@@ -207,7 +207,7 @@ def main() -> None:
             and row["driver_ptx_jit_required"] is False,
             "native AOT architecture/precision/artifact binding differs",
         )
-    for key in ["qualifier", "oracle"]:
+    for key in ["qualifier", "oracle", "auxiliary_inputs"]:
         check(
             digest((ROOT / manifest[key]["path"]).read_bytes())
             == manifest[key]["sha256"],
@@ -223,6 +223,27 @@ def main() -> None:
         }
         for kind in ["inputs-default", "inputs-hf-ccpvtz"]
     }
+    auxiliary = json.loads(
+        lzma.decompress((ROOT / manifest["auxiliary_inputs"]["path"]).read_bytes())
+    )
+    check(
+        {name: digest(canonical(value)) for name, value in auxiliary.items()}
+        == input_sets["inputs-default"],
+        "published default input exports differ",
+    )
+    check(
+        set(input_sets["inputs-hf-ccpvtz"])
+        == {"hf-reference.json", "hf-auxiliary.json"},
+        "explicit HF input population differs",
+    )
+    for name, expected in input_sets["inputs-hf-ccpvtz"].items():
+        check(
+            digest(
+                (ROOT / "benchmarks/results/h100-hf-fit-20261030" / name).read_bytes()
+            )
+            == expected,
+            "published explicit HF input export differs",
+        )
     base = load("build-pair-completed.json")["sources"]["base"]
     indexed = {}
     counts = {

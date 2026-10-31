@@ -25,8 +25,10 @@ This record does not accept that target or qualify the later Direct candidate.
   consumers use one thread each. Execution is a finite qz Job.
 - 66 native Standard processes: the same 33 cases at each of two global
   tile policies. They share 33 fresh stock GPU4PySCF 1.9.0 reference processes
-  on that same physical allocation. The retained runtime audit authenticates
-  the reference installation and cuTENSOR; no Fast arm is in this record.
+  on that same physical allocation. The runtime audit checks files from its
+  selected wheels and records base dependencies' versions and import paths.
+  It does not byte-authenticate the imported base PySCF tree or the complete
+  dependency closure. No Fast arm is in this record.
 - Each process requests one cold and three warm complete E+F calls, using
   its own frozen cold density for warm seeds. Host timing includes synchronized
   CUDA execution and complete forces returned to host.
@@ -54,7 +56,8 @@ uv run --no-env-file --no-project --python 3.12 --with numpy==2.2.6 \
 The reader reconstructs every force list before checking its normalized JSON
 hash; checks all 509 original campaign members, the supplementary admissions,
 case order, physical denominator, source/core/AOT/input/device/allocation and
-producer bindings; recomputes every scientific qualification; and recalculates
+producer bindings; directly checks the published default and explicit HF input
+exports; recomputes every scientific qualification; and recalculates
 both whole-policy summaries. Explicit exceptions keep checks active under
 `python -O`. It does not execute archived campaign producers or launch compute.
 

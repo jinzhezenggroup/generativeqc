@@ -16,6 +16,10 @@
     "path": "benchmarks/results/readme-repaired-20261021/oracles.json.xz",
     "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
   },
+  "auxiliary_inputs": {
+    "path": "benchmarks/results/readme-repaired-20261021/auxiliary-inputs.json.xz",
+    "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
+  },
   "force_storage": {
     "path": "forces.npy.xz",
     "dtype": "<f8",
