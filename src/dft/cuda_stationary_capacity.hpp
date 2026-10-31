@@ -20,6 +20,9 @@ struct CudaStationaryCapacity {
   /** Optional producer panels/provider belong to the cached consumer tier,
    * not to the emitted stationary arena or the mandatory strict grid layout. */
   std::size_t cached_grid_extra_bytes{}, nonlocal_device_bytes{};
+  /** Exact derivative-jet masks are optional. The budget includes host offsets
+   * conservatively as well as peak device discovery/retained storage. */
+  std::size_t ao_map_bytes{}, ao_map_host_bytes{};
 };
 
 /** Stable v1 receipt shared by raw, descriptor and prepared-item queries. */
@@ -70,6 +73,27 @@ inline CudaStationaryCapacity cuda_stationary_capacity(
       runtime::size_add(capacity.grid.allocation_bytes, capacity.grid.provider_allowance);
   capacity.minimum_device_bytes = runtime::size_add(grid_upper, capacity.stationary_minimum_bytes);
   capacity.cached_device_bytes = runtime::size_add(grid_upper, capacity.stationary_cached_bytes);
+  // Restore the indexed force consumer for substantial ordinary grid work.
+  // Force discovery inspects every required derivative jet at 1e-16; an SCF
+  // order-one map cannot authorize dropping order-two force columns. This
+  // crossover is a work estimate, independent of device or functional names.
+  const auto dense_work = runtime::size_mul(grid_points, runtime::size_mul(aos, aos));
+  if (binding.model.nonlocal_b == 0 && (binding.ao_jets == 4 || binding.ao_jets == 10) &&
+      dense_work >= (std::size_t{1} << 35)) {
+    const auto tiles = 1 + (grid_points - 1) / capacity.tile_points;
+    const auto offsets = runtime::size_mul(runtime::size_add(tiles, 1), sizeof(std::size_t));
+    const auto masks = runtime::size_mul(runtime::size_mul(tiles, runtime::size_add(aos, 31) / 32),
+                                         sizeof(unsigned));
+    const auto map_bytes =
+        runtime::size_add(runtime::size_add(runtime::size_mul(2, offsets), masks),
+                          runtime::size_mul(aos, sizeof(std::size_t)));
+    if (map_bytes <= (16U << 20)) {
+      capacity.ao_map_bytes = map_bytes;
+      capacity.ao_map_host_bytes = offsets;
+      capacity.cached_grid_extra_bytes = map_bytes;
+      capacity.cached_device_bytes = runtime::size_add(capacity.cached_device_bytes, map_bytes);
+    }
+  }
   if (binding.model.nonlocal_b != 0) {
     const auto pair = nlc::vv10_cuda_device_layout(nonlocal_points, tile_points, true, true);
     capacity.nonlocal_device_bytes = runtime::size_add(
@@ -84,10 +108,10 @@ inline CudaStationaryCapacity cuda_stationary_capacity(
         runtime::size_add(capacity.cached_device_bytes, capacity.nonlocal_device_bytes);
   }
   if (mixed_grid) {
+    const auto mixed_bytes = cuda_grid_fp32_storage(aos, capacity.tile_points).device_upper_bytes;
     capacity.cached_grid_extra_bytes =
-        cuda_grid_fp32_storage(aos, capacity.tile_points).device_upper_bytes;
-    capacity.cached_device_bytes =
-        runtime::size_add(capacity.cached_device_bytes, capacity.cached_grid_extra_bytes);
+        runtime::size_add(capacity.cached_grid_extra_bytes, mixed_bytes);
+    capacity.cached_device_bytes = runtime::size_add(capacity.cached_device_bytes, mixed_bytes);
   }
   return capacity;
 }

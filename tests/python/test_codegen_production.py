@@ -924,19 +924,71 @@ def test_direct_task_resource_domains_remain_separate() -> None:
     assert "policy.bounded_streaming.arena_maximum_bytes" in capacity_source
 
 
-def test_bounded_force_keeps_fock_only_classes_out_of_force_dispatch() -> None:
-    """Do not call the force registry for the remaining Fock-only psss entry."""
+def test_bounded_force_keeps_fock_only_classes_out_of_force_dispatch(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute coverage partitioning with independent Fock/force inventories."""
+    import subprocess
 
     source = _direct_cuda_source()
     begin = source.index(
         "const std::uint64_t explicit_generated_force_shell_class_mask"
     )
-    end = source.index("const auto launch_bounded_generated_force", begin)
-    mask_source = source[begin:end]
-    assert "selected_fock_shell_kernels" not in mask_source
-    assert "selected_shell_kernels(bounded_force_kernel_count)" in mask_source
-    assert "~kBoundedNativePagedForceShellClassMask" in mask_source
-    assert "cudaErrorNotSupported" in mask_source
+    end = source.index("// A tuned compatible profile", begin)
+    masks = source[begin:end]
+    probe = tmp_path / "bounded-force-inventory.cpp"
+    probe.write_text(
+        r"""
+#include <cstdint>
+#include <initializer_list>
+namespace generated {
+std::uint64_t force_mask, fock_mask;
+std::uint64_t enabled_shell_class_mask() { return force_mask; }
+std::uint64_t enabled_fock_shell_class_mask() { return fock_mask; }
+}
+int main() {
+  constexpr std::uint64_t ssss_shell_class_mask = 1, kDdddShellClassMask = 128;
+  constexpr unsigned kPsssShellClass = 1;
+  constexpr std::uint64_t kBoundedNativePagedForceShellClassMask = 14;
+  constexpr std::uint64_t kStreamingFockShellClassMask = 254;
+  constexpr std::uint64_t kBoundedForceSignatureShellClassMask = 126;
+  constexpr unsigned kResidentPsssMaximumBraPrimitivePairs = 32;
+  for (unsigned fock = 0; fock < 256; ++fock)
+  for (unsigned force = 0; force < 256; ++force)
+  for (bool bounded_direct_streaming : {false, true})
+  for (bool resident : {false, true}) {
+    generated::force_mask = force;
+    generated::fock_mask = fock;
+    const std::uint64_t host_present_shell_class_mask = 255;
+    const bool bounded_direct_count_diagnostic = false;
+    struct { unsigned resident_psss_task_count, resident_psss_bra_primitive_pairs; }
+      plan{resident ? 1U : 0U, 1U};
+"""
+        + masks
+        + r"""
+    const std::uint64_t explicit_force = force & ~std::uint64_t{1};
+    const std::uint64_t resident_force = bounded_direct_streaming && resident ? 2 : 0;
+    const std::uint64_t native_force =
+        bounded_direct_streaming ? (fock & 128U & ~explicit_force) : 0;
+    const std::uint64_t paged_force =
+        bounded_direct_streaming ? (14U & ~explicit_force & ~resident_force) : 0;
+    const std::uint64_t expected_covered =
+        explicit_force | native_force | paged_force | resident_force;
+    if (generated_shell_class_mask != explicit_force) return 1;
+    if (native_streaming_force_shell_class_mask != native_force) return 2;
+    if (bounded_native_paged_force_shell_class_mask != paged_force) return 3;
+    if (covered_force_shell_class_mask != expected_covered) return 4;
+    if (uncovered_force_shell_class_mask != (255U & ~expected_covered)) return 5;
+  }
+}
+"""
+    )
+    executable = native_cxx.build_executable(
+        [probe],
+        tmp_path / "bounded-force-inventory",
+        compile_args=["-std=c++17", "-O2"],
+    )
+    subprocess.run([executable], check=True, timeout=30)
 
 
 def test_psss_force_codegen_emits_only_independent_gradient_roots() -> None:

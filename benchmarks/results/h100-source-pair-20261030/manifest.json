@@ -1,0 +1,274 @@
+{
+  "schema": "generativeqc.h100-source-pair-evidence.v1",
+  "normalization": "Only the private shared-storage root prefix is replaced with <H100_PORTABILITY_ROOT> in string values and dictionary keys. Numeric values, arrays and sample/process ordering are unchanged. Public normalized JSON is not byte-identical to the original private JSON. CUDA/host trace and archived Python producer members retain their exact executed bytes.",
+  "files": {
+    "observations.json.xz": {
+      "bytes": 71508,
+      "sha256": "358e5ed005d32ff5290a4e7bfeb4cc91d055bdd711d0609cce0f19f1bff69997"
+    },
+    "traces.jsonl.xz": {
+      "bytes": 82720,
+      "sha256": "0b663ffd8bd7aee197a2887f8914903dd38da6c5e7640effce90e252c899ce4b"
+    },
+    "forces.npy.xz": {
+      "bytes": 132064,
+      "sha256": "9cd5ca4fad9e2329d8a36ed4d68aeb488aa16d68832160cad9d1db19957171ce"
+    },
+    "original-json-bindings.json.xz": {
+      "bytes": 16996,
+      "sha256": "1fc78af4f22ad898266f103c61dba4c3a943077a2e640288a34882a1b9b90022"
+    },
+    "producers/endpoint.py.xz": {
+      "bytes": 3044,
+      "sha256": "7ab9239bd480166bf4e56a02933453528c60e0ded1d6631999fccba15fb4f3f5"
+    },
+    "producers/pilot.py.xz": {
+      "bytes": 3912,
+      "sha256": "f3eb7039604866e066e1b88afb77d8bbeb01a2d4ffd2060796cd9eebcde89e4d"
+    },
+    "producers/pbe0-pairs.py.xz": {
+      "bytes": 3028,
+      "sha256": "cee2152a23e2cfb00a5d6e2b3810ccc5c3b3a962b4ea5997c9b6a71e00a86abb"
+    },
+    "producers/df-trace-campaign.py.xz": {
+      "bytes": 3428,
+      "sha256": "4ca5ed89681e56906fb16332b31969005f4305aa888c65294ae61b759a9a4ba4"
+    },
+    "producers/trace-endpoint.py.xz": {
+      "bytes": 4292,
+      "sha256": "c14beaa5877109eff540a39d30d5ace27eb678712ad1512a19287b2ee8cddc39"
+    },
+    "producers/reference-runtime-pairs.py.xz": {
+      "bytes": 1808,
+      "sha256": "93519905c78ed0739a9819fd65f6ebabeb07b552ca1f2ad243f5c0814c4dcc26"
+    },
+    "producers/reference-smoke.py.xz": {
+      "bytes": 1796,
+      "sha256": "33769443a49ec5544c4766c61941a20e1e4d0c2ab07c3237194d459f152e3408"
+    }
+  },
+  "traces": {
+    "pbe0-48-df-base-standard-default.cuda.jsonl": {
+      "bytes": 179964,
+      "sha256": "5ed355d6ef7309bac7d8257125d6a91311850bdffa2ec324ddf1ad56dc9a12a4"
+    },
+    "pbe0-48-df-base-standard-default.host.jsonl": {
+      "bytes": 8588,
+      "sha256": "97dd54b3f1a59ec06dc441466c13cf4af804fea54a626851755f26403004a850"
+    },
+    "pbe0-48-df-candidate-standard-default.cuda.jsonl": {
+      "bytes": 220306,
+      "sha256": "05e7686055281073698f2f9a5e640a9a023e69af080ab47b76c3d678b8795abd"
+    },
+    "pbe0-48-df-candidate-standard-default.host.jsonl": {
+      "bytes": 8585,
+      "sha256": "04f1630238cbef613dccffb4b21af473acbc4159367af1b6916beace62b9cf0c"
+    },
+    "pbe0-96-df-base-standard-default.cuda.jsonl": {
+      "bytes": 203978,
+      "sha256": "42dda50cce327c45fc634d8ad97b5dd06e9999662d24af01522f581bb84e9d34"
+    },
+    "pbe0-96-df-base-standard-default.host.jsonl": {
+      "bytes": 8623,
+      "sha256": "4727e87a51e80d128ec0051162fd063976f282a492286d62299a2ebc5666a870"
+    },
+    "pbe0-96-df-candidate-standard-default.cuda.jsonl": {
+      "bytes": 271032,
+      "sha256": "d384f2c8ba8399dbf764f523a83927ade4a55fb22a4d992d8b37739b0f91f2b7"
+    },
+    "pbe0-96-df-candidate-standard-default.host.jsonl": {
+      "bytes": 8607,
+      "sha256": "8d1e8503ddec23bd098c5cfd8354fed0f8fc44d13780b1d1fdf09450d0e25d3c"
+    },
+    "pbe0-96-df-candidate-fast-default.cuda.jsonl": {
+      "bytes": 271096,
+      "sha256": "bcb966d043c40a5dec335643c844fc8a01df6b5628f185263f241b7491488830"
+    },
+    "pbe0-96-df-candidate-fast-default.host.jsonl": {
+      "bytes": 8577,
+      "sha256": "1921c7ec0551388d9e1b401990811f86b717250879d35c2b4c1a17bbd43af1cf"
+    },
+    "pbe0-96-df-candidate-standard-projection-off.cuda.jsonl": {
+      "bytes": 203969,
+      "sha256": "a443e7d380f00807b3ae7345a9f61b8840d70f9acf354eb3db934d249d18d39c"
+    },
+    "pbe0-96-df-candidate-standard-projection-off.host.jsonl": {
+      "bytes": 8614,
+      "sha256": "98074b861d665d69345aebe7aaa887e1d927c75ccae98478c8b0e17d5935a630"
+    },
+    "pbe0-96-direct-base-standard-default.cuda.jsonl": {
+      "bytes": 107647,
+      "sha256": "c27ea85ddcca426d9ca46f87067905c4cc22df802b8b2242d17f00f78c83eeed"
+    },
+    "pbe0-96-direct-base-standard-default.host.jsonl": {
+      "bytes": 7115,
+      "sha256": "59c73b3c830530568c28e2d3dd62d4b167b129e2c7b96a72241e9d171a1246ad"
+    },
+    "pbe0-96-direct-candidate-standard-default.cuda.jsonl": {
+      "bytes": 107616,
+      "sha256": "e2e9649edc748ea4353c4c614341ef1e5788c3cb072d98cc58b55442f9553f0b"
+    },
+    "pbe0-96-direct-candidate-standard-default.host.jsonl": {
+      "bytes": 7205,
+      "sha256": "58f844a1b28f584a7780a4d1cf1b2e3900d53d879218452a39adc4281e65d946"
+    }
+  },
+  "producers": {
+    "endpoint.py": {
+      "path": "producers/endpoint.py.xz",
+      "bytes": 7467,
+      "sha256": "87b1dbf9b0b2237979974a8e26a3c1495aca789d87ec6004f33f08e1da45d051"
+    },
+    "pilot.py": {
+      "path": "producers/pilot.py.xz",
+      "bytes": 9725,
+      "sha256": "5ecd9d5778afbee70f095dfd53c30e1f19ec6b8c002b20627f9b90ee9e683568"
+    },
+    "pbe0-pairs.py": {
+      "path": "producers/pbe0-pairs.py.xz",
+      "bytes": 7343,
+      "sha256": "92d523270f82b67c2ca81b3d41cee638e8252166efe28e13a0915e9d06cb0f7b"
+    },
+    "df-trace-campaign.py": {
+      "path": "producers/df-trace-campaign.py.xz",
+      "bytes": 8729,
+      "sha256": "d0b63f708c57378bd107c018f9993d857ad912839d583a6cc3127b9b2a257d03"
+    },
+    "trace-endpoint.py": {
+      "path": "producers/trace-endpoint.py.xz",
+      "bytes": 11549,
+      "sha256": "5343fdfd914fe2f91a24561bf670cc44e57efa6cf93af0790833d8bb2e7dd178"
+    },
+    "reference-runtime-pairs.py": {
+      "path": "producers/reference-runtime-pairs.py.xz",
+      "bytes": 4080,
+      "sha256": "dadb91f695aea85836b18c4456b083eae993d3e6971db3b3901171c5cb2174f3"
+    },
+    "reference-smoke.py": {
+      "path": "producers/reference-smoke.py.xz",
+      "bytes": 4066,
+      "sha256": "9ae5370773e1ef8ccc7a311c2df2dc830aae9c027167b0abb8109473b2090a64"
+    }
+  },
+  "omitted_transient_progress": {
+    "pbe0-48-df-base-standard-default.progress.jsonl": {
+      "bytes": 5183805,
+      "sha256": "dde44f22ed2f25b5b12cab74de916ee3c57d2abff7865ff0e7fb0d7d449da778"
+    },
+    "pbe0-48-df-candidate-standard-default.progress.jsonl": {
+      "bytes": 11650658,
+      "sha256": "d5a38a7ef8a698bbad629a16ed34aebb7a9f66e781e0d8ee426ec062d68a3254"
+    },
+    "pbe0-96-df-base-standard-default.progress.jsonl": {
+      "bytes": 9732151,
+      "sha256": "b84e61df439598148fce86db6fcc73910354bc8a827b698f9c6c1912a950f97a"
+    },
+    "pbe0-96-df-candidate-standard-default.progress.jsonl": {
+      "bytes": 25507840,
+      "sha256": "5fc921115216f90b55848fb4e23be63aa31b5ce014c047cfc2f7dabef11dad6b"
+    },
+    "pbe0-96-df-candidate-fast-default.progress.jsonl": {
+      "bytes": 25507696,
+      "sha256": "cf5cb9222fcde857fd2b779ac6cdda8906d42c55c4c4b948bac427547db6999d"
+    },
+    "pbe0-96-df-candidate-standard-projection-off.progress.jsonl": {
+      "bytes": 9735105,
+      "sha256": "2f3f6f7a956aa337c7f92b0a22d2ca521a4b7d1b0541e167694fd49de6231f23"
+    },
+    "pbe0-96-direct-base-standard-default.progress.jsonl": {
+      "bytes": 650137,
+      "sha256": "b682f7caabc1ce25580b104bb8896b89b096fcc75515c8eddf11b2e4a6b24c1f"
+    },
+    "pbe0-96-direct-candidate-standard-default.progress.jsonl": {
+      "bytes": 649958,
+      "sha256": "a9d0fb09139924f8590476a9a1cc7cb518bcfecdd4a72c9e16b58458a0372a2e"
+    }
+  },
+  "sources": {
+    "base": "15ab66a68a061355fda833a93e88484dbfee6360",
+    "candidate": "2241fa6a76698c09573c540b2822316ef7cdb908"
+  },
+  "oracle": {
+    "path": "benchmarks/results/readme-repaired-20261021/oracles.json.xz",
+    "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+  },
+  "auxiliary_inputs": {
+    "path": "benchmarks/results/readme-repaired-20261021/auxiliary-inputs.json.xz",
+    "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
+  },
+  "trace_segments": {
+    "pbe0-48-df-base-standard-default.cuda.jsonl": {
+      "begin": 0,
+      "end": 179964
+    },
+    "pbe0-48-df-base-standard-default.host.jsonl": {
+      "begin": 179964,
+      "end": 188552
+    },
+    "pbe0-48-df-candidate-standard-default.cuda.jsonl": {
+      "begin": 188552,
+      "end": 408858
+    },
+    "pbe0-48-df-candidate-standard-default.host.jsonl": {
+      "begin": 408858,
+      "end": 417443
+    },
+    "pbe0-96-df-base-standard-default.cuda.jsonl": {
+      "begin": 417443,
+      "end": 621421
+    },
+    "pbe0-96-df-base-standard-default.host.jsonl": {
+      "begin": 621421,
+      "end": 630044
+    },
+    "pbe0-96-df-candidate-fast-default.cuda.jsonl": {
+      "begin": 630044,
+      "end": 901140
+    },
+    "pbe0-96-df-candidate-fast-default.host.jsonl": {
+      "begin": 901140,
+      "end": 909717
+    },
+    "pbe0-96-df-candidate-standard-default.cuda.jsonl": {
+      "begin": 909717,
+      "end": 1180749
+    },
+    "pbe0-96-df-candidate-standard-default.host.jsonl": {
+      "begin": 1180749,
+      "end": 1189356
+    },
+    "pbe0-96-df-candidate-standard-projection-off.cuda.jsonl": {
+      "begin": 1189356,
+      "end": 1393325
+    },
+    "pbe0-96-df-candidate-standard-projection-off.host.jsonl": {
+      "begin": 1393325,
+      "end": 1401939
+    },
+    "pbe0-96-direct-base-standard-default.cuda.jsonl": {
+      "begin": 1401939,
+      "end": 1509586
+    },
+    "pbe0-96-direct-base-standard-default.host.jsonl": {
+      "begin": 1509586,
+      "end": 1516701
+    },
+    "pbe0-96-direct-candidate-standard-default.cuda.jsonl": {
+      "begin": 1516701,
+      "end": 1624317
+    },
+    "pbe0-96-direct-candidate-standard-default.host.jsonl": {
+      "begin": 1624317,
+      "end": 1631522
+    }
+  },
+  "force_storage": {
+    "path": "forces.npy.xz",
+    "dtype": "<f8",
+    "shape": [
+      68760
+    ],
+    "layout": "Flat coordinates, process/sample/atom/xyz order. Each forces descriptor records array_begin and atom count. Reconstruct original lists before checking the normalized original JSON hash; no rounding or downcast."
+  },
+  "original_json_bindings_path": "original-json-bindings.json.xz"
+}

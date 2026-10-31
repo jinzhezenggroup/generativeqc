@@ -19,6 +19,7 @@ from benchmarks.readme_defaults_report import checked_sample, reduce_record
 
 ORACLE_SCHEMA = "generativeqc.readme-defaults-oracle.v1"
 REUSE_SCHEMA = "generativeqc.readme-oracle-reuse.v1"
+ENVIRONMENT_REUSE_SCHEMA = "generativeqc.readme-oracle-reuse.v2"
 STABILITY_FRACTION = 0.25
 
 
@@ -61,7 +62,8 @@ def _oracle(record: dict) -> None:
         raise ValueError("missing oracle source revision")
     if not re.fullmatch(r"[0-9a-f]{64}", record.get("driver_sha256", "")):
         raise ValueError("missing oracle driver identity")
-    if not record.get("slurm_job_id"):
+    scheduler = record.get("scheduler", {})
+    if not (record.get("slurm_job_id") or scheduler.get("LSB_JOBID")):
         raise ValueError("missing oracle allocation")
     if record.get("common_observable_gates") != COMMON_GATES:
         raise ValueError("oracle gates differ from the declared campaign")
@@ -138,17 +140,26 @@ def qualify(
     reference at the population's own geometry. All warm repeats must pass.
     Production records and their measured samples are never rewritten. Different
     producer revisions require an explicit audited contract for each exact oracle
-    receipt. Native timing populations still require a single measured revision.
+    receipt. Version-2 contracts additionally name the exact reference packages
+    and accepted measurement environments, with an explicit scientific-input
+    review. This permits independent native/reference installations without
+    relabelling either receipt or weakening any numerical gate. Version-1
+    historical contracts retain their original equal-package requirement.
+    Native timing populations still require a single measured revision.
     """
     reuse = {}
     if reference_reuse is not None:
         if (
             set(reference_reuse) != {"schema", "entries"}
-            or reference_reuse["schema"] != REUSE_SCHEMA
+            or reference_reuse["schema"] not in (REUSE_SCHEMA, ENVIRONMENT_REUSE_SCHEMA)
             or not isinstance(reference_reuse["entries"], dict)
         ):
             raise ValueError("malformed reference reuse manifest")
         reuse = reference_reuse["entries"]
+    environment_reuse = (
+        reference_reuse is not None
+        and reference_reuse["schema"] == ENVIRONMENT_REUSE_SCHEMA
+    )
     indexed = {}
     for oracle in oracles:
         if oracle.get("schema") != ORACLE_SCHEMA or oracle.get("backend") not in (
@@ -200,19 +211,51 @@ def qualify(
             result["reasons"].append("missing or incomplete dense/CPU reference")
             continue
         for oracle in (target, cpu, gpu):
-            if oracle.get("source_revision") != record["source_revision"]:
+            packages = record.get("environment", {}).get("packages")
+            oracle_packages = oracle.get("environment", {}).get("packages")
+            if not packages or not oracle_packages:
+                raise ValueError("missing measurement or reference package versions")
+            different_packages = oracle_packages != packages
+            if oracle.get("source_revision") != record["source_revision"] or (
+                different_packages and environment_reuse
+            ):
                 receipt_identity = identity(oracle)
                 contract = _reference_contract(record, oracle)
-                if reuse.get(receipt_identity) != contract:
+                reviewed = reuse.get(receipt_identity)
+                if environment_reuse:
+                    if not isinstance(reviewed, dict) or set(reviewed) != {
+                        *contract,
+                        "reference_packages",
+                        "measurement_packages",
+                        "review",
+                    }:
+                        raise ValueError(
+                            "missing audited reference environment contract"
+                        )
+                    allowed = reviewed["measurement_packages"]
+                    if (
+                        reviewed["reference_packages"] != oracle_packages
+                        or not isinstance(allowed, list)
+                        or not allowed
+                        or any(not isinstance(p, dict) or not p for p in allowed)
+                        or packages not in allowed
+                        or not isinstance(reviewed["review"], str)
+                        or not reviewed["review"].strip()
+                    ):
+                        raise ValueError(
+                            "reference environment lacks an exact audited match"
+                        )
+                    contract.update(
+                        reference_packages=oracle_packages,
+                        measurement_packages=allowed,
+                        review=reviewed["review"],
+                    )
+                if reviewed != contract:
                     raise ValueError(
                         "different reference revision lacks an audited reuse contract"
                     )
                 result.setdefault("reference_reuse", {})[receipt_identity] = contract
-            packages = record.get("environment", {}).get("packages")
-            if (
-                not packages
-                or oracle.get("environment", {}).get("packages") != packages
-            ):
+            if different_packages and not environment_reuse:
                 raise ValueError("measurement and reference package versions differ")
         # Dense-grid stability is recomputed for both the target and the GPU
         # spot check, never inferred from an implementation-written pass flag.

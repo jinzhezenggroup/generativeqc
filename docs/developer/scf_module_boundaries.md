@@ -197,6 +197,10 @@ with at least 64 public/128 Cartesian AOs. Both need eight permitted iterations.
 candidates require a positive prepared Schwarz threshold; actual compact
 census and complete capacity admission decide whether values fit. These
 eligibility gates do not predict profitability or actual iteration count.
+With generated J/K available, ordinary strict hybrids retain automatic cold
+reuse through 128 Cartesian AOs, subject to the same screening, provenance and
+complete-capacity checks. Larger generated hybrids and pure generated Coulomb
+retain streaming; application-budget refinement keeps its existing policy.
 Warm reuse and externally supplied initial densities skip source preparation, including
 provider cloning and row sorting. An unseeded moved geometry is a new cold
 candidate; a moved solve carrying a warm snapshot is not. Native cold initial

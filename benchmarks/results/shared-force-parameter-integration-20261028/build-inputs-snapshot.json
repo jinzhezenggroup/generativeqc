@@ -1,0 +1,14 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "c413cde9fc4d102b42a2c3e856dceb0fadcdcdd7",
+  "file_count": 1,
+  "total_bytes": 166452,
+  "purpose": "Historical whole-source census; current numerical/force/CLI receipts and the verified input count/digest remain offline in the checkout.",
+  "files": [
+    {
+      "path": "benchmarks/results/shared-force-parameter-integration-20261028/final/build-inputs.json.xz",
+      "bytes": 166452,
+      "sha256": "a11b661f9723de5f3b8f0c5bcfc336293cc4f638252c7bf7b0b7b3ccc8248573"
+    }
+  ]
+}

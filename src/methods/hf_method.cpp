@@ -299,6 +299,7 @@ class HfPreparedCalculation final : public PreparedCalculation {
 
 class HfPreparedBatch final : public PreparedBatch,
                               public BatchWarmStarts,
+                              public BatchHfProjection,
                               public BatchDirectQueueProfiles,
                               public BatchEigensolverProfiles,
                               public BatchDfMetricDiagnostics {
@@ -346,6 +347,9 @@ class HfPreparedBatch final : public PreparedBatch,
     return results;
   }
 
+  void invalidate_result() override { plan_.invalidate_projection_source(); }
+  scf::FleetPlan& projection_fleet() override { return plan_; }
+  const scf::FleetPlan& projection_fleet() const override { return plan_; }
   void clear_warm_starts() override { plan_.clear_warm_starts(); }
   std::size_t warm_density_size(std::size_t index) const override {
     return plan_.warm_density_size(index);

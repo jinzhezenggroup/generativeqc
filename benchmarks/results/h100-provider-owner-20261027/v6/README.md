@@ -1,5 +1,10 @@
 # Follow-up H100 provider-owner engineering run
 
+This describes the recorded historical run. First restore the complete family
+using the [offline recovery instructions](../README.md#historical-snapshot-and-offline-replay).
+Archive paths and the original replay program refer to that verified snapshot;
+summary JSON bytes, original source identities and scope remain unchanged.
+
 This run exercises the lifecycle fixes at source base
 `a298c803a9a3f933f81ba26f9abda16247780e48`. Its complete measured input
 manifest is `dcf84602a429e70a2030c86c7b6d73333b4fb3448275526004d0674e96c8d97f`;
@@ -39,9 +44,15 @@ Replay the source identities, outcomes, budgets and conditional grant checks
 without a GPU, compiler or network:
 
 ```console
-python benchmarks/results/h100-provider-owner-20261027/v6/replay.py
+python .artifacts/h100-provider-owner-20261027-original/benchmarks/results/h100-provider-owner-20261027/v6/replay.py
 ```
 
 ## Lossless shared storage
 
-The earlier published V4/V6 receipt JSON bytes now share `v4-v6-receipts.tar.xz` in the family root. The V4 source closure is a three-file delta against the unchanged V6 source archive, which V7 also requires. Both historical replays verify recovery of the exact original compressed archive bytes before checking their unchanged engineering outcomes. Original archive SHA256/length fields remain in each summary. This storage change does not recover private redacted remote bytes or establish SDK/scientific acceptance. Use the family-root `restore_original_archives.py --output <fresh-directory>` for offline byte recovery.
+The earlier published V4/V6 receipt JSON bytes now share `v4-v6-receipts.tar.xz` in the family root. The V4 source closure is a three-file delta against the unchanged V6 source archive, which V7 also requires. Both historical replays verify recovery of the exact original compressed archive bytes before checking their unchanged engineering outcomes. Original archive SHA256/length fields remain in each summary. This storage change does not recover private redacted remote bytes or establish SDK/scientific acceptance. Recover the exact earlier compressed archives with the original restorer in the
+verified snapshot, using a fresh output directory:
+
+```console
+python -I -S -B .artifacts/h100-provider-owner-20261027-original/benchmarks/results/h100-provider-owner-20261027/restore_original_archives.py \
+  --output .artifacts/h100-provider-original-compressed
+```

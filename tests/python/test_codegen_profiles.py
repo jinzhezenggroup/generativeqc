@@ -65,7 +65,16 @@ def test_unmeasured_cuda_targets_automatically_use_portable_profile(
     assert resolved.profile == "portable_cuda"
     assert resolved.portable is True
     assert resolved.tuned is False
-    assert resolved.selections == ()
+    # Portable provenance must not disable generated mathematical coverage.
+    # dddd retains the independent native implementation pending qualification.
+    assert {item.spec.name for item in resolved.selections} == {
+        name
+        for name in FUSED_SHELL_SPEC_BY_NAME
+        if len(name) == 4 and set(name) <= set("spd") and name != "dddd"
+    }
+    assert all(not item.tuned for item in resolved.selections)
+    assert all(item.consumers == (KernelConsumer.FOCK,) for item in resolved.selections)
+    assert all(item.has_capability("streaming_fock") for item in resolved.selections)
     with pytest.raises(ValueError, match="incompatible"):
         resolve_production_profile(manifest, architecture, "sm_120")
 
