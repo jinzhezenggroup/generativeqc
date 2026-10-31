@@ -63,6 +63,7 @@
 #include "scf/cuda/direct_tile_compaction.hpp"
 #include "scf/cuda/direct_tile_validation.hpp"
 #include "scf/cuda/eigensolver.hpp"
+#include "scf/cuda/force_queue_policy.hpp"
 #include "scf/cuda/hf_initial_guess.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/metadata_upload.hpp"
@@ -4805,9 +4806,20 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // native scheduler. Keep the standalone generated task consumer out of the
   // production queue because materializing a second task stream regresses endpoints.
   const std::uint64_t ssss_shell_class_mask = std::uint64_t{1} << kSsssShellClass;
+  const std::uint64_t available_generated_force_mask = generated::enabled_shell_class_mask() &
+                                                       host_present_shell_class_mask &
+                                                       ~ssss_shell_class_mask;
+  // Do not build a second class queue for a portable topology too small to
+  // fill one persistent worker round per force class. The threshold follows
+  // actual work and the resource-derived worker grid, never a GPU/molecule name.
+  // Larger materialized and all bounded plans retain generated force consumers.
+  const bool portable_angular_force =
+      generated::selected_profile().portable && !bounded_direct_streaming &&
+      cuda_policy::portable_force_prefers_angular_queue(total_shell_quartets,
+                                                        available_generated_force_mask,
+                                                        plan.persistent_quartet_worker_blocks);
   const std::uint64_t explicit_generated_force_shell_class_mask =
-      generated::enabled_shell_class_mask() & host_present_shell_class_mask &
-      ~ssss_shell_class_mask;
+      portable_angular_force ? 0U : available_generated_force_mask;
   // Fock-only AOT entries (currently psss) are deliberately not added to the
   // force queue. The force dispatcher is a separate registry and returns
   // ``cudaErrorNotSupported`` for classes without a validated force consumer.

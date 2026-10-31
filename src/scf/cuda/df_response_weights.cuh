@@ -108,7 +108,11 @@ cudaError_t contract_cuda_df_response_weights(
     const std::function<void(const double*, double*)>& read_raw_charge = {},
     // A direct derivative consumer avoids public-AO three-center W panels.
     // It receives exact D and solved v; metric response stays in this owner.
-    const std::function<void(const double*, const double*, double)>& consume_raw_derivative = {});
+    const std::function<void(const double*, const double*, double)>& consume_raw_derivative = {},
+    // Bridge-owned fitted/full-rank occupied response may omit dead general
+    // metric scratch. Its fixed intervals must match df_occupied_response_workspace;
+    // raw, borrowed and truncated consumers keep the general layout.
+    bool compact_fitted_metric_workspace = false);
 
 }  // namespace generativeqc::scf
 #endif

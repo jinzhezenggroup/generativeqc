@@ -483,7 +483,7 @@ __device__ __noinline__ void generated_dppp_rys4_uniform_warp_batch(
             reduced[slot]);
       }}
     }}
-#pragma unroll
+// Recovered-center derivatives are straight-line scalar statements, not a loop.
 {recovered_atomic_code}
   }}
   __syncthreads();

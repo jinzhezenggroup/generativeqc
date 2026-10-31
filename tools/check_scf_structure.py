@@ -724,11 +724,16 @@ CUDA_ALLOWED["cuda_direct_jk_source_lease"] = (
     "scf/cuda/runtime_support.hpp",
     "scf/cuda_direct_jk_device.hpp",
 )
+# The portable queue crossover consumes scalar work/resource counts only.
+# It owns neither allocation state nor recurrence/kernel implementations.
+CUDA_MODULES["cuda_force_queue_policy"] = ("force_queue_policy",)
+CUDA_ALLOWED["cuda_force_queue_policy"] = ()
 # The remaining host driver owns direct-HF numerical launch order, not bucket
 # admission/lifetime or CUDA Graph handles. Keep recurrence and kernel
 # implementation includes out of C++.
 CUDA_MODULES["cuda_hf_driver"] = ("scf/cuda_rhf.cpp",)
 CUDA_ALLOWED["cuda_hf_driver"] = (
+    "scf/cuda/force_queue_policy.hpp",
     "scf/application_precision.hpp",
     "scf/cuda/hf_initial_guess.hpp",
     "solver/cuda/symmetric_eigen_provider.hpp",

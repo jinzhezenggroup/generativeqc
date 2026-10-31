@@ -52,6 +52,48 @@ int main() {
   assert(df_response_tile_with_headroom(maximum, maximum, 1, identity) == maximum-1);
   assert(df_response_tile_with_headroom(1, 0, maximum, identity) == 1);
   assert(df_response_tile_with_headroom(0, 0, 0, identity) == 0);
+  using generativeqc::scf::df_recycled_projection_preferred;
+  // Recycled storage cannot displace retained factors or authorize a scratch
+  // interval too small for the algorithm. It is optional when owned work fits.
+  assert(!df_recycled_projection_preferred(100, 101, 1, 20, 80));
+  assert(!df_recycled_projection_preferred(100, 60, 50, 60, 49));
+  assert(!df_recycled_projection_preferred(100, 60, 20, 40, 80));
+  assert(df_recycled_projection_preferred(100, 60, 20, 41, 80));
+  assert(df_recycled_projection_preferred(100, 60, 50, 60, 50));
+  // Falling short of the preferred 512-column panel does not justify
+  // replacing a viable 499-column owned panel with 25 recycled columns.
+  assert(!df_recycled_projection_preferred(600, 101, 1, 512, 25));
+  assert(!df_recycled_projection_preferred(600, 101, 1, 512, 498));
+  assert(df_recycled_projection_preferred(600, 101, 1, 512, 499));
+  assert(df_recycled_projection_preferred(600, 101, 1, 512, 512));
+  assert(!df_recycled_projection_preferred(maximum, maximum-20, 20, 20, 80));
+  assert(df_recycled_projection_preferred(maximum, maximum-20, 20, 21, 80));
+  using generativeqc::scf::df_occupied_response_workspace;
+  assert(!df_occupied_response_workspace(0,1,1).elements);
+  assert(!df_occupied_response_workspace(1,maximum,1).elements);
+  assert(!df_occupied_response_workspace(maximum,1,1).elements);
+  assert(!df_occupied_response_workspace(1,1,maximum).elements);
+  // Distinct live intervals must fit the declared fixed allocation. In the
+  // observed nonlocal replay, omitting dead metric scratch must admit the
+  // retained factors without changing their representation or dropping them.
+  for (auto n : {1U, 7U, 768U}) for (auto a : {1U, 11U, 3616U})
+    for (auto terms : {1U, 2U, 3U}) for (bool compact : {false, true})
+      for (bool spectral : {false, true}) {
+        const auto plan = df_occupied_response_workspace(n,a,terms,compact,spectral);
+        assert(plan.metric_adjoint+a*a <= plan.ao_temporary);
+        assert(plan.ao_temporary+3UL*n*n <= plan.charges);
+        assert(plan.charges+terms*a <= plan.potentials);
+        assert(plan.potentials+terms*a == plan.elements);
+        if (compact && spectral) assert(a*a <= plan.metric_adjoint);
+      }
+  const auto general = df_occupied_response_workspace(768,3616,1);
+  const auto fitted = df_occupied_response_workspace(768,3616,1,true,false);
+  const auto spectral = df_occupied_response_workspace(768,3616,1,true,true);
+  const auto factors = 3616UL*160*160*8;
+  const auto density = 768UL*768*8;
+  assert(factors+general.elements*8+density > 954531840);
+  assert(factors+fitted.elements*8+density < 954531840);
+  assert(fitted.elements < spectral.elements && spectral.elements < general.elements);
 }
 """)
     binary = tmp_path / "response_budget"

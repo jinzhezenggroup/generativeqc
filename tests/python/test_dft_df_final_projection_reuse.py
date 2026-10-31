@@ -189,6 +189,7 @@ struct Source {
   int device_id=0;
   void* stream=reinterpret_cast<void*>(1);
   std::size_t nbf=24,naux=24,batch_size=1,completed_occupied_projection_rank=5;
+  std::size_t projection_capacity=24*24*5;
   bool streamed=false,integral_source=true,resident_raw_coulomb=false;
   std::vector<bool> metric_full_rank{true},metric_response_valid{true};
   double values[1]{};
@@ -208,7 +209,7 @@ generativeqc_status admit(Source* plan, const CudaDfBorrowedFittedProjection* bo
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 int main() {
-  for (int kind=0; kind<17; ++kind) {
+  for (int kind=0; kind<18; ++kind) {
     Source plan;
     CudaDfBorrowedFittedProjection lease{0,plan.values,plan.values,24,24,5,plan.stream};
     std::string_view projection="auto",occupied_source="auto",space="auto",storage="auto";
@@ -231,8 +232,9 @@ int main() {
     if (kind==15) plan.metric_response_valid[0]=false;
     // Raw A is never an authenticated whitened occupied projection.
     if (kind==16) plan.resident_raw_coulomb=true;
+    if (kind==17) --plan.projection_capacity;
     const auto status=admit(&plan,borrowed,projection,occupied_source,space,storage,host_weights,selected);
-    assert(status==(kind>=9 && kind<=15 ? GENERATIVEQC_STATUS_INVALID_ARGUMENT : GENERATIVEQC_STATUS_SUCCESS));
+    assert(status==(((kind>=9 && kind<=15) || kind==17) ? GENERATIVEQC_STATUS_INVALID_ARGUMENT : GENERATIVEQC_STATUS_SUCCESS));
     assert(selected==(kind==0));
   }
 }

@@ -42,6 +42,10 @@ be at most 0.8 to use the indexed consumer. These predicates contain no GPU
 model, architecture, molecule or functional-name allowlist. ECP and nonlocal
 consumers remain outside this promotion.
 
+The later [nonlocal map decision](2026-10-30-nonlocal-stationary-ao-maps.md)
+supersedes the nonlocal exclusion with exact quadrature-identity checks and
+additional shared/distinct-grid device validation.
+
 Map storage is optional cached capacity; the dense minimum is unchanged. A
 budget which fits the existing geometry cache but not the masks retains that
 geometry cache. Optional allocation failure leaves dense execution available;

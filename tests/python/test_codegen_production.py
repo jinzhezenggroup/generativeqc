@@ -963,6 +963,11 @@ int main() {
     const bool bounded_direct_count_diagnostic = false;
     struct { unsigned resident_psss_task_count, resident_psss_bra_primitive_pairs; }
       plan{resident ? 1U : 0U, 1U};
+    // Exercise inventory partitioning with the angular crossover disabled.
+    const std::uint64_t available_generated_force_mask =
+        generated::enabled_shell_class_mask() & host_present_shell_class_mask &
+        ~ssss_shell_class_mask;
+    const bool portable_angular_force = false;
 """
         + masks
         + r"""

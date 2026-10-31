@@ -12,6 +12,7 @@
 #include "scf/cuda/df_packed_values.hpp"
 #include "scf/cuda/df_response_weights.cuh"
 #include "scf/cuda/df_scf_kernels.hpp"
+#include "scf/df_response_tile_budget.hpp"
 #include "tensor/cuda_runtime.cuh"
 
 namespace generativeqc::scf {
@@ -1056,25 +1057,36 @@ static cudaError_t contract_occupied_response(
     std::span<const double> raw_host,
     const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>& consume,
     bool packed_pairs, std::span<const std::int64_t> auxiliary_shell_offsets,
-    std::size_t ao_block_rows, const std::function<void(std::size_t, double*)>& read_values = {}) {
+    std::size_t ao_block_rows, const std::function<void(std::size_t, double*)>& read_values = {},
+    bool compact_fitted_metric_workspace = false) {
   const auto matrix = n * n, aa = a * a;
   const auto pair_stride = packed_pairs ? n * (n + 1) / 2 : matrix;
-  auto* inverse = workspace;
-  auto* bar_inverse = inverse + aa;
-  auto* metric_temp = bar_inverse + aa;
-  auto* transformed = metric_temp + aa;
-  auto* temporary = transformed + aa;
+  const auto* fitted_occupied = buffers.fitted_occupied_source;
+  if (compact_fitted_metric_workspace &&
+      (!metric.full_rank || !fitted_occupied || buffers.final_occupied_projection))
+    return cudaErrorInvalidValue;
+  const auto layout = df_occupied_response_workspace(
+      n, a, terms.size(), compact_fitted_metric_workspace,
+      fitted_occupied && fitted_occupied->spectral_basis && !fitted_occupied->factor_response_root);
+  if (!layout.elements) return cudaErrorInvalidValue;
+  // Compact storage has no inverse or Frechet temporaries unless a spectral
+  // forward source actually needs to construct its response root. The rooted
+  // occupied factors already yield the physical full-rank metric adjoint.
+  auto* inverse = layout.metric_matrices == 1 ? nullptr : workspace;
+  auto* bar_inverse = workspace + layout.metric_adjoint;
+  auto* metric_temp = compact_fitted_metric_workspace ? nullptr : workspace + 2 * aa;
+  auto* transformed = compact_fitted_metric_workspace ? nullptr : workspace + 3 * aa;
+  auto* temporary = workspace + layout.ao_temporary;
   // Every T projection has been consumed before derivative panels begin.
   // Its borrowed buffer can then hold a fixed-capacity pseudo-density panel,
   // avoiding small panels without allocating or retaining a complete W tensor.
   auto* weights = buffers.exchange_response;
-  auto* charges = temporary + 3 * matrix;
-  auto* potentials = charges + terms.size() * a;
+  auto* charges = workspace + layout.charges;
+  auto* potentials = workspace + layout.potentials;
   auto* raw = buffers.raw_auxiliary_major;
   auto* projected = buffers.exchange_response;
   auto* transformed_projected = buffers.staging_weights;
   const auto* packed_raw = buffers.resident_packed_raw.data;
-  const auto* fitted_occupied = buffers.fitted_occupied_source;
   const bool spectral_occupied = fitted_occupied && fitted_occupied->spectral_basis;
   const auto* explicit_root = fitted_occupied ? fitted_occupied->factor_response_root : nullptr;
   // The spectral route remains an explicit numerical/performance control.
@@ -1789,7 +1801,12 @@ cudaError_t contract_cuda_df_response_weights(
     const CudaDfWhitenedTensorView* retained_coulomb, bool raw_coulomb,
     const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels,
     const std::function<void(const double*, double*)>& read_raw_charge,
-    const std::function<void(const double*, const double*, double)>& consume_raw_derivative) {
+    const std::function<void(const double*, const double*, double)>& consume_raw_derivative,
+    bool compact_fitted_metric_workspace) {
+  if (compact_fitted_metric_workspace &&
+      (!streamed_occupied || !streamed_occupied->fitted_occupied_source || !metric.full_rank ||
+       borrowed || packed_pairs || single_fitted_tensor))
+    return cudaErrorInvalidValue;
   if ((read_raw_panels || read_raw_charge || consume_raw_derivative) && !raw_coulomb)
     return cudaErrorInvalidValue;
   if (raw_coulomb) {
@@ -1836,7 +1853,7 @@ cudaError_t contract_cuda_df_response_weights(
       return cudaErrorInvalidValue;
     return contract_occupied_response(n, a, terms, densities, metric, tile, workspace, stream, blas,
                                       *streamed_occupied, {}, consume, false, {}, packed_block_rows,
-                                      read_values);
+                                      read_values, compact_fitted_metric_workspace);
   }
   if (single_fitted_tensor) {
     if (!metric.full_rank || borrowed || read_fitted || packed_pairs) return cudaErrorInvalidValue;

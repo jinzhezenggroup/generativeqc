@@ -322,7 +322,10 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_runtime_workspace_tests tests/native/test_runtime_workspace.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_resource_planning_tests tests/native/test_resource_planning.cpp)
   generativeqc_native_test(generativeqc_resource_ledger_plan_tests tests/native/test_resource_ledger_plan.cpp)
-  generativeqc_native_test(generativeqc_device_resources_tests tests/native/test_device_resources.cpp NO_SRC_INCLUDE)
+  # This test creates a std::thread itself; a shared library's private thread
+  # dependency does not provide the executable's pthread symbols on older glibc.
+  generativeqc_native_test(generativeqc_device_resources_tests tests/native/test_device_resources.cpp
+                     NO_SRC_INCLUDE LIBRARIES Threads::Threads)
   generativeqc_native_test(generativeqc_execution_context_tests tests/native/test_execution_context.cpp)
   generativeqc_native_test(generativeqc_prepared_lifecycle_tests tests/native/test_prepared_lifecycle.cpp)
   generativeqc_native_test(generativeqc_cpu_linalg_tests tests/native/test_cpu_linalg.cpp)

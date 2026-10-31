@@ -38,7 +38,7 @@ from ..cuda_schedule import (
     ScheduleIR,
     ScheduleKind,
 )
-from ..ir import KernelConsumer
+from ..ir import IntegralIR, KernelConsumer
 from .emission import (
     _oracle_schedule_trial,
     _oracle_symbol_prefix,
@@ -286,14 +286,18 @@ def _run_autotune(
     # target and prevents the independent recompute oracle from becoming an
     # accidentally weaker baseline for an already-promoted class.
     production_baselines = (
-        dict(_production_fock_schedule_index(arguments.architecture))
+        dict(
+            _production_fock_schedule_index(arguments.architecture, arguments.manifest)
+        )
         if selected_consumer == KernelConsumer.FOCK
         else {}
     )
     trials = tuple(
         trial
         for spec in specifications
-        for trial in supported_schedule_trials(spec, selected_consumer, target)
+        for trial in supported_schedule_trials(
+            spec, selected_consumer, target, manifest_path=arguments.manifest
+        )
         if (
             not selected_schedule_kinds
             or trial.schedule.kind in selected_schedule_kinds
@@ -723,6 +727,7 @@ def _run_autotune(
         winners: dict[str, ScheduleIR] = {}
         winner_rows = []
         winner_provenance: dict[str, dict[str, object]] = {}
+        winner_integrals: dict[str, IntegralIR] = {}
         for spec in specifications:
             passing = passing_by_class.get(spec.name, [])
             if not passing:
@@ -840,6 +845,8 @@ def _run_autotune(
                     ]
                     continue
                 winners[spec.name] = trial.schedule
+                if trial.integral is not None:
+                    winner_integrals[spec.name] = trial.integral
                 winner_rows.append(
                     {
                         "shell_class": spec.name,
@@ -882,6 +889,7 @@ def _run_autotune(
                     winners,
                     selected_consumer,
                     winner_provenance,
+                    qualified_integrals=winner_integrals,
                 )
                 manifest_written = True
 

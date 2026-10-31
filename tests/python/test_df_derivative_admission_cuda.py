@@ -16,14 +16,14 @@ from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
-    reason="requires an explicitly Slurm-allocated GPU",
+    reason="requires an explicitly scheduler-allocated GPU",
 )
 
 
 @pytest.fixture(scope="module")
 def production_profile() -> typing.Any:
     """Query the allocated device, without adding a CuPy dependency."""
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     runtime = ctypes.CDLL("libcudart.so")
     runtime.cudaGetDevice.argtypes = [ctypes.POINTER(ctypes.c_int)]
     runtime.cudaDeviceGetAttribute.argtypes = [
@@ -49,7 +49,7 @@ def production_profile() -> typing.Any:
         ).read_text()
     )
     major, minor = capability
-    return manifest["architectures"].get(f"sm_{major}{minor}", {})
+    return manifest, f"sm_{major}{minor}"
 
 
 @pytest.mark.parametrize("buckets", ["off", "on", "packet"])
@@ -70,7 +70,7 @@ def test_qualified_lowering_without_ao_shape_admission(
     """
     from pyscf import gto, scf
 
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     case = benchmark_cases()[
         {
             "equal192": "water-octamer-s4-def2-svp-spherical",
@@ -133,7 +133,7 @@ def test_qualified_lowering_without_ao_shape_admission(
     with calc.prepare_batch(
         [case.atoms], charges=[case.charge], multiplicities=[case.multiplicity]
     ) as batch:
-        for index, policy in enumerate(("auto", "legacy", "auto")):
+        for index, policy in enumerate(("auto", "legacy", "candidate", "auto")):
             trace = tmp_path / f"{index}-{policy}.jsonl"
             monkeypatch.setenv("GENERATIVEQC_DF_SHELL_POLICY", policy)
             monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
@@ -145,15 +145,27 @@ def test_qualified_lowering_without_ao_shape_admission(
             ]
             counters = response["counters"]
             assert counters["three_center_shell_panels"] > 0
-            choices = {
-                row["class"]: row["lowering"]
-                for row in production_profile.get("kernels", [])
-            }
+            manifest, target = production_profile
+            choices = {}
+            for profile in (
+                manifest.get("portable", {}),
+                manifest["architectures"].get(target, {}),
+            ):
+                selected = (
+                    profile.get("baseline", profile)
+                    if policy != "candidate"
+                    else profile
+                )
+                choices.update(
+                    {
+                        row["class"]: row["lowering"] == "rys"
+                        and (selected.get("qualified", False) or policy == "candidate")
+                        for row in selected.get("kernels", [])
+                    }
+                )
             for key, value in counters.items():
                 if key.endswith("_rys_selected"):
-                    expected_rys = (
-                        policy == "auto"
-                        and production_profile.get("qualified", False)
-                        and choices.get(key.split("_")[1]) == "rys"
+                    expected_rys = policy != "legacy" and choices.get(
+                        key.split("_")[1], False
                     )
                     assert value == int(expected_rys), key

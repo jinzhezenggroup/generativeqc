@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.cuda_target import cuda_target_info
@@ -87,7 +87,7 @@ def _supports_uniform_warp_rys(
 
 @dataclass(frozen=True, slots=True)
 class KernelSelection:
-    """One architecture-tuned shell kernel selected for production."""
+    """One target-validated shell selection, optionally with measured tuning."""
 
     architecture: str
     spec: ShellClassSpec
@@ -98,6 +98,10 @@ class KernelSelection:
     recurrence: str = "subset_wick"
     resident_force_recurrence: str | None = None
     fock_schedule: ScheduleIR | None = None
+    # An explicitly independent value lowering keeps force scheduling from
+    # changing the primary Fock algorithm. Each consumer owns its own support
+    # symbols; mathematical output pruning still uses the shared IntegralIR.
+    fock_recurrence: str | None = None
     # Materialization is a compiler schedule choice separate from kernel geometry.
     # Existing profiles remain paged unless measured evidence explicitly promotes
     # the generated no-materialization streaming consumer.
@@ -238,6 +242,28 @@ class KernelSelection:
             )
         if self.fock_schedule is not None and KernelConsumer.FOCK not in self.consumers:
             raise ValueError("a separate Fock schedule requires a Fock consumer")
+        if self.fock_recurrence is not None:
+            if (
+                set(self.consumers) != {KernelConsumer.FOCK, KernelConsumer.FORCE}
+                or self.fock_schedule is None
+                or not isinstance(self.fock_recurrence, str)
+                or self.fock_recurrence not in _SUPPORTED_RECURRENCES - {"subset_wick"}
+            ):
+                raise ValueError(
+                    "independent Fock recurrence requires dual consumers, a Fock "
+                    "schedule and a supported value-only Rys lowering"
+                )
+            value = specialize_integral_ir(
+                selected_integral,
+                consumers=(KernelConsumer.FOCK,),
+                recurrence=self.fock_recurrence,
+            )
+            build_fused_shell_plan(
+                self.spec,
+                integral=value,
+                schedule=self.fock_schedule,
+                target=cuda_target_info(self.architecture),
+            )
         if self.resident_force_recurrence is not None:
             if self.spec.name != "ppps":
                 raise ValueError(
@@ -254,6 +280,46 @@ class KernelSelection:
         # force symbols for Fock-only rows.  Consumer metadata keeps those
         # symbols out of the force registry while allowing low-order bounded
         # Fock classes to avoid the generic AO-quartet fallback.
+
+
+def split_independent_consumers(
+    selection: KernelSelection,
+) -> tuple[KernelSelection, KernelSelection] | None:
+    """Return separately lowered force/value consumers of one scientific IR.
+
+    The force variant owns derivative support; the primary Fock variant retains
+    its independently validated value recurrence and launch geometry. Neither
+    emitted consumer may refer to the other's private helper definitions.
+    """
+    if selection.fock_recurrence is None:
+        return None
+    base = _selection_integral(selection)
+    force = replace(
+        selection,
+        consumers=(KernelConsumer.FORCE,),
+        integral=specialize_integral_ir(base, consumers=(KernelConsumer.FORCE,)),
+        fock_schedule=None,
+        fock_recurrence=None,
+        fock_route="paged",
+        capabilities=frozenset(),
+    )
+    value = specialize_integral_ir(
+        base,
+        consumers=(KernelConsumer.FOCK,),
+        recurrence=selection.fock_recurrence,
+    )
+    assert selection.fock_schedule is not None  # Validated by KernelSelection.
+    fock = replace(
+        selection,
+        consumers=(KernelConsumer.FOCK,),
+        integral=value,
+        recurrence=value.recurrence,
+        schedule=selection.fock_schedule,
+        fock_schedule=None,
+        fock_recurrence=None,
+        resident_force_recurrence=None,
+    )
+    return force, fock
 
 
 def _selection_integral(

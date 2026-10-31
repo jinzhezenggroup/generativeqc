@@ -1,0 +1,38 @@
+{
+  "schema": "generativeqc.issue435.storage.v1",
+  "scope": "Lossless physical storage only. The original scientific retention manifest remains byte-identical; stored payloads decode to their original records.",
+  "retention_manifest": {
+    "path": "retention.json",
+    "bytes": 7563,
+    "sha256": "6f62554c7fae0b9d0a93a35c807fffdd94c02cea5202e71f0272b18da3c4cd81"
+  },
+  "files": {
+    "equal-96.json": {
+      "path": "equal-96.json.gz",
+      "compression": "gzip",
+      "stored_bytes": 4464,
+      "stored_sha256": "167ffebcdee9dae035c8df292b4e8203a2188ed16a0002b6d9bf74b38a33884a",
+      "decoded_sha256": "d4f6302275307f39d7079501e161ea8ac1d85f9111ffa7089cfbf55f44102c2c",
+      "decoded_bytes": 40502,
+      "verified_against_git_revision": "9e6e2aec0953c307bae96215121e78e9d64e03b1"
+    },
+    "equal-384.json": {
+      "path": "equal-384.json.xz",
+      "compression": "xz",
+      "stored_bytes": 7864,
+      "stored_sha256": "df573bc3c948b075c53ff031ed19dcd32e110b6762c0b045a638f35d1c8ef9ad",
+      "decoded_sha256": "eb71153d3f1a48670ff3038e3e6ea441578ab5104e47f39c91d788e8ea492fa4",
+      "decoded_bytes": 71950,
+      "verified_against_git_revision": "9e6e2aec0953c307bae96215121e78e9d64e03b1"
+    },
+    "equal-768.json": {
+      "path": "equal-768.json.gz",
+      "compression": "gzip",
+      "stored_bytes": 17896,
+      "stored_sha256": "d5499fba644123a54e0f3ed97051181960f42f4d3eb876a310c07eafe7d49e3a",
+      "decoded_sha256": "c49113d035ccf8632f501a1fceeb365d4d2f1522f927cccb5a713c2e78415d0b",
+      "decoded_bytes": 114671,
+      "verified_against_git_revision": "f088d3fcd30435c125a5b92422e4d91088884977"
+    }
+  }
+}

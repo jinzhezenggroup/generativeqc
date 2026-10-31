@@ -147,10 +147,10 @@ int main() {
 
 
 @pytest.mark.parametrize(
-    ("method", "native_admitted"),
+    ("profile", "native_admitted"),
     [
         pytest.param(
-            profile.replace("_", "-"),
+            profile,
             True,
             id=profile,
         )
@@ -159,7 +159,7 @@ int main() {
 )
 @pytest.mark.parametrize("atom_count", (48, 96, 128))
 def test_phase_force_matches_energy_derivatives_and_existing_fallback(
-    method: str, native_admitted: bool, atom_count: int
+    profile: str, native_admitted: bool, atom_count: int
 ) -> None:
     """Every emitted program keeps moved forces at cached and minimum capacity."""
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
@@ -175,13 +175,15 @@ def test_phase_force_matches_energy_derivatives_and_existing_fallback(
         center = (8.0 * (pair % 4), 8.0 * ((pair // 4) % 4), 8.0 * (pair // 16))
         for offset in (-0.7, 0.7):
             atoms.append(("H", (center[0], center[1], center[2] + offset)))
-    multiplicity = 2 if method.endswith("-uks") else 1
+    multiplicity = 2 if profile.endswith("_uks") else 1
     if multiplicity == 2:
         # A single HeH radical breaks equal-spin symmetry without making all
         # separated H2 fragments degenerate open-shell triplets.
         atoms[-1] = ("He", atoms[-1][1])
     calculator = Calculator(
-        method=method,
+        # Compiler profile identifiers are not public method aliases (e.g.
+        # wb97mv_rks). Exercise the exact scientific graph being qualified.
+        method=_qualified_aot_profile(profile).plan.method,
         basis="sto-3g",
         device="cuda",
         device_id=int(os.environ.get("GENERATIVEQC_TEST_DEVICE_ID", "0")),
