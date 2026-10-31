@@ -260,10 +260,6 @@ measured_core_runtime_paths=(
   # Move the complete DF mixed-precision module off core-a without changing
   # the original modulo slot or dropping a single numerical certificate.
   tests/python/test_df_cc_mixed_precision.py
-  # Run 38890127895 left all four ECP Hessian cases in a late serial tail
-  # (~453 worker-seconds); runtime-heavy finished in 659 s. Keep every case
-  # and the original core slot while moving this complete file to loadfile.
-  tests/python/test_wb97mv_ecp_hessian.py
 )
 # PR #1934 / run 37238512811 still left the broad core shards with
 # a large measured long tail. Keep these newly measured files out of
@@ -275,6 +271,11 @@ rebalance_paths=(
   # Preserve its ordinary core slot and all cases on existing worksteal workers.
   tests/python/test_uccsd_t_lambda.py
   "${measured_core_runtime_paths[@]}"
+  # Run 41174408456 completed runtime-heavy's assertions in 1810 s, just
+  # beyond its unchanged 1800 s ceiling. Keep the ECP Hessian core slot
+  # while transferring its intact 585-worker-second module to ecp-forces,
+  # whose whole Python step completed in 973 s in that same run.
+  tests/python/test_wb97mv_ecp_hessian.py
   # Run 39351749228 reached minute 28 before the final tight VV10 case.
   # Preserve the core modulo slot, but transfer the complete endpoint file
   # to posthf (838 s in the same run) with whole-file fixture ownership.
@@ -391,14 +392,15 @@ core_hotspots_a=(
   tests/python/test_cuda_xc_point_contract.py
   tests/python/test_uccsd_solver.py
   tests/python/test_cc_triples_tiles.py
-  # Run 41165110996 exhausted core-c's 30-minute test budget with all
-  # workers still active. These intact native contract modules consumed
-  # 525 + 280 worker-seconds; core-a completed its entire job in 24m39s.
-  # Pin only their owner, preserving ordinary modulo slots and all cases.
-  tests/python/test_native_stationary_shared_kernels.py
-  tests/python/test_native_stationary_cuda_binding.py
 )
 core_hotspots_b=(
+  # After precision/defaults integration, run 41183809495 exhausted core-a
+  # with all workers active and no failed reports. These intact modules used
+  # at least 624 + 291 worker-seconds; core-b's test step finished in 975 s.
+  # Preserve ordinary modulo slots and every case on the existing worksteal
+  # workers while moving the two measured owners to that lighter lane.
+  tests/python/test_native_stationary_shared_kernels.py
+  tests/python/test_native_stationary_cuda_binding.py
   # Run 40127914199 completed core-c tests at 1798.9s. Moving these
   # intact ~477-worker-second modules to core-a then exhausted its cold
   # corrected-Lambda lane in run 40135163162; core-b finished in 14m37s.
@@ -642,6 +644,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # Its module-scoped emission must not be split across worksteal workers.
     if git ls-files --error-unmatch -- tests/python/test_df_shell_units.py >/dev/null 2>&1; then
       test_targets+=(tests/python/test_df_shell_units.py)
+    fi
+    # Preserve every Hessian case and its whole-file fixture ownership.
+    # Select tracked missing files as well, so incomplete checkouts fail closed.
+    if git ls-files --error-unmatch -- tests/python/test_wb97mv_ecp_hessian.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_wb97mv_ecp_hessian.py)
     fi
     ;;
   compiler-heavy)

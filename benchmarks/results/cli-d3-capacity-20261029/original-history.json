@@ -1,0 +1,24 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "8cdafb7fcbb0be1005d001f4c14a6e50b2ccf560",
+  "file_count": 3,
+  "total_bytes": 61617,
+  "files": [
+    {
+      "path": "benchmarks/results/cli-d3-capacity-20261029/samples.json.xz",
+      "bytes": 54240,
+      "sha256": "cd55c7f537e95590f30eb28dbab7e00d4550a7efba4715e4f8803254d2c230e1"
+    },
+    {
+      "path": "benchmarks/results/cli-d3-capacity-20261029/identities.json.xz",
+      "bytes": 3728,
+      "sha256": "5a12d34e9e28befff56ec2d1fae182874b13a5ca364fa8eb011e1284bd2a36cf"
+    },
+    {
+      "path": "benchmarks/results/cli-d3-capacity-20261029/qualify.py",
+      "bytes": 3649,
+      "sha256": "55d6383c667fbbad360d63b07784a3c3caee6fa47bfbc25d50a9fcd1d68bbe8b"
+    }
+  ],
+  "retention": "Original CLI D3 qualification retained in verified existing Git ancestry; source-specific raw timings and decisions are unchanged."
+}
