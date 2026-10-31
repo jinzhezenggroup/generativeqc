@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <new>
+#include <stdexcept>
 
 #include "generated_d4_derivative.hpp"
 #if GENERATIVEQC_HAS_CUDA
@@ -91,6 +92,58 @@ bool valid_profile_parameters(const D4Parameters& p, D4EEQProfile profile) {
 
 }  // namespace
 
+D4ResourceUsage d4_resource_usage(generativeqc_backend backend, std::uint64_t systems,
+                                  std::uint64_t atoms, std::uint64_t maximum_atoms,
+                                  std::uint64_t maximum_bytes) {
+  constexpr auto maximum_count = std::numeric_limits<std::uint32_t>::max();
+  if ((backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
+      !systems || systems > maximum_count || !atoms || atoms > maximum_count || !maximum_atoms ||
+      maximum_atoms > kD4MaximumAtoms || atoms < maximum_atoms + systems - 1 ||
+      atoms > systems * maximum_atoms || !maximum_bytes)
+    throw std::invalid_argument("invalid D4 resource shape or budget");
+  // Validated uint32 aggregate counts and the 256-atom EEQ bound keep every
+  // capacity below signed int64. Preserve the incumbent descending worker
+  // schedule: no estimate can select storage unavailable to the real owner.
+  std::uint32_t workers = backend == GENERATIVEQC_BACKEND_CUDA
+                              ? static_cast<std::uint32_t>(std::min<std::uint64_t>(systems, 32))
+                              : 1u;
+  for (; workers; --workers) {
+    bool shortage = false;
+    const auto usage =
+        resources_for(backend, systems, atoms, maximum_atoms, maximum_bytes, workers, shortage);
+    if (!shortage) return usage;
+  }
+  throw std::bad_alloc();
+}
+
+D4ResourceUsage ks_d4_resource_usage(generativeqc_backend backend,
+                                     std::span<const std::uint32_t> atom_counts) {
+  if (atom_counts.empty() || atom_counts.size() > std::numeric_limits<std::uint32_t>::max())
+    throw std::invalid_argument("invalid KS D4 fleet shape");
+  D4ResourceUsage total{};
+  total.system_count = static_cast<std::uint32_t>(atom_counts.size());
+  std::uint64_t largest_owner = 0;
+  // KS owns one correction per item, so each has one EEQ workspace slot and
+  // its own immutable tables. This is intentionally not the ragged schedule.
+  for (const auto atoms : atom_counts) {
+    const auto item =
+        d4_resource_usage(backend, 1, atoms, atoms, std::numeric_limits<std::uint64_t>::max());
+    total.plan_host_bytes += item.plan_host_bytes;
+    total.execution_host_bytes += item.execution_host_bytes;
+    total.device_bytes += item.device_bytes;
+    total.table_bytes += item.table_bytes;
+    total.workspace_bytes += item.workspace_bytes;
+    total.total_atoms += atoms;
+    total.maximum_atoms = std::max(total.maximum_atoms, atoms);
+    total.worker_blocks += item.worker_blocks;
+    total.workspace_slots += item.workspace_slots;
+    largest_owner = std::max(largest_owner,
+                             item.plan_host_bytes + item.execution_host_bytes + item.device_bytes);
+  }
+  total.maximum_bytes = largest_owner * total.system_count;
+  return total;
+}
+
 std::unique_ptr<D4Plan> D4Plan::prepare(
     generativeqc_backend backend, int device_id, std::vector<std::uint32_t> offsets,
     std::vector<std::int32_t> atomic_numbers, std::vector<double> total_charges,
@@ -98,7 +151,8 @@ std::unique_ptr<D4Plan> D4Plan::prepare(
     std::uint64_t maximum_bytes, std::string& detail, generativeqc_status& status) {
   status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   if ((backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
-      maximum_bytes == 0 || offsets.size() < 2 || offsets.front() != 0 ||
+      maximum_bytes == 0 || offsets.size() < 2 ||
+      offsets.size() - 1 > std::numeric_limits<std::uint32_t>::max() || offsets.front() != 0 ||
       offsets.back() != atomic_numbers.size() || total_charges.size() + 1 != offsets.size() ||
       default_coordinates.size() != 3 * atomic_numbers.size() ||
       !valid_profile_parameters(parameters, profile)) {
@@ -137,25 +191,15 @@ std::unique_ptr<D4Plan> D4Plan::prepare(
       return nullptr;
     }
 
-  const auto systems = offsets.size() - 1;
-  std::uint32_t workers = backend == GENERATIVEQC_BACKEND_CUDA
-                              ? static_cast<std::uint32_t>(std::min<std::size_t>(systems, 32))
-                              : 1u;
   D4ResourceUsage resources{};
-  bool budget_failure = true;
-  while (workers) {
-    resources = resources_for(backend, systems, atomic_numbers.size(), maximum_atoms, maximum_bytes,
-                              workers, budget_failure);
-    if (!budget_failure) break;
-    if (backend != GENERATIVEQC_BACKEND_CUDA || workers == 1) break;
-    --workers;
-  }
-  if (budget_failure) {
+  try {
+    resources = d4_resource_usage(backend, offsets.size() - 1, atomic_numbers.size(), maximum_atoms,
+                                  maximum_bytes);
+  } catch (const std::bad_alloc&) {
     status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     detail = "D4 production plan exceeds maximum_bytes even at the minimum workspace schedule";
     return nullptr;
   }
-
   try {
     auto result = std::unique_ptr<D4Plan>(new D4Plan(
         backend, device_id, std::move(offsets), std::move(atomic_numbers), std::move(total_charges),
