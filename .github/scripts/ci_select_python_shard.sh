@@ -391,6 +391,12 @@ core_hotspots_a=(
   tests/python/test_cuda_xc_point_contract.py
   tests/python/test_uccsd_solver.py
   tests/python/test_cc_triples_tiles.py
+  # Run 41165110996 exhausted core-c's 30-minute test budget with all
+  # workers still active. These intact native contract modules consumed
+  # 525 + 280 worker-seconds; core-a completed its entire job in 24m39s.
+  # Pin only their owner, preserving ordinary modulo slots and all cases.
+  tests/python/test_native_stationary_shared_kernels.py
+  tests/python/test_native_stationary_cuda_binding.py
 )
 core_hotspots_b=(
   # Run 40127914199 completed core-c tests at 1798.9s. Moving these
@@ -719,5 +725,12 @@ if [[ "${GENERATIVEQC_CI_SHARD}" == "posthf" && "${GITHUB_EVENT_NAME}" != "sched
   # Keep whole-file fixtures local, but start measured expensive files first.
   # xdist >=3.8 otherwise replaces collection order with descending test count.
   source "${BASH_SOURCE[0]%/*}/ci_prioritize_posthf_files.sh"
+  extra_args+=(--no-loadscope-reorder)
+fi
+
+if [[ "${GENERATIVEQC_CI_SHARD}" == "runtime-heavy" && "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
+  # Keep complete shared fixtures local, but schedule measured slow files before
+  # small test counts leave an expensive numerical tail on the final worker.
+  source "${BASH_SOURCE[0]%/*}/ci_prioritize_runtime_files.sh"
   extra_args+=(--no-loadscope-reorder)
 fi
