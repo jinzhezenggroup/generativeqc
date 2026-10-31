@@ -1,10 +1,14 @@
 # Resident pre-AO force domains
 
-The ordinary CUDA force route can build a conservative AO domain before AO
-evaluation. Compiler-owned Gaussian region envelopes produce an ascending,
-unique device CSR inventory. Each tile lends the existing `AoGridBlockLayout`
+The explicit stationary CUDA force route can build a conservative AO domain
+before AO evaluation. Compiler-owned Gaussian region envelopes produce an
+ascending, unique device CSR inventory. Each tile lends the existing `AoGridBlockLayout`
 to the indexed AO, local density and projection consumers; AO labels do not
-round-trip through Python or upload again on warm replay.
+round-trip through Python or upload again on warm replay. Current public force
+calls use the native prepared controller when its item capability is admitted;
+that controller currently evaluates dense force AO tiles and does not consult
+the Python active-AO profile registry. The policies below govern the retained
+explicit/compatibility stationary consumer, not that native public route.
 
 The automatic portfolio in `python/generativeqc/_force_active_ao.py` targets
 CUDA, all-electron, non-density-fitted RKS/UKS, deriv=1 or deriv=2,
@@ -33,6 +37,31 @@ bind map lifetime. Density updates invalidate task leases but reuse the geometry
 inventory; center updates revoke it. Compatible same-grid force/nonlocal leases
 can share it. The separate native KS/XC owner still has its own AO inventory;
 deriv=1 and deriv=2 maps are not silently interchanged.
+
+Ordinary and composite explicit stationary forces use the same map binding and
+cache owner. The binding includes the grid object and basis/geometry generations,
+scientific identities, derivative order, tile layout, producer, cutoff, occupancy
+guard and admitted cache allowance. A replacement releases the old cache before
+allocating another one. Composite semilocal and nonlocal consumers share a map
+only on the same quadrature; independent nonlocal grids retain their own dense
+AO traversal. Composite automatic selection remains dense until a production
+profile has complete endpoint qualification. Neither a test-only profile nor
+the historical ordinary-route qualification promotes native-controller maps.
+
+The opt-in numerical matrix in
+`tests/python/test_cross_functional_force_ao_cuda.py` compares dense and selected
+explicit stationary Direct LDA/PBE/PBE0/r2SCAN/WB97M-V RKS/UKS energy and forces
+with independently converged GPU4PySCF, including moving-grid response. It exercises first-call,
+warm, moved, moved-warm and zero-cache endpoints, records actual selected/dense
+AO work in JUnit properties, and includes separate XC/nonlocal grids. It calls
+the retained stationary consumer after each native energy solve, without
+overriding native capability or mislabelling dense public forces as selected
+work. A separate public native-force control forbids Python force orchestration
+and checks the same independent reference. The matrix qualifies consumer
+correctness and lifecycle behavior under test-only admission. Its small-fixture
+timings do not establish a production crossover or a fresh-process cold gain.
+Run these tests with `GENERATIVEQC_DFT_CUDA_TEST=1`, a matching native/AOT build,
+and the reference dependencies inside a finite Slurm GPU allocation.
 
 Ordinary density-fitted forces use the separate native AO-jet bitmask producer
 at dense point×AO² work of at least `2**35`. Its discovery cost does not share

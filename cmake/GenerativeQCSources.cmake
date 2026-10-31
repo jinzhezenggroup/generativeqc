@@ -17,6 +17,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_fock.cpp
     src/api/c_api_one_electron_gradient.cpp
     src/api/c_api_projection.cpp
+    src/api/c_api_fleet_projection.cpp
     src/api/c_api_hf_physical_audit.cpp
     src/api/c_api_response.cpp
     src/api/c_api_df_gradient.cpp
@@ -148,6 +149,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/density_fitting.cpp
     src/scf/hf_df_resources.cpp
     src/scf/fleet.cpp
+    src/scf/fleet_projection.cpp
     src/scf/cuda_fock_provider.cpp
     src/scf/fock_prepared.cpp
     src/scf/explicit_integral_backend.cpp

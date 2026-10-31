@@ -16,6 +16,7 @@ import pytest
 
 from benchmarks.readme_defaults import COMMON_GATES, SCHEMA
 from benchmarks.readme_defaults_qualification import (
+    ENVIRONMENT_REUSE_SCHEMA,
     ORACLE_SCHEMA,
     REUSE_SCHEMA,
     identity,
@@ -134,6 +135,70 @@ def test_reference_reuse_preserves_producer_identities_and_all_error_gates() -> 
     assert qualify([record], oracles, reference_reuse=manifest)[0]["status"] == "failed"
 
 
+def environment_campaign() -> tuple[dict, list[dict], dict]:
+    """Review separate production and oracle installs without changing receipts."""
+    record, oracles, manifest = reuse_campaign()
+    record["environment"]["packages"]["gpu4pyscf"] = None
+    manifest["schema"] = ENVIRONMENT_REUSE_SCHEMA
+    for oracle in oracles:
+        manifest["entries"][identity(oracle)].update(
+            reference_packages=deepcopy(oracle["environment"]["packages"]),
+            measurement_packages=[deepcopy(record["environment"]["packages"])],
+            review="Audited identical geometry, basis, Hamiltonian and corrections.",
+        )
+    return record, oracles, manifest
+
+
+def test_separate_reference_environment_requires_explicit_review() -> None:
+    record, oracles, manifest = environment_campaign()
+    original = deepcopy((record, oracles, manifest))
+    assert (
+        qualify([record], oracles, reference_reuse=manifest)[0]["status"] == "qualified"
+    )
+    assert (record, oracles, manifest) == original
+    # A historical same-environment contract cannot implicitly accept this.
+    legacy = deepcopy(manifest)
+    legacy["schema"] = REUSE_SCHEMA
+    for entry in legacy["entries"].values():
+        for key in ("reference_packages", "measurement_packages", "review"):
+            entry.pop(key)
+    with pytest.raises(ValueError, match="package versions differ"):
+        qualify([record], oracles, reference_reuse=legacy)
+    record["samples"][2]["forces"][0][0] = 1e-3
+    assert qualify([record], oracles, reference_reuse=manifest)[0]["status"] == "failed"
+
+
+@pytest.mark.parametrize(
+    "mutation", ["measurement", "oracle", "review", "reference_packages", "basis"]
+)
+def test_environment_contract_cannot_authorize_unreviewed_inputs(mutation: str) -> None:
+    record, oracles, manifest = environment_campaign()
+    entry = manifest["entries"][identity(oracles[0])]
+    if mutation == "measurement":
+        record["environment"]["packages"]["numpy"] = "unreviewed"
+    elif mutation == "oracle":
+        oracles[0]["environment"]["packages"]["pyscf"] = "unreviewed"
+    elif mutation == "basis":
+        record["orbital_basis"] = "sto-3g"
+    elif mutation == "review":
+        entry["review"] = " "
+    else:
+        entry["reference_packages"]["pyscf"] = "unreviewed"
+    with pytest.raises(ValueError):
+        qualify([record], oracles, reference_reuse=manifest)
+
+
+def test_lsf_oracle_preserves_real_allocation_identity() -> None:
+    record, oracles = campaign()
+    for oracle in oracles:
+        oracle["slurm_job_id"] = None
+        oracle["scheduler"] = {"LSB_JOBID": "216478", "CUDA_VISIBLE_DEVICES": "0"}
+    assert qualify([record], oracles)[0]["status"] == "qualified"
+    oracles[0]["scheduler"]["LSB_JOBID"] = None
+    with pytest.raises(ValueError, match="allocation"):
+        qualify([record], oracles)
+
+
 @pytest.mark.parametrize(
     ("key", "value"),
     [
@@ -169,8 +234,13 @@ def test_reference_reuse_requires_exact_receipt_and_producer_provenance(
         qualify([record], oracles, reference_reuse=manifest)
 
 
-def test_reviewed_reference_reuse_still_requires_grid_stability() -> None:
-    record, oracles, manifest = reuse_campaign()
+@pytest.mark.parametrize("separate_environments", [False, True])
+def test_reviewed_reference_reuse_still_requires_grid_stability(
+    separate_environments: bool,
+) -> None:
+    record, oracles, manifest = (
+        environment_campaign() if separate_environments else reuse_campaign()
+    )
     contract = manifest["entries"].pop(identity(oracles[0]))
     oracles[0]["samples"][0]["forces"][0][0] = 1e-3
     manifest["entries"][identity(oracles[0])] = contract
@@ -227,6 +297,28 @@ def test_untrusted_reference_cannot_qualify_production(failure: str) -> None:
     q = qualify([record], oracles)[0]
     assert q["status"] == q["cold"]["status"] == q["warm"]["status"] == "unverified"
     assert q["reasons"]
+
+
+@pytest.mark.parametrize("failure", ["missing_cpu", "grid_unstable", "cpu_disagrees"])
+def test_reviewed_environments_preserve_independent_oracle_gates(failure: str) -> None:
+    """An environment audit cannot substitute for stability or CPU agreement."""
+    record, oracles, manifest = environment_campaign()
+    contracts = {
+        oracle["backend"]: manifest["entries"][identity(oracle)] for oracle in oracles
+    }
+    if failure == "missing_cpu":
+        oracles.pop()
+    elif failure == "grid_unstable":
+        oracles[0]["samples"][0]["energy"] += 1e-3
+        oracles[0]["grid_stability"] = {"passed": True}
+    else:
+        oracles[1]["samples"][0]["forces"][0][0] = 1e-3
+    # Even an explicit receipt audit cannot override failed numerical gates.
+    manifest["entries"] = {
+        identity(oracle): contracts[oracle["backend"]] for oracle in oracles
+    }
+    result = qualify([record], oracles, reference_reuse=manifest)[0]
+    assert result["status"] == "unverified" and result["reasons"]
 
 
 @pytest.mark.parametrize(

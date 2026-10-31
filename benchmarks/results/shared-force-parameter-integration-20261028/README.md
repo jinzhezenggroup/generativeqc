@@ -31,15 +31,35 @@ the successful retry; no scientific failure or skipped case was relabelled.
 The retry used verified sccache 0.16.0, retained existing build outputs, and
 reported 47 compilation requests, 47 misses, zero hits and zero compile failures.
 
-Recheck exact bytes, artifact ownership and recorded force/CLI gates without a GPU:
+Recheck exact numerical receipt bytes, artifact ownership and recorded force/CLI
+gates without a GPU or a Git-history dependency:
 
 ```sh
 PYTHONPATH=python:. python benchmarks/results/shared-force-parameter-integration-20261028/verify.py
 ```
 
+The whole-source census is retained in published Git history through
+[`build-inputs-snapshot.json`](build-inputs-snapshot.json). Its 5,951-input count,
+original digest and successful source verification remain in the current
+manifest. All force, finite-difference, CLI, failed-run and acceptance data remain
+in the checkout. This is a storage change, not requalification. Restore the exact
+census explicitly when auditing or reproducing the historical build:
+
+```sh
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/shared-force-parameter-integration-20261028/build-inputs-snapshot.json \
+  --output .artifacts/2835-input-history
+PYTHONPATH=python:. python benchmarks/results/shared-force-parameter-integration-20261028/verify.py \
+  --build-inputs .artifacts/2835-input-history/benchmarks/results/shared-force-parameter-integration-20261028/final/build-inputs.json.xz
+```
+
+Restoration verifies the full stored bytes and never fetches implicitly; the
+optional verifier also checks the original decompressed bytes. Normal numerical
+replay explicitly reports that the archived census has not been loaded.
+
 To reproduce on the matching node2 environment, restore the measured Git source,
 copy each `final-*` driver to its `execution_path` in the manifest, and decode
-`final/build-inputs.json.xz` to `.artifacts/2835-final-inputs.json`. Adapt checkout
+the restored `final/build-inputs.json.xz` to `.artifacts/2835-final-inputs.json`. Adapt checkout
 and environment paths consistently, then run both phases through finite Slurm
 allocations, preserving the assigned device visibility:
 

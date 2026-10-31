@@ -1,0 +1,81 @@
+{
+  "schema": "generativeqc.h100-hf-fitting-storage.v1",
+  "measured_revision": "15ab66a68a061355fda833a93e88484dbfee6360",
+  "measured_dirty": false,
+  "decision": "accepted numerical preflight only; not promotion or performance",
+  "oracle": {
+    "path": "benchmarks/results/readme-repaired-20261021/oracles.json.xz",
+    "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+  },
+  "files": {
+    "observations.json.xz": {
+      "bytes": 32152,
+      "sha256": "f69eb463304e9c3e22f0661e9f43d559027ade1286cc5805afc3153209e9ebc2"
+    },
+    "hf-auxiliary.json": {
+      "bytes": 9200,
+      "sha256": "5adb284790231935af7930859ffbaab862416d6083342c35734cb1b64eda15aa"
+    },
+    "hf-reference.json": {
+      "bytes": 3344,
+      "sha256": "d312a35daf6250d49ce14102cc3261216172f3033141f9aba93279ff7f16745e"
+    },
+    "hf-fit-reference.py.xz": {
+      "bytes": 2936,
+      "sha256": "15b44411388ba49413a2d46dee4701b3ed4b990458ea0aa1124a85fa581afc66"
+    },
+    "endpoint.py.xz": {
+      "bytes": 3044,
+      "sha256": "5ff2db2d51d3cc714820254aca618101ddfdf24ab75ed2f38bc8d622f78b6b1e"
+    }
+  },
+  "original_receipt_bindings": {
+    "hf-3-standard-cc-pvtz-jkfit": {
+      "record": "073986bb366a93f117be7617403e89d8216ad6124cc9d1f0fe11b58d92070048",
+      "plan": "a6b5b5257b65e8fb053f8572366b1b36e96876ac937c06744396f085b96a5aa3"
+    },
+    "hf-3-gpu4pyscf-cc-pvtz-jkfit": {
+      "record": "9c24bee6467e52b034289f64008a33af792e0fe836de4e2313ea47dd54724a7a",
+      "plan": "33bed478876c044b63ca4cc35b18d56eaa33494f3328575748b2a91739255e0f"
+    },
+    "hf-48-standard-cc-pvtz-jkfit": {
+      "record": "2ee9965eb12be9039608fae431303054f1a2cb4c26fbcbf448052bc9d9a76c8f",
+      "plan": "7dc05b58bc6af86c289429e8982cfb42729193e52c5c64b2d3b159305136ee4c"
+    },
+    "hf-48-gpu4pyscf-cc-pvtz-jkfit": {
+      "record": "01eb5356459b4942e058d890c35a0be509f036288da8c468cf88c75b1f3ab853",
+      "plan": "7af2d349683cf7d362d7a73f80954ec9387962e32f66ad9603415b7c7ab564ad"
+    },
+    "hf-96-gpu4pyscf-cc-pvtz-jkfit": {
+      "record": "a2cbf06a2675f2045bac0a0ad4fa7aa6a3bd923ba2d1bfc0466055be65666c75",
+      "plan": "0e20ce6511c0f8af3f2e0a7d718739347cf34acfd509c6fed76520d1e0e0fd40"
+    },
+    "hf-96-standard-cc-pvtz-jkfit": {
+      "record": "f2d8160a9d2fe558baeed4189160aac082a42f3edc5dd0264fea63afdc7eb12b",
+      "plan": "58aae1de9443e63952be58833beadef51ddd22080d7dffcb1842a727508adb16"
+    },
+    "hf-3-gpu4pyscf-stock-default": {
+      "record": "707840595ea0ff8231f83ecabd89098b4c8294f5465f3c9ad72c0423ce074eb5",
+      "plan": "99db5aae35dc584bb057f5cc880523b24e85445ed8c3f1f5c90c8c097c2fb5ed"
+    }
+  },
+  "transformation_checks": {
+    "scientific_samples_exactly_equal": true,
+    "geometry_exactly_equal": true,
+    "sample_count": 28,
+    "original_plan_sha_matches_execution_record": true,
+    "private_shared_root_prefix_redacted": true
+  },
+  "executed_adapters": {
+    "hf-fit-reference.py": {
+      "path": "hf-fit-reference.py.xz",
+      "original_bytes": 6858,
+      "original_sha256": "49e2f42f5781a0bf2349c9eac8e28725a79adc71655e8942c4e9873be60f199d"
+    },
+    "endpoint.py": {
+      "path": "endpoint.py.xz",
+      "original_bytes": 7467,
+      "original_sha256": "87b1dbf9b0b2237979974a8e26a3c1495aca789d87ec6004f33f08e1da45d051"
+    }
+  }
+}
