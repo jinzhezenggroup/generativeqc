@@ -72,6 +72,10 @@ def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> 
         selector.with_name("ci_prioritize_posthf_files.sh"),
         old_selector.with_name("ci_prioritize_posthf_files.sh"),
     )
+    shutil.copyfile(
+        selector.with_name("ci_prioritize_runtime_files.sh"),
+        old_selector.with_name("ci_prioritize_runtime_files.sh"),
+    )
 
     def run(path: Path, shard: str) -> tuple[str, list[str], list[str], list[str]]:
         script = f"source {shlex.quote(str(path))}\n"
@@ -490,6 +494,8 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         "core-a": (
             "test_cc_triples_tiles.py",
             "test_df_lambda_core_reuse.py",
+            "test_native_stationary_shared_kernels.py",
+            "test_native_stationary_cuda_binding.py",
         ),
         "core-b": (
             "test_cpu_semilocal_force_contract.py",
@@ -551,6 +557,8 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_uccsd_solver.py": "runtime-heavy",
         "tests/python/test_wb97mv_ecp_hessian.py": "runtime-heavy",
         "tests/python/test_cc_triples_tiles.py": "core-a",
+        "tests/python/test_native_stationary_shared_kernels.py": "core-a",
+        "tests/python/test_native_stationary_cuda_binding.py": "core-a",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
         "tests/python/test_df_lambda_core_reuse.py": "core-a",
         "tests/python/test_correlation_convergence.py": "runtime-heavy",
@@ -1354,8 +1362,10 @@ def test_collection_adapter_is_repeatable_without_broadening_selection(
     assert "--ignore=tests/python/test_a.py" not in arguments
 
 
-def _prioritized_posthf_targets(targets: list[str], root: Path) -> list[str]:
-    helper = ROOT / ".github/scripts/ci_prioritize_posthf_files.sh"
+def _prioritized_posthf_targets(
+    targets: list[str], root: Path, *, lane: str = "posthf"
+) -> list[str]:
+    helper = ROOT / f".github/scripts/ci_prioritize_{lane}_files.sh"
     result = subprocess.run(
         [
             "bash",
@@ -1381,27 +1391,39 @@ def _prioritized_posthf_targets(targets: list[str], root: Path) -> list[str]:
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("shard", SHARDS)
-def test_measured_file_priority_only_changes_routine_posthf_scheduling(
+def test_measured_file_priority_only_changes_routine_file_scheduling(
     event: str, shard: str
 ) -> None:
     distribution, selected, extra = _selection(event, shard)
-    prioritized = shard == "posthf" and event in {"pull_request", "push", "merge_group"}
+    prioritized = shard in {"posthf", "runtime-heavy"} and event in {
+        "pull_request",
+        "push",
+        "merge_group",
+    }
     assert ("--no-loadscope-reorder" in extra) == prioritized
     if prioritized:
         assert distribution == "loadfile"
-        assert selected[:5] == [
-            "tests/python/test_treutler_endpoints.py",
-            "tests/python/test_uccsd_lambda.py",
-            "tests/python/test_uccsd_t_owner.py",
-            "tests/python/test_uccsd_physical_response.py",
-            "tests/python/test_dft_complete_cpu.py",
-        ]
-        complete_cc = selected.index("tests/python/test_cc_complete_gradient.py")
-        assert selected[complete_cc : complete_cc + 3] == [
-            "tests/python/test_cc_complete_gradient.py",
-            "tests/python/test_ccsdt_cbs_native.py",
-            "tests/python/test_ecp_heavy.py",
-        ]
+        if shard == "runtime-heavy":
+            assert selected[:4] == [
+                "tests/python/test_wb97mv_ecp_hessian.py",
+                "tests/python/test_uccsd_triples_response.py",
+                "tests/python/test_native_stationary_phased_budget.py",
+                "tests/python/test_correlation_convergence.py",
+            ]
+        else:
+            assert selected[:5] == [
+                "tests/python/test_treutler_endpoints.py",
+                "tests/python/test_uccsd_lambda.py",
+                "tests/python/test_uccsd_t_owner.py",
+                "tests/python/test_uccsd_physical_response.py",
+                "tests/python/test_dft_complete_cpu.py",
+            ]
+            complete_cc = selected.index("tests/python/test_cc_complete_gradient.py")
+            assert selected[complete_cc : complete_cc + 3] == [
+                "tests/python/test_cc_complete_gradient.py",
+                "tests/python/test_ccsdt_cbs_native.py",
+                "tests/python/test_ecp_heavy.py",
+            ]
         # The shared collection adapter must not undo the measured file order.
         targets, arguments = _split_collection(
             _collection_arguments(shard, selected, ROOT)
@@ -1437,9 +1459,13 @@ def test_posthf_order_preserves_unknown_missing_and_duplicate_targets(
         assert actual[:2] == ["tests/python/test_uccsd_lambda.py"] * 2
 
 
+@pytest.mark.parametrize("lane", ("posthf", "runtime"))
 @pytest.mark.parametrize("parent_worker", (None, "gw0"))
 def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixtures(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, parent_worker: str | None
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    parent_worker: str | None,
+    lane: str,
 ) -> None:
     """Exercise the installed xdist scheduler, not a model of its behavior."""
     # A nested controller inherits its parent's environment but is not a worker.
@@ -1463,12 +1489,21 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
         "            stream.write(json.dumps([report.nodeid, report.outcome]) + '\\n')\n",
         encoding="utf-8",
     )
-    priority = [
-        "test_treutler_endpoints.py",
-        "test_uccsd_lambda.py",
-        "test_uccsd_t_owner.py",
-        "test_uccsd_physical_response.py",
-    ]
+    priority = (
+        [
+            "test_treutler_endpoints.py",
+            "test_uccsd_lambda.py",
+            "test_uccsd_t_owner.py",
+            "test_uccsd_physical_response.py",
+        ]
+        if lane == "posthf"
+        else [
+            "test_wb97mv_ecp_hessian.py",
+            "test_uccsd_triples_response.py",
+            "test_native_stationary_phased_budget.py",
+            "test_correlation_convergence.py",
+        ]
+    )
     ordinary = [f"test_future_{index}.py" for index in range(4)]
     for name in [*priority, *ordinary]:
         count = 3 if name in priority else 8
@@ -1486,9 +1521,11 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
             encoding="utf-8",
         )
     selected = [f"tests/python/{name}" for name in [*ordinary, *reversed(priority)]]
-    ordered = _prioritized_posthf_targets(selected, tmp_path)
+    ordered = _prioritized_posthf_targets(selected, tmp_path, lane=lane)
     adapted, collection_args = _split_collection(
-        _collection_arguments("posthf", ordered, tmp_path)
+        _collection_arguments(
+            "posthf" if lane == "posthf" else "runtime-heavy", ordered, tmp_path
+        )
     )
     env = {**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTEST_ADDOPTS": ""}
     command = [

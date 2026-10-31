@@ -2,6 +2,7 @@
 
 import os
 import typing
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -54,6 +55,33 @@ def test_topology_controls_and_spin_bind_the_resource_identity() -> None:
         {"energy_tolerance": 1e-12},
     ):
         assert estimate_ks_resources([H2], **options).identity != base.identity
+
+
+@pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "pbe0-rks", "pbe-uks"))
+def test_resolved_cuda_options_preserve_metadata_and_revalidate_replacements(
+    method: str,
+) -> None:
+    """A resolution snapshot is reusable only for its original immutable inputs."""
+    from generativeqc import GridSpec, _native
+    from generativeqc.ks import KsOptions, resolve_ks_options
+    from generativeqc.resources_ks import ks_resource_request
+
+    library = _native.load_library(device="cpu")
+    options = KsOptions(grid=GridSpec(12, 6, 12))
+    resolved = resolve_ks_options(method, options)
+
+    def request(value: typing.Any, selector: str = method) -> typing.Any:
+        return ks_resource_request(
+            [H2], method=selector, ks_options=value, backend="cuda", library=library
+        )
+
+    assert request(resolved) == request(options)
+    changed = replace(resolved, tile_points=128)
+    assert request(changed) != request(resolved)
+    # Even an already-resolved option must reject an incompatible spin selector.
+    other_spin = method.replace("rks", "uks") if method.endswith("rks") else "pbe-rks"
+    with pytest.raises(NotImplementedError, match="compiler-resolved"):
+        request(resolved, other_spin)
 
 
 @pytest.mark.parametrize(

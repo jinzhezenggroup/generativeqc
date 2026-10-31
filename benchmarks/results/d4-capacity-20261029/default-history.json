@@ -1,0 +1,19 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "28caa68b2c1107e0abd4084c85419bcc5123760b",
+  "file_count": 2,
+  "total_bytes": 117064,
+  "files": [
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/cpu-default-samples.json.xz",
+      "bytes": 31068,
+      "sha256": "6d6d1a0c193da1933d9110e0e2e1106013288d3b319a0009d03192c5ad96b373"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/cuda-default-samples.json.xz",
+      "bytes": 85996,
+      "sha256": "b83aae8d835093add0727a1ec1e33af341c9ffbc67a2e371ad109e01da6102b6"
+    }
+  ],
+  "retention": "Existing ancestor Git objects, without external archives or history rewriting."
+}
