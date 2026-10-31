@@ -330,6 +330,7 @@ class KsOptionsDescriptor(ctypes.Structure):
         ("nonlocal_c", ctypes.c_double),
         ("nonlocal_coefficient", ctypes.c_double),
         ("nonlocal_maximum_bytes", ctypes.c_uint64),
+        ("force_tile_points", ctypes.c_uint64),
     ]
 
 

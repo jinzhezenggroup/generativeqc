@@ -22,7 +22,8 @@ namespace generativeqc {
  * v4 encodes level 0..9 in radial_points and requires zero angular fields;
  * earlier versions use radial_points, angular_polar and angular_azimuth as counts;
  * partition_iterations sets Becke partition smoothing; coincident_tolerance sets the
- * coincident-center threshold; tile_points bounds the grid tile size.
+ * coincident-center threshold; tile_points bounds SCF grid tiles. force_tile_points
+ * bounds CUDA stationary-force tiles independently; zero inherits tile_points.
  * @lifetime Owns only scalar values; copying preserves the complete descriptor.
  * @errors Construction does not validate the grid; native preparation validates it.
  * @units coincident_tolerance is in Bohr; point/iteration counts and version are dimensionless.
@@ -35,6 +36,7 @@ struct KsGrid {
   std::uint32_t partition_iterations{3};
   double coincident_tolerance{1.0e-12};
   std::uint64_t tile_points{256};
+  std::uint64_t force_tile_points{0};
 };
 
 /** @native-contract generativeqc::prepare_named_ks
@@ -64,6 +66,7 @@ inline Calculation prepare_named_ks(Context& context, const System& system,
   options.partition_iterations = grid.partition_iterations;
   options.coincident_tolerance = grid.coincident_tolerance;
   options.tile_points = grid.tile_points;
+  options.force_tile_points = grid.force_tile_points;
   options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
   options.nonlocal_maximum_bytes = nonlocal_bytes;
   method.ks_options = &options;
@@ -219,6 +222,7 @@ class KsComposition {
     options.partition_iterations = grid_.partition_iterations;
     options.coincident_tolerance = grid_.coincident_tolerance;
     options.tile_points = grid_.tile_points;
+    options.force_tile_points = grid_.force_tile_points;
     if (radii_) {
       options.element_radii = radii_->data();
       options.element_radius_count = static_cast<std::uint32_t>(radii_->size());

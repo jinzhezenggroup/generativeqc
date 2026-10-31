@@ -158,6 +158,11 @@ class KsOptions:
     legacy XC grid retains the shared-grid path. Supplying the same complete
     GridSpec explicitly also retains sharing. Matching point counts alone
     never authorize sharing points or weights.
+
+    force_tile_points optionally bounds CUDA stationary-force batches independently
+    of the SCF tile (1..4096 points). None preserves the existing force policy.
+    It changes neither scientific controls nor CPU tiling and remains subject to
+    the complete native force arena and nonlocal memory budgets.
     """
 
     functional: FunctionalSpec | None = None
@@ -165,6 +170,9 @@ class KsOptions:
     grid: GridSpec | None = None
     grid_accuracy: str = "standard"
     tile_points: int = 256
+    # None preserves the native force owner's existing tile. An explicit
+    # force bound is independent of SCF and remains subject to arena admission.
+    force_tile_points: int | None = None
     xc_schedule: str = "device_fused"
     scf_domain: str = SCF_DOMAIN
     # Finite capacity for the full-grid pair/force owners. Actual allocation is
@@ -211,6 +219,11 @@ class KsOptions:
         if self.grid_accuracy not in ("standard", "tight"):
             raise ValueError("KS grid_accuracy must be 'standard' or 'tight'")
         checked_int(self.tile_points, "KS XC tile points")
+        if self.force_tile_points is not None and (
+            type(self.force_tile_points) is not int
+            or not 1 <= self.force_tile_points <= 4096
+        ):
+            raise ValueError("force_tile_points must be None or an integer in [1,4096]")
         if self.xc_schedule not in ("device_fused", "host_unfused"):
             raise ValueError("KS XC schedule must be 'device_fused' or 'host_unfused'")
         if self.scf_domain not in _NATIVE_SCF_DOMAINS:
@@ -301,6 +314,8 @@ class KsOptions:
         }
         if self._precision_budget is not None:
             payload["application_precision_budget"] = self._precision_budget
+        if self.force_tile_points is not None:
+            payload["force_tile_points"] = self.force_tile_points
         if self.has_separate_nonlocal_grid:
             payload["nonlocal_grid"] = asdict(self.nonlocal_grid)
             payload["nonlocal_grid_provenance"] = grid_policy_provenance(
@@ -1243,6 +1258,7 @@ def native_ks_options(
             partition_iterations=nonlocal_spec.partition_iterations,
             coincident_tolerance=nonlocal_spec.coincident_tolerance,
             tile_points=options.tile_points,
+            force_tile_points=options.force_tile_points or 0,
             element_radii=nonlocal_radii,
             element_radius_count=119 if nonlocal_radii is not None else 0,
             xc_execution_schedule=_native.XC_EXECUTION_DEVICE_FUSED
@@ -1276,6 +1292,7 @@ def native_ks_options(
         partition_iterations=grid.partition_iterations,
         coincident_tolerance=grid.coincident_tolerance,
         tile_points=options.tile_points,
+        force_tile_points=options.force_tile_points or 0,
         element_radii=radii,
         element_radius_count=119 if radii is not None else 0,
         xc_execution_schedule=_native.XC_EXECUTION_DEVICE_FUSED
@@ -1387,6 +1404,7 @@ def native_ks_options(
         nonlocal_c,
         nonlocal_coefficient,
         options.nonlocal_memory_budget_bytes if nonlocal_primitive is not None else 0,
+        options.force_tile_points or 0,
         *(options._precision_budget or ((0.0, 0.0, 0.0) if split_grid else ())),
     )
     # ctypes pointer fields do not own their pointees.  Retain every borrowed

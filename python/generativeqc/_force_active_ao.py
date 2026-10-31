@@ -244,6 +244,7 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = 
         evidence=(
             ".agents/notes/implemented/performance/2026-10-10-df-force-active-ao.md",
             ".agents/notes/implemented/performance/2026-10-25-df-force-bitmask-crossover.md",
+            ".agents/notes/implemented/performance/2026-10-31-fixed-force-tile-ao-maps.md",
         ),
         compositions=("ordinary",),
         derivative_orders=(1, 2),
@@ -251,7 +252,10 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = 
         density_fitted=True,
         min_dense_point_ao_square_work=_FITTED_BITMASK_DENSE_WORK_CROSSOVER,
         tile_policy="fixed",
-        tile_points=256,
+        # Explicit and automatic requests share complete capacity admission.
+        # The map binds the actual tile layout, so an explicit larger bound
+        # must not silently disable this same exact-jet producer.
+        tile_points=None,
         min_device_bytes=512 << 20,
         min_host_bytes=256 << 20,
         cutoff=1e-16,
@@ -262,7 +266,7 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = 
 )
 
 
-# Keep explicit 256-point callers and the same continuous producer crossover.
+# Preserve each producer's fixed-tile qualification and continuous crossover.
 # Automatic tiles are admitted by the shared complete-owner byte-budget planner;
 # do not let their policy label silently disable the existing indexed consumer.
 QUALIFIED_FORCE_ACTIVE_AO_PROFILES += tuple(

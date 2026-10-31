@@ -677,7 +677,8 @@
         "angular_azimuth",
         "partition_iterations",
         "coincident_tolerance",
-        "tile_points"
+        "tile_points",
+        "force_tile_points"
       ],
       "field_declarations": [
         "std :: uint32_t version { 4 } ;",
@@ -686,7 +687,8 @@
         "std :: uint32_t angular_azimuth { 0 } ;",
         "std :: uint32_t partition_iterations { 3 } ;",
         "double coincident_tolerance { 1.0 e - 12 } ;",
-        "std :: uint64_t tile_points { 256 } ;"
+        "std :: uint64_t tile_points { 256 } ;",
+        "std :: uint64_t force_tile_points { 0 } ;"
       ]
     },
     "generativeqc::MethodCapabilities": {

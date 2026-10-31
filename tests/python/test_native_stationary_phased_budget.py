@@ -147,19 +147,29 @@ int main() {
 
 
 @pytest.mark.parametrize(
-    ("profile", "native_admitted"),
+    ("profile", "native_admitted", "force_tile_points"),
     [
         pytest.param(
             profile,
             True,
+            None,
             id=profile,
         )
         for profile in NATIVE_STATIONARY_CUDA_PROFILES
+    ]
+    + [
+        pytest.param(profile, True, 1024, id=profile + "-force1024")
+        for profile in ("pbe_rks", "pbe0_rks", "wb97mv_rks")
+    ]
+    + [
+        # The public upper bound exceeds the geometry lane/scratch cap and
+        # must still execute the complete force through its bounded fallback.
+        pytest.param("pbe0_rks", True, 4096, id="pbe0_rks-force4096")
     ],
 )
 @pytest.mark.parametrize("atom_count", (48, 96, 128))
 def test_phase_force_matches_energy_derivatives_and_existing_fallback(
-    profile: str, native_admitted: bool, atom_count: int
+    profile: str, native_admitted: bool, force_tile_points: int | None, atom_count: int
 ) -> None:
     """Every emitted program keeps moved forces at cached and minimum capacity."""
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
@@ -180,6 +190,7 @@ def test_phase_force_matches_energy_derivatives_and_existing_fallback(
         # A single HeH radical breaks equal-spin symmetry without making all
         # separated H2 fragments degenerate open-shell triplets.
         atoms[-1] = ("He", atoms[-1][1])
+    scf_tile_points = 128 if force_tile_points else 256
     calculator = Calculator(
         # Compiler profile identifiers are not public method aliases (e.g.
         # wb97mv_rks). Exercise the exact scientific graph being qualified.
@@ -187,7 +198,11 @@ def test_phase_force_matches_energy_derivatives_and_existing_fallback(
         basis="sto-3g",
         device="cuda",
         device_id=int(os.environ.get("GENERATIVEQC_TEST_DEVICE_ID", "0")),
-        ks_options=KsOptions(grid=GridSpec(12, 4, 8)),
+        ks_options=KsOptions(
+            grid=GridSpec(12, 4, 8),
+            tile_points=scf_tile_points,
+            force_tile_points=force_tile_points,
+        ),
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
         screening_tolerance=1e-14,
@@ -204,6 +219,16 @@ def test_phase_force_matches_energy_derivatives_and_existing_fallback(
             [positions], strict=True, properties=("energy", "forces")
         ).items[0]
         assert original.converged and moved.converged
+        assert (
+            original.ks_diagnostic.tile_points
+            == moved.ks_diagnostic.tile_points
+            == scf_tile_points
+        )
+        # Omitted coordinates select the original prepared geometry.
+        warm = batch.execute(
+            [positions], strict=True, properties=("energy", "forces")
+        ).items[0]
+        np.testing.assert_allclose(warm.forces, moved.forces, atol=1e-7, rtol=0)
         if not native_admitted:
             work = batch._stationary_cuda_execution.sources.metrics()
             assert work["phased_becke_bytes"] > 0
@@ -243,9 +268,41 @@ def test_phase_force_matches_energy_derivatives_and_existing_fallback(
                 batch._library, query(batch._batch, 0, capacity, len(capacity))
             )
             assert capacity[5] > capacity[4]
+            assert capacity[6] == (force_tile_points or scf_tile_points)
+            # A dry plan and the prepared owner must describe the same force
+            # arena even when SCF uses a different tile. These STO-3G fixtures
+            # have one s AO and three primitives per H/He center.
+            shape = (ctypes.c_uint64 * 7)(
+                atom_count, atom_count, 3 * atom_count, atom_count * 12 * 4 * 8, 0, 0, 0
+            )
+            dry = batch._library.generativeqc_resource_ks_stationary_cuda_v1
+            dry.argtypes = [
+                ctypes.POINTER(_native.MethodDescriptor),
+                ctypes.POINTER(ctypes.c_uint64),
+                ctypes.c_size_t,
+                ctypes.POINTER(ctypes.c_uint64),
+                ctypes.c_size_t,
+            ]
+            dry.restype = ctypes.c_int
+            descriptor = calculator._method_descriptor(systems=(displaced,))
+            planned = (ctypes.c_uint64 * 9)()
+            _native.check(
+                batch._library,
+                dry(ctypes.byref(descriptor), shape, len(shape), planned, len(planned)),
+            )
+            assert tuple(planned) == tuple(capacity)
+            descriptor.ks_options.contents.force_tile_points = 0
+            _native.check(
+                batch._library,
+                dry(ctypes.byref(descriptor), shape, len(shape), planned, len(planned)),
+            )
+            assert planned[6] == scf_tile_points
             limit = batch._library.generativeqc_ks_batch_stationary_cuda_limit_v1
             limit.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint64]
             limit.restype = ctypes.c_int
+            assert (
+                limit(batch._batch, 0, capacity[4] - 1) == _native.STATUS_OUT_OF_MEMORY
+            )
             _native.check(batch._library, limit(batch._batch, 0, capacity[4]))
         assert batch._native_dft_force_eligible(0) is native_admitted
         bounded = batch.execute(strict=True, properties=("energy", "forces")).items[0]

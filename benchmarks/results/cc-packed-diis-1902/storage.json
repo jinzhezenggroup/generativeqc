@@ -1,0 +1,35 @@
+{
+  "schema": "lossless-json-storage-v1",
+  "files": [
+    {
+      "path": "post-merge-summary.json.xz",
+      "codec": "xz",
+      "stored_bytes": 5872,
+      "stored_sha256": "0192b1b2ca2c3c81705c8633bacb6c546c28c6416d009e623967f6e1136c1806",
+      "decoded_bytes": 40064,
+      "decoded_sha256": "fa03833126715c3e45910af8ccdc92e55ff7e596329b060c55edc97ae9d7f597",
+      "original_path": "post-merge-summary.json",
+      "original_git_blob": "a607c8fd30e7a76fc157112b9d7fe64fc140e6cf"
+    },
+    {
+      "path": "prepared-provider-summary.json.xz",
+      "codec": "xz",
+      "stored_bytes": 6168,
+      "stored_sha256": "55bc84a4c5572f06fc0e831862171b1c89ea07e57000d92fa8baf6dbe4a1fef5",
+      "decoded_bytes": 64096,
+      "decoded_sha256": "b05040ed0c53444dfeb3150250d20fb3aebd06b4a6a907e292edd9888a7b8b2a",
+      "original_path": "prepared-provider-summary.json",
+      "original_git_blob": "c30b13fd8999df01cd565971f832c359286317ce"
+    },
+    {
+      "path": "retained-reference-summary.json.xz",
+      "codec": "xz",
+      "stored_bytes": 6304,
+      "stored_sha256": "6fc326dba2d4cec9253bc99d2afa1a4e8d2c68a040174ecc7c8f418988dfc6c5",
+      "decoded_bytes": 64314,
+      "decoded_sha256": "de3f1acf425872712f0760bdd877ebbad48b6df91e92c8eabd4d22e2d892b8f1",
+      "original_path": "retained-reference-summary.json",
+      "original_git_blob": "fe3e589e07317608b2af0c4e867faeeb2f659964"
+    }
+  ]
+}

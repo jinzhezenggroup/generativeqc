@@ -9,7 +9,7 @@ No supplied orbitals/amplitudes enter these comparisons.
 
 Each variant has one observation per molecule. The recycled cold/warm rows are
 two calls in one process; their `.wall` covers both and is not assigned to either
-individual endpoint. `summary.json` retains each phase, exact action counts,
+individual endpoint. `summary.json.xz` retains each phase, exact action counts,
 residuals, forces, capacities and binary/source/input hashes. These timings do
 not qualify the subsequently integrated prepared-provider tree.
 
@@ -116,7 +116,7 @@ response/FD suites; common host2339 passes38 current admission/binding/lifetime
 cases. Current shared Lambda/factor and denominator-preconditioner regressions
 also pass in2348. Current complete cold/warm force2345 remains separate from
 the frozen timing comparison above. Its completed report is retained as
-`prepared-provider-summary.json` with the original source-manifest checksum.
+`prepared-provider-summary.json.xz` with the original source-manifest checksum.
 
 ### Prepared-provider integration
 
@@ -139,7 +139,7 @@ Production `5a805b274084c22b16a1c92ecfbc516dead3b882` composes parent
 `c7486bf2e`. Build 2349, host 2351, response/independent small all-coordinate FD
 2352, shared Lambda/factor 2354 and complete force 2355 all pass. Report 2359
 passes every accuracy and existing independent large FD re-audit. Records are
-in `retained-reference-summary.json`, bound by the `v2-sources.sha256` checksum; source,
+in `retained-reference-summary.json.xz`, bound by the `v2-sources.sha256` checksum; source,
 compiler and policy files were hash-checked against the tested checkout.
 
 | Ethane230 | Exact J/K | Z iterations | Recycle hit | Orbital/nuclear s | Complete s | RHF s |
@@ -219,8 +219,16 @@ translation and existing independent large two-coordinate/two-step FD gates.
 The maximum large force difference from the frozen reference is 2.954e-9
 Eh/Bohr, energy difference 4.690e-13 Eh and translation residual 2.077e-12.
 This does not extend the independent large audit to all coordinates.
-`post-merge-summary.json` preserves every observation, validation-log outcomes
+`post-merge-summary.json.xz` preserves every observation, validation-log outcomes
 and hashes, the GPU and binary identity, and the reconstructable
 `v3-sources.sha256` receipt verified after the complete endpoints. Missing total
 FLOPs and unrequested response work remain null. Stronger preconditioning and
 recycling remain opt-in under the previously measured selection policy.
+
+## Lossless checkout storage
+
+The `.json.xz` summaries retain every original byte, including observations,
+failed gates, ordering and source identities. `storage.json` records compressed
+and decoded SHA-256/size identities and the original Git blobs. Use
+`xz --decompress --stdout FILE.json.xz` to inspect a summary. This storage change
+does not update or requalify the historical measurements.
