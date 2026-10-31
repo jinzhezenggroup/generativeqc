@@ -141,6 +141,7 @@ void direct_jk_require(bool yes,const char* message) {
 std::size_t direct_jk_product(std::size_t a,std::size_t b) { return runtime::size_mul(a,b); }
 """
     for signature in (
+        "bool direct_coulomb_optional_authorized(",
         "std::size_t cuda_direct_jk_device_bytes(",
         "std::size_t cuda_direct_coulomb_device_bytes(",
     ):
@@ -168,6 +169,7 @@ std::size_t product(std::size_t a,std::size_t b) { return size_mul(a,b); }
     source += _definition(xc, "CudaXcProgramTraits cuda_xc_program_traits(") + "\n"
     source += _definition(ks, "struct KsStateStorage") + ";\n"
     source += _definition(ks, "std::size_t cuda_ks_state_bytes(") + "\n"
+    source += _definition(ks, "std::size_t cuda_ks_point_batch_budget(") + "\n"
     source += _definition(xc, "CudaXcLayout cuda_xc_layout_shape(") + "\n"
     for signature in (
         "std::size_t cuda_resident_grid_bytes(",

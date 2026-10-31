@@ -8,7 +8,7 @@ worktree was clean.
 
 ## Independent accuracy and point cost
 
-`grid_policy_convergence.json` was produced by
+`grid_policy_convergence.json.xz` was produced by
 `benchmarks/grid_policy_convergence.py` with PySCF 2.14.0. PySCF independently
 solves SCF and full analytic grid-response gradients; it does not execute the
 VibeQC native KS solver. The 96脳32脳64 dense oracle was itself checked against
@@ -29,7 +29,7 @@ stability was 9.1078789e-10 Eh / 3.1718549e-7 Eh/Bohr for LDA and
 1.2948817e-8 Eh / 6.0336236e-7 Eh/Bohr for PBE.
 
 SHA-256:
-- `grid_policy_convergence.json`:
+- `grid_policy_convergence.json.xz`:
   `5281a3e35ec54fae45f50f0b275cb22732b426e4034a10df58d50e3a38e8b447`
 - the shared raw convergence log has the same hash because the driver emits the
   retained JSON to stdout.

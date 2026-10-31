@@ -175,6 +175,12 @@ class KsOptions:
         default=None, repr=False
     )
     _method_ir: MethodIR | None = field(default=None, init=False, repr=False)
+    # Only resolution may bind this immutable option snapshot to a selector.
+    # dataclasses.replace resets it, so changed/profile-selected options require
+    # fresh validation. It is execution provenance, not scientific identity.
+    _resolved_selector: str | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         """Validate exclusive functional/composition inputs, grid, schedule, and budget."""
@@ -1027,9 +1033,13 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
         # Preserve the independent catalog projection's declaration order and
         # identity when options have already been resolved.
         resolved = selected if options.functional is None else options.functional
-        if SemilocalXCPrimitive(resolved).semantic_payload() != (
-            SemilocalXCPrimitive(selected).semantic_payload()
-        ):
+        # A resolved option can retain the graph's exact functional object.
+        # Comparing that object with itself would serialize and hash the same
+        # upstream provenance twice. Distinct objects still need the complete
+        # semantic comparison; no identity cache survives a resolution call.
+        if resolved is not selected and SemilocalXCPrimitive(
+            resolved
+        ).semantic_payload() != (SemilocalXCPrimitive(selected).semantic_payload()):
             raise ValueError("resolved KS functional disagrees with its MethodIR")
     else:
         resolved = expected if options.functional is None else options.functional
@@ -1073,6 +1083,8 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
         scf_domain=domain,
     )
     object.__setattr__(result, "_method_ir", method_ir)
+    if isinstance(method, str):
+        object.__setattr__(result, "_resolved_selector", method)
     return result
 
 

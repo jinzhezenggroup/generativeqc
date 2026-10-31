@@ -2,6 +2,7 @@
 
 import ctypes
 import typing
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -114,6 +115,7 @@ def prepared_ledger(
     ledger.owner = "hf"
     ledger.device = 0
     ledger.limit = 64
+    ledger._native_complete_cap = False
     ledger._capacity_admission = {"declared_device_peak": 80}
     ledger.library = SimpleNamespace(
         generativeqc_device_resources_read=read,
@@ -121,6 +123,57 @@ def prepared_ledger(
         generativeqc_resource_ledger_destroy_v1=lambda handle: None,
     )
     return ledger
+
+
+def test_d4_plan_diagnostics_are_detached_and_observations_stay_authoritative() -> None:
+    """A retained immutable plan must never share mutable public diagnostics."""
+    from generativeqc_compiler.common.resources import (
+        ResourceBudget,
+        ResourceCandidate,
+        ResourceEstimate,
+        ResourceIdentity,
+        ResourcePlan,
+        ResourceRequest,
+    )
+
+    estimate = ResourceEstimate("device owner", 64, "device:0", 0, 0)
+    candidate = ResourceCandidate("resident", "resident", (estimate,))
+    request = ResourceRequest(
+        "ks",
+        ResourceIdentity(
+            "pbe", "native", "cuda", "fp64", '{"atoms":2}', ("energy",), "fixed"
+        ),
+        (candidate,),
+    )
+    plan = ResourcePlan(
+        ResourceBudget(device_bytes=128), (request,), (("ks", "resident"),), "feasible"
+    )
+    ledger = prepared_ledger(changes={"admission": 1})
+    ledger._native_complete_cap = True
+
+    def observe(current: typing.Any) -> typing.Any:
+        return observe_method_call(
+            ledger.library,
+            current,
+            ledger,
+            lambda: _native.STATUS_SUCCESS,
+            owner="ks",
+            native_managed=True,
+        )[1]
+
+    first = observe(plan)
+    first["plan"]["requests"][0]["candidates"][0]["estimates"][0]["bytes"] = -1
+    first["plan"]["peak_bytes"]["device"] = -1
+    assert observe(plan)["plan"] == plan.to_dict()
+    replaced = replace(plan, budget=ResourceBudget(device_bytes=256))
+    assert observe(replaced)["plan"] == replaced.to_dict()
+    # Fresh native observations still reject an underdeclared plan after the
+    # serialization cache has been populated; no cached peak masks the failure.
+    smaller = replace(candidate, estimates=(replace(estimate, bytes=16),))
+    underdeclared = replace(plan, requests=(replace(request, candidates=(smaller,)),))
+    with pytest.raises(RuntimeError, match="owned CUDA allocation peak") as failed:
+        observe(underdeclared)
+    assert failed.value.resource_diagnostics["plan"] == underdeclared.to_dict()
 
 
 def test_native_snapshot_preserves_unavailable_samples_and_requested_byte_overflow() -> (
@@ -190,7 +243,7 @@ def inventory_plan() -> SimpleNamespace:
         last_phase=1,
         accounting="capacity_bound",
     )
-    candidate = SimpleNamespace(name="selected", estimates=(estimate,))
+    candidate = SimpleNamespace(name="selected", estimates=(estimate,), decisions=())
     return SimpleNamespace(
         require_feasible=lambda: None,
         requests=(

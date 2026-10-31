@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from _cc_owner_test_support import compile_owner
+from _cpp_source_support import cpp_function_definition
 from generativeqc_compiler.dft.xc_contraction_cuda import XcMatrixSchedule, _emit_tiled
 from generativeqc_compiler.dft.xc_density_lowering import emit_density_binding
 
@@ -129,6 +130,7 @@ def test_prepared_density_preserves_local_ao_component_precision(
     unit, executable = tmp_path / "prepared.cpp", tmp_path / "prepared"
     unit.write_text(
         r"""
+#include <algorithm>
 #include <cassert>
 #include <charconv>
 #include <cstdlib>
@@ -156,7 +158,19 @@ std::size_t sum(std::size_t left, std::size_t right) {
 std::size_t product(std::size_t left, std::size_t right) {
   return runtime::size_mul(left, right, "test resource overflow");
 }
-struct Layout { bool mixed_density_contraction; std::size_t jets = 4, work_jets = 1, nao = 128, npoint = 1024; };
+"""
+        + "namespace generativeqc::dft {\n"
+        + "// Scalar layout facts supplied to the production capacity policy.\n"
+        + "struct CudaXcLayout { std::size_t jets, work_jets, nao, npoint; };\n"
+        + cpp_function_definition(source, "cuda_ks_point_batch_budget")
+        + "\n}\n"
+        + r"""
+struct Layout : CudaXcLayout {
+  bool mixed_density_contraction;
+  explicit Layout(bool capable) : mixed_density_contraction(capable) {
+    jets=4; work_jets=1; nao=128; npoint=1024;
+  }
+};
 Layout cuda_xc_execution_capabilities(const Layout& layout) { return layout; }
 namespace cuda_xc_detail {
 bool mixed_matrix_contractions_supported(const Layout&) {

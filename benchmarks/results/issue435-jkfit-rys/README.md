@@ -160,7 +160,7 @@ Five interleaved pairs at equal 96/192/384/768 AO give candidate/control ratios
 1.00592, 0.99715, 0.99949 and 1.00012 respectively. These are neutral controls,
 not new speed claims. The old independent 1e-9 Eh / 1e-8 Eh/Bohr gates remain;
 the exact values, references, full outputs and branch counts are in
-`equal-96.json`, `equal-192.json`, `equal-384.json`, and `equal-768.json`.
+`equal-96.json`, `equal-192.json`, `equal-384.json.xz`, and `equal-768.json`.
 
 `validation.json` records 231 independent host Rys tests, the related generation
 and ledger suites, and 32 CUDA practical tests. Host suites overlap other

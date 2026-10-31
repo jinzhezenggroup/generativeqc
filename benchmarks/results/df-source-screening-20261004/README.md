@@ -117,7 +117,7 @@ geometry-dependent regeneration.
   intrusive counter replay; its times are excluded from clean medians.
 - [resource-boundary.json.gz](resource-boundary.json.gz) preserves the larger
   resource observations, including unsuccessful attempts.
-- [validation.json.gz](validation.json.gz) records exact binaries, source hashes,
+- [validation.json.xz](validation.json.xz) records exact binaries, source hashes,
   compiler/cache settings, test cases, sanitizer receipts and all matched
   baseline failures. [measured-source.patch.gz](measured-source.patch.gz)
   reconstructs the measured dirty source from `7d1152038`.
@@ -163,6 +163,3 @@ apply the retained [larger harness patch](../hf-df-96-20261003/larger-harness.pa
 in an isolated checkout, generate its independent `--aos 792` reference under
 Slurm, and use the same wrapper. Preserve assigned `CUDA_VISIBLE_DEVICES` and
 retain any failed admission as a resource observation, not a timing sample.
-
-The JSON receipt is stored as deterministic gzip without changing its expanded
-bytes. Expanded SHA-256: `b635d7f10a5f52ada7abfbac83d72eec4facecefef4d6d6f00590ba0efa16dba`.

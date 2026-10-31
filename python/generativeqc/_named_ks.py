@@ -52,11 +52,31 @@ def select_resource_program(calculator: Any, electronic_request: Any) -> bytes |
     CUDA additionally needs the existing native stationary-capacity receipt:
     compatibility forces would otherwise allocate a second correction owner.
     """
+    from generativeqc_compiler.method import (
+        D3Spec,
+        D4Spec,
+        DispersionCorrectionPrimitive,
+        GeometricCounterpoisePrimitive,
+    )
+
+    graph = calculator._dispersion_method_ir
+    if graph is None or any(
+        isinstance(node, GeometricCounterpoisePrimitive) for node in graph.primitives
+    ):
+        return None
+    corrections = [
+        node.specification
+        for node in graph.primitives
+        if isinstance(node, DispersionCorrectionPrimitive)
+    ]
+    if len(corrections) != 1 or not isinstance(corrections[0], (D3Spec, D4Spec)):
+        return None
+    family = "d4" if isinstance(corrections[0], D4Spec) else "d3"
     library = calculator._library
     if (
         calculator._dispersion_method_ir is None
         or calculator._precision_mode != _native.PRECISION_FP64
-        or not hasattr(library, "generativeqc_ks_d3_resource_query_v1")
+        or not hasattr(library, f"generativeqc_ks_{family}_resource_query_v1")
         or (
             calculator._device_name == "cuda"
             and (
