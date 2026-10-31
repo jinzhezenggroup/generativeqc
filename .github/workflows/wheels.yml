@@ -16,6 +16,7 @@ on:
     paths:
       - ".github/workflows/wheels.yml"
       - "cmake/GenerativeQCCudaImplib.cmake"
+      - "cmake/cuda_wheel_payload.ld"
       - "cmake/3rdparty/implib/**"
       - "pyproject.toml"
       # Wheel-specific native launcher and explicit tuner packaging changes.

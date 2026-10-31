@@ -8,8 +8,10 @@ worktree was clean.
 
 ## Independent accuracy and point cost
 
-`grid_policy_convergence.json` was produced by
-`benchmarks/grid_policy_convergence.py` with PySCF 2.14.0. PySCF independently
+`benchmarks/grid_policy_convergence.py` produced plain
+`grid_policy_convergence.json` with PySCF 2.14.0. The retained
+`grid_policy_convergence.json.xz` is a separate, losslessly XZ-compressed copy
+of that JSON output. PySCF independently
 solves SCF and full analytic grid-response gradients; it does not execute the
 VibeQC native KS solver. The 96脳32脳64 dense oracle was itself checked against
 120脳40脳80 before production profiles were evaluated.
@@ -29,10 +31,13 @@ stability was 9.1078789e-10 Eh / 3.1718549e-7 Eh/Bohr for LDA and
 1.2948817e-8 Eh / 6.0336236e-7 Eh/Bohr for PBE.
 
 SHA-256:
-- `grid_policy_convergence.json`:
+
+- `grid_policy_convergence.json.xz` (stored archive):
+  `07ee99be4097127d3f05871a79f0520f1440972ff16e44e419c5f90b4c1efc87`
+- `grid_policy_convergence.json` (decoded JSON):
   `5281a3e35ec54fae45f50f0b275cb22732b426e4034a10df58d50e3a38e8b447`
-- the shared raw convergence log has the same hash because the driver emits the
-  retained JSON to stdout.
+- the shared raw convergence log has the same hash as the decoded JSON because
+  the driver emits that JSON to stdout.
 
 The qz shared raw-evidence root is
 `/inspire/qb-ilm/project/chemicalreaction/czxs25220150/experiments/vibeqc/issue-0596-qual/ab6938/ad815e87`.

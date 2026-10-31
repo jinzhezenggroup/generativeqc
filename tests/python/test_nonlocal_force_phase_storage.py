@@ -39,10 +39,12 @@ COEFFICIENT = Fraction(3, 5)
 
 @pytest.fixture(scope="module")
 def cuda_runtime() -> tuple[Any, ct.CDLL]:
-    """Import CUDA only after the explicit Slurm qualification opt-in."""
+    """Import CUDA only after the explicit scheduled qualification opt-in."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
-        pytest.skip("set GENERATIVEQC_TEST_WB97MV_CUDA=1 inside Slurm")
-    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+        pytest.skip("set GENERATIVEQC_TEST_WB97MV_CUDA=1 inside Slurm or LSF")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID"), (
+        "real GPU tests require Slurm or LSF"
+    )
     import cupy as cp
 
     return cp, _native.load_library(device="cuda", device_id=0)

@@ -391,7 +391,7 @@ struct NativeOwner {
   Owner* scientific{};
   bool integral_pending{}, nuclear_ready{};
   void* integral_stream{};
-  uint64_t integral_mask{}, grid_points{}, nonlocal_points{};
+  uint64_t integral_mask{}, grid_points{}, nonlocal_points{}, combined_integral_mask{};
   NativeOwner() { ++live_owners; }
   ~NativeOwner() { --live_owners; }
 };

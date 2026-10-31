@@ -3284,6 +3284,24 @@ GENERATIVEQC_API generativeqc_status generativeqc_ks_d3_resource_query_v1(
     generativeqc_backend backend, const uint32_t* atom_counts, uint32_t system_count,
     generativeqc_d3_runtime_diagnostic* output);
 
+/** @native-contract generativeqc_ks_d4_resource_query_v1
+ * @behavior Query the capacities of KS's retained per-system D4(BJ)-EEQ correction owners.
+ * @inputs A CPU_REFERENCE or CUDA selector, nonempty uint32 atom counts, and an ABI-headed
+ * output are required. Each item has 1 through 256 atoms, matching the production EEQ bound.
+ * @outputs Publishes summed host/device/table/workspace capacities and per-item worker slots.
+ * maximum_bytes is the minimum aggregate correction cap under equal-per-item budget shares.
+ * profile, ATM and execution counters are zero (unspecified), not scientific results.
+ * Output is unchanged on failure. Composite gCP storage is excluded.
+ * @lifetime Borrows inputs only for this call; no owner or pointer is retained.
+ * @errors Invalid shape/backend returns INVALID_ARGUMENT; bad output header ABI_MISMATCH.
+ * @execution Allocation-free shape query; CUDA is a selector even in CPU-only libraries.
+ * This is correction capacity only, not complete KS admission, RSS or vendor-memory sizing.
+ * @units Atom and worker counts are dimensionless; all capacities are bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_d4_resource_query_v1(
+    generativeqc_backend backend, const uint32_t* atom_counts, uint32_t system_count,
+    generativeqc_d4_runtime_diagnostic* output);
+
 /** @native-contract generativeqc_calculation_prepare_named_ks_with_device_resources_v1
  * @behavior Prepare the complete named KS program with retained native device admission.
  * @inputs Named preparation inputs plus a live resources handle on the context's CUDA device.

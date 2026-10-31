@@ -34,6 +34,21 @@ struct D4ResourceUsage {
   std::uint32_t workspace_slots{};
 };
 
+/** Allocation-free capacity for the same bounded ragged schedule as D4Plan.
+ * Invalid shapes throw invalid_argument; a budget below the minimum schedule
+ * throws bad_alloc. CUDA is a metadata selector even in CPU-only builds.
+ */
+D4ResourceUsage d4_resource_usage(generativeqc_backend backend, std::uint64_t systems,
+                                  std::uint64_t atoms, std::uint64_t maximum_atoms,
+                                  std::uint64_t maximum_bytes);
+
+/** Sum retained per-system KS correction owners, including replicated tables.
+ * maximum_bytes is the aggregate cap needed by equal per-item budget shares.
+ * Composite gCP storage is outside this correction-only inventory.
+ */
+D4ResourceUsage ks_d4_resource_usage(generativeqc_backend backend,
+                                     std::span<const std::uint32_t> atom_counts);
+
 struct D4RuntimeCounters {
   std::uint64_t execution_count{};
   std::uint64_t unchanged_geometry_replays{};

@@ -88,8 +88,9 @@ struct CudaDfOccupiedResponseFactor {
  * Retained canonical C requires exact density, final-token and device-generation
  * checks. An explicit corrected-density request may instead borrow a separately
  * reconstructed algebraic factor after revoking the previous SCF generation.
- * Coefficients remain immutable through this serialized response and the bridge
- * owns and budgets its projected-factor scratch.
+ * Coefficients remain immutable through this serialized response. The bridge
+ * owns and budgets projected factors; explicitly lent dead producer storage
+ * can replace its scratch while remaining charged to the original value owner.
  */
 struct CudaDfOccupiedResponseView {
   std::array<CudaDfOccupiedResponseFactor, 3> factors{};
@@ -97,8 +98,16 @@ struct CudaDfOccupiedResponseView {
   std::uint64_t owner_identity{};
   // Optional exact final-K fitted U[(Q,i),mu]=B[Q,mu,nu]C[nu,i].
   // The final-state token and this view's owner/factor identity are validated
-  // before construction. It is read-only until the synchronous bridge drains.
+  // before construction. It stays read-only unless the explicit recycling
+  // lease below authorizes reuse after the final projection read.
   const double* final_fitted_occupied_projection{};
+  /** Optional exclusive storage lease for the SAME final projection allocation.
+   * Its producer token is revoked before submission. The response must finish
+   * reading U into disjoint owned factors before overwriting this interval on
+   * the producer stream. Storage stays charged to the value owner, whose next
+   * SCF rebuilds it. Absence retains independently owned bounded scratch. */
+  double* recyclable_final_projection{};
+  std::size_t recyclable_final_projection_elements{};
 };
 /** Immutable FP64 raw [Q,mu,nu] view borrowed from one resident value plan.
  * Strides are in doubles. owner_identity is the process-unique immutable

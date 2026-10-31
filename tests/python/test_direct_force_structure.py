@@ -130,3 +130,22 @@ def test_resident_schedule_admission_does_not_open_device_implementation(
     (source / "direct_force_schedule.cuh").write_text("// Device implementation\n")
     (source / consumer).write_text('#include "direct_force_schedule.cuh"\n')
     assert len(audit_scf_structure(tmp_path)["errors"]) == 1
+
+
+def test_portable_force_queue_policy_cannot_acquire_execution_owners(
+    tmp_path: Path,
+) -> None:
+    """Scalar crossover policy stays independent of kernels and mutable plans."""
+    policy = tmp_path / "src/scf/cuda/force_queue_policy.hpp"
+    policy.parent.mkdir(parents=True)
+    policy.write_text("#include <cstdint>\n")
+    assert not audit_scf_structure(tmp_path)["errors"]
+    for dependency in (
+        "scf/cuda/rhf_bucket_internal.hpp",
+        "scf/cuda/direct_force_quartet.cuh",
+    ):
+        (tmp_path / "src" / dependency).write_text("// Execution owner\n")
+        policy.write_text(f'#include "{dependency}"\n')
+        errors = audit_scf_structure(tmp_path)["errors"]
+        assert len(errors) == 1
+        assert "forbidden cuda_force_queue_policy dependency" in errors[0]

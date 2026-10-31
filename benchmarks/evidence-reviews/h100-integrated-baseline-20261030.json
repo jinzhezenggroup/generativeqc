@@ -2,16 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "h100-integrated-baseline-20261030",
   "owner": "H100 integrated baseline full-vector qualification",
-  "reason": "Retain all 396 complete E+F observations and both complete global policies, including unfavorable outcomes, with all 509 normalized campaign originals. Little-endian FP64 coordinates reconstruct every normalized original JSON before independent scientific replay. The selected policy has 19/30 exploratory single-process ratios above 1.05; this is not final three-pair majority acceptance or qualification of a later source. Lossless compression of two existing subthreshold Becke publications keeps the unchanged aggregate evidence budget.",
+  "reason": "Retain all 396 complete E+F observations and both complete global policies, including unfavorable outcomes, with all 509 normalized campaign originals. Little-endian FP64 coordinates reconstruct every normalized original JSON before independent scientific replay. The selected policy has 19/30 exploratory single-process ratios above 1.05; this is not final three-pair majority acceptance or qualification of a later source. Lossless compression of two existing subthreshold Becke publications keeps the unchanged aggregate evidence budget. Historical large raw payloads now have exact existing-Git recovery in benchmarks/results/h100-history-retention-20261031/snapshot.manifest.json; numerical summaries, original decisions and test inputs remain unchanged. No large payload from this family remains in the current checkout.",
   "review_document": "benchmarks/results/h100-integrated-baseline-20261030/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/h100-integrated-baseline-20261030/forces.npy.xz",
-      "family": "h100-integrated-baseline-20261030",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All 396 complete E+F calls' 83052 full-precision force coordinates; no rounding or downcast",
-      "bytes": 214440,
-      "sha256": "94293e1202383a7957c6b4e447eedc8b58a5345a33ef2767fd97019c9ed232c3"
-    }
-  ]
+  "files": []
 }

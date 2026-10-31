@@ -56,7 +56,7 @@ python tools/benchmark_df_values.py \
 
 | Control | Automatic behavior | Diagnostic overrides |
 | --- | --- | --- |
-| `GENERATIVEQC_DF_SHELL_POLICY` | Qualified architecture/class mapping, without an AO-size or auxiliary-equality filter | `legacy`, `candidate` |
+| `GENERATIVEQC_DF_SHELL_POLICY` | Qualified exact-target/class mapping, then portable class mapping; no AO-size, auxiliary-equality or GPU-name filter | `legacy`, `candidate` |
 | `GENERATIVEQC_DF_SHELL_SCHEDULE` | Class-specific manifest schedule | `warp`, `packed`, `compact` |
 | `GENERATIVEQC_DF_VALUE_MATH` | Existing generic Rys | `generic`, `polynomial`, `rys`, `candidate` |
 | `GENERATIVEQC_DF_VALUE_RAW_MAPPING` | Existing scalar raw export | `scalar`, `subgroup`, `warp`, `candidate` |
@@ -64,14 +64,21 @@ python tools/benchmark_df_values.py \
 | `GENERATIVEQC_DF_SHELL_SCREEN_ABS` | `1e-10 Eh/Bohr` on a work-qualified automatic shell domain on any probed CUDA target; strict otherwise | Nonnegative finite absolute force-component budget, or `off` |
 | `GENERATIVEQC_DF_FINAL_PROJECTION` | Reuse under the shared resident RHF work/capacity policy | `off`, `reuse` |
 
-The qualified sm_120 derivative manifest chooses cooperative Rys/compact for
-its 18 s/p/d entries and auxiliary-f `003/103/113/203/213`. These five
-classes require only the qualified three/four-root DF quadrature. The five-root
-`223` class and missing architectures/classes retain polynomial execution;
-availability alone never qualifies a new entry. Lowering selection does not
-change the separate consumer, weight-layout or primitive-packet admission rules.
+The portable derivative manifest chooses cooperative Rys/compact for its 18
+s/p/d entries and auxiliary-f `003/103/113/203/213` on every probed CUDA target.
+Exact target/class tuning takes precedence; the existing sm_120 mapping is
+unchanged. These five auxiliary-f classes require only the qualified three/four-root
+DF quadrature. The five-root `223` class, other missing classes, an unprobed
+target and explicit `legacy` retain polynomial execution. A portable mapping
+passes the same independent scientific and endpoint evidence gates as a tuned
+mapping. It describes a legal default schedule, not an optimum on every GPU.
+Lowering selection does not change the separate consumer, weight-layout or
+primitive-packet admission rules.
 See the [cooperative lowering qualification](../../.agents/notes/implemented/performance/2026-09-17-cooperative-df-rys.md)
 and [dimension-independent admission](../../.agents/notes/implemented/performance/2026-09-19-df-rys-admission.md) notes.
+The [portable lowering decision](../../.agents/notes/implemented/performance/2026-10-31-portable-df-rys.md)
+records resource bounds and cross-device evidence without relabelling historical
+measurements as new target tuning.
 Value candidates remain unqualified after complete cold
 endpoint regressions. The raw `candidate` schedule applies its generated lane
 count only to total angular degree at most two; metric and higher classes retain

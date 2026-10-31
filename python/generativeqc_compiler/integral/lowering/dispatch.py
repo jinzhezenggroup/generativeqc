@@ -1388,6 +1388,12 @@ __device__ __forceinline__ void generated_dppp_shell_class_force_task("""
                 not explicit_fock_schedule
                 and plan.kernel.integral.recurrence.startswith("rys")
                 and plan.kernel.integral.required_rys_roots in (3, 4)
+                # Only the component-lane force emitter owns the addressed
+                # primitive/HRR support used by this Fock companion. Thread
+                # and subgroup forces have different private support even
+                # when their root counts coincide; retain the ordinary value
+                # lowering rather than referencing undefined force symbols.
+                and plan.schedule.kind == ScheduleKind.COMPONENT_LANES
                 and fock_plan.schedule.kind == ScheduleKind.COMPONENT_LANES
             )
             else None

@@ -563,6 +563,31 @@ def test_resolved_ks_options_preserve_catalog_identity(method: str) -> None:
     assert second.functional is first.functional
 
 
+@pytest.mark.parametrize("method", ("pbe-rks", "pbe0-uks"))
+def test_resolved_functional_snapshot_still_checks_distinct_semantics(
+    method: str,
+) -> None:
+    """A copied or corrupted resolved snapshot cannot bypass graph validation."""
+    from copy import copy
+
+    original = resolve_ks_options(method, KsOptions(grid=CUSTOM))
+    snapshot = copy(original)
+    equivalent = replace(original.functional)
+    object.__setattr__(snapshot, "functional", equivalent)
+    assert resolve_ks_options(method, snapshot).identity == original.identity
+
+    changed = replace(
+        equivalent,
+        components=tuple(
+            (name, coefficient * Fraction(9, 10))
+            for name, coefficient in equivalent.components
+        ),
+    )
+    object.__setattr__(snapshot, "functional", changed)
+    with pytest.raises(ValueError, match="functional disagrees with its MethodIR"):
+        resolve_ks_options(method, snapshot)
+
+
 @pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks"))
 def test_named_hybrid_resource_planning_preserves_explicit_grid(method: str) -> None:
     options = KsOptions(grid=CUSTOM, tile_points=31)

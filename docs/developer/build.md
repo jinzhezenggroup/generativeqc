@@ -114,6 +114,14 @@ builds. This changes packaging, not mathematical kernels or architecture coverag
 Set the option to `OFF` to retain the complete archives in final binaries.
 Other backends, or toolkits without `nvprune`, retain the original archives.
 
+Linux x86-64 provider-free CUDA wheels place device-image sections after host
+code and data using `cmake/cuda_wheel_payload.ld`. This keeps host PC-relative,
+GOT and TLS references within the small code model's range even when the image
+matrix exceeds 2 GiB. Small registration wrappers remain near host data; all
+executable images, PTX and retained relocatable images remain present. The script
+applies only to the final host link, with no compression or device-link change.
+Configuration requires a linker with `INSERT` script support (GNU ld or lld).
+
 The distributable `cuda-release-cli-sm120` preset **always includes the
 entire structurally representable automatic CUDA XC catalog**. It explicitly
 sets `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` and leaves

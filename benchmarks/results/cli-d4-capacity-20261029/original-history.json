@@ -1,0 +1,24 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "a508ecbe47122c4af444708abdc72d4ab5e6c4ce",
+  "file_count": 3,
+  "total_bytes": 40459,
+  "files": [
+    {
+      "path": "benchmarks/results/cli-d4-capacity-20261029/samples.json.xz",
+      "bytes": 32264,
+      "sha256": "3bc9f0f78c1885b10ffe1f56fdfea988f4d1abdf35dead854f989042ef7ca249"
+    },
+    {
+      "path": "benchmarks/results/cli-d4-capacity-20261029/identities.json",
+      "bytes": 4616,
+      "sha256": "d56b595d058a0e52b12a4317acb839148a545c72548eb2e1426fa059044f5dfc"
+    },
+    {
+      "path": "benchmarks/results/cli-d4-capacity-20261029/qualify.py",
+      "bytes": 3579,
+      "sha256": "b6a0235c67369ce6677e4f020cd7aec8753f8245a408225acb1886d043bd9750"
+    }
+  ],
+  "retention": "Original CLI D4 qualification retained in existing verified Git ancestry; current measurements do not relabel historical source identities."
+}

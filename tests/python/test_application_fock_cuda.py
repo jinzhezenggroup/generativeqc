@@ -266,6 +266,49 @@ def test_shared_fast_fock_complete_endpoint(
         calculator.clear_cache()
 
 
+def _strict_returned_work(result: Any, *, state_bound: bool) -> None:
+    """Verify strict publication work instead of requiring an approximate proposal."""
+    work = result.precision
+    assert work["operator_work_counters_valid"] is True
+    assert work["effective_bits"] == 64
+    assert work["mixed_stage_fock_builds"] == 0
+    assert work["strict_stage_fock_builds"] >= 1
+    assert work["final_residual_audits"] >= 1
+    if state_bound:
+        assert result.warm_start_used and not result.warm_start_fallback
+        identity = work["returned_state_identity"]
+        assert identity
+        bound = {
+            event["kind"]
+            for event in work["scf_fock_timeline"]
+            if event["state"] == identity and event["count"] > 0
+        }
+        assert {"strict_fock", "final_audit"} <= bound
+
+
+def _strict_recovery(result: Any) -> None:
+    """A failed proposal may retain its completed native Standard fallback."""
+    validation = result.precision_validation
+    assert "budget_fock_failed_fp64_fallback" in validation.fallback_reasons
+    assert validation.solves[0].role == "candidate"
+    assert validation.solves[0].error is not None
+    assert validation.solves[0].fock_builds is None
+    assert all(
+        solve.requested_precision == "fp64" and solve.error is None
+        for solve in validation.solves[1:]
+    )
+    if validation.status == "observed_met":
+        assert validation.solve_count <= 3
+        assert any(solve.role == "fp64_audit" for solve in validation.solves)
+    else:
+        assert validation.status == "strict_standard_fallback"
+        assert validation.solve_count == 2
+        assert validation.solves[-1].role == "fp64_fallback"
+        assert result.precision["requested_mode"] == "fp64"
+        _strict_returned_work(result, state_bound=False)
+    assert result.precision["mixed_stage_fock_builds"] == 0
+
+
 @pytest.mark.parametrize("case_name", (CASE, "water-tetramer-def2-svp-spherical"))
 @pytest.mark.parametrize(
     ("method", "functional"),
@@ -328,18 +371,11 @@ def test_budget_fock_keeps_native_fp64_force_owner(
             validation = result.precision_validation
             work = result.precision
             record_property(f"{phase}_precision_status", validation.status)
-            if phase == "moved" and validation.status == "observed_met":
-                assert "budget_fock_failed_fp64_fallback" in validation.fallback_reasons
-                assert validation.solve_count <= 3
-                assert validation.solves[0].role == "candidate"
-                assert validation.solves[0].error is not None
-                assert validation.solves[0].fock_builds is None
-                assert any(solve.role == "fp64_audit" for solve in validation.solves)
-                assert all(
-                    solve.requested_precision == "fp64" and solve.error is None
-                    for solve in validation.solves[1:]
-                )
-                assert work["mixed_stage_fock_builds"] == 0
+            if phase == "moved" and validation.status in (
+                "observed_met",
+                "strict_standard_fallback",
+            ):
+                _strict_recovery(result)
             else:
                 assert validation.status == "qualified_budget_fock", (phase, validation)
                 assert validation.solve_count == 1
@@ -411,8 +447,19 @@ def test_budget_fock_prepared_force_lifetime(
                 ).items[0]
                 validation = result.precision_validation
                 record_property(f"{phase}_precision_status", validation.status)
-                assert validation.status in ("qualified_budget_fock", "observed_met")
+                assert validation.status in (
+                    "qualified_budget_fock",
+                    "qualified_budget_fock_strict_warm",
+                    "observed_met",
+                    "strict_standard_fallback",
+                )
                 assert validation.solve_count <= 3
+                if validation.status == "qualified_budget_fock_strict_warm":
+                    assert phase != "cold" and validation.solve_count == 1
+                    _strict_returned_work(result, state_bound=True)
+                elif validation.status in ("observed_met", "strict_standard_fallback"):
+                    assert phase == "moved"
+                    _strict_recovery(result)
                 if phase == "cold":
                     assert validation.status == "qualified_budget_fock"
                     assert result.precision["mixed_stage_fock_builds"] > 0

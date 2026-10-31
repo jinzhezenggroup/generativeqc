@@ -1,0 +1,29 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "456a465021a9ae362721a6ec768e061a194f8895",
+  "file_count": 4,
+  "total_bytes": 41694,
+  "files": [
+    {
+      "path": "benchmarks/results/cli-d4-capacity-20261029/current-samples.json.xz",
+      "bytes": 33184,
+      "sha256": "b89c2ee01ba212c51adecee56291c257ba09ea43d009f45b252a0453bc1b450b"
+    },
+    {
+      "path": "benchmarks/results/cli-d4-capacity-20261029/current-qualification.json.xz",
+      "bytes": 2116,
+      "sha256": "7edad84a105404be5681d2fdb5fc7f34ba826ddfaefe4bd43c28dcd6853573f9"
+    },
+    {
+      "path": "benchmarks/results/cli-d4-capacity-20261029/qualify.py",
+      "bytes": 3593,
+      "sha256": "86cf2a00416a175613da9737a7e8fe48cad279cb2950f62ae756bbe566ca8c99"
+    },
+    {
+      "path": "benchmarks/results/cli-d4-capacity-20261029/README.md",
+      "bytes": 2801,
+      "sha256": "38b754315d11c27fb17ca6f2405bd7247203764bc874a2f9061249e0c32f78f2"
+    }
+  ],
+  "retention": "Previous complete a508ecbe4 CLI qualification before current master integration, preserved byte-for-byte. Storage ancestry is distinct from the measured production source."
+}

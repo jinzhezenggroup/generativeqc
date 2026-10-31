@@ -169,7 +169,8 @@ def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
         r"timeout-minutes: \$\{\{ \(github.event_name == 'schedule' \|\| "
         r"github.event_name == 'workflow_dispatch'\) && (\d+) \|\| "
         r"\(\(matrix.shard == 'posthf' \|\| matrix.shard == 'core-b' \|\| "
-        r"matrix.shard == 'compiler-heavy'\) && (\d+) \|\| (\d+)\) \}\}"
+        r"matrix.shard == 'compiler-heavy' \|\| matrix.shard == 'runtime-heavy'\) "
+        r"&& (\d+) \|\| (\d+)\) \}\}"
     )
     job_limits = re.search(pattern, job.split("\n    steps:\n", 1)[0])
     test_limits = re.search(pattern, tests)

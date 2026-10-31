@@ -124,7 +124,11 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
       const auto points = pair.quadrature.point_count;
       pair.points_per_atom =
           nonlocal_grid->spec().version == 4 ? 0 : grid_points_per_atom(nonlocal_grid->spec());
-      pair.layout = nlc::vv10_cuda_device_layout(points, tile_points_, true, true);
+      // The molecular domain producer marks density-screened rows with -0.
+      // Select its qualified pair schedule just as the standalone force owner
+      // does. Active signed/zero quadrature weights retain their derivatives;
+      // raw fixed-grid consumers do not have this molecular mask contract.
+      pair.layout = nlc::vv10_cuda_device_layout(points, tile_points_, true, true, true);
       pair.effective.allocate(device, 5 * points);
       pair.seeds.allocate(device, 6 * points + 1);
       pair.workspace.allocate(device, pair.layout.workspace_bytes / sizeof(double));
@@ -249,7 +253,8 @@ generativeqc_status CudaStationaryController::gradient(
     const std::function<bool()>& token_current, std::vector<double>& output, std::string& detail,
     bool allow_spatial_default, scf::DirectForcePrecisionRequest* precision,
     const scf::ResolvedFockBuild* range, const CudaKsResidentNonlocalFeaturesBinding* nonlocal,
-    const scf::PreparedFockPlan* range_provider) {
+    const scf::PreparedFockPlan* range_provider,
+    const CudaKsResidentFittedProjectionBinding* fitted_projection) {
   detail.clear();
   try {
     const auto provider = scf::prepared_cuda_fock_binding(fock);
@@ -268,6 +273,17 @@ generativeqc_status CudaStationaryController::gradient(
           "native stationary final density/weight token is stale or "
           "incompatible");
     const auto& spec = fock.strategy().spec;
+    // An occupied projection is a one-shot borrow from this exact final state.
+    // Shape alone cannot authenticate a previous geometry or SCF generation.
+    if (fitted_projection &&
+        (!*fitted_projection || !fitted || !spec.exchange.present || density.spins != 1 ||
+         fitted_projection->device_id != device_ || fitted_projection->nbf != aos_ ||
+         fitted_projection->stream != reinterpret_cast<void*>(provider.stream) ||
+         fitted_projection->owner != density.owner ||
+         fitted_projection->solve_epoch != density.solve_epoch ||
+         fitted_projection->generation != density.generation))
+      throw std::invalid_argument(
+          "native stationary fitted projection has a stale final-state lease");
     const bool composite = binding_->model.range_omega != 0;
     const auto expected_exchange =
         (density.spins == 1 ? -0.5 : -1.0) *
@@ -410,10 +426,19 @@ generativeqc_status CudaStationaryController::gradient(
           error);
       for (std::size_t offset = 0; offset < points; offset += tile_points_) {
         const auto count = std::min(tile_points_, points - offset);
-        require_grid_call(grid_cuda_run_selected_device_deferred_v1(
-                              grid_, quadrature.points + 3 * offset, count, 1, nullptr, aos_,
-                              nullptr, nullptr, error.data(), error.size()),
-                          error);
+        // The sampled derivative map is bound to an exact quadrature span.
+        // Shared XC/NLC grids can reuse it; a distinct NLC grid stays dense.
+        if (indexed_grid_ && quadrature.points == quadrature_.points &&
+            quadrature.point_count == quadrature_.point_count)
+          require_grid_call(grid_cuda_run_ao_map_device_deferred_v1(
+                                grid_, quadrature.points + 3 * offset, count, offset,
+                                binding_->plan_identity, error.data(), error.size()),
+                            error);
+        else
+          require_grid_call(grid_cuda_run_selected_device_deferred_v1(
+                                grid_, quadrature.points + 3 * offset, count, 1, nullptr, aos_,
+                                nullptr, nullptr, error.data(), error.size()),
+                            error);
         require_grid_call(grid_cuda_view_v1(grid_, &view, error.data(), error.size()), error);
         const double* work = nullptr;
         std::uint64_t flags = 0;
@@ -443,9 +468,16 @@ generativeqc_status CudaStationaryController::gradient(
           maximum_device_bytes_, unused_hcore, unused_pulay, detail, nullptr, weights.density,
           weights.weighted_density, consume, reinterpret_cast<void*>(provider.stream));
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      scf::CudaDfBorrowedFittedProjection projection;
+      if (fitted_projection)
+        projection = {fitted_projection->device_id,  fitted_projection->occupied_coefficients,
+                      fitted_projection->projection, fitted_projection->nbf,
+                      fitted_projection->naux,       fitted_projection->rank,
+                      fitted_projection->stream};
       status = fock.consume_fitted_energy_derivatives(
           device_, reinterpret_cast<void*>(provider.stream), density.alpha, density.beta,
-          weights.density, consume, detail);
+          weights.density, consume, detail, false, fitted_projection ? &projection : nullptr,
+          !composite);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       if (composite) {
         if (!range_provider)

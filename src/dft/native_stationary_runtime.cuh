@@ -13,6 +13,9 @@ struct NativeOwner {
   cudaStream_t integral_stream{};
   bool integral_pending{}, nuclear_ready{};
   uint64_t integral_mask{}, grid_points{}, nonlocal_points{};
+  // A coalesced J/K source satisfies both inputs of the compiler-verified unit
+  // reduction, but deliberately cannot satisfy either component diagnostic.
+  uint64_t combined_integral_mask{};
 };
 
 /** Optional pair panels share the cached tier, never the mandatory force arena.
@@ -169,6 +172,7 @@ int native_reset_geometry(void* pointer, const double* centers, double tolerance
         stationary_geometry_reset(owner->scientific, centers, tolerance, error, error_size), error,
         error_size, "stationary geometry reset failed");
     owner->integral_mask = 0;
+    owner->combined_integral_mask = 0;
     owner->grid_points = 0;
     owner->nonlocal_points = 0;
     owner->nuclear_ready = false;
@@ -232,6 +236,33 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
         return;
       } else
         throw std::invalid_argument("profile has no range exchange sources");
+    } else if (view->kind == CudaDerivativeSourceKind::FullRangeJkSum) {
+      if constexpr (native_exchange_slot >= 0 && native_short_exchange_slot < 0 &&
+                    native_long_exchange_slot < 0 && stationary_spin_blocks == 1) {
+        // The compiler validates an ordered unit-source sum before emitting
+        // this adapter. J+K can therefore occupy J's existing reduction slot
+        // with a zero K slot. The mask below explicitly records coalescence:
+        // diagnostics must never report those storage slots as separate J/K.
+        const auto joint_mask = (uint64_t{1} << native_coulomb_slot) | native_exchange_mask;
+        if (view->channels != 1 || view->convention != CudaDerivativeConvention::EnergyGradient ||
+            (owner->integral_mask & joint_mask))
+          throw std::invalid_argument("invalid or duplicate combined native J/K source");
+        owner->integral_stream = stream;
+        owner->integral_pending = true;
+        cuda_check(generativeqc::dft::launch_native_stationary_source_transport(
+            view->values, view->coordinates, 1, 1.0,
+            scientific.sources + native_coulomb_slot * view->coordinates, nullptr,
+            scientific.context.error, stream));
+        cuda_check(
+            cudaMemsetAsync(scientific.sources + native_exchange_storage_slot * view->coordinates,
+                            0, view->coordinates * sizeof(double), stream));
+        ++scientific.launches;
+        owner->integral_mask |= joint_mask;
+        owner->combined_integral_mask |= joint_mask;
+        return;
+      } else {
+        throw std::invalid_argument("profile requires independent J/K source channels");
+      }
     } else if (view->kind == CudaDerivativeSourceKind::FullRangeJk) {
       slot = native_coulomb_slot;
       if (view->channels != 2 || view->convention != CudaDerivativeConvention::Force)
@@ -363,6 +394,10 @@ int native_source_span(void* pointer, size_t begin, size_t sources, double* outp
   auto* owner = static_cast<NativeOwner*>(pointer);
   return guarded(owner ? owner->scientific : nullptr, error, error_size, [&] {
     if (!owner) throw std::invalid_argument("null native stationary owner");
+    for (size_t source = 0; source < 64; ++source)
+      if ((owner->combined_integral_mask & (uint64_t{1} << source)) && source >= begin &&
+          source - begin < sources)
+        throw std::invalid_argument("combined J/K derivative has no independent source span");
     owner->scientific->context.check_device();
     native_drain_integrals(*owner);
     native_require_status(

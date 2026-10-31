@@ -306,6 +306,92 @@ static_assert(!DfProductionPolicy<1,1,1>::select(120,true).available);
     subprocess.run([compiler, "-std=c++20", "-fsyntax-only", str(source)], check=True)
 
 
+@pytest.mark.parametrize("qualified", [False, True])
+@pytest.mark.parametrize("target_qualified", [False, True])
+def test_portable_lowering_is_available_without_target_registration(
+    tmp_path: Path, qualified: bool, target_qualified: bool
+) -> None:
+    """Untuned devices share legal math while exact tuning and legacy keep priority."""
+    import json
+    import shutil
+    import subprocess
+
+    from generativeqc_compiler.integral.df_tuning.manifest import emit_policy
+
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a host C++ compiler")
+    payload = campaign_manifest()
+    portable = copy.deepcopy(payload["architectures"]["sm_120"]["baseline"])
+    portable["qualified"] = qualified
+    portable["kernels"][1]["lowering"] = "rys"
+    payload["portable"] = portable
+    # The exact profile intentionally differs from portable for the same class.
+    payload["architectures"]["sm_120"] = {
+        **copy.deepcopy(portable),
+        "qualified": target_qualified,
+        "kernels": [{"class": "000", "lowering": "polynomial", "schedule": "warp"}],
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(payload))
+    source = tmp_path / "portable.cpp"
+    source.write_text(
+        emit_policy(path)
+        + """
+using namespace generativeqc::scf::generated_df_shell;
+constexpr bool portable_targets() {
+  for (unsigned target : {60u, 70u, 75u, 80u, 86u, 89u, 90u, 100u, 121u, 150u}) {
+    const auto choice = DfProductionPolicy<0,0,0>::select(target);
+    if (!choice.available || !choice.rys || choice.variant != 2) return false;
+  }
+  return true;
+}
+static_assert(portable_targets());
+static_assert(!DfProductionPolicy<0,0,0>::select(0,true).available);
+static_assert(!DfProductionPolicy<3,1,1>::select(80,true).available);
+static_assert(!DfProductionPolicy<0,0,0>::select(120,true).rys);
+static_assert(DfProductionPolicy<0,0,1>::select(120).rys);
+"""
+        + f"static_assert(DfProductionPolicy<0,0,0>::select(120).variant == {0 if target_qualified else 2});\n"
+        + f"static_assert(DfProductionPolicy<0,0,0>::select(80).qualified == {str(qualified).lower()});\n"
+    )
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++20",
+            "-include",
+            "initializer_list",
+            "-fsyntax-only",
+            str(source),
+        ],
+        check=True,
+    )
+
+
+@pytest.mark.parametrize("fault", ["math", "evidence", "baseline"])
+def test_portable_profiles_keep_independent_qualification_gates(
+    tmp_path: Path, fault: str
+) -> None:
+    """A generic target cannot bypass the same math/provenance gates as tuning."""
+    import json
+
+    from generativeqc_compiler.integral.df_tuning.manifest import load_manifest
+
+    payload = campaign_manifest()
+    payload["portable"] = payload["architectures"].pop("sm_120")
+    profile = payload["portable"]
+    if fault == "math":
+        profile["kernels"][0]["class"] = "311"
+    elif fault == "evidence":
+        del profile["provenance"]["generator_sha256"]
+    else:
+        profile["baseline"]["qualified"] = False
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError):
+        load_manifest(path)
+
+
 @pytest.mark.parametrize(
     "fault", ["baseline", "candidate", "nested", "evidence", "math"]
 )

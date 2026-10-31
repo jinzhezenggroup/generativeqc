@@ -24,7 +24,11 @@ from .production_cost import _STABLE_AOT_SHARD_MAP_VERSION, shell_class_index
 from .production_exchange_queue import exchange_streaming_worker
 from .production_profile import _profile_identifier
 from .production_registry import _stable_selection_order
-from .production_selection import KernelSelection, _selection_integral
+from .production_selection import (
+    KernelSelection,
+    _selection_integral,
+    split_independent_consumers,
+)
 from .shell_spec import ShellClassSpec, shell_pair_class
 from .signature import GeneratedKernelArgument, GeneratedKernelSignature
 
@@ -1051,13 +1055,30 @@ def _emit_ppps_resident_source(selection: KernelSelection) -> str:
 
 def emit_production_shard(
     specifications: Iterable[ShellClassSpec | KernelSelection],
+    *,
+    _include_prelude: bool = True,
 ) -> str:
     """Emit one CUDA TU containing a deterministic subset of accepted classes."""
 
     selections = _stable_selection_order(specifications)
+    if any(item.fock_recurrence is not None for item in selections):
+        # The legacy single-target writer shares the same consumer separation.
+        # C launch symbols retain their ABI; private support lives in disjoint
+        # namespaces so neither consumer changes the other's recurrence.
+        body = [_PRODUCTION_PRELUDE] if _include_prelude else []
+        for item in selections:
+            parts = split_independent_consumers(item)
+            if parts is None:
+                body.append(emit_production_shard((item,), _include_prelude=False))
+                continue
+            for label, part in zip(("force", "fock"), parts, strict=True):
+                body.append(f"namespace independent_{item.spec.name}_{label} {{\n")
+                body.append(emit_production_shard((part,), _include_prelude=False))
+                body.append("}\n")
+        return "".join(body)
     body = [
         f"// Stable AOT shard map version: {_STABLE_AOT_SHARD_MAP_VERSION}\n",
-        _PRODUCTION_PRELUDE,
+        _PRODUCTION_PRELUDE if _include_prelude else "",
     ]
     for selection in selections:
         integral = _selection_integral(selection)
@@ -1167,6 +1188,24 @@ def emit_profile_shard(
     """
 
     items = tuple(selections)
+    if any(item.fock_recurrence is not None for item in items):
+        primary, forces = [], []
+        for item in items:
+            parts = split_independent_consumers(item)
+            if parts is None:
+                primary.append(item)
+            else:
+                force, fock = parts
+                forces.append(force)
+                primary.append(fock)
+        # Primary Fock symbols and schedules stay unchanged. A distinct force
+        # namespace owns its roots, raised HRR bounds and launch wrappers; the
+        # registry resolves that explicit variant without optional candidates.
+        return emit_profile_shard(
+            profile, primary, variant=variant, include_work_buckets=include_work_buckets
+        ) + emit_profile_shard(
+            profile, forces, variant=variant + "_force", include_work_buckets=False
+        )
     identifier = _profile_identifier(profile.target.architecture) + variant
     namespace = f"generativeqc::scf::generated::profile_{identifier}"
     body = [

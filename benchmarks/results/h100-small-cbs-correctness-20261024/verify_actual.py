@@ -7,14 +7,14 @@ import json
 from pathlib import Path
 
 from replay import recover, replay
-from restore_actual import digest, restore
+from restore_actual import CAPSULE, digest, restore
 from transport import checked, read
 
 HERE = Path(__file__).resolve().parent
 
 
-def verify(output: Path) -> dict:
-    storage = restore(output)
+def verify(output: Path, capsule: Path = CAPSULE) -> dict:
+    storage = restore(output, capsule)
     plan_path = HERE / "prepared-plan-v4.json"
     checked(
         plan_path, "8d2a61dfdbea39acc2f4852e715b8585a75af8c922702678951c4d0d9178d5ea"
@@ -133,8 +133,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--report", type=Path, required=True, help="new offline report file"
     )
+    parser.add_argument("--capsule", type=Path, default=CAPSULE, help="verified restored historical capsule")
     args = parser.parse_args()
-    result = verify(args.output)
+    result = verify(args.output, args.capsule)
     with args.report.open("x", encoding="utf-8", newline="\n") as stream:
         json.dump(result, stream, indent=2, allow_nan=False)
         stream.write("\n")
