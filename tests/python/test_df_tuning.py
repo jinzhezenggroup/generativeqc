@@ -2,6 +2,7 @@
 
 import copy
 import math
+import runpy
 import typing
 from pathlib import Path
 
@@ -366,6 +367,60 @@ static_assert(DfProductionPolicy<0,0,1>::select(120).rys);
         ],
         check=True,
     )
+
+
+@pytest.mark.parametrize("qualified", (False, True))
+@pytest.mark.parametrize("target_qualified", (False, True))
+def test_cuda_campaign_expectations_preserve_portable_qualification(
+    tmp_path: Path, qualified: bool, target_qualified: bool
+) -> None:
+    """The device-test oracle must not let candidate-only rows shadow portable."""
+    import json
+
+    from generativeqc_compiler.integral.df_tuning.manifest import load_manifest
+
+    payload = campaign_manifest()
+    portable = copy.deepcopy(payload["architectures"]["sm_120"]["baseline"])
+    portable["qualified"] = qualified
+    portable["kernels"] = [{"class": "203", "lowering": "rys", "schedule": "compact"}]
+    payload["portable"] = portable
+    payload["architectures"]["sm_120"] = {
+        **copy.deepcopy(portable),
+        "qualified": target_qualified,
+        "kernels": [{"class": "203", "lowering": "polynomial", "schedule": "warp"}],
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(payload))
+    manifest = load_manifest(path)
+    choices = runpy.run_path(
+        str(Path(__file__).with_name("test_df_derivative_admission_cuda.py"))
+    )["_expected_rys_choices"]
+    assert choices(manifest, "sm_120", "auto") == {
+        "203": qualified and not target_qualified
+    }
+    assert choices(manifest, "sm_120", "candidate") == {"203": False}
+    assert choices(manifest, "sm_90", "auto") == {"203": qualified}
+
+
+@pytest.mark.parametrize("portable", (False, True))
+@pytest.mark.parametrize("promoted", (False, True))
+def test_cuda_campaign_expectations_preserve_qualified_baselines(
+    portable: bool, promoted: bool
+) -> None:
+    """Qualified exact baselines still override portable; candidates remain opt-in."""
+    manifest = campaign_manifest()
+    profile = manifest["architectures"]["sm_120"]
+    if portable:
+        manifest["portable"] = copy.deepcopy(profile["baseline"])
+        manifest["portable"]["kernels"][1]["lowering"] = "rys"
+    if promoted:
+        del profile["baseline"]
+        profile["qualified"] = True
+    choices = runpy.run_path(
+        str(Path(__file__).with_name("test_df_derivative_admission_cuda.py"))
+    )["_expected_rys_choices"]
+    assert choices(manifest, "sm_120", "auto") == {"000": True, "001": promoted}
+    assert choices(manifest, "sm_120", "candidate") == {"000": True, "001": True}
 
 
 @pytest.mark.parametrize("fault", ["math", "evidence", "baseline"])
