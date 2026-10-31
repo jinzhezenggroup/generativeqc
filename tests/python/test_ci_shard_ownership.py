@@ -466,7 +466,10 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
     selections = {shard: set(_selection(event, shard)[1]) for shard in SHARDS}
     expected = {
         # Landed dedicated transfers supersede historical core pins.
-        "ecp-forces": ("test_mixed_rsh_df_forces.py",),
+        "ecp-forces": (
+            "test_mixed_rsh_df_forces.py",
+            "test_wb97mv_ecp_hessian.py",
+        ),
         "compiler-heavy": (
             "test_dft_mp_v1_capacity.py",
             "test_df_lambda_frontier.py",
@@ -489,15 +492,14 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_cuda_xc_point_contract.py",
             "test_df_cc_mixed_precision.py",
             "test_uccsd_solver.py",
-            "test_wb97mv_ecp_hessian.py",
         ),
         "core-a": (
             "test_cc_triples_tiles.py",
             "test_df_lambda_core_reuse.py",
-            "test_native_stationary_shared_kernels.py",
-            "test_native_stationary_cuda_binding.py",
         ),
         "core-b": (
+            "test_native_stationary_shared_kernels.py",
+            "test_native_stationary_cuda_binding.py",
             "test_cpu_semilocal_force_contract.py",
             "test_wb97mv_uks_hessian.py",
             "test_uccsd_response.py",
@@ -555,10 +557,10 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_cuda_xc_point_contract.py": "runtime-heavy",
         "tests/python/test_df_cc_mixed_precision.py": "runtime-heavy",
         "tests/python/test_uccsd_solver.py": "runtime-heavy",
-        "tests/python/test_wb97mv_ecp_hessian.py": "runtime-heavy",
+        "tests/python/test_wb97mv_ecp_hessian.py": "ecp-forces",
         "tests/python/test_cc_triples_tiles.py": "core-a",
-        "tests/python/test_native_stationary_shared_kernels.py": "core-a",
-        "tests/python/test_native_stationary_cuda_binding.py": "core-a",
+        "tests/python/test_native_stationary_shared_kernels.py": "core-b",
+        "tests/python/test_native_stationary_cuda_binding.py": "core-b",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
         "tests/python/test_df_lambda_core_reuse.py": "core-a",
         "tests/python/test_correlation_convergence.py": "runtime-heavy",
@@ -1405,10 +1407,10 @@ def test_measured_file_priority_only_changes_routine_file_scheduling(
         assert distribution == "loadfile"
         if shard == "runtime-heavy":
             assert selected[:4] == [
-                "tests/python/test_wb97mv_ecp_hessian.py",
                 "tests/python/test_uccsd_triples_response.py",
                 "tests/python/test_native_stationary_phased_budget.py",
                 "tests/python/test_correlation_convergence.py",
+                "tests/python/test_bulk_aot_clangxx_closure.py",
             ]
         else:
             assert selected[:5] == [
@@ -1498,10 +1500,10 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
         ]
         if lane == "posthf"
         else [
-            "test_wb97mv_ecp_hessian.py",
             "test_uccsd_triples_response.py",
             "test_native_stationary_phased_budget.py",
             "test_correlation_convergence.py",
+            "test_bulk_aot_clangxx_closure.py",
         ]
     )
     ordinary = [f"test_future_{index}.py" for index in range(4)]

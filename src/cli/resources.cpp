@@ -155,7 +155,7 @@ Bytes ks_grid_points(std::span<const generativeqc_atom> atoms, const RunOptions&
 scf::KsHostResourceShape ks_host_shape(const Topology& shape,
                                        std::span<const generativeqc_atom> atom_values, Bytes spins,
                                        const RunOptions& options, Bytes ecp_terms,
-                                       Bytes ecp_workspace) {
+                                       Bytes ecp_workspace, bool pbe) {
   return {atom_values.size(),
           shape.nbf,
           shape.cartesian_nbf,
@@ -170,7 +170,7 @@ scf::KsHostResourceShape ks_host_shape(const Topology& shape,
           options.backend == GENERATIVEQC_BACKEND_CUDA ? options.grid.tile_points : 256,
           options.diis_history,
           options.max_iterations.value_or(100),
-          options.method_name.starts_with("pbe"),
+          pbe,
           false,
           ecp_workspace};
 }
@@ -180,6 +180,30 @@ Json ks_inventory(const std::array<Bytes, 16>& inventory) {
   for (std::size_t index = 0; index < inventory.size(); ++index)
     result[scf::ks_host_resource_keys[index]] = inventory[index];
   return result;
+}
+
+/** Admit a correction only when its electronic graph matches the existing PBE
+ * inventory. Carrier enums and name prefixes do not establish that identity:
+ * hybrids and range-separated programs can share the same carrier. */
+bool pbe_dispersion_inventory(const RunOptions& options) {
+  const auto* method = options.composition;
+  if (!method || (method->dispersion.kind < 1 || method->dispersion.kind > 3) ||
+      method->dispersion.composite_profile || method->bound_basis || method->nonlocal.variant ||
+      method->exchange_count || method->range_omega != 0 ||
+      (method->spin != 1 && method->spin != 2))
+    return false;
+  const auto* reference = method_generated::find_method(method->spin == 1 ? "pbe-rks" : "pbe-uks");
+  if (!reference || method->domain != reference->domain || method->carrier != reference->carrier ||
+      (options.backend == GENERATIVEQC_BACKEND_CUDA ? !method->cuda : !method->cpu))
+    return false;
+  const auto actual = method_generated::components(*method);
+  const auto expected = method_generated::components(*reference);
+  return actual.size() == expected.size() &&
+         std::equal(actual.begin(), actual.end(), expected.begin(),
+                    [](const auto& a, const auto& b) {
+                      return std::string_view(a.component_id) == b.component_id &&
+                             a.coefficient == b.coefficient;
+                    });
 }
 
 // The CLI repeats topology metadata; the native owner performs the same full
@@ -237,8 +261,12 @@ Json cuda_df_candidates(const Topology& orbital, const Topology& auxiliary, Byte
 int resources_command(const RunOptions& options, std::span<const generativeqc_atom> atoms) {
   const bool hf =
       options.method == GENERATIVEQC_METHOD_RHF || options.method == GENERATIVEQC_METHOD_UHF;
+  const bool correction_program = pbe_dispersion_inventory(options);
+  const bool d4 = correction_program && options.composition->dispersion.kind == 3;
+  const bool pbe = options.method_name.starts_with("pbe") || correction_program;
   const bool ks = options.method_name == "lda-rks" || options.method_name == "lda-uks" ||
-                  options.method_name == "pbe-rks" || options.method_name == "pbe-uks";
+                  options.method_name == "pbe-rks" || options.method_name == "pbe-uks" ||
+                  correction_program;
   Json budget = {
       {"schema_version", 1},
       {"host_bytes", options.host_bytes ? Json(*options.host_bytes) : Json()},
@@ -278,7 +306,8 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     return plan["status"] == "feasible" ? 0 : 2;
   };
   if (!hf && !ks) {
-    plan["diagnostic"] = "native resource inventory requires RHF/UHF or LDA/PBE RKS/UKS";
+    plan["diagnostic"] =
+        "native resource inventory requires RHF/UHF, LDA/PBE RKS/UKS or a named PBE D3/D4 program";
     return emit();
   }
   // This inventory admits only mean-field methods, never correlated references.
@@ -322,7 +351,9 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   }
   const auto orbital = topology(basis);
   const Bytes spins =
-      options.method_name.ends_with("uhf") || options.method_name.ends_with("uks") ? 2 : 1;
+      correction_program
+          ? options.composition->spin
+          : (options.method_name.ends_with("uhf") || options.method_name.ends_with("uks") ? 2 : 1);
   std::int64_t electrons = -static_cast<std::int64_t>(options.charge);
   for (const auto& atom : atoms) electrons += atom.atomic_number;
   for (const auto core : basis.core_electrons) electrons -= core;
@@ -434,7 +465,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   } else if (cpu && ks) {
     scf::CpuKsHostFleetResources fleet;
     plan["item_inventory"] = ks_inventory(fleet.append(
-        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace),
+        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace, pbe),
         options.batch));
     const auto aggregate = fleet.inventory();
     retained = aggregate[12];
@@ -496,10 +527,10 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     const Bytes points = ks_grid_points(atoms, options);
     std::array<Bytes, 3> capacities{};
     Bytes quadrature = 0, matrix_provider = 0;
-    if (generativeqc_resource_ks_cuda_v1(
-            orbital.nbf, atoms.size(), orbital.shells, orbital.primitives, points,
-            options.diis_history, spins, options.method_name.starts_with("pbe") ? 1 : 0,
-            options.grid.tile_points, capacities.data(), capacities.size()) ||
+    if (generativeqc_resource_ks_cuda_v1(orbital.nbf, atoms.size(), orbital.shells,
+                                         orbital.primitives, points, options.diis_history, spins,
+                                         pbe ? 1 : 0, options.grid.tile_points, capacities.data(),
+                                         capacities.size()) ||
         generativeqc_resource_quadrature_cuda_v1(atoms.size(), points, &quadrature) ||
         generativeqc_resource_ks_matrix_provider_cuda_v1(orbital.nbf, &matrix_provider)) {
       plan["diagnostic"] =
@@ -508,7 +539,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     }
     scf::KsHostFleetResources host_fleet;
     plan["item_inventory"] = ks_inventory(host_fleet.append(
-        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace),
+        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace, pbe),
         options.batch, scf::KsHostExecution::cuda_fused));
     const auto host_inventory = host_fleet.inventory();
     retained = host_inventory[12];
@@ -563,6 +594,65 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   } else {
     plan["diagnostic"] = "this CUDA provider has no qualified native dry-run inventory";
     return emit();
+  }
+  if (correction_program) {
+    // Named KS retains a separate correction owner per item. Ask the existing
+    // D3/D4 owner for its complete fleet, including replicated CUDA tables;
+    // standalone ragged-owner sizing would undercount that retained storage.
+    // This energy-only CLI has no Python compatibility-gradient consumer.
+    if (atoms.size() > std::numeric_limits<std::uint32_t>::max() || (d4 && atoms.size() > 256) ||
+        std::any_of(atoms.begin(), atoms.end(), [](const auto& atom) {
+          return atom.atomic_number < 1 || atom.atomic_number > 86;
+        })) {
+      plan["diagnostic"] = "correction inventory rejects the element or per-item atom domain";
+      return emit();
+    }
+    const std::vector<std::uint32_t> counts(options.batch,
+                                            static_cast<std::uint32_t>(atoms.size()));
+    const auto append = [&](const auto& correction, const char* owner) {
+      plan["correction_inventory"] = {{"owner", owner},
+                                      {"method_identity", options.composition->identity},
+                                      {"plan_host_bytes", correction.plan_host_bytes},
+                                      {"execution_host_bytes", correction.execution_host_bytes},
+                                      {"device_bytes", correction.device_bytes},
+                                      {"table_bytes", correction.table_bytes},
+                                      {"workspace_bytes", correction.workspace_bytes},
+                                      {"minimum_maximum_bytes", correction.maximum_bytes}};
+      plan["controls"]["dispersion_memory_bytes"] = options.dispersion_memory_bytes;
+      if (options.dispersion_memory_bytes < correction.maximum_bytes) {
+        plan["status"] = "infeasible";
+        plan["diagnostic"] =
+            "named correction owners exceed the equal-share dispersion memory budget";
+        return false;
+      }
+      retained = sum({retained, correction.plan_host_bytes, correction.execution_host_bytes});
+      device = sum({device, correction.device_bytes});
+      if (correction.device_bytes) {
+        auto& resident = plan["resident_bytes"]["device:" + std::to_string(options.device_id)];
+        resident = sum({resident.get<Bytes>(), correction.device_bytes});
+      }
+      return true;
+    };
+    if (d4) {
+      generativeqc_d4_runtime_diagnostic correction{};
+      correction.struct_size = sizeof(correction);
+      correction.abi_version = GENERATIVEQC_ABI_VERSION;
+      generativeqc::check(generativeqc_ks_d4_resource_query_v1(options.backend, counts.data(),
+                                                               options.batch, &correction));
+      if (!append(correction, "native-ks-d4-layout-v1")) return emit();
+    } else {
+      generativeqc_d3_runtime_diagnostic correction{};
+      correction.struct_size = sizeof(correction);
+      correction.abi_version = GENERATIVEQC_ABI_VERSION;
+      // D3 owns its shape limit. A refused query must not fall back to an
+      // electronic-only inventory or a differently composed correction owner.
+      if (generativeqc_ks_d3_resource_query_v1(options.backend, counts.data(), options.batch,
+                                               &correction) != GENERATIVEQC_STATUS_SUCCESS) {
+        plan["diagnostic"] = "native D3 correction inventory rejects this system/batch shape";
+        return emit();
+      }
+      if (!append(correction, "native-ks-d3-layout-v1")) return emit();
+    }
   }
   // Each native fleet already applies batch multiplicity to retained storage.
   const Bytes resident_device =

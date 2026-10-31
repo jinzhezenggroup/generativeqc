@@ -35,3 +35,10 @@ Check complete hosted CI after this change. If core-a becomes the critical
 path or native fixture costs change, use per-module diagnostics from the
 same run to rebalance complete owners without dropping tests. The measured
 worker sum estimates available load; it does not establish a wall-time win.
+
+## Follow-up
+
+After the precision/defaults stack entered master, core-a became the critical
+path in run `41183809495`. The
+[follow-up balance](2026-10-31-core-a-integrated-contract-balance.md) supersedes
+the owner choice above, preserving its coverage and scheduling invariants.

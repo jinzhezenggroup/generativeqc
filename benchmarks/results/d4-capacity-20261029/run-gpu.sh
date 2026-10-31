@@ -5,6 +5,20 @@ base_root=/home/jzzeng/codes/qc-2227-d4-ledger-4fc8782cf-20261029
 reference_root=/home/jzzeng/codes/qc-2227-precision-policy-20261029
 out="$run_root/artifacts"
 cd "$run_root"
+qualification_status=0
+finish() {
+  local status=$? integrity_status=0
+  trap - EXIT
+  if [ "$qualification_status" -ne 0 ]; then
+    status=$qualification_status
+  fi
+  sha256sum -c "$out/input-sha256.txt" > "$out/integrity-after.log" || integrity_status=$?
+  if [ "$status" -eq 0 ]; then
+    status=$integrity_status
+  fi
+  exit "$status"
+}
+trap finish EXIT
 export PATH=/home/jzzeng/miniconda3/bin:/home/jzzeng/.local/bin:/group/software/cuda-12.9.1/bin:$PATH
 export PYTHONPATH="$run_root/python:$run_root:$reference_root/artifacts/reference-python-v2:$out/qualification"
 export GENERATIVEQC_LIBRARY="$out/libgenerativeqc.so.0"
@@ -34,7 +48,14 @@ for campaign in default budget; do
   else
     export D4_QUALIFY_GLOBAL_BUDGET=0
   fi
-  python "$out/qualification/qualify.py" --baseline "$base_root" --candidate "$run_root" --baseline-library "$base_root/artifacts/libgenerativeqc.so.0" --candidate-library "$out/libgenerativeqc.so.0" --backend cuda --groups 8 --output "$out/cuda-$campaign-samples.json.xz"
+  if python "$out/qualification/qualify.py" --baseline "$base_root" --candidate "$run_root" --baseline-library "$base_root/artifacts/libgenerativeqc.so.0" --candidate-library "$out/libgenerativeqc.so.0" --backend cuda --groups 8 --output "$out/cuda-$campaign-samples.json.xz"; then
+    :
+  else
+    campaign_status=$?
+    if [ "$qualification_status" -eq 0 ]; then
+      qualification_status=$campaign_status
+    fi
+  fi
   for role in baseline candidate; do
     source_root="$run_root"
     library="$out/libgenerativeqc.so.0"
@@ -49,4 +70,4 @@ for campaign in default budget; do
   python "$out/qualification/profile_summary.py" --baseline "$out/$campaign-baseline-profile.sqlite" --candidate "$out/$campaign-candidate-profile.sqlite" --output "$out/$campaign-profile-summary.json"
 done
 sha256sum "$out/libgenerativeqc.so.0" "$base_root/artifacts/libgenerativeqc.so.0"
-sha256sum -c "$out/input-sha256.txt" > "$out/integrity-after.log"
+exit "$qualification_status"
