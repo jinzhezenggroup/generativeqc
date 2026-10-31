@@ -67,10 +67,13 @@ Ordinary density-fitted forces use the separate native AO-jet bitmask producer
 at dense point×AO² work of at least `2**35`. Its discovery cost does not share
 the sampled producer's crossover. It checks every requested AO derivative at
 the unchanged `1e-16` cutoff, including second derivatives for forces, and
-retains every grid point and Becke response. Fixed 256-point and budget-auto
+retains every grid point and Becke response. Explicit force tiles and budget-auto
 tiles share the same admission, 64 MiB optional map allowance, 0.8 mean active
 fraction guard and complete-owner byte limits. Smaller work, missing resident
 capabilities and optional capacity/occupancy refusals retain dense execution.
+The fixed tile request still goes through complete capacity planning; specifying
+`KsOptions.force_tile_points` does not disable the fitted AO map. Map identity
+includes the actual tile layout, so changing the tile rebuilds its inventory.
 The [crossover decision](../../.agents/notes/implemented/performance/2026-10-25-df-force-bitmask-crossover.md)
 records endpoint qualification and the reason for the separate threshold.
 

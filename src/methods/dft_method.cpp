@@ -538,7 +538,7 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
           native_cuda_stationary_binding(execution_plan, options, grid, true, angular, n, atoms);
       if (!binding) return {};
       const auto force = dft::cuda_stationary_capacity(*binding, atoms, n, primitives, points,
-                                                       options.xc_tile_points, false);
+                                                       options.stationary_tile_points(), false);
       stationary = std::max(force.minimum_device_bytes, force.cached_device_bytes);
     }
     // The DIIS Gram diagnostic can be changed before a geometry rebuild.
@@ -670,7 +670,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       try {
         (void)dft::cuda_stationary_capacity(
             *binding, basis_.natom, basis_.nao, basis_.nprimitive, grid_.point_count(),
-            options_.xc_tile_points, false,
+            options_.stationary_tile_points(), false,
             options_.nonlocal_grid ? options_.nonlocal_grid->point_count() : 0);
         return true;
       } catch (...) {
@@ -2102,7 +2102,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       // storage not already retained on a replay, before creating any force owner.
       const auto capacity = dft::cuda_stationary_capacity(
           *binding, basis_.natom, basis_.nao, basis_.nprimitive, grid_.point_count(),
-          options_.xc_tile_points, precision && precision->mixed_grid,
+          options_.stationary_tile_points(), precision && precision->mixed_grid,
           options_.nonlocal_grid ? options_.nonlocal_grid->point_count() : 0);
       // Preserve the public nonlocal sub-budget as well as the complete force
       // allowance. SCF capacity does not authorize a larger derivative owner.
@@ -2120,7 +2120,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       if (!stationary_controller_) {
         stationary_controller_ = std::make_unique<dft::CudaStationaryController>(
             system_, basis_, grid_, *binding, expected.identity.model.device,
-            options_.xc_tile_points, maximum_device_bytes,
+            options_.stationary_tile_points(), maximum_device_bytes,
             nonlocal_ ? (options_.nonlocal_grid ? options_.nonlocal_grid : &grid_) : nullptr);
       }
       dft::CudaKsResidentDensityBinding density;
@@ -2300,7 +2300,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
     try {
       const auto candidate = dft::cuda_stationary_capacity(
           *binding, basis_.natom, basis_.nao, basis_.nprimitive, grid_.point_count(),
-          options_.xc_tile_points, application_gradient_qualification() != 0,
+          options_.stationary_tile_points(), application_gradient_qualification() != 0,
           options_.nonlocal_grid ? options_.nonlocal_grid->point_count() : 0);
       capacity = candidate;
       detail.clear();
@@ -3651,7 +3651,7 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
       }
     }
     const auto candidate = dft::cuda_stationary_capacity(
-        *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,
+        *binding, shape[0], shape[1], shape[2], shape[3], options.stationary_tile_points(),
         dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
                                              options.screening_tolerance, false) &&
             dft::application_gradient_qualification(*binding, options.application_precision_budget,

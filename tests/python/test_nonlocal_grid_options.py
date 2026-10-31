@@ -33,7 +33,7 @@ def test_equal_grid_preserves_the_legacy_descriptor(secondary: GridSpec | None) 
         "wb97m-v", KsOptions(grid=PRIMARY, nonlocal_grid=secondary)
     )
     descriptor = native_ks_options(options, library=SimpleNamespace())
-    assert descriptor.struct_size == ctypes.sizeof(_native.KsOptionsDescriptor) == 160
+    assert descriptor.struct_size == ctypes.sizeof(_native.KsOptionsDescriptor) == 168
 
 
 @pytest.mark.parametrize("secondary", (SECONDARY, GridSpec(8, 9, 12)))
@@ -45,7 +45,7 @@ def test_distinct_grid_has_a_retained_exact_layout(secondary: GridSpec) -> None:
     assert (
         descriptor.struct_size
         == ctypes.sizeof(_native.NonlocalGridKsOptionsDescriptor)
-        == 200
+        == 208
     )
     extension = descriptor._extension_owner
     assert extension.nonlocal_grid_version == 1

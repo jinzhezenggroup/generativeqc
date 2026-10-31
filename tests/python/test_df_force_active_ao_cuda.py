@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pytest
@@ -29,8 +28,15 @@ ROOT = Path(__file__).resolve().parents[2]
     [("lda", "LDA_X,LDA_C_PW"), ("pbe", "PBE"), ("pbe0", "PBE0"), ("r2scan", "R2SCAN")],
 )
 @pytest.mark.parametrize("spin", ["rks", "uks"])
+@pytest.mark.parametrize(
+    "force_tile_points", [None, 1024], ids=["automatic", "fixed1024"]
+)
 def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
-    monkeypatch: pytest.MonkeyPatch, method: str, xc: str, spin: str
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    xc: str,
+    spin: str,
+    force_tile_points: int | None,
 ) -> None:
     """Exercise all AO jets, unequal spins, two geometries and dense fallback.
 
@@ -44,7 +50,7 @@ def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
     from gpu4pyscf.dft import uks
     from test_dft_complete_cuda import no_cpu_derivatives
 
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     case = benchmark_cases()["water-tetramer-def2-svp-spherical"]
     if spin == "uks":
         case = replace(case, atoms=case.atoms[:3])
@@ -66,13 +72,18 @@ def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
     moved = coordinates.copy()
     moved[1, 0] += 0.002
     geometries = (coordinates, moved)
-    charge = int(spin == "uks")
-    references = []
-    for points in geometries:
-        atoms = [
+
+    def atoms_at(points: np.ndarray) -> list[tuple[str, np.ndarray]]:
+        """Bind the explicit fallback to the same geometry as the native solve."""
+        return [
             (element, point)
             for (element, _), point in zip(case.atoms, points, strict=True)
         ]
+
+    charge = int(spin == "uks")
+    references = []
+    for points in geometries:
+        atoms = atoms_at(points)
         reference = reference_engine(atoms, reference_basis, grid, xc=xc)
         if charge:
             reference.mol.build(charge=charge, spin=1)
@@ -98,7 +109,7 @@ def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
         basis_representation="spherical",
         device="cuda",
         density_fitting="cuda",
-        ks_options=KsOptions(grid=grid),
+        ks_options=KsOptions(grid=grid, force_tile_points=force_tile_points),
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
         screening_tolerance=1e-12,
@@ -107,7 +118,9 @@ def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
     profile = next(
         profile
         for profile in policy.QUALIFIED_FORCE_ACTIVE_AO_PROFILES
-        if profile.density_fitted and profile.tile_policy == "budget-auto"
+        if profile.density_fitted
+        and profile.tile_policy
+        == ("budget-auto" if force_tile_points is None else "fixed")
     )
     profile = replace(
         profile, min_dense_point_ao_square_work=1, max_active_fraction=1.0
@@ -127,7 +140,14 @@ def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
                     strict=True,
                     properties=("energy", "forces"),
                 ).items[0]
-            dense.append(result.forces.copy())
+                # Native FP64 controllers now own these public force cases.
+                # Exercise the retained generated consumer explicitly without
+                # spoofing that capability or mislabelling native map work.
+                explicit_forces, _ = batch._public_dft_cuda_force(0, atoms_at(points))
+            np.testing.assert_allclose(
+                explicit_forces, result.forces, atol=1e-9, rtol=0
+            )
+            dense.append(explicit_forces.copy())
 
     monkeypatch.setattr(policy, "QUALIFIED_FORCE_ACTIVE_AO_PROFILES", (profile,))
     with calculator.prepare_batch(
@@ -136,18 +156,6 @@ def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
         multiplicities=[charge + 1],
         warm_start=True,
     ) as batch:
-        records = []
-        original_force = batch._public_dft_cuda_force
-
-        def observed_force(
-            *arguments: Any, **keywords: Any
-        ) -> tuple[np.ndarray, dict[str, Any]]:
-            """Observe actual public work, without replacing any consumer."""
-            forces, work = original_force(*arguments, **keywords)
-            records.append(work)
-            return forces, work
-
-        monkeypatch.setattr(batch, "_public_dft_cuda_force", observed_force)
         previous = None
         for call, geometry in enumerate((0, 0, 1, 1)):
             with no_cpu_derivatives():
@@ -156,17 +164,23 @@ def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
                     strict=True,
                     properties=("energy", "forces"),
                 ).items[0]
+                explicit_forces, force_work = batch._public_dft_cuda_force(
+                    0, atoms_at(geometries[geometry])
+                )
             energy, forces = references[geometry]
             assert result.executed_backend == "cuda" and result.converged
             assert result.physical_residual_rms <= 1e-9
             assert abs(result.energy - energy) <= 1e-8
             np.testing.assert_allclose(result.forces, forces, atol=3e-7, rtol=0)
             np.testing.assert_allclose(
-                result.forces, dense[geometry], atol=1e-9, rtol=0
+                explicit_forces, result.forces, atol=1e-9, rtol=0
+            )
+            np.testing.assert_allclose(
+                explicit_forces, dense[geometry], atol=1e-9, rtol=0
             )
             owner = batch._stationary_cuda_execution._resident_ao_maps
             assert owner.domain.derivative_order == (1 if method == "lda" else 2)
-            work = records[-1]["resident_ao_selection"]["work"]
+            work = force_work["resident_ao_selection"]["work"]
             assert work["discovery_producer"] == "exact-jets-native-bitmask"
             assert work["point_ao_square_sum"] < work["dense_point_ao_square_sum"]
             assert work["discovery_ao_panel_write_bytes"] == 0
@@ -191,11 +205,17 @@ def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
                     strict=True,
                     properties=("energy", "forces"),
                 ).items[0]
+                explicit_forces, force_work = batch._public_dft_cuda_force(
+                    0, atoms_at(moved)
+                )
             np.testing.assert_allclose(
-                result.forces, references[1][1], atol=3e-7, rtol=0
+                explicit_forces, references[1][1], atol=3e-7, rtol=0
             )
-            np.testing.assert_allclose(result.forces, dense[1], atol=1e-9, rtol=0)
-            work = records[-1]["resident_ao_selection"]["work"]
+            np.testing.assert_allclose(
+                explicit_forces, result.forces, atol=1e-9, rtol=0
+            )
+            np.testing.assert_allclose(explicit_forces, dense[1], atol=1e-9, rtol=0)
+            work = force_work["resident_ao_selection"]["work"]
             assert work["point_ao_square_sum"] == work["dense_point_ao_square_sum"]
             assert (
                 work[

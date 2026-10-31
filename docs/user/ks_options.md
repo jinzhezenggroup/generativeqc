@@ -210,24 +210,32 @@ the [complete endpoint and accuracy qualification](../maintainer/performance_eng
 
 ## SCF and force tile policies
 
-`KsOptions.tile_points` configures SCF AO/grid/XC panels. The ordinary public
-CUDA analytic-force executor has a separate fixed 256-point policy; composite
-forces instead use their own budget-aware planner. Increasing the SCF tile does
-not request a larger Becke force workspace.
+`KsOptions.tile_points` configures SCF AO/grid/XC panels. The native CUDA
+stationary-force executor inherits this bound unless `force_tile_points` is
+specified. That independent CUDA force bound accepts integers from 1 to 4096;
+it changes batching without changing the SCF tile, quadrature, precision or
+screening thresholds. `None` preserves the existing force policy. CPU execution
+continues to use `tile_points`; `force_tile_points` is a CUDA scheduling control.
 
 For an independently qualified larger-tile workload, request the size explicitly:
 
 ```python
 options = KsOptions(
     grid=GridSpec(radial_points=48, angular_polar=16, angular_azimuth=32),
-    tile_points=512,
+    tile_points=256,
+    force_tile_points=1024,
 )
 ```
 
 Larger tiles reduce submission/map counts but can include more local AO
 summands. They are not universally faster, and map reservation bytes are not
-complete endpoint peak memory. The default remains 256: there is no implicit
-512-point promotion or automatic replacement of an explicit tile request.
+complete endpoint peak memory. The complete force arena and nonlocal sub-budget
+still apply; a request below the required memory fails admission. A tile bound
+may be clamped to the available grid point count. The native default remains
+256, and explicit SCF tiles are preserved. Generated CUDA fallback owners also
+honor an explicit force tile; without one they retain their existing force
+planner. C and C++ callers set `generativeqc_ks_options.force_tile_points` or
+`KsGrid.force_tile_points`; zero selects inheritance for the native owner.
 Resource budgets and the existing dense/local-AO admission remain authoritative.
 Use a new prepared owner when changing the tile, and inspect the actual
 `ks_diagnostic.tile_points` rather than assuming the requested route ran.

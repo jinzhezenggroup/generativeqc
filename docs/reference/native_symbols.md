@@ -5713,7 +5713,8 @@ explicit-radius radial-v1 pruned (3), or Treutler/Lebedev/NWChem (4) semantics;
 v4 encodes level 0..9 in radial_points and requires zero angular fields;
 earlier versions use radial_points, angular_polar and angular_azimuth as counts;
 partition_iterations sets Becke partition smoothing; coincident_tolerance sets the
-coincident-center threshold; tile_points bounds the grid tile size.
+coincident-center threshold; tile_points bounds SCF grid tiles. force_tile_points
+bounds CUDA stationary-force tiles independently; zero inherits tile_points.
 
 **Lifetime.** Owns only scalar values; copying preserves the complete descriptor.
 

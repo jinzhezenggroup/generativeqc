@@ -72,12 +72,12 @@ void validate_grid_spec(const GridSpec& g) {if(!g.radial_points)throw std::inval
 namespace scf {struct ScfOptions {
  std::optional<dft::GridSpec> nonlocal_grid_spec;
  enum class XcExecutionSchedule {DeviceFused,HostUnfused};
- std::uint64_t xc_tile_points=256;
+ std::uint64_t xc_tile_points=256, xc_force_tile_points=0;
  XcExecutionSchedule xc_execution_schedule=XcExecutionSchedule::DeviceFused;
 };}
 struct generativeqc_ks_options {
  std::size_t struct_size=sizeof(generativeqc_ks_options); unsigned abi_version=1;
- const char* scf_domain="current-domain"; std::uint64_t tile_points=37;
+ const char* scf_domain="current-domain"; std::uint64_t tile_points=37, force_tile_points=0;
  unsigned xc_execution_schedule=GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED;
  unsigned grid_version=2,radial_points=7,angular_polar=5,angular_azimuth=9,partition_iterations=4;
  double coincident_tolerance=1e-10; const double* element_radii=nullptr; std::size_t element_radius_count=0;
