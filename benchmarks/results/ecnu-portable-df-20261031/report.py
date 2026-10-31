@@ -15,18 +15,26 @@ def main() -> None:
     phase, seconds = columns.index("phase"), columns.index("seconds")
     for name in ("a100-clean", "a100-promotion", "5090-auto", "pro6000-auto"):
         cohort = data["cohorts"][name]
-        comparisons = {row["case"]: row for row in data["analyses"][name]["comparisons"]}
+        comparisons = {
+            row["case"]: row for row in data["analyses"][name]["comparisons"]
+        }
         print(name, "case warm_seconds reference_seconds")
         for case, record in sorted(cohort["records"].items()):
-            if not case.endswith("-96"):
-                continue
             warm = median(s[seconds] for s in record["samples"] if s[phase] == "warm")
             reference = comparisons[case + ".json"].get("reference_warm_seconds")
-            print(case, f"{warm:.6f}", f"{median(reference):.6f}" if reference else "unmeasured")
-        print("Failed gates:", [
-            (q["method"], q["mode"], q["atoms"])
-            for q in data["analyses"][name]["qualification"] if q["status"] != "qualified"
-        ])
+            print(
+                case,
+                f"{warm:.6f}",
+                f"{median(reference):.6f}" if reference else "unmeasured",
+            )
+        print(
+            "Failed gates:",
+            [
+                (q["method"], q["mode"], q["atoms"])
+                for q in data["analyses"][name]["qualification"]
+                if q["status"] != "qualified"
+            ],
+        )
 
 
 if __name__ == "__main__":

@@ -60,6 +60,12 @@ int main() {
   assert(!df_recycled_projection_preferred(100, 60, 20, 40, 80));
   assert(df_recycled_projection_preferred(100, 60, 20, 41, 80));
   assert(df_recycled_projection_preferred(100, 60, 50, 60, 50));
+  // Falling short of the preferred 512-column panel does not justify
+  // replacing a viable 499-column owned panel with 25 recycled columns.
+  assert(!df_recycled_projection_preferred(600, 101, 1, 512, 25));
+  assert(!df_recycled_projection_preferred(600, 101, 1, 512, 498));
+  assert(df_recycled_projection_preferred(600, 101, 1, 512, 499));
+  assert(df_recycled_projection_preferred(600, 101, 1, 512, 512));
   assert(!df_recycled_projection_preferred(maximum, maximum-20, 20, 20, 80));
   assert(df_recycled_projection_preferred(maximum, maximum-20, 20, 21, 80));
   using generativeqc::scf::df_occupied_response_workspace;

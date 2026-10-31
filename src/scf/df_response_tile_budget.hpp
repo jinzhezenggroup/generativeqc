@@ -36,7 +36,8 @@ inline DfOccupiedResponseWorkspace df_occupied_response_workspace(
 /** Recycle an authenticated dead projection only under response pressure.
  * Independent owned scratch is faster when its preferred panel already fits.
  * The retained factors must always fit separately, and the borrowed interval
- * must hold the algorithm's irreducible scratch. The caller bounds its panel
+ * must hold the algorithm's irreducible scratch without narrowing the viable
+ * owned panel. The caller bounds its panel
  * by that interval and retains an ordinary fallback if allocation still fails.
  * Sizes use one common unit (bytes or elements); subtraction avoids overflow.
  */
@@ -45,7 +46,8 @@ inline bool df_recycled_projection_preferred(std::size_t available, std::size_t 
                                              std::size_t preferred_scratch,
                                              std::size_t borrowed_capacity) noexcept {
   return retained <= available && minimum_scratch <= borrowed_capacity &&
-         preferred_scratch > available - retained;
+         preferred_scratch > available - retained &&
+         borrowed_capacity >= available - retained;
 }
 
 /** Prefer optional work-reducing storage over the last few response columns.

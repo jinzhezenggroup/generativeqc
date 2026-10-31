@@ -56,7 +56,9 @@ def test_portable_primary_campaign_retains_real_inventory(
     monkeypatch.setenv("GENERATIVEQC_RYS_VALUE_LIBRARY", "/dummy/not-loaded.so")
     monkeypatch.setenv("GENERATIVEQC_RYS_VALUE_FAMILY", "primary")
     namespace = runpy.run_path(str(CAMPAIGN))
-    assert len(namespace["CLASSES"]) == 21
+    assert len(namespace["CLASSES"]) == 20
     assert "psss" in namespace["CLASSES"]
-    assert "dddd" in namespace["CLASSES"]
+    # dddd's shared force recurrence is Rys, but its Fock companion is
+    # specialized to subset/Wick and does not qualify a Rys Fock kernel.
+    assert "dddd" not in namespace["CLASSES"]
     assert namespace["pytestmark"].args[0] is False
