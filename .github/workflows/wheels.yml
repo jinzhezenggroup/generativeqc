@@ -16,6 +16,7 @@ on:
     paths:
       - ".github/workflows/wheels.yml"
       - "cmake/GenerativeQCCudaImplib.cmake"
+      - "cmake/cuda_wheel_payload.ld"
       - "cmake/3rdparty/implib/**"
       - "pyproject.toml"
       # Wheel-specific native launcher and explicit tuner packaging changes.
@@ -48,10 +49,12 @@ jobs:
       actions: read
     name: Build CUDA manylinux wheel
     runs-on: ubuntu-24.04
-    # Cold qualification reached only 275/637 build tasks at the former 60m cap.
-    # Bound compilation separately, reserving time to save completed cache entries
-    # even on a build failure. Keep all repair, smoke and payload checks required.
-    timeout-minutes: 180
+    # Multi-architecture compilation needs a larger finite budget than the
+    # single-target wheel. Reserve 30 minutes for setup, cache retention and
+    # payload checks within GitHub-hosted runners' six-hour job limit.
+    # A full wheel run remains the acceptance gate; this budget is not a timing
+    # guarantee. Keep repair, smoke and payload checks required.
+    timeout-minutes: 360
     env:
       CCACHE_MAXSIZE: 3G
     steps:
@@ -92,7 +95,7 @@ jobs:
 
       - name: Build and test wheel
         id: wheel_build
-        timeout-minutes: 150
+        timeout-minutes: 330
         uses: pypa/cibuildwheel@1828c10ab37f080699c7b81cea34097c684a7074 # v4.2
         env:
           CIBW_CACHE_PATH: ${{ runner.temp }}/cibw-cache
@@ -105,7 +108,8 @@ jobs:
           CIBW_ENVIRONMENT: >-
             GENERATIVEQC_ENABLE_CUDA=ON
             GENERATIVEQC_ENABLE_AOT_SHELLS=ON
-            GENERATIVEQC_CUDA_ARCHITECTURES=120
+            GENERATIVEQC_CUDA_ARCHITECTURES="80-real;86-real;89-real;90-real;100-real;120"
+            CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable -DGENERATIVEQC_AOT_PROFILES=sm_120"
             CCACHE_DIR=/host${{ runner.temp }}/ccache
             CCACHE_MAXSIZE=3G
             CCACHE_BASEDIR=/tmp
@@ -227,7 +231,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: wheel-ccache-master-manylinux-cuda12.9-sm120-v1-${{ github.run_attempt }}
+          name: wheel-ccache-master-manylinux-cuda12.9-multiarch-v2-${{ github.run_attempt }}
           path: ${{ steps.wheel_snapshot.outputs.path }}
           if-no-files-found: error
           compression-level: 0

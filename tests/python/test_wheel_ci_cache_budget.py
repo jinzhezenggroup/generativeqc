@@ -29,10 +29,11 @@ def test_cold_wheel_build_reserves_bounded_cache_save_time() -> None:
     job_header = WORKFLOW.split("  build_wheels:\n", 1)[1].split("    steps:\n", 1)[0]
     build = _step("Build and test wheel")
     save = _step("Save completed compiler cache entries")
-    assert _timeout(build) == 150
-    assert _timeout(job_header) == 180
+    assert _timeout(build) == 330
+    assert _timeout(job_header) == 360
     assert _timeout(save) == 10
     assert _timeout(build) + _timeout(save) < _timeout(job_header)
+    assert _timeout(job_header) - _timeout(build) >= 30
     assert "continue-on-error" not in build
     assert "continue-on-error" not in job_header
 

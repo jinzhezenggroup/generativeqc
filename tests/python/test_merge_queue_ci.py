@@ -150,6 +150,7 @@ def test_wheels_preserve_scoped_pr_and_periodic_qualification() -> None:
     assert set(re.findall(r'      - "([^"]+)"', pull_request)) == {
         ".github/workflows/wheels.yml",
         "cmake/GenerativeQCCudaImplib.cmake",
+        "cmake/cuda_wheel_payload.ld",
         "cmake/3rdparty/implib/**",
         "pyproject.toml",
         "src/cli/wheel_launcher.cpp",
