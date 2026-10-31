@@ -11,7 +11,11 @@ from pathlib import Path
 import pytest
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.integral.cuda_schedule import ScheduleKind
-from generativeqc_compiler.integral.ir import KernelConsumer
+from generativeqc_compiler.integral.ir import (
+    IntegralIR,
+    KernelConsumer,
+    build_integral_ir,
+)
 from generativeqc_compiler.integral.production_bundle import (
     write_production_bundle,
     write_production_bundles,
@@ -19,6 +23,10 @@ from generativeqc_compiler.integral.production_bundle import (
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
 from generativeqc_compiler.integral.production_selection import (
     split_independent_consumers,
+)
+from generativeqc_compiler.integral.specialize import (
+    specialize_fock_integral,
+    specialize_integral_ir,
 )
 from generativeqc_compiler.integral.tuning import policy as tuning_policy
 from generativeqc_compiler.integral.tuning.manifest import update_manifest_payload
@@ -291,3 +299,149 @@ def test_portable_uniform_warp_force_unroll_pragmas_target_loops() -> None:
                 index,
                 lines[index + 1],
             )
+
+
+@pytest.mark.parametrize("consumer", (KernelConsumer.FOCK, KernelConsumer.FORCE))
+@pytest.mark.parametrize("joint", (False, True))
+def test_legacy_publication_rejects_a_different_measured_recurrence(
+    tmp_path: Path, consumer: KernelConsumer, joint: bool
+) -> None:
+    """Legacy and joint rows must not reinterpret an accepted winner's math."""
+    manifest = _manifest(tmp_path / "manifest.json")
+    payload = json.loads(manifest.read_text())
+    for row in payload["architectures"]["portable_cuda"]["kernels"]:
+        del row["fock_recurrence"]
+        if not joint:
+            row["consumers"] = ["force"]
+            del row["fock_schedule"]
+    manifest.write_text(json.dumps(payload))
+    selections = resolve_production_profile(manifest, "sm_80").selections
+    winners = {}
+    qualified = {}
+    for selection in selections:
+        winners[selection.spec.name] = (
+            selection.fock_schedule or selection.schedule
+            if consumer == KernelConsumer.FOCK
+            else selection.schedule
+        )
+        qualified[selection.spec.name] = build_integral_ir(
+            selection.spec,
+            (consumer,),
+            recurrence="subset_wick" if consumer == KernelConsumer.FOCK else "rys3",
+        )
+    # Reject a later row before installing even an earlier, correctly bound one.
+    last = selections[-1]
+    qualified[last.spec.name] = build_integral_ir(
+        last.spec,
+        (consumer,),
+        recurrence="rys2" if consumer == KernelConsumer.FOCK else "subset_wick",
+    )
+    original = json.dumps(payload, sort_keys=True)
+    with pytest.raises(ValueError, match="qualified tuning integral differs"):
+        update_manifest_payload(
+            payload,
+            "portable_cuda",
+            winners,
+            consumer,
+            qualified_integrals=qualified,
+        )
+    assert json.dumps(payload, sort_keys=True) == original
+
+
+@pytest.mark.parametrize("consumer", (KernelConsumer.FOCK, KernelConsumer.FORCE))
+@pytest.mark.parametrize("recurrence", (None, "rys3"))
+@pytest.mark.parametrize("measured_joint", (False, True))
+def test_legacy_publication_retains_the_measured_consumer_after_reload(
+    tmp_path: Path,
+    consumer: KernelConsumer,
+    recurrence: str | None,
+    measured_joint: bool,
+) -> None:
+    """Joint trials compare their executed consumer, including subset/Wick Fock."""
+    manifest = _manifest(tmp_path / "manifest.json")
+    payload = json.loads(manifest.read_text())
+    for row in payload["architectures"]["portable_cuda"]["kernels"]:
+        del row["fock_recurrence"]
+        if recurrence is None:
+            del row["recurrence"]
+    manifest.write_text(json.dumps(payload))
+    selection = resolve_production_profile(manifest, "sm_80").selections[0]
+    shared = build_integral_ir(
+        selection.spec, selection.consumers, recurrence=selection.recurrence
+    )
+
+    def selected(integral: IntegralIR) -> IntegralIR:
+        return (
+            specialize_fock_integral(integral)
+            if consumer == KernelConsumer.FOCK
+            else specialize_integral_ir(integral, consumers=(consumer,))
+        )
+
+    expected = selected(shared)
+    update_manifest_payload(
+        payload,
+        "portable_cuda",
+        {
+            selection.spec.name: (
+                selection.fock_schedule
+                if consumer == KernelConsumer.FOCK
+                else selection.schedule
+            )
+        },
+        consumer,
+        qualified_integrals={
+            selection.spec.name: shared if measured_joint else expected
+        },
+    )
+    manifest.write_text(json.dumps(payload))
+    updated = resolve_production_profile(manifest, "sm_80").selections[0]
+    assert (
+        selected(
+            build_integral_ir(
+                updated.spec, updated.consumers, recurrence=updated.recurrence
+            )
+        )
+        == expected
+    )
+    assert updated.recurrence == selection.recurrence
+    assert updated.schedule == selection.schedule
+    assert updated.fock_schedule == selection.fock_schedule
+
+
+@pytest.mark.parametrize("consumer", (KernelConsumer.FOCK, KernelConsumer.FORCE))
+@pytest.mark.parametrize("driver_mapping", (False, True))
+def test_legacy_default_trial_keeps_schedule_only_publication(
+    tmp_path: Path, consumer: KernelConsumer, driver_mapping: bool
+) -> None:
+    """Implicit legacy trials retain the driver's empty qualification mapping."""
+    manifest = _manifest(tmp_path / "manifest.json")
+    payload = json.loads(manifest.read_text())
+    for row in payload["architectures"]["portable_cuda"]["kernels"]:
+        del row["fock_recurrence"]
+        del row["recurrence"]
+    manifest.write_text(json.dumps(payload))
+    selection = resolve_production_profile(manifest, "sm_80").selections[0]
+    trial = tuning_policy.supported_schedule_trials(
+        selection.spec,
+        consumer,
+        cuda_target_info("sm_80"),
+        manifest_path=manifest,
+    )[0]
+    assert trial.integral is None
+    # Match the driver's collection of only explicitly carried integral IRs.
+    qualified = {
+        item.spec.name: item.integral for item in (trial,) if item.integral is not None
+    }
+    update_manifest_payload(
+        payload,
+        "portable_cuda",
+        {trial.spec.name: trial.schedule},
+        consumer,
+        qualified_integrals=qualified if driver_mapping else None,
+    )
+    manifest.write_text(json.dumps(payload))
+    updated = resolve_production_profile(manifest, "sm_80").selections[0]
+    assert updated.recurrence == "subset_wick"
+    assert (
+        updated.fock_schedule if consumer == KernelConsumer.FOCK else updated.schedule
+    ) == trial.schedule
