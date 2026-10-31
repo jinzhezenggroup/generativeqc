@@ -49,15 +49,37 @@ print(run.target.energy, run.verification.status)
 ```
 
 CPU all-electron RHF/UHF initialization with the built-in projection policy uses
-one native system-projection owner for overlap preparation and all spin channels.
-It validates identical ordered nuclei, geometry and electron/spin state, then
-publishes a seed only after every channel passes. `projection_owners` records
-`native_cpu_system` for that path. Old libraries, custom policies and unsupported
-backend/model domains retain explicit preparation compatibility; an admitted
-native error never retries it. The native matrix-capacity query adds live metrics
-and detached spin results to the existing projection workspace. Prepared fleets,
-caller buffers and opaque provider overhead are separate; this is not an RSS bound.
-Python still owns per-item eligibility/reporting and transactional seed installation.
+the prepared native fleet for source eligibility, overlap preparation, all spin
+channels and transactional seed installation. Source densities remain in their
+native owner. The operation requires matching ordered nuclei, geometry and
+electron/spin state; it does not extrapolate between geometries. A source replay
+at moved coordinates can seed a target prepared at those same coordinates.
+`execution_owner="native_cpu_fleet"` identifies this transaction, while each
+item's `projection_owners` records the shared `native_cpu_system` algorithm.
+
+Only a successful solve whose density was retained grants source eligibility.
+Failed or malformed replays revoke eligibility while preserving last-good seeds.
+Imported proposals and successful replays with frozen seed updates cannot become
+projection sources until a successful result is retained. The target must have
+warm starts enabled and no existing seed. With `strict=True`, any rejected item
+leaves the whole target unchanged; with `strict=False`, accepted neighbors are
+installed together and rejected neighbors remain cold. Target SCF and final
+verification still run after initialization.
+
+The SDK exposes `generativeqc_hf_fleet_projection_query_v1` and
+`generativeqc_hf_fleet_initialize_cpu_v1` on the same prepared owners. Its optional
+coordinate descriptors borrow the target request for the duration of the call.
+The query reports a conservative simultaneously-live matrix numeric bound:
+projection work, staged densities/coordinates and final physical-validation
+scratch. A below-limit failure cannot partially install seeds. Prepared HF
+arenas, topology metadata, caller buffers and opaque provider overhead are
+separate; this is not an RSS bound. Python presents policy and detached reports
+and retains its additional resource preflight. A frontend report-publication
+failure clears the fresh target's seeds without changing the source.
+
+Old libraries, custom policies and unsupported backend/model domains retain
+explicit preparation compatibility. The native path preflights the entire fleet
+before scientific execution; an admitted native error never retries compatibility.
 
 ## Immutable target and typed plan
 

@@ -8,6 +8,7 @@
 #include "dft/cuda_stationary_capacity.hpp"
 #include "dft/cuda_xc_point_program.hpp"
 #include "generativeqc/generativeqc.hpp"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_fock_execution.hpp"
@@ -83,12 +84,18 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
   maximum_device_bytes = std::min(maximum_device_bytes, runtime::device_resource_available(device));
   resources_.minimum_device_bytes = capacity.minimum_device_bytes;
   if (resources_.minimum_device_bytes > maximum_device_bytes) throw std::bad_alloc();
-  const bool cached = capacity.cached_device_bytes <= maximum_device_bytes;
+  // Missing optional masks must not evict the pre-existing geometry cache.
+  // Public fleet admission still reserves either the full cached tier or the
+  // dense minimum; a private intermediate allowance may retain geometry alone.
+  const auto geometry_cached_bytes = capacity.cached_device_bytes - capacity.ao_map_bytes;
+  const bool cached = geometry_cached_bytes <= maximum_device_bytes;
+  const bool admit_map = capacity.cached_device_bytes <= maximum_device_bytes;
   resources_.cached_geometry = cached;
   const auto stationary_budget =
       cached ? capacity.stationary_cached_bytes : capacity.stationary_minimum_bytes;
   resources_.device_upper_bytes =
-      cached ? capacity.cached_device_bytes : capacity.minimum_device_bytes;
+      cached ? (admit_map ? capacity.cached_device_bytes : geometry_cached_bytes)
+             : capacity.minimum_device_bytes;
   resources_.grid_numeric_bytes = storage.allocation_bytes;
   resources_.stationary_numeric_bytes = stationary_budget + capacity.nonlocal_device_bytes;
   resources_.grid_provider_allowance_bytes = storage.provider_allowance;
@@ -196,6 +203,26 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
     resources_.grid_prepare_device_delta = metrics.prepare_device_delta;
     if (metrics.provider_retained_bytes > storage.provider_allowance)
       throw std::runtime_error("native stationary grid provider exceeds its retained allowance");
+    if (admit_map && capacity.ao_map_bytes && system.ecp_terms.empty()) {
+      // The controller owns an immutable basis and borrows its parent's frozen
+      // quadrature for its entire lifetime. Geometry updates replace that parent
+      // and controller. The grid owner additionally checks its geometry epoch,
+      // exact point pointer/span, derivative order and this binding identity.
+      std::array<std::size_t, 8> map{};
+      const auto status = grid_cuda_prepare_exact_ao_map_device_v1(
+          grid_, quadrature_.points, quadrature_.point_count, 1e-16, capacity.ao_map_bytes,
+          binding_->plan_identity, map.data(), error.data(), error.size());
+      // Optional allocation failure leaves the dense owner usable. Scientific
+      // or driver failures must still propagate through their typed boundary.
+      if (status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) require_grid_call(status, error);
+      if (!status && map[0]) {
+        resources_.ao_map_host_bytes = capacity.ao_map_host_bytes;
+        // Declining a high-occupancy map keeps every AO; it never raises the
+        // cutoff. Retained mask storage remains charged to the cached tier.
+        indexed_grid_ =
+            static_cast<long double>(map[3]) <= 0.8L * static_cast<long double>(map[4]) * aos_;
+      }
+    }
   } catch (...) {
     close();
     throw;
@@ -267,6 +294,10 @@ generativeqc_status CudaStationaryController::gradient(
                  (binding_->model.long_range_exchange - binding_->model.short_range_exchange)))
       throw std::invalid_argument("native composite final-state/model lease mismatch");
     runtime::CudaDeviceScope device_scope(device_, stationary_cuda_check);
+    runtime::cuda_trace::TraceOperation trace("stationary_force",
+                                              reinterpret_cast<cudaStream_t>(density.stream),
+                                              {1, aos_, 0, true, true});
+    const auto previous_grid_work = resources_.grid_work;
     std::array<char, 512> error{};
     require_stationary_call(
         binding_->reset_geometry(stationary_, centers_.data(), coincident_tolerance_, error.data(),
@@ -317,7 +348,12 @@ generativeqc_status CudaStationaryController::gradient(
                                                   aos_, error.data(), error.size()),
             error);
         precision->grid_points += points;
-      } else
+      } else if (indexed_grid_)
+        require_grid_call(grid_cuda_run_ao_map_device_deferred_v1(
+                              grid_, quadrature_.points + 3 * offset, points, offset,
+                              binding_->plan_identity, error.data(), error.size()),
+                          error);
+      else
         require_grid_call(grid_cuda_run_selected_device_deferred_v1(
                               grid_, quadrature_.points + 3 * offset, points, 1, nullptr, aos_,
                               nullptr, nullptr, error.data(), error.size()),
@@ -467,6 +503,31 @@ generativeqc_status CudaStationaryController::gradient(
     require_grid_call(
         grid_cuda_work_metrics_v1(grid_, &resources_.grid_work, error.data(), error.size()), error);
     if (!token_current()) throw std::invalid_argument("native stationary terminal token changed");
+    // Existing host counters describe work actually submitted, including map
+    // discovery on the first call. Report per-call differences without another
+    // device readback. Tracing is opt-in and its timings are diagnostic only.
+    const auto& work = resources_.grid_work;
+    runtime::cuda_trace::trace_counter(
+        "grid_evaluation_points", work.evaluation_points - previous_grid_work.evaluation_points);
+    runtime::cuda_trace::trace_counter("grid_ao_jet_values",
+                                       work.ao_jet_values - previous_grid_work.ao_jet_values);
+    runtime::cuda_trace::trace_counter(
+        "grid_projection_fma_pairs",
+        work.projection_fma_pairs - previous_grid_work.projection_fma_pairs);
+    runtime::cuda_trace::trace_counter("grid_evaluation_tiles",
+                                       work.evaluation_tiles - previous_grid_work.evaluation_tiles);
+    runtime::cuda_trace::trace_counter("grid_active_point_ao",
+                                       work.active_point_ao - previous_grid_work.active_point_ao);
+    runtime::cuda_trace::trace_counter("grid_dense_point_ao",
+                                       work.dense_point_ao - previous_grid_work.dense_point_ao);
+    runtime::cuda_trace::trace_counter(
+        "grid_discovery_ao_jet_values",
+        work.discovery_ao_jet_values - previous_grid_work.discovery_ao_jet_values);
+    runtime::cuda_trace::trace_counter("grid_discovery_passes",
+                                       work.discovery_passes - previous_grid_work.discovery_passes);
+    runtime::cuda_trace::trace_counter("indexed_grid", indexed_grid_ ? 1 : 0);
+    runtime::cuda_trace::trace_counter("cached_geometry", resources_.cached_geometry ? 1 : 0);
+    runtime::cuda_trace::trace_counter("grid_tile_points", tile_points_);
     output.swap(candidate);
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {

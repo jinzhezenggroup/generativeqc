@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-source-pair-20261030",
+  "owner": "H100 post-2887 source-pair and completed native-force qualification",
+  "reason": "Retain every full-precision force coordinate from 75 clean populations/300 E+F and eight separately intrusive populations/32 E+F. Typed FP64 storage reconstructs each normalized original JSON hash before independent oracle and process-pair replay. Four physical PBE0 cases include unfavorable results; no full30-case majority or later-source qualification is claimed. Existing per-file, change-review and aggregate budgets are unchanged.",
+  "review_document": "benchmarks/results/h100-source-pair-20261030/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-source-pair-20261030/forces.npy.xz",
+      "family": "h100-source-pair-20261030",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 332 complete energy/force calls' full-precision force coordinates; no downcast or rounding",
+      "bytes": 132064,
+      "sha256": "9cd5ca4fad9e2329d8a36ed4d68aeb488aa16d68832160cad9d1db19957171ce"
+    }
+  ]
+}

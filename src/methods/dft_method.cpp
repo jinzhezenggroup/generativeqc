@@ -761,6 +761,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
           bytes = runtime::add_capacity(bytes, runtime::vector_bytes(matrix));
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) bytes = runtime::add_capacity(bytes, cuda_->resources().retained_host_numeric_bytes);
+    if (stationary_controller_)
+      bytes = runtime::add_capacity(bytes, stationary_controller_->resources().ao_map_host_bytes);
 #endif
     if (d4_) {
       const auto& resources = d4_->resources();

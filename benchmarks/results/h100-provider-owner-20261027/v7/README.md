@@ -1,5 +1,10 @@
 # H100 owner lifecycle after allocation-exception repair
 
+This describes the recorded historical run. First restore the complete family
+using the [offline recovery instructions](../README.md#historical-snapshot-and-offline-replay).
+Archive paths and the original replay program refer to that verified snapshot;
+summary JSON bytes, original source identities and scope remain unchanged.
+
 This model-free run measures the production input closure at
 `f0cb1eabd36153b37a1763925d162d1a9360445a`, including the exception-safe
 pending-owner attachment. The source manifest SHA-256 is
@@ -53,5 +58,5 @@ and performance matrices remain open; the earlier v6 source identity is kept.
 Replay the retained identities, outcomes, budgets and grant checks offline:
 
 ```console
-python benchmarks/results/h100-provider-owner-20261027/v7/replay.py
+python .artifacts/h100-provider-owner-20261027-original/benchmarks/results/h100-provider-owner-20261027/v7/replay.py
 ```

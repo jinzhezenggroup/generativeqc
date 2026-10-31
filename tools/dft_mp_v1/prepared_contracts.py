@@ -6,6 +6,9 @@ scientific compilation or calculation participates in the capacity report.
 
 from __future__ import annotations
 
+import ast
+import builtins
+import weakref
 from contextlib import nullcontext
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -186,3 +189,164 @@ def check_prepared_selection(module: ModuleType) -> None:
             raise RuntimeError(
                 "prepared stationary AOT selection contract changed: budget accepted"
             )
+
+
+def check_resident_ao_binding(owner: ast.FunctionDef) -> None:
+    """Execute the current map binding with inert storage and revocable state."""
+    ns = SimpleNamespace
+
+    def require(condition: bool, message: str = "binding invariant") -> None:
+        if not condition:
+            raise RuntimeError(message)
+
+    previous = None
+    fail_allocation = False
+
+    class Cache:
+        def __init__(self, grid: Any, domain: Any, **policy: Any) -> None:
+            require(previous is None or previous() is None, "old map still retained")
+            if fail_allocation:
+                raise MemoryError("map staging")
+            self.grid, self.domain, self.policy = grid, domain, policy
+            self.work: dict[str, Any] = {}
+
+        def reset_work(self) -> None:
+            self.work.clear()
+
+    adapters = ns(
+        ResidentAoMapDomain=lambda **fields: ns(**fields),
+        ResidentAoMapCache=Cache,
+        ResidentDeviceAoMapOwner=Cache,
+    )
+
+    def imports(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "_resident_ao_maps":
+            return adapters
+        return builtins.__import__(name, *args, **kwargs)
+
+    scope: dict[str, Any] = {
+        "__builtins__": {**vars(builtins), "__import__": imports},
+    }
+    code = ast.Module(
+        body=[
+            ast.ImportFrom(
+                module="__future__", names=[ast.alias(name="annotations")], level=0
+            ),
+            owner,
+        ],
+        type_ignores=[],
+    )
+    # Execute only the repository-owned helper with inert map adapters.
+    exec(  # noqa: S102
+        compile(ast.fix_missing_locations(code), "<resident-ao-binding>", "exec"), scope
+    )
+    cache = scope[owner.name]
+    binding = ns(_resident_ao_maps=None, _resident_ao_map_key=None)
+    grid = ns(
+        basis_identity="basis",
+        geometry_generation=1,
+        basis_generation=1,
+        plan=ns(tile_points=16, order=2),
+    )
+    resident = ns(device=1, points=4096, point_count=32)
+
+    def current() -> None:
+        pass
+
+    state = ns(
+        _source=ns(check_current=current),
+        identity=ns(geometry_identity="geometry", grid_identity="grid"),
+    )
+
+    def run(**policy: Any) -> Any:
+        return cache(
+            binding,
+            grid,
+            state,
+            resident,
+            **({"cutoff": 1e-16, "budget_bytes": 64} | policy),
+        )
+
+    try:
+        first = run()
+        require(
+            vars(first.domain)
+            == {
+                "basis_identity": "basis",
+                "geometry_identity": "geometry",
+                "grid_identity": "grid",
+                "device": 1,
+                "point_pointer": 4096,
+                "point_count": 32,
+                "tile_points": 16,
+                "derivative_order": 2,
+            }
+        )
+        first.work["previous_endpoint"] = 7
+        state.identity.density_generation = 2
+        require(run() is first and not first.work)
+        del first
+        for obj, field, value in (
+            (state.identity, "geometry_identity", "moved"),
+            (state.identity, "grid_identity", "new-grid"),
+            (grid, "basis_identity", "new-basis"),
+            (grid, "geometry_generation", 2),
+            (grid, "basis_generation", 2),
+            (grid.plan, "order", 1),
+            (grid.plan, "tile_points", 8),
+            (resident, "device", 2),
+            (resident, "points", 8192),
+            (resident, "point_count", 16),
+        ):
+            previous = weakref.ref(binding._resident_ao_maps)
+            setattr(obj, field, value)
+            run()
+            require(previous() is None)
+            previous = None
+        previous = weakref.ref(binding._resident_ao_maps)
+        grid = ns(**vars(grid))
+        run()
+        require(previous() is None)
+        previous = None
+
+        def revoked() -> None:
+            raise RuntimeError("revoked snapshot")
+
+        state._source.check_current = revoked
+        try:
+            run()
+        except RuntimeError as error:
+            require(str(error) == "revoked snapshot")
+        else:
+            raise AssertionError("revoked snapshot reused")
+        state._source.check_current = current
+        previous = weakref.ref(binding._resident_ao_maps)
+        fail_allocation = True
+        try:
+            run(cutoff=1e-18)
+        except MemoryError:
+            pass
+        else:
+            raise AssertionError("replacement failure swallowed")
+        require(previous() is None)
+        require(binding._resident_ao_maps is binding._resident_ao_map_key is None)
+        previous = None
+        fail_allocation = False
+        for disabled in (True, False):
+            run()
+            require(
+                cache(
+                    binding,
+                    grid,
+                    state,
+                    resident if disabled else None,
+                    cutoff=None if disabled else 1e-16,
+                    budget_bytes=64,
+                )
+                is None
+            )
+            require(binding._resident_ao_maps is binding._resident_ao_map_key is None)
+    except Exception as error:
+        raise RuntimeError(
+            f"stationary CUDA resident AO policy lifecycle contract changed: {error}"
+        ) from error

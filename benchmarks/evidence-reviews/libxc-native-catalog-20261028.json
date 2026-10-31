@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "libxc-native-catalog-20261028",
+  "owner": "Native Libxc qualification catalog (#1124)",
+  "reason": "Full-precision independent boundary/SCF/force and finite-difference inputs are consumed by the live catalog checker and mutation tests. Shared source, binary, compiler and execution provenance binds 11 registrations and 44 contexts. Full source/command censuses, logs and build products remain ignored local artifacts. This is compact evidence storage review, not scientific promotion.",
+  "review_document": "benchmarks/results/libxc-native-catalog-20261028/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/libxc-native-catalog-20261028/campaign.json.xz",
+      "family": "libxc-native-catalog-20261028",
+      "classification": "required-compact-accepted-evidence",
+      "role": "independent-native-endpoint-acceptance-inputs",
+      "bytes": 227880,
+      "sha256": "ff85346595cbd70df34e247c37de5c90c2e943af61b6cb305d49533c6786887d"
+    }
+  ]
+}

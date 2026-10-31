@@ -25,6 +25,9 @@ from generativeqc_compiler.integral.production_profile import resolve_production
 from generativeqc_compiler.integral.production_registry import (
     emit_multi_registry_source,
 )
+from generativeqc_compiler.integral.production_rys_tasks import (
+    direct_rys_task_candidates,
+)
 from generativeqc_compiler.integral.production_rys_values import (
     direct_rys_value_candidates,
 )
@@ -32,6 +35,32 @@ from generativeqc_compiler.integral.production_selection import _selection_integ
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "python/generativeqc_compiler/integral/production_shell_classes.json"
+
+
+@pytest.mark.parametrize("architecture", ("sm_80", "sm_120"))
+def test_optional_variants_do_not_control_primary_coverage(architecture: str) -> None:
+    """A profile's code-size policy is independent of GPU identity and coverage."""
+    profile = resolve_production_profile(MANIFEST, architecture)
+    lean = replace(
+        profile,
+        optional_fock_variants=False,
+        preferred_rys_task_fock_shell_classes=None,
+    )
+    expanded = replace(lean, optional_fock_variants=True)
+    assert lean.selections == expanded.selections
+    assert lean.portable == expanded.portable and lean.tuned == expanded.tuned
+    for inventory in (
+        direct_rys_value_candidates,
+        direct_rys_task_candidates,
+        direct_k_block_candidates,
+    ):
+        assert inventory(lean) == ()
+        assert inventory(expanded)
+    # The registry remains linkable without referencing omitted variants.
+    source = emit_multi_registry_source((lean,))
+    assert "_rys_task_generated_" not in source
+    assert "_rys_value_generated_" not in source
+    assert "_k_block_generated_" not in source
 
 
 def test_candidates_keep_value_identity_and_incumbent_coverage() -> None:
