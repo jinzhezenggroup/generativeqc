@@ -3220,19 +3220,22 @@ class KsPreparedBatch final : public PreparedBatch,
       auto source = systems_[i];
       geometry::set_coordinates(source, state.coordinates);
       scf::initial_guess::EigenOperation eigen;
+      scf::initial_guess::MatrixProductOperation products;
 #if GENERATIVEQC_HAS_CUDA
-      if (auto* cuda = items_[i].plan ? items_[i].plan->cuda_plan() : nullptr)
+      if (auto* cuda = items_[i].plan ? items_[i].plan->cuda_plan() : nullptr) {
         eigen = cuda->seed_eigen_operation();
+        products = cuda->seed_product_operation();
+      }
 #endif
       // This common validation reads only source S and checks the shared
       // spin-density convention. An idle CUDA plan supplies the ordinary
-      // eigensolver without overwriting its final/warm state; source coordinates
-      // still determine S, including changed-geometry checkpoints. The shared
-      // validator preserves its legacy near-symmetric input fallback.
+      // eigensolver and optional products without overwriting final/warm state.
+      // Source coordinates still determine S for changed-geometry checkpoints.
+      // The shared validator retains its legacy near-symmetric input fallback.
       scf::validate_hf_warm_density(
           source,
           ks_is_unrestricted(execution_plan_) ? GENERATIVEQC_METHOD_UHF : GENERATIVEQC_METHOD_RHF,
-          state.density, eigen);
+          state.density, eigen, products);
     }
     // All source-metric validation precedes the no-throw commit. Missing
     // entries preserve neighbors, including their resident density ownership.
