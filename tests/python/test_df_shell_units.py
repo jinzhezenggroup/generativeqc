@@ -18,10 +18,38 @@ from generativeqc_compiler.integral.df_shell_derivatives import (
     SUPPORTED_SHELL_CLASSES,
     emit_df_shell_derivatives_cuda,
     select_shell_classes,
+    shell_execution_variant,
+    shell_schedule,
 )
 from generativeqc_compiler.integral.df_shell_units import emit_df_shell_units
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("angular", SUPPORTED_SHELL_CLASSES)
+def test_execution_aliases_preserve_complete_schedules(
+    angular: tuple[int, int, int],
+) -> None:
+    """All public choices retain ownership/storage; only equal choices share code."""
+    representatives = [
+        shell_execution_variant(angular, variant) for variant in range(3)
+    ]
+    for variant, representative in enumerate(representatives):
+        assert representative in range(3)
+        assert shell_schedule(angular, variant) == shell_schedule(
+            angular, representative
+        )
+        assert shell_execution_variant(angular, representative) == representative
+        for other in range(3):
+            assert (representative == representatives[other]) == (
+                shell_schedule(angular, variant) == shell_schedule(angular, other)
+            )
+
+
+@pytest.mark.parametrize("variant", [-1, 3, 4])
+def test_execution_alias_rejects_unknown_schedule(variant: int) -> None:
+    with pytest.raises(ValueError, match="schedule"):
+        shell_execution_variant((0, 0, 0), variant)
 
 
 @pytest.fixture(scope="module")

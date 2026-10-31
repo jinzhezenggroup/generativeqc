@@ -244,6 +244,7 @@ void print_usage(std::ostream& out) {
          "  --precision fp64|auto    Native precision admission (default: fp64)\n"
          "  --density-fitting-threshold F --density-fitting-memory-bytes N\n"
          "  --correlation-memory-bytes N --mp2-denominator-threshold F\n"
+         "  --nonlocal-memory-bytes N --dispersion-memory-bytes N\n"
          "  --ccsd-max-iterations N --ccsd-diis-history N\n"
          "  --ccsd-energy-tolerance F --ccsd-residual-tolerance F\n"
          "  --ccsd-denominator-threshold F --ccsd-damping F --ccsd-level-shift F\n"
@@ -341,12 +342,15 @@ void print_methods(bool json, bool libxc = false) {
         if (!first) std::cout << ",\n";
         std::cout << "  {\"name\":\"" << entry.name << "\",\"family\":\"density_functional\","
                   << "\"properties\":[\"energy\"],\"supports_batch\":true,\"available\":true,"
-                  << "\"status\":\"available\",\"cpu\":true,\"cuda\":false,\"aliases\":[";
+                  << "\"status\":\"available\",\"cpu\":" << (entry.cpu ? "true" : "false")
+                  << ",\"cuda\":" << (entry.cuda ? "true" : "false") << ",\"aliases\":[";
         if (entry.spin == 1) std::cout << "\"libxc-rks:" << entry.name.substr(6) << "\"";
         std::cout << "]}";
         first = false;
       } else {
-        std::cout << entry.name << "\tdensity_functional\tenergy\tyes\tCPU only\n";
+        std::cout << entry.name << "\tdensity_functional\tenergy\tyes\t"
+                  << (entry.cuda ? "native preparation checks backend availability" : "CPU only")
+                  << '\n';
       }
     }
   }
@@ -615,6 +619,10 @@ RunOptions parse_run(int argc, char** argv) {
         options.precision = GENERATIVEQC_PRECISION_AUTO;
       else
         throw UsageError("--precision must be fp64 or auto");
+    } else if (option == "--nonlocal-memory-bytes") {
+      options.nonlocal_memory_bytes = parse_bytes(value(), "nonlocal memory bytes");
+    } else if (option == "--dispersion-memory-bytes") {
+      options.dispersion_memory_bytes = parse_bytes(value(), "dispersion memory bytes");
     } else if (option == "--correlation-memory-bytes") {
       options.correlation_memory_bytes = parse_bytes(value(), "correlation memory bytes");
     } else if (option == "--density-fitting-memory-bytes") {
@@ -717,6 +725,8 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("unknown run option: " + std::string(option));
     }
   }
+  if (options.composition && options.owned_device_bytes.has_value())
+    throw UsageError("--owned-device-bytes is not supported for named KS preparation");
   if ((options.initial_guess_explicit || options.initial_guess_controls_explicit) &&
       std::string_view(argv[1]) != "run")
     throw UsageError("initial-guess controls currently require the run command");
@@ -760,6 +770,16 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("MethodIR composition " + options.method_name + " is unavailable: " + why);
     }
   }
+  if (options.composition && options.composition->bound_basis) {
+    if (options.representation_explicit && options.representation != GENERATIVEQC_BASIS_SPHERICAL)
+      throw UsageError("the method's defining basis requires spherical representation");
+    if (!options.basis_explicit ||
+        lower(options.basis_name) == lower(std::string(options.composition->basis_name))) {
+      options.basis_program = options.composition;
+      options.basis_name = std::string(options.composition->basis_name);
+      options.representation = GENERATIVEQC_BASIS_SPHERICAL;
+    }
+  }
   return options;
 }
 
@@ -795,7 +815,7 @@ int run(RunOptions options) {
   generativeqc::Context context(context_descriptor);
 
   generativeqc::cli::NativeBasisData basis;
-  if (!is_gfn2(options)) {
+  if (!is_gfn2(options) && !options.basis_program) {
     try {
       basis = generativeqc::cli::expand_basis_input(
           options.basis_name, atoms,
@@ -805,6 +825,7 @@ int run(RunOptions options) {
       throw UsageError(error.what());
     }
   }
+  if (options.basis_program) basis.identity = options.basis_program->basis_identity;
   const auto* shells = is_gfn2(options) ? nullptr : basis.shells.data();
   const auto* primitives = is_gfn2(options) ? nullptr : basis.primitives.data();
   const std::uint32_t shell_count =
@@ -824,7 +845,8 @@ int run(RunOptions options) {
       options.multiplicity,
       is_gfn2(options) ? GENERATIVEQC_BASIS_CARTESIAN : options.representation};
   generativeqc::System system =
-      basis.ecp_terms.empty()
+      options.basis_program ? generativeqc::cli::create_method_basis_system(context, atoms, options)
+      : basis.ecp_terms.empty()
           ? generativeqc::System(context, system_descriptor)
           : generativeqc::System(context, system_descriptor, basis.core_electrons, basis.ecp_terms);
 
@@ -877,18 +899,11 @@ int run(RunOptions options) {
   generativeqc::Calculation calculation = [&]() -> generativeqc::Calculation {
     const auto* row = options.composition;
     if (!row) return {context, system, method, resources.get()};
-    // Build the exact build-time-compiled primitive graph through one SDK owner.
-    // Preparation retains authority over basis, device, provider, and SCF admission.
-    generativeqc::KsComposition composed(row->carrier, std::string(row->domain), row->spin);
-    composed.set_grid(options.grid);
-    using namespace generativeqc::cli::method_generated;
-    for (const auto& term : components(*row)) {
-      composed.add_semilocal(term.component_id, term.coefficient);
-    }
-    for (const auto& term : exchanges(*row)) {
-      composed.add_exact_exchange(term.operator_kind, term.coefficient, term.omega);
-    }
-    return composed.prepare(context, system, method, resources.get());
+    if (resources)
+      throw UsageError("named KS native preparation does not support --owned-device-bytes");
+    return generativeqc::prepare_named_ks(context, system, method, std::string(row->name),
+                                          options.grid, options.nonlocal_memory_bytes,
+                                          options.dispersion_memory_bytes, row->identity.data());
   }();
   // A method-family name alone never qualifies analytic forces. The exact
   // prepared model, DF provider, backend and geometry own force admission.

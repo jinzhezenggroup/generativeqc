@@ -64,3 +64,17 @@ A complete wheel CI receipt demonstrates acceptable time, cache and artifact
 cost, or deployment requirements justify changing the architecture/PTX matrix.
 Do not remove portable fallback admission or promote 5090 schedules to other
 devices merely to reduce compilation work.
+
+## Prerequisite integration, 2026-10-31
+
+PR #2831 merged as `31bfe905ffbee77fe77cfeb8313a880a56041ded` on
+2026-10-27. The packaging branch now includes master
+`0388bcfbb42834e20fad577ac237d573772e9266` through a history-preserving merge;
+the wheel architecture/profile selection and all qualification gates remain
+unchanged. The 70 wheel snapshot/cache/budget checks pass after integration.
+
+The earlier wheel job was explicitly cancelled while starting its container,
+before compilation, so it provides neither build-failure nor timing evidence.
+A full wheel run against the integrated source is now appropriate. Its successful
+build/job timing, cache statistics/size and repaired artifact size are still
+required before this packaging PR is ready.

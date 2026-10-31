@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 from generativeqc_compiler.integral.derivative_aot_registry import (
-    DerivativeAotKey,
     DerivativeShellAotKey,
     component_group,
     component_groups,
@@ -24,7 +23,6 @@ from generativeqc_compiler.integral.first_derivative_schedule import (
 )
 from generativeqc_compiler.integral.production_cost import shell_class_index
 from generativeqc_compiler.integral.range_separation import CoulombKernel
-from generativeqc_compiler.integral.rsh_cpu_aot import entry_prefix as legacy_rsh_prefix
 from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -84,18 +82,6 @@ def test_registry_selection_is_operator_based_not_method_named() -> None:
     assert "wb97" not in prefix.lower()
     assert "pbe" not in prefix.lower()
     assert "b3lyp" not in prefix.lower()
-
-
-def test_existing_cpu_range_symbol_layout_remains_compatible() -> None:
-    radial = CoulombKernel("long_range", 0.3)
-    angular = (1, 0, 1, 0)
-    key = DerivativeAotKey(
-        backend="cpu",
-        radial=radial,
-        angular=angular,
-        group_index=0,
-    )
-    assert entry_prefix_for_key(key) == legacy_rsh_prefix(radial, angular, 0)
 
 
 def test_full_range_has_method_neutral_registry_identity() -> None:

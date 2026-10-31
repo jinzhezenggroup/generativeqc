@@ -14,13 +14,15 @@ from generativeqc_compiler.integral.first_derivative_native import (
 )
 from generativeqc_compiler.integral.first_derivative_schedule import (
     CUDA_REQUESTS_PER_UNIT,
+    cached_derivative_cuda_source,
     derivative_cuda_sources,
+    derivative_requests,
 )
 from generativeqc_compiler.method.stationary_cuda import (
+    AVAILABLE_STATIONARY_AOT_PROFILE_NAMES,
     QUALIFIED_SPD_AOT_SHARD_WIDTH,
     QUALIFIED_SPD_AOT_SHARDS,
     QUALIFIED_SPD_COMPONENTS,
-    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     emit_stationary_aot_cuda,
     emit_stationary_component_aot_wrapper_cuda,
     emit_stationary_profile_aot_cuda,
@@ -32,14 +34,25 @@ from generativeqc_compiler.method.stationary_cuda import (
 from tools.generate_df_kernels import write_if_changed
 
 
-def _component_aot_sources() -> tuple[str, ...]:
-    units = derivative_cuda_sources(QUALIFIED_SPD_COMPONENTS)
+def _component_aot_sources(source_cache: Path | None = None) -> tuple[str, ...]:
+    if source_cache is None:
+        sources = tuple(
+            source for _, source in derivative_cuda_sources(QUALIFIED_SPD_COMPONENTS)
+        )
+    else:
+        cached, _ = cached_derivative_cuda_source(
+            derivative_requests(QUALIFIED_SPD_COMPONENTS),
+            component_domain=QUALIFIED_SPD_COMPONENTS,
+            cache=source_cache,
+        )
+        assert isinstance(cached, tuple)
+        sources = cached
     if (
         CUDA_REQUESTS_PER_UNIT != QUALIFIED_SPD_AOT_SHARD_WIDTH
-        or len(units) != QUALIFIED_SPD_AOT_SHARDS
+        or len(sources) != QUALIFIED_SPD_AOT_SHARDS
     ):
         raise RuntimeError("stationary s/p/d AOT shard contract drift")
-    return tuple(source for _, source in units)
+    return sources
 
 
 def main() -> None:
@@ -52,10 +65,15 @@ def main() -> None:
     )
     parser.add_argument("--functional", type=int, choices=(0, 1, 2))
     parser.add_argument("--spin", choices=("unpolarized", "polarized"))
-    parser.add_argument("--profile", choices=QUALIFIED_STATIONARY_AOT_PROFILE_NAMES)
+    parser.add_argument("--profile", choices=AVAILABLE_STATIONARY_AOT_PROFILE_NAMES)
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--component-domain", choices=("sp", "spd"), default="sp")
     parser.add_argument("--shard-index", type=int)
+    parser.add_argument(
+        "--source-cache",
+        type=Path,
+        help="Share verified target-independent split sources across build directories",
+    )
     split = parser.add_mutually_exclusive_group()
     split.add_argument(
         "--primitive-only", action="store_true", help="Emit the shared s/p primitive TU"
@@ -69,6 +87,12 @@ def main() -> None:
         help="Emit all shared s/p/d primitive shards in one generation pass",
     )
     args = parser.parse_args()
+    if args.source_cache is not None and not (
+        args.primitive_only or args.wrapper_only or args.component_domain == "spd"
+    ):
+        parser.error(
+            "--source-cache requires split primitives/wrappers or the spd domain"
+        )
 
     if args.primitive_only or args.wrapper_only:
         if (
@@ -86,7 +110,13 @@ def main() -> None:
                 parser.error(
                     "s/p primitives are shared across functionals/spins/profiles"
                 )
-            source = emit_first_derivative_cuda(qualified_sp_requests())
+            if args.source_cache is None:
+                source = emit_first_derivative_cuda(qualified_sp_requests())
+            else:
+                source, _ = cached_derivative_cuda_source(
+                    qualified_sp_requests(), cache=args.source_cache
+                )
+                assert isinstance(source, str)
         else:
             if (
                 args.profile is None
@@ -97,7 +127,7 @@ def main() -> None:
                     "--wrapper-only requires --profile without --functional/--spin"
                 )
             source = emit_stationary_profile_aot_wrapper_cuda(
-                args.profile, iterations=args.iterations
+                args.profile, iterations=args.iterations, source_cache=args.source_cache
             )
         write_if_changed(args.output, source)
         return
@@ -116,7 +146,7 @@ def main() -> None:
             )
         # CMake owns all outputs in one command so the full inventory is lowered
         # once, with the existing per-unit and aggregate source budgets intact.
-        for shard_index, source in enumerate(_component_aot_sources()):
+        for shard_index, source in enumerate(_component_aot_sources(args.source_cache)):
             write_if_changed(
                 args.output / f"generativeqc_stationary_spd_primitive_{shard_index}.cu",
                 source,
@@ -160,7 +190,7 @@ def main() -> None:
             )
         if not 0 <= args.shard_index < QUALIFIED_SPD_AOT_SHARDS:
             parser.error(f"--shard-index must be in [0,{QUALIFIED_SPD_AOT_SHARDS - 1}]")
-        sources = _component_aot_sources()
+        sources = _component_aot_sources(args.source_cache)
         source = sources[args.shard_index]
     else:
         if args.profile is None and (args.functional is None or args.spin is None):
@@ -173,11 +203,14 @@ def main() -> None:
             parser.error("--profile cannot be combined with --functional/--spin")
         source = (
             emit_stationary_profile_component_aot_wrapper_cuda(
-                args.profile, iterations=args.iterations
+                args.profile, iterations=args.iterations, source_cache=args.source_cache
             )
             if args.profile is not None
             else emit_stationary_component_aot_wrapper_cuda(
-                args.functional, spin=args.spin, iterations=args.iterations
+                args.functional,
+                spin=args.spin,
+                iterations=args.iterations,
+                source_cache=args.source_cache,
             )
         )
 

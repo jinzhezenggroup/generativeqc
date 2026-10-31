@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
+from _cpp_source_support import cpp_function_definition
 from generativeqc.nonlocal_runtime import _ResidentNonlocalForceOwner
 from generativeqc_compiler.method import original_nonlocal_correlation
 
@@ -222,9 +223,13 @@ def test_resident_force_hot_path_has_no_host_transfer_or_fence() -> None:
 
 def test_resident_force_helpers_are_all_device_only() -> None:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
-    body = source.split("void enqueue_vv10_collect_total_features_cuda(", 1)[1].split(
-        "Vv10CudaDeviceLayout vv10_cuda_device_layout(", 1
-    )[0]
+    body = "\n".join(
+        cpp_function_definition(source, name)
+        for name in (
+            "enqueue_vv10_collect_total_features_cuda",
+            "enqueue_vv10_pack_force_seeds_cuda",
+        )
+    )
     for forbidden in (
         "OwnedCudaBuffer",
         "OwnedCudaStream",

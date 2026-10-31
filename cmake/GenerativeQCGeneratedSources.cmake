@@ -22,6 +22,8 @@ function(generativeqc_register_named_ks_catalog target)
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/native_method_catalog.hpp"
     DEPENDS ${_generativeqc_named_ks_inputs}
             "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/__init__.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/basis.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json"
     ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/native_method_catalog.hpp"
     COMMENT "Generating the shared MethodIR-owned native KS catalog")
 endfunction()
@@ -197,6 +199,24 @@ macro(generativeqc_register_host_generated_sources target)
          --enabled ${_generativeqc_stationary_dispatch_enabled}
     COMMENT "Generating native bindings to packaged stationary CPU derivatives")
 
+  set(_native_range_force_outputs "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_native_range_force.hpp")
+  if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+    list(APPEND _native_range_force_outputs "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_native_range_force.cpp")
+  endif()
+  generativeqc_register_generated_sources(
+    NAME generativeqc_native_range_force_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_range_force.py"
+    OUTPUTS ${_native_range_force_outputs}
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/range_exchange_cpu.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py"
+    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+         --enabled ${_generativeqc_stationary_dispatch_enabled}
+    COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
+    COMMENT "Packaging shared host range derivative for native forces")
+
   if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
     set(GENERATIVEQC_RANGE_DERIVATIVE_CPU_AOT_DIRECTORY
         "${CMAKE_CURRENT_BINARY_DIR}/generated/range_derivative_cpu")
@@ -226,7 +246,6 @@ macro(generativeqc_register_host_generated_sources target)
       OUTPUTS ${GENERATIVEQC_RANGE_DERIVATIVE_CPU_AOT_SOURCES}
       DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/manifests/derivative_aot_radials.json"
-        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/rsh_cpu_aot.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/derivative_aot_registry.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/weighted_eri.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/weighted_eri_native.py"
@@ -821,7 +840,7 @@ macro(generativeqc_register_host_generated_sources target)
     TARGET ${target}
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsdt_native.py"
     OUTPUTS "${GENERATIVEQC_RCCSDT_CPU_HEADER}"
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_cc/triples.py"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/cc/triples.py"
     ARGS --output "${GENERATIVEQC_RCCSDT_CPU_HEADER}")
 
   set(GENERATIVEQC_DF_HF_RESPONSE_CONTRACT_HEADER
@@ -1177,6 +1196,16 @@ macro(generativeqc_register_cuda_generated_sources target)
 
   set(GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_derivative_cuda_shell_aot.cuh")
+  generativeqc_cuda_profile_arguments(_generativeqc_derivative_profile_args)
+  if(NOT GENERATIVEQC_ENABLE_AOT_SHELLS)
+    # No accepted shell bundle is linked. Emit empty derivative registries for
+    # these targets and let the bounded native radial implementation handle them.
+    set(_generativeqc_derivative_profile_args)
+    foreach(architecture IN LISTS _generativeqc_cuda_compile_architectures)
+      list(APPEND _generativeqc_derivative_profile_args --target-architecture "${architecture}")
+    endforeach()
+    list(APPEND _generativeqc_derivative_profile_args --profile portable)
+  endif()
   generativeqc_register_generated_sources(
     NAME generativeqc_derivative_shell_aot_codegen
     TARGET ${target}
@@ -1191,13 +1220,13 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_cost.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_profile.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_selection.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_shell_classes.json"
+      "${GENERATIVEQC_AOT_SHELL_MANIFEST}"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/shell_spec.py"
     ARGS
       --output "${GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER}"
       --radial-manifest "${CMAKE_CURRENT_SOURCE_DIR}/manifests/derivative_aot_radials.json"
-      --production-manifest "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_shell_classes.json"
-      --target-architecture "sm_120"
+      --production-manifest "${GENERATIVEQC_AOT_SHELL_MANIFEST}"
+      ${_generativeqc_derivative_profile_args}
     COMMENT "Generating method-neutral CUDA exact-shell derivative AOT package registry")
 
   set(GENERATIVEQC_DIRECT_RECURRENCE_HEADERS
@@ -1318,10 +1347,10 @@ macro(generativeqc_register_cuda_generated_sources target)
     OUTPUTS "${GENERATIVEQC_SPLIT_HYBRID_CUDA_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/manifests/cuda_split_hybrids.json"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_xc_split_hybrid_cuda.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/libxc_split_hybrid.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/libxc_bulk_metadata.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/libxc_method_metadata.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/split_hybrid_codegen.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/split_hybrid_program.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_c_metadata.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_method_metadata.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_maple.py"
@@ -1350,8 +1379,26 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.hpp"
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.cpp")
   set(_generativeqc_libxc_cuda_registry_args)
+  if(GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA)
+    if(GENERATIVEQC_STATIONARY_AOT_PROFILES STREQUAL "auto")
+      list(APPEND _generativeqc_libxc_cuda_registry_args --stationary-all)
+    else()
+      foreach(_point_force_profile IN LISTS GENERATIVEQC_STATIONARY_AOT_PROFILES)
+        if(_point_force_profile MATCHES "^libxc_")
+          list(APPEND _generativeqc_libxc_cuda_registry_args
+               --stationary-profile "${_point_force_profile}")
+        endif()
+      endforeach()
+    endif()
+  endif()
   set(_generativeqc_libxc_cuda_science_inputs)
   if(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
+    if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS)
+      list(APPEND _generativeqc_libxc_cuda_registry_args --share-parameters
+           --parameter-policy "${GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY}")
+    else()
+      list(APPEND _generativeqc_libxc_cuda_registry_args --no-share-parameters)
+    endif()
     # Packaging selects structural registrations, never numerical admission.
     # Unpackaged codes retain the null-descriptor, fail-closed runtime path.
     foreach(_generativeqc_libxc_cuda_functional IN LISTS GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS)
@@ -1387,9 +1434,12 @@ macro(generativeqc_register_cuda_generated_sources target)
     DEPENDS
       ${_generativeqc_libxc_cuda_science_inputs}
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_xc_point_program.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_xc_point_value.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/cuda_runtime.cuh"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/xc_point_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/automatic_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/parameter_cuda_package.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/constant_parameters.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/automatic_point.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/automatic_semilocal.py"
     ARGS --output-directory "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}" ${_generativeqc_libxc_cuda_registry_args}
@@ -1482,7 +1532,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsdt_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsdt_native.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_cc/triples.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/cc/triples.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/cc/triples_cuda.hpp"
     ARGS --output "${GENERATIVEQC_RCCSDT_CUDA_SOURCE}")
 

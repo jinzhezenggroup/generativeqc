@@ -36,38 +36,51 @@ def qualified(*arguments: str) -> tuple[str, ...]:
 
 def test_inventory_is_generated_from_compiler_method_ir() -> None:
     native = qualified("--list-profiles")
-    aot = qualified("--list-aot-profiles")
+    aot = qualified("--list-available-aot-profiles")
     assert native and len(native) == len(set(native))
     assert set(native) <= set(aot)
     assert native == qualified("--list-profiles")
 
 
-def test_single_graph_generation_matches_independent_codegen(tmp_path: Path) -> None:
+@pytest.mark.parametrize("fused", (False, True))
+def test_group_generation_matches_declared_inventory_and_reuses_files(
+    tmp_path: Path, fused: bool
+) -> None:
     names = qualified("--list-profiles")
     assert len(names) >= 2
     selected = (names[0], names[-1])
-    output = tmp_path / "group"
-    actual = generate(
-        "--all-profiles", "--output-dir", str(output), "--profiles", *selected
+    package = (
+        "--profiles",
+        *selected,
+        "--fused-profiles",
+        *((name for name in selected if name.startswith("libxc_")) if fused else ()),
     )
+    output = tmp_path / "group"
+    actual = generate("--all-profiles", "--output-dir", str(output), *package)
     assert actual.returncode == 0, actual.stderr
+    declared = qualified("--list-sources", *package)
+    assert {path.name for path in output.iterdir()} == set(declared)
     snapshots: dict[str, tuple[bytes, int]] = {}
+    for filename in declared:
+        candidate = output / filename
+        snapshots[filename] = (candidate.read_bytes(), candidate.stat().st_mtime_ns)
     for name in selected:
+        if name.startswith("libxc_") and not fused:
+            continue
         candidate = output / f"native_{name}.cu"
         assert candidate.is_file()
         old = tmp_path / f"single_{name}.cu"
         separate = generate("--output", str(old), "--profile", name)
         assert separate.returncode == 0, separate.stderr
         assert candidate.read_bytes() == old.read_bytes()
-        snapshots[name] = (candidate.read_bytes(), candidate.stat().st_mtime_ns)
 
-    second = generate(
-        "--all-profiles", "--output-dir", str(output), "--profiles", *selected
-    )
+    second = generate("--all-profiles", "--output-dir", str(output), *package)
     assert second.returncode == 0, second.stderr
-    for name in selected:
-        candidate = output / f"native_{name}.cu"
-        assert (candidate.read_bytes(), candidate.stat().st_mtime_ns) == snapshots[name]
+    for filename in declared:
+        candidate = output / filename
+        assert (candidate.read_bytes(), candidate.stat().st_mtime_ns) == snapshots[
+            filename
+        ]
 
 
 @pytest.mark.parametrize("profiles", [("invalid_profile",), ("pbe_rks", "pbe_rks")])
@@ -140,7 +153,10 @@ const CudaStationaryBinding& native_stationary_profile_m06_2x_rks() {
 namespace generativeqc::methods::detail {
 struct NativeKsExecutionPlan {
   unsigned spin_channels{1}, functional{1}, domain{4};
-  bool range_exchange{}, nonlocal_correlation{}, d4_correction{}, generated_split_hybrid{};
+  bool range_exchange{}, nonlocal_correlation{}, d4_correction{}, generated_split_hybrid{}, density_fitted_range_exchange{}, automatic_program{};
+  double short_range_exchange{}, long_range_exchange{}, range_omega{};
+  struct { double b{}, c{}, coefficient{1.0}; } nonlocal_parameters;
+  dft::SemilocalFamily semilocal_family{dft::SemilocalFamily::Pbe};
 };
 unsigned ks_xc_functional_code(const NativeKsExecutionPlan& plan) { return plan.functional; }
 unsigned ks_scf_domain_version(const NativeKsExecutionPlan& plan) { return plan.domain; }
@@ -173,10 +189,30 @@ int main() {
     const auto capacity = dft::cuda_stationary_capacity(*selected, 2, 2, 2, 4, 2);
     if (capacity.stationary_minimum_bytes != 1000 + 10 * spin ||
         capacity.stationary_cached_bytes != 2000 + 10 * spin) return 2;
-    if (native_cuda_stationary_binding(plan, options, grid, false, 1, 96, 12) ||
-        bool(native_cuda_stationary_binding(plan, options, grid, true, 2, 96, 12)) != (spin == 1)) return 3;
-    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 768, 96)) return 14;
-    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 384, 48)) return 15;
+    if (native_cuda_stationary_binding(plan, options, grid, false, 1, 96, 12) != expected ||
+        native_cuda_stationary_binding(plan, options, grid, true, 2, 96, 12) != expected) return 3;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 768, 96) != expected) return 14;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 384, 48) != expected) return 15;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 3, 96, 12)) return 26;
+    options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+    provider.spec.coulomb.approximation = provider.spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 3, 96, 12) != expected) return 27;
+    options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+    provider.spec.coulomb.approximation = provider.spec.exchange.approximation = scf::FockApproximation::Exact;
+    // The same matching binding cannot widen an automatic program's domain.
+    // Keep the curated ECP/DF positive controls above while exercising both spins.
+    plan.automatic_program = true;
+    options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+    if (select() != expected) return 30;
+    if (native_cuda_stationary_binding(plan, options, grid, false, 1, 96, 12)) return 31;
+    options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+    provider.spec.coulomb.approximation = provider.spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+    if (select()) return 32;
+    options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+    provider.spec.coulomb.approximation = provider.spec.exchange.approximation = scf::FockApproximation::Exact;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 96, 12)) return 33;
+    if (select() != expected) return 34;
+    plan.automatic_program = false;
     const auto mixed = dft::cuda_stationary_capacity(*selected, 2, 2, 2, 4, 2, true);
     const auto extra = 4 * (8 * 2 * 2 + 2 * 2) + dft::CudaGridStorage::provider_allowance;
     if (mixed.minimum_device_bytes != capacity.minimum_device_bytes ||
@@ -241,8 +277,8 @@ int main() {
   };
   const auto* expected = &dft::native_stationary_profile_m06_2x_rks();
   if (select(24, 3, 2) != expected || select(96, 12, 2) != expected) return 18;
-  if (select(23, 3, 1) || select(97, 12, 1) || select(24, 1, 1) ||
-      select(96, 33, 1) || select(96, 12, 3)) return 19;
+  if (select(23, 3, 1) != expected || select(97, 12, 1) != expected || select(24, 1, 1) != expected ||
+      select(96, 33, 1) != expected || select(96, 12, 3)) return 19;
   split.spin_channels = 2;
   provider.spec.spin = scf::FockSpin::Unrestricted;
   provider.spec.exchange.coefficient = -0.54;

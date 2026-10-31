@@ -20,7 +20,7 @@ if typing.TYPE_CHECKING:
     from .df_contract import DFCCSDTMethodContract
     from .solver import SolverOptions
 
-from .triples import (
+from generativeqc_compiler.cc.triples import (
     _LABELS,
     INVENTORY_HASH,
     OP,

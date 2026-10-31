@@ -1236,7 +1236,9 @@ jobs:
     # The broad core suite is split deterministically by test file so routine
     # feedback does not leave one ~18-minute serial critical-path shard.
     # Keep the full test-step ceilings and leave setup/cache-save headroom.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || 40 }}
+    # The extended shards have 35-minute test allowances. Their setup and
+    # artifact publication retain ten further minutes; other caps stay bounded.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy') && 45 || 40) }}
     env:
       CCACHE_MAXSIZE: 2G
       # PySCF and NumPy can each fan out through BLAS/OpenMP. Keep those
@@ -1358,6 +1360,10 @@ jobs:
           PY_INNER
           )"
           echo "GENERATIVEQC_XTB_CPU_LINALG_LIBRARY=${xtb_linalg}" >> "$GITHUB_ENV"
+      - name: Revalidate retained native Libxc endpoint evidence against live inputs
+        if: matrix.shard == 'core-a' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        run: |
+          PYTHONPATH=python:. .venv/bin/python tools/check_libxc_native_catalog.py
       - name: Qualify owned sccache compiler lifetimes
         if: matrix.shard == 'compiler-heavy' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
@@ -1458,7 +1464,11 @@ jobs:
       - name: Run Python tests with coverage
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: python_tests
-        timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 30 }}
+        # These three shards need bounded tail/reporting headroom. posthf reached
+        # 100% at its old limit (40504114981); core-b and compiler-heavy both
+        # reached 99% before the 30-minute cancellation in 40833182012. Keep
+        # all tests and diagnostics, with ten further minutes for job cleanup.
+        timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy') && 35 || 30) }}
         env:
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build/libgenerativeqc.so
           GENERATIVEQC_BUILD_DIR: ${{ github.workspace }}/build

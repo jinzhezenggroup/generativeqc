@@ -1,7 +1,8 @@
 # User-local CUDA autotuning
 
-Builds for untuned GPUs must opt into `portable_cuda` explicitly; `auto`
-never hides a missing tuned profile behind the generic CUDA implementation.
+Builds for untuned GPUs use `portable_cuda` automatically. Profile diagnostics
+identify this fallback as portable and untuned; they do not claim measured
+performance or reuse a tuned schedule from an incompatible architecture.
 Autotuning is optional and never runs during installation. A local profile
 contains a validated native library and its evidence, so later calculations can
 use the generated kernels without rebuilding them.
@@ -22,7 +23,10 @@ without CUDA compiler tools. See [native CLI ownership](native_cli.md).
 XYZ coordinates default to Angstrom and are converted to Bohr. Use `--units
 bohr` for a Bohr XYZ file. Charge, multiplicity, RHF/UHF method, Cartesian or
 spherical representation, and batch size are explicit options. The command uses
-logical CUDA device 0 within the allocated visibility.
+logical CUDA device 0 within the allocated visibility by default. Use
+`--device-id N` to select another visible ordinal. Device probing, candidate
+timing, independent numerical gates and final endpoint validation all use that
+same ordinal; physical GPU indices outside the allocation are not selected.
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
@@ -39,7 +43,9 @@ These searches deliberately use a separate Python compiler frontend exposed as
 `generativeqc-tune`; the C++ runtime command never imports or spawns it. On systems without
 Slurm, run inside the allocation provided by the local scheduler. The tuner and
 its child processes preserve `CUDA_VISIBLE_DEVICES`; they do not request a
-second allocation. Set `CUDA_PATH` or `--nvcc` to select a toolkit.
+second allocation. Set `--nvcc`, `CUDACXX`, or a toolkit root (`CUDAToolkit_ROOT`,
+`CUDA_PATH`, `CUDA_HOME`) to select a toolkit. An empty visibility mask remains
+empty in every child process.
 
 Quick mode profiles the actual final-density shell tasks and ranks classes by
 measured active primitive work. It targets 97% coverage, at most eight classes,

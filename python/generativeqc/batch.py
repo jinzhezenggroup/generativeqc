@@ -241,6 +241,7 @@ class PreparedBatch:
             raise ValueError("a batch requires at least one system")
         self._last_statuses = None
         self._dispersion_batch: typing.Any = None
+        self._native_dispersion: typing.Any = None
         self._intrinsic_dispersion_energy = (
             calculator._method == _native.METHOD_PBE_D4_RKS
         )
@@ -301,7 +302,10 @@ class PreparedBatch:
         self._resource_ledger = None
         self._resource_prepare = None
         dispersion_request = None
+        resource_native_name = None
         if resource_plan is not None or calculator._resource_budget is not None:
+            from ._named_ks import select_resource_program
+
             request = calculator._resource_request(
                 self._systems,
                 charges=self._charges,
@@ -309,7 +313,10 @@ class PreparedBatch:
                 ks_options=self._effective_ks_options,
                 properties=self._planned_properties,
             )
-            dispersion_request = calculator._dispersion_resource_request(self._systems)
+            resource_native_name = select_resource_program(calculator, request)
+            dispersion_request = calculator._dispersion_resource_request(
+                self._systems, request
+            )
             requests = (
                 (request,)
                 if dispersion_request is None
@@ -348,6 +355,9 @@ class PreparedBatch:
                     self.resource_plan,
                     owner=request.name,
                     prepared_kind="batch",
+                    component_owners=("d3",)
+                    if resource_native_name is not None
+                    else (),
                 )
                 self._resource_prepare = self._resource_ledger.prepared_call
             if request.identity.backend == "cuda" and (
@@ -413,7 +423,43 @@ class PreparedBatch:
             if inactive_eigensolver_profiling:
                 flags |= _native.BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING
 
+            native_name = resource_native_name
+            if (
+                calculator._dispersion_method_ir is not None
+                and self.resource_plan is None
+                and calculator._precision_mode == _native.PRECISION_FP64
+            ):
+                from ._named_ks import select_named_program
+
+                native_name = select_named_program(
+                    self._library,
+                    calculator._dispersion_method_ir,
+                    _native.BACKEND_CUDA
+                    if calculator._device_name == "cuda"
+                    else _native.BACKEND_CPU_REFERENCE,
+                )
+
             def prepare() -> typing.Any:
+                if native_name is not None:
+                    from ._named_ks import prepare_named_batch
+
+                    return prepare_named_batch(
+                        self._library,
+                        self._context,
+                        handle_array,
+                        count,
+                        method,
+                        flags,
+                        ctypes.byref(self._batch),
+                        native_name,
+                        calculator._dispersion_method_ir,
+                        calculator._dispersion_memory_budget_bytes,
+                        resources=(
+                            self._resource_ledger.handle
+                            if self._resource_ledger is not None
+                            else None
+                        ),
+                    )
                 if self._resource_prepare is not None:
                     return self._resource_prepare(
                         self._context,
@@ -472,7 +518,17 @@ class PreparedBatch:
                 configure_native_cuda_stationary_batch(
                     self._library, self._batch, self.resource_plan
                 )
-            if calculator._dispersion_method_ir is not None:
+            if native_name is not None:
+                from ._named_ks import NativeKsDispersion
+
+                self._native_dispersion = NativeKsDispersion(
+                    self, calculator._dispersion_method_ir
+                )
+                self._intrinsic_dispersion_energy = True
+            if (
+                calculator._dispersion_method_ir is not None
+                and self._native_dispersion is None
+            ):
                 from generativeqc_compiler.method import (
                     D4Spec,
                     DispersionCorrectionPrimitive,
@@ -540,32 +596,27 @@ class PreparedBatch:
                         device_id=calculator._device_id,
                         maximum_bytes=calculator._dispersion_memory_budget_bytes,
                     )
-                    if (
-                        self.resource_plan is not None
-                        and dispersion_request is not None
-                    ):
-                        selected = dict(self.resource_plan.selections)[
-                            dispersion_request.name
-                        ]
-                        candidate = next(
-                            candidate
-                            for candidate in dispersion_request.candidates
-                            if candidate.name == selected
-                        )
-                        planned = dict(candidate.decisions)
-                        diagnostic = self._dispersion_batch.diagnostic()
-                        actual = {
-                            "plan_host_bytes": diagnostic.plan_host_bytes,
-                            "execution_host_bytes": diagnostic.execution_host_bytes,
-                            "device_bytes": diagnostic.device_bytes,
-                            "table_bytes": diagnostic.table_bytes,
-                            "workspace_bytes": diagnostic.workspace_bytes,
-                        }
-                        expected = {key: int(planned[key]) for key in actual}
-                        if actual != expected:
-                            raise RuntimeError(
-                                "prepared D3 resource inventory differs from the global ResourcePlan"
-                            )
+            if self.resource_plan is not None and dispersion_request is not None:
+                selected = dict(self.resource_plan.selections)[dispersion_request.name]
+                candidate = next(
+                    candidate
+                    for candidate in dispersion_request.candidates
+                    if candidate.name == selected
+                )
+                planned = dict(candidate.decisions)
+                diagnostic = self.dispersion_diagnostic
+                actual = {
+                    "plan_host_bytes": diagnostic.plan_host_bytes,
+                    "execution_host_bytes": diagnostic.execution_host_bytes,
+                    "device_bytes": diagnostic.device_bytes,
+                    "table_bytes": diagnostic.table_bytes,
+                    "workspace_bytes": diagnostic.workspace_bytes,
+                }
+                expected = {key: int(planned[key]) for key in actual}
+                if actual != expected:
+                    raise RuntimeError(
+                        "prepared D3 resource inventory differs from the global ResourcePlan"
+                    )
         except Exception:
             # Construction owns native handles before resource-status conversion,
             # which can raise MemoryError as well as ordinary validation errors.
@@ -607,8 +658,10 @@ class PreparedBatch:
 
     @property
     def dispersion_diagnostic(self) -> typing.Any:
-        """Return the retained external-correction diagnostic, if present."""
+        """Return current native or compatibility correction-owner diagnostics."""
         self._ensure_open()
+        if self._native_dispersion is not None:
+            return self._native_dispersion.diagnostic()
         return (
             None
             if self._dispersion_batch is None
@@ -1198,11 +1251,6 @@ class PreparedBatch:
             names = ", ".join(sorted(repr(name) for name in unknown))
             raise ValueError(f"unsupported properties: {names}")
         unsupported = requested - self._calculator._capabilities.supported_properties
-        if unsupported:
-            raise ValueError(
-                f"method {self._calculator._method_name!r} does not support properties: "
-                + ", ".join(sorted(unsupported))
-            )
         compute_forces = "forces" in requested
         public_dft_forces = (
             compute_forces
@@ -1219,6 +1267,19 @@ class PreparedBatch:
             public_dft_forces and self._native_dft_force_eligible(index)
             for index in range(count)
         )
+        if (
+            public_dft_forces
+            and self._calculator._automatic_libxc_name is not None
+            and self._calculator._device_name == "cuda"
+            and not all(native_dft_forces)
+        ):
+            # Automatic CUDA force admission belongs to the shared native
+            # owner. An unbuilt or unsupported neighbor cannot invoke the
+            # historical Python stationary/JIT compatibility path.
+            raise NotImplementedError(
+                "automatic CUDA forces require a packaged native stationary "
+                "profile and an admitted all-electron s/p FP64 context for every item"
+            )
         selected_execute = getattr(
             self._library, "generativeqc_ks_batch_execute_selected_forces_v1", None
         )
@@ -1229,6 +1290,16 @@ class PreparedBatch:
             # request that could force an unqualified neighbor into native work.
             native_dft_forces = (False,) * count
             mixed_native_forces = False
+        # Method-level metadata can be conservative (for example, an ECP
+        # combination). Only the immutable prepared owner may add force support;
+        # a missing/old native query must never enable an unqualified fallback.
+        if unsupported and not (
+            unsupported == {"forces"} and public_dft_forces and all(native_dft_forces)
+        ):
+            raise ValueError(
+                f"method {self._calculator._method_name!r} does not support properties: "
+                + ", ".join(sorted(unsupported))
+            )
         compatibility_forces = tuple(
             public_dft_forces and not native for native in native_dft_forces
         )
@@ -1387,7 +1458,14 @@ class PreparedBatch:
 
         correction_results = None
         if (
+            self._native_dispersion is not None
+            and any(compatibility_forces)
+            and self._dispersion_batch is None
+        ):
+            self._dispersion_batch = self._native_dispersion.compatibility_owner()
+        if (
             self._dispersion_batch is None
+            and self._native_dispersion is None
             and self._intrinsic_dispersion_energy
             and compute_forces
         ):
@@ -1455,6 +1533,14 @@ class PreparedBatch:
             dispersion = (
                 None if correction_results is None else correction_results[index]
             )
+            if (
+                succeeded
+                and self._native_dispersion is not None
+                and not compatibility_forces[index]
+            ):
+                dispersion = self._native_dispersion.result(
+                    index, native_compute_forces[index]
+                )
             dispersion_failure_message = None
             if succeeded and dispersion is not None and not dispersion.ok:
                 output.status = dispersion.status
@@ -1529,7 +1615,14 @@ class PreparedBatch:
                 if succeeded and native_compute_forces[index]
                 else None
             )
-            if succeeded and dispersion is not None and compute_forces:
+            if (
+                succeeded
+                and dispersion is not None
+                and compute_forces
+                and not (
+                    self._native_dispersion is not None and native_dft_forces[index]
+                )
+            ):
                 if dispersion.gradient is None:
                     raise RuntimeError(
                         "successful external correction omitted requested dE/dR"
@@ -1843,6 +1936,7 @@ class PreparedBatch:
 
     def close(self) -> None:
         """Release cached execution, correction, batch, context, and ledger resources."""
+        self._native_dispersion = None
         if self._snapshot_grid_cache is not None:
             self._snapshot_grid_cache.clear()
             self._snapshot_grid_cache = None

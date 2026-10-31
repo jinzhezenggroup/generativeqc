@@ -41,7 +41,7 @@ def test_nonlocal_resident_grid_enqueue_uploads_no_grid_measure() -> None:
     )
     assert "upload(*p, p->weights" not in body
     assert "upload(*p, p->raw" not in body
-    assert "device_weights, device_raw, external_device" in body
+    assert "device_weights, device_raw, external_device" in " ".join(body.split())
 
 
 def test_python_scheduler_passes_device_weights_without_host_pointer_conversion() -> (

@@ -1,7 +1,6 @@
 """Keep routine feedback bounded without truncating full qualification jobs."""
 
 import re
-import typing
 from pathlib import Path
 
 import pytest
@@ -212,11 +211,21 @@ def test_master_complete_cache_cannot_precede_the_python_seed() -> None:
 
 
 @pytest.mark.parametrize(
-    "filename, job, routine_minutes",
-    [("ci.yml", "python", 40), ("cumetal-cuda.yml", "cuda-tests", 30)],
+    "filename, job, shard, routine_minutes",
+    [
+        ("ci.yml", "python", "core-a", 40),
+        ("ci.yml", "python", "core-b", 45),
+        ("ci.yml", "python", "core-c", 40),
+        ("ci.yml", "python", "uccsd-forces", 40),
+        ("ci.yml", "python", "runtime-heavy", 40),
+        ("ci.yml", "python", "posthf", 45),
+        ("ci.yml", "python", "compiler-heavy", 45),
+        ("ci.yml", "python", "ecp-forces", 40),
+        ("cumetal-cuda.yml", "cuda-tests", "", 30),
+    ],
 )
 def test_full_qualification_has_a_separate_finite_budget(
-    filename: typing.Any, job: typing.Any, routine_minutes: typing.Any
+    filename: str, job: str, shard: str, routine_minutes: int
 ) -> None:
     path = Path(__file__).resolve().parents[2] / ".github/workflows" / filename
     section = path.read_text().split(f"\n  {job}:\n", 1)[1]
@@ -224,14 +233,23 @@ def test_full_qualification_has_a_separate_finite_budget(
     match = re.search(r"^\s*timeout-minutes: (.+)$", header, re.MULTILINE)
     assert match, "full qualification must have a finite timeout"
     budget = match[1]
+    # Evaluate the actual matrix context: extended shards have bounded routine exceptions,
+    # while every shard still receives the independent full-qualification budget.
+    context = {"matrix.shard": shard}
     for event in ("schedule", "workflow_dispatch"):
-        full = expression(budget, {"github.event_name": event})
+        full = expression(budget, {**context, "github.event_name": event})
         assert type(full) is int and 60 <= full <= 120
     for event in ("pull_request", "push"):
-        assert expression(budget, {"github.event_name": event}) == routine_minutes
+        assert (
+            expression(budget, {**context, "github.event_name": event})
+            == routine_minutes
+        )
     # CuMetal queue jobs run the full cold native build and scientific suite.
     queue_minutes = 75 if filename == "cumetal-cuda.yml" else routine_minutes
-    assert expression(budget, {"github.event_name": "merge_group"}) == queue_minutes
+    assert (
+        expression(budget, {**context, "github.event_name": "merge_group"})
+        == queue_minutes
+    )
     if filename == "ci.yml":
         assert "source .github/scripts/ci_select_python_shard.sh" in section
         selector = (

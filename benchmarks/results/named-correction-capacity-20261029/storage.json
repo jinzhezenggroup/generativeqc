@@ -1,0 +1,11 @@
+{
+  "scope": "Lossless storage change only; preserve every historical independent-reference byte and the existing evidence limit.",
+  "original_path": "benchmarks/results/df-final-occupied-endpoint-20260926/independent-reference.json",
+  "original_revision": "9ce18971351c2bda69e4e5732c67097e11969d04",
+  "original_git_blob": "fb8f6951b66c693da29475d2c6755ac617884808",
+  "original_bytes": 83900,
+  "original_sha256": "1a1240dd47e1b6ab83874af8514094e7c758eee39ce50d84c6a1e5ea8668aa19",
+  "stored_path": "benchmarks/results/df-final-occupied-endpoint-20260926/independent-reference.json.xz",
+  "stored_bytes": 14056,
+  "stored_sha256": "3581fd299659c6a94c56e0a7b966bc1db1d9a4ebf6b47e9b200c471b048dc00b"
+}

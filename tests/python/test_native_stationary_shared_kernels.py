@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
 def test_native_shared_reduction_preserves_ir_source_order(profile: str) -> None:
     plan = _qualified_aot_profile(profile).plan
-    sources = stationary_runtime_sources(plan)
+    sources = stationary_runtime_sources(plan, include_external=True)
     program = plan.reduction_program(atoms=1)
     reduction = program.outputs["gradient"]
     assert plan.source_names == sources
@@ -146,7 +146,9 @@ def test_shared_kernel_scalar_order_and_transport(
     for profile in NATIVE_STATIONARY_CUDA_PROFILES:
         plan = _qualified_aot_profile(profile).plan
         references.append(
-            f"namespace {profile} {{\n" + emit_stationary_reduction_cuda(plan) + "}\n"
+            f"namespace {profile} {{\n"
+            + emit_stationary_reduction_cuda(plan, include_external=True)
+            + "}\n"
         )
         calls.append(
             f"verify_reduction({len(plan.source_names)}, {profile}::generativeqc_stationary_cuda::source_reduce);"
@@ -162,6 +164,8 @@ def test_shared_kernel_scalar_order_and_transport(
 #include <limits>
 #include <stdexcept>
 #include <vector>
+#include "dft/mixed_rsh_exchange.hpp"
+using generativeqc::dft::mixed_rsh_exchange_sources;
 #define __global__
 #define __device__
 using std::isfinite;
@@ -228,6 +232,6 @@ int main() {
     executable = native_cxx.build_executable(
         [source],
         tmp_path / "shared_scalar",
-        compile_args=("-std=c++20", "-ffp-contract=off"),
+        compile_args=("-std=c++20", "-ffp-contract=off", f"-I{ROOT / 'src'}"),
     )
     subprocess.run([str(executable)], check=True, timeout=10)

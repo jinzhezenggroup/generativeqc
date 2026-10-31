@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string_view>
 
+#include "dft/cuda_xc_point_value.hpp"
 #include "dft/xc_capabilities.hpp"
 
 namespace generativeqc::dft {
@@ -21,6 +22,14 @@ using CudaXcPointLauncher = void (*)(cudaStream_t, const double*, const double*,
 using CudaXcPointBatchLauncher = void (*)(cudaStream_t, const double*, const double*, std::size_t,
                                           std::size_t, double*, double*, int*, std::uint32_t,
                                           double, double, std::size_t);
+
+/** Paired [2,5,points] physical features from the resident geometry producer.
+ * Unlike the SCF coefficient ABI, this retains both physical spin derivatives.
+ * The caller owns points output slots and both sticky error words, and keeps
+ * all buffers alive until the borrowed stream finishes consuming the tile.
+ */
+using CudaXcStationaryPointLauncher = void (*)(cudaStream_t, const double*, std::size_t,
+                                               std::size_t, DevicePointValue*, int*, const int*);
 
 /** Process-lifetime AOT descriptor. All strings/callbacks are library-owned;
  * names are diagnostic, never native mathematical selectors. Ingredient masks
@@ -42,6 +51,9 @@ struct CudaXcPointProgram {
   // Restricted is separate only for the explicit total-density LDA program.
   const char* polarized_expression_identity{};
   const char* restricted_expression_identity{};
+  CudaXcStationaryPointLauncher launch_stationary{};
+  const char* polarized_executable_identity{};
+  const char* restricted_executable_identity{};
 
   bool matches_cpu_science(std::string_view polarized, std::string_view restricted, unsigned mask,
                            unsigned version) const noexcept {
@@ -50,6 +62,19 @@ struct CudaXcPointProgram {
            restricted == (restricted_expression_identity ? restricted_expression_identity : "") &&
            mask == ingredient_mask && version == domain_version;
   }
+};
+
+/** Prepared execution binding shared by curated, composed and automatic XC.
+ * Resolve both launchers together so a later policy change cannot pair a batch
+ * consumer with different point mathematics. A null batch callback means that
+ * production batching is unqualified, even if a raw AOT batch entry exists.
+ * The optional automatic descriptor retains its own scientific provenance;
+ * curated method/domain identity continues to belong to the prepared KS model.
+ */
+struct CudaXcPointBinding {
+  CudaXcPointLauncher launch{};
+  CudaXcPointBatchLauncher launch_batch{};
+  const CudaXcPointProgram* automatic_program{};
 };
 
 }  // namespace generativeqc::dft

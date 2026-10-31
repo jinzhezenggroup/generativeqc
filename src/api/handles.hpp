@@ -12,6 +12,8 @@
 #include "methods/method.hpp"
 #include "scf/types.hpp"
 
+struct generativeqc_calculation;
+
 namespace generativeqc::runtime {
 struct DeviceResourceLedger;
 }
@@ -21,6 +23,8 @@ struct generativeqc_context {
   generativeqc::core::ContextState state;
   // Borrowed by the public error getter: mutate only when recording a failure.
   std::string last_detail;
+  generativeqc_calculation* provider_initialization_calculation{};
+  bool provider_initialization_failed_candidate{};
 };
 
 struct generativeqc_system {
@@ -72,6 +76,7 @@ inline bool valid_system_roles(const generativeqc_system& orbital,
 
 struct generativeqc_calculation {
   generativeqc_context* context{};
+  bool pending_provider_initialization{};
   /** Survives metadata-handle close; declared first so the plan releases last charges. */
   std::shared_ptr<generativeqc::runtime::DeviceResourceLedger> resource_ledger;
   std::unique_ptr<generativeqc::methods::PreparedCalculation> plan;
@@ -109,6 +114,7 @@ struct generativeqc_batch {
   std::vector<std::optional<generativeqc::dft::ScfDiagnostic>> ks_diagnostics;
   std::vector<std::optional<generativeqc::scf::initial_guess::PreliminaryDiagnostic>>
       initial_guesses;
+  std::vector<std::optional<generativeqc::methods::DispersionResult>> dispersion;
 };
 
 #endif

@@ -227,6 +227,84 @@ class RuntimeTests(unittest.TestCase):
             refused = self.cli(command, *arguments, "--owned-device-bytes", "4096")
             self.assertEqual(refused.returncode, 2, refused.stderr)
 
+    def test_named_ks_owned_device_cap_rejected_before_input(self) -> None:
+        """Reject an unimplemented ownership cap before file or device work."""
+        missing = str(self.root / "missing.xyz")
+        for method in ("pbe0-rks", "r2scan-3c-rks"):
+            for backend in ("cpu", "cuda"):
+                for limit in ("0", "4096"):
+                    method_flags = ("--method", method)
+                    cap_flags = ("--owned-device-bytes", limit)
+                    for flags in (
+                        (*method_flags, *cap_flags),
+                        (*cap_flags, *method_flags),
+                    ):
+                        with self.subTest(
+                            method=method, backend=backend, limit=limit, flags=flags
+                        ):
+                            result = self.cli(
+                                "run", missing, "--backend", backend, *flags
+                            )
+                            self.assertEqual(result.returncode, 2, result.stderr)
+                            diagnostic = result.stderr.partition("\n")[0]
+                            self.assertIn("--owned-device-bytes", diagnostic)
+                            self.assertIn("named KS", diagnostic)
+                            self.assertNotIn("cannot open XYZ", diagnostic)
+                            self.assertEqual(result.stdout, "")
+
+    def test_owned_device_cap_uses_final_method_selection(self) -> None:
+        """A superseded selector must neither reject RHF nor admit named KS."""
+        missing = str(self.root / "missing.xyz")
+        for backend in ("cpu", "cuda"):
+            for limit in ("0", "4096"):
+                for first, last in (("pbe0-rks", "rhf"), ("rhf", "pbe0-rks")):
+                    with self.subTest(backend=backend, limit=limit, final=last):
+                        result = self.cli(
+                            "run",
+                            missing,
+                            "--backend",
+                            backend,
+                            "--method",
+                            first,
+                            "--owned-device-bytes",
+                            limit,
+                            "--method",
+                            last,
+                        )
+                        self.assertEqual(result.returncode, 2, result.stderr)
+                        self.assertEqual(result.stdout, "")
+                        diagnostic = result.stderr.partition("\n")[0]
+                        if last == "rhf":
+                            self.assertIn("cannot open XYZ", diagnostic)
+                            self.assertNotIn("named KS", diagnostic)
+                        else:
+                            self.assertIn("--owned-device-bytes", diagnostic)
+                            self.assertIn("named KS", diagnostic)
+                            self.assertNotIn("cannot open XYZ", diagnostic)
+
+    def test_named_ks_without_owned_cap_still_reads_input(self) -> None:
+        """Omitting the cap leaves ordinary named-program input handling intact."""
+        missing = str(self.root / "missing.xyz")
+        for method in ("pbe0-rks", "r2scan-3c-rks"):
+            for backend in ("cpu", "cuda"):
+                with self.subTest(method=method, backend=backend):
+                    result = self.cli(
+                        "run",
+                        missing,
+                        "--method",
+                        method,
+                        "--backend",
+                        backend,
+                    )
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    # Usage lists every option; inspect the actual error, not its help.
+                    diagnostic = result.stderr.partition("\n")[0]
+                    self.assertEqual(
+                        diagnostic, f"generativeqc: cannot open XYZ input: {missing}"
+                    )
+                    self.assertNotIn("--owned-device-bytes", diagnostic)
+                    self.assertEqual(result.stdout, "")
+
     def bundle(self) -> Path:
         directory = self.root / "bundle"
         directory.mkdir()
@@ -1414,7 +1492,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(listing.returncode, 0, listing.stderr)
         table = {entry["name"]: entry for entry in json.loads(listing.stdout)}
         self.assertEqual(table["libxc:gga_x_apbe"]["aliases"], ["libxc-rks:gga_x_apbe"])
-        self.assertFalse(table["libxc-uks:gga_x_apbe"]["cuda"])
+        self.assertTrue(table["libxc-uks:gga_x_apbe"]["cuda"])
         # Exercise both numerical domains through the installed-style process
         # with no interpreter/toolchain on PATH. GGA alone cannot catch a stale
         # generic domain on a density-only LDA catalog entry.
@@ -1443,16 +1521,9 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(len(energies), 3)
             self.assertAlmostEqual(energies[0], energies[1], places=12)
             self.assertAlmostEqual(energies[0], energies[2], places=8)
-        rejected = self.cli(
-            "run",
-            str(SOURCE / "tests/data/h2_bohr.xyz"),
-            "--method",
-            "libxc:GGA_X_APBE",
-            "--backend",
-            "cuda",
-        )
-        self.assertEqual(rejected.returncode, 2)
-        self.assertIn("CPU backend", rejected.stderr)
+        # CUDA is now catalog-representable. Linked-provider and real-device
+        # admission are checked by the scheduled installed-CUDA qualification,
+        # not this Python-free host test (which must never initialize a GPU).
 
     def test_profile_validate_and_zip_export_preserve_python_identity(self) -> None:
         directory = self.bundle()

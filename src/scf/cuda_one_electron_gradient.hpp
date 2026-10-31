@@ -47,7 +47,8 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
     std::span<const double> weighted_density, unsigned schedule, std::size_t maximum_bytes,
     std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
     OneElectronGradientResources* resources = nullptr, const double* resident_density = nullptr,
-    const double* resident_weighted_density = nullptr);
+    const double* resident_weighted_density = nullptr,
+    const CudaDerivativeSourceConsumer& consume = {}, void* borrowed_stream = nullptr);
 
 /** Evaluate stationary hcore/Pulay by borrowing a derivative-capable Direct
  * owner's normalized device metadata, ordinary stream and force scratch.

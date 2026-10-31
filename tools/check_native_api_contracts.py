@@ -22,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HEADERS = (
     "include/generativeqc/generativeqc.h",
+    "include/generativeqc/provider_initialization.h",
     "include/generativeqc/generativeqc.hpp",
     "include/generativeqc/ks.hpp",
 )
@@ -287,6 +288,12 @@ def operation_name(owner: str | None, head: list[Token]) -> str:
             and "generativeqc_basis_template_descriptor_v1" in params
         ):
             name += "-basis-template"
+        elif (
+            owner in {"System", "Calculation"}
+            and name == owner
+            and "generativeqc_named_ks_descriptor" in params
+        ):
+            name += "-named-ks"
         elif owner == "System" and name == "System" and "basis_name" in params:
             name += "-bundled"
     return "generativeqc::" + (owner + "::" if owner else "") + name

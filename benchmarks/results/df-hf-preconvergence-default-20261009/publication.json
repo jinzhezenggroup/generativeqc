@@ -37,10 +37,10 @@
       "sha256": "d6ff1c11d3917965a9f5752f341679776b023ac4ff98886cd32b28a813869b5f"
     },
     {
-      "bytes": 52036,
-      "path": "source.patch",
+      "bytes": 12516,
+      "path": "source.patch.xz",
       "role": "source-patch",
-      "sha256": "c3de73ba733b1d6545dfe3474bd9a3d0683aed4a6575b1dcd4d000dbf37ece4b"
+      "sha256": "17f892a1580fcd87fef800d25e052e536ff781b7f986e0ec58baec4538e7981d"
     },
     {
       "path": "additional-qualification.json",
@@ -83,6 +83,12 @@
       "role": "reproduction",
       "bytes": 869,
       "sha256": "033f1b4d577a5ceb2f7557a0311ecc6067899d451dcfae8b0f8ec8f195be9709"
+    },
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 396,
+      "sha256": "3bfad046db8fe5f4559a6d3a6a55b8a72d0e45c56f647e0953db161c1aed219c"
     }
   ],
   "reproduction": {

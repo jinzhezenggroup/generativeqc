@@ -16,11 +16,9 @@ from generativeqc_compiler.integral import (
     cuda_target_info,
     schedule_candidates,
 )
-from generativeqc_compiler.integral.autotune import (
-    emit_schedule_driver,
-    supported_schedule_trials,
-)
 from generativeqc_compiler.integral.capabilities import build_capability_report
+from generativeqc_compiler.integral.tuning.emission import emit_schedule_driver
+from generativeqc_compiler.integral.tuning.policy import supported_schedule_trials
 
 
 @pytest.mark.parametrize("architecture", sorted(CUDA_TARGETS))

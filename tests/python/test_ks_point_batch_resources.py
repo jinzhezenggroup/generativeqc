@@ -102,6 +102,7 @@ def native_probe(
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_ks_diis_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
+#include "dft/cuda_stationary_binding.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
@@ -116,9 +117,16 @@ def native_probe(
 #include "scf/cuda/resident_final_validation.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/direct_task_layout.hpp"
+#include "scf/diis_work.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/generated_shell_task.hpp"
 using namespace generativeqc;
+namespace generativeqc::dft {
+// This allocation-double probe has no packaged automatic stationary artifacts.
+const CudaStationaryBinding* cuda_stationary_binding(const CudaStationaryModel&) noexcept {
+  return nullptr;
+}
+}
 namespace generativeqc::dft::generated {
 const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t) { return nullptr; }
 }
@@ -428,6 +436,14 @@ extern "C" void active_fleet(void* handle,std::size_t count,std::size_t mandator
 """
     )
     source += r"""
+extern "C" int incremental_capacity(std::size_t n, unsigned spins,
+                                     bool exchange, bool range, std::uint64_t* out) {
+  try {
+    out[0]=dft::cuda_ks_state_bytes(n,spins,8,exchange,range,false);
+    out[1]=dft::cuda_ks_state_bytes(n,spins,8,exchange,range,true);
+    return 0;
+  } catch (...) { return 1; }
+}
 extern "C" std::size_t md_capacity(void* handle,bool reserve) {
   using namespace runtime;
   const auto previous=active_device_resource_ledger;
@@ -487,6 +503,14 @@ extern "C" std::size_t md_capacity(void* handle,bool reserve) {
         [ctypes.c_void_p] + [ctypes.c_size_t] * 5 + [ctypes.POINTER(ctypes.c_uint64)]
     )
     probe.active_fleet.restype = None
+    probe.incremental_capacity.argtypes = [
+        ctypes.c_size_t,
+        ctypes.c_uint,
+        ctypes.c_bool,
+        ctypes.c_bool,
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    probe.incremental_capacity.restype = ctypes.c_int
     probe.md_capacity.argtypes = [ctypes.c_void_p, ctypes.c_bool]
     probe.md_capacity.restype = ctypes.c_size_t
     return probe
@@ -597,6 +621,47 @@ def test_public_budget_preserves_fleet_and_later_workspace(
         assert ledger.to_dict()["live_bytes"] == 0
     finally:
         ledger.close()
+
+
+@pytest.mark.parametrize("aos", [4, 16, 64])
+@pytest.mark.parametrize("spins", [1, 2])
+@pytest.mark.parametrize(
+    "exchange,range_correction", [(False, False), (True, False), (True, True)]
+)
+@pytest.mark.parametrize("collect_work", [False, True])
+def test_incremental_jk_charges_physical_anchor_storage(
+    native_probe: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    aos: int,
+    spins: int,
+    exchange: bool,
+    range_correction: bool,
+    collect_work: bool,
+) -> None:
+    """Execute the real layout; diagnostic census must not hide J/K capacity."""
+    if collect_work:
+        monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", "diagnostic.jsonl")
+    else:
+        monkeypatch.delenv("GENERATIVEQC_DF_PROGRESS_TRACE", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM", "1")
+    monkeypatch.delenv(
+        "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION", raising=False
+    )
+    result = (ctypes.c_uint64 * 2)()
+    assert (
+        native_probe.incremental_capacity(
+            aos, spins, exchange, range_correction, result
+        )
+        == 0
+    )
+    matrix = aos * aos
+    elements = spins * matrix
+    # Physical full anchor, delta density, Coulomb anchor, optional exchange
+    # anchors, and one maximum-density scalar, all strict FP64.
+    expected = 8 * (
+        2 * elements + matrix + exchange * elements + range_correction * elements + 1
+    )
+    assert result[1] - result[0] == expected
 
 
 @pytest.mark.parametrize("history", [1, 2, 8, 64])

@@ -10,27 +10,51 @@ from __future__ import annotations
 import json
 import re
 from fractions import Fraction
+from functools import cache
+from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.paths import asset_path
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
 from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
+from generativeqc_compiler.xc.automatic_semilocal import (
+    automatic_functional_code,
+    automatic_scf_domain,
+)
+from generativeqc_compiler.xc.density_work import (
+    DENSITY_WORK_DOMAIN,
+    DENSITY_WORK_DOMAIN_VERSION,
+)
+from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 from .ks_execution import compile_ks_execution_plan
 from .stationary_cuda import (
+    AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES,
+    COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES,
     QUALIFIED_PARTITION_ITERATIONS,
     QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     _qualified_aot_profile,
     emit_stationary_profile_aot_wrapper_cuda,
+    emit_stationary_wrapper_cuda,
     qualified_sp_requests,
+    stationary_aot_profile_contract_identity,
     stationary_runtime_sources,
 )
 
-NATIVE_STATIONARY_CUDA_PROFILES = tuple(
-    profile
-    for profile in QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
-    if (plan := _qualified_aot_profile(profile).plan).source_names
-    == stationary_runtime_sources(plan)
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+NATIVE_STATIONARY_CUDA_PROFILES = (
+    tuple(
+        profile
+        for profile in QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
+        if set((plan := _qualified_aot_profile(profile).plan).external_source_names)
+        <= set(COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES)
+    )
+    + AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES
 )
 
 
@@ -44,6 +68,29 @@ def native_stationary_model(profile: str) -> tuple[int, int, Fraction, Fraction]
     plan = compile_ks_execution_plan(_qualified_aot_profile(profile).plan.method)
     functional = plan.semilocal.functional
     actual = dict(functional.components)
+    if len(actual) == 1 and next(iter(actual)) in AUTO_BULK_COMPONENTS:
+        name, coefficient = next(iter(actual.items()))
+        if (
+            coefficient != 1
+            or plan.exchange
+            or plan.nonlocal_correlation
+            or plan.post_scf
+            or functional.range_omega
+        ):
+            raise ValueError(
+                "automatic stationary model requires one pure unit component"
+            )
+        domain = (
+            DENSITY_WORK_DOMAIN_VERSION
+            if automatic_scf_domain(name) == DENSITY_WORK_DOMAIN
+            else LIBXC_WORK_DOMAIN_VERSION
+        )
+        return (
+            automatic_functional_code(name),
+            domain,
+            Fraction(1),
+            Fraction(1),
+        )
     for record in SPLIT_HYBRIDS.values():
         expected = {
             name: Fraction(coefficient) for name, coefficient in record["components"]
@@ -88,7 +135,9 @@ def native_stationary_model(profile: str) -> tuple[int, int, Fraction, Fraction]
     raise ValueError("stationary graph has no native semilocal execution metadata")
 
 
-def emit_native_stationary_profile_cuda(profile: str) -> str:
+def emit_native_stationary_profile_cuda(
+    profile: str, *, staged_point: bool = False, source_cache: Path | None = None
+) -> str:
     """Isolate one unchanged scientific wrapper and emit its typed native table.
 
     Preprocessor token aliases cover the included runtime as well as generated
@@ -99,7 +148,7 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
         raise ValueError(f"unsupported native stationary CUDA profile: {profile}")
     selected = _qualified_aot_profile(profile)
     plan = selected.plan
-    sources = stationary_runtime_sources(plan)
+    sources = stationary_runtime_sources(plan, include_external=True)
     if sources != plan.source_names or len(sources) > 64:
         raise ValueError(
             "native stationary binding requires a complete bounded source inventory"
@@ -124,7 +173,24 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
         raise ValueError(
             "native shared CUDA reduction requires the exact unit-source sum"
         )
-    wrapper = emit_stationary_profile_aot_wrapper_cuda(profile, include_reduction=False)
+    shared = native_stationary_shared_group(profile) if staged_point else None
+    wrapper = (
+        emit_stationary_wrapper_cuda(
+            functional=selected.functional,
+            plan=plan,
+            include_reduction=False,
+            staged_point=True,
+            source_cache=source_cache,
+            include_external=True,
+        )
+        if staged_point
+        else emit_stationary_profile_aot_wrapper_cuda(
+            profile,
+            include_reduction=False,
+            source_cache=source_cache,
+            include_external=True,
+        )
+    )
     runtime = asset_path("src/dft/stationary_gradient_cuda.cuh").read_text()
     transport = asset_path("src/dft/native_stationary_runtime.cuh").read_text()
     identifiers = set(
@@ -146,7 +212,29 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
         )
         for suffix in ("", "_fp32")
     )
-    prefix = f"generativeqc_native_{profile}_"
+    prefix = f"generativeqc_native_{shared or profile}_"
+    source_identity = canonical_hash(
+        {
+            "schema": "generativeqc.native-stationary-source.v1",
+            "contract": (
+                native_stationary_shared_contract(profile)
+                if shared
+                else stationary_aot_profile_contract_identity(profile)
+            ),
+            "wrapper": wrapper,
+            "transport": transport,
+            "runtime_header": file_hash(
+                asset_path("src/dft/stationary_gradient_cuda.cuh")
+            ),
+            "point_abi": file_hash(asset_path("src/dft/cuda_xc_point_value.hpp")),
+            "binding_header": file_hash(
+                asset_path("src/dft/cuda_stationary_binding.hpp")
+            ),
+            "shared_kernels": file_hash(
+                asset_path("src/dft/native_stationary_shared_kernels.cu")
+            ),
+        }
+    )
     aliases = "\n".join(
         f"#define {name} {prefix}{name}" for name in sorted(identifiers)
     )
@@ -154,7 +242,14 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
     exchange_slot = slots.get("exact_exchange", -1)
     integral_mask = sum(
         1 << slots[name]
-        for name in ("one_electron", "coulomb", "overlap_pulay", "exact_exchange")
+        for name in (
+            "one_electron",
+            "coulomb",
+            "overlap_pulay",
+            "exact_exchange",
+            "exchange_short_range",
+            "exchange_long_range",
+        )
         if name in slots
     )
     nuclear_kind = qualified_sp_requests().index(("nuclear", ()))
@@ -164,10 +259,48 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
     )
     if functional != selected.functional:
         raise ValueError("stationary profile and native point selector disagree")
+    profile_name = shared or profile
+    plan_identity = source_identity if shared else plan.identity
+    method_identity = "" if shared else plan.method.identity
+    if shared:
+        functional = domain = 0
+    execution = compile_ks_execution_plan(plan.method)
+    ranged = {
+        term.operator: term
+        for term in execution.exchange
+        if term.operator != "full-range"
+    }
+    sr = ranged.get("short-range")
+    lr = ranged.get("long-range")
+    if (sr is None) != (lr is None) or (
+        sr is not None and lr is not None and sr.omega != lr.omega
+    ):
+        raise ValueError("native stationary range graph requires matched SR/LR")
+    nlc = execution.nonlocal_correlation
+    if bool(ranged) != bool(nlc):
+        raise ValueError(
+            "native stationary composite requires complete range/VV10 providers"
+        )
+    range_values = ", ".join(
+        exact_cuda_literal(value)
+        for value in (
+            sr.coefficient if sr else 0,
+            lr.coefficient if lr else 0,
+            sr.omega if sr else 0,
+            nlc.spec.b if nlc else 0,
+            nlc.spec.c if nlc else 0,
+            nlc.coefficient if nlc else 0,
+        )
+    )
     # Partition response has no XC or spin dependence. Every admitted native
     # profile shares the existing large-system crossover and resource guards.
     metadata = f"""
 namespace generativeqc_stationary_cuda {{
+constexpr double native_short_exchange = {exact_cuda_literal(sr.coefficient if sr else 0)};
+constexpr double native_long_exchange = {exact_cuda_literal(lr.coefficient if lr else 0)};
+constexpr int native_short_exchange_slot = {slots.get("exchange_short_range", -1)};
+constexpr int native_long_exchange_slot = {slots.get("exchange_long_range", -1)};
+constexpr int native_nonlocal_slot = {slots.get("nonlocal_ao", -1)};
 constexpr size_t native_one_electron_slot = {slots["one_electron"]};
 constexpr size_t native_coulomb_slot = {slots["coulomb"]};
 constexpr size_t native_overlap_slot = {slots["overlap_pulay"]};
@@ -180,11 +313,11 @@ constexpr size_t native_phased_becke_min_atoms = 48;
 }}
 #include "dft/native_stationary_runtime.cuh"
 namespace generativeqc::dft {{
-const CudaStationaryBinding& native_stationary_profile_{profile}() {{
+const CudaStationaryBinding& native_stationary_profile_{profile_name}() {{
   using namespace generativeqc_stationary_cuda;
   static const char* const sources[] = {{{", ".join(json.dumps(name) for name in sources)}}};
   static const CudaStationaryBinding binding{{
-      {json.dumps(profile)}, {json.dumps(plan.identity)}, {json.dumps(plan.method.identity)},
+      {json.dumps(profile_name)}, {json.dumps(plan_identity)}, {json.dumps(method_identity)},
       sources, {len(sources)}, {plan.spin_blocks}, {exchange}, {nuclear_kind},
       stationary_geometry_max_lanes, stationary_geometry_max_scratch_bytes,
       stationary_geometry_max_threads, stationary_ao_jets, stationary_jets,
@@ -194,8 +327,13 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
       native_source_span, native_metrics, native_destroy,
       {{{functional}U, {domain}U, {plan.spin_blocks}U, {QUALIFIED_PARTITION_ITERATIONS}U,
        {exact_cuda_literal(exchange_scale)}, {exact_cuda_literal(correlation_scale)},
-       {exchange}}},
-      stationary_fp32_point_capable ? native_geometry<true> : nullptr, native_grid_topology
+       {exchange}, {range_values}}},
+      stationary_fp32_point_capable ? native_geometry<true> : nullptr, native_grid_topology,
+      native_nonlocal_slot >= 0 ? native_nonlocal_geometry : nullptr,
+      {json.dumps(source_identity)}, nullptr,
+      {"native_bind_point" if shared else "nullptr"},
+      {json.dumps(source_identity) if shared else "nullptr"},
+      {json.dumps(profile_name)}, {"native_point_metrics" if shared else "nullptr"}
   }};
   return binding;
 }}
@@ -204,12 +342,121 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
     return (
         '#include "dft/cuda_stationary_binding.hpp"\n'
         "#define GENERATIVEQC_NATIVE_SHARED_REDUCTION 1\n"
-        f"// stationary-reduction-program: {reduction_program.logical_hash}\n"
+        + ("#define GENERATIVEQC_NATIVE_STAGED_POINT 1\n" if shared else "")
+        + f"// stationary-reduction-program: {reduction_program.logical_hash}\n"
         + aliases
         + "\n"
         + wrapper
         + metadata
     )
+
+
+@cache
+def native_stationary_shared_contract(profile: str) -> dict:
+    """Authenticate the actual force-consumer ABI independently of XC identity.
+
+    Sharing requires the exact source inventory, weights, reduction, ingredient
+    layout and spin convention. Registration names or a loose family label
+    cannot establish equivalence. Backend/target/toolchain remain build inputs.
+    """
+    if profile not in AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES:
+        raise ValueError("shared automatic consumer requires an automatic profile")
+    selected = _qualified_aot_profile(profile)
+    plan = selected.plan
+    execution = compile_ks_execution_plan(plan.method)
+    # This also rejects non-unit components, corrections and exact exchange.
+    native_stationary_model(profile)
+    from .stationary_cuda import stationary_aot_profile_weight_programs
+
+    return {
+        "schema": "generativeqc.stationary-shared-consumer.v1",
+        "ingredients": execution.semilocal.functional.ingredients,
+        "spin_blocks": plan.spin_blocks,
+        "sources": stationary_runtime_sources(plan),
+        "weights": stationary_aot_profile_weight_programs(profile),
+        "reduction": plan.reduction_program(atoms=1).logical_hash,
+        "partition_iterations": QUALIFIED_PARTITION_ITERATIONS,
+        "precision": "float64",
+        "point_layout": "physical-spin-DevicePointValue-v1",
+        "schedule": "bounded-or-cooperative-or-phased-v1",
+    }
+
+
+def native_stationary_shared_group(profile: str) -> str:
+    """Name a consumer by its complete compiler-owned execution contract."""
+    return "shared_" + canonical_hash(native_stationary_shared_contract(profile))[:24]
+
+
+def emit_native_stationary_profile_cpp(profile: str) -> str:
+    """Bind scientific provenance to a shared consumer without another CUDA TU."""
+    selected = _qualified_aot_profile(profile)
+    plan = selected.plan
+    group = native_stationary_shared_group(profile)
+    functional, domain, exchange, correlation = native_stationary_model(profile)
+    identity = canonical_hash(
+        {
+            "schema": "generativeqc.stationary-staged-binding.v1",
+            "contract": stationary_aot_profile_contract_identity(profile),
+            "consumer": native_stationary_shared_contract(profile),
+            "emitter": file_hash(
+                asset_path(
+                    "python/generativeqc_compiler/method/stationary_native_cuda.py"
+                )
+            ),
+            "binding": file_hash(asset_path("src/dft/cuda_stationary_binding.hpp")),
+        }
+    )
+    return f"""// Generated immutable point/scientific registration; no CUDA kernels.
+#include "dft/cuda_stationary_binding.hpp"
+#include "generated_libxc_semilocal_cuda_registry.hpp"
+namespace generativeqc::dft {{
+const CudaStationaryBinding& native_stationary_profile_{group}();
+const CudaStationaryBinding& native_stationary_profile_{profile}() {{
+  static const CudaStationaryBinding binding = [] {{
+    auto value = native_stationary_profile_{group}();
+    value.profile = {json.dumps(profile)};
+    value.plan_identity = {json.dumps(plan.identity)};
+    value.method_identity = {json.dumps(plan.method.identity)};
+    value.source_identity = {json.dumps(identity)};
+    value.model = {{{functional}U, {domain}U, {plan.spin_blocks}U,
+                    {QUALIFIED_PARTITION_ITERATIONS}U,
+                    {exact_cuda_literal(exchange)}, {exact_cuda_literal(correlation)}, 0.0}};
+    value.point_program = generated::automatic_cuda_point_entry({functional}U);
+    return value;
+  }}();
+  return binding;
+}}
+}}
+"""
+
+
+def native_stationary_package_sources(
+    profiles: tuple[str, ...], *, fused_profiles: tuple[str, ...] = ()
+) -> dict[str, str]:
+    """Map deterministic output names to their representative profile.
+
+    A .cpp file groups provenance/point bindings for one shared consumer. A
+    shared .cu file is emitted once per authenticated consumer ABI. Explicit fused specializations remain
+    available for measured hot packages; they are never runtime compilations.
+    """
+    if len(set(profiles)) != len(profiles) or set(profiles) - set(
+        NATIVE_STATIONARY_CUDA_PROFILES
+    ):
+        raise ValueError("invalid native stationary package profiles")
+    if set(fused_profiles) - set(profiles):
+        raise ValueError("fused profiles must belong to the selected force package")
+    sources = {}
+    for profile in sorted(profiles):
+        if (
+            profile in AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES
+            and profile not in fused_profiles
+        ):
+            group = native_stationary_shared_group(profile)
+            sources.setdefault(f"native_{group}_bindings.cpp", profile)
+            sources.setdefault(f"native_{group}.cu", profile)
+        else:
+            sources[f"native_{profile}.cu"] = profile
+    return sources
 
 
 def emit_native_stationary_registry_cpp(profiles: tuple[str, ...]) -> str:
@@ -243,12 +490,12 @@ def emit_native_stationary_registry_cpp(profiles: tuple[str, ...]) -> str:
             "}",
             "const CudaStationaryBinding* cuda_stationary_binding(std::string_view profile) noexcept {",
             "  for (const auto* binding : cuda_stationary_bindings())",
-            "    if (profile == binding->profile) return binding;",
+            "    if (profile == binding->profile && (!binding->bind_point || binding->point_program)) return binding;",
             "  return nullptr;",
             "}",
             "const CudaStationaryBinding* cuda_stationary_binding(const CudaStationaryModel& model) noexcept {",
             "  for (const auto* binding : cuda_stationary_bindings())",
-            "    if (model == binding->model) return binding;",
+            "    if (model == binding->model && (!binding->bind_point || binding->point_program)) return binding;",
             "  return nullptr;",
             "}",
             "}",

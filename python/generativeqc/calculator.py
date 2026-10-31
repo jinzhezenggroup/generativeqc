@@ -175,6 +175,7 @@ class Calculator:
         precision: str = "fp64",
         target_accuracy: TargetAccuracy | None = None,
         resource_budget: typing.Any = None,
+        provider_initialization: typing.Any = None,
         ks_options: typing.Any = None,
         initial_guess: InitialGuessSpec | typing.Literal["auto"] | None = "auto",
         dispersion_memory_budget_bytes: int = 256 * 1024 * 1024,
@@ -239,6 +240,30 @@ class Calculator:
             if not isinstance(resource_budget, ResourceBudget):
                 raise TypeError("resource_budget must be a ResourceBudget")
         self._resource_budget = resource_budget
+        self._provider_initialization_intent = None
+        if provider_initialization is not None:
+            from .provider_initialization import ProviderInitializationIntent
+
+            if not isinstance(provider_initialization, ProviderInitializationIntent):
+                raise TypeError("provider_initialization must be an immutable intent")
+            conventional = density_fitting is False or (
+                isinstance(density_fitting, str) and density_fitting.lower() == "none"
+            )
+            if (
+                not isinstance(method, str)
+                or method.lower() not in {"mp2", "ccsd", "rccsd"}
+                or str(device).lower() != "cuda"
+                or not conventional
+                or auxiliary_basis is not None
+                or ks_options is not None
+                or resource_budget is not None
+            ):
+                raise NotImplementedError(
+                    "provider intent requires scalar conventional CUDA MP2/RCCSD without a ledger"
+                )
+            self._provider_initialization_intent = ProviderInitializationIntent(
+                provider_initialization.allowance_bytes
+            )
         self._automatic_initial_guess = (
             isinstance(initial_guess, str) and initial_guess == "auto"
         )
@@ -780,22 +805,14 @@ class Calculator:
                 raise ValueError("ccsd_max_iterations must be positive for RCCSD")
             if ccsd_diis_history == 1 or ccsd_diis_history > 20:
                 raise ValueError("ccsd_diis_history must be 0 or 2..20 for RCCSD")
-            from ._correlation_convergence import convergence_limits
-
-            for name, value, upper in (
-                ("ccsd_energy_tolerance", ccsd_energy_tolerance, 1e-8),
-                (
-                    "ccsd_residual_tolerance",
-                    ccsd_residual_tolerance,
-                    convergence_limits(_correlation_convergence_budget)[
-                        "ccsd_residual_tolerance"
-                    ],
-                ),
+            # Reject malformed values before library loading. The selected native
+            # policy supplies the actual ceilings below, before any context exists.
+            for name, value in (
+                ("ccsd_energy_tolerance", ccsd_energy_tolerance),
+                ("ccsd_residual_tolerance", ccsd_residual_tolerance),
             ):
-                if not np.isfinite(value) or not 0.0 < value <= upper:
-                    raise ValueError(
-                        f"{name} must be finite, positive, and <= {upper:g}"
-                    )
+                if not np.isfinite(value) or value <= 0:
+                    raise ValueError(f"{name} must be finite and positive")
             if (
                 not np.isfinite(ccsd_denominator_threshold)
                 or ccsd_denominator_threshold <= 0.0
@@ -872,6 +889,20 @@ class Calculator:
         ):
             raise ValueError("canonical correlated methods require precision='fp64'")
         self._library = _native.load_library(device=device, device_id=self._device_id)
+        if self._method in _COUPLED_CLUSTER_METHODS:
+            from ._correlation_convergence import convergence_limits
+
+            limits = convergence_limits(
+                _correlation_convergence_budget, library=self._library
+            )
+            for name, value in (
+                ("ccsd_energy_tolerance", ccsd_energy_tolerance),
+                ("ccsd_residual_tolerance", ccsd_residual_tolerance),
+            ):
+                if value > limits[name]:
+                    raise ValueError(
+                        f"{name} must be finite, positive, and <= {limits[name]:g}"
+                    )
         if _correlation_preconvergence is not None:
             query = getattr(
                 self._library, "generativeqc_correlation_execution_version_v1", None
@@ -1042,8 +1073,33 @@ class Calculator:
                 )
             )
         cpu_direct_semilocal_force = qualified_direct_semilocal_context(self)
+        automatic_cuda_force = False
+        if (
+            self._automatic_libxc_name is not None
+            and self._device_name == "cuda"
+            and self._precision_mode == _native.PRECISION_FP64
+            and density_fitting_mode == _native.DENSITY_FITTING_NONE
+            and self._ks_options.xc_schedule == "device_fused"
+            and not basis_has_ecp
+        ):
+            from .resources_ks import native_cuda_stationary_model_available
+
+            automatic_cuda_force = native_cuda_stationary_model_available(
+                self._library,
+                self._ks_options,
+                precision="fp64",
+                max_iterations=self._max_iterations,
+                diis_history=self._diis_history,
+                energy_tolerance=self._energy_tolerance,
+                density_tolerance=self._density_tolerance,
+                screening_tolerance=self._screening_tolerance,
+            )
         semilocal_force = (
-            (self._automatic_libxc_name is None or cpu_direct_semilocal_force)
+            (
+                self._automatic_libxc_name is None
+                or cpu_direct_semilocal_force
+                or automatic_cuda_force
+            )
             and self._ks_options is not None
             and self._ks_options.coefficients == (1.0, 1.0, 0.0)
             and not (
@@ -1366,6 +1422,7 @@ class Calculator:
                 and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
             )
             or qualified_direct_semilocal_context(self)
+            or self._automatic_libxc_name is not None
         ):
             return frozenset({"energy"})
         return self._capabilities.supported_properties
@@ -1379,7 +1436,11 @@ class Calculator:
         requested = frozenset(properties)
         if "energy" not in requested:
             raise ValueError("properties must include 'energy'")
-        if requested - self._capabilities.supported_properties:
+        unsupported = requested - self._capabilities.supported_properties
+        if unsupported and not (
+            unsupported == {"forces"}
+            and self._capabilities.family == "density_functional"
+        ):
             raise ValueError(
                 "method does not support properties: "
                 + ", ".join(sorted(requested - self._capabilities.supported_properties))
@@ -1770,6 +1831,14 @@ class Calculator:
                 "representation": self._basis_representation,
                 "method": self._method,
                 **(
+                    {
+                        "provider_initialization_allowance_bytes": self._provider_initialization_intent.allowance_bytes
+                    }
+                    if getattr(self, "_provider_initialization_intent", None)
+                    is not None
+                    else {}
+                ),
+                **(
                     {"ks_options": self._ks_options.to_payload()}
                     if self._ks_options
                     else {}
@@ -2062,6 +2131,32 @@ class Calculator:
         checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
         checked_integer(len(atoms), "atom count", low=1, high=2**32 - 1)
         from . import _basis_builtin
+
+        if (
+            basis is None
+            and self._dispersion_method_ir is not None
+            and self._dispersion_method_ir.basis is not None
+            and hasattr(self._library, "generativeqc_system_create_named_ks_v1")
+        ):
+            from generativeqc_compiler.method.basis_binding import (
+                validate_basis_snapshot,
+            )
+
+            from ._named_ks import create_named_system, select_named_program
+
+            graph = self._dispersion_method_ir
+            validate_basis_snapshot(graph.basis, selected_basis)
+            name = select_named_program(
+                self._library,
+                graph,
+                _native.BACKEND_CUDA
+                if self._device_name == "cuda"
+                else _native.BACKEND_CPU_REFERENCE,
+            )
+            if name is not None:
+                return create_named_system(
+                    self._library, context, atoms, charge, multiplicity, name, graph
+                )
 
         correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
             "df_metric"
@@ -2373,7 +2468,9 @@ class Calculator:
                 )
         return request
 
-    def _dispersion_resource_request(self, systems: typing.Any) -> typing.Any:
+    def _dispersion_resource_request(
+        self, systems: typing.Any, electronic_request: typing.Any
+    ) -> typing.Any:
         """Return the bounded D3 owner request for global planning, when present."""
         if self._dispersion_method_ir is None:
             return None
@@ -2392,6 +2489,7 @@ class Calculator:
                 "global ResourcePlan currently supports composed D3(BJ) only"
             )
 
+        from ._named_ks import select_resource_program
         from .resources_d3 import d3_resource_request
 
         return d3_resource_request(
@@ -2401,6 +2499,7 @@ class Calculator:
             device_id=self._device_id,
             maximum_bytes=self._dispersion_memory_budget_bytes,
             library=self._library,
+            _native_ks=select_resource_program(self, electronic_request) is not None,
         )
 
     def _effective_ks_selection(
@@ -2509,7 +2608,7 @@ class Calculator:
                 properties=properties,
             )
         ]
-        dispersion_request = self._dispersion_resource_request(systems)
+        dispersion_request = self._dispersion_resource_request(systems, requests[0])
         if dispersion_request is not None:
             requests.append(dispersion_request)
         return plan_resources(
@@ -2541,6 +2640,10 @@ class Calculator:
         it as a context manager. It is not concurrently re-entrant.
         See :ref:`python-batch-errors` and :ref:`python-batch-ownership`."""
 
+        if getattr(self, "_provider_initialization_intent", None) is not None:
+            raise NotImplementedError(
+                "provider initialization intent does not admit batch execution"
+            )
         if not self._capabilities.supports_batch:
             raise NotImplementedError(
                 f"method {self._method_name!r} does not support prepared batches"
@@ -2974,6 +3077,10 @@ class Calculator:
         Method-specific response solves remain separate, while the reference,
         exact integral source and compatible correction-basis OVOV block are shared.
         """
+        if getattr(self, "_provider_initialization_intent", None) is not None:
+            raise NotImplementedError(
+                "provider initialization intent does not admit companion execution"
+            )
         names = tuple(companions)
         allowed = {"rhf"} if self._method_name == "mp2" else {"rhf", "mp2"}
         if self._method_name not in ("mp2", "ccsd(t)", "df-rccsd(t)", "df-ccsd(t)"):
@@ -3017,6 +3124,11 @@ class Calculator:
         component_outputs: dict[str, Result] | None = None,
     ) -> Result:
         """Execute under the retained context's transaction lock, when present."""
+        intent = getattr(self, "_provider_initialization_intent", None)
+        if intent is not None:
+            from ._provider_initialization_lifetime import require_no_pending_owner
+
+            require_no_pending_owner()
         if properties is None:
             properties = self._default_properties()
         if isinstance(properties, (str, bytes)):
@@ -3037,7 +3149,12 @@ class Calculator:
                 f"method {self._method_name!r} does not support properties: {names}"
             )
         unsupported_properties = requested_properties - supported_properties
-        if unsupported_properties:
+        # DFT forces are admitted by the prepared context after the actual
+        # basis, operators and linked derivative providers are known.
+        if unsupported_properties and not (
+            unsupported_properties == {"forces"}
+            and self._capabilities.family == "density_functional"
+        ):
             names = ", ".join(sorted(unsupported_properties))
             raise ValueError(
                 f"method {self._method_name!r} does not support properties: {names}"
@@ -3096,7 +3213,19 @@ class Calculator:
                     ks_transport_diagnostic=batch.ks_transport_diagnostics[0],
                     dispersion=item.dispersion,
                 )
-        if self._singlepoint_context is not None:
+        if getattr(self, "_provider_initialization_intent", None) is not None and (
+            multiplicity != 1 or resource_plan is not None
+        ):
+            raise NotImplementedError(
+                "provider intent does not admit unrestricted or ledger execution"
+            )
+        provider_transaction = None
+        if intent is not None:
+            from ._provider_initialization_lifetime import begin
+
+            provider_transaction = begin(self._library, self._singlepoint_context)
+            context = provider_transaction.context
+        elif self._singlepoint_context is not None:
             context = self._singlepoint_context.get(self._context_descriptor())
         else:
             context = ctypes.c_void_p()
@@ -3112,7 +3241,12 @@ class Calculator:
         ledger = None
         resource_prepare = None
         resource_diagnostics = None
+        primary_error: BaseException | None = None
+        if provider_transaction is not None:
+            provider_transaction.calculation = calculation
         try:
+            if provider_transaction is not None:
+                context = provider_transaction.open_context(self._context_descriptor())
             if (
                 resource_plan is not None
                 and resource_plan.requests[0].identity.backend == "cuda"
@@ -3129,6 +3263,8 @@ class Calculator:
             system = self._create_native_system(
                 context, native_atoms, charge, multiplicity
             )
+            if provider_transaction is not None:
+                provider_transaction.system = system
             if self._auxiliary_basis is not None:
                 auxiliary_system = self._create_native_system(
                     context,
@@ -3137,6 +3273,8 @@ class Calculator:
                     multiplicity,
                     self._auxiliary_basis,
                 )
+                if provider_transaction is not None:
+                    provider_transaction.auxiliary_system = auxiliary_system
             method_descriptor = self._method_descriptor(
                 auxiliary_system if auxiliary_system.value else None,
                 resource_plan=resource_plan,
@@ -3145,6 +3283,20 @@ class Calculator:
             )
 
             def prepare() -> typing.Any:
+                intent = getattr(self, "_provider_initialization_intent", None)
+                if intent is not None:
+                    from ._provider_initialization_native import (
+                        prepare as prepare_intent,
+                    )
+
+                    return prepare_intent(
+                        self._library,
+                        context,
+                        system,
+                        ctypes.byref(method_descriptor),
+                        ctypes.byref(calculation),
+                        intent,
+                    )
                 if resource_prepare is not None:
                     return resource_prepare(
                         context,
@@ -3359,14 +3511,21 @@ class Calculator:
                         else None,
                     )
             return native_result
+        except BaseException as error:
+            primary_error = error
+            raise
         finally:
-            if calculation.value:
-                self._library.generativeqc_calculation_destroy(calculation)
-            if system.value:
-                self._library.generativeqc_system_destroy(system)
-            if auxiliary_system.value:
-                self._library.generativeqc_system_destroy(auxiliary_system)
-            if self._singlepoint_context is None:
-                self._library.generativeqc_context_destroy(context)
-            if ledger is not None:
-                ledger.close()
+            if provider_transaction is not None:
+                provider_transaction.budget_lease = ledger
+                provider_transaction.close_preserving_primary(primary_error)
+            else:
+                if calculation.value:
+                    self._library.generativeqc_calculation_destroy(calculation)
+                if system.value:
+                    self._library.generativeqc_system_destroy(system)
+                if auxiliary_system.value:
+                    self._library.generativeqc_system_destroy(auxiliary_system)
+                if self._singlepoint_context is None:
+                    self._library.generativeqc_context_destroy(context)
+                if ledger is not None:
+                    ledger.close()

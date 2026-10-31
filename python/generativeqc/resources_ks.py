@@ -313,6 +313,10 @@ def _item_host_inventory(
     # descriptors and plan objects have a conservative LP64 value allowance.
     # Include fixed element-radius tables copied into method/grid/XC snapshots.
     metadata = 8192 + 512 * (a + s + p + n + c + orbital.get("ecp_terms", 0))
+    # Optional terminal DIIS readback: two uint64 counters and count/head.
+    # The matching device record is charged by the native state layout query.
+    if backend == "cuda" and os.environ.get("GENERATIVEQC_DF_PROGRESS_TRACE"):
+        metadata += 24
     # Shared native XC potential binding, including bounded preparation scratch.
     if backend == "cuda" and model.xc_schedule != "host_unfused":
         metadata += 16 << 10
@@ -749,6 +753,34 @@ def _cuda_stationary_descriptor(
     return descriptor
 
 
+def native_cuda_stationary_model_available(
+    library: typing.Any, model: typing.Any, **controls: typing.Any
+) -> bool:
+    """Discover a linked model through native policy before a molecule exists.
+
+    This upper bound is useful for Calculator output discovery. A real shape
+    still needs the capacity query and prepared-item capability; this function
+    neither probes CUDA nor substitutes a Python functional whitelist.
+    """
+    from . import _native
+
+    query = getattr(library, "generativeqc_ks_stationary_cuda_model_available_v1", None)
+    if query is None:
+        return False
+    descriptor = _cuda_stationary_descriptor(model, library=library, **controls)
+    available = ctypes.c_int()
+    query.argtypes = [
+        ctypes.POINTER(_native.MethodDescriptor),
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    query.restype = ctypes.c_int
+    status = query(ctypes.byref(descriptor), ctypes.byref(available))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return False
+    _native.check(library, status)
+    return bool(available.value)
+
+
 def _native_cuda_stationary_inventory(
     library: typing.Any, item: typing.Any, descriptor: typing.Any
 ) -> dict[str, int] | None:
@@ -770,7 +802,12 @@ def _native_cuda_stationary_inventory(
         item["grid_points"],
         orbital["maximum_angular"],
         orbital.get("ecp_terms", 0),
-        orbital.get("ecp_core_electrons", 0),
+        # Basis metadata retains one core count per atom; the native shape ABI
+        # takes their scalar total to distinguish ECP from all-electron owners.
+        sum(
+            checked_bytes(core, "ECP core electrons")
+            for core in orbital.get("ecp_core_electrons", ())
+        ),
     )
     shape = (ctypes.c_uint64 * len(dimensions))(
         *(checked_bytes(value, "CUDA KS stationary shape") for value in dimensions)
@@ -933,8 +970,6 @@ def ks_resource_request(
         raise NotImplementedError(
             "automatic CUDA KS requires strict-FP64 device-fused execution"
         )
-    if automatic_cuda and include_forces:
-        raise NotImplementedError("automatic CUDA KS forces are not qualified")
     if backend == "cuda" and model.has_nonlocal_correlation:
         raise NotImplementedError(
             "self-consistent nonlocal correlation currently requires CPU"
@@ -961,6 +996,22 @@ def ks_resource_request(
     for value in (energy_tolerance, density_tolerance, screening_tolerance):
         if not math.isfinite(value) or value <= 0:
             raise ValueError("KS numerical tolerances must be positive finite")
+    automatic_cuda_force_model = False
+    if automatic_cuda:
+        if library is None:
+            from . import _native
+
+            library = _native.load_library(device="cpu")
+        automatic_cuda_force_model = native_cuda_stationary_model_available(
+            library,
+            model,
+            precision=precision,
+            max_iterations=max_iterations,
+            diis_history=diis_history,
+            energy_tolerance=energy_tolerance,
+            density_tolerance=density_tolerance,
+            screening_tolerance=screening_tolerance,
+        )
     selected = _snapshot_basis(basis, basis_representation)
     cpu_forces = backend == "cpu" and (qualified_basis(selected) or include_forces)
     # Imported CPU tau uses the same four AO jets and dense potential matrices
@@ -1025,7 +1076,7 @@ def ks_resource_request(
         "screening_tolerance": screening_tolerance,
         "ks_options": model.to_payload(),
         "outputs": "energy+forces"
-        if (backend == "cuda" and not automatic_cuda) or cpu_forces
+        if (backend == "cuda" and (not automatic_cuda or include_forces)) or cpu_forces
         else "energy",
         "inventory_version": 1,
         "schedule": "ordinary-stream-round-robin"
@@ -1036,11 +1087,11 @@ def ks_resource_request(
     # Serialized generated-force ownership can retain the largest member's
     # arena across the next SCF replay. Charge exactly the execution policy's
     # maximum caps, including a mixed fleet's all-electron and ECP members.
-    # Automatic CUDA owners expose energy only and cannot retain a force
-    # arena. Do not charge unavailable force work to either host/device budget.
+    # A bounded automatic package may omit its force artifacts. Charge their
+    # retained owners only when native model discovery finds a complete graph.
     force_caps = tuple(
         (0, 0)
-        if automatic_cuda
+        if automatic_cuda and not automatic_cuda_force_model
         else ordinary_cuda_force_limits(
             item["atoms"],
             density_fitted=False,
@@ -1100,7 +1151,7 @@ def ks_resource_request(
         precision,
         json.dumps({"items": items}),
         ("energy", "forces")
-        if (backend == "cuda" and not automatic_cuda) or cpu_forces
+        if (backend == "cuda" and (not automatic_cuda or include_forces)) or cpu_forces
         else ("energy",),
         json.dumps(controls, sort_keys=True),
     )
@@ -1264,7 +1315,7 @@ def ks_resource_request(
                     raise NotImplementedError(
                         "native library lacks method precision transport"
                     )
-            if automatic_cuda:
+            if automatic_cuda and not automatic_cuda_force_model:
                 stationary = [None for _ in items]
             else:
                 descriptor = _cuda_stationary_descriptor(
@@ -1283,6 +1334,11 @@ def ks_resource_request(
                     for item in items
                 ]
             native_stationary = all(item is not None for item in stationary)
+            if automatic_cuda and include_forces and not native_stationary:
+                raise NotImplementedError(
+                    "automatic CUDA KS forces require a packaged native stationary "
+                    "profile and an admitted all-electron s/p FP64 context"
+                )
             if (
                 model.has_nondefault_composition
                 and not native_stationary
@@ -1366,8 +1422,9 @@ def ks_resource_request(
                 )
             )
             # The prepared force arena remains live during a later SCF replay.
-            # Keep its reservation persistent and add only actual setup excess
-            # to the transient phase model; preserve resident execution reuse.
+            # The native transient peak also includes ECP derivative scratch
+            # alongside live SCF owners. Add only its excess here; the force
+            # arena itself has a separate persistent reservation below.
             estimates.append(
                 ResourceEstimate(
                     "serialized KS transient device phase peak",

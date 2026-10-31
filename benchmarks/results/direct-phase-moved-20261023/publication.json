@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 12973,
+      "bytes": 13369,
       "path": "README.md",
       "role": "summary",
-      "sha256": "e4fd49f9fd5aed168fce4003494b9ba68d6c2f98a46f361a8d5932251fee2283"
+      "sha256": "3870a6799d05c45199953eb1c2e4fb23466307feedcc186dfa0210d48eb9696e"
     },
     {
       "bytes": 13040,
@@ -25,10 +25,10 @@
       "sha256": "f052bc9efeeefd5f250f09f6174c5ce10476f44665d867e6123a8e8cc3588e0f"
     },
     {
-      "bytes": 86687,
-      "path": "driver.patch",
+      "bytes": 18636,
+      "path": "driver.patch.xz",
       "role": "source-patch",
-      "sha256": "7103a0dac6e91f2824b737832f3ab619dcfccc8ec94a6a6d315cdd594d761fc3"
+      "sha256": "cb52cc42c2b0e4d660982a9717921e0cc56f9bdcc279128ddd0bf56db819ea6c"
     },
     {
       "bytes": 15200,

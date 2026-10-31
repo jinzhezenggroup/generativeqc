@@ -99,24 +99,76 @@ bool use_equal_spin_points(std::size_t spins) {
 """
 
 
-def emit_device_point_value() -> str:
+def emit_device_point_value(*, shared: bool = False) -> str:
     """Emit the existing physical E/vxc ABI, including the half-vtau coefficient."""
+    if shared:
+        return "using DevicePointValue = ::generativeqc::dft::DevicePointValue;\n"
     return _POINT_VALUE
 
 
-def emit_point_traversal() -> str:
+def emit_stationary_point_kernel(*, parameter_type: str | None = None) -> str:
+    """Publish the same point differential for a staged resident force tile.
+
+    Geometry already owns paired physical spin features, including the RKS
+    half-density embedding. Parameter workers pass the same immutable row used
+    by energy evaluation; the traversal and physical derivative layout agree.
+    """
+    source = r"""
+template <I feature_terms, class PointEvaluator>
+__global__ void stationary_evaluate_points(const double* features, std::size_t count,
+    DevicePointValue* output, int* error, const int* producer_error) {
+  const auto point = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (point >= count) return;
+  if ((producer_error && *producer_error) || *error) {
+    atomicExch(error, 1);
+    return;
+  }
+  double rho[2]{}, gradient[2][3]{}, tau[2]{};
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    rho[spin] = features[5 * spin * count + point];
+    if constexpr (feature_terms >= 4)
+      for (unsigned axis = 0; axis < 3; ++axis)
+        gradient[spin][axis] = features[(5 * spin + axis + 1) * count + point];
+    if constexpr (feature_terms == 5)
+      tau[spin] = features[(5 * spin + 4) * count + point];
+  }
+  const auto value = PointEvaluator::physical_point(0, rho, gradient, tau, 1.0, 1.0);
+  output[point] = value;
+  if (!value.valid) atomicCAS(error, 0, 3);
+}
+"""
+    if parameter_type is not None:
+        source = source.replace(
+            "const int* producer_error)",
+            f"const int* producer_error, {parameter_type} parameters)",
+        ).replace("physical_point(0,", "physical_point(parameters,")
+    return source
+
+
+def emit_point_traversal(*, parameter_type: str = "I") -> str:
     """Emit the one shared single/batched tile traversal for static providers.
 
     Native preparation validates spin/count/tile dimensions. A response provider
     supplies ``response_point``; an ordinary provider supplies ``physical_point``.
     Discarded response branches impose no response/fxc capability on the latter.
+    A private worker may carry a typed immutable parameter row instead of the
+    ordinary functional code; the physical traversal and output ABI are shared.
     """
-    return _POINT_TRAVERSAL
+    return _POINT_TRAVERSAL.replace("I functional", f"{parameter_type} functional")
 
 
-def emit_automatic_point_kernel() -> str:
-    """Emit an ordinary-provider entry without adding a curated kernel variant."""
-    return _AUTOMATIC_KERNEL
+def emit_automatic_point_kernel(
+    *, parameter_type: str = "I", name: str = "automatic_evaluate_points"
+) -> str:
+    """Emit a named entry with a functional code or private parameter row.
+
+    Distinct parameter-storage ABIs may name separate entries while sharing the
+    same physical traversal. Emitting a template does not instantiate a kernel;
+    the package owner selects exactly the entries needed by its launchers.
+    """
+    return _AUTOMATIC_KERNEL.replace(
+        "I functional", f"{parameter_type} functional"
+    ).replace("automatic_evaluate_points", name)
 
 
 def emit_equal_spin_point_selector() -> str:

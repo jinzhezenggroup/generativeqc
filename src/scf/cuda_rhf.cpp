@@ -462,6 +462,23 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics) {
   preflight_reference_provider_initialization(options.reference_provider_initialization,
                                               options.export_physical_reference);
+  const auto pending_resident_selection =
+      options.reference_provider_initialization_owner
+          ? reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"))
+          : ReferenceResidentValuesSelection::disabled;
+  if (options.reference_provider_initialization_owner) {
+    options.reference_provider_initialization_owner->require_current();
+    if (!options.export_physical_reference || unrestricted || systems.size() != 1 ||
+        !options.reference_provider_initialization_intent ||
+        options.reference_provider_initialization)
+      throw std::invalid_argument(
+          "pending provider intent requires one restricted physical reference");
+    if (pending_resident_selection == ReferenceResidentValuesSelection::forced)
+      throw ProviderInitializationUnavailable(
+          "forced transient resident source is outside pending-owner lifetime scope");
+    if (pending_resident_selection == ReferenceResidentValuesSelection::invalid)
+      throw std::invalid_argument("invalid reference resident-values selection");
+  }
   const runtime::ResidencyExecution residency_execution(runtime::ResidencyOwner::hf_bucket);
   using SourceRole = runtime::ResidencyRole;
   using SourceSite = runtime::ResidencySite;
@@ -803,6 +820,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
        plan.incremental_direct_jk != requested_incremental_direct_jk ||
        plan.incremental_diis_gram != requested_incremental_diis_gram ||
        plan.ordered_diis_gram != requested_ordered_diis_gram ||
+       plan.diis_work_enabled != diis_work_requested() ||
        plan.one_electron_value_mapping != cuda_policy::one_electron_value_mapping_requested() ||
        plan.mixed_precision_fock != requested_mixed_precision_fock ||
        plan.mixed_precision_fock_threshold !=
@@ -1003,6 +1021,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     plan.diis_history = diis_history;
     plan.incremental_diis_gram = requested_incremental_diis_gram;
     plan.ordered_diis_gram = requested_ordered_diis_gram;
+    plan.diis_work_enabled = diis_work_requested();
+    if (plan.diis_work_enabled) plan.diis_work_readback.resize(batch_size);
     plan.persistent_eri = requested_persistent_eri;
     plan.quartet_direct = requested_quartet_direct;
     plan.transformed_direct = requested_transformed_direct;
@@ -1178,8 +1198,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   plan.resident_previous_energy.clear();
   std::size_t reference_base_bytes = 0;
   const ReferenceProviders reference_providers{use_cublas, use_cusolver};
-  const auto reference_provider_allowance = provider_initialization_allowance(
-      options.reference_provider_initialization, reference_providers);
+  const auto reference_provider_allowance = declared_reference_provider_allowance(
+      options.reference_provider_initialization, options.reference_provider_initialization_intent,
+      reference_providers);
   if (options.export_physical_reference) {
     reference_base_bytes = reference_detail::base_capacity(layout.bytes, host, matrix_elements,
                                                            reference_provider_allowance,
@@ -1198,9 +1219,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     reference_base_bytes = reference_detail::check_capacity(
         reference_base_bytes, resources.reference_fock_correction_bytes_,
         options.reference_memory_budget_bytes);
+    reference_base_bytes = reference_detail::check_capacity(
+        reference_base_bytes, runtime::vector_bytes(plan.diis_work_readback),
+        options.reference_memory_budget_bytes);
     resources.reference_peak_bytes_ = reference_base_bytes;
   }
-  cudaError_t cuda_error = cudaSetDevice(device_id);
+  cudaError_t cuda_error = options.reference_provider_initialization_owner &&
+                                   options.reference_provider_initialization_owner->identity_bound()
+                               ? cudaSuccess
+                               : cudaSetDevice(device_id);
   if (cuda_error != cudaSuccess) {
     fill_global_failure(outputs, cuda_status(cuda_error));
     return outputs;
@@ -1238,7 +1265,18 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     plan.persistent_quartet_worker_blocks =
         direct_target.multiprocessor_count * direct_schedule.persistent_quartet_warps_per_sm;
   }
-  if (explicit_provider_initialization(options.reference_provider_initialization)) {
+  if (options.reference_provider_initialization_owner) {
+    const auto family = !reference_providers.solver
+                            ? std::optional<ProviderInitializationEigenFamily>{}
+                        : use_jacobi ? ProviderInitializationEigenFamily::jacobi_batched
+                        : ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd
+                            ? ProviderInitializationEigenFamily::xsyevd
+                            : ProviderInitializationEigenFamily::xsyev_batched;
+    auto& owner = *options.reference_provider_initialization_owner;
+    owner.bind_current(reference_providers, family);
+    resources.provider_initialization_ = owner.resolved();
+    resources.provider_identity_pins_ = owner.pins();
+  } else if (explicit_provider_initialization(options.reference_provider_initialization)) {
     const auto identity = runtime::observe_cuda_provider_identity(
         reference_providers.mask(), {reinterpret_cast<const void*>(&cudaRuntimeGetVersion),
                                      reinterpret_cast<const void*>(&cublasCreate),
@@ -1624,6 +1662,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   auto diis_raw_gram = plan.incremental_diis_gram
                            ? arena_pointer<double>(resources.arena_, layout.diis_raw_gram)
                            : nullptr;
+  auto diis_work = plan.diis_work_enabled
+                       ? arena_pointer<tensor::RingGramWork>(resources.arena_, layout.diis_work)
+                       : nullptr;
   auto diis_coefficients = arena_pointer<double>(resources.arena_, layout.diis_coefficients);
   auto diis_count = arena_pointer<std::uint32_t>(resources.arena_, layout.diis_count);
   auto diis_head = arena_pointer<std::uint32_t>(resources.arena_, layout.diis_head);
@@ -2133,8 +2174,13 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // and retires those graphs before freeing source values on every exit.
   std::unique_ptr<RhfResidentValues> resident_values;
   const auto resident_value_selection =
-      reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"));
+      options.reference_provider_initialization_owner
+          ? pending_resident_selection
+          : reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"));
+  // The opt-in owner retains the incumbent bounded producer, without a separate
+  // transient values/graph owner. Legacy resident-value selection is unchanged.
   const bool resident_value_requested =
+      !options.reference_provider_initialization_owner &&
       resident_value_selection != ReferenceResidentValuesSelection::disabled;
   // Finite public ledgers have no optional quartic reservation. Ordinary cold
   // solves use a small source domain qualified against their fused Fock path;
@@ -3098,6 +3144,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, cuda_status(cuda_error));
     return outputs;
   }
+  if (diis_work) {
+    // A replay/retry starts a fresh census; wraps and retirements within this
+    // solve retain their actual work instead of hiding discarded reductions.
+    std::fill(plan.diis_work_readback.begin(), plan.diis_work_readback.end(), DiisWorkReadback{});
+    cuda_error = cudaMemsetAsync(diis_work, 0, batch_size * sizeof(*diis_work), resources.stream_);
+    if (cuda_error != cudaSuccess) {
+      fill_global_failure(outputs, cuda_status(cuda_error));
+      return outputs;
+    }
+  }
   launch_initialize_state_kernel(blocks_for(batch_size), threads, 0, resources.stream_,
                                  static_cast<std::int32_t>(batch_size), cached_energy_baseline_hit,
                                  energy, active, converged, failed, iterations, previous_energy,
@@ -3505,7 +3561,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
           static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(nbf),
           unrestricted ? 2 : 1, static_cast<std::uint32_t>(diis_history), fock, residual, active,
           fock_history, residual_history, diis_linear_system, diis_coefficients, diis_count,
-          diis_head, eigensystem, diis_raw_gram);
+          diis_head, eigensystem, diis_raw_gram, false, diis_work);
     } else {
       const bool incremental_gram = plan.incremental_diis_gram;
       if (incremental_gram) {
@@ -4765,12 +4821,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                  ~explicit_generated_force_shell_class_mask
            : 0U) &
       ~(bounded_resident_psss_force_enabled ? (std::uint64_t{1} << kPsssShellClass) : 0U);
+  // Only the force registry can authorize a generated force consumer. Portable
+  // profiles also contain Fock-only classes, which must remain visible to the
+  // bounded correctness fallback. dddd is the sole Fock-advertised exception:
+  // launch_bounded_native_force below owns its independent native derivative.
   const std::uint64_t selected_force_shell_class_mask =
       (explicit_generated_force_shell_class_mask |
-       (bounded_direct_streaming
-            ? generated::enabled_fock_shell_class_mask() & kStreamingFockShellClassMask &
-                  ~kBoundedNativePagedForceShellClassMask
-            : 0U)) &
+       (bounded_direct_streaming ? generated::enabled_fock_shell_class_mask() & kDdddShellClassMask
+                                 : 0U)) &
       host_present_shell_class_mask;
   const std::uint64_t native_streaming_force_shell_class_mask =
       bounded_direct_streaming ? selected_force_shell_class_mask & kDdddShellClassMask &
@@ -4795,9 +4853,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const std::uint64_t bounded_force_legacy_queue_shell_class_mask =
       bounded_direct_count_diagnostic ? generated_queued_force_shell_class_mask
                                       : bounded_first_wave_force_shell_class_mask;
-  const std::uint64_t covered_force_shell_class_mask = generated_shell_class_mask |
-                                                       native_streaming_force_shell_class_mask |
-                                                       bounded_native_paged_force_shell_class_mask;
+  const std::uint64_t covered_force_shell_class_mask =
+      generated_shell_class_mask | native_streaming_force_shell_class_mask |
+      bounded_native_paged_force_shell_class_mask |
+      (bounded_resident_psss_force_enabled ? (std::uint64_t{1} << kPsssShellClass) : 0U);
   const std::uint64_t uncovered_force_shell_class_mask =
       host_present_shell_class_mask & ~covered_force_shell_class_mask;
   // A tuned compatible profile is a production qualification claim. Once all
@@ -5652,6 +5711,33 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       return outputs;
     }
   }
+  if (diis_work) {
+    // Queue bounded owner-retained destinations immediately before the existing
+    // terminal fence. No iteration or Graph-capture path reads counters on host.
+    for (std::size_t item = 0; item < batch_size && cuda_error == cudaSuccess; ++item) {
+      auto& receipt = plan.diis_work_readback[item];
+      cuda_error = runtime::residency_memcpy_async(
+          residency_execution, SourceRole::oracle, SourceSite::hf_profile, SourcePayload::none,
+          &receipt.work, diis_work + item, sizeof(receipt.work), cudaMemcpyDeviceToHost,
+          resources.stream_);
+      if (cuda_error == cudaSuccess)
+        cuda_error = runtime::residency_memcpy_async(
+            residency_execution, SourceRole::oracle, SourceSite::hf_profile, SourcePayload::none,
+            &receipt.count, diis_count + item, sizeof(receipt.count), cudaMemcpyDeviceToHost,
+            resources.stream_);
+      if (cuda_error == cudaSuccess)
+        cuda_error = runtime::residency_memcpy_async(
+            residency_execution, SourceRole::oracle, SourceSite::hf_profile, SourcePayload::none,
+            &receipt.head, diis_head + item, sizeof(receipt.head), cudaMemcpyDeviceToHost,
+            resources.stream_);
+    }
+    if (cuda_error != cudaSuccess) {
+      // A partial asynchronous read must drain before a failed owner can retire.
+      (void)cudaStreamSynchronize(resources.stream_);
+      fill_global_failure(outputs, cuda_status(cuda_error));
+      return outputs;
+    }
+  }
   cuda_error =
       runtime::residency_stream_synchronize(residency_execution, SourceRole::publication,
                                             SourceSite::hf_results_fence, resources.stream_);
@@ -5887,6 +5973,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       result.forces.assign(host_forces.begin() + atom_begin * 3,
                            host_forces.begin() + atom_end * 3);
     }
+    if (diis_work)
+      publish_diis_work(plan.diis_work_readback[system], unrestricted ? "UHF" : "RHF",
+                        reinterpret_cast<std::uintptr_t>(&plan), plan.execution_generation, system,
+                        nbf, static_cast<unsigned>(spin_count), diis_history,
+                        plan.ordered_diis_gram, plan.incremental_diis_gram, result.converged,
+                        host_failed[system] != 0, iteration_graphs.iteration_launches());
     output.status = host_failed[system] != 0
                         ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE
                         : (result.converged ? GENERATIVEQC_STATUS_SUCCESS

@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 60478,
-      "path": "evidence.json",
+      "bytes": 6855,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "653844045882f3ede516c42935288d25ba482972f5b81c33fb638d7c99e6b5df"
+      "sha256": "bfb51e2c57275748fcc8714fefe571913ad31b4edcf202a0635081186ce17ff0"
     },
     {
       "bytes": 23303,
@@ -25,10 +25,10 @@
       "sha256": "d0bcd9d30e738f961c2214604699e58423e0c8379d37f3613d23dcf6bd36aaa7"
     },
     {
-      "bytes": 41187,
-      "path": "source.patch",
+      "bytes": 9892,
+      "path": "source.patch.xz",
       "role": "source-patch",
-      "sha256": "28b896c0178756088aa1ef075f0ced709f15a9ab5d705eb84cdfcc2dd473fc7f"
+      "sha256": "b84974f0bcb2f0205b0188f34a5632737f83442dc19d141f34357e91e3e5f07f"
     },
     {
       "bytes": 28886,
@@ -113,6 +113,12 @@
       "path": "protocols/intrusive-primitive-96.json.gz",
       "role": "samples",
       "sha256": "7c97a2cbeb175ae3e5b86ecf2b50dd4f276fa0332bf7aa5cd2f2be578d194da8"
+    },
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 396,
+      "sha256": "3bfad046db8fe5f4559a6d3a6a55b8a72d0e45c56f647e0953db161c1aed219c"
     }
   ],
   "reproduction": {

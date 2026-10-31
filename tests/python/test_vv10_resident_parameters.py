@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 from test_nonlocal_host_staging_lifetime import PREFIX
 
 if TYPE_CHECKING:
@@ -54,10 +55,12 @@ def parameter_probe(
     tmp_path_factory: pytest.TempPathFactory, native_cxx: "NativeCxx"
 ) -> Path:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
-    body = source.split("Vv10CudaDeviceLayout vv10_cuda_device_layout(", 1)[1]
-    body = (
-        "Vv10CudaDeviceLayout vv10_cuda_device_layout("
-        + body.split("void execute_vv10_cuda(", 1)[0]
+    capacity = (ROOT / "src/dft/nonlocal_correlation/vv10_capacity.hpp").read_text()
+    body = "\n".join(
+        (
+            cpp_function_definition(capacity, "vv10_cuda_device_layout"),
+            cpp_function_definition(source, "enqueue_vv10_cuda_device"),
+        )
     )
     body = re.sub(r"<<<.*?>>>", "", body, flags=re.DOTALL)
     folder = tmp_path_factory.mktemp("vv10-parameter-admission")

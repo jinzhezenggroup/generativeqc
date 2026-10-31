@@ -33,9 +33,9 @@ SHAPE = {
 }
 
 
-@pytest.mark.parametrize("architecture", ["sm_80", "sm_89", "sm_120"])
+@pytest.mark.parametrize("architecture", ["sm_80", "sm_89", "sm_90", "sm_120"])
 @pytest.mark.parametrize("atoms", [1, 3, 6, 11, 12, 24, 32, 33, 48, 96, 128])
-def test_automatic_cooperation_is_limited_to_qualified_target_and_shape(
+def test_automatic_cooperation_follows_resource_caps_and_shape(
     architecture: str, atoms: int
 ) -> None:
     target = cuda_target_info(architecture)
@@ -46,9 +46,7 @@ def test_automatic_cooperation_is_limited_to_qualified_target_and_shape(
     generic = plan_stationary_cuda_resources(
         **shape, target=target, budget_bytes=1 << 30, cooperative_becke=False
     )
-    expected_threads = (
-        BECKE_COOPERATIVE_THREADS if architecture == "sm_120" and atoms >= 12 else 1
-    )
+    expected_threads = BECKE_COOPERATIVE_THREADS if atoms >= 12 else 1
     assert automatic.becke_threads_per_point == expected_threads
     assert generic.becke_threads_per_point == 1
     assert automatic.allocation_bytes == generic.allocation_bytes
@@ -160,6 +158,9 @@ def assert_native_allocation_contract(
 constexpr size_t stationary_spin_blocks=2, stationary_source_count=8;
 constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_scratch_bytes=16777216;
 """
+        + '#include "'
+        + str(ROOT / "src/runtime/bounded_workspace.hpp")
+        + '"\n'
         + function[0]
         + "\nint main() {\n"
         + "\n".join(checks)
@@ -170,12 +171,23 @@ for (size_t lanes : {size_t(0),size_t(4097),std::numeric_limits<size_t>::max()})
 }
 try { allocation(128,96,240,4096,256,2,2048); return 3; }
 catch (const std::invalid_argument&) {}
+// Molecular extents are dynamic; only actual scratch/task/index bounds reject.
 for (auto shape : {std::array<size_t,7>{129,96,240,256,256,2,256},
-                   {12,2049,240,256,256,2,256}, {12,96,16385,256,256,2,256},
-                   {12,96,240,4097,256,2,256}, {12,96,240,256,4097,2,256},
+                   {12,2049,240,256,256,2,256}, {12,96,16385,256,256,2,256}}) {
+  const auto na=shape[0], n=shape[1], primitives=shape[2];
+  const size_t expected=8*(2*primitives+4*n+22*256+(5+18*256+3*8)*na+1+3*256+4*n*n)+256;
+  if(allocation(na,n,primitives,256,256,2,256)!=expected) return 5;
+}
+for (auto shape : {std::array<size_t,7>{12,96,240,4097,256,2,256}, {12,96,240,256,4097,2,256},
                    {12,96,240,256,256,1,256}, {12,96,240,256,256,2,257}}) {
   try { allocation(shape[0],shape[1],shape[2],shape[3],shape[4],shape[5],shape[6]); return 4; }
   catch (const std::invalid_argument&) {}
+}
+for(size_t dimension : {size_t(0),size_t(1),size_t(2)}) {
+  auto shape=std::array<size_t,3>{12,96,240};
+  shape[dimension]=std::numeric_limits<size_t>::max();
+  try { allocation(shape[0],shape[1],shape[2],256,256,2,1); return 6; }
+  catch(const std::overflow_error&) {}
 }
 return 0;
 }
@@ -224,6 +236,9 @@ def assert_native_create_contract(
         + emit_binary_scaled_becke()
         + '#include "'
         + str(ROOT / "src/dft/becke_scaled_policy.hpp")
+        + '"\n'
+        + '#include "'
+        + str(ROOT / "src/runtime/bounded_workspace.hpp")
         + '"\n'
         + r"""
 #include <algorithm>

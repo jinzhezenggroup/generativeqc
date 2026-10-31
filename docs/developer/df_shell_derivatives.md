@@ -29,6 +29,14 @@ The auxiliary derivative follows from translation of the two independent
 orbital centers. Exponents, normalization and external response weights remain
 fixed in this derivative.
 
+The per-class CUDA units share compiler algebra and native execution templates.
+Their host dispatch signature alone does not establish a common device ABI:
+ordered Cartesian components, raised-first-center cache layout, Boys domain,
+Rys eligibility, schedule and precision policy remain class inputs. Swapping
+orbital centers additionally requires weight-index permutation and derivative
+slot restoration. The [offline AOT census](build.md#compiler-cache-generated-shards-and-compile-units)
+reports these distinctions without changing shell admission or kernel routing.
+
 The native runtime owns compact angular-class shell lists and AO offsets. It
 projects each shell block's public weights through the existing normalized
 sparse Cartesian expansions once. One generated subgroup traverses primitive shell
@@ -53,6 +61,13 @@ after the corresponding shell launches have been submitted successfully.
 | `warp` | 32 lanes per shell | 1 |
 | `packed` | 32 lanes per shell | Up to 4, bounded by shared storage |
 | `compact` | 4, 8, 16 or 32 lanes according to component count | Up to 128 threads, bounded by shared storage |
+
+The compiler resolves these policy choices separately for each angular class.
+Choices with identical complete cooperative ownership and storage share one
+CUDA execution specialization. All three selectors remain available, with the
+same launch dimensions and reductions. Moment/Rys algebra, strict/mixed
+arithmetic, screening and panel/packet execution retain their own contracts;
+an alias never crosses angular classes or changes production selection.
 
 `GENERATIVEQC_DF_PRIMITIVE_BUCKETS=on` splits each angular list by exact primitive
 count and launches homogeneous `(la, lb, lc, nprim_a, nprim_b, nprim_c)` products.

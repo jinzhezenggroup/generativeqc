@@ -265,14 +265,23 @@ cudaError_t dispatch_screening(double budget, Launch&& launch) {
   return launch.template operator()<Rys, false>();
 }
 
-/** Instantiate all supported schedules, independent of production-policy bytes. */
+/** Keep every policy choice, compiling equal resolved schedules only once.
+ * The compiler compares complete cooperative/storage contracts within a shell
+ * class. Algebra, screening and precision keep their own specializations; no
+ * launch dimensions, reduction order or strict-retry behavior are changed. */
 template <unsigned A, unsigned B, unsigned C, class Launch>
 cudaError_t dispatch_class(const DfShellLaunch& context, double budget, Launch&& launch) {
   auto variant = [&]<bool Rys, bool Screening>() -> cudaError_t {
     const auto arithmetic = [&]<bool Mixed>() -> cudaError_t {
-      if (context.variant == 0) return launch.template operator()<0, Rys, Screening, Mixed>();
-      if (context.variant == 1) return launch.template operator()<1, Rys, Screening, Mixed>();
-      if (context.variant == 2) return launch.template operator()<2, Rys, Screening, Mixed>();
+      if (context.variant == 0)
+        return launch.template
+        operator()<generated::Schedule<A, B, C, 0>::execution_variant, Rys, Screening, Mixed>();
+      if (context.variant == 1)
+        return launch.template
+        operator()<generated::Schedule<A, B, C, 1>::execution_variant, Rys, Screening, Mixed>();
+      if (context.variant == 2)
+        return launch.template
+        operator()<generated::Schedule<A, B, C, 2>::execution_variant, Rys, Screening, Mixed>();
       return cudaErrorInvalidValue;
     };
     // Strict Gaussian/root preparation dominates the s/p bra lowerings; their
@@ -281,8 +290,13 @@ cudaError_t dispatch_class(const DfShellLaunch& context, double budget, Launch&&
     // or calling a losing dtype path Fast. Independent kernel probes still
     // qualify every float class; this is an endpoint cost policy, not availability.
     constexpr bool mixed_contraction_preferred = A >= 2 || B >= 2;
-    return context.mixed && mixed_contraction_preferred ? arithmetic.template operator()<true>()
-                                                        : arithmetic.template operator()<false>();
+    // Discard the ineligible launch at template instantiation time. A normal
+    // conditional still instantiates its CUDA kernel, even when host dead-code
+    // elimination later removes the call. Keep private mixed-arithmetic probes
+    // independent of this production selection policy.
+    if constexpr (mixed_contraction_preferred)
+      if (context.mixed) return arithmetic.template operator()<true>();
+    return arithmetic.template operator()<false>();
   };
   if constexpr (generated::rys_available<A, B, C>)
     if (context.rys) return dispatch_screening<A, B, C, true>(budget, variant);

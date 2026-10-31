@@ -71,6 +71,38 @@ def initialize_from(
         raise ProjectionRejected(
             "only RHF/UHF occupied density projection is supported"
         )
+    from . import _fleet_projection_native
+
+    native = _fleet_projection_native.initialize(
+        target,
+        source,
+        policy=policy,
+        strict=strict,
+        maximum_host_bytes=maximum_host_bytes,
+        started=start,
+    )
+    if native is not None:
+        return native
+    return _initialize_from_compatibility(
+        target,
+        source,
+        policy=policy,
+        strict=strict,
+        maximum_host_bytes=maximum_host_bytes,
+        start=start,
+    )
+
+
+def _initialize_from_compatibility(
+    target: typing.Any,
+    source: typing.Any,
+    *,
+    policy: typing.Any,
+    strict: bool,
+    maximum_host_bytes: int,
+    start: float,
+) -> typing.Any:
+    """Explicit old-protocol/custom/unsupported preparation; never native retry."""
     count = target.system_count
     states = (_native.HfWarmState * count)(*(_descriptor() for _ in range(count)))
     storage, reports = [], []
@@ -161,29 +193,52 @@ def initialize_from(
                 raise ProjectionRejected(
                     "source density geometry differs from the target's ordered atoms"
                 )
-            options = {
-                "charge": target.charges[index],
-                "multiplicity": target.multiplicities[index],
-                "maximum_bytes": maximum_host_bytes,
-            }
-            ss = cross_overlap(source._calculator, source._calculator, atoms, **options)
-            tt = cross_overlap(target._calculator, target._calculator, atoms, **options)
-            ts = cross_overlap(target._calculator, source._calculator, atoms, **options)
-            occupations = (
-                [left["nalpha"], left["nbeta"]] if spins == 2 else [left["nalpha"]]
+            from . import _system_projection_native
+
+            native_projection = _system_projection_native.project(
+                target,
+                source,
+                index,
+                density,
+                policy=policy,
+                maximum_host_bytes=maximum_host_bytes,
+                retained_bytes=retained_bytes,
+                coordinate_count=state.coordinate_count,
             )
-            projected = [
-                project_density(
-                    ss,
-                    tt,
-                    ts,
-                    block,
-                    occupied_orbitals=occupied,
-                    occupation=1 if spins == 2 else 2,
-                    policy=policy,
+            if native_projection is not None:
+                projected, workspace = native_projection
+            else:
+                # Missing protocol/custom policy/unsupported domain retains the
+                # incumbent preparation explicitly. Native errors never retry it.
+                options = {
+                    "charge": target.charges[index],
+                    "multiplicity": target.multiplicities[index],
+                    "maximum_bytes": maximum_host_bytes,
+                }
+                ss = cross_overlap(
+                    source._calculator, source._calculator, atoms, **options
                 )
-                for block, occupied in zip(density, occupations, strict=True)
-            ]
+                tt = cross_overlap(
+                    target._calculator, target._calculator, atoms, **options
+                )
+                ts = cross_overlap(
+                    target._calculator, source._calculator, atoms, **options
+                )
+                occupations = (
+                    [left["nalpha"], left["nbeta"]] if spins == 2 else [left["nalpha"]]
+                )
+                projected = [
+                    project_density(
+                        ss,
+                        tt,
+                        ts,
+                        block,
+                        occupied_orbitals=occupied,
+                        occupation=1 if spins == 2 else 2,
+                        policy=policy,
+                    )
+                    for block, occupied in zip(density, occupations, strict=True)
+                ]
             proposal = np.ascontiguousarray([p.density for p in projected])
             report["spins"] = [asdict(p.diagnostics) for p in projected]
             report["projection_owners"] = [p.execution_owner for p in projected]
@@ -233,7 +288,7 @@ def initialize_from(
         "policy": asdict(policy),
         "items": reports,
         "seconds": time.perf_counter() - start,
-        "placement": "native CPU cross-overlap; per-spin projection_owners; native target seed import",
+        "placement": "per-item native/compatibility projection_owners; native target seed import",
         "target_verification": "pending_execute",
     }
     target._warm_state.projection_diagnostics = report

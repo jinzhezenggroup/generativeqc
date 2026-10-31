@@ -77,6 +77,9 @@ def test_shell_execution_and_return_to_generic(
     monkeypatch.setenv("GENERATIVEQC_DF_PRIMITIVE_BUCKETS", buckets)
     monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA", algebra)
     monkeypatch.setenv("GENERATIVEQC_DF_RAW_STAGING", staging)
+    # This matrix qualifies explicit scalar/BLAS panel work. Automatic occupied
+    # response has a different work ledger and is covered by endpoint tests.
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "panel")
     with calc.prepare_batch([atoms], multiplicities=[spin + 1]) as owner:
         owner.execute(properties=("energy", "forces"), strict=True)
         routes = [

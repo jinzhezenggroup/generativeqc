@@ -148,6 +148,15 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
     const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail);
+/** Publish resident RSH sources without changing the qualified radial schedule.
+ * The canonical split emits FullRangeJk followed by RangeCorrection on the same
+ * stream. Consumers reconstruct the SR/LR channels using their bound model.
+ * Other schedules emit RangeSeparatedJk directly. Every view expires when its
+ * callback returns, so consumers must enqueue their reads before reuse. */
+generativeqc_status consume_prepared_cuda_direct_rsh_energy_derivatives_device(
+    const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail);
 
 /** Fixed-density derivative of one independently prepared exact LongRange-K
  * correction. The coefficient and omega come exclusively from this owner's
@@ -158,6 +167,12 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
  * a different CUDA stream; a resident density pointer is not itself a lease.
  * Value-only Direct owners without retained first derivatives fail closed.
  */
+/** Device sink for the independently prepared exact LR correction. Only the
+ * LR source is consumed; the provider remains alive until the complete force drains. */
+generativeqc_status consume_prepared_cuda_direct_long_range_derivatives_device(
+    const PreparedFockPlan& correction, const double* density, const double* beta,
+    std::size_t matrix_elements, const CudaDerivativeSourceConsumer& consume, std::string& detail);
+
 generativeqc_status execute_prepared_cuda_direct_long_range_derivatives_device(
     const PreparedFockPlan& correction, const double* density, const double* beta,
     std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail);

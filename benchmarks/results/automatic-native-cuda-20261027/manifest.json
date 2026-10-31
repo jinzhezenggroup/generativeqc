@@ -1,0 +1,2437 @@
+{
+  "compiled_census": {
+    "archive": {
+      "bytes": 638954812,
+      "path": "build/full-auto-cuda/libgenerativeqc_native_stationary.a",
+      "sha256": "340f7d088ca585f3841469eff370f00c79a22138c3497acb1a7f8afe052f1697"
+    },
+    "build_elapsed_seconds": 926.877,
+    "compiler_launcher": {
+      "command_stream_sha256": "4185e053e29fd337d024e966159d616aecb9ea693edec4193092e9c4e2208f09",
+      "commands": 429,
+      "verified_launcher_commands": 429
+    },
+    "force": {
+      "maxima": {
+        "LOCAL": 0,
+        "REG": 255,
+        "SHARED": 10472,
+        "STACK": 1768
+      },
+      "raw": {
+        "bytes": 3288649,
+        "path": "evidence/full-native-force-resources.txt",
+        "sha256": "43285f6aab32b0efbfa47ef3aefd5bbbc62d027b7c0b6a83dd88122b2a91b20e"
+      },
+      "records": 11834,
+      "violations": 0
+    },
+    "force_objects": {
+      "count": 394,
+      "max_bytes": 1979032,
+      "total_bytes": 398123664
+    },
+    "installed": {
+      "build_library": {
+        "bytes": 775811576,
+        "path": "build/native-cuda/libgenerativeqc.so",
+        "sha256": "dc3554e8d713cac2a6be329d318fc0400bbf806e79d4b6ca5d4142fb0a04bd8b"
+      },
+      "cli": {
+        "bytes": 850056,
+        "path": "install/bin/generativeqc",
+        "sha256": "99674fca853cf168a9e0e592dcf8968e87973ebd321cf19274178f9e01b348ce"
+      },
+      "library": {
+        "bytes": 775811576,
+        "path": "install/lib/libgenerativeqc.so",
+        "sha256": "78433aae031df47a7d97767d86a002dbc5833957c29382d5a524f022c55c83ee"
+      }
+    },
+    "point": {
+      "maxima": {
+        "LOCAL": 0,
+        "REG": 255,
+        "SHARED": 0,
+        "STACK": 768
+      },
+      "raw": {
+        "bytes": 241831,
+        "path": "evidence/full-point-resources.txt",
+        "sha256": "b866c83503e219a20e61f30629e4f93340941ba97352dc30c0014ae5d867679b"
+      },
+      "records": 788,
+      "violations": 0
+    },
+    "point_objects": {
+      "count": 33,
+      "max_bytes": 9371072,
+      "total_bytes": 144591064
+    },
+    "shared_objects": {
+      "count": 2,
+      "max_bytes": 229951328,
+      "total_bytes": 229987776
+    }
+  },
+  "environment": {
+    "gpu_inventory": [
+      "0, NVIDIA GeForce RTX 5090, GPU-45f177f9-33ac-0e4e-f473-2beeaf6d413d, 580.95.05",
+      "1, NVIDIA GeForce RTX 5090, GPU-d0b9e1b7-2083-6198-da50-c3e55693691c, 580.95.05",
+      "2, NVIDIA GeForce RTX 5090, GPU-57db1e6a-5ff9-570d-67b0-6965fb3a77e6, 580.95.05",
+      "3, NVIDIA GeForce RTX 5090, GPU-d05490f6-a867-d1a0-f13f-8bf4b1116387, 580.95.05",
+      "4, NVIDIA GeForce RTX 5090, GPU-d79031c2-173e-535f-3563-5520bab0293b, 580.95.05",
+      "5, NVIDIA GeForce RTX 5090, GPU-9af5c15a-a02d-fa3e-fe5c-ceb8a0a80c68, 580.95.05",
+      "6, NVIDIA GeForce RTX 5090, GPU-8dcf7797-196e-8923-8015-b063eb6d928e, 580.95.05",
+      "7, NVIDIA GeForce RTX 5090, GPU-4c5ba19e-745a-9f56-6bf8-34d118bcc818, 580.95.05"
+    ],
+    "node": "node1",
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "slurm_job_id": "14662",
+    "visible_devices": "7"
+  },
+  "files": {
+    "README.md": {
+      "bytes": 9508,
+      "sha256": "c11ab737407e6ea0de11c79aa7a3a2398d786ecc0d1c8d12894442daeb86f760"
+    },
+    "aot-audit.json.gz": {
+      "bytes": 11617,
+      "sha256": "1ac959ceb45c19918473dcf70ac830095598ff24e1c81544a4355adf72a51f15"
+    },
+    "baseline-native-source.patch.xz": {
+      "bytes": 10992,
+      "sha256": "de596ff43fb8880c2e80077206231a0c5213380ed860ad8bbcf9c8e1f0f1c873"
+    },
+    "catalog.json.gz": {
+      "bytes": 97058,
+      "sha256": "d71ff3c2ff564b2c6a14dfd2e915137d4fa87097052f5118f85bfffc674b1e23"
+    },
+    "drivers/bench-native.py": {
+      "bytes": 3476,
+      "sha256": "b6dc7bf3f582892b2b5246d9db74c25908ddd30dce1ee6de73d7b892d735e4f9"
+    },
+    "drivers/bench-suite.py": {
+      "bytes": 1396,
+      "sha256": "3d738581d30c4b21c5466a077a7b3f04a603bad988ea6dac5f695341b0261aeb"
+    },
+    "drivers/build-full-aot-n1.sh": {
+      "bytes": 8458,
+      "sha256": "85fb9750349c2b277bbbba8d1b4509c8bd8ddfa287ec9027e79db4c0fcdfa490"
+    },
+    "drivers/build-n1.sh": {
+      "bytes": 2273,
+      "sha256": "29b18dc1c1e9d4af9ad5ddb33fc4c895820bf146c62cf9e6157c0825e19cd6ee"
+    },
+    "drivers/census-graphs.py": {
+      "bytes": 1488,
+      "sha256": "8562bf61cc518c6ab433f13998a3f0dcf99ec85187aa77753b916e8ddb3a3647"
+    },
+    "drivers/census-native.py": {
+      "bytes": 2678,
+      "sha256": "1e9442084530841164f84892cc05b257d89bda89f1fef83b4cea70ed1571e1d0"
+    },
+    "drivers/census-objects.py": {
+      "bytes": 4046,
+      "sha256": "8aeb7a53e31dd7e7d92e313dd00e49631c12ebb106cf484af26f4d44f3e01a0d"
+    },
+    "drivers/installed-cli.py": {
+      "bytes": 3888,
+      "sha256": "c1df02445d338a9a3e513b3bb843abaffd5be2be20b9ca279f225b40006faff3"
+    },
+    "drivers/rebind-forces.py": {
+      "bytes": 5405,
+      "sha256": "7dd1fb2b320f9b90212063caa4cb8a847cd7ee1c45168e7a281dd85d41ef6a61"
+    },
+    "drivers/review-source-reuse.py": {
+      "bytes": 2716,
+      "sha256": "390112117c8434f128d09bab532003dce8246bc7198641ea754bbbfc71157ccf"
+    },
+    "drivers/run-installed-n1.sh": {
+      "bytes": 766,
+      "sha256": "5dc509150950ab7d2f94e4ecb499d95a0f1b75b63b4674fff0ff8ff86c00b8be"
+    },
+    "drivers/run-performance-n1.sh": {
+      "bytes": 762,
+      "sha256": "90fd1739b0f4461a856ad6d746ca21f33cc2e8db3795442c9e55f9017a301fb4"
+    },
+    "drivers/run-rebind-n1.sh": {
+      "bytes": 766,
+      "sha256": "4b17760af8f26b2526baa84ff805284dcb2124ca92f93e5edf3adbe2e12d0914"
+    },
+    "drivers/run-regression-n1.sh": {
+      "bytes": 1090,
+      "sha256": "cc423b8dbefe671ba5b8fbdd03192416312867224bc0501f7e84226e167685ee"
+    },
+    "drivers/run-sanitizer-n1.sh": {
+      "bytes": 841,
+      "sha256": "3a1a18f10dbf7ee01337c7b95ce103e812ed9511e4d5636ea891272e7f5f6abf"
+    },
+    "drivers/sanitizer-force.py": {
+      "bytes": 1191,
+      "sha256": "72231e75cd2202686a4ccf3b9e80802dedeafbb9efd11a0186f230683102ae3c"
+    },
+    "executions.json.gz": {
+      "bytes": 63017,
+      "sha256": "33f7810deada560f97a523ac03cff1b94179f991f568fbbd96fe2ce8137a10a6"
+    },
+    "installed.json.gz": {
+      "bytes": 5158,
+      "sha256": "876c1925a327df47b754543ae8e2a7fefb1e49b260051110235aea59db36121b"
+    },
+    "performance.json.gz": {
+      "bytes": 58248,
+      "sha256": "8fe592cd588e6c2b733e3bd4e921f31cda269a695b26f15701def6008ba2b302"
+    },
+    "reference-native-source.patch.xz": {
+      "bytes": 47332,
+      "sha256": "74da7abc354cc3a8b6bf948c9d3b9e754570cba6d4b3540e6b4e83b160d40462"
+    },
+    "reference-reuse-source-review.json": {
+      "bytes": 13599,
+      "sha256": "6e23a0968199f9c3d57f5a7f5ab0aea65d7c5775e4a4c42b89c1a81691f70e58"
+    },
+    "references.json.gz": {
+      "bytes": 84937,
+      "sha256": "e2a20d246982369d2be1edb98e50aa825ae11b94447629d5c6b88c8b1e0c2b30"
+    },
+    "verify.py": {
+      "bytes": 7815,
+      "sha256": "ef9fbb696182a4fa0e6a95c9a84e2e8d2992f3ece4cb5db5188b88e179612017"
+    }
+  },
+  "full_source_transition": {
+    "current_directory": "/home/jzzeng/tmp/qc-1118-native-force-20261027/build/full-auto-cuda/generated/stationary_force",
+    "normalized_body_inventory_sha256": "2c211b6b2b8606fc68a14bbb7e29efadd31cacbfd9beb84632cbb85064e92410",
+    "only_identity_literal_changed": 394,
+    "previous_directory": "/home/jzzeng/tmp/qc-1118-native-force-20261027/evidence/reference-generated-force",
+    "profiles": 394,
+    "scope": "source comparison only; final objects/resources independently compiled and audited"
+  },
+  "limits": {
+    "center_energy_atol": 3e-09,
+    "force_atol": 3e-05,
+    "force_reexecution_parity_atol": 3e-08,
+    "local_bytes": 4096,
+    "performance_ratio": 1.05,
+    "registers": 255,
+    "shared_bytes": 49152,
+    "stack_bytes": 4096,
+    "translation_atol": 2e-08
+  },
+  "native_libraries": {
+    "baseline": "f330f4c787733482bf357e8e5c78d6f9b45395e87a15857e864beea55b881705",
+    "candidate": "dc3554e8d713cac2a6be329d318fc0400bbf806e79d4b6ca5d4142fb0a04bd8b",
+    "installed": "78433aae031df47a7d97767d86a002dbc5833957c29382d5a524f022c55c83ee"
+  },
+  "negative_evidence": [
+    {
+      "case": "initial LTA RKS replay",
+      "log": {
+        "bytes": 2143,
+        "sha256": "25158d2c8953863b9185fcb978ecc8cf51f1361c4fee7a0bf80ee1ab09621c37"
+      },
+      "resolution": "shared canonical proof; no tolerance relaxation",
+      "result": "1 failed, 24 passed; SCF nonconvergence after strict warm closure",
+      "status": "failed"
+    },
+    {
+      "case": "water-ion UKS correlation-only TPSS",
+      "diagnostic": {
+        "converged": false,
+        "energy": -66.35421562827928,
+        "history": [
+          {
+            "components": {
+              "hartree": 40.05959734937602,
+              "nuclear": 9.196584350515398,
+              "one_electron": -115.32199991755152,
+              "xc": -0.29061965337600354
+            },
+            "density_change_max": 0.012142812748205471,
+            "electrons": [
+              5.000000000000002,
+              3.9999999999999996
+            ],
+            "energy_change": 0.001115053951286475,
+            "iteration": 291,
+            "occupation_stabilized": false,
+            "physical_residual_max": 0.02130738683895207
+          },
+          {
+            "components": {
+              "hartree": 40.04539873930981,
+              "nuclear": 9.196584350515398,
+              "one_electron": -115.30867386040038,
+              "xc": -0.29056408735610817
+            },
+            "density_change_max": 0.03339164541330938,
+            "electrons": [
+              5.0000000000000036,
+              4.0
+            ],
+            "energy_change": 0.000816986895172055,
+            "iteration": 292,
+            "occupation_stabilized": false,
+            "physical_residual_max": 0.0206137462275944
+          },
+          {
+            "components": {
+              "hartree": 40.026749582245465,
+              "nuclear": 9.196584350515398,
+              "one_electron": -115.29372919019107,
+              "xc": -0.2905664787082915
+            },
+            "density_change_max": 0.20551615057467665,
+            "electrons": [
+              5.000000000000001,
+              4.000000000000003
+            ],
+            "energy_change": 0.003706878207227601,
+            "iteration": 293,
+            "occupation_stabilized": false,
+            "physical_residual_max": 0.019873104811744056
+          },
+          {
+            "components": {
+              "hartree": 39.59200963376554,
+              "nuclear": 9.196584350515398,
+              "one_electron": -114.9497722767137,
+              "xc": -0.2909224692975826
+            },
+            "density_change_max": 0.036227907482212836,
+            "electrons": [
+              5.000000000000001,
+              3.999999999999999
+            ],
+            "energy_change": 0.09113902559183562,
+            "iteration": 294,
+            "occupation_stabilized": false,
+            "physical_residual_max": 0.0065444039154625095
+          },
+          {
+            "components": {
+              "hartree": 39.62504570661686,
+              "nuclear": 9.196584350515398,
+              "one_electron": -114.9790291445045,
+              "xc": -0.29096759154981555
+            },
+            "density_change_max": 0.038261408899781975,
+            "electrons": [
+              5.0,
+              4.0
+            ],
+            "energy_change": 0.003734082808292986,
+            "iteration": 295,
+            "occupation_stabilized": false,
+            "physical_residual_max": 0.009912862294529706
+          },
+          {
+            "components": {
+              "hartree": 39.522432301070815,
+              "nuclear": 9.196584350515398,
+              "one_electron": -114.87669501749592,
+              "xc": -0.29045103409977513
+            },
+            "density_change_max": 0.20909690989941235,
+            "electrons": [
+              4.999999999999999,
+              4.000000000000001
+            ],
+            "energy_change": 0.0002372789125589097,
+            "iteration": 296,
+            "occupation_stabilized": false,
+            "physical_residual_max": 0.010805513558985774
+          },
+          {
+            "components": {
+              "hartree": 40.044117213129084,
+              "nuclear": 9.196584350515398,
+              "one_electron": -115.3075685874429,
+              "xc": -0.29055494403809384
+            },
+            "density_change_max": 0.013832898471982899,
+            "electrons": [
+              5.0000000000000036,
+              3.9999999999999996
+            ],
+            "energy_change": 0.09070743217297539,
+            "iteration": 297,
+            "occupation_stabilized": false,
+            "physical_residual_max": 0.021098961820463377
+          },
+          {
+            "components": {
+              "hartree": 40.059937812135324,
+              "nuclear": 9.196584350515398,
+              "one_electron": -115.32074195597714,
+              "xc": -0.2905800501405175
+            },
+            "density_change_max": 0.0021427157936333924,
+            "electrons": [
+              5.0,
+              4.000000000000001
+            ],
+            "energy_change": 0.002622124369571897,
+            "iteration": 298,
+            "occupation_stabilized": false,
+            "physical_residual_max": 0.02294342151892801
+          },
+          {
+            "components": {
+              "hartree": 40.07440542292836,
+              "nuclear": 9.196584350515398,
+              "one_electron": -115.33372240067632,
+              "xc": -0.29063164138817416
+            },
+            "density_change_max": 0.0031042179627514136,
+            "electrons": [
+              5.000000000000001,
+              4.000000000000001
+            ],
+            "energy_change": 0.001435574846205343,
+            "iteration": 299,
+            "occupation_stabilized": false,
+            "physical_residual_max": 0.024196781733465015
+          },
+          {
+            "components": {
+              "hartree": 40.05631719884967,
+              "nuclear": 9.196584350515398,
+              "one_electron": -115.31656801467454,
+              "xc": -0.2905491629697949
+            },
+            "density_change_max": 0.011162181968905937,
+            "electrons": [
+              5.000000000000001,
+              4.0
+            ],
+            "energy_change": 0.0008513596585308345,
+            "iteration": 300,
+            "occupation_stabilized": false,
+            "physical_residual_max": 0.02357026367195858
+          }
+        ],
+        "iterations": 300,
+        "name": "MGGA_C_TPSS"
+      },
+      "resolution": "not promoted; neutral-water p-AO transport and open-shell H4 remain distinct",
+      "status": "failed"
+    },
+    {
+      "case": "water-ion UKS correlation-only LDA",
+      "resolution": "not promoted",
+      "result": "Hcore SCF oscillation observed during fixture development; no original numeric trace retained",
+      "status": "failed"
+    },
+    {
+      "case": "first final report serialization",
+      "resolution": "serialize arrays explicitly and rerun command to exit 0",
+      "result": "ndarray JSON serialization failed after endpoint/sanitizer execution",
+      "status": "failed"
+    },
+    {
+      "case": "combined alias/closure test collection",
+      "resolution": "explicit fixture import; 84 passed",
+      "result": "83 passed, 1 fixture-registration error",
+      "status": "failed"
+    },
+    {
+      "case": "post-rebase force artifact identity",
+      "log": {
+        "bytes": 460,
+        "sha256": "a9505ccddfedb6786d0cf7b4bbbb6a885b4d2f0644422915f4af8cbfde1ead36"
+      },
+      "resolution": "explicit compiler-source review; 58 new endpoints with original independent references",
+      "status": "rejected"
+    }
+  ],
+  "original_build_artifacts": {
+    "evidence/force-matrix-source.tar.gz": "2211202f31388eee0b4992e5d78545745f7ec5af2d249c0bb56317eb154d04dc",
+    "evidence/libgenerativeqc-force-matrix.so": "f330f4c787733482bf357e8e5c78d6f9b45395e87a15857e864beea55b881705",
+    "evidence/libgenerativeqc-qualified-matrix.so": "4bf8158aa4a92fd3c22e49043816334a01a5b1676a4d181b2d1dd0f2ce00e83f",
+    "evidence/qualified-matrix-source.tar.gz": "797be73fc2f020b718b90e5c74db426d48d86809617bca3c3b3dee31597769bc"
+  },
+  "performance": [
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "iterations": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "mad_seconds": 0.0015213321894407272,
+          "maximum_seconds": 1.0839137397706509,
+          "median_seconds": 1.0823680981993675,
+          "minimum_seconds": 1.0793155431747437,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "iterations": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "mad_seconds": 0.0115797258913517,
+          "maximum_seconds": 1.0693013705313206,
+          "median_seconds": 1.0566463824361563,
+          "minimum_seconds": 1.044683050364256,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-rks:GGA_X_APBE",
+      "passed": true,
+      "phase": "cold",
+      "ratio": 0.9762357040954902
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "iterations": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "mad_seconds": 0.0003544073551893234,
+          "maximum_seconds": 0.5452964454889297,
+          "median_seconds": 0.5448198989033699,
+          "minimum_seconds": 0.5443789437413216,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "iterations": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "mad_seconds": 0.0017776265740394592,
+          "maximum_seconds": 0.5103692002594471,
+          "median_seconds": 0.508573429659009,
+          "minimum_seconds": 0.506340354681015,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-rks:GGA_X_APBE",
+      "passed": true,
+      "phase": "moved",
+      "ratio": 0.933470731672395
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 12,
+          "fock_builds": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "iterations": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "mad_seconds": 0.0004274807870388031,
+          "maximum_seconds": 0.24696991220116615,
+          "median_seconds": 0.23082700371742249,
+          "minimum_seconds": 0.23008403182029724,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 12,
+          "fock_builds": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "mad_seconds": 0.0015905778855085373,
+          "maximum_seconds": 0.2187698744237423,
+          "median_seconds": 0.19656232744455338,
+          "minimum_seconds": 0.19345451518893242,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-rks:GGA_X_APBE",
+      "passed": true,
+      "phase": "warm",
+      "ratio": 0.8515568987984794
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "iterations": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "mad_seconds": 0.010963276028633118,
+          "maximum_seconds": 0.8730476722121239,
+          "median_seconds": 0.8603935092687607,
+          "minimum_seconds": 0.8391183316707611,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "iterations": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "mad_seconds": 0.0013592280447483063,
+          "maximum_seconds": 0.8550980612635612,
+          "median_seconds": 0.8487058356404305,
+          "minimum_seconds": 0.847075629979372,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-rks:LDA_C_VWN_4",
+      "passed": true,
+      "phase": "cold",
+      "ratio": 0.9864158974905989
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "iterations": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "mad_seconds": 0.001092454418540001,
+          "maximum_seconds": 0.3107282482087612,
+          "median_seconds": 0.3040602430701256,
+          "minimum_seconds": 0.3025672063231468,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "iterations": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "mad_seconds": 0.0041350871324539185,
+          "maximum_seconds": 0.2966327890753746,
+          "median_seconds": 0.2923161964863539,
+          "minimum_seconds": 0.287738136947155,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-rks:LDA_C_VWN_4",
+      "passed": true,
+      "phase": "moved",
+      "ratio": 0.9613759218726167
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 12,
+          "fock_builds": [
+            2,
+            2,
+            11,
+            2,
+            2,
+            11,
+            2,
+            2,
+            11,
+            2,
+            2,
+            11
+          ],
+          "iterations": [
+            2,
+            2,
+            11,
+            2,
+            2,
+            11,
+            2,
+            2,
+            11,
+            2,
+            2,
+            11
+          ],
+          "mad_seconds": 0.010080711916089058,
+          "maximum_seconds": 0.36856819689273834,
+          "median_seconds": 0.17624746449291706,
+          "minimum_seconds": 0.16312237083911896,
+          "warm_fallbacks": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true
+          ]
+        },
+        "candidate": {
+          "count": 12,
+          "fock_builds": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "mad_seconds": 0.0004905704408884048,
+          "maximum_seconds": 0.16560722142457962,
+          "median_seconds": 0.14848881214857101,
+          "minimum_seconds": 0.14789815992116928,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-rks:LDA_C_VWN_4",
+      "passed": true,
+      "phase": "warm",
+      "ratio": 0.8425018344280261
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "iterations": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "mad_seconds": 0.0044442955404520035,
+          "maximum_seconds": 1.290029190480709,
+          "median_seconds": 1.2837194427847862,
+          "minimum_seconds": 1.2751622833311558,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "iterations": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "mad_seconds": 0.006322355940937996,
+          "maximum_seconds": 1.315364122390747,
+          "median_seconds": 1.2812526617199183,
+          "minimum_seconds": 1.273621205240488,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-rks:MGGA_X_LTA",
+      "passed": true,
+      "phase": "cold",
+      "ratio": 0.9980784110743725
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            23,
+            23,
+            23,
+            23
+          ],
+          "iterations": [
+            23,
+            23,
+            23,
+            23
+          ],
+          "mad_seconds": 0.0002607721835374832,
+          "maximum_seconds": 1.222679827362299,
+          "median_seconds": 1.2198324836790562,
+          "minimum_seconds": 1.21931878849864,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            22,
+            22,
+            22,
+            22
+          ],
+          "iterations": [
+            22,
+            22,
+            22,
+            22
+          ],
+          "mad_seconds": 0.0006532855331897736,
+          "maximum_seconds": 1.1764538884162903,
+          "median_seconds": 1.1748660430312157,
+          "minimum_seconds": 1.173593983054161,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-rks:MGGA_X_LTA",
+      "passed": true,
+      "phase": "moved",
+      "ratio": 0.9631372001897996
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 12,
+          "fock_builds": [
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12
+          ],
+          "iterations": [
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12
+          ],
+          "mad_seconds": 0.0003461446613073349,
+          "maximum_seconds": 0.9358154945075512,
+          "median_seconds": 0.9339403938502073,
+          "minimum_seconds": 0.9328051060438156,
+          "warm_fallbacks": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        "candidate": {
+          "count": 12,
+          "fock_builds": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "mad_seconds": 0.0002489164471626282,
+          "maximum_seconds": 0.20832880586385727,
+          "median_seconds": 0.20537767373025417,
+          "minimum_seconds": 0.20505890250205994,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-rks:MGGA_X_LTA",
+      "passed": true,
+      "phase": "warm",
+      "ratio": 0.21990447686235773
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "iterations": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "mad_seconds": 0.0006843749433755875,
+          "maximum_seconds": 1.2284963987767696,
+          "median_seconds": 1.2277750242501497,
+          "minimum_seconds": 1.2236104682087898,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "iterations": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "mad_seconds": 0.011760244145989418,
+          "maximum_seconds": 1.209264863282442,
+          "median_seconds": 1.1974907200783491,
+          "minimum_seconds": 1.185167483985424,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-uks:GGA_X_APBE",
+      "passed": true,
+      "phase": "cold",
+      "ratio": 0.9753339955825405
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "iterations": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "mad_seconds": 0.009847031906247139,
+          "maximum_seconds": 0.668823454529047,
+          "median_seconds": 0.6587242316454649,
+          "minimum_seconds": 0.6482127383351326,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "iterations": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "mad_seconds": 0.011195717379450798,
+          "maximum_seconds": 0.636413250118494,
+          "median_seconds": 0.6233491748571396,
+          "minimum_seconds": 0.6096316426992416,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-uks:GGA_X_APBE",
+      "passed": true,
+      "phase": "moved",
+      "ratio": 0.9462976233621163
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 12,
+          "fock_builds": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "iterations": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "mad_seconds": 0.00042457692325115204,
+          "maximum_seconds": 0.23985842242836952,
+          "median_seconds": 0.2372344769537449,
+          "minimum_seconds": 0.23633943870663643,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 12,
+          "fock_builds": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "mad_seconds": 0.0009131412953138351,
+          "maximum_seconds": 0.20074062794446945,
+          "median_seconds": 0.19971834123134613,
+          "minimum_seconds": 0.1971704140305519,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-uks:GGA_X_APBE",
+      "passed": true,
+      "phase": "warm",
+      "ratio": 0.8418605246415616
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            15,
+            15,
+            15,
+            15
+          ],
+          "iterations": [
+            15,
+            15,
+            15,
+            15
+          ],
+          "mad_seconds": 0.0057252272963523865,
+          "maximum_seconds": 1.0169411078095436,
+          "median_seconds": 1.0059788152575493,
+          "minimum_seconds": 1.000072281807661,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            14,
+            14,
+            14,
+            14
+          ],
+          "iterations": [
+            14,
+            14,
+            14,
+            14
+          ],
+          "mad_seconds": 0.011216990649700165,
+          "maximum_seconds": 1.0118909180164337,
+          "median_seconds": 0.9967590980231762,
+          "minimum_seconds": 0.9823077209293842,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-uks:LDA_C_VWN_4",
+      "passed": true,
+      "phase": "cold",
+      "ratio": 0.990835078140276
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "iterations": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "mad_seconds": 0.008557723835110664,
+          "maximum_seconds": 0.42129093781113625,
+          "median_seconds": 0.4122608248144388,
+          "minimum_seconds": 0.40268437564373016,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "iterations": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "mad_seconds": 0.007262011989951134,
+          "maximum_seconds": 0.4137452803552151,
+          "median_seconds": 0.3921455964446068,
+          "minimum_seconds": 0.3829754404723644,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-uks:LDA_C_VWN_4",
+      "passed": true,
+      "phase": "moved",
+      "ratio": 0.9512075192230889
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 12,
+          "fock_builds": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "iterations": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "mad_seconds": 0.0006160978227853775,
+          "maximum_seconds": 0.20248452201485634,
+          "median_seconds": 0.18460134975612164,
+          "minimum_seconds": 0.18369365856051445,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 12,
+          "fock_builds": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "mad_seconds": 0.0023144371807575226,
+          "maximum_seconds": 0.19894888997077942,
+          "median_seconds": 0.16629246063530445,
+          "minimum_seconds": 0.16300836950540543,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-uks:LDA_C_VWN_4",
+      "passed": true,
+      "phase": "warm",
+      "ratio": 0.9008193106659014
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            28,
+            28,
+            28,
+            28
+          ],
+          "iterations": [
+            28,
+            28,
+            28,
+            28
+          ],
+          "mad_seconds": 0.0013248827308416367,
+          "maximum_seconds": 2.0683285109698772,
+          "median_seconds": 2.0660331398248672,
+          "minimum_seconds": 2.0520151630043983,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            28,
+            28,
+            28,
+            28
+          ],
+          "iterations": [
+            28,
+            28,
+            28,
+            28
+          ],
+          "mad_seconds": 0.007164988666772842,
+          "maximum_seconds": 2.0678123869001865,
+          "median_seconds": 2.0587628465145826,
+          "minimum_seconds": 2.051262926310301,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-uks:MGGA_X_LTA",
+      "passed": true,
+      "phase": "cold",
+      "ratio": 0.9964810374189347
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            14,
+            14,
+            14,
+            14
+          ],
+          "iterations": [
+            14,
+            14,
+            14,
+            14
+          ],
+          "mad_seconds": 0.0004174746572971344,
+          "maximum_seconds": 0.8449428305029869,
+          "median_seconds": 0.8442436791956425,
+          "minimum_seconds": 0.8435602262616158,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            14,
+            14,
+            14,
+            14
+          ],
+          "iterations": [
+            14,
+            14,
+            14,
+            14
+          ],
+          "mad_seconds": 0.0001556091010570526,
+          "maximum_seconds": 0.8448938205838203,
+          "median_seconds": 0.844587029889226,
+          "minimum_seconds": 0.8443968892097473,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-uks:MGGA_X_LTA",
+      "passed": true,
+      "phase": "moved",
+      "ratio": 1.0004066961968974
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 12,
+          "fock_builds": [
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28
+          ],
+          "iterations": [
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28,
+            28
+          ],
+          "mad_seconds": 0.0006937384605407715,
+          "maximum_seconds": 1.7590760961174965,
+          "median_seconds": 1.7411577515304089,
+          "minimum_seconds": 1.7392390258610249,
+          "warm_fallbacks": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        "candidate": {
+          "count": 12,
+          "fock_builds": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "mad_seconds": 0.0002925507724285126,
+          "maximum_seconds": 0.23094716668128967,
+          "median_seconds": 0.21019233018159866,
+          "minimum_seconds": 0.20981818810105324,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "libxc-uks:MGGA_X_LTA",
+      "passed": true,
+      "phase": "warm",
+      "ratio": 0.12071986584607163
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "iterations": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "mad_seconds": 0.0008607115596532822,
+          "maximum_seconds": 0.20903006941080093,
+          "median_seconds": 0.2078111432492733,
+          "minimum_seconds": 0.2065446600317955,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "iterations": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "mad_seconds": 0.002519013360142708,
+          "maximum_seconds": 0.21525466442108154,
+          "median_seconds": 0.21235387213528156,
+          "minimum_seconds": 0.20680197700858116,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "pbe-rks",
+      "passed": true,
+      "phase": "cold",
+      "ratio": 1.0218598907401186
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "iterations": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "mad_seconds": 0.0003264583647251129,
+          "maximum_seconds": 0.20585773140192032,
+          "median_seconds": 0.2014901265501976,
+          "minimum_seconds": 0.20108111575245857,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "iterations": [
+            9,
+            9,
+            9,
+            9
+          ],
+          "mad_seconds": 0.0003554355353116989,
+          "maximum_seconds": 0.20266058295965195,
+          "median_seconds": 0.20128024369478226,
+          "minimum_seconds": 0.20069190114736557,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "pbe-rks",
+      "passed": true,
+      "phase": "moved",
+      "ratio": 0.998958346699122
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 12,
+          "fock_builds": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "mad_seconds": 8.208490908145905e-05,
+          "maximum_seconds": 0.06136501207947731,
+          "median_seconds": 0.061167240142822266,
+          "minimum_seconds": 0.0610034242272377,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 12,
+          "fock_builds": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "mad_seconds": 0.00010028481483459473,
+          "maximum_seconds": 0.06136026978492737,
+          "median_seconds": 0.06113048270344734,
+          "minimum_seconds": 0.06101950630545616,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "pbe-rks",
+      "passed": true,
+      "phase": "warm",
+      "ratio": 0.9993990665707804
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "iterations": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "mad_seconds": 0.010550133883953094,
+          "maximum_seconds": 0.339798204600811,
+          "median_seconds": 0.32895267754793167,
+          "minimum_seconds": 0.31241489946842194,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "iterations": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "mad_seconds": 0.020034220069646835,
+          "maximum_seconds": 0.35861091688275337,
+          "median_seconds": 0.3297327999025583,
+          "minimum_seconds": 0.30943023413419724,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "pbe-uks",
+      "passed": true,
+      "phase": "cold",
+      "ratio": 1.0023715336821144
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 4,
+          "fock_builds": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "iterations": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "mad_seconds": 0.000544445589184761,
+          "maximum_seconds": 0.2952992878854275,
+          "median_seconds": 0.28917843475937843,
+          "minimum_seconds": 0.2884708121418953,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 4,
+          "fock_builds": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "iterations": [
+            12,
+            12,
+            12,
+            12
+          ],
+          "mad_seconds": 0.0015931520611047745,
+          "maximum_seconds": 0.291949812322855,
+          "median_seconds": 0.2896753791719675,
+          "minimum_seconds": 0.2874049246311188,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "pbe-uks",
+      "passed": true,
+      "phase": "moved",
+      "ratio": 1.0017184698195167
+    },
+    {
+      "arms": {
+        "baseline": {
+          "count": 12,
+          "fock_builds": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "iterations": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "mad_seconds": 0.00012569129467010498,
+          "maximum_seconds": 0.11348116770386696,
+          "median_seconds": 0.11315277591347694,
+          "minimum_seconds": 0.11297890171408653,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "candidate": {
+          "count": 12,
+          "fock_builds": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "iterations": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "mad_seconds": 0.00024054571986198425,
+          "maximum_seconds": 0.11260516569018364,
+          "median_seconds": 0.11217616125941277,
+          "minimum_seconds": 0.11187281459569931,
+          "warm_fallbacks": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "method": "pbe-uks",
+      "passed": true,
+      "phase": "warm",
+      "ratio": 0.9913690614642017
+    }
+  ],
+  "raw_streams": {
+    "final-force-full.log": {
+      "bytes": 127,
+      "sha256": "93aae15eae8664f10f1520227bd85515f234fbc3ed1c52b9442be638ba198da2"
+    },
+    "final-force-replay.log": {
+      "bytes": 126,
+      "sha256": "3ae07eee0a8805f04fe06c6adb6813d2c6ce70adeedbfb330a15eb8b30b055b8"
+    },
+    "final-regression.log": {
+      "bytes": 8097,
+      "sha256": "8ad9f8e6c62aeb9e4d27bde8cb09e7d036b624d6f4c3c5e444438785c53fbd62"
+    },
+    "force-memcheck.log": {
+      "bytes": 2404,
+      "sha256": "7fe6e238091ced5d62b8f6fdb8127f554cfae9c64202e08419bb302a6d39c33a"
+    },
+    "full-build.log": {
+      "bytes": 3675943,
+      "sha256": "c59fc05ca30b63e263dfcc5d1614f077344a7ab56a468db9a6b894d34ef50de1"
+    },
+    "full-configure.log": {
+      "bytes": 275,
+      "sha256": "2841071f64fe7a304addebf13ff8e9e74473f097be95fb3416bf888ca20d595b"
+    },
+    "installed-cli.log": {
+      "bytes": 685,
+      "sha256": "d83b271cf5405449c8cc288b5f2a9e4263e8f0c4f7a78c05f49cd5ccb0dbdbde"
+    },
+    "performance.log": {
+      "bytes": 86,
+      "sha256": "9c2d62f3526251abbf466cde8edd42cc1945ca0419979fc4be7b420701a96fe3"
+    },
+    "rebind-forces.log": {
+      "bytes": 1570,
+      "sha256": "220b83a1ad579eaa384a421c21ebd246833e9c9229ef7b969a3b18bb636496fd"
+    }
+  },
+  "schema": "generativeqc.native-automatic-cuda-qualification.v1",
+  "shared_cache_observations": {
+    "after": {
+      "raw": {
+        "bytes": 2028,
+        "sha256": "130d8e1b5316d3767ec073959c3aa07f8ef5d535b0cae1221ba1ff5fcf621cc6"
+      },
+      "values": {
+        "Average cache read hit": "0.004 s",
+        "Average cache write": "0.005 s",
+        "Average compiler": "12.799 s",
+        "Base directories": "(none)",
+        "Cache errors": "16",
+        "Cache errors (C/C++)": "15",
+        "Cache errors (CUDA)": "1",
+        "Cache hits": "44462",
+        "Cache hits (C/C++)": "6676",
+        "Cache hits (CUBIN)": "15785",
+        "Cache hits (CUDA (Device code))": "6166",
+        "Cache hits (CUDA)": "9734",
+        "Cache hits (PTX)": "6101",
+        "Cache hits rate": "24.29 %",
+        "Cache hits rate (C/C++)": "16.36 %",
+        "Cache hits rate (CUBIN)": "44.39 %",
+        "Cache hits rate (CUDA (Device code))": "17.33 %",
+        "Cache hits rate (CUDA)": "27.37 %",
+        "Cache hits rate (PTX)": "17.15 %",
+        "Cache location": "Local disk: \"/home/jzzeng/.cache/sccache\"",
+        "Cache misses": "138614",
+        "Cache misses (C/C++)": "34127",
+        "Cache misses (CUBIN)": "19778",
+        "Cache misses (CUDA (Device code))": "29410",
+        "Cache misses (CUDA)": "25829",
+        "Cache misses (PTX)": "29470",
+        "Cache read errors": "0",
+        "Cache size": "10 GiB",
+        "Cache timeouts": "0",
+        "Cache write errors": "0",
+        "Compilation failures": "70",
+        "Compilations": "174177",
+        "Compile requests": "76572",
+        "Compile requests executed": "218725",
+        "Failed distributed compilations": "0",
+        "Forced recaches": "4",
+        "Max cache size": "10 GiB",
+        "Non-cacheable calls": "0",
+        "Non-cacheable compilations": "35563",
+        "Non-compilation calls": "143",
+        "Unsupported compiler calls": "0",
+        "Use direct/preprocessor mode?": "yes",
+        "Version (client)": "0.16.0"
+      }
+    },
+    "before": {
+      "raw": {
+        "bytes": 2028,
+        "sha256": "0e492db359c5adfa320c553cf13fc4ed41ba6e2a37d12c83afb93a598718b2e6"
+      },
+      "values": {
+        "Average cache read hit": "0.004 s",
+        "Average cache write": "0.005 s",
+        "Average compiler": "12.862 s",
+        "Base directories": "(none)",
+        "Cache errors": "16",
+        "Cache errors (C/C++)": "15",
+        "Cache errors (CUDA)": "1",
+        "Cache hits": "44293",
+        "Cache hits (C/C++)": "6676",
+        "Cache hits (CUBIN)": "15616",
+        "Cache hits (CUDA (Device code))": "6166",
+        "Cache hits (CUDA)": "9734",
+        "Cache hits (PTX)": "6101",
+        "Cache hits rate": "24.40 %",
+        "Cache hits rate (C/C++)": "16.36 %",
+        "Cache hits rate (CUBIN)": "44.40 %",
+        "Cache hits rate (CUDA (Device code))": "17.53 %",
+        "Cache hits rate (CUDA)": "27.68 %",
+        "Cache hits rate (PTX)": "17.34 %",
+        "Cache location": "Local disk: \"/home/jzzeng/.cache/sccache\"",
+        "Cache misses": "137207",
+        "Cache misses (C/C++)": "34127",
+        "Cache misses (CUBIN)": "19553",
+        "Cache misses (CUDA (Device code))": "29016",
+        "Cache misses (CUDA)": "25435",
+        "Cache misses (PTX)": "29076",
+        "Cache read errors": "0",
+        "Cache size": "10 GiB",
+        "Cache timeouts": "0",
+        "Cache write errors": "0",
+        "Compilation failures": "70",
+        "Compilations": "172376",
+        "Compile requests": "76178",
+        "Compile requests executed": "216755",
+        "Failed distributed compilations": "0",
+        "Forced recaches": "4",
+        "Max cache size": "10 GiB",
+        "Non-cacheable calls": "0",
+        "Non-cacheable compilations": "35169",
+        "Non-compilation calls": "143",
+        "Unsupported compiler calls": "0",
+        "Use direct/preprocessor mode?": "yes",
+        "Version (client)": "0.16.0"
+      }
+    }
+  },
+  "source": {
+    "base": "cd9ad801b09225d923ae5e2995c70274f76a50cf",
+    "baseline_native_patch_base": {
+      "first_apply": "reference-native-source.patch",
+      "revision": "4fb1bcde754cc145d8485682e7a87f53ba6439d3"
+    },
+    "dirty_native_code": false,
+    "later_changes": "audit/test/evidence only",
+    "reference_native_patch_base": "4fb1bcde754cc145d8485682e7a87f53ba6439d3",
+    "revision": "4fb1bcde754cc145d8485682e7a87f53ba6439d3"
+  },
+  "source_census": {
+    "canonical_graphs": {
+      "derivative_roots": 1045,
+      "maximum_derivative_ssa_nodes": 1282,
+      "maximum_energy_nodes": 351,
+      "worker_layouts": 231
+    },
+    "families": {
+      "GGA": 99,
+      "LDA": 34,
+      "MGGA": 64
+    },
+    "force": {
+      "largest_source_bytes": 413893,
+      "source_bytes": 60153143,
+      "unique_sources": 394,
+      "variants": 394
+    },
+    "generation_seconds": 246.92691996786743,
+    "point": {
+      "largest_source_bytes": 288389,
+      "source_bytes": 21755951,
+      "unique_sources": 625,
+      "variants": 788
+    }
+  },
+  "source_census_origin": "reference-native source reconstruction; canonical graph census on final native-code head; compiled census and executed artifacts are final-head builds",
+  "test_outcomes": {
+    "current_force_requalification": "58 passed; Slurm 14660",
+    "current_installed_cli": "22 passed + omitted provider rejected; Slurm 14661",
+    "current_memcheck": "0 errors, 0 bytes leaked; Slurm 14656",
+    "current_performance": "320 endpoints, 24/24 <= 5% regression; Slurm 14662",
+    "current_regression": "native DFT + KS, 91 automatic energy, 4 resource/failure tests passed; Slurm 14654",
+    "earlier_policy": "6 real profile reconfiguration tests passed",
+    "host": "343 passed + 12 subtests; 84 artifact/closure/alias tests; 4 focused CLI CTests",
+    "independent_reference_matrix": "22 full-vector + 12 lifecycle tests; 58 endpoints, 300 FD directions"
+  },
+  "toolchain": {
+    "architecture": "sm_120 real cubin",
+    "build_type": "Release",
+    "cmake": "4.4.4",
+    "cuda_compile_jobs": 16,
+    "cxx": "GCC 13.3.0",
+    "libxc": "7.0.0",
+    "ninja": "1.13.2.git.kitware.jobserver-pipe-1",
+    "nvcc": "12.9.86",
+    "pyscf": "2.14.0",
+    "sccache": "0.16.0",
+    "split_compile_threads": 2
+  }
+}

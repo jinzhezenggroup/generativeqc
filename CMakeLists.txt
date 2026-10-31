@@ -34,6 +34,24 @@ if(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA)
 endif()
 option(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT
        "Build experimental automatic semilocal CUDA E/vxc AOT plumbing" OFF)
+set(_generativeqc_parameter_sharing_default OFF)
+if(GENERATIVEQC_ENABLE_CUDA AND GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
+  set(_generativeqc_parameter_sharing_default ON)
+endif()
+option(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS
+       "Share compatible CUDA workers with immutable coefficients"
+       ${_generativeqc_parameter_sharing_default})
+set(GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY "discover" CACHE STRING
+    "XC parameter sharing policy: discover compatible workers or retain legacy qualified groups")
+set_property(CACHE GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY PROPERTY STRINGS qualified discover)
+if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY MATCHES "^(qualified|discover)$")
+  message(FATAL_ERROR "Automatic CUDA XC parameter policy must be qualified or discover")
+endif()
+if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS AND
+   (NOT GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT OR NOT GENERATIVEQC_ENABLE_CUDA))
+  message(FATAL_ERROR
+    "GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS requires CUDA and automatic CUDA AOT")
+endif()
 set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS "" CACHE STRING
     "Semicolon-separated automatic CUDA AOT registrations; empty selects the opt-in full catalog")
 if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
@@ -76,6 +94,10 @@ option(GENERATIVEQC_CUDA_SEPARABLE_COMPILATION
        "Enable CUDA relocatable device code and the device-link stage" OFF)
 option(GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK
        "Share native direct numerical code through a bounded NVIDIA device link" ON)
+option(GENERATIVEQC_PRUNE_CUDA_ARCHIVES
+       "Prune resolved CUDA link inputs from private host-link archive copies" ON)
+option(GENERATIVEQC_COMPRESS_CUDA_FATBINS
+       "Compress NVIDIA device images (smaller files, additional first-load work)" OFF)
 option(GENERATIVEQC_CUDA_FAST_COMPILE
        "Use compiler-oriented CUDA options (never for release measurements)" OFF)
 option(GENERATIVEQC_ENABLE_CXX_PCH
@@ -90,6 +112,8 @@ set(GENERATIVEQC_CUDA_COMPILE_JOBS "" CACHE STRING
     "Optional native CUDA compiler job limit; empty follows the build tool parallelism")
 set(GENERATIVEQC_AOT_COMPILE_JOBS "" CACHE STRING
     "Optional independent generated-AOT CUDA job limit; empty follows native CUDA scheduling")
+set(GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE "" CACHE PATH
+    "Optional shared target-independent stationary source cache across AOT build directories")
 set(GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS "1" CACHE STRING
     "NVCC split-compile threads for generated AOT kernels; 1 preserves production code generation")
 set(GENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS "1" CACHE STRING
@@ -98,7 +122,10 @@ set(GENERATIVEQC_CUDA_PROVIDER "nvidia" CACHE STRING
     "CUDA execution provider identity: nvidia or cumetal")
 set_property(CACHE GENERATIVEQC_CUDA_PROVIDER PROPERTY STRINGS nvidia cumetal)
 set(GENERATIVEQC_AOT_PROFILE "auto" CACHE STRING
-    "AOT profile for every target: strict auto, explicit portable, sm_XX, or a named profile")
+    "AOT profile for every target: auto (tuned then portable), explicit portable, sm_XX, or a named profile")
+set(GENERATIVEQC_AOT_SHELL_MANIFEST
+    "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_shell_classes.json"
+    CACHE FILEPATH "Accepted generated shell classes for production CUDA")
 set(GENERATIVEQC_AOT_PROFILES "" CACHE STRING
     "Optional explicit list of AOT profiles, independent of architecture order")
 set(GENERATIVEQC_AOT_SHARDS "8" CACHE STRING
@@ -238,6 +265,8 @@ if(GENERATIVEQC_ENABLE_CUDA)
         "CUDA host compiler selected by CMake" FORCE)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCCudaCompression.cmake")
+    generativeqc_configure_cuda_compression()
     # Preserve NVCC's real/virtual suffixes for compilation. A separate
     # numeric profile identity is derived below for manifest and cache paths.
     set(_generativeqc_cuda_compile_architectures ${CMAKE_CUDA_ARCHITECTURES})
@@ -305,6 +334,10 @@ if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
    NOT GENERATIVEQC_ENABLE_CUDA)
   message(FATAL_ERROR
     "The selected automatic CUDA AOT package cannot use the CPU-only compiler fallback")
+endif()
+if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS AND NOT GENERATIVEQC_ENABLE_CUDA)
+  message(FATAL_ERROR
+    "Automatic CUDA parameter sharing cannot use the CPU-only compiler fallback")
 endif()
 
 # Scoped GenerativeQC-owned GFN2 CPU runtime is registered below.

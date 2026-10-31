@@ -19,10 +19,10 @@
       "sha256": "d7a7a4a16707d89291510d8fec039835b2a7892ba648d3680d3cf251a2250515"
     },
     {
-      "bytes": 49531,
-      "path": "source.patch",
+      "bytes": 12088,
+      "path": "source.patch.xz",
       "role": "source-patch",
-      "sha256": "1b2a4e5b22334db509ce8dc309ca6da621425aedc63daa129956525d82aecb48"
+      "sha256": "a68af1cda6c14255419d95cb04b691cf849f1d080c5f0c059df66ee63e0fd0cc"
     },
     {
       "bytes": 762,
@@ -41,6 +41,12 @@
       "path": "reproduce.sh",
       "role": "reproduction",
       "sha256": "fec30768a4fb2877e37511cf223ffb4b26a2546813991a3ae3a8ae426a09f656"
+    },
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 396,
+      "sha256": "3bfad046db8fe5f4559a6d3a6a55b8a72d0e45c56f647e0953db161c1aed219c"
     }
   ],
   "reproduction": {

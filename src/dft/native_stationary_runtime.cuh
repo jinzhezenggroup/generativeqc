@@ -12,7 +12,7 @@ struct NativeOwner {
   Owner* scientific{};
   cudaStream_t integral_stream{};
   bool integral_pending{}, nuclear_ready{};
-  uint64_t integral_mask{}, grid_points{};
+  uint64_t integral_mask{}, grid_points{}, nonlocal_points{};
 };
 
 /** Optional pair panels share the cached tier, never the mandatory force arena.
@@ -30,7 +30,8 @@ size_t native_numeric_bytes(size_t atoms, size_t aos, size_t primitives, size_t 
                             size_t tasks, size_t spins, size_t lanes, bool center_cache) {
   const auto bounded =
       allocation(atoms, aos, primitives, points, tasks, spins, lanes, center_cache);
-  return bounded + (center_cache ? native_phased_becke_bytes(atoms, points, lanes) : 0);
+  return generativeqc::runtime::size_add(
+      bounded, center_cache ? native_phased_becke_bytes(atoms, points, lanes) : 0);
 }
 
 /** Disjoint source slots may be populated on the existing provider stream.
@@ -97,6 +98,36 @@ int native_create(int device, int major, int minor, size_t atoms, size_t aos, si
   });
 }
 
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+int native_point_metrics(void* pointer, uint64_t* output, size_t count) {
+  const auto* owner = static_cast<const NativeOwner*>(pointer);
+  if (!owner || !output || count != 3) return 1;
+  const auto& scientific = *owner->scientific;
+  output[0] = scientific.points * sizeof(StationaryPointValue);
+  output[1] = scientific.staged_point_launches;
+  output[2] = scientific.staged_point_count;
+  return 0;
+}
+
+/** Attach one process-lifetime point program before topology or source work.
+ * A shared consumer cannot substitute another ingredient layout, and immutable
+ * attachment prevents warm/replay calls from switching science under a token. */
+int native_bind_point(void* pointer, const generativeqc::dft::CudaXcPointProgram* program,
+                      char* error, size_t error_size) {
+  auto* owner = static_cast<NativeOwner*>(pointer);
+  return guarded(owner ? owner->scientific : nullptr, error, error_size, [&] {
+    constexpr unsigned mask = stationary_coefficients == 1   ? 1
+                              : stationary_coefficients == 4 ? 7
+                                                             : 15;
+    if (!owner || !program || !program->launch_stationary || program->ingredient_mask != mask ||
+        owner->scientific->point_launcher || owner->scientific->topology_ready ||
+        owner->scientific->geometry_pending)
+      throw std::invalid_argument("invalid staged stationary point binding");
+    owner->scientific->point_launcher = program->launch_stationary;
+  });
+}
+#endif
+
 int native_topology(void* pointer, const double* primitives, const int64_t* ranges,
                     const double* norms, const int64_t* ao_atoms, char* error, size_t error_size) {
   auto* owner = static_cast<NativeOwner*>(pointer);
@@ -110,6 +141,12 @@ int native_topology(void* pointer, const double* primitives, const int64_t* rang
 int native_grid_topology(void* pointer, const size_t* offsets, const double* radii, size_t atoms,
                          char* error, size_t error_size) {
   auto* owner = static_cast<NativeOwner*>(pointer);
+  // Initial V4 grid topology is installed before AO topology. Only an active
+  // geometry submission needs a fence when switching XC/nonlocal grids.
+  if (owner && owner->scientific->geometry_pending) {
+    const auto status = stationary_geometry_drain(owner->scientific, error, error_size);
+    if (status) return status;
+  }
   return stationary_grid_topology_v1(owner ? owner->scientific : nullptr, offsets, radii, atoms,
                                      error, error_size);
 }
@@ -133,6 +170,7 @@ int native_reset_geometry(void* pointer, const double* centers, double tolerance
         error_size, "stationary geometry reset failed");
     owner->integral_mask = 0;
     owner->grid_points = 0;
+    owner->nonlocal_points = 0;
     owner->nuclear_ready = false;
   });
 }
@@ -153,8 +191,9 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
     cuda_check(cudaStreamIsCapturing(stream, &capture));
     if (capture != cudaStreamCaptureStatusNone)
       throw std::invalid_argument("native stationary sources require a noncapturing stream");
-    if (owner->integral_pending && owner->integral_stream != stream)
-      throw std::invalid_argument("native stationary integral producer changed before drain");
+    // Independent fitted/range providers retain their ordinary streams. Finish
+    // the preceding borrow before the next provider may read or replace a slot.
+    if (owner->integral_pending && owner->integral_stream != stream) native_drain_integrals(*owner);
     size_t slot = 0;
     uint64_t mask = 0;
     double* second = nullptr;
@@ -162,6 +201,37 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
       slot = native_one_electron_slot;
     } else if (view->kind == CudaDerivativeSourceKind::OverlapPulay) {
       slot = native_overlap_slot;
+    } else if (view->kind == CudaDerivativeSourceKind::Coulomb) {
+      slot = native_coulomb_slot;
+    } else if (view->kind == CudaDerivativeSourceKind::Exchange) {
+      if constexpr (native_short_exchange_slot >= 0)
+        slot = size_t(native_short_exchange_slot);
+      else if constexpr (native_exchange_slot >= 0)
+        slot = native_exchange_storage_slot;
+      else
+        throw std::invalid_argument("profile has no exchange source");
+    } else if (view->kind == CudaDerivativeSourceKind::RangeCorrection) {
+      if constexpr (native_short_exchange_slot >= 0 && native_long_exchange_slot >= 0) {
+        const auto short_mask = uint64_t{1} << native_short_exchange_slot;
+        const auto long_mask = uint64_t{1} << native_long_exchange_slot;
+        if (view->channels != 1 || !(owner->integral_mask & short_mask) ||
+            (owner->integral_mask & long_mask))
+          throw std::invalid_argument("mixed range source is incomplete or duplicated");
+        const auto fraction =
+            native_short_exchange / (native_long_exchange - native_short_exchange);
+        owner->integral_stream = stream;
+        owner->integral_pending = true;
+        cuda_check(generativeqc::dft::launch_native_stationary_range_correction(
+            view->values, view->coordinates, fraction,
+            view->convention == CudaDerivativeConvention::Force ? -1.0 : 1.0,
+            scientific.sources + size_t(native_short_exchange_slot) * view->coordinates,
+            scientific.sources + size_t(native_long_exchange_slot) * view->coordinates,
+            scientific.context.error, stream));
+        ++scientific.launches;
+        owner->integral_mask |= long_mask;
+        return;
+      } else
+        throw std::invalid_argument("profile has no range exchange sources");
     } else if (view->kind == CudaDerivativeSourceKind::FullRangeJk) {
       slot = native_coulomb_slot;
       if (view->channels != 2 || view->convention != CudaDerivativeConvention::Force)
@@ -169,7 +239,34 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
       if constexpr (native_exchange_slot >= 0) {
         mask |= native_exchange_mask;
         second = scientific.sources + native_exchange_storage_slot * view->coordinates;
+      } else if constexpr (native_short_exchange_slot >= 0) {
+        // Direct RSH can retain the specialized full-range J/K source just as
+        // the fitted owner does. The following RangeCorrection replaces this
+        // provisional full K with the method's separate SR/LR contributions.
+        mask |= uint64_t{1} << native_short_exchange_slot;
+        second = scientific.sources + size_t(native_short_exchange_slot) * view->coordinates;
       }
+    } else if (view->kind == CudaDerivativeSourceKind::RangeSeparatedJk) {
+      if constexpr (native_short_exchange_slot >= 0 && native_long_exchange_slot >= 0) {
+        if (view->channels != 3 || view->convention != CudaDerivativeConvention::Force)
+          throw std::invalid_argument("native stationary RSH source convention mismatch");
+        const size_t slots[]{native_coulomb_slot, size_t(native_short_exchange_slot),
+                             size_t(native_long_exchange_slot)};
+        for (auto source : slots) mask |= uint64_t{1} << source;
+        if (owner->integral_mask & mask)
+          throw std::invalid_argument("duplicate native stationary RSH source");
+        owner->integral_stream = stream;
+        owner->integral_pending = true;
+        for (size_t channel = 0; channel < 3; ++channel)
+          cuda_check(generativeqc::dft::launch_native_stationary_source_transport(
+              view->values + channel * view->coordinates, view->coordinates, 1, -1.0,
+              scientific.sources + slots[channel] * view->coordinates, nullptr,
+              scientific.context.error, stream));
+        scientific.launches += 3;
+        owner->integral_mask |= mask;
+        return;
+      } else
+        throw std::invalid_argument("profile has no range exchange sources");
     } else {
       throw std::invalid_argument("unknown native stationary source kind");
     }
@@ -224,12 +321,33 @@ int native_geometry(void* pointer, const generativeqc::dft::GridTaskView* view, 
   });
 }
 
+/** Keep nonlocal geometry in the compiler's separate three source slots. */
+int native_nonlocal_geometry(void* pointer, const generativeqc::dft::GridTaskView* view,
+                             const double* work, size_t offset, size_t points_per_atom,
+                             const double* weights, const double* raw, const double* seeds,
+                             size_t total, size_t seed_offset, char* error, size_t error_size) {
+  auto* owner = static_cast<NativeOwner*>(pointer);
+  return guarded(owner ? owner->scientific : nullptr, error, error_size, [&] {
+    if (!owner || !view || native_nonlocal_slot < 0 || offset != owner->nonlocal_points ||
+        seed_offset != offset || offset > total || view->npoint > total - offset)
+      throw std::invalid_argument("incomplete native nonlocal grid span");
+    native_require_status(
+        stationary_geometry_external_device_molecular_resident_weights_to_source(
+            owner->scientific, view, work, offset, points_per_atom, weights, raw, seeds, total,
+            seed_offset, size_t(native_nonlocal_slot), error, error_size),
+        error, error_size, "native nonlocal geometry failed");
+    owner->nonlocal_points += view->npoint;
+    if (owner->nonlocal_points == total) owner->nonlocal_points = SIZE_MAX;
+  });
+}
+
 int native_finish_gradient(void* pointer, size_t expected_points, double* output, size_t count,
                            char* error, size_t error_size) {
   auto* owner = static_cast<NativeOwner*>(pointer);
   return guarded(owner ? owner->scientific : nullptr, error, error_size, [&] {
     if (!owner || !expected_points || owner->grid_points != expected_points ||
-        owner->integral_mask != native_required_integral_mask || !owner->nuclear_ready)
+        owner->integral_mask != native_required_integral_mask || !owner->nuclear_ready ||
+        (native_nonlocal_slot >= 0 && owner->nonlocal_points != SIZE_MAX))
       throw std::invalid_argument("native stationary force source inventory is incomplete");
     owner->scientific->context.check_device();
     native_drain_integrals(*owner);

@@ -6,10 +6,14 @@
 
 #include "dft/cuda_grid_api.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
+#include "dft/cuda_xc_point_program.hpp"
 #include "generativeqc/generativeqc.hpp"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
+#include "xc_cpu_generated.hpp"
 
 namespace generativeqc::dft {
 namespace {
@@ -34,40 +38,66 @@ void stationary_cuda_check(cudaError_t status) {
 }
 }  // namespace
 
+/** Full-grid VV10 seeds stay on device; only topology is retained on host. */
+struct CudaStationaryController::NonlocalOwner {
+  CudaMolecularGridView quadrature;
+  nlc::Vv10CudaDeviceLayout layout;
+  std::size_t points_per_atom{};
+  std::vector<std::size_t> xc_offsets, offsets;
+  std::vector<double> xc_radii, radii;
+  runtime::OwnedCudaBuffer<double> effective, seeds, workspace;
+  runtime::OwnedCudaBuffer<int> errors;
+};
+
 CudaStationaryController::CudaStationaryController(const core::System& system, const AoBasis& basis,
                                                    const MolecularGrid& grid,
                                                    const CudaStationaryBinding& binding, int device,
                                                    std::size_t tile_points,
-                                                   std::size_t maximum_device_bytes)
+                                                   std::size_t maximum_device_bytes,
+                                                   const MolecularGrid* nonlocal_grid)
     : device_(device),
       binding_(&binding),
       quadrature_(grid.cuda_view()),
       aos_(basis.nao),
-      tile_points_(std::min(tile_points, grid.point_count())) {
+      tile_points_(std::min(
+          tile_points,
+          std::max(grid.point_count(), nonlocal_grid ? nonlocal_grid->point_count() : 0))) {
   if (!binding_ || !quadrature_ || quadrature_.device != device || !tile_points_ || !basis.natom ||
-      basis.natom != system.atoms.size() || grid.spec().partition_iterations != 3 ||
-      !system.ecp_terms.empty() ||
-      std::any_of(system.atoms.begin(), system.atoms.end(),
-                  [](const auto& atom) { return atom.ecp_core != 0; }))
+      basis.natom != system.atoms.size() || grid.spec().partition_iterations != 3)
     throw std::invalid_argument(
         "native CUDA stationary owner has no qualified profile/grid domain");
+  if (binding_->bind_point &&
+      (!binding_->point_program ||
+       binding_->point_program->functional_code != binding_->model.functional ||
+       binding_->point_program->domain_version != binding_->model.domain_version))
+    throw std::invalid_argument("stationary point producer differs from its scientific model");
+  system_ = system;
+  maximum_device_bytes_ = maximum_device_bytes;
   points_per_atom_ = grid.spec().version == 4 ? 0 : grid_points_per_atom(grid.spec());
   coincident_tolerance_ = grid.spec().coincident_tolerance;
   const auto capacity = cuda_stationary_capacity(*binding_, basis.natom, aos_, basis.nprimitive,
-                                                 grid.point_count(), tile_points_);
+                                                 grid.point_count(), tile_points_, false,
+                                                 nonlocal_grid ? nonlocal_grid->point_count() : 0);
   if (basis.packed.size() != capacity.packed_elements)
     throw std::invalid_argument("native stationary capacity/basis layout mismatch");
   const auto& storage = capacity.grid;
   maximum_device_bytes = std::min(maximum_device_bytes, runtime::device_resource_available(device));
   resources_.minimum_device_bytes = capacity.minimum_device_bytes;
   if (resources_.minimum_device_bytes > maximum_device_bytes) throw std::bad_alloc();
-  const bool cached = capacity.cached_device_bytes <= maximum_device_bytes;
+  // Missing optional masks must not evict the pre-existing geometry cache.
+  // Public fleet admission still reserves either the full cached tier or the
+  // dense minimum; a private intermediate allowance may retain geometry alone.
+  const auto geometry_cached_bytes = capacity.cached_device_bytes - capacity.ao_map_bytes;
+  const bool cached = geometry_cached_bytes <= maximum_device_bytes;
+  const bool admit_map = capacity.cached_device_bytes <= maximum_device_bytes;
+  resources_.cached_geometry = cached;
   const auto stationary_budget =
       cached ? capacity.stationary_cached_bytes : capacity.stationary_minimum_bytes;
   resources_.device_upper_bytes =
-      cached ? capacity.cached_device_bytes : capacity.minimum_device_bytes;
+      cached ? (admit_map ? capacity.cached_device_bytes : geometry_cached_bytes)
+             : capacity.minimum_device_bytes;
   resources_.grid_numeric_bytes = storage.allocation_bytes;
-  resources_.stationary_numeric_bytes = stationary_budget;
+  resources_.stationary_numeric_bytes = stationary_budget + capacity.nonlocal_device_bytes;
   resources_.grid_provider_allowance_bytes = storage.provider_allowance;
   mixed_grid_budget_ = maximum_device_bytes - resources_.device_upper_bytes;
   unsigned order = 0;
@@ -76,13 +106,45 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
     throw std::invalid_argument("native stationary profile AO jets have no grid producer");
   for (const auto& atom : system.atoms) {
     centers_.insert(centers_.end(), atom.position.begin(), atom.position.end());
-    charges_.push_back(atom.atomic_number);
+    charges_.push_back(atom.ionic_charge());
   }
   runtime::CudaDeviceScope device_scope(device, stationary_cuda_check);
   cudaDeviceProp property{};
   stationary_cuda_check(cudaGetDeviceProperties(&property, device));
   std::array<char, 512> error{};
   try {
+    if (binding.model.nonlocal_b != 0) {
+      if (!nonlocal_grid || !binding.nonlocal_geometry || !binding.grid_topology)
+        throw std::invalid_argument("native composite lacks nonlocal grid/provider");
+      nonlocal_ = std::make_unique<NonlocalOwner>();
+      auto& pair = *nonlocal_;
+      pair.quadrature = nonlocal_grid->cuda_view();
+      if (!pair.quadrature || pair.quadrature.device != device)
+        throw std::invalid_argument("native nonlocal quadrature device mismatch");
+      const auto points = pair.quadrature.point_count;
+      pair.points_per_atom =
+          nonlocal_grid->spec().version == 4 ? 0 : grid_points_per_atom(nonlocal_grid->spec());
+      pair.layout = nlc::vv10_cuda_device_layout(points, tile_points_, true, true);
+      pair.effective.allocate(device, 5 * points);
+      pair.seeds.allocate(device, 6 * points + 1);
+      pair.workspace.allocate(device, pair.layout.workspace_bytes / sizeof(double));
+      pair.errors.allocate(device, 3);
+      auto topology = [&](const MolecularGrid& source, auto& offsets, auto& radii) {
+        offsets.push_back(0);
+        for (const auto& atom : system.atoms) {
+          offsets.push_back(offsets.back() +
+                            (source.spec().version == 4
+                                 ? grid_atom_point_count(source.spec(), atom.atomic_number)
+                                 : grid_points_per_atom(source.spec())));
+          if (source.spec().version == 4)
+            radii.push_back(source.spec().element_radii[atom.atomic_number]);
+        }
+        if (offsets.back() != source.point_count())
+          throw std::invalid_argument("native nonlocal topology extent mismatch");
+      };
+      topology(grid, pair.xc_offsets, pair.xc_radii);
+      topology(*nonlocal_grid, pair.offsets, pair.radii);
+    }
     grid_provider_allowance_.emplace(device, storage.provider_allowance);
     require_stationary_call(
         binding_->create(device, property.major, property.minor, basis.natom, aos_,
@@ -91,6 +153,11 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
                          stationary_budget, capacity.geometry_lanes, capacity.geometry_threads,
                          &stationary_, error.data(), error.size()),
         error);
+    if (binding_->bind_point) {
+      require_stationary_call(
+          binding_->bind_point(stationary_, binding_->point_program, error.data(), error.size()),
+          error);
+    }
     if (grid.spec().version == 4) {
       if (!binding_->grid_topology)
         throw std::invalid_argument("stationary binding lacks variable atom grid support");
@@ -136,6 +203,26 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
     resources_.grid_prepare_device_delta = metrics.prepare_device_delta;
     if (metrics.provider_retained_bytes > storage.provider_allowance)
       throw std::runtime_error("native stationary grid provider exceeds its retained allowance");
+    if (admit_map && capacity.ao_map_bytes && system.ecp_terms.empty()) {
+      // The controller owns an immutable basis and borrows its parent's frozen
+      // quadrature for its entire lifetime. Geometry updates replace that parent
+      // and controller. The grid owner additionally checks its geometry epoch,
+      // exact point pointer/span, derivative order and this binding identity.
+      std::array<std::size_t, 8> map{};
+      const auto status = grid_cuda_prepare_exact_ao_map_device_v1(
+          grid_, quadrature_.points, quadrature_.point_count, 1e-16, capacity.ao_map_bytes,
+          binding_->plan_identity, map.data(), error.data(), error.size());
+      // Optional allocation failure leaves the dense owner usable. Scientific
+      // or driver failures must still propagate through their typed boundary.
+      if (status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) require_grid_call(status, error);
+      if (!status && map[0]) {
+        resources_.ao_map_host_bytes = capacity.ao_map_host_bytes;
+        // Declining a high-occupancy map keeps every AO; it never raises the
+        // cutoff. Retained mask storage remains charged to the cached tier.
+        indexed_grid_ =
+            static_cast<long double>(map[3]) <= 0.8L * static_cast<long double>(map[4]) * aos_;
+      }
+    }
   } catch (...) {
     close();
     throw;
@@ -151,6 +238,7 @@ void CudaStationaryController::close() noexcept {
   stationary_ = nullptr;
   if (grid_) grid_cuda_destroy_v1(grid_);
   grid_ = nullptr;
+  nonlocal_.reset();
   grid_provider_allowance_.reset();
   mixed_grid_provider_allowance_.reset();
 }
@@ -159,13 +247,19 @@ generativeqc_status CudaStationaryController::gradient(
     const CudaKsResidentDensityBinding& density,
     const CudaKsResidentStationaryWeightsBinding& weights, const scf::PreparedFockPlan& fock,
     const std::function<bool()>& token_current, std::vector<double>& output, std::string& detail,
-    bool allow_spatial_default, scf::DirectForcePrecisionRequest* precision) {
+    bool allow_spatial_default, scf::DirectForcePrecisionRequest* precision,
+    const scf::ResolvedFockBuild* range, const CudaKsResidentNonlocalFeaturesBinding* nonlocal,
+    const scf::PreparedFockPlan* range_provider) {
   detail.clear();
   try {
+    const auto provider = scf::prepared_cuda_fock_binding(fock);
+    const bool fitted =
+        fock.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
     const auto derivative = scf::prepared_cuda_direct_derivative_binding(fock);
-    if (!stationary_ || !grid_ || !density || !weights || !derivative || !token_current ||
-        !token_current() || density.device_id != device_ || weights.device_id != device_ ||
-        derivative.device_id != device_ || density.matrix_elements != aos_ * aos_ ||
+    if (!stationary_ || !grid_ || !density || !weights || !provider || (!fitted && !derivative) ||
+        !token_current || !token_current() || density.device_id != device_ ||
+        weights.device_id != device_ || provider.device_id != device_ ||
+        density.matrix_elements != aos_ * aos_ ||
         weights.matrix_elements != density.matrix_elements ||
         density.spins != binding_->spin_blocks || weights.spins != density.spins ||
         weights.owner != density.owner || weights.solve_epoch != density.solve_epoch ||
@@ -174,20 +268,36 @@ generativeqc_status CudaStationaryController::gradient(
           "native stationary final density/weight token is stale or "
           "incompatible");
     const auto& spec = fock.strategy().spec;
+    const bool composite = binding_->model.range_omega != 0;
     const auto expected_exchange =
-        (density.spins == 1 ? -0.5 : -1.0) * binding_->full_range_exchange;
-    const auto full_range = [](const scf::FockTermSpec& term) {
+        (density.spins == 1 ? -0.5 : -1.0) *
+        (composite ? binding_->model.short_range_exchange : binding_->full_range_exchange);
+    const auto full_range = [fitted](const scf::FockTermSpec& term) {
       return !term.present || (term.op == scf::FockOperator::FullRange && term.omega == 0.0 &&
-                               term.approximation == scf::FockApproximation::Exact);
+                               term.approximation == (fitted ? scf::FockApproximation::DensityFitted
+                                                             : scf::FockApproximation::Exact));
     };
     if (fock.strategy().backend != scf::FockBackend::Cuda || !spec.coulomb.present ||
         spec.coulomb.coefficient != 1.0 || !full_range(spec.coulomb) ||
-        !full_range(spec.exchange) ||
-        spec.exchange.present != (binding_->full_range_exchange != 0.0) ||
+        !full_range(spec.exchange) || spec.exchange.present != (expected_exchange != 0.0) ||
         (spec.exchange.present && spec.exchange.coefficient != expected_exchange) ||
         (spec.spin == scf::FockSpin::Restricted ? 1U : 2U) != density.spins)
       throw std::invalid_argument("native stationary profile disagrees with prepared Fock model");
+    if (composite &&
+        (!range || !nonlocal_ || !nonlocal || !*nonlocal || nonlocal->device_id != device_ ||
+         nonlocal->owner != density.owner || nonlocal->solve_epoch != density.solve_epoch ||
+         nonlocal->generation != density.generation ||
+         nonlocal->point_count != nonlocal_->quadrature.point_count ||
+         range->spec.exchange.omega != binding_->model.range_omega ||
+         range->spec.exchange.coefficient !=
+             (density.spins == 1 ? -0.5 : -1.0) *
+                 (binding_->model.long_range_exchange - binding_->model.short_range_exchange)))
+      throw std::invalid_argument("native composite final-state/model lease mismatch");
     runtime::CudaDeviceScope device_scope(device_, stationary_cuda_check);
+    runtime::cuda_trace::TraceOperation trace("stationary_force",
+                                              reinterpret_cast<cudaStream_t>(density.stream),
+                                              {1, aos_, 0, true, true});
+    const auto previous_grid_work = resources_.grid_work;
     std::array<char, 512> error{};
     require_stationary_call(
         binding_->reset_geometry(stationary_, centers_.data(), coincident_tolerance_, error.data(),
@@ -200,6 +310,14 @@ generativeqc_status CudaStationaryController::gradient(
         grid_cuda_density_device_v1(grid_, density.alpha, density.beta, density.matrix_elements,
                                     density.spins, density.stream, error.data(), error.size()),
         error);
+    if (nonlocal_) {
+      const auto& nlc = *nonlocal_;
+      require_stationary_call(
+          binding_->grid_topology(stationary_, nlc.xc_offsets.data(),
+                                  nlc.xc_radii.empty() ? nullptr : nlc.xc_radii.data(),
+                                  centers_.size() / 3, error.data(), error.size()),
+          error);
+    }
     const bool mixed_geometry = precision && precision->mixed_geometry;
     bool mixed_grid = precision && precision->mixed_grid;
     const auto geometry = mixed_geometry ? binding_->geometry_fp32 : binding_->geometry;
@@ -230,7 +348,12 @@ generativeqc_status CudaStationaryController::gradient(
                                                   aos_, error.data(), error.size()),
             error);
         precision->grid_points += points;
-      } else
+      } else if (indexed_grid_)
+        require_grid_call(grid_cuda_run_ao_map_device_deferred_v1(
+                              grid_, quadrature_.points + 3 * offset, points, offset,
+                              binding_->plan_identity, error.data(), error.size()),
+                          error);
+      else
         require_grid_call(grid_cuda_run_selected_device_deferred_v1(
                               grid_, quadrature_.points + 3 * offset, points, 1, nullptr, aos_,
                               nullptr, nullptr, error.data(), error.size()),
@@ -249,17 +372,121 @@ generativeqc_status CudaStationaryController::gradient(
           error);
       if (mixed_geometry) precision->geometry_points += points;
     }
+    if (nonlocal_) {
+      auto& pair = *nonlocal_;
+      const auto& quadrature = pair.quadrature;
+      const auto points = quadrature.point_count;
+      GridTaskView view;
+      require_grid_call(grid_cuda_view_v1(grid_, &view, error.data(), error.size()), error);
+      const auto stream = view.stream;
+      // Order the borrowed final feature lease against the grid producer;
+      // neither dense D/W nor full-grid feature arrays cross to the host.
+      runtime::OwnedCudaEvent ready(device_, cudaEventDisableTiming, stationary_cuda_check);
+      ready.record(reinterpret_cast<cudaStream_t>(nonlocal->stream));
+      stationary_cuda_check(cudaStreamWaitEvent(stream, ready.get(), 0));
+      stationary_cuda_check(cudaMemsetAsync(pair.errors.get(), 0, 3 * sizeof(int), stream));
+      auto* effective = pair.effective.get();
+      auto* seeds = pair.seeds.get();
+      nlc::enqueue_vv10_molecular_domain_cuda(
+          stream, points, generated::kMolecularVv10DensityThreshold, quadrature.weights,
+          nonlocal->density, nonlocal->gradient, effective, effective + points,
+          effective + 2 * points, pair.errors.get() + 1);
+      const auto& model = binding_->model;
+      nlc::enqueue_vv10_cuda_device(
+          pair.layout,
+          {nlc::Vv10Variant::vv10, model.nonlocal_b, model.nonlocal_c, model.nonlocal_coefficient},
+          device_, stream, quadrature.points, effective, effective + points, effective + 2 * points,
+          pair.workspace.get(), pair.layout.workspace_bytes, seeds + 6 * points, seeds,
+          seeds + points, effective + 2 * points, seeds + 5 * points, pair.errors.get() + 2);
+      nlc::enqueue_vv10_pack_force_seeds_cuda(stream, points, effective, effective + 2 * points,
+                                              seeds, pair.errors.get(), pair.errors.get() + 1,
+                                              pair.errors.get() + 2);
+      // The same bounded AO/grid owner can serve a distinct nonlocal grid.
+      // Changing atom-prefix/radius topology first drains prior geometry work.
+      require_stationary_call(
+          binding_->grid_topology(stationary_, pair.offsets.data(),
+                                  pair.radii.empty() ? nullptr : pair.radii.data(),
+                                  centers_.size() / 3, error.data(), error.size()),
+          error);
+      for (std::size_t offset = 0; offset < points; offset += tile_points_) {
+        const auto count = std::min(tile_points_, points - offset);
+        require_grid_call(grid_cuda_run_selected_device_deferred_v1(
+                              grid_, quadrature.points + 3 * offset, count, 1, nullptr, aos_,
+                              nullptr, nullptr, error.data(), error.size()),
+                          error);
+        require_grid_call(grid_cuda_view_v1(grid_, &view, error.data(), error.size()), error);
+        const double* work = nullptr;
+        std::uint64_t flags = 0;
+        require_grid_call(grid_cuda_density_jets_v2(grid_, view.generation, binding_->density_jets,
+                                                    &work, &flags, error.data(), error.size()),
+                          error);
+        require_stationary_call(binding_->nonlocal_geometry(
+                                    stationary_, &view, work, offset, pair.points_per_atom,
+                                    quadrature.weights + offset, quadrature.atomic_weights + offset,
+                                    seeds, points, offset, error.data(), error.size()),
+                                error);
+      }
+    }
     const scf::CudaDerivativeSourceConsumer consume = [&](const auto& view) {
       require_stationary_call(
           binding_->consume_integrals(stationary_, &view, error.data(), error.size()), error);
     };
-    auto status = scf::consume_prepared_cuda_stationary_one_electron_pair(
-        fock.cuda_direct_source(), weights.density, weights.weighted_density,
-        weights.matrix_elements, consume, detail);
-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    status = scf::consume_prepared_cuda_direct_shell_full_range_derivatives_device(
-        fock, density.alpha, density.beta, density.matrix_elements, consume, detail,
-        allow_spatial_default, precision);
+    generativeqc_status status;
+    if (fitted) {
+      std::vector<double> unused_hcore, unused_pulay;
+      // These temporary device sources borrow the persistent Fock stream and
+      // retain its existing one-electron mapping policy. Hardcoding serial AO
+      // pairs would regress the previous DF consumer's attraction-center work.
+      // The terminal consumer owns copied slots after the bridge drains.
+      status = scf::execute_cuda_stationary_one_electron_pair(
+          device_, system_, {}, {}, scf::cuda_policy::one_electron_derivative_mapping_requested(),
+          maximum_device_bytes_, unused_hcore, unused_pulay, detail, nullptr, weights.density,
+          weights.weighted_density, consume, reinterpret_cast<void*>(provider.stream));
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      status = fock.consume_fitted_energy_derivatives(
+          device_, reinterpret_cast<void*>(provider.stream), density.alpha, density.beta,
+          weights.density, consume, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      if (composite) {
+        if (!range_provider)
+          throw std::invalid_argument(
+              "mixed range force lacks its independent derivative provider");
+        const auto range_binding = scf::prepared_cuda_fock_binding(*range_provider);
+        if (!range_binding) throw std::invalid_argument("range provider has no resident binding");
+        // The resident D/W owner and both radial providers may use different
+        // ordinary streams. Order the read without a host matrix export.
+        runtime::OwnedCudaEvent ready(device_, cudaEventDisableTiming, stationary_cuda_check);
+        ready.record(provider.stream);
+        stationary_cuda_check(cudaStreamWaitEvent(range_binding.stream, ready.get(), 0));
+        status = range_provider->strategy().spec.exchange.approximation ==
+                         scf::FockApproximation::DensityFitted
+                     ? range_provider->consume_fitted_energy_derivatives(
+                           device_, reinterpret_cast<void*>(range_binding.stream), density.alpha,
+                           density.beta, weights.density, consume, detail, true)
+                     : scf::consume_prepared_cuda_direct_long_range_derivatives_device(
+                           *range_provider, density.alpha, density.beta, density.matrix_elements,
+                           consume, detail);
+      }
+    } else {
+      if (system_.ecp_terms.empty()) {
+        status = scf::consume_prepared_cuda_stationary_one_electron_pair(
+            fock.cuda_direct_source(), weights.density, weights.weighted_density,
+            weights.matrix_elements, consume, detail);
+      } else {
+        std::vector<double> unused_hcore, unused_pulay;
+        status = scf::execute_cuda_stationary_one_electron_pair(
+            device_, system_, {}, {}, scf::cuda_policy::one_electron_derivative_mapping_requested(),
+            maximum_device_bytes_, unused_hcore, unused_pulay, detail, nullptr, weights.density,
+            weights.weighted_density, consume, reinterpret_cast<void*>(provider.stream));
+      }
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      status = composite ? scf::consume_prepared_cuda_direct_rsh_energy_derivatives_device(
+                               fock, *range, density.alpha, density.beta, density.matrix_elements,
+                               consume, detail)
+                         : scf::consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+                               fock, density.alpha, density.beta, density.matrix_elements, consume,
+                               detail, allow_spatial_default, precision);
+    }
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     std::vector<double> candidate(centers_.size());
     require_stationary_call(
@@ -269,9 +496,38 @@ generativeqc_status CudaStationaryController::gradient(
     require_stationary_call(binding_->metrics(stationary_, resources_.stationary_work.data(),
                                               resources_.stationary_work.size()),
                             error);
+    if (binding_->point_metrics)
+      require_stationary_call(binding_->point_metrics(stationary_, resources_.point_work.data(),
+                                                      resources_.point_work.size()),
+                              error);
     require_grid_call(
         grid_cuda_work_metrics_v1(grid_, &resources_.grid_work, error.data(), error.size()), error);
     if (!token_current()) throw std::invalid_argument("native stationary terminal token changed");
+    // Existing host counters describe work actually submitted, including map
+    // discovery on the first call. Report per-call differences without another
+    // device readback. Tracing is opt-in and its timings are diagnostic only.
+    const auto& work = resources_.grid_work;
+    runtime::cuda_trace::trace_counter(
+        "grid_evaluation_points", work.evaluation_points - previous_grid_work.evaluation_points);
+    runtime::cuda_trace::trace_counter("grid_ao_jet_values",
+                                       work.ao_jet_values - previous_grid_work.ao_jet_values);
+    runtime::cuda_trace::trace_counter(
+        "grid_projection_fma_pairs",
+        work.projection_fma_pairs - previous_grid_work.projection_fma_pairs);
+    runtime::cuda_trace::trace_counter("grid_evaluation_tiles",
+                                       work.evaluation_tiles - previous_grid_work.evaluation_tiles);
+    runtime::cuda_trace::trace_counter("grid_active_point_ao",
+                                       work.active_point_ao - previous_grid_work.active_point_ao);
+    runtime::cuda_trace::trace_counter("grid_dense_point_ao",
+                                       work.dense_point_ao - previous_grid_work.dense_point_ao);
+    runtime::cuda_trace::trace_counter(
+        "grid_discovery_ao_jet_values",
+        work.discovery_ao_jet_values - previous_grid_work.discovery_ao_jet_values);
+    runtime::cuda_trace::trace_counter("grid_discovery_passes",
+                                       work.discovery_passes - previous_grid_work.discovery_passes);
+    runtime::cuda_trace::trace_counter("indexed_grid", indexed_grid_ ? 1 : 0);
+    runtime::cuda_trace::trace_counter("cached_geometry", resources_.cached_geometry ? 1 : 0);
+    runtime::cuda_trace::trace_counter("grid_tile_points", tile_points_);
     output.swap(candidate);
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {

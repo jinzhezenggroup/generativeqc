@@ -1,0 +1,14 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "2cc39bdda524d206e987e6cc70d620113f0cae54",
+  "file_count": 1,
+  "total_bytes": 22424,
+  "files": [
+    {
+      "path": "benchmarks/results/hf-fleet-transfer-20261028/pre-integration/samples.json.xz",
+      "bytes": 22424,
+      "sha256": "6378a8ee43729be57ba2b5691828df0e591377fc86ffb2b4c4b2c193bbc1dbc8"
+    }
+  ],
+  "retention": "Original pre-integration raw timings retained byte-for-byte in Git; current integrated samples remain present. No acceptance result changes."
+}

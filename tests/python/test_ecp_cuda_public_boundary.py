@@ -51,13 +51,18 @@ def test_cuda_ecp_public_force_capability_has_an_explicit_basis_domain(
     cpu = Calculator(basis=basis, method=method, device="cpu")
     assert ("forces" in cpu._capabilities.supported_properties) == admitted
 
-    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("unqualified public ECP forces reached native preparation")
+    class PreparedAdmission(Exception):
+        """Sentinel for delegation without probing a real GPU."""
 
-    monkeypatch.setattr(calculator, "prepare_batch", forbidden)
+    def prepared_gate(*args: typing.Any, **kwargs: typing.Any) -> None:
+        raise PreparedAdmission("native prepared capability decides final admission")
+
+    monkeypatch.setattr(calculator, "prepare_batch", prepared_gate)
     spin = int(method.endswith("uks"))
     if not admitted:
-        with pytest.raises(ValueError, match="forces"):
+        # Constructor metadata remains conservative; actual force rejection
+        # belongs to the prepared owner, as exercised by native boundary gates.
+        with pytest.raises(PreparedAdmission, match="native prepared capability"):
             calculator.singlepoint(
                 atoms,
                 charge=spin,

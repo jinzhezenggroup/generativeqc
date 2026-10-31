@@ -11,6 +11,10 @@ from dataclasses import asdict, dataclass, field, replace
 from fractions import Fraction
 
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft._generated_native_semilocal import (
+    SCF_DOMAIN_BY_VERSION,
+    SEMILOCAL_FAMILIES,
+)
 from generativeqc_compiler.dft.grid import (
     GridPolicy,
     GridSpec,
@@ -33,10 +37,6 @@ from generativeqc_compiler.method import (
     compile_ks_execution_plan,
     d4_composite_method_identifiers,
     resolve_method,
-)
-from generativeqc_compiler.xc._generated_native_semilocal import (
-    SCF_DOMAIN_BY_VERSION,
-    SEMILOCAL_FAMILIES,
 )
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.automatic_semilocal import (
@@ -635,8 +635,25 @@ def cpu_stationary_all_electron_force_eligible(
     nonlocal_range = plan.nonlocal_correlation is not None and {
         term.operator for term in plan.exchange
     } == {"short-range", "long-range"}
-    return bool(record["stationary_ecp_gradient"]) and (
-        has_dispersion or full_range or nonlocal_range
+    # This is a candidate capability only. The native prepared owner still
+    # authenticates the actual basis, integral work bound and final-state token.
+    exchange, correlation, exact = ks_coefficients(electronic_method_ir(method_ir))
+    native_profile = (
+        not plan.nonlocal_correlation
+        and not any(term.operator != "full-range" for term in plan.exchange)
+        and any(
+            (2 if method_ir.spin == "polarized" else 1) in spins
+            and float(Fraction(exact_profile)) == exact
+            and float(Fraction(exchange_profile)) == exchange
+            and float(Fraction(correlation_profile)) == correlation
+            for spins, exact_profile, exchange_profile, correlation_profile in record[
+                "cpu_stationary_force_profiles"
+            ]
+        )
+    )
+    return native_profile or (
+        bool(record["stationary_ecp_gradient"])
+        and (has_dispersion or full_range or nonlocal_range)
     )
 
 
@@ -1252,6 +1269,11 @@ def native_ks_options(
         xc_execution_schedule=_native.XC_EXECUTION_DEVICE_FUSED
         if options.xc_schedule == "device_fused"
         else _native.XC_EXECUTION_HOST_UNFUSED,
+        nonlocal_maximum_bytes=(
+            options.nonlocal_memory_budget_bytes
+            if options.execution_plan.nonlocal_correlation is not None
+            else 0
+        ),
     )
     descriptor._domain_owner = domain
     descriptor._radii_owner = radii

@@ -18,7 +18,7 @@ Archive compression can differ across Git versions; per-file source hashes
 and the archive's base-commit PAX record bind the actual scientific baseline.
 
 RTX 4090, CUDA 12.9, sm_89, Release, AOT shells disabled, one OpenMP/BLAS thread.
-Compute Sanitizer uses CUDA 12.8. `summary.json` records exact hardware,
+Compute Sanitizer uses CUDA 12.8. `summary.json.xz` records exact hardware,
 toolchain, source/library hashes, numerical errors, all timing samples, work
 counts and planned/observed resources. `raw-evidence.manifest.json` binds the
 full diagnostic archive retained in the user's original qb-ilm workspace under
@@ -112,7 +112,7 @@ On the existing s/p/d domain, matched baseline/candidate complete RHF medians
 were 989.10/993.60 ms (+0.45%) and UHF 983.36/989.19 ms (+0.59%). Full-engine
 component endpoint medians changed by -0.17% to +1.18%. Three samples per case
 show no material regression in this bounded run; they do not establish a
-general performance guarantee. Full samples and numerical gates are in `summary.json`.
+general performance guarantee. Full samples and numerical gates are in `summary.json.xz`.
 
 ## Reproduction
 
@@ -161,3 +161,10 @@ it retains 56 registers, 64 stack bytes and zero reported local-memory bytes.
 
 See the [current contract](../../../docs/user/ecp.md) and
 [decision](../../../.agents/notes/implemented/numerics/2026-09-17-ecp-orbital-f.md).
+
+## Lossless summary storage
+
+`summary.json.xz` preserves all 63,399 original summary bytes, including
+every retained measurement. Decompressed SHA-256: `eaf4c3e818547efe57570bb281255118c0914362e7e0a1de4b11de22ca28c4d4`.
+Read with `xz -dc benchmarks/results/ecp-f-171/summary.json.xz`;
+no scientific record or acceptance gate was removed.

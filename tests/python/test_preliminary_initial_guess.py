@@ -334,8 +334,22 @@ def test_complete_native_energy_and_fallbacks(
         )
         assert result.iterations == baseline.iterations
         assert result.initial_guess["outcome"] == outcome
-    with pytest.raises((ValueError, NotImplementedError)):
-        calc.singlepoint(WATER, properties=("energy", "forces"))
+    if method == "rhf":
+        with pytest.raises((ValueError, NotImplementedError)):
+            calc.singlepoint(WATER, properties=("energy", "forces"))
+    else:
+        import numpy as np
+
+        # A preliminary density changes initialization, not the converged
+        # stationary derivative. The prepared KS owner admits the full E/F
+        # endpoint even when constructor-level capabilities are conservative.
+        reference = calculator(method).singlepoint(
+            WATER, properties=("energy", "forces")
+        )
+        actual = calc.singlepoint(WATER, properties=("energy", "forces"))
+        assert actual.converged and actual.initial_guess["outcome"] == "used"
+        assert actual.energy == pytest.approx(reference.energy, abs=1e-8)
+        np.testing.assert_allclose(actual.forces, reference.forces, rtol=0, atol=1e-6)
 
 
 @pytest.mark.parametrize("kind", ["hf", "lda", "minao", "huckel"])

@@ -1,0 +1,178 @@
+{
+  "scope": "Post-campaign ECP resource-planning fix; explicit owned-device ledger plus provider reservation, excludes opaque library/driver/pool internals and process RSS.",
+  "slurm_job": "Slurm job: 14348",
+  "assigned_visibility": "CUDA_VISIBLE_DEVICES: 0",
+  "source_hashes": [
+    "175871e7e7beca2207a01ef28cbb9fd7c3c6a558daf1904b0c7a401093536685  python/generativeqc/resources_ks.py",
+    "6512913d57d6aa92b4b841b2b120807e04b3ed36bb761fee1355ebaeb02bfc62  src/scf/ks_device_resources.hpp",
+    "952078cbc94bca07d7ffcad9b41bde0992e7b166c877e463daabe2176d0ab37b  build/native-ks-catalog/libgenerativeqc.so",
+    "95e239fe77fca4e283008e63493e5b27c871e68f087e3a2712a012666796ad3f  .artifacts/r1/ecp-tests/test_ecp_public_cuda.py"
+  ],
+  "xml_sha256": "652cec6d16b49f2ad6a9f593d9ed16e5c5e7a5a6e1014c9a395cad599db0de3f",
+  "cases": [
+    {
+      "name": "test_public_ecp_budgeted_ragged_replay_and_failure_recovery[cartesian-pbe-rks]",
+      "properties": {
+        "planned_peaks": {
+          "host": 406187152,
+          "device": 216652669,
+          "pinned": 0,
+          "pageable": 406187152,
+          "device:0": 216652669
+        },
+        "native_scf_ledger": {
+          "device": 0,
+          "limit_bytes": 216652669,
+          "live_bytes": 9749942,
+          "peak_bytes": 14872600,
+          "allocations": 165,
+          "rejected_allocations": 0,
+          "owner": "ks",
+          "scope": "owned CUDA buffer capacities; excludes driver/graph/pool and library-internal allocations",
+          "capacity_admission": {
+            "source": "native-device-ledger-plan-v1",
+            "declared_device_peak": 216652669
+          },
+          "requested_bytes": 21038304,
+          "admission": {
+            "limit_bytes": 216652669,
+            "numeric_live_bytes": 9749942,
+            "numeric_peak_bytes": 14872600,
+            "provider_reserved_bytes": 201326592,
+            "provider_reservation_peak_bytes": 201326592,
+            "combined_peak_bytes": 216199192
+          }
+        },
+        "generated_force": [],
+        "batch_cold_seconds": 1.2053790539503098,
+        "batch_warm_seconds": 0.45030392333865166,
+        "batch_changed_geometry_seconds": 0.6926082223653793
+      }
+    },
+    {
+      "name": "test_public_ecp_budgeted_ragged_replay_and_failure_recovery[cartesian-pbe-uks]",
+      "properties": {
+        "planned_peaks": {
+          "host": 406075064,
+          "device": 216513616,
+          "pinned": 0,
+          "pageable": 406075064,
+          "device:0": 216513616
+        },
+        "native_scf_ledger": {
+          "device": 0,
+          "limit_bytes": 216513616,
+          "live_bytes": 9610830,
+          "peak_bytes": 14733488,
+          "allocations": 165,
+          "rejected_allocations": 0,
+          "owner": "ks",
+          "scope": "owned CUDA buffer capacities; excludes driver/graph/pool and library-internal allocations",
+          "capacity_admission": {
+            "source": "native-device-ledger-plan-v1",
+            "declared_device_peak": 216513616
+          },
+          "requested_bytes": 21092712,
+          "admission": {
+            "limit_bytes": 216513616,
+            "numeric_live_bytes": 9610830,
+            "numeric_peak_bytes": 14733488,
+            "provider_reserved_bytes": 201326592,
+            "provider_reservation_peak_bytes": 201326592,
+            "combined_peak_bytes": 216060080
+          }
+        },
+        "generated_force": [],
+        "batch_cold_seconds": 0.5881082899868488,
+        "batch_warm_seconds": 0.4521024376153946,
+        "batch_changed_geometry_seconds": 0.7024230845272541
+      }
+    },
+    {
+      "name": "test_public_ecp_budgeted_ragged_replay_and_failure_recovery[spherical-pbe-rks]",
+      "properties": {
+        "planned_peaks": {
+          "host": 406187152,
+          "device": 216652669,
+          "pinned": 0,
+          "pageable": 406187152,
+          "device:0": 216652669
+        },
+        "native_scf_ledger": {
+          "device": 0,
+          "limit_bytes": 216652669,
+          "live_bytes": 9749942,
+          "peak_bytes": 14872600,
+          "allocations": 165,
+          "rejected_allocations": 0,
+          "owner": "ks",
+          "scope": "owned CUDA buffer capacities; excludes driver/graph/pool and library-internal allocations",
+          "capacity_admission": {
+            "source": "native-device-ledger-plan-v1",
+            "declared_device_peak": 216652669
+          },
+          "requested_bytes": 21038304,
+          "admission": {
+            "limit_bytes": 216652669,
+            "numeric_live_bytes": 9749942,
+            "numeric_peak_bytes": 14872600,
+            "provider_reserved_bytes": 201326592,
+            "provider_reservation_peak_bytes": 201326592,
+            "combined_peak_bytes": 216199192
+          }
+        },
+        "generated_force": [],
+        "batch_cold_seconds": 0.5533138252794743,
+        "batch_warm_seconds": 0.45502033084630966,
+        "batch_changed_geometry_seconds": 0.6958210542798042
+      }
+    },
+    {
+      "name": "test_public_ecp_budgeted_ragged_replay_and_failure_recovery[spherical-pbe-uks]",
+      "properties": {
+        "planned_peaks": {
+          "host": 406075064,
+          "device": 216513616,
+          "pinned": 0,
+          "pageable": 406075064,
+          "device:0": 216513616
+        },
+        "native_scf_ledger": {
+          "device": 0,
+          "limit_bytes": 216513616,
+          "live_bytes": 9610830,
+          "peak_bytes": 14733488,
+          "allocations": 165,
+          "rejected_allocations": 0,
+          "owner": "ks",
+          "scope": "owned CUDA buffer capacities; excludes driver/graph/pool and library-internal allocations",
+          "capacity_admission": {
+            "source": "native-device-ledger-plan-v1",
+            "declared_device_peak": 216513616
+          },
+          "requested_bytes": 21092712,
+          "admission": {
+            "limit_bytes": 216513616,
+            "numeric_live_bytes": 9610830,
+            "numeric_peak_bytes": 14733488,
+            "provider_reserved_bytes": 201326592,
+            "provider_reservation_peak_bytes": 201326592,
+            "combined_peak_bytes": 216060080
+          }
+        },
+        "generated_force": [],
+        "batch_cold_seconds": 0.5136795938014984,
+        "batch_warm_seconds": 0.45171763002872467,
+        "batch_changed_geometry_seconds": 0.691267091780901
+      }
+    },
+    {
+      "name": "test_public_ecp_force_failure_is_transactional_and_closes_snapshot[cartesian]",
+      "properties": {}
+    },
+    {
+      "name": "test_public_ecp_force_failure_is_transactional_and_closes_snapshot[spherical]",
+      "properties": {}
+    }
+  ]
+}

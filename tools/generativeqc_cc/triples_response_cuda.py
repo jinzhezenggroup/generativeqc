@@ -18,6 +18,19 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 
 import numpy as np
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc.response_solver import _vector_norm
+from generativeqc_compiler.cc.triples import _check_denominators, _validate
+from generativeqc_compiler.cc.triples_response import (
+    _arrays,
+    _scatter_prefix,
+    _selected_inputs,
+    build_tile_triples_vjp,
+)
+from generativeqc_compiler.cc.triples_tiles import (
+    TriplesTileEnumerator,
+    _tile_input_feeds,
+)
 from generativeqc_compiler.common.provenance import canonical_hash
 
 from tools.generativeqc_response.implicit import (
@@ -25,24 +38,14 @@ from tools.generativeqc_response.implicit import (
     _immutable,
     checked_transpose_solve,
 )
-from tools.generativeqc_response.krylov import _vector_norm
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 from .lambda_response import BoundCCSDResponse
 from .lambda_solver import CCSDLambdaResult, _feed_hash
-from .triples import _check_denominators, _validate
 from .triples_cuda import TriplesTileConfig
 from .triples_lambda_response import (
     CorrectedLambdaResult,
     _source_identity,
 )
-from .triples_response import (
-    _arrays,
-    _scatter_prefix,
-    _selected_inputs,
-    build_tile_triples_vjp,
-)
-from .triples_tiles import TriplesTileEnumerator, _tile_input_feeds
 
 
 @dataclass(frozen=True)

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, GridSpec, KsOptions, _native
+from generativeqc import Atom, Calculator, GridSpec, KsOptions, _native
 from generativeqc.batch import PreparedBatch
 
 SYSTEMS = [
@@ -104,25 +104,24 @@ def test_invalid_batch_properties_reject_before_execution(
             batch.execute(properties=properties)
 
 
-@pytest.mark.parametrize("method", ["lda-rks", "pbe-rks", "lda-uks", "pbe-uks"])
-def test_unqualified_dft_basis_rejects_forces_before_execution(
-    method: typing.Any, monkeypatch: typing.Any
+@pytest.mark.parametrize("method", ["lda-rks", "lda-uks", "pbe-rks", "pbe-uks"])
+@pytest.mark.parametrize("atomic_number, expected", [(1, True), (8, False)])
+def test_native_semilocal_force_admission_uses_actual_basis_shells(
+    method: str, atomic_number: int, expected: bool
 ) -> None:
-    preparation = (
-        {"charges": [-1], "multiplicities": [2]} if method.endswith("uks") else {}
+    calculator = Calculator(
+        method=method, basis="def2-tzvp", device="cpu", density_fitting="none"
     )
-    # The f-containing basis context remains outside the qualified s/p/d CPU
-    # force domain, even though the named semilocal methods can expose forces.
-    calculator = Calculator(method=method, basis="def2-tzvp")
-    assert calculator.capabilities.supported_properties == frozenset({"energy"})
-    with calculator.prepare_batch(SYSTEMS[:1], **preparation) as batch:
-
-        def forbidden(*args: typing.Any) -> None:
-            pytest.fail("unsupported force request reached native execution")
-
-        monkeypatch.setattr(batch._library, "generativeqc_batch_execute", forbidden)
-        with pytest.raises(ValueError, match="does not support properties: forces"):
-            batch.execute(properties=("energy", "forces"))
+    atoms = SYSTEMS[0] if atomic_number == 1 else [(atomic_number, (0.0, 0.0, 0.0))]
+    shells = calculator._shells_for_atoms(tuple(Atom.from_value(a) for a in atoms))
+    assert max(shell.angular_momentum for shell in shells) == (
+        1 if atomic_number == 1 else 3
+    )
+    # Method-level capability is a candidate; the native prepared owner must
+    # still reject O's f shell instead of confusing it with H's s/p basis.
+    assert "forces" in calculator.capabilities.supported_properties
+    with calculator.prepare_batch([atoms]) as batch:
+        assert batch._native_dft_force_eligible() is expected
 
 
 def test_dft_prepared_native_force_query_fails_closed_without_method_whitelist() -> (
@@ -225,20 +224,22 @@ def test_cpu_pbe_python_api_consumes_qualified_native_batch_forces(
 
 
 @pytest.mark.parametrize(
-    "method",
+    "method, expected",
     [
-        "lda-rks",
-        "r2scan-rks",
-        "wb97m-v-rks",
-        "pbe-d4-rks",
-        "lda-uks",
-        "b3lyp-uks",
-        "r2scan-uks",
-        "wb97m-v-uks",
+        ("lda-rks", True),
+        ("r2scan-rks", True),
+        ("wb97m-v-rks", True),
+        ("pbe-d4-rks", True),
+        ("lda-uks", True),
+        ("b3lyp-uks", True),
+        ("r2scan-uks", True),
+        ("wb97m-v-uks", True),
     ],
 )
-def test_native_direct_pbe_force_capability_rejects_other_models(method: str) -> None:
-    """A shared family/underlying kernel never authenticates a different model."""
+def test_native_direct_force_capability_uses_qualified_model_profiles(
+    method: str, expected: bool
+) -> None:
+    """Each model is admitted by its own qualified profile, not a PBE whitelist."""
     calculator = Calculator(
         method,
         "sto-3g",
@@ -247,4 +248,4 @@ def test_native_direct_pbe_force_capability_rejects_other_models(method: str) ->
         ks_options=KsOptions(grid=GridSpec(24, 8, 16)),
     )
     with calculator.prepare_batch(SYSTEMS[:1]) as batch:
-        assert not batch._native_dft_force_eligible()
+        assert batch._native_dft_force_eligible() is expected

@@ -6,13 +6,108 @@
 #include "api/handles.hpp"
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
+#include "api/named_ks_inputs.hpp"
 #include "api/native_method_inputs.hpp"
 #include "api/precision.hpp"
 #include "api/prepared_publication.hpp"
+#include "api/provider_initialization_intent.hpp"
+#include "api/provider_initialization_lifetime.hpp"
 #include "generativeqc/generativeqc.h"
+#include "generativeqc/provider_initialization.h"
 #include "methods/method.hpp"
+#include "methods/provider_initialization_intent.hpp"
+#include "molecule/basis_template.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "scf/initial_guess/automatic_policy.hpp"
+
+namespace generativeqc::api {
+namespace {
+generativeqc_status prepare_candidate(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation,
+    const std::optional<scf::ProviderInitializationIntent>& pending,
+    const std::shared_ptr<runtime::DeviceResourceLedger>& resource_owner,
+    const generativeqc_named_ks_descriptor* named = nullptr) {
+  generativeqc::runtime::host_trace::Region trace("calculation_prepare");
+  if (context == nullptr || system == nullptr || descriptor == nullptr || calculation == nullptr) {
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  *calculation = nullptr;
+  if (!generativeqc::api::valid_descriptor(descriptor) ||
+      (descriptor->initial_guess &&
+       !generativeqc::api::valid_descriptor(descriptor->initial_guess))) {
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  }
+  std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
+  try {
+    if (resource_owner) {
+      if (context->state.executed_backend != generativeqc::core::kCudaBackend)
+        return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+      if (context->state.device_id != resource_owner->device)
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    generativeqc::runtime::DeviceResourceScope resources(resource_owner);
+    std::optional<generativeqc::api::NamedKsInputs> named_inputs;
+    if (named) {
+      named_inputs.emplace(*descriptor, *named, context->state.executed_backend);
+      descriptor = &named_inputs->method.base;
+      generativeqc::methods::named_ks::validate_bound_basis(*named_inputs->program, system->data);
+    }
+    if (!generativeqc::api::valid_system_roles(*system, *descriptor,
+                                               context->state.executed_backend)) {
+      context->last_detail =
+          "auxiliary handle role requires its matching method and density-fitting backend";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    auto candidate = std::make_unique<generativeqc_calculation>();
+    candidate->context = context;
+    candidate->resource_ledger = resource_owner;
+    if (pending) {
+      if (context->provider_initialization_calculation)
+        throw std::runtime_error("context retains an explicit provider owner");
+      candidate->pending_provider_initialization = true;
+      context->provider_initialization_calculation = candidate.get();
+      try {
+        generativeqc::methods::prepare_calculation_with_provider_initialization_intent_into(
+            context->state, system->data, *descriptor,
+            generativeqc::api::native_auxiliary_basis(*descriptor), *pending, candidate->plan);
+      } catch (...) {
+        if (generativeqc::api::close_provider_initialization_current(candidate.get()) !=
+            GENERATIVEQC_STATUS_SUCCESS) {
+          context->provider_initialization_failed_candidate = true;
+          (void)candidate.release();
+        } else
+          context->provider_initialization_calculation = nullptr;
+        throw;
+      }
+    } else {
+      candidate->plan = generativeqc::methods::prepare_calculation(
+          context->state, system->data, *descriptor,
+          generativeqc::api::native_auxiliary_basis(*descriptor),
+          named_inputs && named_inputs->program->dispersion.kind
+              ? &named_inputs->program->dispersion
+              : nullptr,
+          named ? named->dispersion_maximum_bytes : 0);
+    }
+    *calculation = candidate.release();
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&context->last_detail);
+  }
+}
+}  // namespace
+
+generativeqc_status prepare_calculation_with_provider_initialization_intent(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, scf::ProviderInitializationIntent pending,
+    generativeqc_calculation** calculation) noexcept {
+  return prepare_candidate(context, system, descriptor, calculation, pending, {});
+}
+
+std::uint32_t provider_initialization_intent_capabilities() noexcept {
+  return 0;  // SDK registration and source-matched device acceptance remain held.
+}
+}  // namespace generativeqc::api
 
 extern "C" {
 
@@ -122,53 +217,63 @@ generativeqc_status generativeqc_calculation_get_initial_guess_diagnostic(
   return generativeqc::api::copy_initial_guess_diagnostic(calculation->initial_guess, out);
 }
 
-static generativeqc_status prepare_calculation(
-    generativeqc_context* context, const generativeqc_system* system,
-    const generativeqc_method_descriptor* descriptor,
-    const std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>& resource_owner,
-    generativeqc_calculation** calculation) {
-  generativeqc::runtime::host_trace::Region trace("calculation_prepare");
-  if (context == nullptr || system == nullptr || descriptor == nullptr || calculation == nullptr) {
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  }
-  *calculation = nullptr;
-  if (!generativeqc::api::valid_descriptor(descriptor) ||
-      (descriptor->initial_guess &&
-       !generativeqc::api::valid_descriptor(descriptor->initial_guess))) {
-    return GENERATIVEQC_STATUS_ABI_MISMATCH;
-  }
-  std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
-  if (!generativeqc::api::valid_system_roles(*system, *descriptor,
-                                             context->state.executed_backend)) {
-    context->last_detail =
-        "auxiliary handle role requires its matching method and density-fitting backend";
-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  }
-  try {
-    if (resource_owner) {
-      if (context->state.executed_backend != generativeqc::core::kCudaBackend)
-        return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-      if (context->state.device_id != resource_owner->device)
-        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    }
-    generativeqc::runtime::DeviceResourceScope resources(resource_owner);
-    auto candidate = std::make_unique<generativeqc_calculation>();
-    candidate->context = context;
-    candidate->resource_ledger = resource_owner;
-    candidate->plan = generativeqc::methods::prepare_calculation(
-        context->state, system->data, *descriptor,
-        generativeqc::api::native_auxiliary_basis(*descriptor));
-    *calculation = candidate.release();
-    return GENERATIVEQC_STATUS_SUCCESS;
-  } catch (...) {
-    return generativeqc::api::map_exception(&context->last_detail);
-  }
-}
-
 generativeqc_status generativeqc_calculation_prepare(
     generativeqc_context* context, const generativeqc_system* system,
     const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation) {
-  return prepare_calculation(context, system, descriptor, {}, calculation);
+  return generativeqc::api::prepare_candidate(context, system, descriptor, calculation, {}, {});
+}
+
+generativeqc_status generativeqc_calculation_prepare_named_ks_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_calculation** calculation) {
+  if (calculation) *calculation = nullptr;
+  if (!name) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return generativeqc::api::prepare_candidate(context, system, descriptor, calculation, {}, {},
+                                              name);
+}
+
+generativeqc_status generativeqc_calculation_prepare_named_ks_with_device_resources_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    const generativeqc_device_resources* resources, generativeqc_calculation** calculation) {
+  if (calculation) *calculation = nullptr;
+  if (!name || !resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return generativeqc::api::prepare_candidate(context, system, descriptor, calculation, {},
+                                              generativeqc::api::device_resource_owner(resources),
+                                              name);
+}
+
+generativeqc_status generativeqc_system_create_named_ks_v1(
+    generativeqc_context* context, const generativeqc_system_descriptor* input,
+    const generativeqc_named_ks_descriptor* named, generativeqc_system** system) {
+  if (system) *system = nullptr;
+  if (!context || !input || !named || !system) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(input)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (!input->atoms || !input->atom_count || input->shells || input->shell_count ||
+      input->primitives || input->primitive_count)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(context->mutex);
+  try {
+    const auto& program =
+        generativeqc::api::named_ks_program(*named, context->state.executed_backend);
+    if (!program.bound_basis)
+      throw generativeqc::methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                                               "named method does not define an orbital basis");
+    const auto expanded = generativeqc::molecule::expand_basis_template(
+        *program.bound_basis, std::span(input->atoms, input->atom_count),
+        GENERATIVEQC_BASIS_SPHERICAL);
+    auto descriptor = *input;
+    descriptor.struct_size = sizeof(descriptor);
+    descriptor.shells = expanded.shells.data();
+    descriptor.shell_count = expanded.shells.size();
+    descriptor.primitives = expanded.primitives.data();
+    descriptor.primitive_count = expanded.primitives.size();
+    descriptor.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+    return generativeqc_system_create(context, &descriptor, system);
+  } catch (...) {
+    return generativeqc::api::map_exception(&context->last_detail);
+  }
 }
 
 generativeqc_status generativeqc_calculation_prepare_with_device_resources(
@@ -176,8 +281,8 @@ generativeqc_status generativeqc_calculation_prepare_with_device_resources(
     const generativeqc_method_descriptor* descriptor,
     const generativeqc_device_resources* resources, generativeqc_calculation** calculation) {
   if (!resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  return prepare_calculation(context, system, descriptor,
-                             generativeqc::api::device_resource_owner(resources), calculation);
+  return generativeqc::api::prepare_candidate(context, system, descriptor, calculation, {},
+                                              generativeqc::api::device_resource_owner(resources));
 }
 
 generativeqc_status generativeqc_calculation_get_device_resources(
@@ -197,6 +302,15 @@ generativeqc_status generativeqc_calculation_get_device_resources(
 
 void generativeqc_calculation_destroy(generativeqc_calculation* calculation) {
   generativeqc::runtime::host_trace::Region trace("calculation_destroy");
+  if (!calculation) return;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  if (generativeqc::api::close_provider_initialization_current(calculation) !=
+      GENERATIVEQC_STATUS_SUCCESS)
+    return;
+  if (calculation->context->provider_initialization_calculation == calculation) {
+    calculation->context->provider_initialization_calculation = nullptr;
+    calculation->context->provider_initialization_failed_candidate = false;
+  }
   delete calculation;
 }
 

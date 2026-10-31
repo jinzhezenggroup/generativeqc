@@ -16,13 +16,28 @@ GENERATIVEQC_ENABLE_CUDA=OFF python -m pip install .
 ```
 
 For CUDA source builds, set `CUDACXX` to the desired NVCC and select the
-target architecture, for example:
+target architecture. For example, an Ada GPU (compute capability 8.9) uses
+the portable CUDA profile automatically:
 
 ```bash
 CUDACXX=/path/to/cuda/bin/nvcc \
-GENERATIVEQC_CUDA_ARCHITECTURES=120 \
+GENERATIVEQC_CUDA_ARCHITECTURES=89 \
 python -m pip install .
 ```
+
+Use `80`/`86` for Ampere, `90` for Hopper, or `100` for data-center Blackwell.
+For an RTX 5090, use `120` to select its measured shell profile. The default
+`auto` selection uses a matching tuned or compatible profile when available,
+and otherwise uses portable CUDA with untuned profile metadata. Explicitly
+requesting an incompatible tuned profile remains an error.
+Architecture-specific prebuilt `sm120` archives
+cannot execute on older GPUs; see the [build guide](../developer/build.md)
+for multi-architecture builds.
+
+For relocated CUDA runtimes, set `CUDA_HOME`, `CUDA_PATH`, or `CUDAToolkit_ROOT`
+to the toolkit prefix, or supply library directories through `LD_LIBRARY_PATH`.
+Provider discovery also checks the active Python environment's `lib` directory
+and NVIDIA's separately installed Python packages.
 
 Verify method discovery after installation:
 

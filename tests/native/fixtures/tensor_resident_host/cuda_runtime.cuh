@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "metrics.hpp"
+#include "runtime/cuda_device_scope.hpp"
 
 enum { cudaMemcpyHostToDevice = 1, cudaMemcpyDeviceToHost = 2, cudaMemcpyDeviceToDevice = 3 };
 struct DeviceRange {
@@ -57,7 +58,9 @@ struct CopyObservation {
   std::uintptr_t source, target;
 };
 inline std::vector<CopyObservation> copies;
+inline std::vector<int> work_devices;
 inline int cudaMemcpyAsync(void* to, const void* from, size_t bytes, int kind, int stream) {
+  work_devices.push_back(host_current_device);
   if (stream != 73) throw std::runtime_error("wrong owner stream");
   copies.push_back(
       {kind, bytes, reinterpret_cast<std::uintptr_t>(from), reinterpret_cast<std::uintptr_t>(to)});
@@ -73,6 +76,7 @@ inline int cudaMemcpyAsync(void* to, const void* from, size_t bytes, int kind, i
   return 0;
 }
 inline int finish_work(size_t watermark) {
+  work_devices.push_back(host_current_device);
   ++synchronizations;
   if (failure == 2) {
     pending.clear();
@@ -166,6 +170,7 @@ struct Context {
   }
   void check_device() {
     if (failure == 3) throw std::runtime_error("injected device mismatch");
+    if (host_current_device != device) throw std::runtime_error("wrong current device");
   }
   uint64_t device_delta() const { return live_device_delta; }
   template <class F>
@@ -248,6 +253,17 @@ extern "C" void host_static_ready(void* p, int ready) {
   static_cast<Context*>(p)->static_ready = ready;
 }
 extern "C" void host_failure(int mode) { failure = mode; }
+extern "C" void host_owner_device(void* p, int device) {
+  static_cast<Context*>(p)->device = device;
+}
+extern "C" int host_selected_device() { return host_current_device; }
+extern "C" void host_fail_device(int device) { host_failed_device = device; }
+extern "C" void host_clear_work_devices() { work_devices.clear(); }
+extern "C" int host_work_on_device(int device) {
+  return !work_devices.empty() &&
+         std::all_of(work_devices.begin(), work_devices.end(),
+                     [device](int observed) { return observed == device; });
+}
 extern "C" int host_synchronizations() { return synchronizations; }
 extern "C" size_t host_pending_work() { return pending.size(); }
 extern "C" void host_clear_copy_kinds() { copies.clear(); }

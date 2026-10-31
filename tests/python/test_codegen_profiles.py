@@ -37,21 +37,19 @@ from generativeqc_compiler.integral.benchmark import (
     benchmark_command as standalone_benchmark_command,
 )
 from generativeqc_compiler.integral.benchmark import emit_shell_class_benchmark_cuda
-from generativeqc_compiler.integral.production import (
-    resolve_production_profile,
-    write_production_bundles,
-)
+from generativeqc_compiler.integral.production_bundle import write_production_bundles
+from generativeqc_compiler.integral.production_profile import resolve_production_profile
 
 TEST_CUDA_TARGET = cuda_target_info("sm_120")
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.parametrize("architecture", ("sm_80", "sm_86", "sm_89", "sm_90"))
-def test_unmeasured_cuda_targets_require_explicit_portable_profile(
+@pytest.mark.parametrize("architecture", ("sm_80", "sm_86", "sm_89", "sm_90", "sm_100"))
+def test_unmeasured_cuda_targets_automatically_use_portable_profile(
     architecture: str,
 ) -> None:
-    """Never hide a missing tuned profile behind an implicit generic build."""
+    """Untuned targets execute portable CUDA and expose that provenance."""
 
     manifest = (
         REPOSITORY_ROOT
@@ -60,13 +58,23 @@ def test_unmeasured_cuda_targets_require_explicit_portable_profile(
         / "integral"
         / "production_shell_classes.json"
     )
-    with pytest.raises(ValueError, match="portable_cuda.*explicitly"):
-        resolve_production_profile(manifest, architecture)
-    resolved = resolve_production_profile(manifest, architecture, "portable_cuda")
+    resolved = resolve_production_profile(manifest, architecture)
+    assert resolved == resolve_production_profile(
+        manifest, architecture, "portable_cuda"
+    )
     assert resolved.profile == "portable_cuda"
     assert resolved.portable is True
     assert resolved.tuned is False
-    assert resolved.selections == ()
+    # Portable provenance must not disable generated mathematical coverage.
+    # dddd retains the independent native implementation pending qualification.
+    assert {item.spec.name for item in resolved.selections} == {
+        name
+        for name in FUSED_SHELL_SPEC_BY_NAME
+        if len(name) == 4 and set(name) <= set("spd") and name != "dddd"
+    }
+    assert all(not item.tuned for item in resolved.selections)
+    assert all(item.consumers == (KernelConsumer.FOCK,) for item in resolved.selections)
+    assert all(item.has_capability("streaming_fock") for item in resolved.selections)
     with pytest.raises(ValueError, match="incompatible"):
         resolve_production_profile(manifest, architecture, "sm_120")
 
@@ -110,6 +118,56 @@ def _small_multi_profile_manifest(path: Path) -> None:
         ),
         encoding="utf-8",
     )
+
+
+@pytest.mark.parametrize("schema_version", (1, 2))
+def test_auto_portable_fallback_without_a_manifest_portable_entry(
+    tmp_path: Path,
+    schema_version: int,
+) -> None:
+    """Older/custom manifests must not require a tuning entry for each GPU."""
+    manifest = tmp_path / "manifest.json"
+    payload = (
+        {
+            "schema_version": 1,
+            "shell_classes": ["dsss"],
+            "acceptance": {"architecture": "sm_120"},
+        }
+        if schema_version == 1
+        else {
+            "schema_version": 2,
+            "default_architecture": "sm_120",
+            "architectures": {"sm_120": {"kind": "tuned", "kernels": []}},
+        }
+    )
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    resolved = resolve_production_profile(manifest, "sm_80")
+    assert resolved == resolve_production_profile(manifest, "sm_80", "portable")
+    assert resolved.portable and not resolved.tuned
+    assert resolved.target.architecture == "sm_80"
+    assert resolved.selections == ()
+    with pytest.raises(ValueError):
+        resolve_production_profile(manifest, "sm_80", "sm_120")
+
+
+def test_auto_prefers_qualified_profiles_and_rejects_ambiguity(tmp_path: Path) -> None:
+    """A portable fallback must not hide broken or ambiguous tuning metadata."""
+    manifest = tmp_path / "manifest.json"
+    _small_multi_profile_manifest(manifest)
+    assert resolve_production_profile(manifest, "sm_80").tuned
+    payload = json.loads(manifest.read_text())
+    payload["architectures"]["sm_80"]["compatible_architectures"] = ["sm_90"]
+    manifest.write_text(json.dumps(payload))
+    resolved = resolve_production_profile(manifest, "sm_90")
+    assert resolved.profile == "sm_80" and not resolved.portable
+    payload["architectures"]["sm_120"]["compatible_architectures"] = ["sm_90"]
+    manifest.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="multiple production profiles"):
+        resolve_production_profile(manifest, "sm_90")
+    payload["architectures"]["sm_80"]["generator_abi"] = 0
+    manifest.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="generator ABI"):
+        resolve_production_profile(manifest, "sm_80")
 
 
 def test_multi_profile_bundle_is_order_independent_and_collision_free(

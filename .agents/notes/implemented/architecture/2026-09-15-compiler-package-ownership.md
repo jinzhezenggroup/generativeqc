@@ -90,6 +90,9 @@ mathematics does not.
 
 ## Revisit when
 
+The temporary shim-retention policy below is superseded by the maintainer's
+[2026-10-28 pre-release cleanup decision](../compatibility/2026-10-28-unreleased-canonical-imports.md).
+
 Revisit package boundaries if native/runtime ownership changes, if compatibility
 facades are the only remaining repository callers and downstream users have had a
 release to migrate, or if a new backend requires a genuinely shared algebra layer

@@ -38,6 +38,12 @@
       "legacy": false
     },
     {
+      "name": "mn15",
+      "family": "split:MN15",
+      "method": "MN15",
+      "legacy": false
+    },
+    {
       "name": "wb97mv",
       "family": "Wb97mv",
       "method": "WB97M-V",

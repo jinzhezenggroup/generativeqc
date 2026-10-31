@@ -332,7 +332,7 @@ class CCSDTCBSCalculator:
             else (0.0, 1.0)
         )
 
-        from ._correlation_convergence import convergence_limits, convergence_scale
+        from ._correlation_convergence import convergence_policy
         from .force_aware_numerics import TargetErrorBudget
 
         coefficients: dict[tuple[str, str], float] = {}
@@ -359,8 +359,7 @@ class CCSDTCBSCalculator:
             if budget is not None
             else None
         )
-        scale = convergence_scale(component_budget)
-        limits = convergence_limits(component_budget)
+        scale, limits = convergence_policy(component_budget)
         if scale:
             for name in (
                 "energy_tolerance",

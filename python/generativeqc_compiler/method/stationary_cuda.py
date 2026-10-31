@@ -10,8 +10,9 @@ Rationale: .agents/notes/implemented/architecture/2026-09-20-stationary-cuda-emi
 
 import json
 import os
+import re
 import typing
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from functools import lru_cache
 from itertools import permutations
 from pathlib import Path
@@ -38,9 +39,15 @@ from generativeqc_compiler.method.stationary_resources import (
     GEOMETRY_THREADS,
 )
 from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
+from generativeqc_compiler.xc.automatic_semilocal import (
+    automatic_functional_name,
+    automatic_registry_entries,
+    automatic_scf_domain,
+)
 from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
 
 from ._generated_stationary_aot_profiles import STATIONARY_AOT_BUILD_PROFILES
+from .bulk_ks import resolve_bulk_ks
 from .spec import SemilocalXCPrimitive, resolve_method
 from .stationary_becke_phased import emit_stationary_phased_becke_cuda
 from .stationary_gradient import (
@@ -64,7 +71,9 @@ _FUSED_WEIGHT_SOURCES = ("one_electron", "coulomb", "overlap_pulay")
 _SPLIT_COMPILE_THREADS_ENV = "GENERATIVEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS"
 
 
-def stationary_runtime_sources(plan: StationaryGradientPlan) -> tuple[str, ...]:
+def stationary_runtime_sources(
+    plan: StationaryGradientPlan, *, include_external: bool = False
+) -> tuple[str, ...]:
     """Retain plan order for contributions owned by the bounded CUDA arena.
 
     ECP and range/nonlocal providers retain separate ownership. Full-range
@@ -74,7 +83,8 @@ def stationary_runtime_sources(plan: StationaryGradientPlan) -> tuple[str, ...]:
     return tuple(
         source
         for source in plan.source_names
-        if source in (*STATIONARY_RUNTIME_SOURCE_NAMES, "exact_exchange")
+        if include_external
+        or source in (*STATIONARY_RUNTIME_SOURCE_NAMES, "exact_exchange")
     )
 
 
@@ -98,8 +108,10 @@ def stationary_external_provider_sources(
     )
 
 
-def _runtime_layout_cuda(plan: StationaryGradientPlan) -> str:
-    sources = stationary_runtime_sources(plan)
+def _runtime_layout_cuda(
+    plan: StationaryGradientPlan, *, include_external: bool = False
+) -> str:
+    sources = stationary_runtime_sources(plan, include_external=include_external)
     integral_slots = [
         sources.index(s)
         for s in (*_FUSED_WEIGHT_SOURCES, "exact_exchange")
@@ -146,7 +158,12 @@ def _split_compile_options(
     return () if threads == 1 else (f"--split-compile={threads}",)
 
 
-def emit_stationary_weight_cuda(plan: typing.Any) -> str:
+def emit_stationary_weight_cuda(
+    plan: typing.Any,
+    *,
+    include_plan_identity: bool = True,
+    include_external: bool = False,
+) -> str:
     """Emit pointwise device weights directly from StationaryGradientPlan TensorIR."""
     if not isinstance(plan, StationaryGradientPlan):
         raise TypeError(
@@ -154,10 +171,10 @@ def emit_stationary_weight_cuda(plan: typing.Any) -> str:
         )
     functions = [
         "namespace generativeqc_stationary_cuda {",
-        f"// stationary-plan: {plan.identity}",
+        *([f"// stationary-plan: {plan.identity}"] if include_plan_identity else []),
     ]
     dispatch: list[str] = []
-    sources = stationary_runtime_sources(plan)
+    sources = stationary_runtime_sources(plan, include_external=include_external)
     for source in (
         *_FUSED_WEIGHT_SOURCES,
         *(("exact_exchange",) if plan.exchange is not None else ()),
@@ -372,6 +389,7 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     double* grad, StationaryPointValue& xc, double& becke_seed, int* error,
     bool bound_point = false) {
   const size_t np = view.npoint;
+#if !defined(GENERATIVEQC_NATIVE_STAGED_POINT)
   double rho[2]{view.features[p], view.features[5 * np + p]}, g[2][3]{}, tau[2]{};
   // Consume the emitted ingredient layout, never a functional's numeric code.
   if (stationary_coefficients > 1)
@@ -379,8 +397,16 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
       for (size_t k = 0; k < 3; ++k) g[s][k] = view.features[(5 * s + k + 1) * np + p];
   if (stationary_coefficients == 5)
     for (size_t s = 0; s < 2; ++s) tau[s] = view.features[(5 * s + 4) * np + p];
+#endif
   // The exact shared SCF point model, including vacuum/spin boundaries.
   xc = StationaryPointValue{};
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+  // In this compiled ABI, external is the owner's typed point tile. The
+  // ordinary six-channel nonlocal seed ABI remains in the fused consumers.
+  // Its allocation, producer and same-stream lifetime are bound by the owner.
+  if (!external || *error) { atomicExch(error, 1); return false; }
+  xc = reinterpret_cast<const StationaryPointValue*>(external)[p];
+#else
   if constexpr (std::is_same_v<Arithmetic, float>) {
     if (external) {
       atomicExch(error, 1);
@@ -430,6 +456,7 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     else
       xc = stationary_evaluate_point(rho, g, tau);
   }
+#endif
   if (!xc.valid) {
     atomicExch(error, 1);
     return false;
@@ -586,13 +613,14 @@ struct GeometryBlockTeam {
 template <class Arithmetic, class Accumulation>
 __device__ void geometry_reduce_ao_panel(generativeqc::dft::GridTaskView view,
     const int64_t* ao_atoms, size_t owner, size_t na, const Arithmetic* ao_gradient,
-    Accumulation* grad) {
+    Accumulation* grad, size_t ao_begin, size_t ao_count) {
   const size_t grid_coordinate = 3 * na + 3 * owner;
   Accumulation grid_gradient[3]{grad[grid_coordinate], grad[grid_coordinate + 1],
                           grad[grid_coordinate + 2]};
   size_t previous_atom = na;
   Accumulation atom_gradient[3]{};
-  for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index) {
+  for (size_t local = 0; local < ao_count; ++local) {
+    const size_t ao_index = ao_begin + local;
     const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
     const size_t atom = size_t(ao_atoms[global_ao]);
     if (atom != previous_atom) {
@@ -604,7 +632,7 @@ __device__ void geometry_reduce_ao_panel(generativeqc::dft::GridTaskView view,
       previous_atom = atom;
     }
     for (size_t axis = 0; axis < 3; ++axis) {
-      const Arithmetic value = ao_gradient[3 * ao_index + axis];
+      const Arithmetic value = ao_gradient[3 * local + axis];
       atom_gradient[axis] -= value;
       grid_gradient[axis] += value;
     }
@@ -643,8 +671,15 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       ? na - 1 : stationary_becke_pair_tile_rows;
   const size_t pair_capacity = na <= stationary_becke_retained_max_atoms
       ? na * (na - 1) / 2 : pair_rows * (2 * na - pair_rows - 1) / 2;
-  const bool cooperative_ao = point_words * sizeof(double) + 3 * view.nactive * sizeof(Arithmetic)
-      <= pair_capacity * sizeof(PairState);
+  // Fit a bounded AO chunk, not the entire basis. A slightly larger basis
+  // must not serialize every pullback when the same shared arena can serve
+  // successive chunks. Point storage remains live across all chunks; pair
+  // storage is still dead until the final collective barrier below.
+  const size_t pair_bytes = pair_capacity * sizeof(PairState);
+  const size_t point_bytes = point_words * sizeof(double);
+  const size_t ao_capacity = pair_bytes > point_bytes
+      ? (pair_bytes - point_bytes) / (3 * sizeof(Arithmetic)) : 0;
+  const bool cooperative_ao = ao_capacity != 0;
   auto* point_value = reinterpret_cast<StationaryPointValue*>(geometry_pair_storage);
   auto* ao_gradient = reinterpret_cast<Arithmetic*>(geometry_pair_storage + point_words);
   __shared__ GeometryBlockControl control;
@@ -664,11 +699,16 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       if constexpr (precomputed_point) control.valid = control.valid && !*error;
       if (control.valid) {
         if constexpr (precomputed_point) {
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+          control.valid = geometry_point_setup(view, p, owner, na, raw, external,
+              external_stride, external_offset, grad, *point_value, control.seed, error);
+#else
           *point_value = *reinterpret_cast<const StationaryPointValue*>(ws);
           control.seed = phase_seeds[p];
           for (size_t axis = 0; axis < 3; ++axis)
             grad[3 * na + 3 * owner + axis] += ws[3 * na + 3 * owner + axis];
-          if (!cooperative_ao)
+#endif
+          if (control.valid && !cooperative_ao)
             control.valid = geometry_point_ao_prepared(view, work, ao_atoms, p, owner, na,
                                                        weights, *point_value, grad, error);
         } else {
@@ -688,35 +728,53 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       return;
     }
     if (cooperative_ao) {
-      for (size_t ao_index = threadIdx.x; ao_index < view.nactive; ao_index += blockDim.x) {
-        const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
-        if (global_ao >= view.nao || ao_atoms[global_ao] < 0 || ao_atoms[global_ao] >= int64_t(na)) {
-          atomicExch(&control.collective_valid, 0);
-          continue;
+      auto* point_partial = reinterpret_cast<float*>(ws + 5 * na);
+      if constexpr (std::is_same_v<Arithmetic, float>) {
+        if (threadIdx.x == 0)
+          for (size_t coordinate = 0; coordinate < 6 * na; ++coordinate)
+            point_partial[coordinate] = 0;
+      }
+      for (size_t begin = 0; begin < view.nactive; begin += ao_capacity) {
+        const size_t count = std::min(ao_capacity, view.nactive - begin);
+        for (size_t local = threadIdx.x; local < count; local += blockDim.x) {
+          const size_t ao_index = begin + local;
+          const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
+          if (global_ao >= view.nao || ao_atoms[global_ao] < 0 || ao_atoms[global_ao] >= int64_t(na)) {
+            atomicExch(&control.collective_valid, 0);
+            continue;
+          }
+          geometry_ao_gradient<Arithmetic>(view, work, p, ao_index, weights[p], *point_value,
+                                           ao_gradient + 3 * local);
         }
-        geometry_ao_gradient<Arithmetic>(view, work, p, ao_index, weights[p], *point_value,
-                             ao_gradient + 3 * ao_index);
+        __syncthreads();
+        if (!control.collective_valid) {
+          if (threadIdx.x == 0) atomicExch(error, 1);
+          return;
+        }
+        // Publish chunks in original AO order, including atom runs spanning
+        // chunk boundaries and arbitrary indexed maps. Do not tree-reduce or
+        // atomically accumulate floating-point gradients.
+        if (threadIdx.x == 0) {
+          if constexpr (std::is_same_v<Arithmetic, float>)
+            geometry_reduce_ao_panel(view, ao_atoms, size_t(owner), na, ao_gradient,
+                                     point_partial, begin, count);
+          else
+            geometry_reduce_ao_panel(view, ao_atoms, size_t(owner), na, ao_gradient,
+                                     grad, begin, count);
+        }
+        // Readers retire before the next AO producer reuses the same panel.
+        __syncthreads();
       }
-      __syncthreads();
-      if (!control.collective_valid) {
-        if (threadIdx.x == 0) atomicExch(error, 1);
-        return;
-      }
-      // One ordered traversal replaces na full AO-label scans. The producer's
-      // preceding collective vote validates every label before any scatter.
-      if (threadIdx.x == 0) {
-        if constexpr (std::is_same_v<Arithmetic, float>) {
-          // Recover translation from the same rounded point-local atom sums.
-          auto* point_partial = reinterpret_cast<float*>(ws + 5 * na);
-          for (size_t coordinate = 0; coordinate < 6 * na; ++coordinate) point_partial[coordinate] = 0;
-          geometry_reduce_ao_panel(view, ao_atoms, size_t(owner), na, ao_gradient, point_partial);
+      if constexpr (std::is_same_v<Arithmetic, float>) {
+        // Recover translation once from the same rounded point-local atom
+        // sums, after every chunk has contributed to them.
+        if (threadIdx.x == 0)
           for (size_t atom = 0; atom < na; ++atom)
             for (size_t axis = 0; axis < 3; ++axis) {
               const double value = point_partial[3 * atom + axis];
               grad[3 * atom + axis] += value;
               grad[3 * na + 3 * owner + axis] -= value;
             }
-        } else geometry_reduce_ao_panel(view, ao_atoms, size_t(owner), na, ao_gradient, grad);
       }
       // Every reader must finish before Becke overwrites the aliased panel.
       __syncthreads();
@@ -868,14 +926,16 @@ __global__ void geometry_reduce(const double* partial, size_t na, size_t geometr
 """
 
 
-def emit_stationary_reduction_cuda(plan: StationaryGradientPlan) -> str:
+def emit_stationary_reduction_cuda(
+    plan: StationaryGradientPlan, *, include_external: bool = False
+) -> str:
     """Specialize the authoritative ordered TensorIR sum for native source storage."""
     lines = [
         "namespace generativeqc_stationary_cuda {",
         "__global__ void source_reduce(const double* input, size_t na, double* output, int* error) {",
         "  if (*error) return;",
     ]
-    sources = stationary_runtime_sources(plan)
+    sources = stationary_runtime_sources(plan, include_external=include_external)
     if plan.source_names != sources:
         # ECP/range/nonlocal sources still have separately owned providers.
         lines += ["  atomicExch(error, 1);", "}", "}", ""]
@@ -910,13 +970,25 @@ def emit_stationary_reduction_cuda(plan: StationaryGradientPlan) -> str:
 
 
 def emit_stationary_scientific_kernels(
-    plan: typing.Any, *, include_reduction: bool = True
+    plan: typing.Any,
+    *,
+    include_reduction: bool = True,
+    staged_point: bool = False,
+    include_external: bool = False,
 ) -> str:
     """Emit XC geometry with an optional independently compiled final reduction."""
     return (
-        emit_stationary_weight_cuda(plan)
+        emit_stationary_weight_cuda(
+            plan,
+            include_plan_identity=not staged_point,
+            include_external=include_external,
+        )
         + _STATIONARY_SCIENTIFIC_KERNELS
-        + (emit_stationary_reduction_cuda(plan) if include_reduction else "")
+        + (
+            emit_stationary_reduction_cuda(plan, include_external=include_external)
+            if include_reduction
+            else ""
+        )
     )
 
 
@@ -946,8 +1018,15 @@ class StationaryAotProfile:
 
     @property
     def plan(self) -> StationaryGradientPlan:
+        # Automatic registrations reuse their energy owner's exact work domain.
+        # The profile identifies package contents; it does not grant capability.
+        method = (
+            resolve_bulk_ks(self.method, spin=self.spin, backend="cuda").method
+            if self.name.startswith("libxc_")
+            else resolve_method(self.method, spin=self.spin)
+        )
         return StationaryGradientPlan(
-            resolve_method(self.method, spin=self.spin),
+            method,
             StationaryMeanField(self.point_model),
         )
 
@@ -962,6 +1041,16 @@ QUALIFIED_STATIONARY_AOT_PROFILES = tuple(
 QUALIFIED_STATIONARY_AOT_PROFILE_NAMES = tuple(
     f"{profile.name}_{'rks' if profile.spin == 'unpolarized' else 'uks'}"
     for profile in QUALIFIED_STATIONARY_AOT_PROFILES
+)
+# Discovery must remain cheap: do not lower hundreds of MethodIRs merely to
+# choose a bounded package. The selected graph is authenticated during emission.
+AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES = tuple(
+    f"libxc_{entry.code}_{spin}"
+    for entry in automatic_registry_entries()
+    for spin in ("rks", "uks")
+)
+AVAILABLE_STATIONARY_AOT_PROFILE_NAMES = (
+    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES + AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES
 )
 STATIONARY_AOT_ASSETS = (
     "src/dft/stationary_gradient_cuda.cuh",
@@ -1060,6 +1149,17 @@ def _profile_stem(profile: StationaryAotProfile) -> str:
 
 @lru_cache(maxsize=16)
 def _qualified_aot_profile(name: str) -> StationaryAotProfile:
+    match = re.fullmatch(r"libxc_([1-9][0-9]*)_(rks|uks)", name)
+    if match:
+        code = int(match[1])
+        functional = automatic_functional_name(code)
+        return StationaryAotProfile(
+            f"libxc_{code}",
+            code,
+            functional,
+            "unpolarized" if match[2] == "rks" else "polarized",
+            point_model=automatic_scf_domain(functional),
+        )
     matches = tuple(
         profile
         for profile in QUALIFIED_STATIONARY_AOT_PROFILES
@@ -1093,6 +1193,11 @@ def stationary_aot_profile_for_plan(
         and profile.spin == spin
         and profile.plan.identity == plan.identity
     )
+    automatic = f"libxc_{functional}_{'rks' if spin == 'unpolarized' else 'uks'}"
+    if automatic in AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES:
+        profile = _qualified_aot_profile(automatic)
+        if profile.plan.identity == plan.identity:
+            matches += (profile,)
     if len(matches) > 1:
         raise ValueError("stationary CUDA AOT plan identity has duplicate profiles")
     return matches[0] if matches else None
@@ -1214,6 +1319,7 @@ def emit_stationary_profile_component_aot_wrapper_cuda(
     profile: str,
     *,
     iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+    source_cache: Path | None = None,
 ) -> str:
     """Emit a profile wrapper linked against the shared packaged s/p/d shards."""
 
@@ -1226,6 +1332,7 @@ def emit_stationary_profile_component_aot_wrapper_cuda(
         functional=selected.functional,
         plan=selected.plan,
         iterations=iterations,
+        source_cache=source_cache,
         primitive_shards=QUALIFIED_SPD_AOT_SHARDS,
         primitive_shard_width=QUALIFIED_SPD_AOT_SHARD_WIDTH,
     )
@@ -1235,7 +1342,9 @@ def emit_stationary_profile_aot_wrapper_cuda(
     profile: str,
     *,
     iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+    source_cache: Path | None = None,
     include_reduction: bool = True,
+    include_external: bool = False,
 ) -> str:
     """Emit an exact-plan s/p wrapper for the shared, separably compiled primitives.
 
@@ -1251,7 +1360,9 @@ def emit_stationary_profile_aot_wrapper_cuda(
         functional=selected.functional,
         plan=selected.plan,
         iterations=iterations,
+        source_cache=source_cache,
         include_reduction=include_reduction,
+        include_external=include_external,
     )
 
 
@@ -1282,6 +1393,7 @@ def emit_stationary_component_aot_wrapper_cuda(
     *,
     spin: str = "unpolarized",
     iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+    source_cache: Path | None = None,
 ) -> str:
     """Emit the small wrapper linked against the fixed packaged s/p/d primitive shards."""
     if type(iterations) is not int or iterations != QUALIFIED_PARTITION_ITERATIONS:
@@ -1290,7 +1402,7 @@ def emit_stationary_component_aot_wrapper_cuda(
         )
     profile = _legacy_profile(functional, spin)
     return emit_stationary_profile_component_aot_wrapper_cuda(
-        _profile_stem(profile), iterations=iterations
+        _profile_stem(profile), iterations=iterations, source_cache=source_cache
     )
 
 
@@ -1696,8 +1808,26 @@ def emit_stationary_wrapper_cuda(
     primitive_shards: int | None = None,
     primitive_shard_width: int | None = None,
     include_reduction: bool = True,
+    staged_point: bool = False,
+    source_cache: Path | None = None,
+    include_external: bool = False,
 ) -> typing.Any:
     """Emit the small method-specific TU linked against cached primitive code."""
+
+    if source_cache is not None:
+        return cached_stationary_wrapper_cuda(
+            cache=source_cache,
+            functional=functional,
+            pbe=pbe,
+            plan=plan,
+            iterations=iterations,
+            declare_primitive=declare_primitive,
+            primitive_shards=primitive_shards,
+            primitive_shard_width=primitive_shard_width,
+            include_reduction=include_reduction,
+            staged_point=staged_point,
+            include_external=include_external,
+        )[0]
 
     if not isinstance(plan, StationaryGradientPlan):
         raise TypeError("stationary CUDA requires StationaryGradientPlan")
@@ -1730,17 +1860,26 @@ def emit_stationary_wrapper_cuda(
             pbe=pbe,
             iterations=iterations,
             semilocal=semilocal,
+            staged_point=staged_point,
         )
         + "namespace generativeqc_stationary_cuda {\n"
         + f"constexpr unsigned stationary_spin_blocks = {plan.spin_blocks};\n"
         + "constexpr bool stationary_native_reduction_supported = "
-        + str(plan.source_names == stationary_runtime_sources(plan)).lower()
+        + str(
+            plan.source_names
+            == stationary_runtime_sources(plan, include_external=include_external)
+        ).lower()
         + ";\n"
         + "}\n"
-        + _runtime_layout_cuda(plan)
+        + _runtime_layout_cuda(plan, include_external=include_external)
         + emit_stationary_phased_becke_cuda(iterations=iterations)
         + '#include "dft/stationary_gradient_cuda.cuh"\n'
-        + emit_stationary_scientific_kernels(plan, include_reduction=include_reduction)
+        + emit_stationary_scientific_kernels(
+            plan,
+            include_reduction=include_reduction,
+            staged_point=staged_point,
+            include_external=include_external,
+        )
     )
 
 
@@ -1765,6 +1904,71 @@ def emit_stationary_cuda(
         iterations=iterations,
         declare_primitive=False,
     )
+
+
+def cached_stationary_wrapper_cuda(
+    *,
+    cache: Path | None,
+    plan: StationaryGradientPlan,
+    functional: typing.Any = None,
+    pbe: typing.Any = None,
+    iterations: int = 3,
+    declare_primitive: bool = True,
+    primitive_shards: int | None = None,
+    primitive_shard_width: int | None = None,
+    include_reduction: bool = True,
+    staged_point: bool = False,
+    include_external: bool = False,
+) -> tuple[str, dict[str, typing.Any]]:
+    """Reuse target-independent lowering across AOT builds and runtime JIT.
+
+    Every emitter selection, exact scientific plan and dependency is part of
+    the recipe. GPU targets and toolchains belong exclusively to downstream
+    binary identities: this emitter never reads either of them. A source hit
+    cannot admit a binary for a different target or waive its integrity checks.
+    """
+    started = perf_counter()
+    if not isinstance(plan, StationaryGradientPlan):
+        raise TypeError("stationary CUDA requires StationaryGradientPlan")
+    selection: dict[str, typing.Any] = {
+        "plan": plan,
+        "functional": functional,
+        "pbe": pbe,
+        "iterations": iterations,
+        "declare_primitive": declare_primitive,
+        "primitive_shards": primitive_shards,
+        "primitive_shard_width": primitive_shard_width,
+        "include_reduction": include_reduction,
+        "staged_point": staged_point,
+        # Composite range/VV10 sources change layout and reduction semantics.
+        # A semilocal-only cache entry cannot satisfy the complete endpoint.
+        "include_external": include_external,
+    }
+    recipe = {
+        "dependencies": source_hashes(
+            "common",
+            "integral",
+            "tensor",
+            "xc",
+            "dft",
+            "method",
+            assets=STATIONARY_AOT_ASSETS,
+        ),
+        "precision": "FP64/strict/no-fmad",
+        "product": "stationary-wrapper-cuda.v2",
+        **selection,
+        "plan": plan.to_payload(),
+        "method_manifest": plan.method.to_payload(),
+    }
+    recipe_seconds = perf_counter() - started
+    sources, work = cached_sources(
+        cache,
+        recipe,
+        lambda: (emit_stationary_wrapper_cuda(**selection),),
+        expected_units=1,
+    )
+    work["recipe_seconds"] = recipe_seconds
+    return sources[0], work
 
 
 def compile_stationary_cuda(
@@ -1802,7 +2006,6 @@ def compile_stationary_cuda(
     if callable(primitive_source):
         primitive_source, primitive_work = primitive_source()
 
-    recipe_started = perf_counter()
     sharded = not isinstance(primitive_source, str)
     primitive_sources = (
         tuple(primitive_source) if sharded else (typing.cast("str", primitive_source),)
@@ -1813,44 +2016,16 @@ def compile_stationary_cuda(
         raise ValueError("stationary CUDA requires nonempty primitive source")
     if sharded != (primitive_shard_width is not None):
         raise ValueError("stationary CUDA shard width must match primitive sources")
-    wrapper_recipe = {
-        "dependencies": source_hashes(
-            "common",
-            "integral",
-            "tensor",
-            "xc",
-            "dft",
-            "method",
-            assets=STATIONARY_AOT_ASSETS,
-        ),
-        "target": asdict(compiler.target),
-        "precision": "FP64/strict/no-fmad",
-        "product": "stationary-wrapper-cuda.v1",
-        "plan": plan.to_payload(),
-        "method_manifest": plan.method.to_payload(),
-        "functional": functional,
-        "pbe": pbe,
-        "iterations": iterations,
-        "primitive_shards": len(primitive_sources) if sharded else None,
-        "primitive_shard_width": primitive_shard_width,
-    }
-    recipe_seconds = perf_counter() - recipe_started
-    wrapper_sources, wrapper_work = cached_sources(
-        source_cache,
-        wrapper_recipe,
-        lambda: (
-            emit_stationary_wrapper_cuda(
-                functional=functional,
-                pbe=pbe,
-                plan=plan,
-                iterations=iterations,
-                primitive_shards=len(primitive_sources) if sharded else None,
-                primitive_shard_width=primitive_shard_width,
-            ),
-        ),
-        expected_units=1,
+    wrapper_source, wrapper_work = cached_stationary_wrapper_cuda(
+        cache=source_cache,
+        functional=functional,
+        pbe=pbe,
+        plan=plan,
+        iterations=iterations,
+        primitive_shards=len(primitive_sources) if sharded else None,
+        primitive_shard_width=primitive_shard_width,
     )
-    wrapper_source = wrapper_sources[0]
+    recipe_seconds = wrapper_work["recipe_seconds"]
     binary_started = perf_counter()
     cache.mkdir(parents=True, exist_ok=True)
     wrapper_path = cache / (canonical_hash(wrapper_source) + ".stationary.cu")

@@ -105,6 +105,54 @@ def test_cuda_runtime_search_finds_pypi_provider_dirs(
     assert cusolver.resolve() in search_dirs
 
 
+@pytest.mark.parametrize("variable", ("CUDA_HOME", "CUDA_PATH", "CUDAToolkit_ROOT"))
+def test_cuda_runtime_search_honors_relocated_toolkits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variable: str
+) -> None:
+    """User toolkits and loader paths precede bundled or system providers."""
+    for name in (
+        "CUDA_HOME",
+        "CUDA_PATH",
+        "CUDAToolkit_ROOT",
+        "CUDACXX",
+        "GENERATIVEQC_NVCC",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    root = tmp_path / "relocated toolkit"
+    toolkit = root / "targets/aarch64-linux/lib"
+    loader = tmp_path / "loader"
+    prefix = tmp_path / "environment"
+    for path in (toolkit, loader, prefix / "lib"):
+        path.mkdir(parents=True)
+    monkeypatch.setenv(variable, str(root))
+    monkeypatch.setenv("LD_LIBRARY_PATH", f"{loader}:{loader}:")
+    monkeypatch.setattr(_cuda_runtime.platform, "machine", lambda: "aarch64")
+    monkeypatch.setattr(_cuda_runtime.sys, "prefix", str(prefix))
+    directories = _cuda_runtime._runtime_search_dirs()
+    assert directories[:3] == [
+        loader.resolve(),
+        toolkit.resolve(),
+        (prefix / "lib").resolve(),
+    ]
+    assert Path.cwd() not in directories
+
+
+@pytest.mark.parametrize("variable", ("CUDACXX", "GENERATIVEQC_NVCC"))
+def test_cuda_runtime_search_uses_selected_compiler_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variable: str
+) -> None:
+    compiler = tmp_path / "toolkit/bin/nvcc"
+    compiler.parent.mkdir(parents=True)
+    compiler.write_text("#!/bin/sh\nexit 0\n")
+    compiler.chmod(0o755)
+    libraries = tmp_path / "toolkit/lib64"
+    libraries.mkdir()
+    monkeypatch.delenv("GENERATIVEQC_NVCC", raising=False)
+    monkeypatch.delenv("CUDACXX", raising=False)
+    monkeypatch.setenv(variable, str(compiler))
+    assert libraries in _cuda_runtime._runtime_search_dirs()
+
+
 def test_cuda_runtime_preload_uses_curated_sonames_not_driver(
     tmp_path: typing.Any, monkeypatch: typing.Any
 ) -> None:
@@ -350,7 +398,7 @@ def test_project_metadata_declares_cuda_runtime_providers() -> None:
         "nvidia-nvjitlink-cu12",
     }
     assert required <= {dependency.split(">=", 1)[0] for dependency in dependencies}
-    assert project["project"]["optional-dependencies"]["cuda12"] == []
+    assert "cuda12" not in project["project"]["optional-dependencies"]
 
 
 def test_cibuildwheel_uses_base_dependencies_for_provider_smoke() -> None:

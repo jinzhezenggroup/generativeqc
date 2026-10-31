@@ -241,7 +241,8 @@ fallback remains reserved even while optional storage is live. Shared resource
 handles retain separate promises for separate prepared owners.
 
 Selected external inventories retain the dense/single-tile path. Preliminary
-guesses, range/nonlocal/D4 corrections, automatic/generated-split programs,
+guesses, range/nonlocal corrections, legacy D4 and all named D3/D4 corrections,
+automatic/generated-split programs,
 explicit incremental J/K, application precision budgets and experimental PBE
 point precision retain incumbent admission. A native bound that does not fit
 also retains incumbent admission; this is a bounded fallback under the same
@@ -317,14 +318,14 @@ candidates and need not be simultaneously attainable.
 
 ## Current provider inventory
 
-CPU HF/KS plans with an already-loaded `generativeqc_resource_basis_shape_v1`
+CPU and CUDA HF/KS plans with an already-loaded `generativeqc_resource_basis_shape_v1`
 query obtain public/Cartesian AO, shell, primitive and maximum-angular counts
 from native compact expanded-contraction rows. The AO rule is shared with
 normalized native systems. Count overflow or native refusal never retries
 Python arithmetic; failed queries leave native outputs unchanged. The query
 does not read coordinates or coefficients, allocate scientific arrays, load a
-provider, or qualify an otherwise unsupported method/basis. Missing-symbol,
-library-free and CUDA planning retain explicit portable shape arithmetic.
+provider, or qualify an otherwise unsupported method/basis. Missing-symbol and
+library-free planning retain explicit portable shape arithmetic.
 Python still owns basis expansion and mathematical provenance in this planner;
 these counts are not complete allocation, provider, lease or RSS authority.
 
@@ -590,6 +591,13 @@ also reserves TensorIR's separate allocations. The ledger excludes CUDA
 context/modules, graphs, stacks, pool/page retention and library internals.
 Those exclusions and any allowances are explicit in the plan. It is not a
 process-wide physical-memory cap.
+
+Native D4 correction owners also charge their retained CUDA buffers to an
+active device ledger. Partial construction and host exceptions release those
+charges; a surviving correction owner keeps its ledger alive after the submitting
+scope ends, including cross-thread destruction. Without an active ledger,
+standalone D4 retains its existing `maximum_bytes` worker-schedule bound. This
+allocation contract alone does not add D4 to global `ResourcePlan` admission.
 
 CPU diagnostics sample simultaneously owned integral/SCF/DIIS vector capacities
 at iteration boundaries. They **exclude transient recurrence/eigensolver

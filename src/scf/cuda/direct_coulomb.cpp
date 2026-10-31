@@ -912,7 +912,12 @@ static cudaError_t enqueue_generated_full_range_energy_derivatives(
   // Total-force consumers combine the compiler-owned cotangents before AD;
   // derivative exports retain independent channels on exactly the same domain.
   const auto output_elements = (separate_sources ? 2U : 1U) * coordinates;
+  // A disabled exchange source needs no second cotangent traversal. Preserve
+  // the requested two-channel publication: the full reset below leaves K zero
+  // while the existing combined kernel writes the sole J contribution to slot 0.
+  const bool split_traversal = separate_sources && exchange_coefficient != 0.0;
   runtime::cuda_trace::trace_counter("direct_force_output_channels", separate_sources ? 2U : 1U);
+  runtime::cuda_trace::trace_counter("direct_force_traversal_channels", split_traversal ? 2U : 1U);
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           shared.stream);
   if (error != cudaSuccess) return error;
@@ -928,7 +933,7 @@ static cudaError_t enqueue_generated_full_range_energy_derivatives(
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Full, 0.0,
           coulomb_coefficient, exchange_coefficient, p.bounded_block_domain, p.force_resident_bra,
-          separate_sources);
+          split_traversal);
       if (error != cudaSuccess) return error;
     } else {
       error = launch_bounded_shell_energy_derivative(
@@ -936,7 +941,7 @@ static cudaError_t enqueue_generated_full_range_energy_derivatives(
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, coulomb_coefficient,
-          exchange_coefficient, p.bounded_block_domain, separate_sources, shared.topology,
+          exchange_coefficient, p.bounded_block_domain, split_traversal, shared.topology,
           resolve_direct_spd_force_schedule(p.spd_force_schedule, allow_spatial_default));
       if (error != cudaSuccess) return error;
     }
@@ -1050,6 +1055,90 @@ cudaError_t consume_generated_full_range_energy_derivatives(
   return cudaSuccess;
 }
 
+/** Submit the existing canonical LR shell derivative with a caller-owned sink.
+ * Host and resident consumers share this selection; changing transport must
+ * not replace the specialized omega=0.3 source with a generic fused traversal.
+ * Density bounds, heads, cursor and output must already be prepared/cleared.
+ */
+static cudaError_t enqueue_generated_long_range_force(GeneratedExchangePlan& p, bool unrestricted,
+                                                      double omega, double coefficient,
+                                                      double* output) {
+  auto& shared = *p.shared;
+  if (p.angular_force_opt_in)
+    return launch_bounded_shell_angular_energy_derivative(
+        unrestricted, shared.worker_blocks, shared.stream, shared.batch, shared.screening,
+        shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+        p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin,
+        shared.active, output, p.force_cursor, DirectCoulombRange::Long, omega, 0.0, coefficient,
+        p.bounded_block_domain);
+  launch_bounded_shell_range_exchange_derivative(
+      unrestricted, shared.worker_blocks, shared.stream, shared.batch, shared.screening,
+      shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+      p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin,
+      shared.active, output, p.force_cursor, DirectCoulombRange::Long, omega, coefficient,
+      p.bounded_block_domain);
+  return cudaGetLastError();
+}
+
+cudaError_t consume_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, bool unrestricted,
+                                                     const double* alpha, const double* beta,
+                                                     double cj, double short_ck, double long_ck,
+                                                     double omega,
+                                                     const CudaDerivativeSourceConsumer& consumer) {
+  if (!consumer || !p.force_capability || !p.bounded_pair_order || !p.shell_pair_block_bounds ||
+      !p.force || !p.force_cursor || !std::isfinite(cj) || !std::isfinite(short_ck) ||
+      !std::isfinite(long_ck) || !std::isfinite(omega) || omega <= 0)
+    return cudaErrorInvalidValue;
+  auto& shared = *p.shared;
+  runtime::cuda_trace::TraceOperation trace(
+      "direct_rsh_force_resident", shared.stream,
+      {static_cast<std::size_t>(shared.batch.batch_size),
+       static_cast<std::size_t>(shared.batch.nbf), 0, true, true});
+  struct Drain {
+    cudaStream_t stream;
+    bool active{true};
+    ~Drain() {
+      if (active) (void)cudaStreamSynchronize(stream);
+    }
+  } drain{shared.stream};
+  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
+  if (error != cudaSuccess) return error;
+  const auto nc = static_cast<std::size_t>(shared.batch.total_atoms) * 3;
+  error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
+                          shared.stream);
+  if (error != cudaSuccess) return error;
+  error = cudaMemsetAsync(p.force, 0, 3 * nc * sizeof(double), shared.stream);
+  if (error != cudaSuccess) return error;
+  error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+  if (error != cudaSuccess) return error;
+  const bool isolated_canonical_lr = omega == 0.3 && cj == 0.0 && short_ck == 0.0;
+  if (isolated_canonical_lr) {
+    // Mixed DF owns J and full-range K elsewhere. Submit only the exact LR
+    // source, directly into its third channel; the first two remain zero.
+    error = enqueue_generated_long_range_force(p, unrestricted, omega, long_ck, p.force + 2 * nc);
+  } else {
+    // General RSH retains its qualified fused source traversal and three slots.
+    launch_bounded_shell_rsh_derivatives(
+        unrestricted, shared.worker_blocks, shared.stream, shared.batch, shared.screening,
+        shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+        p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin,
+        shared.active, p.force, p.force_cursor, omega, cj, short_ck, long_ck);
+    error = cudaGetLastError();
+  }
+  runtime::cuda_trace::trace_counter("isolated_canonical_lr", isolated_canonical_lr ? 1 : 0);
+  runtime::cuda_trace::trace_counter("source_channels", 3);
+  runtime::cuda_trace::trace_counter("device_to_host_bytes", 0);
+  runtime::cuda_trace::trace_counter("host_to_device_bytes", 0);
+  if (error != cudaSuccess) return error;
+  int device = -1;
+  error = cudaGetDevice(&device);
+  if (error != cudaSuccess) return error;
+  consumer({CudaDerivativeSourceKind::RangeSeparatedJk, CudaDerivativeConvention::Force, device,
+            reinterpret_cast<void*>(shared.stream), p.force, nc, 3});
+  drain.active = false;
+  return cudaSuccess;
+}
+
 cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, bool unrestricted,
                                                      const double* alpha, const double* beta,
                                                      double coulomb_coefficient,
@@ -1096,24 +1185,7 @@ cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, b
     if (error != cudaSuccess) return error;
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
-    if (p.angular_force_opt_in) {
-      // The retained owner fixes provider/system/screening/geometry identity,
-      // so LR can borrow the same optional row index as the full-range source.
-      error = launch_bounded_shell_angular_energy_derivative(
-          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
-          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
-          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
-          p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Long, omega,
-          0.0, 1.0, p.bounded_block_domain);
-    } else {
-      launch_bounded_shell_range_exchange_derivative(
-          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
-          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
-          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
-          p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Long, omega,
-          1.0, p.bounded_block_domain);
-      error = cudaGetLastError();
-    }
+    error = enqueue_generated_long_range_force(p, unrestricted, omega, 1.0, p.force);
     if (error != cudaSuccess) return error;
     error = cudaMemcpyAsync(long_force.data(), p.force, coordinates * sizeof(double),
                             cudaMemcpyDeviceToHost, shared.stream);

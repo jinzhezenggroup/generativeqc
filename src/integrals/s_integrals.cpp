@@ -2460,8 +2460,6 @@ std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
 std::vector<double> contract_weighted_one_electron_derivative(
     const core::System& system, std::span<const double> overlap_weights,
     std::span<const double> hcore_weights, bool include_nuclear_repulsion) {
-  if (!system.ecp_terms.empty())
-    throw std::invalid_argument("streamed one-electron ECP derivatives are not implemented");
   const auto n = molecule::ao_count(system);
   const auto matrix_size = checked_product(n, n);
   if (overlap_weights.size() != matrix_size || hcore_weights.size() != matrix_size ||
@@ -2535,6 +2533,18 @@ std::vector<double> contract_weighted_one_electron_derivative(
         contracted = contracted + static_cast<double>(system.atoms[a].ionic_charge() *
                                                       system.atoms[b].ionic_charge()) /
                                       sqrt(distance_squared(atoms[a], atoms[b]));
+  // The Coulomb attraction above already uses ionic charges. Add only the
+  // residual local/nonlocal operator from the same checked ECP provider as SCF.
+  // Pure overlap/Pulay calls have no ECP cotangent and need no quadrature.
+  if (!system.ecp_terms.empty() &&
+      std::any_of(hcore_weights.begin(), hcore_weights.end(), [](double x) { return x != 0; })) {
+    const auto ecp = checked_ecp_integrals(system, true);
+    for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)
+      for (std::size_t item = 0; item < matrix_size; ++item)
+        contracted.derivative[coordinate] +=
+            hcore_weights[item] * (ecp.local_derivative[coordinate * matrix_size + item] +
+                                   ecp.nonlocal_derivative[coordinate * matrix_size + item]);
+  }
   if (!std::isfinite(contracted.value) ||
       !std::all_of(contracted.derivative.begin(), contracted.derivative.end(),
                    [](double value) { return std::isfinite(value); }))

@@ -14,9 +14,6 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/native_semilocal_families.json"
 CPP_OUTPUT = ROOT / "src/dft/semilocal_family.hpp"
 PYTHON_OUTPUT = ROOT / "python/generativeqc_compiler/dft/_generated_native_semilocal.py"
-PYTHON_COMPAT_OUTPUT = (
-    ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
-)
 SCHEMA = "generativeqc.native-semilocal-families.v3"
 LIBXC_HYBRIDS = ROOT / "python/generativeqc_compiler/xc/_generated_libxc_methods.py"
 FAST_PATH_FIELDS = (
@@ -178,8 +175,8 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
         if item["exchange_policy"] == "canonical" and not item.get("canonical_method"):
             raise ValueError("canonical exchange policy requires canonical_method")
         profiles = item.get("cpu_stationary_force_profiles", [])
-        if not isinstance(profiles, list) or len(profiles) > 2:
-            raise ValueError("CPU stationary force profiles must have at most two rows")
+        if not isinstance(profiles, list):
+            raise TypeError("CPU stationary force profiles must be a list")
         for profile in profiles:
             if not isinstance(profile, dict) or set(profile) != {
                 "spins",
@@ -223,6 +220,11 @@ def cpp_fast_path_capabilities(item: dict[str, Any]) -> str:
 def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
     families = load_manifest() if families is None else families
     enum_rows = "\n".join(f"  {item['symbol']} = {item['code']}," for item in families)
+    # Storage follows the manifest inventory; adding a scientifically qualified
+    # composition must not require a separate handwritten profile-count cap.
+    profile_capacity = max(
+        len(item.get("cpu_stationary_force_profiles", [])) for item in families
+    )
     records = []
     for item in families:
         component_ids = [name for name, _ in item["components"]]
@@ -247,7 +249,7 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
             + "}"
             for profile in force_profiles
         ]
-        profile_rows += ["{0U, 0.0, 0.0, 0.0}"] * (2 - len(profile_rows))
+        profile_rows += ["{0U, 0.0, 0.0, 0.0}"] * (profile_capacity - len(profile_rows))
         force_profiles_cpp = "{{" + ", ".join(profile_rows) + "}}"
         records.append(
             "\n".join(
@@ -336,7 +338,7 @@ struct SemilocalFamilyMetadata {{
   bool molecular_nonlocal_domain;
   bool incremental_xc;
   bool stationary_second_order;
-  std::array<CpuStationaryForceProfile, 2> cpu_stationary_force_profiles;
+  std::array<CpuStationaryForceProfile, {profile_capacity}> cpu_stationary_force_profiles;
   std::uint32_t cpu_stationary_force_profile_count;
   CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
@@ -476,6 +478,32 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             + "".join(f"{json.dumps(alias)}," for alias in item["aliases"])
             + ")"
         )
+        profile_rows = [
+            "            ("
+            + repr(tuple(profile["spins"]))
+            + ", "
+            + ", ".join(
+                json.dumps(profile[field])
+                for field in (
+                    "exact_exchange",
+                    "semilocal_exchange",
+                    "semilocal_correlation",
+                )
+            )
+            + "),"
+            for profile in item.get("cpu_stationary_force_profiles", ())
+        ]
+        profile_text = (
+            ['        "cpu_stationary_force_profiles": (', *profile_rows, "        ),"]
+            if profile_rows
+            else ['        "cpu_stationary_force_profiles": (),']
+        )
+        if len(profile_rows) == 1:
+            profile_text = [
+                '        "cpu_stationary_force_profiles": ('
+                + profile_rows[0].strip()
+                + "),"
+            ]
         fields = [
             f'        "symbol": {json.dumps(item["symbol"])},',
             f'        "code": {item["code"]},',
@@ -500,6 +528,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             f'        "molecular_nonlocal_domain": {bool(item["molecular_nonlocal_domain"])!r},',
             f'        "incremental_xc": {bool(item["incremental_xc"])!r},',
             f'        "stationary_second_order": {bool(item["stationary_second_order"])!r},',
+            *profile_text,
             f'        "legacy_cpu_point_response_slot": {item.get("legacy_cpu_point_response_slot")!r},',
             f'        "aliases": {alias_text},',
             '        "cuda_fast_paths": {',
@@ -557,6 +586,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         "    molecular_nonlocal_domain: bool\n"
         "    incremental_xc: bool\n"
         "    stationary_second_order: bool\n"
+        "    cpu_stationary_force_profiles: tuple[tuple[tuple[int, ...], str, str, str], ...]\n"
         "    legacy_cpu_point_response_slot: int | None\n"
         "    aliases: tuple[str, ...]\n"
         "    cuda_fast_paths: dict[str, str]\n"
@@ -576,25 +606,6 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
     )
 
 
-def emit_python_compat() -> str:
-    return '''"""Compatibility re-export for native semilocal execution metadata."""
-
-from generativeqc_compiler.dft._generated_native_semilocal import (
-    SCF_DOMAIN_BY_VERSION,
-    SEMILOCAL_FAMILIES,
-    SEMILOCAL_FAMILY_BY_CODE,
-    SEMILOCAL_FAMILY_CODES,
-)
-
-__all__ = [
-    "SCF_DOMAIN_BY_VERSION",
-    "SEMILOCAL_FAMILIES",
-    "SEMILOCAL_FAMILY_BY_CODE",
-    "SEMILOCAL_FAMILY_CODES",
-]
-'''
-
-
 def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
@@ -605,15 +616,12 @@ def main() -> int:
     args = parser.parse_args()
     cpp = emit_cpp()
     python = emit_python()
-    python_compat = emit_python_compat()
     if args.check:
         stale = []
         if CPP_OUTPUT.read_text(encoding="utf-8") != cpp:
             stale.append(str(CPP_OUTPUT.relative_to(ROOT)))
         if PYTHON_OUTPUT.read_text(encoding="utf-8") != python:
             stale.append(str(PYTHON_OUTPUT.relative_to(ROOT)))
-        if PYTHON_COMPAT_OUTPUT.read_text(encoding="utf-8") != python_compat:
-            stale.append(str(PYTHON_COMPAT_OUTPUT.relative_to(ROOT)))
         if stale:
             raise SystemExit(
                 "stale generated native semilocal metadata: " + ", ".join(stale)
@@ -621,7 +629,6 @@ def main() -> int:
         return 0
     _write(CPP_OUTPUT, cpp)
     _write(PYTHON_OUTPUT, python)
-    _write(PYTHON_COMPAT_OUTPUT, python_compat)
     return 0
 
 

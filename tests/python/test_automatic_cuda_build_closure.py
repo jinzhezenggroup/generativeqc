@@ -69,6 +69,7 @@ def test_registry_object_keeps_wheel_headers_separate_from_provider_linkage(
     launcher = shutil.which("sccache") or shutil.which("ccache")
     if cmake is None or launcher is None:
         pytest.skip("object configuration probe requires CMake and a compiler cache")
+    assert cmake is not None and launcher is not None
     subprocess.run([launcher, "--version"], check=True, capture_output=True, timeout=10)
     source = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text()
     start = source.index("  # Reuse the exact AOT objects")
@@ -162,22 +163,28 @@ _SCIENCE_INPUTS = (
 
 
 @pytest.mark.parametrize(
-    ("backend", "enabled", "functionals"),
+    ("backend", "enabled", "functionals", "share_parameters"),
     (
-        ("cuda", False, ()),
-        ("cuda", True, ()),
-        ("cuda", True, ("GGA_X_APBE", "MGGA_X_LTA")),
-        ("cpu", True, ()),
+        ("cuda", False, (), False),
+        ("cuda", True, (), False),
+        ("cuda", True, ("GGA_X_APBE", "MGGA_X_LTA"), False),
+        ("cuda", True, ("MGGA_X_KTBM_0", "MGGA_X_KTBM_1"), True),
+        ("cpu", True, (), False),
     ),
-    ids=("cuda-off", "cuda-full", "cuda-selected", "cpu"),
+    ids=("cuda-off", "cuda-full", "cuda-selected", "cuda-shared", "cpu"),
 )
 def test_registry_incremental_build_tracks_science_only_when_enabled(
-    tmp_path: Path, backend: str, enabled: bool, functionals: tuple[str, ...]
+    tmp_path: Path,
+    backend: str,
+    enabled: bool,
+    functionals: tuple[str, ...],
+    share_parameters: bool,
 ) -> None:
     """Both registries must invalidate on hashed bytes absent from import depfiles."""
     cmake, ninja = shutil.which("cmake"), shutil.which("ninja")
     if cmake is None or ninja is None:
         pytest.skip("incremental graph probe requires CMake and Ninja")
+    assert cmake is not None
     source = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text()
     start = source.index(
         f"  set(GENERATIVEQC_LIBXC_SEMILOCAL_{backend.upper()}_DIRECTORY"
@@ -202,11 +209,15 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         "p.add_argument('--output-directory', type=pathlib.Path)\n"
         "p.add_argument('--disabled', action='store_true')\n"
         "p.add_argument('--functional', action='append')\n"
+        "p.add_argument('--share-parameters', action=argparse.BooleanOptionalAction, default=False)\n"
+        "p.add_argument('--parameter-policy', choices=('qualified', 'discover'), default='qualified')\n"
         "a = p.parse_args()\n"
         "a.output_directory.mkdir(parents=True, exist_ok=True)\n"
         "counter = a.output_directory / 'runs.txt'\n"
         "counter.write_text(str(int(counter.read_text()) + 1 if counter.exists() else 1))\n"
         "(a.output_directory / 'functionals.txt').write_text(';'.join(a.functional or []))\n"
+        "(a.output_directory / 'sharing.txt').write_text(str(a.share_parameters))\n"
+        "(a.output_directory / 'policy.txt').write_text(a.parameter_policy)\n"
         "names = ['registry.hpp', 'registry.cpp']\n"
         f"if not a.disabled: names += [str(i) + '{'.cu' if backend == 'cuda' else '.cpp'}' for i in range({32 if backend == 'cuda' else 8})]\n"
         "for name in names:\n"
@@ -220,7 +231,8 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         f'set(Python3_EXECUTABLE "{sys.executable}")\n'
         f"set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT {'ON' if enabled else 'OFF'})\n"
         f'set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS "{";".join(functionals)}")\n'
-        + declaration
+        f"set(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS {'ON' if share_parameters else 'OFF'})\n"
+        "set(GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY discover)\n" + declaration
     )
     build = tmp_path / "build"
     subprocess.run(
@@ -249,6 +261,12 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
     assert (
         build / f"generated/libxc_semilocal_{backend}/functionals.txt"
     ).read_text() == ";".join(functionals)
+    assert (
+        build / f"generated/libxc_semilocal_{backend}/sharing.txt"
+    ).read_text() == str(share_parameters)
+    assert (build / f"generated/libxc_semilocal_{backend}/policy.txt").read_text() == (
+        "discover" if share_parameters else "qualified"
+    )
     expected = 1
     identity_only = (
         ("python/generativeqc_compiler/xc/automatic_cuda.py",)
@@ -278,6 +296,7 @@ def test_explicit_package_requires_cuda_and_opt_in(
     cmake = shutil.which("cmake")
     if cmake is None:
         pytest.skip("option guard requires CMake")
+    assert cmake is not None
     source = (ROOT / "CMakeLists.txt").read_text()
     start = source.index('set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS ""')
     end = source.index("option(GENERATIVEQC_CUDA_AO_RADIAL_REUSE", start)
@@ -306,20 +325,26 @@ def test_explicit_package_requires_cuda_and_opt_in(
     assert "requires CUDA and automatic CUDA AOT" in " ".join(result.stderr.split())
 
 
-def test_explicit_package_rejects_cuda_detection_fallback(tmp_path: Path) -> None:
+@pytest.mark.parametrize("share_parameters", (False, True))
+def test_explicit_package_rejects_cuda_detection_fallback(
+    tmp_path: Path, share_parameters: bool
+) -> None:
     """A requested package cannot quietly disappear if nvcc is unavailable."""
     cmake = shutil.which("cmake")
     if cmake is None:
         pytest.skip("option guard requires CMake")
+    assert cmake is not None
     source = (ROOT / "CMakeLists.txt").read_text()
     start = source.rindex(
         'if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND'
     )
     end = source.index("# Scoped GenerativeQC-owned GFN2", start)
+    functionals = '""' if share_parameters else "GGA_X_APBE"
     (tmp_path / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.24)\n"
         "project(AutomaticCudaFallback LANGUAGES NONE)\n"
-        "set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS GGA_X_APBE)\n"
+        f"set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS {functionals})\n"
+        f"set(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS {'ON' if share_parameters else 'OFF'})\n"
         "set(GENERATIVEQC_ENABLE_CUDA OFF)\n" + source[start:end]
     )
     result = subprocess.run(
@@ -333,3 +358,53 @@ def test_explicit_package_rejects_cuda_detection_fallback(tmp_path: Path) -> Non
     assert "cannot use the CPU-only compiler fallback" in " ".join(
         result.stderr.split()
     )
+
+
+@pytest.mark.parametrize(("cuda", "aot"), ((False, True), (True, False), (True, True)))
+def test_parameter_sharing_defaults_to_cuda_aot_and_remains_optional(
+    tmp_path: Path, cuda: bool, aot: bool
+) -> None:
+    """Default sharing requires CUDA AOT; explicit OFF retains specialization."""
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("option guard requires CMake")
+    assert cmake is not None
+    source = (ROOT / "CMakeLists.txt").read_text()
+    start = source.index("set(_generativeqc_parameter_sharing_default OFF)")
+    end = source.index('set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS ""', start)
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\nproject(ParameterSharing LANGUAGES NONE)\n"
+        f"set(GENERATIVEQC_ENABLE_CUDA {'ON' if cuda else 'OFF'})\n"
+        f"set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT {'ON' if aot else 'OFF'})\n"
+        + source[start:end]
+        + 'file(WRITE "${CMAKE_BINARY_DIR}/sharing.txt" "${GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS}")\n'
+        + 'file(WRITE "${CMAKE_BINARY_DIR}/policy.txt" "${GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY}")\n'
+    )
+    command = [cmake, "-S", str(tmp_path), "-B", str(tmp_path / "build")]
+    subprocess.run(command, check=True, capture_output=True, timeout=30)
+    assert (tmp_path / "build/sharing.txt").read_text() == (
+        "ON" if cuda and aot else "OFF"
+    )
+    assert (tmp_path / "build/policy.txt").read_text() == "discover"
+    subprocess.run(
+        [
+            *command,
+            "-DGENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS=OFF",
+            "-DGENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY=qualified",
+        ],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+    assert (tmp_path / "build/sharing.txt").read_text() == "OFF"
+    assert (tmp_path / "build/policy.txt").read_text() == "qualified"
+    result = subprocess.run(
+        [*command, "-DGENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS=ON"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert (result.returncode == 0) == (cuda and aot)
+    if result.returncode:
+        assert "requires CUDA and automatic CUDA AOT" in " ".join(result.stderr.split())

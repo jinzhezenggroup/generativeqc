@@ -194,6 +194,94 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
   }
   return status;
 }
+generativeqc_status consume_prepared_cuda_direct_rsh_energy_derivatives_device(
+    const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail) {
+  const auto binding = prepared_cuda_direct_derivative_binding(plan);
+  auto* source = plan.cuda_direct_source();
+  const auto& primary = plan.strategy();
+  const auto& p = primary.spec;
+  const auto& c = long_range_correction.spec;
+  if (!binding || !source) {
+    detail = "prepared CUDA Fock owner did not retain Direct first-derivative capability";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const bool valid_primary = primary.backend == FockBackend::Cuda && p.derivative_order == 0 &&
+                             p.coulomb.present &&
+                             p.coulomb.approximation == FockApproximation::Exact &&
+                             p.coulomb.op == FockOperator::FullRange && p.exchange.present &&
+                             p.exchange.approximation == FockApproximation::Exact &&
+                             p.exchange.op == FockOperator::FullRange;
+  const bool valid_correction =
+      long_range_correction.backend == FockBackend::Cuda && c.derivative_order == 0 &&
+      c.spin == p.spin && !c.coulomb.present && c.exchange.present &&
+      c.exchange.approximation == FockApproximation::Exact &&
+      c.exchange.op == FockOperator::LongRange && c.exchange.omega > 0.0 &&
+      long_range_correction.screening_tolerance == primary.screening_tolerance;
+  if (!valid_primary || !valid_correction || matrix_elements != binding.nbf * binding.nbf) {
+    detail = "prepared CUDA resident RSH derivative has incompatible scientific identity";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  if (c.exchange.omega == 0.3 && c.exchange.coefficient != 0.0 &&
+      std::isfinite(p.exchange.coefficient / c.exchange.coefficient)) {
+    // Preserve the host derivative adapter's specialized full/LR traversals.
+    // Both callbacks borrow the same prepared stream: the consumer must copy
+    // the full-range channels before the LR traversal reuses their storage.
+    // Its existing RangeCorrection transport reconstructs SR = Full - LR;
+    // neither a host force array nor another integral owner is needed.
+    const auto status = consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+        plan, density, beta, matrix_elements, consumer, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    return consume_cuda_direct_shell_rsh_energy_derivatives_device(
+        source, p.spin, 0.0, 0.0, c.exchange.coefficient, c.exchange.omega, density, beta,
+        matrix_elements,
+        [&](const CudaDerivativeSourceView& value) {
+          if (value.kind != CudaDerivativeSourceKind::RangeSeparatedJk || value.channels != 3)
+            throw std::invalid_argument("LR provider returned incompatible source rows");
+          auto correction = value;
+          correction.kind = CudaDerivativeSourceKind::RangeCorrection;
+          correction.values += 2 * correction.coordinates;
+          correction.channels = 1;
+          consumer(correction);
+        },
+        detail);
+  }
+  // Other radial schedules, and vanishing/too-small corrections for which
+  // recomposition has no finite ratio, retain the complete fused source.
+  return consume_cuda_direct_shell_rsh_energy_derivatives_device(
+      source, p.spin, p.coulomb.coefficient, p.exchange.coefficient,
+      p.exchange.coefficient + c.exchange.coefficient, c.exchange.omega, density, beta,
+      matrix_elements, consumer, detail);
+}
+
+generativeqc_status consume_prepared_cuda_direct_long_range_derivatives_device(
+    const PreparedFockPlan& correction, const double* density, const double* beta,
+    std::size_t matrix_elements, const CudaDerivativeSourceConsumer& consume, std::string& detail) {
+  const auto binding = prepared_cuda_direct_derivative_binding(correction);
+  const auto& spec = correction.strategy().spec;
+  if (!binding || !consume || !density || spec.coulomb.present || !spec.exchange.present ||
+      spec.exchange.approximation != FockApproximation::Exact ||
+      spec.exchange.op != FockOperator::LongRange || !(spec.exchange.omega > 0) ||
+      matrix_elements != binding.nbf * binding.nbf ||
+      (spec.spin == FockSpin::Unrestricted ? !beta : beta != nullptr)) {
+    detail = "invalid independent exact LR derivative lease";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return consume_cuda_direct_shell_rsh_energy_derivatives_device(
+      correction.cuda_direct_source(), spec.spin, 0, 0, spec.exchange.coefficient,
+      spec.exchange.omega, density, beta, matrix_elements,
+      [&](const CudaDerivativeSourceView& value) {
+        if (value.kind != CudaDerivativeSourceKind::RangeSeparatedJk || value.channels != 3)
+          throw std::invalid_argument("LR provider returned incompatible source rows");
+        auto lr = value;
+        lr.kind = CudaDerivativeSourceKind::RangeCorrection;
+        lr.values += 2 * lr.coordinates;
+        lr.channels = 1;
+        consume(lr);
+      },
+      detail);
+}
 
 generativeqc_status execute_prepared_cuda_direct_long_range_derivatives_device(
     const PreparedFockPlan& correction, const double* density, const double* beta,

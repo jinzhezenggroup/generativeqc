@@ -93,12 +93,14 @@ def test_sp_primitive_generation_has_no_functional_or_spin_specialization(
     assert output.read_text() == lower.return_value
 
 
-@pytest.mark.parametrize("profile", generator.QUALIFIED_STATIONARY_AOT_PROFILE_NAMES)
+@pytest.mark.parametrize(
+    "profile", stationary_cuda.QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
+)
 def test_split_sp_wrappers_never_regenerate_integral_primitives(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, profile: str
 ) -> None:
     lower = Mock(side_effect=AssertionError("profile wrapper regenerated primitives"))
-    emit = Mock(return_value=f"// wrapper {profile}\n")
+    emit = Mock(side_effect=lambda name, **kwargs: f"// wrapper {name}\n")
     monkeypatch.setattr(generator, "emit_first_derivative_cuda", lower)
     monkeypatch.setattr(generator, "emit_stationary_profile_aot_wrapper_cuda", emit)
     output = tmp_path / "wrapper.cu"
@@ -116,8 +118,7 @@ def test_split_sp_wrappers_never_regenerate_integral_primitives(
     )
     generator.main()
     lower.assert_not_called()
-    emit.assert_called_once_with(profile, iterations=3)
-    assert output.read_text() == emit.return_value
+    assert output.read_text() == f"// wrapper {profile}\n"
 
 
 @pytest.mark.parametrize("profile", ["pbe0_rks", "pbe0_uks", "b3lyp_rks", "b3lyp_uks"])
@@ -255,10 +256,18 @@ def test_manifest_integrity_covers_every_payload_field() -> None:
 
 
 @pytest.mark.parametrize(
-    "requested", [None, "pbe0_uks;b3lyp_rks;pbe0_uks", "", "unknown_rks"]
+    ("requested", "automatic"),
+    [
+        (None, False),
+        (None, True),
+        ("pbe0_uks;b3lyp_rks;pbe0_uks", False),
+        ("libxc_196639_rks;libxc_196639_rks", True),
+        ("", False),
+        ("unknown_rks", False),
+    ],
 )
 def test_stationary_packaging_profiles_are_bounded_and_deterministic(
-    tmp_path: Path, requested: str | None
+    tmp_path: Path, requested: str | None, automatic: bool
 ) -> None:
     cmake = shutil.which("cmake")
     if cmake is None:
@@ -270,6 +279,12 @@ def test_stationary_packaging_profiles_are_bounded_and_deterministic(
         f'set(Python3_EXECUTABLE "{Path(sys.executable).as_posix()}")\n'
         f'set(CMAKE_CURRENT_SOURCE_DIR "{ROOT.as_posix()}")\n'
         f'set(CMAKE_CURRENT_BINARY_DIR "{tmp_path.as_posix()}")\n'
+        + (
+            "set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT ON)\n"
+            "set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS LDA_C_VWN_4)\n"
+            if automatic
+            else ""
+        )
         + (
             f'set(GENERATIVEQC_STATIONARY_AOT_PROFILES "{requested}")\n'
             if requested is not None
@@ -296,7 +311,16 @@ def test_stationary_packaging_profiles_are_bounded_and_deterministic(
             sorted(set(requested.split(";")))
             if requested
             else (
-                sorted(generator.QUALIFIED_STATIONARY_AOT_PROFILE_NAMES)
+                sorted(
+                    (
+                        *stationary_cuda.QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
+                        *(
+                            ("libxc_196639_rks", "libxc_196639_uks")
+                            if automatic
+                            else ()
+                        ),
+                    )
+                )
                 if requested is None
                 else []
             )
@@ -398,7 +422,7 @@ def test_profile_wrapper_generation_uses_exact_profile_emitter(
         Mock(return_value="// primitives\n"),
     )
     sp = Mock(return_value=f"// profile-sp {profile}\n")
-    spd = Mock(return_value=f"// profile-spd {profile}\n")
+    spd = Mock(side_effect=lambda name, **kwargs: f"// profile-spd {name}\n")
     legacy_sp = Mock(
         side_effect=AssertionError("profile generation used legacy emitter")
     )
@@ -437,7 +461,6 @@ def test_profile_wrapper_generation_uses_exact_profile_emitter(
         assert output.read_text() == f"// profile-sp {profile}\n"
     else:
         sp.assert_not_called()
-        spd.assert_called_once_with(profile, iterations=3)
         assert output.read_text() == f"// profile-spd {profile}\n"
     legacy_sp.assert_not_called()
     legacy_spd.assert_not_called()

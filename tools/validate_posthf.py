@@ -22,6 +22,7 @@ import os
 import platform
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -40,6 +41,7 @@ from generativeqc_compiler.common.evidence import (
     outcome,
     validate_evidence,
 )
+from generativeqc_compiler.common.provenance import find_nvcc
 
 from tools.generativeqc_posthf.conventions import MOBlock
 from tools.generativeqc_posthf.cuda import compile_cuda
@@ -73,10 +75,12 @@ def main() -> typing.Any:
         "--cuda-target", help="explicit CUDA target architecture (e.g. sm_90)"
     )
     parser.add_argument("--generated-df", action="store_true")
+    parser.add_argument("--nvcc", type=Path, default=find_nvcc())
     parser.add_argument(
-        "--nvcc", type=Path, default=Path("/group/software/cuda-12.9.1/bin/nvcc")
+        "--cache",
+        type=Path,
+        default=Path(tempfile.gettempdir()) / "posthf147-cuda-cache",
     )
-    parser.add_argument("--cache", type=Path, default=Path("/tmp/posthf147-cuda-cache"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument(
@@ -86,6 +90,8 @@ def main() -> typing.Any:
         choices=["h2", "water", "lih"],
     )
     args = parser.parse_args()
+    if args.cuda and args.nvcc is None:
+        parser.error("CUDA validation requires --nvcc or a configured CUDA toolkit")
     if args.cuda and not args.cuda_target:
         parser.error("--cuda requires --cuda-target")
     if args.samples < 5:

@@ -20,6 +20,8 @@ def test_complete_gradient_retry_is_bounded_and_numerical_only(
     source.write_text(
         r"""
 #include <cassert>
+#include <optional>
+#include <memory>
 #include <string>
 #include <vector>
 #include "generativeqc/generativeqc.h"
@@ -28,9 +30,15 @@ using generativeqc::scf::DirectForcePrecisionRequest;
 struct Controller {
   int calls{};
   generativeqc_status result{};
+  const int* expected_range{};
+  const int* expected_features{};
+  const int* expected_radial{};
   generativeqc_status gradient(int,int,int,bool,std::vector<double>& output,std::string&,
-                               bool,DirectForcePrecisionRequest* precision) {
+                               bool,DirectForcePrecisionRequest* precision,
+                               const int* range=nullptr,const int* features=nullptr,
+                               const int* radial=nullptr) {
     assert(!precision);
+    assert(range==expected_range && features==expected_features && radial==expected_radial);
     ++calls;
     if (result==GENERATIVEQC_STATUS_SUCCESS) output={2.0};
     return result;
@@ -43,9 +51,18 @@ int main() {
                        GENERATIVEQC_STATUS_OUT_OF_MEMORY, GENERATIVEQC_STATUS_NOT_IMPLEMENTED})
   for (auto retry : {GENERATIVEQC_STATUS_SUCCESS, GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                      GENERATIVEQC_STATUS_CUDA_ERROR})
-  for (unsigned mode=0;mode<4;++mode) for (bool supplied:{false,true}) {
+  for (unsigned mode=0;mode<4;++mode) for (bool supplied:{false,true})
+  for (bool composite:{false,true}) for (bool fitted:{false,true}) {
     generativeqc_status status=initial;
-    Controller controller{0,retry};
+    std::optional<int> range_strategy_;
+    if (composite) range_strategy_=71;
+    bool nonlocal_=composite;
+    int features=83;
+    auto range_correction_=std::make_unique<int>(17);
+    auto range_derivative_correction_=fitted?std::make_unique<int>(19):nullptr;
+    Controller controller{0,retry,composite?&*range_strategy_:nullptr,
+                           composite?&features:nullptr,
+                           fitted?range_derivative_correction_.get():range_correction_.get()};
     auto* stationary_controller_=&controller;
     DirectForcePrecisionRequest request;
     request.mixed_geometry=bool(mode&1);

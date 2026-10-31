@@ -10,9 +10,13 @@
 #include "../tensor/cuda_runtime.cuh"
 #include "becke_scaled_policy.hpp"
 #include "grid_task_view.cuh"
+#include "runtime/bounded_workspace.hpp"
 #include "xc_point.hpp"
 #if defined(GENERATIVEQC_NATIVE_SHARED_REDUCTION)
 #include "dft/native_stationary_shared_kernels.hpp"
+#endif
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+#include "dft/cuda_xc_point_program.hpp"
 #endif
 
 namespace generativeqc_stationary_cuda {
@@ -20,6 +24,13 @@ using namespace generativeqc_tensor;
 constexpr size_t record_stride = 26, task_stride = 9;
 struct Owner {
   Context context;
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+  // This bounded tile is charged by allocation() and reused on the borrowed
+  // geometry stream. The point launcher has process-lifetime AOT ownership.
+  StationaryPointValue* staged_points{};
+  generativeqc::dft::CudaXcStationaryPointLauncher point_launcher{};
+  uint64_t staged_point_launches{}, staged_point_count{};
+#endif
   generativeqc::runtime::OwnedCudaBuffer<unsigned char> phased_storage;
   size_t atoms{}, aos{}, primitives{}, points{}, task_capacity{}, spin_blocks{},
       max_page_primitive_work{}, bytes{}, geometry_lanes{}, geometry_threads{},
@@ -114,23 +125,34 @@ PhasedBeckeInput phased_input(Owner& owner, size_t points) {
   input.zero_seed_points = owner.becke_zero_seed_points;
   return input;
 }
-// Caps make all products below representable before any allocation or pointer
-// dereference. D/W and AO metadata have no fixed-size AO array; 2048 admits
-// full 96-atom def2-TZVPD without changing allocation formulas. Compiler-planned
-// lanes bound O(lanes*natom) adjoint scratch; byte admission remains mandatory.
+// The general geometry kernel uses planned O(lanes*atoms) scratch. The
+// cooperative/retained-pair specializations have their own shape checks and
+// may fall back to it. Molecular atom/AO/primitive counts are not fixed arrays.
 size_t allocation(size_t na, size_t n, size_t nprimitive, size_t np, size_t ntask, size_t ns,
                   size_t geometry_lanes, bool cache_center_geometry = false) {
-  if (!na || na > 128 || !n || n > 2048 || !nprimitive || nprimitive > 16384 || !np || np > 4096 ||
-      !ntask || ntask > 4096 || (ns != 1 && ns != 2) || ns != stationary_spin_blocks ||
-      !geometry_lanes || geometry_lanes > np || geometry_lanes > stationary_geometry_max_lanes ||
-      18 * geometry_lanes * na * sizeof(double) > stationary_geometry_max_scratch_bytes)
-    throw std::invalid_argument("stationary CUDA shape exceeds bounded resource caps");
-  // Three center coordinates, two planned nine-coordinate lane panels,
-  // and one three-coordinate panel per compiler-owned gradient source.
-  return 8 * (2 * nprimitive + 4 * n + 22 * ntask +
-              (5 + 18 * geometry_lanes + 3 * stationary_source_count) * na + 1 + 3 * np +
-              2 * ns * n * n) +
-         (cache_center_geometry ? 48 * (na * (na - 1) / 2) : 0) + 256;
+  using generativeqc::runtime::size_add;
+  using generativeqc::runtime::size_mul;
+  if (!na || !n || !nprimitive || !np || np > 4096 || !ntask || ntask > 4096 ||
+      (ns != 1 && ns != 2) || ns != stationary_spin_blocks || !geometry_lanes ||
+      geometry_lanes > np || geometry_lanes > stationary_geometry_max_lanes ||
+      size_mul(size_mul(18, geometry_lanes), size_mul(na, sizeof(double))) >
+          stationary_geometry_max_scratch_bytes)
+    throw std::invalid_argument("stationary CUDA shape exceeds its geometry workspace");
+  const auto centers = size_mul(
+      size_add(size_add(5, size_mul(18, geometry_lanes)), size_mul(3, stationary_source_count)),
+      na);
+  const auto matrices = size_mul(size_mul(2, ns), size_mul(n, n));
+  auto elements = size_add(size_mul(2, nprimitive), size_mul(4, n));
+  elements = size_add(elements, size_mul(22, ntask));
+  elements = size_add(elements, size_add(centers, size_add(1, size_mul(3, np))));
+  elements = size_add(elements, matrices);
+  const auto cached = cache_center_geometry ? size_mul(48, size_mul(na, na - 1) / 2) : 0;
+  auto bytes = size_add(size_add(size_mul(sizeof(double), elements), cached), 256);
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+  // The staged producer uses the same overflow-checked workspace admission.
+  bytes = size_add(bytes, size_mul(np, sizeof(StationaryPointValue)));
+#endif
+  return bytes;
 }
 /** Preserve allocation (2/3), device runtime (4), and numerical source (5)
  * failures. Invalid contracts remain 1. Existing nonzero-rejection callers
@@ -316,6 +338,18 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
                      double* partial, double* scratch,
                      const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
                      bool restricted_point = false, bool fp32_geometry = false) {
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+  if (!owner.point_launcher || !owner.staged_points || external || fp32_geometry)
+    throw std::invalid_argument("staged stationary geometry has no matching point producer");
+  cuda_check(cudaPeekAtLastError());
+  owner.point_launcher(stream, view.features, view.npoint, owner.spin_blocks, owner.staged_points,
+                       error, view.error);
+  cuda_check(cudaPeekAtLastError());
+  external = reinterpret_cast<const double*>(owner.staged_points);
+  ++owner.launches;
+  ++owner.staged_point_launches;
+  owner.staged_point_count += view.npoint;
+#endif
   if (!owners && !points_per_atom && owner.molecular_points) {
     stationary_grid_owners<<<blocks(view.npoint, 128), 128, 0, stream>>>(
         owner.atom_offsets, na, owner_offset, view.npoint, owner.point_atoms);
@@ -365,8 +399,12 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
   // routes on the original evaluator; no new resident-storage requirement.
   static_assert(alignof(StationaryPointValue) <= alignof(double));
   const bool precomputed_point =
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+      false;
+#else
       phased_active &&
       na >= (sizeof(StationaryPointValue) + 3 * sizeof(double) - 1) / (3 * sizeof(double));
+#endif
   if (precomputed_point) {
     // Preserve incoming launch status and stop before any consumer can observe
     // scratch from a failed producer. Peeking neither clears nor synchronizes.
@@ -399,6 +437,10 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
             center_pairs, error, phased.seeds, false, radii);
     cuda_check(cudaPeekAtLastError());
   } else if (owner.becke_threads_per_point > 1)
+    // The template flag denotes a fully prepared phased-Becke seed, not merely
+    // an external XC value. Staged points still need geometry_point_setup to
+    // form that seed and either publish it or contract inline partition motion.
+    // Selecting <true> here silently drops Becke response on nonphased tiles.
     geometry_cooperative_kernel<false, double>
         <<<geometry_lanes, owner.becke_threads_per_point,
            owner.becke_shared_bytes - stationary_becke_control_bytes, stream>>>(
@@ -577,6 +619,12 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->point_atoms = reinterpret_cast<int64_t*>(take(np));
     p->density = take(ns * n * n);
     p->weighted_density = take(ns * n * n);
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+    static_assert(sizeof(StationaryPointValue) % sizeof(double) == 0);
+    static_assert(alignof(StationaryPointValue) <= alignof(double));
+    p->staged_points = reinterpret_cast<StationaryPointValue*>(
+        take(np * sizeof(StationaryPointValue) / sizeof(double)));
+#endif
     // The charged 256-byte control panel reserves two error words followed by
     // this aligned counter. It is not part of the mathematical scratch alias.
     p->becke_zero_seed_points = reinterpret_cast<unsigned long long*>(
@@ -663,8 +711,10 @@ int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* erro
     cudaDeviceProp property{};
     cuda_check(cudaGetDeviceProperties(&property, owner->context.device));
     const size_t pairs = owner->atoms * (owner->atoms - 1) / 2;
-    if (property.major != 12 || property.minor != 0 || property.maxThreadsPerBlock < 128 ||
-        property.maxThreadsDim[0] < 128 || pairs > size_t(property.maxGridSize[1]) ||
+    // Phased partition response uses ordinary CUDA kernels. Admission depends
+    // on their launch dimensions and retained byte budget, not a GPU model.
+    if (property.maxThreadsPerBlock < 128 || property.maxThreadsDim[0] < 128 ||
+        pairs > size_t(property.maxGridSize[1]) ||
         blocks(owner->points, 128) > size_t(property.maxGridSize[0]))
       return;
     try {
@@ -1308,17 +1358,18 @@ int stationary_geometry_external_device_molecular_enqueue(
   });
 }
 
-int stationary_geometry_external_device_molecular_resident_weights_enqueue(
+static int stationary_geometry_external_device_molecular_resident_weights_to_source(
     void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
     size_t owner_offset, size_t points_per_atom, const double* device_weights,
     const double* device_raw, const double* external_device, size_t external_stride,
-    size_t external_offset, char* error, size_t size) {
+    size_t external_offset, size_t source_slot, char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points || !device_weights || !device_raw || !external_device ||
+        source_slot + 3 > stationary_source_count ||
         !stationary_grid_span(*p, owner_offset, view->npoint, points_per_atom) ||
         external_stride < external_offset || view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid resident-weight nonlocal geometry lease");
@@ -1338,7 +1389,7 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
                     external_stride, external_offset, geometry_lanes, p->partial, p->scratch,
                     p->center_pairs, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-        p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
+        p->partial, p->atoms, geometry_lanes, p->sources + 3 * source_slot * p->atoms,
         p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 2;
@@ -1350,6 +1401,17 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
   });
+}
+
+int stationary_geometry_external_device_molecular_resident_weights_enqueue(
+    void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
+    size_t owner_offset, size_t points_per_atom, const double* device_weights,
+    const double* device_raw, const double* external_device, size_t external_stride,
+    size_t external_offset, char* error, size_t size) {
+  return stationary_geometry_external_device_molecular_resident_weights_to_source(
+      pointer, view, work, owner_offset, points_per_atom, device_weights, device_raw,
+      external_device, external_stride, external_offset,
+      generativeqc_stationary_cuda::stationary_xc_source, error, size);
 }
 
 static int stationary_geometry_molecular_resident_weights_enqueue_impl(

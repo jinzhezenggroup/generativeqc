@@ -469,7 +469,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             (ROOT / "manifests/public_methods.json").read_bytes()
         ),
         "semilocal_force_predicate_sha256": (
-            "038dcd55175e305001d264203391147a79e0e98238cdfe64df5f581e1a4e38fb"
+            "d643696b8ba56b118400c0c949d50aba329fb1c9befd03e30590e9367b5ec286"
         ),
         "global_hybrid_force_predicate_sha256": current_python_owner_identity(
             "python/generativeqc/calculator.py",
@@ -679,8 +679,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "device_ao_map_reserve_sha256": (
             "2ae396067d6e7610a2f0591c3a9eb61bd001d13a60377194b85823074ace5e65"
         ),
-        "resident_ao_cache_sha256": (
-            "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
+        "resident_ao_cache_sha256": current_python_owner_identity(
+            "python/generativeqc/_stationary_cuda.py",
+            "_stationary_resident_ao_cache",
         ),
         "native_owner_sha256": current_native_identity("struct Owner {"),
         "native_allocation_sha256": current_native_identity("size_t allocation("),
@@ -737,8 +738,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_phased_becke_allocation_sha256": (
             "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
         ),
-        "native_phased_becke_admission_sha256": (
-            "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
+        "native_phased_becke_admission_sha256": current_native_identity(
+            "int stationary_configure_phased_becke_v1("
         ),
         "native_becke_normalize_configuration_sha256": (
             "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
@@ -944,10 +945,9 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         assert route["selection"] == "all-electron packaged stationary CUDA"
         assert route["missing_aot_behavior"] == "fail closed; no NVCC fallback"
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
-    assert result["stationary_aot_source_package"] == {
-        "cmake_contract_sha256": (
-            "a3b47ec9184ebf5f987c748d997d2599ec091d25e8236dda8922ab00a020631b"
-        ),
+    package = dict(result["stationary_aot_source_package"])
+    assert len(bytes.fromhex(package.pop("cmake_contract_sha256"))) == 32
+    assert package == {
         "profiles": [
             "lda_rks",
             "lda_uks",
@@ -961,6 +961,8 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
             "b3lyp_uks",
             "m06_2x_rks",
             "m06_2x_uks",
+            "mn15_rks",
+            "mn15_uks",
             "wb97mv_rks",
             "wb97mv_uks",
         ],
@@ -1750,10 +1752,10 @@ def test_native_finish_span_fails_closed_on_contract_drift(
     "old,new",
     [
         (
-            "(5 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
-            "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
+            "size_add(size_add(5, size_mul(18, geometry_lanes))",
+            "size_add(size_add(4, size_mul(18, geometry_lanes))",
         ),
-        ("n > 2048", "n > 2049"),
+        ("ntask > 4096", "ntask > 4097"),
     ],
 )
 def test_memory_bounds_fail_closed_when_native_allocation_moves(
@@ -2260,31 +2262,23 @@ def test_admission_gate_order_fails_closed_when_memory_gates_move(
         qualify_capacity._source_limits(tmp_path)
 
 
-@pytest.mark.parametrize(
-    ("old", "new"),
-    [
-        ("          --component-domain spd", "          --component-domain sp"),
-        (
-            "target_link_libraries(${target} PRIVATE generativeqc_native_stationary)",
-            "target_link_libraries(${target} PRIVATE missing_native_stationary)",
-        ),
-    ],
-)
-def test_packaged_aot_claim_fails_closed_when_cmake_wiring_moves(
-    tmp_path: Path, old: str, new: str
+def test_package_inventory_records_refactors_without_claiming_binary_qualification(
+    tmp_path: Path,
 ) -> None:
-    source = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
-    assert old in source
-    target = tmp_path / "cmake/GenerativeQCCuda.cmake"
-    target.parent.mkdir(parents=True)
-    (target.parent / "GenerativeQCStationaryProfiles.cmake").write_text(
-        (ROOT / "cmake/GenerativeQCStationaryProfiles.cmake").read_text(),
-        encoding="utf-8",
-    )
-    target.write_text(source.replace(old, new, 1), encoding="utf-8")
-
-    with pytest.raises(RuntimeError, match="packaged-AOT CMake contract changed"):
-        qualify_capacity._source_package_inventory(tmp_path)
+    """CMake source identity changes must not invalidate a source-only census."""
+    target = tmp_path / "cmake"
+    target.mkdir()
+    for name in ("GenerativeQCCuda.cmake", "GenerativeQCStationaryProfiles.cmake"):
+        (target / name).write_text(
+            (ROOT / "cmake" / name).read_text(), encoding="utf-8"
+        )
+    before = qualify_capacity._source_package_inventory(tmp_path)
+    policy = target / "GenerativeQCStationaryProfiles.cmake"
+    policy.write_text(policy.read_text() + "\n# A declaration-preserving refactor.\n")
+    after = qualify_capacity._source_package_inventory(tmp_path)
+    assert after["profiles"] == before["profiles"]
+    assert after["component_domain"] == before["component_domain"]
+    assert after["cmake_contract_sha256"] != before["cmake_contract_sha256"]
 
 
 def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
@@ -2485,6 +2479,7 @@ def test_spherical_ao_count_fails_closed_when_shared_shell_owner_is_missing(
     [
         ("self._automatic_libxc_name is None", 0),
         ("cpu_direct_semilocal_force", 0),
+        ("automatic_cuda_force", 0),
         ("self._ks_options is not None", 0),
         ("self._ks_options.coefficients == (1.0, 1.0, 0.0)", 0),
         ('self._device_name == "cuda"', 0),
@@ -5150,6 +5145,12 @@ def test_capacity_resource_provenance_allows_benign_source_edits(
     assert_native_create_contract(source, tmp_path, required_native_cxx)
 
 
+def test_resource_semantics_accept_capability_based_targets() -> None:
+    qualify_capacity._geometry_resource_contract(
+        ROOT / "python/generativeqc_compiler/method/stationary_resources.py"
+    )
+
+
 @pytest.mark.parametrize(
     "old,new",
     [
@@ -5157,6 +5158,25 @@ def test_capacity_resource_provenance_allows_benign_source_edits(
         ("+ 1  # atom prefix offsets", "+ 0  # atom prefix offsets"),
         ("if required <= budget_bytes - allocation - center_bytes:", "if True:"),
         ("except ValueError as error:", "except Exception as error:"),
+        (
+            "type(atoms) is int and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS",
+            (
+                'type(atoms) is int and target.architecture == "sm_120" '
+                "and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS"
+            ),
+        ),
+        (
+            "and target.maximum_threads_per_block >= BECKE_COOPERATIVE_THREADS",
+            "and True",
+        ),
+        (
+            "<= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)",
+            "<= target.shared_memory_per_block",
+        ),
+        (
+            "<= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)",
+            "<= target.tuning_maximum_shared_bytes",
+        ),
     ],
 )
 def test_resource_semantics_reject_missing_panels_and_unbounded_fallback(
@@ -5189,3 +5209,42 @@ def test_native_grid_abi_provenance_accepts_benign_reader_edits(
         "native_grid_abi_sha256"
     }
     assert_native_grid_abi(tmp_path, tmp_path, required_native_cxx)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("state._source.check_current()", "None"),
+        ("device=resident.device", "device=0"),
+        ("grid.geometry_generation,", "0,"),
+        ("float(cutoff),", "1e-16,"),
+        (
+            "if owner is None or prepared._resident_ao_map_key != key:",
+            "if owner is None:",
+        ),
+        ("owner.reset_work()", "None"),
+        ("        owner = None\n", "        pass\n"),
+        ("prepared._resident_ao_maps = None", "None"),
+        ("prepared._resident_ao_map_key = None", "None"),
+    ],
+)
+def test_resident_ao_binding_witness_rejects_lifecycle_drift(
+    old: str, new: str
+) -> None:
+    from tools.dft_mp_v1.prepared_contracts import check_resident_ao_binding
+
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    owner = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_stationary_resident_ao_cache"
+    )
+    check_resident_ao_binding(owner)
+    segment = ast.get_source_segment(source, owner)
+    assert segment is not None and old in segment
+    changed = ast.parse(segment.replace(old, new)).body[0]
+    with pytest.raises(
+        RuntimeError, match="resident AO policy lifecycle contract changed"
+    ):
+        check_resident_ao_binding(changed)

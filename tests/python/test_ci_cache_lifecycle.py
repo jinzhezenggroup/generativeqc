@@ -163,15 +163,19 @@ def test_master_python_seed_matches_python_shard_compilation_paths(
 def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
     job = _job("python")
     tests = _step("python", "Run Python tests with coverage")
+    # Both job and test ceilings preserve the nightly tier; the extended shards
+    # get bounded extra time for their measured complete routine workloads.
     pattern = (
         r"timeout-minutes: \$\{\{ \(github.event_name == 'schedule' \|\| "
-        r"github.event_name == 'workflow_dispatch'\) && (\d+) \|\| (\d+) \}\}"
+        r"github.event_name == 'workflow_dispatch'\) && (\d+) \|\| "
+        r"\(\(matrix.shard == 'posthf' \|\| matrix.shard == 'core-b' \|\| "
+        r"matrix.shard == 'compiler-heavy'\) && (\d+) \|\| (\d+)\) \}\}"
     )
     job_limits = re.search(pattern, job.split("\n    steps:\n", 1)[0])
     test_limits = re.search(pattern, tests)
     assert job_limits and test_limits
-    assert tuple(map(int, test_limits.groups())) == (90, 30)
-    assert tuple(map(int, job_limits.groups())) == (100, 40)
+    assert tuple(map(int, test_limits.groups())) == (90, 35, 30)
+    assert tuple(map(int, job_limits.groups())) == (100, 45, 40)
     assert "id: python_tests" in tests
     assert "continue-on-error:" not in tests
     assert "-m pytest" in tests and '"${collection_targets[@]}"' in tests

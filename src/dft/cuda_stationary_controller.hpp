@@ -19,7 +19,11 @@ struct CudaStationaryResources {
   std::size_t grid_provider_retained_bytes{}, grid_prepare_device_delta{};
   std::size_t grid_provider_allowance_bytes{};
   std::size_t minimum_device_bytes{};
+  std::size_t ao_map_host_bytes{};
+  /** Optional center/phase geometry cache selected from the same fleet budget. */
+  bool cached_geometry{};
   std::array<std::uint64_t, 24> stationary_work{};
+  std::array<std::uint64_t, 3> point_work{};
   AoGridWork grid_work;
 };
 
@@ -34,7 +38,8 @@ class CudaStationaryController {
  public:
   CudaStationaryController(const core::System& system, const AoBasis& basis,
                            const MolecularGrid& grid, const CudaStationaryBinding& binding,
-                           int device, std::size_t tile_points, std::size_t maximum_device_bytes);
+                           int device, std::size_t tile_points, std::size_t maximum_device_bytes,
+                           const MolecularGrid* nonlocal_grid = nullptr);
   ~CudaStationaryController();
   CudaStationaryController(const CudaStationaryController&) = delete;
   CudaStationaryController& operator=(const CudaStationaryController&) = delete;
@@ -45,7 +50,10 @@ class CudaStationaryController {
                                const std::function<bool()>& token_current,
                                std::vector<double>& output, std::string& detail,
                                bool allow_spatial_default = false,
-                               scf::DirectForcePrecisionRequest* precision = nullptr);
+                               scf::DirectForcePrecisionRequest* precision = nullptr,
+                               const scf::ResolvedFockBuild* range = nullptr,
+                               const CudaKsResidentNonlocalFeaturesBinding* nonlocal = nullptr,
+                               const scf::PreparedFockPlan* range_provider = nullptr);
   const CudaStationaryResources& resources() const noexcept { return resources_; }
 
  private:
@@ -57,9 +65,14 @@ class CudaStationaryController {
   std::size_t mixed_grid_budget_{}, mixed_grid_bytes_{};
   double coincident_tolerance_{};
   std::vector<double> centers_, charges_;
+  core::System system_;
+  std::size_t maximum_device_bytes_{};
   void *grid_{}, *stationary_{};
+  bool indexed_grid_{};
   std::optional<runtime::DeviceProviderAllowance> grid_provider_allowance_;
   std::optional<runtime::DeviceProviderAllowance> mixed_grid_provider_allowance_;
   CudaStationaryResources resources_;
+  struct NonlocalOwner;
+  std::unique_ptr<NonlocalOwner> nonlocal_;
 };
 }  // namespace generativeqc::dft

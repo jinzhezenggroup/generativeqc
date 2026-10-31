@@ -1,0 +1,24 @@
+{
+  "scope": "Untimed complete 56-call integrated candidate; explicit CUDA dynamic storage only. Baseline remains the separately identified Slurm 14826 trace.",
+  "slurm_job_id": "14828",
+  "explicit_device_peak_bytes": 27048950,
+  "explicit_device_final_live_bytes": 0,
+  "explicit_device_allocation_count": 4232,
+  "static_device_bytes": 1078077,
+  "kernel_launch_count": 30832,
+  "graph_api_calls": 0,
+  "copies": {
+    "Device-to-Device": {
+      "count": 1480,
+      "bytes": 11359200
+    },
+    "Device-to-Host": {
+      "count": 1352,
+      "bytes": 2053872
+    },
+    "Host-to-Device": {
+      "count": 2976,
+      "bytes": 9843976
+    }
+  }
+}

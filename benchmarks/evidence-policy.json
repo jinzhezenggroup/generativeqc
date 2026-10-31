@@ -367,6 +367,56 @@
       "reason": "Exact original 256-population baseline, retained alongside the unified replacement so prior numerical values, slower Fast results and failures remain independently auditable. This source-frozen historical receipt is unchanged by the replacement campaign; waive only its duplicate change-review charge, retaining the hard per-file and aggregate checkout caps.",
       "sha256": "226813e5e07af11387926a1ec1dd9f5dbfa1054be54cbe78faa692a6d03327bb",
       "review_change": true
+    },
+    "benchmarks/results/shared-force-parameter-integration-20261028/final/build-before-cosx-fix/build.log.xz": {
+      "owner": "shared-force-parameter-integration-20261028",
+      "reason": "Original failed COSX link/configuration receipt, kept separate from the successful retry. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
+      "sha256": "80ddec6748ea71fda2a4dc4f2de4e629de2b7c943df5d60764c683f87bf00383"
+    },
+    "benchmarks/results/shared-force-parameter-integration-20261028/final/build-before-cosx-fix/configure.log.xz": {
+      "owner": "shared-force-parameter-integration-20261028",
+      "reason": "Original failed COSX link/configuration receipt, kept separate from the successful retry. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
+      "sha256": "faf4a96f2e8d2bcabdc82c9be7ef6998dc00e2cfdd343ef21f874afbb4efef9d"
+    },
+    "benchmarks/results/shared-force-parameter-integration-20261028/final/build.log.xz": {
+      "owner": "shared-force-parameter-integration-20261028",
+      "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
+      "sha256": "e15b69c3b2f1bff74f201f365335ec860bf9715dc1178d9c9717a9acca68fe2c"
+    },
+    "benchmarks/results/shared-force-parameter-integration-20261028/final/composite-cli.log.xz": {
+      "owner": "shared-force-parameter-integration-20261028",
+      "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
+      "sha256": "41381d08e5f8b44cfe2d2ab93f711f8463b62a313d76cdb825e05a8622582e16"
+    },
+    "benchmarks/results/shared-force-parameter-integration-20261028/final/configure.log.xz": {
+      "owner": "shared-force-parameter-integration-20261028",
+      "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
+      "sha256": "26c07abd059cfa8f4b4d4c3b7f10eb341e6a8082af57ea934bb8e58748b65105"
+    },
+    "benchmarks/results/shared-force-parameter-integration-20261028/final/ctest.log.xz": {
+      "owner": "shared-force-parameter-integration-20261028",
+      "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
+      "sha256": "201329a36da11320a3e14b048c2edc5deeeaeabfdec48e6cb3e866ecdec64c57"
+    },
+    "benchmarks/results/shared-force-parameter-integration-20261028/final/force.log.xz": {
+      "owner": "shared-force-parameter-integration-20261028",
+      "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
+      "sha256": "49bda3d4b79bd1f027fb02a12fae8100501e0f5f5ee153a114be7fa1f60a0aba"
+    },
+    "benchmarks/results/shared-force-parameter-integration-20261028/final/r1-cpu.log.xz": {
+      "owner": "shared-force-parameter-integration-20261028",
+      "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
+      "sha256": "6e6cc583291b29a481629c3edd9800b39a934b6750b6de26f7429c31110f01d3"
+    },
+    "benchmarks/results/shared-force-parameter-integration-20261028/final/r1-cpu.xml.xz": {
+      "owner": "shared-force-parameter-integration-20261028",
+      "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
+      "sha256": "f01d46eae43399c45c32e34e3e14c7cec1e455fe1b961a56b18d09cdc74b2941"
+    },
+    "benchmarks/results/h100-pbe0-direct-df-20261029/evidence.tar.xz": {
+      "owner": "h100-pbe0-direct-df-20261029 / xshengrui",
+      "reason": "Exact compact source-bound H100 PBE0 Direct/DF matrix: all620 public raw members, full144 E+F vectors/binary64, independent gates, semantic work, failures and negative performance. Standalone offline replay verifies every reconstructed public hash; redacted originals retain separate explicit witnesses. No cap or change-review exemption.",
+      "sha256": "35478688958cffcf9dbd7400d0cd7116dc15fd9607dcf7f717688843a45bde97"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

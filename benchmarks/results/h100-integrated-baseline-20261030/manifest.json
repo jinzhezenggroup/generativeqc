@@ -1,0 +1,50 @@
+{
+  "schema": "generativeqc.h100-integrated-baseline-evidence.v1",
+  "measured_source": "000517f82dc62130459a6fd92a27518a158c49cc",
+  "job": "gqc-h100-integrated-000517-1030-v1",
+  "original_archive": {
+    "bytes": 534592,
+    "sha256": "d4c67121e43cc7b9f577cedcd94bd221916747893aec5b598c65a25bdaaddc4b",
+    "members": 509
+  },
+  "normalization": "Only the private shared-storage root is replaced with <H100_PORTABILITY_ROOT> in JSON keys/strings and text streams. Normalized JSON is checked after restoring every full-precision force list. Original private byte identities remain explicit provenance; public normalized bytes are not asserted identical to them. Scientific numbers, ordering, unfavorable results, telemetry and all original campaign producer/log members are retained.",
+  "qualifier": {
+    "path": "benchmarks/readme_defaults_qualification.py",
+    "sha256": "1034191728f269014e1209c59b58c1eb0b6da45727667a1d07bc18b250487d14"
+  },
+  "oracle": {
+    "path": "benchmarks/results/readme-repaired-20261021/oracles.json.xz",
+    "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+  },
+  "auxiliary_inputs": {
+    "path": "benchmarks/results/readme-repaired-20261021/auxiliary-inputs.json.xz",
+    "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
+  },
+  "force_storage": {
+    "path": "forces.npy.xz",
+    "dtype": "<f8",
+    "shape": [
+      83052
+    ],
+    "vectors": 396
+  },
+  "files": {
+    "documents.json.xz": {
+      "bytes": 123656,
+      "sha256": "d5214c23ee4f8e183ebcf1eb9bcca4e8e74797ee8856388dcec1c586c33f7238"
+    },
+    "bindings.json.xz": {
+      "bytes": 30672,
+      "sha256": "39ef56fec898f5c17fa4c5d44e71986ff0cc08e01feddc332e9a96df9a24ff40"
+    },
+    "forces.npy.xz": {
+      "bytes": 214440,
+      "sha256": "94293e1202383a7957c6b4e447eedc8b58a5345a33ef2767fd97019c9ed232c3"
+    },
+    "text-streams.bin.xz": {
+      "bytes": 28440,
+      "sha256": "eb85ac74934e7fd24abbbaddbbd88c38063dfd886909d798b0229155fe394be9"
+    }
+  },
+  "scope": "All99 baseline populations/396 complete E+F, both global policies and33 fresh same-H100 stock GPU4PySCF references. Complete normalized campaign originals, source/core/AOT/input/device/qualifier bindings and full-force scientific replay. One process per arm only: no final three-process majority, candidate80bb, kernel attribution, native/lifecycle/resource guards or production promotion. Build binary and complete compiler-log replay remain separate private metadata evidence. Fourteen historical denser-grid producer byte streams remain unavailable; the retained oracle-reuse audit says so."
+}

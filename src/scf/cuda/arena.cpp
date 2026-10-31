@@ -7,6 +7,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/eigensolver_types.hpp"
 #include "scf/cuda/packed_basis.hpp"
+#include "scf/diis_work.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -336,6 +337,8 @@ bool make_layout(
       !workspace.append<double>(incremental_diis_gram ? diis_raw_gram_elements : 0,
                                 made.diis_raw_gram) ||
       !workspace.append<double>(batch_size * diis_dimension, made.diis_coefficients) ||
+      !workspace.append<tensor::RingGramWork>(diis_work_requested() ? batch_size : 0,
+                                              made.diis_work) ||
       !workspace.append<std::uint32_t>(batch_size, made.diis_count) ||
       !workspace.append<std::uint32_t>(batch_size, made.diis_head) ||
       !workspace.append<double>(batch_size, made.energy) ||

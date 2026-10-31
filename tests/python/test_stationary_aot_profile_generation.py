@@ -27,6 +27,7 @@ def test_aot_profile_legacy_transport_is_generated_without_name_branch() -> None
         "pbe0",
         "b3lyp",
         "m06_2x",
+        "mn15",
         "wb97mv",
     }
     # Every packaged method must expose both spin channels; additions should not

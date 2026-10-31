@@ -11,7 +11,7 @@ import time
 import typing
 from contextlib import ExitStack, suppress
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import InitVar, asdict, dataclass
 from enum import Enum
 from hashlib import sha256
 
@@ -373,8 +373,11 @@ class DeterministicHFPlan:
     problem: TargetProblem
     stages: tuple[StagePlan, ...]
     budget: ProgressiveBudget = ProgressiveBudget()
+    # Execution binds admission to its already-selected library. This transport
+    # input is not retained, serialized, compared or included in plan identity.
+    _library: InitVar[typing.Any] = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, _library: typing.Any) -> None:
         """Validate the two-stage source-to-target plan against target identity and budget."""
         if not isinstance(self.problem, TargetProblem) or not isinstance(
             self.budget, ProgressiveBudget
@@ -427,20 +430,16 @@ class DeterministicHFPlan:
             raise ValueError("final stage changed target convergence requirements")
         if not target.arithmetic.is_strict_target:
             raise ValueError("final stage must establish a strict FP64 target state")
-        if source.convergence.energy_change < target.convergence.energy_change or (
-            source.convergence.density_rms < target.convergence.density_rms
-        ):
+        from ._hf_plan_native import failures
+
+        unmet = failures(source, target, self.budget, library=_library)
+        if unmet & 1:
             raise ValueError(
                 "the initialization solve cannot be stricter than the target"
             )
-        if (
-            source.convergence.maximum_iterations
-            > self.budget.maximum_source_iterations
-        ):
+        if unmet & 2:
             raise ValueError("source iteration limit exceeds the progressive budget")
-        if sum(stage.convergence.maximum_iterations for stage in stages) > (
-            self.budget.maximum_total_iterations
-        ):
+        if unmet & 4:
             raise ValueError("planned iterations exceed the progressive budget")
         for stage in stages:
             for evidence in stage.error_evidence:
@@ -452,16 +451,10 @@ class DeterministicHFPlan:
                     raise ValueError(
                         "stage error evidence names a different evaluated model"
                     )
-        if self.budget.maximum_estimated_cost_units is not None:
-            costs = tuple(stage.estimated_cost_units for stage in stages)
-            if any(value is None for value in costs):
-                raise ValueError(
-                    "a cost-limited plan requires every stage cost estimate"
-                )
-            if sum(typing.cast("float", value) for value in costs) > (
-                self.budget.maximum_estimated_cost_units
-            ):
-                raise ValueError("estimated stage cost exceeds the progressive budget")
+        if unmet & 8:
+            raise ValueError("a cost-limited plan requires every stage cost estimate")
+        if unmet & 16:
+            raise ValueError("estimated stage cost exceeds the progressive budget")
 
     @property
     def identity(self) -> str:
@@ -577,6 +570,7 @@ def make_deterministic_hf_plan(
         problem,
         (source, target),
         ProgressiveBudget() if budget is None else budget,
+        _library=target_calculator._library,
     )
 
 
@@ -687,9 +681,10 @@ def finalize_hf_verification(
 ) -> FinalVerification:
     """Derive final acceptance through the shared native metadata policy.
 
-    The first configured library supplies the policy for standalone calls. Older
-    libraries and integer metadata outside the ABI retain explicit compatibility;
-    native refusal never retries it. This does not perform a physical Fock audit.
+    The first configured library supplies the current protocol for standalone
+    calls. Missing support and native refusal are errors. Integer metadata
+    outside the ABI retains explicit Python behavior without truncation.
+    This does not perform a physical Fock audit.
     """
     return _finalize_hf_verification(
         problem,
@@ -732,7 +727,7 @@ def _finalize_hf_verification_python(
     physical_audit_error: str | None = None,
     physical_audit_budget_exhausted: bool = False,
 ) -> FinalVerification:
-    """Old-library/unrepresentable-metadata compatibility; never a native retry."""
+    """Verify unrepresentable integer metadata without truncation; never a native retry."""
     if (
         not isinstance(problem, TargetProblem)
         or target_stage.role is not StageRole.TARGET

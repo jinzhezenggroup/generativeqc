@@ -3,38 +3,11 @@
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
-from generativeqc_compiler.integral import production, production_profile
-
-
-def test_production_preserves_profile_compatibility_reexports() -> None:
-    """Legacy production imports resolve to the canonical profile objects."""
-
-    assert production.ProfileMatch is production_profile.ProfileMatch
-    assert (
-        production._schedule_from_payload is production_profile._schedule_from_payload
-    )
-    assert (
-        production.ResolvedProductionProfile
-        is production_profile.ResolvedProductionProfile
-    )
-    assert (
-        production.resolve_production_profile
-        is production_profile.resolve_production_profile
-    )
-    assert (
-        production.load_production_kernel_selections
-        is production_profile.load_production_kernel_selections
-    )
-    assert (
-        production.load_production_manifest
-        is production_profile.load_production_manifest
-    )
-    assert (
-        production.load_production_fock_manifest
-        is production_profile.load_production_fock_manifest
-    )
+import pytest
+from generativeqc_compiler.integral import production_profile
 
 
 def test_production_profile_avoids_emission_orchestration_dependencies() -> None:
@@ -65,3 +38,27 @@ def test_resolved_profile_is_owned_by_profile_module() -> None:
     assert production_profile.ResolvedProductionProfile.__module__.endswith(
         ".production_profile"
     )
+
+
+@pytest.mark.parametrize("invalid", (0, 1, "false", None))
+def test_optional_fock_variants_requires_an_explicit_boolean(
+    tmp_path: Path, invalid: object
+) -> None:
+    """Reject ambiguous build policy instead of silently omitting kernels."""
+    manifest = tmp_path / "profile.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "architectures": {
+                    "portable_cuda": {
+                        "kind": "portable",
+                        "kernels": [],
+                        "optional_fock_variants": invalid,
+                    }
+                },
+            }
+        )
+    )
+    with pytest.raises(TypeError, match="optional_fock_variants must be a boolean"):
+        production_profile.resolve_production_profile(manifest, "sm_80")

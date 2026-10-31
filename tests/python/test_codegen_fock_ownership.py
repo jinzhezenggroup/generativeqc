@@ -19,7 +19,6 @@ from generativeqc_compiler.integral import (
     cuda_target_info,
     emit_shell_class_fused_cuda,
 )
-from generativeqc_compiler.integral.autotune import supported_schedule_trials
 from generativeqc_compiler.integral.benchmark import emit_shell_class_oracle_cuda
 from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_fock_accumulation_header,
@@ -27,6 +26,7 @@ from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_force_density_coefficient,
     emit_generated_shell_fock_accumulation,
 )
+from generativeqc_compiler.integral.tuning.policy import supported_schedule_trials
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 TEST_CUDA_TARGET = cuda_target_info("sm_120")

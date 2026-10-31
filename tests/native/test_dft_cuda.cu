@@ -236,6 +236,10 @@ void automatic_xc_record(std::uint32_t code, unsigned spins, double displacement
   require(program && program->launch && program->launch_batch, "missing automatic AOT entry");
   require(generated::automatic_cuda_point_entry(code) == program, "unstable AOT lifetime");
   require(!generated::automatic_cuda_point_entry(code | 0x1000000U), "truncated AOT code");
+  const auto binding = cuda_xc_detail::resolve_point_binding(code, false);
+  require(binding.launch == program->launch && binding.automatic_program == program,
+          "shared point binding lost the automatic executable or science identity");
+  require(!binding.launch_batch, "raw AOT batch entry granted production batching");
   auto molecule = system();
   molecule.atoms[1].position[2] += displacement;
   const AoBasis basis(molecule);
@@ -370,6 +374,66 @@ void automatic_point_record(std::uint32_t code, unsigned spins, std::size_t tile
   json_vector(coefficients);
   std::cout << ",\"totals\":";
   json_vector(totals);
+  std::cout << "}\n";
+}
+
+/** Exercise the production staged point ABI on a borrowed nondefault stream.
+ * Unused feature channels stay uninitialized so initcheck can detect accidental
+ * reads. A failed upstream producer leaves every channel uninitialized; neither
+ * that failure nor a sticky consumer error may overwrite the retained tile. */
+void automatic_stationary_point_record(std::uint32_t code, unsigned spins, unsigned failure) {
+  const auto* program = generated::automatic_cuda_point_entry(code);
+  require(program && program->launch_stationary && (spins == 1 || spins == 2) && failure <= 2,
+          "invalid staged point test binding");
+  std::size_t count{};
+  require(bool(std::cin >> count) && count > 0 && count <= 128, "invalid staged test count");
+  std::vector<double> features(10 * count);
+  for (auto& value : features) require(bool(std::cin >> value), "invalid staged feature");
+  generativeqc::runtime::OwnedCudaStream stream(0);
+  generativeqc::runtime::OwnedCudaBuffer<double> input(0, features.size(), stream.get());
+  generativeqc::runtime::OwnedCudaBuffer<DevicePointValue> output(0, count + 1, stream.get());
+  generativeqc::runtime::OwnedCudaBuffer<int> errors(0, 2, stream.get());
+  std::vector<DevicePointValue> points(count + 1);
+  for (auto& point : points) {
+    point.energy = 937.0;
+    point.valid = false;
+  }
+  int status[2]{failure == 2 ? 7 : 0, failure == 1 ? 11 : 0};
+  check(cudaMemcpyAsync(output.get(), points.data(), points.size() * sizeof(DevicePointValue),
+                        cudaMemcpyHostToDevice, stream.get()));
+  check(
+      cudaMemcpyAsync(errors.get(), status, sizeof(status), cudaMemcpyHostToDevice, stream.get()));
+  if (!failure)
+    for (std::size_t spin = 0; spin < 2; ++spin)
+      for (std::size_t term = 0; term < program->feature_terms; ++term) {
+        const auto offset = (5 * spin + term) * count;
+        check(cudaMemcpyAsync(input.get() + offset, features.data() + offset,
+                              count * sizeof(double), cudaMemcpyHostToDevice, stream.get()));
+      }
+  program->launch_stationary(stream.get(), input.get(), count, spins, output.get(), errors.get(),
+                             errors.get() + 1);
+  check(cudaPeekAtLastError());
+  check(cudaMemcpyAsync(points.data(), output.get(), points.size() * sizeof(DevicePointValue),
+                        cudaMemcpyDeviceToHost, stream.get()));
+  check(
+      cudaMemcpyAsync(status, errors.get(), sizeof(status), cudaMemcpyDeviceToHost, stream.get()));
+  stream.synchronize();
+  require(points.back().energy == 937.0 && !points.back().valid, "point tile overrun");
+  if (failure) {
+    require(status[0] != 0, "lost sticky staged producer failure");
+    for (const auto& point : points)
+      require(point.energy == 937.0 && !point.valid, "failed producer overwrote point tile");
+  }
+  std::vector<double> values;
+  for (std::size_t p = 0; p < count; ++p) {
+    const auto& point = points[p];
+    values.insert(values.end(), {point.energy, point.rho[0], point.rho[1]});
+    for (const auto& gradient : point.gradient)
+      values.insert(values.end(), std::begin(gradient), std::end(gradient));
+    values.insert(values.end(), {point.kinetic[0], point.kinetic[1]});
+  }
+  std::cout << std::setprecision(17) << "{\"error\":" << status[0] << ",\"values\":";
+  json_vector(values);
   std::cout << "}\n";
 }
 
@@ -1111,6 +1175,12 @@ int main(int argc, char** argv) {
                              static_cast<unsigned>(std::stoul(argv[3])), std::stoull(argv[4]));
       return 0;
     }
+    if (argc == 5 && std::string(argv[1]) == "--automatic-stationary-json") {
+      automatic_stationary_point_record(static_cast<std::uint32_t>(std::stoul(argv[2], nullptr, 0)),
+                                        static_cast<unsigned>(std::stoul(argv[3])),
+                                        static_cast<unsigned>(std::stoul(argv[4])));
+      return 0;
+    }
     if (argc == 5 && std::string(argv[1]) == "--automatic-xc-json") {
       automatic_xc_record(static_cast<std::uint32_t>(std::stoul(argv[2], nullptr, 0)),
                           static_cast<unsigned>(std::stoul(argv[3])), std::stod(argv[4]));
@@ -1292,7 +1362,7 @@ int main(int argc, char** argv) {
                                                grid.point_count(), functional, false, 17);
       require(layout.jets == 4 && layout.work_jets == 4 && layout.feature_terms == 5,
               "generated split-hybrid MGGA layout is inconsistent");
-      require(cuda_xc_detail::resolve_point_launcher(functional, false) != nullptr,
+      require(cuda_xc_detail::resolve_point_binding(functional, false).launch != nullptr,
               "generated split-hybrid CUDA point launcher is missing");
     }
     bool unknown_split_hybrid_rejected = false;

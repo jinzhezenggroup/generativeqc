@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.method.stationary_cuda import (
+    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     _qualified_aot_profile,
     emit_stationary_profile_aot_wrapper_cuda,
     qualified_sp_requests,
@@ -20,12 +21,29 @@ from generativeqc_compiler.method.stationary_native_cuda import (
     emit_native_stationary_registry_cpp,
     native_stationary_model,
 )
+from generativeqc_compiler.xc.automatic_semilocal import (
+    automatic_functional_code,
+    automatic_functional_name,
+    automatic_scf_domain,
+)
 from generativeqc_compiler.xc.grid_native import emit_grid_partials
+from test_libxc_automatic_point_native import NAMES
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
+# Keep required-CI generation bounded while spanning every supported ingredient
+# and spin layout. The available package inventory itself remains structural.
+TEST_PROFILES = tuple(
+    name
+    for name in QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
+    if name in NATIVE_STATIONARY_CUDA_PROFILES
+) + tuple(
+    f"libxc_{automatic_functional_code(name)}_{spin}"
+    for name in NAMES
+    for spin in ("rks", "uks")
+)
 
 
 def test_typed_geometry_helpers_link_across_native_profiles(
@@ -35,7 +53,7 @@ def test_typed_geometry_helpers_link_across_native_profiles(
     units = []
     for index, profile in enumerate(("pbe0_rks", "pbe_rks")):
         wrapper = emit_stationary_profile_aot_wrapper_cuda(
-            profile, include_reduction=False
+            profile, include_reduction=False, include_external=True
         )
         native = emit_native_stationary_profile_cuda(profile)
         aliases = "\n".join(
@@ -64,11 +82,13 @@ def test_typed_geometry_helpers_link_across_native_profiles(
         assert probe() == 10.0
 
 
-@pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
+@pytest.mark.parametrize("profile", TEST_PROFILES)
 def test_native_binding_retains_scientific_wrapper(profile: str) -> None:
     """Token ownership changes cannot rewrite equations, literals or IR hashes."""
-    wrapper = emit_stationary_profile_aot_wrapper_cuda(profile, include_reduction=False)
-    legacy = emit_stationary_profile_aot_wrapper_cuda(profile)
+    wrapper = emit_stationary_profile_aot_wrapper_cuda(
+        profile, include_reduction=False, include_external=True
+    )
+    legacy = emit_stationary_profile_aot_wrapper_cuda(profile, include_external=True)
     native = emit_native_stationary_profile_cuda(profile)
     # The XC/AO/Becke and source-weight science stays byte-identical.
     # Only the original generated source-sum kernel is replaced by one
@@ -101,13 +121,20 @@ def test_native_binding_retains_scientific_wrapper(profile: str) -> None:
     assert native == emit_native_stationary_profile_cuda(profile)
 
 
-@pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
+@pytest.mark.parametrize("profile", TEST_PROFILES)
 def test_native_transport_metadata_comes_from_plan(profile: str) -> None:
     plan = _qualified_aot_profile(profile).plan
     source = emit_native_stationary_profile_cuda(profile)
     assert plan.identity in source
     assert plan.method.identity in source
-    integral_sources = ("one_electron", "coulomb", "overlap_pulay", "exact_exchange")
+    integral_sources = (
+        "one_electron",
+        "coulomb",
+        "overlap_pulay",
+        "exact_exchange",
+        "exchange_short_range",
+        "exchange_long_range",
+    )
     mask = sum(
         1 << plan.source_names.index(name)
         for name in integral_sources
@@ -124,7 +151,16 @@ def test_native_transport_metadata_comes_from_plan(profile: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "selected", [(), ("lda_rks", "b3lyp_uks", "r2scan_rks", "m06_2x_rks")]
+    "selected",
+    [
+        (),
+        ("lda_rks", "b3lyp_uks", "r2scan_rks", "m06_2x_rks"),
+        tuple(
+            f"libxc_{automatic_functional_code(name)}_{spin}"
+            for name in ("LDA_C_VWN_4", "GGA_X_APBE", "MGGA_X_LTA")
+            for spin in ("rks", "uks")
+        ),
+    ],
 )
 def test_native_registry_contains_only_built_profiles(
     selected: tuple[str, ...], tmp_path: Path, native_cxx: NativeCxx
@@ -254,7 +290,7 @@ def test_split_hybrid_model_uses_exact_graph_not_method_label(
         native.native_stationary_model("ignored")
 
 
-@pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
+@pytest.mark.parametrize("profile", TEST_PROFILES)
 def test_native_model_matches_independent_native_ks_lowering(profile: str) -> None:
     """The existing SDK transport lowerer independently checks emitted point scales."""
     from generativeqc.ks import (
@@ -273,7 +309,11 @@ def test_native_model_matches_independent_native_ks_lowering(profile: str) -> No
     )
     assert functional == _native_semilocal_code(plan.method)
     expected_domain = (
-        SPLIT_HYBRID_SCF_DOMAIN if domain == 4 else SCF_DOMAIN_BY_VERSION[domain]
+        automatic_scf_domain(automatic_functional_name(functional))
+        if profile.startswith("libxc_")
+        else SPLIT_HYBRID_SCF_DOMAIN
+        if domain == 4
+        else SCF_DOMAIN_BY_VERSION[domain]
     )
     assert expected_domain == _scf_domain_for_ir(plan.method)
     actual_exchange, actual_correlation, _ = ks_coefficients(plan.method)
@@ -351,7 +391,7 @@ struct NativeOwner {
   Owner* scientific{};
   bool integral_pending{}, nuclear_ready{};
   void* integral_stream{};
-  uint64_t integral_mask{}, grid_points{};
+  uint64_t integral_mask{}, grid_points{}, nonlocal_points{};
   NativeOwner() { ++live_owners; }
   ~NativeOwner() { --live_owners; }
 };
@@ -361,6 +401,7 @@ constexpr size_t stationary_becke_max_atoms=128, stationary_becke_pair_tile_rows
                  stationary_becke_threads=32;
 namespace generativeqc_grid_adjoint { struct PointPair { double values[8]; }; }
 constexpr uint64_t native_required_integral_mask = 1, native_nuclear_kind = 0;
+constexpr int native_nonlocal_slot = -1;
 namespace generativeqc::dft { struct GridTaskView { size_t npoint{}; }; }
 void native_drain_integrals(NativeOwner&) {}
 void cuda_check(int) {}
@@ -377,6 +418,7 @@ template <class... Arguments> int stationary_geometry_reset(Arguments&&...) { re
 template <class... Arguments> int stationary_nuclear_all(Arguments&&...) { return inner_status; }
 template <class... Arguments>
 int stationary_geometry_molecular_resident_weights_enqueue_impl(Arguments&&...) { return inner_status; }
+template <class... Arguments> int stationary_geometry_external_device_molecular_resident_weights_to_source(Arguments&&...) { return inner_status; }
 template <class... Arguments> int stationary_finish_reduced(Arguments&&...) { return inner_status; }
 template <class... Arguments> int stationary_finish_span(Arguments&&...) { return inner_status; }
 """

@@ -5,6 +5,11 @@
 #include <cstdint>
 #include <limits>
 
+#include "api/ks_dispersion.hpp"
+#include "methods/method.hpp"
+#include "molecule/basis.hpp"
+#include "molecule/basis_geometry_identity.hpp"
+#include "molecule/basis_template.hpp"
 #include "native_method_catalog.hpp"
 
 namespace generativeqc::methods::named_ks {
@@ -21,7 +26,78 @@ std::span<const generativeqc_ks_exchange_term> exchanges(const Method& method) n
   return std::span(generated::kExchanges).subspan(method.exchange_offset, method.exchange_count);
 }
 
+void electronic_options(const Method& entry, generativeqc_ks_options& candidate) noexcept {
+  candidate.scf_domain = entry.domain.data();
+  candidate.spin_channels = entry.spin;
+  candidate.semilocal_components = components(entry).data();
+  candidate.semilocal_component_count = entry.component_count;
+  candidate.semilocal_range_omega = entry.range_omega;
+  candidate.exchange_terms = entry.exchange_count ? exchanges(entry).data() : nullptr;
+  candidate.exchange_term_count = entry.exchange_count;
+  candidate.has_nonlocal_correlation = entry.nonlocal.variant != 0;
+  candidate.nonlocal_variant = entry.nonlocal.variant;
+  candidate.nonlocal_b = entry.nonlocal.b;
+  candidate.nonlocal_c = entry.nonlocal.c;
+  candidate.nonlocal_coefficient = entry.nonlocal.coefficient;
+}
+
+void validate_bound_basis(const Method& method, const core::System& system) {
+  if (!method.bound_basis) return;
+  if (system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL || !system.ecp_terms.empty() ||
+      std::any_of(system.atoms.begin(), system.atoms.end(),
+                  [](const auto& atom) { return atom.ecp_core != 0; }))
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "named composite requires its exact spherical all-electron basis");
+  std::vector<generativeqc_atom> atoms;
+  atoms.reserve(system.atoms.size());
+  for (const auto& atom : system.atoms)
+    atoms.push_back({atom.atomic_number, atom.position[0], atom.position[1], atom.position[2]});
+  const auto expanded =
+      molecule::expand_basis_template(*method.bound_basis, atoms, GENERATIVEQC_BASIS_SPHERICAL);
+  core::System reference;
+  reference.atoms = system.atoms;
+  reference.charge = system.charge;
+  reference.multiplicity = system.multiplicity;
+  reference.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  for (const auto& shell : expanded.shells) {
+    core::Shell target{shell.atom_index, shell.angular_momentum, {}};
+    for (std::size_t index = shell.primitive_offset;
+         index < shell.primitive_offset + shell.primitive_count; ++index) {
+      const auto& primitive = expanded.primitives[index];
+      target.primitives.push_back({primitive.exponent, primitive.coefficient});
+    }
+    reference.shells.push_back(std::move(target));
+  }
+  std::string detail;
+  const auto status = molecule::validate_and_normalize(reference, detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw MethodError(status, detail);
+  if (!molecule::BasisGeometryIdentity(reference).matches(system))
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "orbital basis differs from the named method's defining snapshot");
+}
+
 }  // namespace generativeqc::methods::named_ks
+
+extern "C" generativeqc_status generativeqc_ks_catalog_name_v1(const char* identity,
+                                                               generativeqc_backend backend,
+                                                               const char** name) {
+  if (!identity || !name ||
+      (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const std::string_view requested(identity);
+  if (requested.size() != 64 || !std::all_of(requested.begin(), requested.end(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      }))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  *name = nullptr;
+  for (const auto& entry : generativeqc::methods::named_ks::methods())
+    if (entry.identity == requested &&
+        (backend == GENERATIVEQC_BACKEND_CUDA ? entry.cuda : entry.cpu)) {
+      *name = entry.name.data();
+      break;
+    }
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
 
 namespace {
 bool disjoint(const void* first, std::size_t first_bytes, const void* second,
@@ -90,7 +166,8 @@ extern "C" GENERATIVEQC_API generativeqc_status generativeqc_ks_catalog_plan_v1(
       }
     }
   }
-  if (!entry || (!requested_identity.empty() && entry->identity != requested_identity) ||
+  if (!entry || entry->dispersion.kind ||
+      (!requested_identity.empty() && entry->identity != requested_identity) ||
       !(backend == GENERATIVEQC_BACKEND_CUDA ? entry->cuda : entry->cpu) ||
       (output->scf_domain && entry->domain != domain)) {
     *selected = 0;
@@ -98,17 +175,9 @@ extern "C" GENERATIVEQC_API generativeqc_status generativeqc_ks_catalog_plan_v1(
   }
 
   auto candidate = *output;
-  candidate.scf_domain = entry->domain.data();
-  candidate.spin_channels = entry->spin;
-  candidate.semilocal_components = components(*entry).data();
-  candidate.semilocal_component_count = entry->component_count;
-  candidate.semilocal_range_omega = 0;
-  candidate.exchange_terms = entry->exchange_count ? exchanges(*entry).data() : nullptr;
-  candidate.exchange_term_count = entry->exchange_count;
-  candidate.has_nonlocal_correlation = 0;
-  candidate.nonlocal_variant = 0;
-  candidate.nonlocal_b = candidate.nonlocal_c = candidate.nonlocal_coefficient = 0;
-  candidate.nonlocal_maximum_bytes = 0;
+  electronic_options(*entry, candidate);
+  // Capacity is caller execution policy, never part of scientific identity.
+  // In particular, a zero budget remains zero and preparation rejects it.
   *output = candidate;
   *selected = 1;
   return GENERATIVEQC_STATUS_SUCCESS;

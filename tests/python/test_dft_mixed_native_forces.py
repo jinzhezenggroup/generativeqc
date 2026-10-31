@@ -72,33 +72,26 @@ def test_mixed_force_consumers_share_scf_and_survive_replay(
         assert recovered.succeeded and visited == {1}
 
 
-def test_real_unqualified_neighbor_preserves_native_force_and_invalidation(
+def test_former_size_ceiling_keeps_native_force_and_invalidation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Thirteen He/STO-3G atoms exceed the native primitive-source work bound.
-    # Their CPU compatibility consumer also retains its explicit atom bound.
-    # This exercises actual prepared capability differences, not mocked flags.
+    # The former fixture-sized primitive-work ceiling must not push this fleet
+    # into a compatibility consumer with its own diagnostic admission limit.
+    # Mixed-route ownership is exercised separately by narrowing one slot.
     large = [("He", (float(i % 4) * 4, float(i // 4) * 4, 0.0)) for i in range(13)]
     calc = calculator()
     reference = calc.singlepoint(H2, properties=PROPERTIES)
     with calc.prepare_batch([H2, large]) as batch:
         assert batch._native_dft_force_eligible(0)
-        assert not batch._native_dft_force_eligible(1)
-        compatibility = batch._public_dft_cpu_force
-        visited: set[int] = set()
+        assert batch._native_dft_force_eligible(1)
 
         def force(index: int, atoms: object) -> tuple:
-            assert index == 1, "unqualified neighbor displaced an admitted native force"
-            visited.add(index)
-            return compatibility(index, atoms)
+            pytest.fail("size-only ceiling diverted a qualified native force")
 
         monkeypatch.setattr(batch, "_public_dft_cpu_force", force)
         result = batch.execute(properties=PROPERTIES)
-        assert result.failure_indices == (1,)
-        assert visited == {1}
-        assert result.items[1].status == _native.STATUS_INVALID_ARGUMENT
-        assert "dense-export domain" in result.items[1].status_message
-        assert result.items[1].forces is None
+        assert result.succeeded
+        assert np.isfinite(result.items[1].forces).all()
         np.testing.assert_allclose(
             result.items[0].forces, reference.forces, atol=2e-9, rtol=0
         )
@@ -113,13 +106,11 @@ def test_real_unqualified_neighbor_preserves_native_force_and_invalidation(
                 snapshot.check_current()
         finally:
             snapshot.close()
-        visited.clear()
         recovered = batch.execute(properties=PROPERTIES)
-        assert recovered.failure_indices == (1,)
+        assert recovered.succeeded
         np.testing.assert_allclose(
             recovered.items[0].forces, reference.forces, atol=2e-9, rtol=0
         )
-        assert visited == {1}
 
 
 def test_older_library_retains_whole_fleet_compatibility(

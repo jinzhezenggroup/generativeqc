@@ -224,7 +224,11 @@ def test_missing_protocol_is_compatibility(
 def test_prepared_projection_honors_native_capacity(
     native_projection: typing.Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from generativeqc import Calculator
+    from generativeqc import Calculator, _fleet_projection_native
+
+    # Exercise the older numeric-only protocol; prepared-fleet capacity has
+    # separate real exact/below-limit coverage in test_native_fleet_projection.
+    monkeypatch.setattr(_fleet_projection_native, "bind", lambda library: False)
 
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     source = Calculator(basis="sto-3g")
@@ -258,7 +262,15 @@ def test_prepared_projection_reports_actual_owner(
     ):
         source.execute(strict=True)
         report = target.initialize_from(source, policy=policy)
-        expected = "python_compatibility" if compatibility else "native_cpu"
+        expected = (
+            "python_compatibility"
+            if compatibility
+            else (
+                "native_cpu_system"
+                if hasattr(native_projection, "generativeqc_hf_system_project_cpu_v1")
+                else "native_cpu"
+            )
+        )
         assert report["items"][0]["projection_owners"] == [expected]
         assert report["target_verification"] == "pending_execute"
 

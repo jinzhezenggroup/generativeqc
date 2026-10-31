@@ -16,12 +16,12 @@ from tempfile import TemporaryDirectory
 import numpy as np
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.evidence import canonical_hash, file_hash
-from generativeqc_compiler.integral.autotune import schedule_payload
 from generativeqc_compiler.integral.benchmark import _CUDA_PRELUDE
-from generativeqc_compiler.integral.cuda_lowering import emit_shell_class_fused_cuda
 from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
 from generativeqc_compiler.integral.ir import KernelConsumer
+from generativeqc_compiler.integral.lowering.dispatch import emit_shell_class_fused_cuda
 from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
+from generativeqc_compiler.integral.tuning.policy import schedule_payload
 
 from .f_shell import ROOT, cuobjdump_resources, runtime_header_hashes
 from .f_shell_cuda import emit_numerical_driver
@@ -42,6 +42,7 @@ def validate_schedule(
     directory: Path,
     *,
     timeout: typing.Any = 600,
+    device_id: int = 0,
     production_source: Path | None = None,
     production_object: Path | None = None,
 ) -> dict:
@@ -73,7 +74,12 @@ def validate_schedule(
         directory / n for n in ("kernel.cu", "kernel.o", "driver.cu", "numerical")
     ]
     driver_source = emit_numerical_driver(
-        name, target.architecture, plan=plan, source=source, consumer=consumer
+        name,
+        target.architecture,
+        plan=plan,
+        source=source,
+        consumer=consumer,
+        device_id=device_id,
     )
     compiler = CudaCompilerAdapter(nvcc, target, compile_timeout=timeout)
     compiled = None

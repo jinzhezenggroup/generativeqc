@@ -13,6 +13,7 @@ import math
 import re
 import tempfile
 from dataclasses import dataclass
+from fractions import Fraction
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -256,6 +257,7 @@ class BulkProgram:
     variables: tuple[Expr, ...]
     energy: Expr
     identity: str
+    parameters: tuple[tuple[str, float], ...] = ()
 
     def roots(self, derivative_order: int = 1) -> tuple[Expr, ...]:
         """Return E, vxc, then upper-triangular fxc in feature order."""
@@ -278,6 +280,9 @@ class BulkProgram:
     def emit_source(self, derivative_order: int = 1, *, cuda: bool = False) -> str:
         """Emit a scalar point function through the existing C/CUDA emitters."""
         variables = {name: f"features[{i}]" for i, name in enumerate(self.features)}
+        variables.update(
+            {name: f"parameters[{i}]" for i, (name, _) in enumerate(self.parameters)}
+        )
         if cuda:
             from generativeqc_compiler.integral.cuda import CudaEmitter
 
@@ -290,7 +295,9 @@ class BulkProgram:
         lines = [
             "/* Generated from pinned MPL-2.0 Libxc sources by GenerativeQC. */",
             "#include <math.h>",
-            f"{prefix}void bulk_xc_point(const double *features, double *outputs) {{",
+            f"{prefix}void bulk_xc_point(const double *features, double *outputs"
+            + (", const double *parameters" if self.parameters else "")
+            + ") {",
             *["  " + line for line in emitter.lines],
             *[
                 f"  outputs[{i}] = {emitter.reference(root)};"
@@ -308,8 +315,14 @@ def build_record(
     source_root: Path,
     *,
     spin: str = "polarized",
+    parameter_names: tuple[str, ...] = (),
 ) -> BulkProgram:
-    """Lower a bound registration into physical density/gradient/laplacian/tau IR."""
+    """Lower a bound registration into physical density/gradient/laplacian/tau IR.
+
+    Optional scalar parameter names remain symbolic through AD. Their immutable
+    registered values are retained separately, so parameterized executables can
+    share arithmetic while preserving each registration's scientific identity.
+    """
     if spin not in ("polarized", "unpolarized"):
         raise ValueError("bulk spin must be polarized or unpolarized")
     polarized = spin == "polarized"
@@ -360,7 +373,10 @@ def build_record(
             )
         )
     module = import_record(record, files, source_root)
-    energy = density * module.call(graph, "f", *arguments)
+    if len(set(parameter_names)) != len(parameter_names):
+        raise MapleImportError("duplicate symbolic mathematical parameter")
+    symbolic = {name: graph.variable(name) for name in parameter_names}
+    energy = density * module.call(graph, "f", *arguments, symbolic_bindings=symbolic)
     # Inverse rs/zeta coordinates are exactly the input spin densities. Their
     # FP64 round trip can land on either side of screen_dens at its threshold,
     # activating a nominally empty-spin exchange/kinetic branch. Substitute the
@@ -377,14 +393,30 @@ def build_record(
             },
             "spin": spin,
             "features": names,
+            **({"symbolic_parameters": parameter_names} if parameter_names else {}),
             "source_manifest_sha256": canonical_hash(files),
             "transitive_sha256": module.transitive_sha256,
             "adapter_sha256": file_hash(Path(__file__)),
             "importer_sha256": file_hash(Path(libxc_maple.__file__)),
         }
     )
+    parameter_values = []
+    bindings = dict(module.bindings)
+    for name in parameter_names:
+        value = bindings[name]
+        if not isinstance(value, str):
+            raise MapleImportError("symbolic parameter is not a scalar binding")
+        parameter_values.append((name, float(Fraction(value))))
     return BulkProgram(
-        record["name"], family, spin, tuple(names), graph, variables, energy, identity
+        record["name"],
+        family,
+        spin,
+        tuple(names),
+        graph,
+        variables,
+        energy,
+        identity,
+        tuple(parameter_values),
     )
 
 
@@ -394,6 +426,7 @@ def build_bulk_program(
     spin: str = "polarized",
     source_root: Path | None = None,
     catalog_path: Path = CATALOG_PATH,
+    parameter_names: tuple[str, ...] = (),
 ) -> BulkProgram:
     """Build one named imported registration, never a handwritten fallback."""
     catalog = read_catalog(catalog_path)
@@ -406,4 +439,10 @@ def build_bulk_program(
             f"bulk Libxc registration is blocked: {record['reason']}"
         )
     root = asset_path(SOURCE_ASSET) if source_root is None else Path(source_root)
-    return build_record(record, catalog["source_files"], root, spin=spin)
+    return build_record(
+        record,
+        catalog["source_files"],
+        root,
+        spin=spin,
+        parameter_names=parameter_names,
+    )

@@ -37,6 +37,16 @@ Transfer counters distinguish setup H2D from these requested D2H operations
 and count their synchronization boundaries. The surrounding method must also
 account for its density input, one-electron setup, J provider and final outputs.
 
+Curated, composed-hybrid and automatic Libxc point providers share one prepared
+`CudaXcPointBinding`. Preparation resolves the ordinary and qualified batch
+launchers together, preserving the selected PBE specialization if its environment
+policy later changes. A null batch launcher retains the bounded one-tile path;
+the existence of a raw automatic AOT batch kernel does not grant production
+batching. Automatic scientific descriptors remain attached for provenance.
+Curated domains, fused component algebra, response and precision qualifications
+retain their existing owners; this common execution binding does not substitute
+Libxc work-domain rules for a curated numerical model.
+
 The geometry, basis, grid and functional are immutable within a plan. Changes
 require a new plan. This device component itself currently supports exactly the
 LDA_X+LDA_C_PW and PBE_X+PBE_C compositions, with the
@@ -92,7 +102,14 @@ prepare public automatic pure-semilocal RKS/UKS energy endpoints through the
 ordinary native KS owner. The contract is strict-FP64, device-fused, all-electron
 execution with J only. Missing static providers fail with a build-option
 diagnostic; there is no CPU fallback or runtime NVCC/Maple/Libxc.
-Analytic automatic CUDA forces and other unqualified products remain rejected.
+With `GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON` and a matching linked force
+profile, explicit analytic forces use the same native prepared owner. The force
+envelope is strict FP64, device-fused, all-electron s/p orbitals, direct J only
+and three Becke partition iterations. Preparation and resource planning query
+the same exact model/domain/spin binding. Missing force artifacts and unsupported
+shapes fail explicitly; automatic methods keep energy-only default outputs.
+Hessian/HVP, Laplacian/current ingredients, nonlocal and exact-exchange additions
+do not follow from this semilocal force contract.
 Automatic CUDA UKS additionally requires nonzero occupations in both spin
 channels. Empty-spin requests fail at preparation with an explicit physical-birth
 derivative diagnostic; native construction and detached final-state validation
@@ -106,15 +123,62 @@ semicolon-separated list of exact structural registration names, for example
 `"LDA_C_VWN_4;GGA_X_APBE;MGGA_X_LTA"`. Both CUDA and the automatic AOT option
 must be enabled; a selected package cannot use the CPU-only compiler fallback.
 An empty list preserves the full-catalog opt-in behavior, while the AOT option
-remains off by default. Selected entries retain their original codes,
-mathematical/source identities and ordinary/batched providers. Omitted entries
+remains off by default. Selected entries retain their original codes and
+canonical mathematical identities. Packaged source identities record their
+actual entry-point sets, shared workers and immutable parameter bindings. Omitted entries
 have no executable dispatch case and return a null static descriptor.
 Unknown/unrepresentable names fail before generation writes outputs; duplicate
 or reordered requests do not change structural shard order. Regeneration
 rewrites all shards, removing omitted dispatch cases from shrinking packages.
 Selection controls installed artifact content, not scientific admission,
-public capability promotion, executable alias reuse or a complete persistent
-binary-cache dependency closure.
+public capability promotion or a complete persistent binary-cache dependency
+closure.
+
+`GENERATIVEQC_STATIONARY_AOT_PROFILES=auto` follows the selected automatic energy
+package for native RKS/UKS force profiles. An explicit profile list bounds the
+force package further; an empty list omits forces. Automatic profile names are
+`libxc_<native-code>_rks` and `libxc_<native-code>_uks`. They require the matching
+energy provider. Automatic forces do not add legacy Python s/p or s/p/d DSOs;
+the native package shares its integral primitives and source reduction kernels.
+Automatic profiles default to staged point evaluation followed by a shared
+force consumer. Consumers are compiled per ingredient/spin/derivative ABI,
+strict precision, partition and geometry schedule, rather than per registration.
+`xc/automatic_cuda_package.py` deduplicates point workers only when the exact
+emitted mathematics, work domain, outputs and execution ABI agree. Registration
+codes, canonical expression identities and capability evidence remain separate.
+For example, the unpolarized VWN 1–4 bodies share an executable; their polarized
+bodies do not. Similar formulas with different work floors do not share.
+
+The shared `DevicePointValue` tile is charged inside the existing stationary
+arena. Its producer consumes the grid's physical `[2,5,points]` feature layout
+and writes energy, density derivatives, Cartesian gradient derivatives and the
+existing half-vtau coefficients. It reads only the declared ingredients. The
+producer and geometry consumer use the same borrowed stream and retained owner;
+no host repacking, transfer or CPU evaluation is inserted. Sticky producer
+errors prevent consuming stale point values. The minimum-workspace schedule
+also charges the point tile and remains an explicit bounded alternative.
+Geometry still forms the Becke cotangent from the point energy and raw weight.
+A resident XC tile alone cannot authorize skipping partition response: bounded
+geometry contracts it inline, while phased geometry publishes its seed to the
+existing partition kernels.
+
+`GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES` is an explicit semicolon-separated
+subset of the selected automatic force profiles. Those entries retain static
+fused point/geometry code. Package qualification compares complete cold, warm
+and moved SCF+E+F endpoints against the per-functional AOT incumbent; the default
+selection must remain within 5% median regression. Select a fused specialization
+when measured staged cost breaches that gate, retaining its compile/size cost.
+Generation and compiler-cache use are build-time operations. Ordinary installed
+execution never generates code or runs a compiler, Libxc, Maple or PySCF.
+
+Executable source identities are not persistent binary-cache keys. CMake tracks
+generator/scientific inputs and compiler depfiles, and the verified compiler
+cache owns command/toolchain/header invalidation. Final installed receipts bind
+actual loaded library bytes. The explicit offline
+[CUDA closure collector](libxc_cuda_aot_closure.md) retains its narrower admitted
+whole-program domain; unsupported native package targets/device-link recipes
+cannot be published through that object store as reusable closures. Incomplete
+closure assertions remain fail closed.
 
 The compiler's `xc/automatic_point.py` owns canonical CPU/CUDA point science and
 work policy. `dft/xc_point_cuda.py` owns their common physical-spin traversal and
@@ -130,11 +194,15 @@ rather than admitting curated device chunks, graph replay or incremental J.
 CPU/CUDA resolve the same MethodIR and bind the same canonical expression and
 work-domain identity. The code-scoped KS resource inventory v2 obtains the
 actual static ingredient/feature widths, including tau; it never substitutes a
-same-family LDA/PBE shape or claims automatic force storage/capability.
-Automatic RKS and UKS also use a bounded physical F[D] closure after DIIS,
-with four additional history slots accounted by both native and public resource
-owners. Detached snapshots retain the shared physical/canonical validation
-gates rather than treating an SCF convergence flag as sufficient authorization.
+same-family LDA/PBE shape. When a force binding is linked, the planner includes
+its derivative sources and retained consumer with cached and minimum workspace
+alternatives. The prepared item still owns final shape admission.
+Automatic RKS and UKS audit the current physical F[D] and its unextrapolated
+canonical density before publishing convergence. The requested density and
+energy gates remain intact. A rejected proof continues DIIS within the original
+iteration budget; it does not perturb an accepted state through a potentially
+unstable fixed-point correction. Detached snapshots and force weights retain
+their separate token-bound physical/canonical validation.
 
 The default-on `GENERATIVEQC_CUDA_XC_EQUAL_SPIN` selector also applies to every
 structurally registered automatic provider (`0` restores the old path).
@@ -145,6 +213,93 @@ bounded traversal. The descriptor's exact source identity covers both bodies
 and the selector. This does not add response support, installed variants,
 public backend admission, or resource/performance qualification. See
 [equal-spin qualification](../maintainer/xc_equal_spin_qualification.md).
+
+`GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS` defaults to `ON` when CUDA and
+automatic XC AOT are enabled. The default
+`GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY=discover` shares workers across
+structurally compatible registrations in the selected catalog. Set the policy to
+`qualified` to restore the prepared-coefficient KTBM selection, or the sharing
+option to `OFF` to retain
+literal specialization; the standalone generator provides `--no-share-parameters`
+for the same fallback. Automatic XC AOT itself remains opt-in. Existing CMake
+caches preserve their saved policy; set
+`-DGENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY=discover` to adopt the new default
+in a build directory that previously cached `qualified`.
+
+Scalar mathematical coefficients and their fixed products are prepared after
+differentiation using the existing Graph algebra, before equal-spin projection.
+An immutable host table supplies one row by value in CUDA launch parameter space;
+fixed offsets avoid dynamic device-table addressing, and concurrent launches
+never mutate shared coefficient state. The restricted batched adapter explicitly
+pairs physical inputs after the host proves RKS, exposing the same input equality
+to CUDA optimization as to the mathematical Graph. It reuses the restricted
+mathematical body and replaces its existing batched kernel instantiation.
+The ordinary general entry marks its immutable parameter row
+`__grid_constant__`; restricted and batched entries retain their distinct storage
+ABIs. This replaces an instantiation and preserves four energy kernels per group.
+Polarized partial derivatives and runtime tile/output layouts retain their
+existing contracts. Density thresholds,
+work-domain guards, physical derivative conventions and spin layouts remain
+part of the compiled contract. Both general and equal-spin parameterized bodies,
+ordered parameter names and complete point layouts must agree before sharing.
+Other families and singleton selections retain their specialized point emitters
+under the qualified policy.
+This controls executable reuse, not functional admission or supported products.
+
+The default `discover` policy analyzes the entire selected structural catalog.
+After ordinary literal specialization and differentiation, it lifts arithmetic
+constants and compares both complete spin bodies and execution ABIs, without a
+source-entry or functional-name restriction. Predicate dependencies, fixed powers,
+zero terms, binary scaling constants and existing CSE remain specialized.
+Coefficients common to a group become literals again; equal coefficient columns
+share one launch slot. LDA retains separate unpolarized RKS and polarized UKS
+contracts, even when the equal-spin optimization is disabled. Groups exceeding
+the portable launch-data budget and unmatched/singleton bodies remain specialized.
+
+Structural compatibility does not establish universal point or complete-endpoint
+performance. Default discovery is qualified on NVCC 12.9.1 / SM120; retain the
+explicit `qualified` and literal fallbacks when qualifying other toolchains or
+devices. This policy does not enable the automatic AOT master switch or change
+functional, derivative or public method admission. The standalone generator uses
+the same default and accepts `--parameter-policy qualified` for rollback. A report
+shows both compatible candidates and the workers actually selected:
+
+```bash
+python tools/generate_libxc_semilocal_cuda_registry.py \
+  --output-directory .cache/xc-cuda \
+  --sharing-report .cache/xc-cuda-sharing.json
+```
+
+The report includes coefficient ABI sizes, exact contract identities, selection
+status, retained specializations and energy point-kernel counts, including exact
+literal alias reuse. Staged force entries are excluded from that count. See the
+[structural default decision](../../.agents/notes/implemented/performance/2026-10-28-xc-structural-default.md)
+for qualification, rejected alternatives and the earlier discovery and paired-input
+experiments. Report `default_qualified` denotes eligibility under this build
+policy; it does not certify another GPU or expand public functional admission.
+
+Each registration retains its canonical coefficient-bound mathematical identity
+for CPU/CUDA admission. Its source identity authenticates the shared worker's
+complete source and immutable parameter table, plus its own selected row and
+host validation wrapper. One CUDA shard owns the worker; other shards call its
+private host launchers, so no cross-translation-unit device linking is needed.
+The GPU sees one uniform parameter row per launch and has no per-point
+functional switch. Host registration wrappers include only descriptor headers,
+without emitting unrelated tensor conversion kernels.
+
+When a parameterized registration also belongs to the selected force package,
+the same immutable coefficient row supplies its staged physical point producer.
+The descriptor advertises that callback only for packaged force spins; ordinary
+energy-only registrations retain a null stationary callback. LDA RKS keeps its
+total-density differential, while GGA/MGGA force tiles retain both polarized
+physical derivatives even when energy evaluation uses the equal-spin shortcut.
+The source identity binds the callback availability and shared executable key
+separately from the registration's canonical mathematical identity.
+
+The [default-promotion decision](../../.agents/notes/implemented/performance/2026-10-28-xc-prepared-parameters.md)
+links the numerical, complete-SCF and point-kernel evidence on NVCC 12.9.1 / SM120.
+It does not establish performance on every architecture. Explicit specialization
+remains available for qualification on other toolchains and devices.
 
 Build `generativeqc_dft_cuda_tests` with the option enabled. Inside a finite
 Slurm GPU allocation, set `GENERATIVEQC_AUTOMATIC_CUDA_XC_EXECUTABLE` to that
@@ -163,6 +318,42 @@ checks physical density/Fock and energy directions, and records
 complete endpoint timings and J-only semantic work. Optional
 `GENERATIVEQC_AUTOMATIC_CUDA_KS_EVIDENCE_DIR` retains source/binary-bound receipts.
 These are qualification data, not an installed bundle or a positive user list.
+
+For automatic analytic forces, set `GENERATIVEQC_AUTOMATIC_CUDA_FORCE_TEST=1`
+inside a finite Slurm allocation and run
+`tests/python/test_libxc_native_cuda_forces.py`. Its full-vector, moved/replay,
+p-orbital and resource/lifecycle cases compare with reconverged native energies
+and independent pinned PySCF/Libxc energies on the exported moving grids.
+Open-shell tau cases additionally measure populated near-iso-orbital and
+low-density grid points. Failed SCF never authorizes force output.
+
+The explicit `generativeqc.automatic_artifacts.read_automatic_artifact_diagnostic`
+query binds the current successful native token to its actual static point and
+force descriptors. It reports source/plan identities, loaded-module SHA-256,
+workspace and retained-owner work. The `minimum-workspace` reason identifies
+the actually selected bounded geometry schedule; `none` identifies cached
+geometry execution. Work fields are retained-controller counters, not a
+whole-endpoint accounting of every failed SCF attempt. A later energy solve clears completed-force
+work; failures cannot borrow a prior force receipt. The mapped library inode
+must remain immutable while loaded; atomic replacement is detected on Linux.
+The optional diagnostic hashes library files and is outside ordinary endpoint
+execution. It does not infer register pressure from workspace sizes.
+`tools/audit_native_automatic_aot.py` joins these receipts with matching generated
+sources, objects and `cuobjdump` register/stack/local/shared counters under explicit
+resource limits. This offline evidence supplements numerical endpoint gates.
+Diagnostic v2 additionally records the shared consumer and both point executable
+identities, the actual callback modules, and point tile bytes/launches/points.
+The original v1 extents remain available to older readers. ELF base mappings
+authenticate both read-only and BSS registration storage, as well as callbacks.
+
+`tools/census_native_automatic_aot.py` measures the active compile inventory,
+linked and installed device images, kernel counts and cubin/ptxas resources.
+Supply cold/cache-hit measurements and complete endpoint evidence separately;
+archive bytes do not describe installed library size. Its capability output uses
+the existing Lane-F `compiled-cuda` envelope and cannot grant molecular forces
+or unsupported derivative, spin, angular, exchange or precision capabilities.
+The [shared AOT qualification](../../benchmarks/results/shared-automatic-aot-20261027/README.md)
+contains the bounded/full package comparison and an explicit offline verifier.
 
 ### Curated execution
 
@@ -556,8 +747,10 @@ defaults to at most 64 GiB and one quarter of local available disk space.
 Full-range sources retain Direct by default because qualified local-NVMe replay
 is slower than their recurrence; a positive `GENERATIVEQC_KS_DISK_MAX_BYTES`
 enables controlled full-range experiments. Explicit `0` disables that tier; the matching
-`DISK_BUCKET_MASK` controls restrict selected buckets. The directory is `/tmp`,
-or `GENERATIVEQC_ERI_TMPDIR` when set. RAM filesystems and common network
+`DISK_BUCKET_MASK` controls restrict selected buckets. The directory follows
+the platform temporary-directory setting (including `TMPDIR`), overridden by
+`GENERATIVEQC_ERI_TMPDIR` when set. An unavailable directory or an empty explicit
+override disables optional spilling. RAM filesystems and common network
 filesystems are refused. Complete GPU residency creates no temporary file.
 
 The file is physically preallocated and immediately unlinked, so its owning

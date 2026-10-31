@@ -8,19 +8,22 @@ not a new artifact-cache owner or qualification of optional CUDA mechanisms.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
+from typing import Literal
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from generativeqc_compiler.xc.automatic_cuda import (
-    emit_automatic_cuda_descriptor,
-    emit_automatic_cuda_provider,
-)
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc.automatic_cuda_package import automatic_cuda_package
 from generativeqc_compiler.xc.automatic_semilocal import (
     AutomaticRegistryEntry,
     automatic_registry_entries,
+)
+from generativeqc_compiler.xc.parameter_cuda_package import (
+    parameter_worker_groups,
 )
 
 from tools.generate_libxc_semilocal_cpu_registry import write_if_changed
@@ -91,19 +94,31 @@ const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t code) noexcep
 """
 
 
-def emit_shard(index: int, entries: tuple[AutomaticRegistryEntry, ...]) -> str:
+def emit_shard(
+    index: int,
+    entries: tuple[AutomaticRegistryEntry, ...],
+    *,
+    force_profiles: tuple[str, ...] | None = None,
+    share_parameters: bool = True,
+    parameter_policy: Literal["qualified", "discover"] = "discover",
+) -> str:
     """Emit one bounded AOT unit from an authenticated structural package."""
     if not 0 <= index < SHARD_COUNT:
         raise ValueError("automatic CUDA registry shard index is out of range")
     selected = entries[index::SHARD_COUNT]
-    providers = [emit_automatic_cuda_provider(entry.name) for entry in selected]
+    workers, registrations = automatic_cuda_package(
+        tuple(entry.name for entry in entries),
+        force_profiles,
+        share_parameters=share_parameters,
+        parameter_policy=parameter_policy,
+    )
     definitions = "\n".join(
-        provider.source + emit_automatic_cuda_descriptor(provider)
-        for provider in providers
+        [worker.source for worker in tuple(workers.values())[index::SHARD_COUNT]]
+        + [registrations[entry.name] for entry in selected]
     )
     cases = "\n".join(
-        f"    case 0x{entry.code:x}U: return &{provider.namespace}::program;"
-        for entry, provider in zip(selected, providers, strict=True)
+        f"    case 0x{entry.code:x}U: return &cuda_xc_detail::automatic_{entry.name.lower()}_point_provider::program;"
+        for entry in selected
     )
     return f"""// Generated automatic Libxc CUDA point programs; do not edit.
 #include "generated_libxc_semilocal_cuda_registry.hpp"
@@ -124,6 +139,25 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-directory", required=True, type=Path)
     parser.add_argument("--disabled", action="store_true")
+    parser.add_argument("--stationary-all", action="store_true")
+    parser.add_argument("--stationary-profile", action="append", default=[])
+    parser.add_argument(
+        "--share-parameters",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="share compatible workers by default; --no-share-parameters retains literal specialization",
+    )
+    parser.add_argument(
+        "--parameter-policy",
+        choices=("qualified", "discover"),
+        default=None,
+        help="discover compatible catalog-wide workers by default; qualified retains legacy prepared-product groups",
+    )
+    parser.add_argument(
+        "--sharing-report",
+        type=Path,
+        help="write selected groups, coefficient ABI sizes and retained specializations as JSON",
+    )
     parser.add_argument(
         "--functional",
         action="append",
@@ -132,6 +166,13 @@ def main() -> None:
     args = parser.parse_args()
     if args.disabled and args.functional:
         parser.error("--functional cannot be combined with --disabled")
+    if args.disabled and args.share_parameters:
+        parser.error("--share-parameters cannot be combined with --disabled")
+    if args.disabled and args.sharing_report:
+        parser.error("--sharing-report cannot be combined with --disabled")
+    if args.disabled and args.parameter_policy not in (None, "qualified"):
+        parser.error("--parameter-policy discover cannot be combined with --disabled")
+    parameter_policy = args.parameter_policy or "discover"
     try:
         entries = () if args.disabled else select_entries(args.functional)
     except ValueError as error:
@@ -149,8 +190,62 @@ def main() -> None:
     for index in range(SHARD_COUNT):
         write_if_changed(
             output / f"generated_libxc_semilocal_cuda_{index}.cu",
-            emit_shard(index, entries),
+            emit_shard(
+                index,
+                entries,
+                force_profiles=None
+                if args.stationary_all
+                else tuple(args.stationary_profile),
+                share_parameters=args.share_parameters is not False,
+                parameter_policy=parameter_policy,
+            ),
         )
+    if args.sharing_report:
+        names = tuple(entry.name for entry in entries)
+        candidates = parameter_worker_groups(names)
+        groups = (
+            parameter_worker_groups(
+                names, include_candidates=parameter_policy == "discover"
+            )
+            if args.share_parameters is not False
+            else ()
+        )
+        shared = {name for group in groups for name in group.names}
+        workers, _ = automatic_cuda_package(
+            names,
+            None if args.stationary_all else tuple(args.stationary_profile),
+            share_parameters=args.share_parameters is not False,
+            parameter_policy=parameter_policy,
+        )
+        report = {
+            "schema": "generativeqc.xc-parameter-sharing-plan.v1",
+            "policy": parameter_policy
+            if args.share_parameters is not False
+            else "specialized",
+            "registrations": len(names),
+            "shared_registrations": len(shared),
+            "candidate_groups": [
+                {
+                    "names": group.names,
+                    "strategy": group.strategy,
+                    "contract_identity": canonical_hash(group.contract),
+                    "parameter_bytes": 8 * len(group.providers[0].point.parameters),
+                    "selected": set(group.names) <= shared,
+                    # Eligibility under the default execution policy does not
+                    # qualify a new public functional or a different GPU model.
+                    "default_qualified": True,
+                }
+                for group in candidates
+            ],
+            "specialized_registrations": sorted(set(names) - shared),
+            # Exact literal aliases can share too. Count the actual package
+            # owners instead of assuming four energy kernels per registration.
+            "point_kernels": sum(
+                worker.energy_kernel_count for worker in workers.values()
+            ),
+            "qualification": "structural compatibility; no performance or public admission claim",
+        }
+        write_if_changed(args.sharing_report, json.dumps(report, indent=2) + "\n")
 
 
 if __name__ == "__main__":

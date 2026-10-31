@@ -10,13 +10,13 @@ Changing the basis or correction parameters changes the method.
 
 | Calculation | Energy | Analytic forces | Prepared batches |
 | --- | --- | --- | --- |
-| CPU RKS/UKS, direct | Yes | Not published | Yes |
+| CPU RKS/UKS, direct | Yes | Conditional | Yes |
 | CPU RKS/UKS, density-fitted | Yes | Conditional | Yes |
 | CUDA RKS/UKS, direct | Yes | Conditional | Yes |
 | CUDA RKS/UKS, density-fitted | Yes | Conditional | Yes |
 
-Force support also depends on the system size, basis, device and available
-generated kernels. Query `Calculator.capabilities` for the actual settings.
+Force support depends on the basis, device, available native providers and
+checked workspace capacity. Query `Calculator.capabilities` for the actual settings.
 `method_capabilities()` provides only the more limited backend-independent
 method summary.
 
@@ -30,15 +30,21 @@ F = F(r2SCAN) - dE(D4)/dR - dE(gCP)/dR
 
 Density-fitted forces differentiate the three-center integrals, fitting
 metric and moving integration grid. D4 and gCP add their own geometry
-derivatives; on CUDA the gCP component runs on CPU.
+derivatives. Both corrections remain inside the native prepared KS owner;
+on CUDA, gCP runs on the device. Prepared replay applies each correction
+once and invalidates receipts after a failed calculation.
 
 ## Current limits
 
-- CPU density-fitted force calculations are limited to 8 atoms, 64 AOs
-  and 128 primitives.
-- The current CUDA s/p/d stationary-force path is limited to 32 atoms,
-  128 AOs, 1,000,000 grid points and 100,000,000 grid-pair visits.
-  Some CUDA paths require NVCC for generated derivative kernels.
+- CPU and CUDA Direct forces use packaged s/p/d derivatives. Density-fitted
+  forces require a supported orbital and auxiliary basis. Native CUDA FP64
+  requires three partition iterations. Query the prepared calculation for
+  exact property support.
+- Electronic atom/AO/primitive and grid-work fixture ceilings no longer
+  determine force availability. Checked workspace sizes and actual provider
+  limits still apply. Integral work is streamed through bounded pages.
+- gCP retains coordinate-index and dispersion-budget limits; D4 retains its
+  EEQ pivot-capacity bound and must fit the correction budget.
 - Unsupported elements, modified defining components, missing compiler
   support or insufficient resources produce an error rather than a
   partial energy or force.
@@ -50,3 +56,15 @@ differ; the program does not automatically follow the same root.
 See `tests/python/test_r2scan3c_execution.py` for numerical tests and
 `benchmarks/run_readme_dft_benchmarks.sh` for GPU benchmarks. The
 [method table](../public_methods.md) gives the current selector inventory.
+
+The native C/C++ preparation API and CLI use the same compiled method graph
+for supported CPU/CUDA energies and analytic forces. Custom graphs, older
+libraries and unsupported contexts retain their explicit compatibility
+routes. See the [shared derivative contract](native_cpp.md#density-fitting-and-derivative-boundary)
+for the native admission boundary.
+
+
+A CUDA DF context prepared with a NumericCap capacity promise retains its
+energy path but does not advertise or execute forces: the derivative peak is
+not included in that promise. Query the actual prepared properties; ordinary
+DF force contexts without this promise retain their existing admission.

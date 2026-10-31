@@ -15,6 +15,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+@pytest.fixture(autouse=True)
+def native_force_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    """All admitted imported programs must use the prepared native force owner."""
+    from test_r1_native_forces import forbid_python_force
+
+    forbid_python_force(monkeypatch)
+
+
 @pytest.mark.parametrize(
     "name",
     (
@@ -63,6 +71,42 @@ def test_automatic_force_does_not_inflate_backend_neutral_or_second_order_claims
         ("energy",)
     )
     assert calculator._default_properties(batch=True) == frozenset(("energy",))
+
+
+@pytest.mark.parametrize("name", ("LDA_C_VWN_4", "GGA_X_APBE", "MGGA_X_LTA"))
+@pytest.mark.parametrize("spin", ("rks", "uks"))
+def test_imported_cpu_df_force_retains_derivative_sources(name: str, spin: str) -> None:
+    """CUDA's imported energy-only policy must not retire CPU DF force sources."""
+    from generativeqc import GridSpec, KsOptions
+
+    calculator = Calculator(
+        method=f"libxc-{spin}:{name}",
+        basis="sto-3g",
+        density_fitting="cpu",
+        auxiliary_basis="sto-3g",
+        device="cpu",
+        initial_guess=None,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        ks_options=KsOptions(grid=GridSpec(24, 8, 16)),
+    )
+    atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.1, 0.2, 1.4))]
+    options = {"charge": int(spin == "uks"), "multiplicity": 2 if spin == "uks" else 1}
+    result = calculator.singlepoint(atoms, properties=("energy", "forces"), **options)
+    assert result.converged and np.isfinite(result.forces).all()
+    for step in (3e-4, 1e-4):
+        energies = []
+        for direction in (-1, 1):
+            moved = [atoms[0], ("H", (0.1, 0.2, 1.4 + direction * step))]
+            displaced = calculator.singlepoint(moved, properties=("energy",), **options)
+            assert displaced.converged
+            energies.append(displaced.energy)
+        np.testing.assert_allclose(
+            result.forces[1, 2],
+            -(energies[1] - energies[0]) / (2 * step),
+            rtol=0,
+            atol=3e-7,
+        )
 
 
 @pytest.mark.parametrize("name", ("LDA_C_VWN_4", "GGA_X_APBE", "MGGA_X_LTA"))

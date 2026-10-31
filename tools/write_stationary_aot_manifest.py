@@ -20,10 +20,10 @@ from generativeqc_compiler.integral.first_derivative_schedule import (
     derivative_cuda_sources,
 )
 from generativeqc_compiler.method.stationary_cuda import (
+    AVAILABLE_STATIONARY_AOT_PROFILE_NAMES,
     QUALIFIED_SPD_AOT_SHARD_WIDTH,
     QUALIFIED_SPD_AOT_SHARDS,
     QUALIFIED_SPD_COMPONENTS,
-    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     _legacy_profile,
     _profile_stem,
     _qualified_aot_profile,
@@ -95,7 +95,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--functional", type=int, choices=(0, 1, 2))
     parser.add_argument("--spin", choices=("unpolarized", "polarized"))
-    parser.add_argument("--profile", choices=QUALIFIED_STATIONARY_AOT_PROFILE_NAMES)
+    parser.add_argument("--profile", choices=AVAILABLE_STATIONARY_AOT_PROFILE_NAMES)
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--component-domain", choices=("sp", "spd"), default="sp")
     parser.add_argument("--architecture", action="append", default=[])

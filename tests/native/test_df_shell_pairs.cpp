@@ -35,7 +35,9 @@ void select_schedule(unsigned variant) {
 
 using df_benchmark::Storage;
 
-void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false) {
+void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false,
+              bool request_mixed = false) {
+  require(!request_mixed || many_signatures, "mixed fallback fixture requires an s-only bra");
   core::System orbital;
   orbital.atoms = {{2, {.1, -.2, -.7}}, {1, {.3, .1, .8}}, {1, {-.5, .4, .2}}};
   // Equal angular classes need their own triangular indexing; different
@@ -94,6 +96,10 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false) 
   const auto* wp = storage.upload(packed);
   auto* output = storage.upload(std::vector<double>(9));
   auto* work = storage.upload(std::vector<unsigned long long>(6));
+  // A mixed request on s/p bra classes must retain the strict production
+  // arithmetic. Test the actual launch ABI and independent force oracle,
+  // including packet tails, rather than pinning generated kernel spellings.
+  auto* precision_work = storage.upload(std::vector<unsigned long long>(3));
   for (unsigned variant = 0; variant < 3; ++variant)
     for (const auto cap : {std::size_t{1}, std::size_t{7}, a})
       for (const auto pairs : {scf::DfDerivativePairs::full, scf::DfDerivativePairs::symmetric,
@@ -104,9 +110,9 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false) 
         const bool compressed = pairs == scf::DfDerivativePairs::packed;
         const auto stride = compressed ? packed_size : n * n;
         for (std::size_t begin = 0; begin < a; begin += cap)
-          check(scf::launch_df_shell_derivative_panel(o, x, r, begin, std::min(cap, a - begin),
-                                                      (compressed ? wp : w) + begin * stride,
-                                                      output, work, nullptr, true, variant, pairs));
+          check(scf::launch_df_shell_derivative_panel(
+              o, x, r, begin, std::min(cap, a - begin), (compressed ? wp : w) + begin * stride,
+              output, work, nullptr, true, variant, pairs, nullptr, request_mixed, precision_work));
         std::vector<double> actual(9);
         std::array<unsigned long long, 6> counters;
         check(cudaMemcpy(actual.data(), output, 9 * sizeof(double), cudaMemcpyDeviceToHost));
@@ -170,7 +176,7 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false) 
               check(scf::launch_df_shell_derivative_packets(
                   os, xs, r, begin, std::min(cap, a - begin),
                   (compressed ? wp : w) + begin * stride, output, work, nullptr, true, variant,
-                  pairs, sink));
+                  pairs, sink, request_mixed, precision_work));
           } else {
             for (std::size_t begin = 0; begin < a; begin += cap)
               for (std::size_t ia = 0; ia < os.size(); ++ia)
@@ -180,7 +186,8 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false) 
                     check(scf::launch_df_shell_derivative_group(
                         os[ia], os[ib], third, r, begin, std::min(cap, a - begin),
                         (compressed ? wp : w) + begin * stride, output, work, nullptr, true,
-                        variant, pairs, pairs != scf::DfDerivativePairs::full && ia == ib, sink));
+                        variant, pairs, pairs != scf::DfDerivativePairs::full && ia == ib, sink,
+                        request_mixed, precision_work));
                 }
           }
           std::vector<double> actual(9);
@@ -269,6 +276,11 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false) 
                     "incorrect grouped task domain");
           }
         }
+  std::array<unsigned long long, 3> precision_counts{};
+  check(cudaMemcpy(precision_counts.data(), precision_work, sizeof(precision_counts),
+                   cudaMemcpyDeviceToHost));
+  require(precision_counts == std::array<unsigned long long, 3>{},
+          "strict-only shell policy attempted mixed arithmetic");
 }
 }  // namespace
 
@@ -281,6 +293,7 @@ int main() {
       for (bool spherical_o : {false, true})
         for (bool spherical_x : {false, true}) exercise(spherical_o, spherical_x);
       exercise(false, false, true);
+      exercise(false, false, true, true);
     }
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

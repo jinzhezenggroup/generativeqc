@@ -40,10 +40,6 @@ reference-test = [
 ]
 torch = ["torch>=2"]
 autotune = ["pyscf>=2.8"]
-# Compatibility alias retained for callers that already install
-# `generativeqc[cuda12]`. Linux CUDA wheel providers are base runtime dependencies
-# because NVCC registration constructors need cudart while libgenerativeqc.so loads.
-cuda12 = []
 # CuPy is only needed by the explicit low-level CUDA development owner, not by
 # public native-AOT CUDA Hessian/HVP calls or the Python-free C++ CLI.
 cuda-hessian = ["cupy-cuda12x>=13.6,<14"]
@@ -113,6 +109,8 @@ wheel.py-api = "py3"
 "src/dft/ao_grid_work.hpp" = "generativeqc_compiler/assets/src/dft/ao_grid_work.hpp"
 "src/dft/grid_task_view.cuh" = "generativeqc_compiler/assets/src/dft/grid_task_view.cuh"
 "src/dft/xc_point.hpp" = "generativeqc_compiler/assets/src/dft/xc_point.hpp"
+"src/dft/cuda_xc_point_value.hpp" = "generativeqc_compiler/assets/src/dft/cuda_xc_point_value.hpp"
+"src/dft/cuda_xc_point_program.hpp" = "generativeqc_compiler/assets/src/dft/cuda_xc_point_program.hpp"
 "src/dft/xc_point_mixed.hpp" = "generativeqc_compiler/assets/src/dft/xc_point_mixed.hpp"
 "src/dft/semilocal_family.hpp" = "generativeqc_compiler/assets/src/dft/semilocal_family.hpp"
 "src/dft/xc_capabilities.hpp" = "generativeqc_compiler/assets/src/dft/xc_capabilities.hpp"

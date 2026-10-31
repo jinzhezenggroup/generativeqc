@@ -27,6 +27,10 @@ struct RhfBucketItem {
 
 struct CudaRhfBucketPlan;
 
+/** Retire an optional executable only after its real owner confirms close.
+ * Failure preserves the original slot/owner instead of releasing admission. */
+bool try_retire_rhf_cuda_bucket_plan(CudaRhfBucketPlan**) noexcept;
+
 enum class CudaDirectFinalStateRoute : std::uint8_t {
   none,
   scf_force_ready,

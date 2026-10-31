@@ -9,6 +9,7 @@
 #include "generativeqc/generativeqc.h"
 #include "integrals/s_integrals.hpp"
 #include "scf/occupied_projection.hpp"
+#include "scf/system_projection.hpp"
 
 namespace {
 using generativeqc::scf::projection::Input;
@@ -174,5 +175,148 @@ extern "C" generativeqc_status generativeqc_system_cross_overlap_cpu(
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&context->last_detail);
+  }
+}
+
+namespace {
+namespace system_projection = generativeqc::scf::system_projection;
+
+system_projection::Controls system_controls(
+    const generativeqc_hf_system_projection_controls_v1& controls) {
+  constexpr auto maximum = std::numeric_limits<std::size_t>::max();
+  if (controls.unrestricted > 1 || controls.reserved || controls.maximum_ao > maximum ||
+      controls.maximum_host_bytes > maximum)
+    throw std::invalid_argument("invalid system projection controls");
+  return {{controls.relative_threshold, controls.validation_tolerance, controls.maximum_residual,
+           static_cast<std::size_t>(controls.maximum_ao), 0},
+          bool(controls.unrestricted),
+          static_cast<std::size_t>(controls.maximum_host_bytes)};
+}
+
+generativeqc_status system_projection_failure(std::string* detail = nullptr) {
+  try {
+    throw;
+  } catch (const system_projection::Unsupported& error) {
+    if (detail) *detail = error.what();
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  } catch (const std::overflow_error& error) {
+    if (detail) *detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (...) {
+    return generativeqc::api::map_exception(detail);
+  }
+}
+}  // namespace
+
+extern "C" generativeqc_status generativeqc_hf_system_projection_query_v1(
+    const generativeqc_system* target, const generativeqc_system* source,
+    const generativeqc_hf_system_projection_controls_v1* controls,
+    generativeqc_hf_system_projection_capacity_v1* output) {
+  if (!target || !source || !controls || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(controls) ||
+      !generativeqc::api::valid_descriptor(output))
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  Range borrowed, publication;
+  if (!range(controls, 1, controls->struct_size, alignof(decltype(*controls)), borrowed) ||
+      !range(output, 1, output->struct_size, alignof(decltype(*output)), publication) ||
+      !disjoint(borrowed, publication))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  try {
+    const auto required =
+        system_projection::capacity(target->data, source->data, system_controls(*controls));
+    *output = {sizeof(*output),
+               GENERATIVEQC_ABI_VERSION,
+               required.source_ao,
+               required.target_ao,
+               required.spins,
+               required.occupied[0],
+               required.occupied[1],
+               required.source_density_count,
+               required.target_density_count,
+               required.numeric_workspace_bytes};
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return system_projection_failure();
+  }
+}
+
+extern "C" generativeqc_status generativeqc_hf_system_project_cpu_v1(
+    generativeqc_context* context, const generativeqc_system* target,
+    const generativeqc_system* source,
+    const generativeqc_hf_system_projection_controls_v1* controls, const double* density,
+    std::uint64_t density_count, generativeqc_basis_projection_output_v1* outputs,
+    std::uint64_t output_count) {
+  if (!context || !target || !source || !controls || !density || !outputs)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(controls)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  std::lock_guard<std::recursive_mutex> lock(context->mutex);
+  context->last_detail.clear();
+  try {
+    if (context->state.executed_backend != generativeqc::core::kCpuReferenceBackend)
+      throw system_projection::Unsupported("system projection requires an explicit CPU context");
+    const auto selected = system_controls(*controls);
+    const auto required = system_projection::capacity(target->data, source->data, selected);
+    if (density_count != required.source_density_count || output_count != required.spins)
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    Range borrowed[4]{}, written[4]{};
+    if (!range(controls, 1, controls->struct_size, alignof(decltype(*controls)), borrowed[0]) ||
+        !range(density, density_count, sizeof(double), alignof(double), borrowed[1]) ||
+        !range(outputs, output_count, sizeof(*outputs), alignof(decltype(*outputs)), borrowed[2]) ||
+        !disjoint(borrowed[2], borrowed[0]) || !disjoint(borrowed[2], borrowed[1]))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    for (std::size_t spin = 0; spin < required.spins; ++spin) {
+      const auto& output = outputs[spin];
+      if (!generativeqc::api::valid_descriptor(&output)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+      if (!range(&output, 1, output.struct_size, alignof(decltype(output)), borrowed[2 + spin]))
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      for (std::size_t prior = 0; prior < 2 + spin; ++prior)
+        if (!disjoint(borrowed[2 + spin], borrowed[prior]))
+          return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      const auto coefficients = required.target_ao * required.occupied[spin];
+      const auto target_count = required.target_ao * required.target_ao;
+      constexpr auto maximum_count = std::numeric_limits<std::size_t>::max() / sizeof(double);
+      if (output.coefficient_capacity < coefficients || output.density_capacity < target_count ||
+          output.coefficient_capacity > maximum_count || output.density_capacity > maximum_count ||
+          !range(output.coefficients, coefficients, sizeof(double), alignof(double),
+                 written[2 * spin]) ||
+          !range(output.density, target_count, sizeof(double), alignof(double),
+                 written[2 * spin + 1]))
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    for (std::size_t index = 0; index < 2 * required.spins; ++index) {
+      for (auto input : borrowed)
+        if (!disjoint(written[index], input)) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      for (std::size_t prior = 0; prior < index; ++prior)
+        if (!disjoint(written[index], written[prior])) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    const auto result = system_projection::evaluate(
+        target->data, source->data, selected, {density, static_cast<std::size_t>(density_count)});
+    // Stage descriptors before copying any output. evaluate() has already
+    // accepted every spin; the remaining trivial copies cannot fail halfway.
+    std::array<generativeqc_basis_projection_output_v1, 2> published;
+    for (std::size_t spin = 0; spin < required.spins; ++spin) {
+      auto& output = published[spin];
+      output = outputs[spin];
+      const auto& diagnostic = result[spin].diagnostics;
+      output.source_metric_rank = diagnostic.source_metric_rank;
+      output.target_metric_rank = diagnostic.target_metric_rank;
+      output.occupied_rank = diagnostic.occupied_rank;
+      output.minimum_projected_norm_squared = diagnostic.minimum_projected_norm_squared;
+      output.projection_residual = diagnostic.projection_residual;
+      output.normal_equation_residual = diagnostic.normal_equation_residual;
+      output.metric_orthogonality_error = diagnostic.metric_orthogonality_error;
+      output.electron_trace = diagnostic.electron_trace;
+      output.metric_idempotency_error = diagnostic.metric_idempotency_error;
+    }
+    for (std::size_t spin = 0; spin < required.spins; ++spin) {
+      const auto& value = result[spin];
+      if (!value.coefficients.empty())
+        std::copy(value.coefficients.begin(), value.coefficients.end(), outputs[spin].coefficients);
+      std::copy(value.density.begin(), value.density.end(), outputs[spin].density);
+      outputs[spin] = published[spin];
+    }
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return system_projection_failure(&context->last_detail);
   }
 }

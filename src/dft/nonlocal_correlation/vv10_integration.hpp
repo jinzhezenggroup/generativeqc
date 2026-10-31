@@ -44,5 +44,13 @@ SpinVv10Integral integrate_vv10_uks(const AoBasis& basis, const MolecularGrid& g
                                     std::size_t tile_points = 256,
                                     Vv10DensityDomain domain = Vv10DensityDomain::StrictPositive);
 
+/** Analytic moving-grid derivative of the same total-density VV10 energy.
+ * Includes both pair legs, AO motion, point displacement and Becke weights.
+ * The molecular domain removes inactive points from all four cotangents. */
+std::vector<double> stationary_vv10_derivative(const AoBasis& basis, const MolecularGrid& grid,
+                                               const std::vector<std::vector<double>>& density,
+                                               Vv10Plan& plan, std::size_t tile_points,
+                                               Vv10DensityDomain domain, std::size_t maximum_bytes);
+
 }  // namespace nlc
 }  // namespace generativeqc::dft

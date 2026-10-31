@@ -47,7 +47,7 @@ struct SemilocalFamilyMetadata {
   bool molecular_nonlocal_domain;
   bool incremental_xc;
   bool stationary_second_order;
-  std::array<CpuStationaryForceProfile, 2> cpu_stationary_force_profiles;
+  std::array<CpuStationaryForceProfile, 3> cpu_stationary_force_profiles;
   std::uint32_t cpu_stationary_force_profile_count;
   CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
@@ -74,8 +74,8 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      false,
      true,
-     {{{0U, 0.0, 0.0, 0.0}, {0U, 0.0, 0.0, 0.0}}},
-     0U,
+     {{{3U, 0.0, 1.0, 1.0}, {0U, 0.0, 0.0, 0.0}, {0U, 0.0, 0.0, 0.0}}},
+     1U,
      {CudaXcCapability::QualificationRequired, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified},
      {"LDA_X", "LDA_C_PW", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -97,8 +97,8 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      true,
      true,
-     {{{3U, 0.0, 1.0, 1.0}, {3U, 0.25, 0.75, 1.0}}},
-     2U,
+     {{{3U, 0.0, 1.0, 1.0}, {3U, 0.25, 0.75, 1.0}, {3U, 0.5, 0.5, 1.0}}},
+     3U,
      {CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified},
      {"GGA_X_PBE", "GGA_C_PBE", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -120,8 +120,8 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      false,
      false,
-     {{{0U, 0.0, 0.0, 0.0}, {0U, 0.0, 0.0, 0.0}}},
-     0U,
+     {{{3U, 0.0, 1.0, 1.0}, {0U, 0.0, 0.0, 0.0}, {0U, 0.0, 0.0, 0.0}}},
+     1U,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::Qualified, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"MGGA_X_R2SCAN", "MGGA_C_R2SCAN", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -143,7 +143,7 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      false,
      false,
-     {{{1U, 0.2, 1.0, 1.0}, {0U, 0.0, 0.0, 0.0}}},
+     {{{3U, 0.2, 1.0, 1.0}, {0U, 0.0, 0.0, 0.0}, {0U, 0.0, 0.0, 0.0}}},
      1U,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::QualificationRequired, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"LDA_X", "GGA_X_B88", "LDA_C_VWN_RPA", "GGA_C_LYP"},
@@ -166,8 +166,8 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      false,
      false,
-     {{{0U, 0.0, 0.0, 0.0}, {0U, 0.0, 0.0, 0.0}}},
-     0U,
+     {{{3U, 0.15, 1.0, 1.0}, {0U, 0.0, 0.0, 0.0}, {0U, 0.0, 0.0, 0.0}}},
+     1U,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::QualificationRequired, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"MGGA_X_WB97M_V", "MGGA_C_WB97M_V", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},

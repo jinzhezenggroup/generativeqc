@@ -6,6 +6,42 @@ import pytest
 from generativeqc_compiler.common.provenance import find_nvcc
 
 
+@pytest.fixture(autouse=True)
+def isolated_toolkit_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep discovery tests independent of the developer's installed toolkits."""
+    for name in (
+        "GENERATIVEQC_NVCC",
+        "CUDACXX",
+        "CUDAToolkit_ROOT",
+        "CUDA_PATH",
+        "CUDA_HOME",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.mark.parametrize("variable", ("CUDA_HOME", "CUDA_PATH", "CUDAToolkit_ROOT"))
+def test_nonstandard_toolkit_root(
+    variable: str, monkeypatch: typing.Any, tmp_path: typing.Any
+) -> None:
+    compiler = executable(tmp_path / "custom cuda" / "bin/nvcc")
+    monkeypatch.setenv(variable, str(compiler.parent.parent))
+    monkeypatch.setenv("PATH", "")
+    assert find_nvcc() == compiler
+
+
+@pytest.mark.parametrize(
+    "variable",
+    ("GENERATIVEQC_NVCC", "CUDACXX", "CUDAToolkit_ROOT", "CUDA_PATH", "CUDA_HOME"),
+)
+def test_invalid_explicit_toolkit_never_falls_back_to_path(
+    variable: str, monkeypatch: typing.Any, tmp_path: typing.Any
+) -> None:
+    compiler = executable(tmp_path / "other/bin/nvcc")
+    monkeypatch.setenv("PATH", str(compiler.parent))
+    monkeypatch.setenv(variable, str(tmp_path / "missing"))
+    assert find_nvcc() is None
+
+
 def executable(path: typing.Any) -> typing.Any:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("#!/bin/sh\nexit 0\n")

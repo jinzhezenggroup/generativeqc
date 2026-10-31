@@ -594,6 +594,11 @@ without an SCF solve. `energy(...)` evaluates only the primal HF endpoint.
 Energy is in Hartree; coordinate energy gradients are in Hartree/Bohr, and
 basis gradients are per corresponding raw input unit.
 
+For standalone CUDA owners, `cuda_arch=None` detects the architecture of the
+selected `device` within scheduler visibility. An explicit `cuda_arch="sm_80"`
+can select a compilation target; it must be compatible with the executing GPU.
+CPU owners do not probe CUDA.
+
 Owner configuration is immutable. Calls copy input arrays before native
 execution. Returned value/gradient arrays are immutable owned snapshots that
 outlive `close()`. Later execution on a closed owner raises `RuntimeError`.
@@ -811,8 +816,11 @@ Slurm `srun` on an allowed node (`n1`, `n2`, `n4`, `n5`), a compatible partition
 request and the unchanged scheduler-assigned `CUDA_VISIBLE_DEVICES`. Select
 `GENERATIVEQC_ARRAY_API_CUDA_TEST=1` for the real-device molecular test, or
 `--backend cuda` for the benchmark; source/planner checks are not device evidence.
-Pass `--cuda-arch` matching the selected GPU when it differs from the default
-`sm_120`; this selects the tensor compiler target without changing Slurm visibility.
+Array API CUDA compilation and the benchmark detect the selected visible GPU's
+compute capability by default, on first execution. `cuda_arch="sm_89"` (or
+benchmark `--cuda-arch sm_89`) selects an explicit target for offline planning;
+execution still requires a matching GPU. Detection does not modify Slurm
+visibility or require CuPy/the native chemistry library for tensor-only programs.
 SSH host aliases and Slurm node names are distinct: these machines report
 `node1`, `node2`, `node4`, and `node5` to the scheduler. Both verified naming
 forms are admitted; `n3`/`node3` remains excluded during maintenance.

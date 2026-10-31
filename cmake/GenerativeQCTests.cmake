@@ -13,6 +13,12 @@ function(generativeqc_native_test target source)
   endif()
   if(NOT VNT_NO_SRC_INCLUDE)
     target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    if(NOT VNT_NO_GENERATIVEQC AND TARGET CUDA::cudart)
+      # Internal device views expose CUDA types when the library enables CUDA.
+      # Keep their toolkit usage requirements local to internal-header tests;
+      # installed SDK consumers do not acquire a CUDA header dependency.
+      target_link_libraries(${target} PRIVATE CUDA::cudart)
+    endif()
   endif()
   add_test(NAME ${target} COMMAND ${target})
   if(VNT_SKIP_77)
@@ -243,6 +249,8 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_initial_density_tests tests/native/test_initial_density.cpp)
     generativeqc_native_test(generativeqc_occupied_projection_tests tests/native/test_occupied_projection.cpp)
     generativeqc_native_test(generativeqc_basis_projection_sdk_tests tests/native/test_basis_projection_sdk.cpp NO_SRC_INCLUDE)
+    generativeqc_native_test(generativeqc_system_projection_sdk_tests tests/native/test_system_projection_sdk.cpp NO_SRC_INCLUDE)
+    generativeqc_native_test(generativeqc_fleet_projection_sdk_tests tests/native/test_fleet_projection_sdk.cpp NO_SRC_INCLUDE)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
     generativeqc_native_test(generativeqc_ump2_contract_tests tests/native/test_ump2_contract.cpp)
@@ -302,6 +310,8 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_progressive_hf_tests tests/native/test_progressive_hf.cpp)
   generativeqc_native_test(generativeqc_hf_physical_audit_tests tests/native/test_hf_physical_audit.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_hf_verification_tests tests/native/test_hf_verification.cpp NO_SRC_INCLUDE)
+  generativeqc_native_test(generativeqc_hf_plan_tests tests/native/test_hf_plan.cpp NO_SRC_INCLUDE)
+  generativeqc_native_test(generativeqc_correlation_policy_tests tests/native/test_correlation_policy.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_named_ks_catalog_tests tests/native/test_named_ks_catalog.cpp)
   generativeqc_native_test(generativeqc_grid_tests tests/native/test_grid.cpp)
   generativeqc_native_test(generativeqc_runtime_workspace_tests tests/native/test_runtime_workspace.cpp NO_GENERATIVEQC)
@@ -389,6 +399,12 @@ macro(generativeqc_add_native_tests)
   target_sources(generativeqc_d4_eeq_tests PRIVATE
     src/dft/dispersion/d4_table_data.cpp)
   generativeqc_native_test(generativeqc_gcp_r2scan3c_tests tests/native/test_gcp_r2scan3c.cpp NO_GENERATIVEQC)
+  if(GENERATIVEQC_ENABLE_CUDA)
+    generativeqc_native_test(generativeqc_gcp_cuda_tests tests/native/test_gcp_r2scan3c.cpp SKIP_77)
+    target_compile_definitions(generativeqc_gcp_cuda_tests PRIVATE GENERATIVEQC_GCP_CUDA_TEST=1)
+    target_include_directories(generativeqc_gcp_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    add_dependencies(generativeqc_gcp_cuda_tests generativeqc_method_parameters_codegen)
+  endif()
   foreach(_generativeqc_parameter_test IN ITEMS
           generativeqc_d4_reference_tests generativeqc_d4_eeq_tests generativeqc_gcp_r2scan3c_tests)
     add_dependencies(${_generativeqc_parameter_test} generativeqc_method_parameters_codegen)
@@ -422,7 +438,10 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_d3_cuda_replay_failure_tests
                        tests/native/test_d3_cuda_replay_failure.cu
                        NO_GENERATIVEQC LIBRARIES CUDA::cudart SKIP_77)
-    target_sources(generativeqc_d3_cuda_replay_failure_tests PRIVATE src/dft/dispersion/d3_cuda.cu)
+    target_sources(generativeqc_d3_cuda_replay_failure_tests PRIVATE
+      src/dft/dispersion/d3_cuda.cu src/dft/dispersion/d3_runtime.cpp)
+    target_compile_definitions(generativeqc_d3_cuda_replay_failure_tests PRIVATE
+      GENERATIVEQC_HAS_CUDA=1)
     add_dependencies(generativeqc_d3_cuda_replay_failure_tests generativeqc_d3_codegen)
     target_include_directories(generativeqc_d3_cuda_replay_failure_tests PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -539,6 +558,14 @@ macro(generativeqc_add_native_tests)
       src/integrals/generated_df_cpu.cpp
       src/integrals/ecp.cpp)
     add_dependencies(generativeqc_cosx_cuda_tests generativeqc_ecp_codegen generativeqc_libxc_semilocal_cuda_codegen)
+    if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+      # This standalone test compiles s_integrals.cpp instead of linking the
+      # production library, so its enabled dispatch needs the same CPU shards.
+      target_sources(generativeqc_cosx_cuda_tests PRIVATE
+        ${GENERATIVEQC_STATIONARY_CPU_AOT_SOURCES})
+      add_dependencies(generativeqc_cosx_cuda_tests
+        generativeqc_stationary_cpu_derivatives_codegen)
+    endif()
     target_include_directories(generativeqc_cosx_cuda_tests PRIVATE
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}"
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -596,6 +623,8 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_hf_df_resources.cpp)
   generativeqc_native_test(generativeqc_stationary_integral_gradient_tests
                        tests/native/test_stationary_integral_gradient.cpp)
+  generativeqc_native_test(generativeqc_range_exchange_runtime_tests
+                       tests/native/test_range_exchange_runtime.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   generativeqc_native_test(generativeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
   generativeqc_native_test(generativeqc_dft_restricted_point_tests

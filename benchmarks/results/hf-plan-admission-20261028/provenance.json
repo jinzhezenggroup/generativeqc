@@ -1,0 +1,22 @@
+{
+  "source_base": "a3ec1f8fd8116fc70cf945ab2e7dd97f1e0d42a6",
+  "dirty_production_patch": "source.patch.xz",
+  "patch_sha256": "439cda9f6603c5791a870f3d10a776487dea58c8ada9b6a5a39fb54ff56dd48c",
+  "patch_bytes": 17729,
+  "reconstructed_paths": [
+    "cmake/GenerativeQCSources.cmake",
+    "include/generativeqc/generativeqc.h",
+    "python/generativeqc/_hf_plan_native.py",
+    "python/generativeqc/progressive_controller.py",
+    "src/api/c_api_hf_plan.cpp",
+    "src/scf/progressive_plan.hpp"
+  ],
+  "runner": "node3",
+  "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+  "cpu": "AMD EPYC 7K62 48-Core Processor",
+  "numpy": "2.5.1",
+  "pyscf": "2.14.0",
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "cache": "sccache 0.16.0",
+  "harness_sha256": "2fe4606d19de4a6bbcea2782d6d6d285d07fe7bbe4883100b6dcaa2c6c10a79f"
+}

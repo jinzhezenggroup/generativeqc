@@ -18,6 +18,7 @@ def test_tuner_requires_xyz_and_preserves_quick_full_limits() -> None:
     assert default.compile_jobs == 2
     assert default.device_id == 0
     assert default.budget_seconds == 7200
+    assert parser.parse_args(["water.xyz", "--device-id", "2"]).device_id == 2
     assert parser.parse_args(["--full", "water.xyz"]).full
     with pytest.raises(SystemExit) as error:
         parser.parse_args(["profile", "show"])
@@ -46,9 +47,12 @@ def test_tuner_validates_limits_without_importing_runtime(
     from generativeqc import autotune
 
     monkeypatch.setattr(autotune, "run", fake_run)
-    assert tune_cli.main(["--full", "--batch", "4", "water.xyz"]) == 0
+    assert (
+        tune_cli.main(["--full", "--batch", "4", "--device-id", "2", "water.xyz"]) == 0
+    )
     assert len(calls) == 1
     assert calls[0].coverage == 1.0
+    assert calls[0].device_id == 2
     assert calls[0].max_classes == 55
     assert calls[0].max_candidates == 16
     assert tune_cli.main(["water.xyz"]) == 0
@@ -56,6 +60,11 @@ def test_tuner_validates_limits_without_importing_runtime(
     with pytest.raises(SystemExit) as error:
         tune_cli.main(["--batch", "0", "water.xyz"])
     assert error.value.code == 2
+    assert len(calls) == 2
+    for invalid in ("-1", str(2**31)):
+        with pytest.raises(SystemExit) as error:
+            tune_cli.main(["--device-id", invalid, "water.xyz"])
+        assert error.value.code == 2
     assert len(calls) == 2
 
 

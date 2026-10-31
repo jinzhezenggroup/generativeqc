@@ -12,6 +12,7 @@
 #include "scf/cuda/rhf_graph.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_batch.hpp"
+#include "scf/diis_work.hpp"
 
 namespace generativeqc::scf {
 
@@ -86,6 +87,9 @@ struct CudaRhfBucketPlan {
   std::size_t diis_history{};
   bool incremental_diis_gram{};
   bool ordered_diis_gram{};
+  bool diis_work_enabled{};
+  /** Own terminal copy destinations until the stream is drained. */
+  std::vector<DiisWorkReadback> diis_work_readback;
   int lwork{};
   bool persistent_eri{};
   bool quartet_direct{};
@@ -200,6 +204,10 @@ inline bool same_hf_bucket_execution_options(const ScfOptions& first, const ScfO
              second.reference_iteration_screening_tolerance &&
          first.compute_forces == second.compute_forces &&
          first.export_physical_reference == second.export_physical_reference &&
+         first.reference_provider_initialization_intent ==
+             second.reference_provider_initialization_intent &&
+         first.reference_provider_initialization_owner ==
+             second.reference_provider_initialization_owner &&
          same_provider_initialization_request(first.reference_provider_initialization,
                                               second.reference_provider_initialization) &&
          first.precision_mode == second.precision_mode &&
