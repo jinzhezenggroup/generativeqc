@@ -178,3 +178,13 @@ every README functional on every target GPU remains open.
 
 See the [decision note](../../../.agents/notes/implemented/performance/2026-11-01-cuda-ks-seed-products.md)
 for scratch lifetime, bounded fallback and discarded alternatives.
+
+## Source integration boundary
+
+After rebasing onto #2908 (`04d316ce0`), the complete source identity is
+`8b75da56f4efef0a2b8b2dde33541ac1e0151df5ac5aeb95830820c29cba02d6`.
+Native sources, CMake inputs and DFT compiler sources are unchanged from the
+measured implementation. Incoming edits concern Libxc provenance/cache identity
+and consumer validation. All receipts retain the original measured identity;
+these tables are not fresh measurements of the rebased checkout. The independent
+evidence reader is replayed without changing recorded inputs or gates.

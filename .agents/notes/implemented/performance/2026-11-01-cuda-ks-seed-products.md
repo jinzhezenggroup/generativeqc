@@ -106,3 +106,21 @@ product change does not alter that lifecycle.
 Revisit the shape crossover with complete cold/import endpoint evidence on new
 devices. A larger matrix-library workspace requirement must remain charged by
 the existing owner; an unavailable binding must retain the bounded host route.
+
+## Integration after the Libxc provenance update
+
+Rebase onto master `04d316ce0` (#2908) changes the complete source identity to
+`8b75da56f4efef0a2b8b2dde33541ac1e0151df5ac5aeb95830820c29cba02d6`.
+The native sources, CMake build inputs and DFT compiler sources remain byte
+identical to the measured seed implementation; the incoming production edits
+scope Libxc cache fingerprints and published-consumer validation. The recorded
+GPU populations remain at their original identity `b6b63f90...` and are not
+relabelled as measurements of the rebased source identity.
+
+The automatic Libxc catalog is regenerated against the exact preceding #2908
+summary. Its scalar/capability summary is unchanged, so there are no new
+transition acknowledgements. The previous identity-v2 migration summary and
+acknowledgements remain recoverable from `04d316ce0` at the original manifest
+paths. Historical native qualification stays stale; no new endpoint admission
+is inferred. Seed adapter behavior tests, the incoming provenance/consumer
+tests and the retained independent performance-evidence reader are rerun.
