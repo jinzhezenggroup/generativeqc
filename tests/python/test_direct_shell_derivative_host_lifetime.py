@@ -745,7 +745,7 @@ int main() {
   };
   const auto invoke = [&] {
     return consume_generated_full_range_energy_derivatives(
-        plan, false, density, nullptr, 1.0, -0.5, consumer, false, nullptr);
+        plan, false, density, nullptr, 1.0, -0.5, consumer, true, false, nullptr);
   };
   capture_state = cudaStreamCaptureStatusActive;
   if (invoke() != expected_capture_error || submissions || drains || callbacks) return 1;
@@ -773,7 +773,7 @@ int main() {
   DirectForcePrecisionRequest precision{true, true};
   const auto collect = [&] {
     return consume_generated_full_range_energy_derivatives(
-        plan, false, density, nullptr, 1.0, -0.5, consumer, false, &precision);
+        plan, false, density, nullptr, 1.0, -0.5, consumer, true, false, &precision);
   };
   if (collect() != cudaSuccess || drains != 3 ||
       precision.work != std::array<std::uint64_t, 3>{19, 37, 2}) return 8;
