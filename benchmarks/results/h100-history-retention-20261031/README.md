@@ -13,7 +13,7 @@ From the repository root, restore to a **new** ignored directory using the
 unchanged standard recovery tool:
 
 ```bash
-python tools/restore_retained_evidence.py --all \
+uv run --no-env-file --no-project --python 3.12 python tools/restore_retained_evidence.py --all \
   --manifest benchmarks/results/h100-history-retention-20261031/snapshot.manifest.json \
   --output .artifacts/h100-history-20261031
 ```
@@ -29,9 +29,9 @@ Replay the recovered data explicitly:
 uv run --no-env-file --no-project --python 3.12 --with numpy==2.2.6 \
   python benchmarks/results/h100-integrated-baseline-20261030/replay.py \
   --payload-root .artifacts/h100-history-20261031/benchmarks/results/h100-integrated-baseline-20261030
-python -I -S -B benchmarks/results/h100-pbe0-direct-df-20261029/replay.py \
+uv run --no-env-file --no-project --python 3.12 python -I -S -B benchmarks/results/h100-pbe0-direct-df-20261029/replay.py \
   --payload-root .artifacts/h100-history-20261031/benchmarks/results/h100-pbe0-direct-df-20261029
-python benchmarks/results/h100-small-cbs-correctness-20261024/verify_actual.py \
+uv run --no-env-file --no-project --python 3.12 python benchmarks/results/h100-small-cbs-correctness-20261024/verify_actual.py \
   --capsule .artifacts/h100-history-20261031/benchmarks/results/h100-small-cbs-correctness-20261024/actual-terminal-originals-v2.json.xz \
   --output .artifacts/h100-cbs-restored-originals-20261031 \
   --report .artifacts/h100-cbs-offline-replay-20261031.json

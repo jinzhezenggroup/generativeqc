@@ -52,7 +52,8 @@ From the repository root:
 
 ```bash
 uv run --no-env-file --no-project --python 3.12 --with numpy==2.2.6 \
-  python benchmarks/results/h100-integrated-baseline-20261030/replay.py
+  python benchmarks/results/h100-integrated-baseline-20261030/replay.py \
+  --payload-root .artifacts/h100-history-20261031/benchmarks/results/h100-integrated-baseline-20261030
 ```
 
 The reader reconstructs every force list before checking its normalized JSON

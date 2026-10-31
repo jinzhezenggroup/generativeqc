@@ -3,7 +3,8 @@
 Status: implemented
 Date: 2026-10-31
 
-The aggregate evidence budget left less than 100 KiB for new H100 qualification.
+At base `5bf1d00a9f4de2f47e381d2c9fba66fd43bf51ba`, the 80 MiB aggregate
+evidence budget left 258,147 bytes for new H100 qualification.
 Move only seven historical raw/storage files to an exact, already merged Git
 snapshot. Keep all original negative decisions, numerical summaries, thresholds,
 source identities and test fixtures in the normal checkout. Verify stock offline

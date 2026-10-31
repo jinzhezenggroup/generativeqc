@@ -10,8 +10,15 @@ level-5 energy/force gates, level-4/5 stability, actual work and process statist
 This is a focused evidence candidate; parent closure awaits independent review.
 The historical spent pilot and its failures remain separate and unchanged.
 
-Run `python -I -S -B replay.py` using Python 3.10+; no network, solver, native
-library, GPU or oracle execution is used. `evidence.tar.xz` is a standard TAR/XZ
+After the linked offline recovery, run from the repository root:
+
+```bash
+uv run --no-env-file --no-project --python 3.12 python -I -S -B \
+  benchmarks/results/h100-pbe0-direct-df-20261029/replay.py \
+  --payload-root .artifacts/h100-history-20261031/benchmarks/results/h100-pbe0-direct-df-20261029
+```
+
+No network, solver, native library, GPU or oracle execution is used. `evidence.tar.xz` is a standard TAR/XZ
 containing every raw member, full supplements and an index of public SHA256 values
 and separate original-byte SHA witnesses. Path aliases redact private canonical
 roots only. For changed members, original bytes are unavailable in this public
