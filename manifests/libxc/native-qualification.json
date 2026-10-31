@@ -20,9 +20,9 @@
   ],
   "previous": {
     "path": "manifests/libxc/native-qualification-previous.json.xz",
-    "scope": "Last published summary retained before the source-bound offline refresh after RSH gradient transport,DF workspace and formatting integration; historical measured evidence remains stale and no new qualification is admitted.",
+    "scope": "last published summary before the pre-commit.ci native-header formatting update; the original manifest, previous summary and snapshot remain recoverable at the same paths in source_commit. Qualification stages, blockers and stale historical native evidence are unchanged; no current-source qualification is claimed",
     "sha256": "05d40f4baf56442a20add1de74c97c9c010d9376b4599ebb50d4a661436862e3",
-    "source_commit": "64de04a05674bbe2853874fc6802aa564e96863b"
+    "source_commit": "5467ba39542838d24598c1579906f5648bafa024"
   },
   "report": "docs/reference/libxc_qualification.md",
   "schema": "generativeqc.libxc-native-catalog-manifest.v1",
