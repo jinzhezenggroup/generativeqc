@@ -94,26 +94,26 @@ qualification or claim Fast universally beats Standard.
 
 ## Reproduction and provenance
 
-`observations.json.xz` retains all cold/warm samples, variability, executed
-settings, SCF/Fock counts, original receipt identities and independently computed
-observable errors/gates. `provenance.json.xz` retains runners, source/build
-receipts, validation outcomes, diagnostic trace extracts and setup failures.
-The unchanged repository size budget requires compact summaries: full original
-JSON receipts and force vectors remain in the shared workspace's ignored
-`.artifacts/force-batch-planning-20261031/`, with no external artifact host.
-They are not embedded in the Git summary, and summary-only replay is not an
-independent numerical requalification.
+`receipts.json.xz` losslessly embeds every original JSON receipt, including full
+force vectors, cold/warm samples, executed settings, SCF/Fock counts and original
+source identities. It also retains independently computed observable errors/gates.
+`provenance.json.xz` retains complete runners, source/build receipts, validation
+logs, diagnostic traces and setup failures. Both fit the unchanged repository
+storage limits; numerical replay requires no external artifact host.
 
-The default report checks recorded sample statistics and ratios. To authenticate
-every original receipt and recompute all full-vector oracle gates locally:
+The default report authenticates original bytes and checks sample statistics and
+ratios. To recompute all full-vector oracle gates from the retained bundle:
 
 ```bash
 PYTHONPATH=python:. python benchmarks/results/independent-force-tiles-20261031/report.py \
-  --verify --raw-root .artifacts/force-batch-planning-20261031
+  --verify
 ```
 
-The retained set has 188 complete or failed populations: 183 independently
-qualified, three failed HF reference gates, and two pre-alignment AOT failures.
+The retained set has 212 complete or failed populations: 201 independently
+qualified, three failed HF reference gates, two pre-alignment AOT failures and
+six rejected abbreviated-source-revision records. Those six integration controls
+were rerun with the full revision; their original bytes remain independently
+identifiable and the reporter verifies their rejection.
 It contains every population from coherent public API campaigns,
 integrated controls, fixed-map ABBA, final production map controls and SCF/force
 tile sweeps, including failures. Earlier instrumented pilots and successful
@@ -134,6 +134,16 @@ Source boundaries are explicit:
 - D4-integrated controls use commit `1885f4970e6ee332dfee30ebf572f14d7a77ca9e`, source `9357eb6603444fc76d7c0dc792908b11c316d80c73e8692782b3cd8dd40f5737`.
 - The map fix uses source `9fbd98e19bbbb5733c40b47bee84bbc5e75f59e4f60e09525f5b09061e602189`.
 - Fixed-map ablations use source433 on Blackwell and source9357 on A100; each pair has an identical native binary and retained diagnostic driver.
+- Shared native precision/default/warm-seed integration uses source `b6d85e3799ddf57fc395407a0d5bc25eff5aca1b2c4c3626b5fb0392e8b114bd`. Its 18 qualified `rebased/` controls are separate from every earlier timing comparison.
+
+Historical commit labels are the original run tags. The retained
+`shared-to-map-source.patch`, its digest-bound deletion list
+`shared-to-map-source-deletions.json`, and `map-to-force-api-source.patch`
+reconstruct source9f and source9357 in a copy of the final PR production tree,
+even after rebasing the unpublished commits. The deletion list avoids duplicating
+additive upstream SDK files already present in that tree. Both resulting native
+input identities were checked.
+Preserving the concurrent remote merge changed no measured native input bytes.
 
 Initial A100 Fast r2SCAN failed AOT contract authentication because only the core
 library had been rebuilt. Both failures remain retained. Coherent builds rebuild
@@ -142,11 +152,28 @@ is bypassed. ECNU uses the environment's glibc sysroot loader. Setup failures,
 including unavailable oracle packages in the native-only test environment, are
 retained as failures/skips rather than claimed as GPU passes.
 
-A100 runs in finite LSF `gpu_chem` allocations; Blackwell runs through finite
-Slurm `main` jobs on n5 (5090) and n2 (PRO 6000), preserving assigned device
-visibility. Each device passes all 16 final-source mapped-force oracle/rebinding
-tests; the two Blackwell devices additionally pass one unfiltered memcheck case
-with zero errors each. A100 has no new sanitizer claim for this map repair.
+A100 runs in finite LSF `gpu_chem` allocations; Blackwell timing campaigns run
+through finite Slurm `main` jobs on n5 (5090) and n2 (PRO 6000), preserving
+assigned device visibility. Source9f passes all 16 mapped-force oracle/rebinding
+tests on each device; the two Blackwell devices additionally pass one unfiltered
+memcheck case with zero errors each. A100 has no new sanitizer claim for this
+map repair.
+
+The subsequent sourceb6d integration repeats all 16 map tests, five force-budget
+cases and six qualified complete endpoint populations on each device. The
+Blackwell jobs also pass the 13-test warm-seed snapshot and 38-test D4 resource
+suites, including their CPU variants. This integration's 5090 runs on idle n4
+because n5 is occupied; no new n4 timing is pooled with the n5 comparisons.
+It does not add a new sanitizer claim. Host integration suites pass 296 and 213
+tests respectively; their overlap is not counted as independent coverage.
+
+A100's first successful integration job failed only during the final archive
+export because its home directory quota was full; the original validation exit
+code and logs were recovered from temporary storage. Its six short-revision
+controls were then repeated with full source tags. The first n4 test launch
+lacked pytest and executed no tests; the corrected environment retains
+GPU4PySCF 1.9.0, CuPy 13.6.0 and PySCF 2.14.0. These setup failures and the
+cancelled, still-pending n5 allocation are kept separate from passing tests.
 Moved-force tests cover RKS/UKS, derivative orders one/two, independent
 oracles, repeated/moved calls, and cache/occupancy fallbacks. Separate public
 force-budget tests exercise 48/128 atoms, force4096, planned/prepared capacity
