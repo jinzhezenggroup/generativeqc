@@ -721,3 +721,10 @@ if [[ "${GENERATIVEQC_CI_SHARD}" == "posthf" && "${GITHUB_EVENT_NAME}" != "sched
   source "${BASH_SOURCE[0]%/*}/ci_prioritize_posthf_files.sh"
   extra_args+=(--no-loadscope-reorder)
 fi
+
+if [[ "${GENERATIVEQC_CI_SHARD}" == "runtime-heavy" && "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
+  # Keep complete shared fixtures local, but schedule measured slow files before
+  # small test counts leave an expensive numerical tail on the final worker.
+  source "${BASH_SOURCE[0]%/*}/ci_prioritize_runtime_files.sh"
+  extra_args+=(--no-loadscope-reorder)
+fi
