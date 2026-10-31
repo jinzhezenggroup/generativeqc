@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 54527,
-      "path": "evidence.json",
+      "bytes": 6145,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "d7fce19fca92784ac46c2155970f209424d7502c85f5cd9eef450867fed2ec0b"
+      "sha256": "3c69049dab14771dc18791e259db2d052bc5d4eacf32c960bf58a5aae7bcd026"
     },
     {
       "bytes": 83063,
