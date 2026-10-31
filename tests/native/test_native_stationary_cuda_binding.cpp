@@ -185,6 +185,26 @@ void profile_sources(const generativeqc::dft::CudaStationaryBinding& binding) {
     }
   }
   if (ranged) {
+    // General runtime-omega providers publish positive energy gradients. The
+    // same receiver must preserve their sign while still converting Force rows.
+    reset();
+    require(receive(CudaDerivativeSourceKind::RangeSeparatedJk, provider.values + 12, 3,
+                    CudaDerivativeConvention::EnergyGradient) == 0,
+            error.data());
+    require(binding.source_span(lease.owner, 0, binding.source_count, actual.data(), actual.size(),
+                                error.data(), error.size()) == 0,
+            error.data());
+    for (std::size_t source = 0; source < binding.source_count; ++source) {
+      const std::string name(binding.source_names[source]);
+      const std::size_t input_offset = name == "coulomb"                ? 12
+                                       : name == "exchange_short_range" ? 18
+                                       : name == "exchange_long_range"  ? 24
+                                                                        : 0;
+      if (!input_offset) continue;
+      for (std::size_t coordinate = 0; coordinate < 6; ++coordinate)
+        require(actual[source * 6 + coordinate] == input[input_offset + coordinate],
+                "general RSH energy-gradient transport inverted a source");
+    }
     // The resident Direct adapter publishes full J/K before reusing its force
     // arena for the LR correction. Verify the actual device transport copies
     // both full-range channels and reconstructs the named SR/LR source slots.
@@ -249,8 +269,11 @@ void profile_sources(const generativeqc::dft::CudaStationaryBinding& binding) {
             "combined J/K accepted a duplicate Coulomb component");
     reset();
     require(receive(CudaDerivativeSourceKind::FullRangeJkSum, provider.values + 12, 1,
-                    CudaDerivativeConvention::EnergyGradient) == 0,
+                    CudaDerivativeConvention::Force) == 0,
             error.data());
+    require(receive(CudaDerivativeSourceKind::Exchange, provider.values + 18, 1,
+                    CudaDerivativeConvention::EnergyGradient) != 0,
+            "combined force J/K accepted a duplicate exchange component");
     std::fill(actual.begin(), actual.end(), 42.0);
     require(binding.source_span(lease.owner, 0, binding.source_count, actual.data(), actual.size(),
                                 error.data(), error.size()) != 0 &&
@@ -262,9 +285,11 @@ void profile_sources(const generativeqc::dft::CudaStationaryBinding& binding) {
                                 error.data(), error.size()) == 0,
             "reset retained the previous combined source inventory");
   } else {
-    require(receive(CudaDerivativeSourceKind::FullRangeJkSum, provider.values + 12, 1,
-                    CudaDerivativeConvention::EnergyGradient) != 0,
-            "a profile requiring separate sources accepted combined J/K");
+    for (const auto convention :
+         {CudaDerivativeConvention::EnergyGradient, CudaDerivativeConvention::Force})
+      require(receive(CudaDerivativeSourceKind::FullRangeJkSum, provider.values + 12, 1,
+                      convention) != 0,
+              "a profile requiring separate sources accepted combined J/K");
   }
   reset();
   require(receive(CudaDerivativeSourceKind::OneElectron, provider.values, 1,

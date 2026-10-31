@@ -179,7 +179,13 @@ int main() {
               assert(canonical_used == (j != 0 || k != 0));
               assert(output.size() == (separate ? 6U : 3U));
               for (std::size_t i = 0; i < 3; ++i) {
-                assert(output[i] == j * double(i + 1) + (separate ? 0 : k * double(i + 11)));
+                // The downloaded products round separately; a host compiler may
+                // fuse the expected expression. Permit only FP64 rounding noise.
+                const double expected =
+                    j * double(i + 1) + (separate ? 0 : k * double(i + 11));
+                assert(std::abs(output[i] - expected) <=
+                       2 * std::numeric_limits<double>::epsilon() *
+                           std::fmax(1.0, std::abs(expected)));
                 if (separate) assert(output[3 + i] == k * double(i + 11));
               }
             }

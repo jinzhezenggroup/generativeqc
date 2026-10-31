@@ -244,13 +244,16 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
         // with a zero K slot. The mask below explicitly records coalescence:
         // diagnostics must never report those storage slots as separate J/K.
         const auto joint_mask = (uint64_t{1} << native_coulomb_slot) | native_exchange_mask;
-        if (view->channels != 1 || view->convention != CudaDerivativeConvention::EnergyGradient ||
+        if (view->channels != 1 ||
+            (view->convention != CudaDerivativeConvention::EnergyGradient &&
+             view->convention != CudaDerivativeConvention::Force) ||
             (owner->integral_mask & joint_mask))
           throw std::invalid_argument("invalid or duplicate combined native J/K source");
         owner->integral_stream = stream;
         owner->integral_pending = true;
         cuda_check(generativeqc::dft::launch_native_stationary_source_transport(
-            view->values, view->coordinates, 1, 1.0,
+            view->values, view->coordinates, 1,
+            view->convention == CudaDerivativeConvention::Force ? -1.0 : 1.0,
             scientific.sources + native_coulomb_slot * view->coordinates, nullptr,
             scientific.context.error, stream));
         cuda_check(
@@ -279,7 +282,8 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
       }
     } else if (view->kind == CudaDerivativeSourceKind::RangeSeparatedJk) {
       if constexpr (native_short_exchange_slot >= 0 && native_long_exchange_slot >= 0) {
-        if (view->channels != 3 || view->convention != CudaDerivativeConvention::Force)
+        if (view->channels != 3 || (view->convention != CudaDerivativeConvention::Force &&
+                                    view->convention != CudaDerivativeConvention::EnergyGradient))
           throw std::invalid_argument("native stationary RSH source convention mismatch");
         const size_t slots[]{native_coulomb_slot, size_t(native_short_exchange_slot),
                              size_t(native_long_exchange_slot)};
@@ -288,9 +292,10 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
           throw std::invalid_argument("duplicate native stationary RSH source");
         owner->integral_stream = stream;
         owner->integral_pending = true;
+        const auto sign = view->convention == CudaDerivativeConvention::Force ? -1.0 : 1.0;
         for (size_t channel = 0; channel < 3; ++channel)
           cuda_check(generativeqc::dft::launch_native_stationary_source_transport(
-              view->values + channel * view->coordinates, view->coordinates, 1, -1.0,
+              view->values + channel * view->coordinates, view->coordinates, 1, sign,
               scientific.sources + slots[channel] * view->coordinates, nullptr,
               scientific.context.error, stream));
         scientific.launches += 3;

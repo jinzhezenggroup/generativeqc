@@ -20,9 +20,9 @@
   ],
   "previous": {
     "path": "manifests/libxc/native-qualification-previous.json.xz",
-    "scope": "last published PR summary before integrating master 910cfc516dfa5a8980b46e484f9646c99d09573d; both parent manifests, previous summaries, snapshots and historical acknowledgements remain recoverable at their exact Git paths in the merge parents. This source-only reconciliation preserves all measured campaign bytes and qualification stages, retains stale historical native evidence, and claims no new current-source qualification",
+    "scope": "Summary before Git-only native-input provenance repair. The source492 manifest, prior upstream summary, snapshot and report remain recoverable in Git492 and both merge parents. Every qualification stage and historical measured source/library identity stays unchanged; no current scientific result is promoted.",
     "sha256": "05d40f4baf56442a20add1de74c97c9c010d9376b4599ebb50d4a661436862e3",
-    "source_commit": "08a0cb05bc5de104a8139450e853fb3ce830f3de"
+    "source_commit": "4921290a8384881a20693283381638310a830519"
   },
   "report": "docs/reference/libxc_qualification.md",
   "schema": "generativeqc.libxc-native-catalog-manifest.v1",

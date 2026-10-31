@@ -3423,12 +3423,16 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
 generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
-    const CudaDerivativeSourceConsumer& consumer, std::string& detail, bool allow_spatial_default,
-    DirectForcePrecisionRequest* precision) {
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail, bool separate_sources,
+    bool allow_spatial_default, DirectForcePrecisionRequest* precision) {
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
     detail = "prepared Direct owner has no retained shell derivative lease";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  if (!separate_sources && spin == FockSpin::Unrestricted) {
+    detail = "total-only resident shell derivatives require restricted spin";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   // Reject capture before entering the failure drain: synchronizing a captured
   // stream would invalidate the caller's graph even though no work was submitted.
@@ -3458,7 +3462,7 @@ generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
     try {
       direct_jk_check(cuda_execution::consume_generated_full_range_energy_derivatives(
           *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
-          exchange_coefficient, consumer, allow_spatial_default, precision));
+          exchange_coefficient, consumer, separate_sources, allow_spatial_default, precision));
     } catch (const generativeqc::Error& error) {
       // Preserve the callback's typed status through the existing provider
       // guard and its failure drain; driver failures are not bad seed input.
@@ -3472,6 +3476,17 @@ generativeqc_status execute_cuda_direct_shell_rsh_energy_derivatives_device(
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail) {
+  // The non-default shell RSH exchange jets failed independent CPU controls
+  // (#2901). Preserve exact omega through the retained general CUDA owner.
+  if (omega != 0.3) {
+    if (!std::isfinite(omega) || omega <= 0.0) {
+      detail = "resident shell RSH derivatives require finite positive omega";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    return execute_cuda_direct_rsh_energy_derivatives_device(
+        plan, spin, coulomb_coefficient, short_exchange_coefficient, long_exchange_coefficient,
+        omega, density, beta, matrix_elements, derivatives, detail);
+  }
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
     detail = "prepared Direct owner has no retained shell derivative lease";
@@ -3504,6 +3519,13 @@ generativeqc_status consume_cuda_direct_shell_rsh_energy_derivatives_device(
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
     const double* density, const double* beta, std::size_t matrix_elements,
     const CudaDerivativeSourceConsumer& consumer, std::string& detail) {
+  // The default composed provider submits full J/K separately and borrows only
+  // this qualified isolated LR shell row. General fused shell RSH sources
+  // remain unqualified; publish the general provider's gradient convention.
+  if (omega != 0.3 || coulomb_coefficient != 0.0 || short_exchange_coefficient != 0.0)
+    return consume_cuda_direct_rsh_energy_derivatives_device(
+        plan, spin, coulomb_coefficient, short_exchange_coefficient, long_exchange_coefficient,
+        omega, density, beta, matrix_elements, consumer, detail);
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
     detail = "prepared Direct owner has no retained shell derivative lease";
@@ -3587,6 +3609,65 @@ static void direct_rsh_derivatives(CudaDirectJkPlan* plan, std::size_t item, dou
         plan->derivative);
     direct_jk_check(cudaGetLastError());
   }
+}
+
+generativeqc_status consume_cuda_direct_rsh_energy_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
+    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail) {
+  if (plan == nullptr || !consumer) {
+    detail = "resident general RSH derivatives require an owner and consumer";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  auto capture_error = cudaSetDevice(plan->device_id);
+  cudaStreamCaptureStatus capture{};
+  if (capture_error == cudaSuccess) capture_error = cudaStreamIsCapturing(plan->stream, &capture);
+  if (capture_error != cudaSuccess) {
+    detail = cudaGetErrorString(capture_error);
+    return source_cuda_status(capture_error);
+  }
+  if (capture != cudaStreamCaptureStatusNone) {
+    detail = "resident general RSH derivatives require an ordinary noncapturing stream";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(plan->diagnostic.batch_size == 1 && plan->diagnostic.derivative_order >= 1 &&
+                          plan->derivative != nullptr,
+                      "resident general RSH derivative capability is unavailable");
+    direct_jk_require(
+        std::isfinite(coulomb_coefficient) && std::isfinite(short_exchange_coefficient) &&
+            std::isfinite(long_exchange_coefficient) && std::isfinite(omega) && omega > 0.0,
+        "nonfinite resident general RSH derivative coefficient");
+    const auto n = plan->diagnostic.nbf;
+    direct_jk_require(density != nullptr && matrix_elements == n * n,
+                      "resident general RSH derivative density shape is invalid");
+    const bool unrestricted = spin == FockSpin::Unrestricted;
+    direct_jk_require(unrestricted ? beta != nullptr : beta == nullptr,
+                      "resident general RSH derivative spin storage is invalid");
+    const auto coordinates = plan->coordinates_per_item;
+    direct_jk_require(plan->coordinate_elements == coordinates,
+                      "resident general RSH derivative rows are not contiguous");
+    runtime::cuda_trace::TraceOperation trace("direct_rsh_force_general_fallback", plan->stream,
+                                              {1, n, 0, true, true});
+    for (unsigned source = 0; source < 3; ++source)
+      direct_jk_check(cudaMemsetAsync(plan->derivative + source * coordinates, 0,
+                                      coordinates * sizeof(double), plan->stream));
+    if (coulomb_coefficient != 0.0 || short_exchange_coefficient != 0.0 ||
+        long_exchange_coefficient != 0.0)
+      direct_rsh_derivatives(plan, 0, coulomb_coefficient, short_exchange_coefficient,
+                             long_exchange_coefficient, unrestricted, omega, density, beta);
+    runtime::cuda_trace::trace_counter("source_channels", 3);
+    runtime::cuda_trace::trace_counter("device_to_host_bytes", 0);
+    runtime::cuda_trace::trace_counter("host_to_device_bytes", 0);
+    try {
+      consumer({CudaDerivativeSourceKind::RangeSeparatedJk,
+                CudaDerivativeConvention::EnergyGradient, plan->device_id,
+                reinterpret_cast<void*>(plan->stream), plan->derivative, coordinates, 3});
+    } catch (const generativeqc::Error& error) {
+      throw DirectJkFailure{error.status(), error.what()};
+    }
+  });
 }
 
 generativeqc_status execute_cuda_direct_rsh_energy_derivatives_device(

@@ -999,11 +999,12 @@ cudaError_t execute_generated_full_range_energy_derivatives(
 cudaError_t consume_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient,
-    const CudaDerivativeSourceConsumer& consumer, bool allow_spatial_default,
+    const CudaDerivativeSourceConsumer& consumer, bool separate_sources, bool allow_spatial_default,
     DirectForcePrecisionRequest* precision) {
-  if (!plan.shared || !consumer) return cudaErrorInvalidValue;
+  if (!plan.shared || !consumer || (!separate_sources && unrestricted))
+    return cudaErrorInvalidValue;
   const auto input_status = validate_generated_full_range_derivative_inputs(
-      plan, unrestricted, beta, coulomb_coefficient, exchange_coefficient, true, false);
+      plan, unrestricted, beta, coulomb_coefficient, exchange_coefficient, separate_sources, false);
   if (input_status != cudaSuccess) return input_status;
   auto& shared = *plan.shared;
   int device{};
@@ -1033,14 +1034,16 @@ cudaError_t consume_generated_full_range_energy_derivatives(
     }
   } drain{shared.stream};
   const auto error = enqueue_generated_full_range_energy_derivatives(
-      plan, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, true,
+      plan, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, separate_sources,
       allow_spatial_default, false, precision);
   if (error != cudaSuccess) return error;
   // Generated Direct kernels publish forces; the stationary source inventory
   // publishes energy derivatives. The consumer retains this explicit sign.
-  consumer({CudaDerivativeSourceKind::FullRangeJk, CudaDerivativeConvention::Force, device,
-            reinterpret_cast<void*>(shared.stream), plan.force,
-            static_cast<std::size_t>(shared.batch.total_atoms) * 3U, 2});
+  consumer({separate_sources ? CudaDerivativeSourceKind::FullRangeJk
+                             : CudaDerivativeSourceKind::FullRangeJkSum,
+            CudaDerivativeConvention::Force, device, reinterpret_cast<void*>(shared.stream),
+            plan.force, static_cast<std::size_t>(shared.batch.total_atoms) * 3U,
+            separate_sources ? 2U : 1U});
   const bool collect = precision && precision->mixed_weighted && precision->collect_work;
   if (collect) {
     auto status = cudaMemcpyAsync(precision->work.data(), plan.force_cursor + 1,

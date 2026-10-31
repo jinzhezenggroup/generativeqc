@@ -2,12 +2,11 @@
 
 > Full historical raw records are recoverable from the [verified Git snapshot](../retention-df-integration/README.md). Restore it before replaying the original raw-record commands. Compact summaries and all production-manifest references remain in this checkout.
 
-The retained `equal-96.json`, `equal-384.json`, and `equal-768.json` controls
-use gzip (96/768 AO) and XZ (384 AO) storage. Decompression reproduces their
-retained JSON bytes. The [storage manifest](storage.json) records the compressed and original byte
-checksums separately from the original scientific receipt checksums in
-`retention.json`. For example, `xz -dc equal-384.json.xz` reads
-the unchanged 384-AO control. No measurement or acceptance gate changed.
+The retained `equal-96.json` and `equal-768.json` controls use gzip;
+`equal-384.json` uses XZ. Decompression reproduces the original JSON bytes.
+The [storage manifest](storage.json) records stored and decoded checksums
+separately from the scientific receipt checksums in `retention.json`.
+For example, `xz -dc equal-384.json.xz` reads the unchanged 384-AO control.
 
 ## Change and scope
 
