@@ -1,0 +1,24 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "ba424c457cff8bfd92ca0df62b42f03593a9197c",
+  "file_count": 3,
+  "total_bytes": 65549,
+  "scope": "Exact preceding DF-projection candidate, including paired PBE repeats. This snapshot preserves its 64-case matrices, original producer identities and scientific qualification; portable scheduling evidence is retained separately. No external publication or measurement relabelling.",
+  "files": [
+    {
+      "path": "benchmarks/results/ecnu-df-projection-20261030/README.md",
+      "bytes": 2767,
+      "sha256": "c7a077cdddfe8865a7e7a0d3a28f0435d19cf4318fa0c6d2d8f625f0d47110fc"
+    },
+    {
+      "path": "benchmarks/results/ecnu-df-projection-20261030/observations.json.xz",
+      "bytes": 61096,
+      "sha256": "8451bf4977ab498e9f4a02f4272e9d9719b944987dcc98870ce62ae610e82fbe"
+    },
+    {
+      "path": "benchmarks/results/ecnu-df-projection-20261030/report.py",
+      "bytes": 1686,
+      "sha256": "247dd0b12fc26f58124dadb9d99687024284e4a323a4e9ab11d1962ff908a7c6"
+    }
+  ]
+}

@@ -168,7 +168,7 @@ def test_dispatch_preserves_domains_order_and_explicit_schedules(
 
 
 @pytest.mark.parametrize("kind", range(3))
-def test_qualified_policy_and_unknown_target_fallback(
+def test_qualified_policy_and_portable_target_selection(
     dispatcher: typing.Any, kind: typing.Any
 ) -> None:
     manifest = json.loads(
@@ -192,7 +192,34 @@ def test_qualified_policy_and_unknown_target_fallback(
     ]
     assert dispatcher(kind)["calls"] == expected
     assert dispatcher(kind, policy="candidate")["calls"] == expected
-    assert dispatcher(kind, architecture=80)["calls"] == [
+    portable = manifest["portable"]
+    portable_choices = {
+        20 * int(row["class"][0]) + 5 * int(row["class"][1]) + int(row["class"][2]): row
+        for row in portable["kernels"]
+    }
+    portable_expected = [
+        [
+            code,
+            SCHEDULES.index(portable_choices[code]["schedule"]),
+            int(portable_choices[code]["lowering"] == "rys"),
+        ]
+        if code in portable_choices
+        else [code, 0, 0]
+        for code in codes
+    ]
+    for architecture in (60, 75, 80, 89, 90, 100, 150):
+        # Portable candidates are executable on any built target, independently
+        # of whether evidence has promoted them for automatic use yet.
+        assert (
+            dispatcher(kind, architecture=architecture, policy="candidate")["calls"]
+            == portable_expected
+        )
+        assert dispatcher(kind, architecture=architecture)["calls"] == (
+            portable_expected
+            if portable["qualified"]
+            else [[code, 0, 0] for code in codes]
+        )
+    assert dispatcher(kind, architecture=0, policy="candidate")["calls"] == [
         [code, 0, 0] for code in codes
     ]
     assert dispatcher(kind, schedule="auto")["calls"] == expected

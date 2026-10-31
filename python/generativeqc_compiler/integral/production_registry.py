@@ -830,6 +830,9 @@ def emit_multi_registry_source(
             force_symbol = (
                 f"generativeqc_launch_{identifier}_generated_{selection.spec.name}"
             )
+            primary_symbol = force_symbol
+            if selection.fock_recurrence is not None:
+                force_symbol = f"generativeqc_launch_{identifier}_force_generated_{selection.spec.name}"
             if _has_force_entrypoint(selection):
                 declarations.append(
                     f'extern "C" cudaError_t {force_symbol}('
@@ -850,7 +853,7 @@ def emit_multi_registry_source(
                 )
                 force_mask |= 1 << shell_class
             if KernelConsumer.FOCK in selection.consumers:
-                fock_symbol = f"{force_symbol}_fock"
+                fock_symbol = f"{primary_symbol}_fock"
                 declarations.append(
                     f'extern "C" cudaError_t {fock_symbol}('
                     "cudaStream_t, bool, unsigned, const void*, "
@@ -864,7 +867,7 @@ def emit_multi_registry_source(
                     f"      return {fock_symbol}({launch_arguments});"
                 )
                 if selection.has_capability(CAPABILITY_MIXED_FOCK):
-                    mixed_fock_symbol = f"{force_symbol}_mixed_fock"
+                    mixed_fock_symbol = f"{primary_symbol}_mixed_fock"
                     declarations.append(
                         f'extern "C" cudaError_t {mixed_fock_symbol}('
                         "cudaStream_t, bool, unsigned, const void*, "
@@ -884,7 +887,7 @@ def emit_multi_registry_source(
                     )
                     mixed_fock_mask |= 1 << shell_class
                 if selection.has_capability(CAPABILITY_STREAMING_FOCK):
-                    streaming_fock_symbol = f"{force_symbol}_streaming_fock"
+                    streaming_fock_symbol = f"{primary_symbol}_streaming_fock"
                     declarations.append(
                         f'extern "C" cudaError_t {streaming_fock_symbol}('
                         "cudaStream_t, bool, unsigned, const void*, "
@@ -899,7 +902,7 @@ def emit_multi_registry_source(
                         f"{streaming_fock_arguments});"
                     )
                     if supports_exchange_work_buckets(selection):
-                        work_symbol = f"{force_symbol}_work_streaming_fock"
+                        work_symbol = f"{primary_symbol}_work_streaming_fock"
                         declarations.append(
                             f'extern "C" cudaError_t {work_symbol}('
                             "cudaStream_t, bool, unsigned, const void*, "
@@ -922,7 +925,14 @@ def emit_multi_registry_source(
                 if selection.fock_route == "streaming":
                     preferred_streaming_fock_mask |= 1 << shell_class
             if selection.resident_force_recurrence is not None:
-                resident_symbol = f"generativeqc_launch_{identifier}_ppps_resident"
+                force_identifier = (
+                    identifier + "_force"
+                    if selection.fock_recurrence is not None
+                    else identifier
+                )
+                resident_symbol = (
+                    f"generativeqc_launch_{force_identifier}_ppps_resident"
+                )
                 declarations.append(
                     f'extern "C" cudaError_t {resident_symbol}('
                     f"{_resident_launch_parameter_declaration()});"

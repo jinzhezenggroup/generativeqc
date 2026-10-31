@@ -12,7 +12,7 @@ from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
-    reason="requires a finite Slurm GPU allocation",
+    reason="requires a finite Slurm or LSF GPU allocation",
 )
 
 
@@ -27,7 +27,7 @@ def test_automatic_single_fitted_projection_replays(
     """
     from pyscf import gto, scf
 
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     for name in (
         "GENERATIVEQC_DF_EXCHANGE",
         "GENERATIVEQC_DF_FINAL_EXCHANGE",
@@ -87,7 +87,7 @@ def test_final_projection_replay_and_geometry(
     """Only singleton RHF may lend U; warm and geometry replays bind fresh states."""
     from pyscf import gto, scf
 
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     case = benchmark_cases()["water-tetramer-def2-svp-spherical"]
     for name, value in {
         "GENERATIVEQC_DF_EXCHANGE": "occupied",

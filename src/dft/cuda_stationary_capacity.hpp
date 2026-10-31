@@ -78,8 +78,7 @@ inline CudaStationaryCapacity cuda_stationary_capacity(
   // order-one map cannot authorize dropping order-two force columns. This
   // crossover is a work estimate, independent of device or functional names.
   const auto dense_work = runtime::size_mul(grid_points, runtime::size_mul(aos, aos));
-  if (binding.model.nonlocal_b == 0 && (binding.ao_jets == 4 || binding.ao_jets == 10) &&
-      dense_work >= (std::size_t{1} << 35)) {
+  if ((binding.ao_jets == 4 || binding.ao_jets == 10) && dense_work >= (std::size_t{1} << 35)) {
     const auto tiles = 1 + (grid_points - 1) / capacity.tile_points;
     const auto offsets = runtime::size_mul(runtime::size_add(tiles, 1), sizeof(std::size_t));
     const auto masks = runtime::size_mul(runtime::size_mul(tiles, runtime::size_add(aos, 31) / 32),
@@ -95,7 +94,7 @@ inline CudaStationaryCapacity cuda_stationary_capacity(
     }
   }
   if (binding.model.nonlocal_b != 0) {
-    const auto pair = nlc::vv10_cuda_device_layout(nonlocal_points, tile_points, true, true);
+    const auto pair = nlc::vv10_cuda_device_layout(nonlocal_points, tile_points, true, true, true);
     capacity.nonlocal_device_bytes = runtime::size_add(
         pair.workspace_bytes,
         runtime::size_add(

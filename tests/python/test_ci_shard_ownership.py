@@ -741,11 +741,11 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
     )
     assert '-o "$RUNNER_TEMP/libnative-fault-record.so"' in preparation
     assert (
-        "&& 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy') && 35 || 30)"
+        "&& 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 35 || 30)"
         in step
     )
     assert (
-        "&& 100 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy') && 45 || 40)"
+        "&& 100 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40)"
         in source
     )
 

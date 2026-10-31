@@ -217,7 +217,7 @@ def test_master_complete_cache_cannot_precede_the_python_seed() -> None:
         ("ci.yml", "python", "core-b", 45),
         ("ci.yml", "python", "core-c", 40),
         ("ci.yml", "python", "uccsd-forces", 40),
-        ("ci.yml", "python", "runtime-heavy", 40),
+        ("ci.yml", "python", "runtime-heavy", 45),
         ("ci.yml", "python", "posthf", 45),
         ("ci.yml", "python", "compiler-heavy", 45),
         ("ci.yml", "python", "ecp-forces", 40),

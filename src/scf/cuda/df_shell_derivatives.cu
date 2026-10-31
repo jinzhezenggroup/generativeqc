@@ -8,10 +8,11 @@
 namespace generativeqc::scf {
 namespace {
 namespace generated = generated_df_shell;
-/** Query a target once per host packet call. The generated manifest owns
- * architecture/class qualification; AO dimensions do not change that kernel
- * capability. Consumer/layout admission remains with the gradient bridge.
- * Unknown targets/classes and explicit legacy controls retain their fallback.
+/** Query a target once per host packet call. The generated manifest prefers
+ * measured target tuning, then portable class qualification; AO dimensions and
+ * device model names do not change mathematical kernel availability. Generated
+ * schedules bound launch resources; consumer/layout admission stays with the
+ * gradient bridge. Unavailable classes and explicit legacy keep their fallback.
  */
 cudaError_t production_target(unsigned& architecture) {
   architecture = 0;

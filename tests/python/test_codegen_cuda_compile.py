@@ -1348,6 +1348,71 @@ def test_ppps_scalar_thread_benchmark_runs_when_nvcc_is_configured(
     )
 
 
+@pytest.mark.parametrize(
+    ("name", "recurrence", "kind", "threads", "tasks"),
+    (
+        ("dpss", "rys3", ScheduleKind.THREAD_TASKS, 32, 32),
+        ("pppp", "rys3", ScheduleKind.SUBGROUP_TASKS, 128, 8),
+        ("ddpp", "rys4", ScheduleKind.SUBGROUP_TASKS, 256, 4),
+    ),
+)
+def test_independent_force_schedule_compiles_with_implicit_fock(
+    tmp_path: Path,
+    name: str,
+    recurrence: str,
+    kind: ScheduleKind,
+    threads: int,
+    tasks: int,
+) -> None:
+    """A Fock companion cannot borrow another force family's private support.
+
+    Compile the complete translation unit: source spelling checks miss absent
+    primitive structs/HRR functions when both consumers happen to use Rys.
+    This is a frontend gate and does not execute or qualify GPU performance.
+    """
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
+    if nvcc is None:
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
+    spec = FUSED_SHELL_SPEC_BY_NAME[name]
+    plan = build_fused_shell_plan(
+        spec,
+        consumers=(KernelConsumer.FOCK, KernelConsumer.FORCE),
+        recurrence=recurrence,
+        target=cuda_target_info(architecture),
+        schedule=ScheduleIR(
+            kind=kind,
+            block_threads=threads,
+            component_tile=spec.component_count,
+            tasks_per_warp=tasks,
+            shared_coulomb=kind != ScheduleKind.THREAD_TASKS,
+            minimum_blocks_per_sm=1,
+        ),
+    )
+    source = tmp_path / f"{name}_independent_force.cu"
+    source.write_text(_PRODUCTION_PRELUDE + emit_shell_class_fused_cuda(spec, plan))
+    result = subprocess.run(
+        [
+            nvcc,
+            "-std=c++20",
+            f"-arch={architecture}",
+            "-I",
+            str(REPOSITORY_ROOT / "src"),
+            "-cubin",
+            str(source),
+            "-o",
+            str(tmp_path / f"{name}.cubin"),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_joint_fock_force_cuda_compiles_when_nvcc_is_configured(
     tmp_path: Path,
 ) -> None:

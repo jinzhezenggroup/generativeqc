@@ -1,6 +1,6 @@
 """Real-device ordering and predicate gates for molecular VV10 admission.
 
-Run with GENERATIVEQC_TEST_WB97MV_CUDA=1 inside a finite Slurm GPU allocation.
+Run with GENERATIVEQC_TEST_WB97MV_CUDA=1 inside a finite Slurm or LSF GPU allocation.
 The direct schedule is a scheduling oracle; independent mathematical/complete
 molecular gates live in the pair-codegen and WB97M-V endpoint tests.
 """
@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.compiler_cache import run_cached_compiler
 from test_nonlocal_signed_weight_kernels import _definition
 
 from tools.generate_nonlocal_pair_native import native_header
@@ -36,14 +37,15 @@ def admission_probe(
 ) -> ct.CDLL:
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
         pytest.skip("explicit real-device qualification required")
-    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID"), (
+        "real GPU tests require Slurm or LSF"
+    )
     import cupy as cp
 
     device = cp.cuda.runtime.getDeviceProperties(0)
     architecture = f"sm_{device['major']}{device['minor']}"
-    compiler, cache = shutil.which("nvcc"), shutil.which("ccache")
-    assert compiler and cache, "nvcc and ccache are required"
-    subprocess.run([cache, "--version"], check=True, capture_output=True)
+    compiler = shutil.which("nvcc")
+    assert compiler, "nvcc is required"
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     dispatch = _definition(
         source, "template <Vv10Variant Variant, bool Features, bool Geometry>"
@@ -165,9 +167,8 @@ extern "C" int run_rvv10_mixed(size_t n,int geometry,int mask,int stage,const do
     )
     # Cache CUDA compilation separately; linking a shared object is not cacheable.
     obj = directory / "probe.o"
-    subprocess.run(
+    compiled = run_cached_compiler(
         [
-            cache,
             compiler,
             "-std=c++17",
             "-O2",
@@ -179,11 +180,10 @@ extern "C" int run_rvv10_mixed(size_t n,int geometry,int mask,int stage,const do
             "-o",
             str(obj),
         ],
-        check=True,
-        capture_output=True,
-        text=True,
         timeout=180,
+        label="VV10 admission probe",
     )
+    assert compiled.returncode == 0, compiled.stderr
     subprocess.run(
         [compiler, "--shared", str(obj), "-o", str(library)],
         check=True,
