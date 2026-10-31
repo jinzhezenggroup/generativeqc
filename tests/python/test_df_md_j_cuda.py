@@ -3,7 +3,7 @@
 This private seam qualifies public-AO charge/projection and replay reset only.
 It also exercises bounded owner setup and changed-density graph replay.
 It is not a production SCF, metric-policy, force, or endpoint performance gate.
-Every real-device execution requires an explicitly enabled finite Slurm job.
+Every real-device execution requires an explicitly enabled finite Slurm/LSF job.
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_TEST_DF_MD_J") != "1"
-    or not os.environ.get("SLURM_JOB_ID"),
-    reason="requires explicit DF MD qualification in a finite Slurm GPU allocation",
+    or not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")),
+    reason="requires explicit DF MD qualification in a finite Slurm/LSF GPU allocation",
 )
 
 
@@ -332,3 +332,105 @@ def test_metric_bounded_sources_preserve_independent_products_and_replay(
     assert float(fields["max_j_omission"]) == 1e-15
     assert float(fields["projection_error_per_primitive"]) > 0
     assert (float(fields["source_norm_limit"]) > 0) == (metric_scale > 0)
+
+
+@pytest.mark.parametrize("spherical", (False, True), ids=("cartesian", "spherical"))
+@pytest.mark.parametrize("angular", ((0, 1), (2, 3), (3, 4), (4, 4)))
+def test_factored_metric_gradient_replay(
+    df_md_probe: Path, tmp_path: Path, spherical: bool, angular: tuple[int, int]
+) -> None:
+    """Signed metric factors match libcint finite differences through g/g.
+
+    Two different auxiliary centers make the force nonzero. The native seam
+    covers fresh/zero/changed captured factors, addition to an existing sink,
+    exact-capacity allocation refusal and no allocations during replay.
+    """
+    import copy
+
+    from pyscf import lib
+
+    from tools.generate_validation_references import pyscf_molecule
+    from tools.generativeqc_validation.df_values import make_df_value_fixture
+
+    lib.num_threads(1)
+    inputs = copy.deepcopy(
+        make_df_value_fixture((0, 0, angular[0]), primitive_lengths=(2, 3, 2)).inputs
+    )
+    inputs["coordinates"].append([-0.24, -0.54, 0.73])
+    inputs["atomic_numbers"].append(1)
+    inputs["charge"] = 0
+    inputs["multiplicity"] = 1
+    extra = copy.deepcopy(inputs["shells"][2])
+    extra["atom_index"] = 3
+    extra["angular_momentum"] = angular[1]
+    extra["primitives"] = [
+        [1.3 * exponent, coefficient] for exponent, coefficient in extra["primitives"]
+    ]
+    inputs["shells"].append(extra)
+    mol, scales, _ = pyscf_molecule(inputs)
+    loc = mol.ao_loc_nr(cart=not spherical)
+    n, a = int(loc[2]), int(loc[4] - loc[2])
+    rng = np.random.default_rng(9041)
+    density, potential = rng.normal(size=(n, n)), rng.normal(size=a)
+    lines = []
+    for shells in (inputs["shells"][:2], inputs["shells"][2:]):
+        lines.append(f"4 {len(shells)} 0 {int(spherical)}")
+        lines.extend("1 " + " ".join(map(str, r)) for r in inputs["coordinates"])
+        for shell in shells:
+            lines.append(
+                f"{shell['atom_index']} {shell['angular_momentum']} {len(shell['primitives'])}"
+            )
+            lines.extend(" ".join(map(str, p)) for p in shell["primitives"])
+    lines.extend((" ".join(map(str, density.ravel())), " ".join(map(str, potential))))
+    output = tmp_path / "metric.bin"
+    run = subprocess.run(
+        [str(df_md_probe), str(output), "--metric-gradient"],
+        input="\n".join(lines) + "\n",
+        text=True,
+        capture_output=True,
+        timeout=90,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    observed = (
+        np.fromfile(output, dtype=np.float64)
+        .reshape(3, a + n * n + 12)[:, -12:]
+        .reshape(3, 4, 3)
+    )
+
+    def energy(atom: int, axis: int, displacement: float) -> float:
+        geometry = mol.atom_coords()
+        geometry[atom, axis] += displacement
+        shifted = mol.copy()
+        shifted.set_geom_(geometry, unit="Bohr")
+        metric = np.empty((a, a))
+        for i, j in product((2, 3), repeat=2):
+            block = shifted.intor_by_shell(
+                "int2c2e_sph" if spherical else "int2c2e_cart", (i, j)
+            )
+            if not spherical:
+                block = (
+                    block
+                    * scales[loc[i] : loc[i + 1], None]
+                    * scales[None, loc[j] : loc[j + 1]]
+                )
+            metric[
+                loc[i] - loc[2] : loc[i + 1] - loc[2],
+                loc[j] - loc[2] : loc[j + 1] - loc[2],
+            ] = block
+        return 0.5 * float(potential @ metric @ potential)
+
+    step = 2e-4
+    gradient = np.empty((4, 3))
+    for atom, axis in product(range(4), range(3)):
+        gradient[atom, axis] = (
+            energy(atom, axis, -2 * step)
+            - 8 * energy(atom, axis, -step)
+            + 8 * energy(atom, axis, step)
+            - energy(atom, axis, 2 * step)
+        ) / (12 * step)
+    assert np.max(abs(gradient)) > 1e-4
+    for value, scale in zip(observed, (1.25, 0.0, 5.0), strict=True):
+        np.testing.assert_allclose(value - 0.25, scale * gradient, atol=3e-8, rtol=3e-8)
+        np.testing.assert_allclose((value - 0.25).sum(axis=0), 0.0, atol=3e-9)
+    np.testing.assert_array_equal(observed[1], 0.25)
