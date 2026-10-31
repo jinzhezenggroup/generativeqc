@@ -57,50 +57,49 @@ no backend-specific correction is applied to the resulting potential.
 
 ## Current execution scope
 
-Automatic point mathematics now has one compiler-owned CPU/CUDA source emitter,
-with the same E/vxc roots, physical-spin layout, and work-domain identity. The
-CUDA point-source validation is not public CUDA XC, molecular SCF, or force
-support: those native execution/resource integration gates remain closed.
-
-The automatic path supports CPU FP64 semilocal energy/SCF. Direct all-electron
-s/p/d contexts also support explicitly requested analytic forces through the
-shared stationary gradient consumer, including UKS and tau meta-GGA. Energy
-remains the default in both one-shot and prepared-batch calls:
+Automatic CPU and CUDA energy/SCF use the common compiler-owned point
+mathematics. Explicit analytic forces execute through the prepared native
+stationary owner, with the selected rho/sigma/tau differential, moving-grid
+partition response, AO-center derivatives, Pulay terms and Coulomb response.
+The installed package must contain the requested provider and derivative artifacts.
+Energy remains the default in one-shot and prepared calls:
 
 ```python
 result = calculator.singlepoint(atoms, properties=("energy", "forces"))
 ```
 
-Forces require the exact selected native point provider and its rho/sigma/tau
-derivatives, moving-grid/partition response, AO-center derivatives, Pulay terms
-and J-only integral response. No functional-specific force formula or reference
-callback is used. The existing bounded CPU force contract applies: at most eight
-atoms, sixteen AOs, 128 primitives, one million grid points, and a 256 MiB
-additional numeric host-workspace cap. Force requests are revalidated and
-rebudgeted before prepared replay; a failed derivative never becomes a successful
-energy-only result.
+CUDA automatic forces currently require strict FP64, device-fused XC,
+all-electron s/p bases, Direct J, and three partition iterations. Prepared replay
+rechecks the current state and resources; a failed force request cannot become a
+successful energy-only result. CPU force admission also follows the current
+native owner and its resource estimate. The historical small Python stationary
+adapter's fixed atom/AO limits do not describe this native path.
 
-Backend-neutral `method_capabilities()` remains conservatively energy-only;
-`Calculator.capabilities` describes the selected context. CUDA, ECP and
-density-fitted automatic forces, Hessians/HVPs, exact exchange, range separation,
-and nonlocal correlation remain outside this automatic force contract.
+Backend-neutral `method_capabilities()` remains conservatively energy-only.
+`Calculator.capabilities` and the installed native preparation boundary describe
+the selected context. Automatic CUDA DF/ECP forces, Fast/mixed force arithmetic,
+and automatic response/Hessian/HVP coverage are not implied by semilocal energy
+or first-force success. In particular, the physical empty-spin particle-birth
+guard remains active; pointwise boundary agreement does not qualify a
+particle-changing molecular continuation.
 
-Independent qualification can be reproduced with the reference-test dependencies
-and a CPU native build:
+The generated [native qualification report](../reference/libxc_qualification.md)
+records the measured family/backend/spin/product counts and exact blockers.
+Its scopes include the executed binary, precision, quadrature, geometries,
+independent reference gates and cold/replay/moved lifecycle. These are optional
+qualification claims, separate from structural selector admission. A compiled
+registration without a molecular receipt is not counted as molecule-qualified.
+
+Recheck the retained evidence against the current checkout without running a
+calculation:
 
 ```console
-PYTHONPATH=python python tools/qualify_libxc_forces.py \
-  --functional GGA_X_APBE --output .cache/libxc-forces/GGA_X_APBE.json
+PYTHONPATH=python:. python tools/check_libxc_native_catalog.py
 ```
 
-The tool reconverges native and pinned PySCF 2.14.0 / Libxc 7.0.0 energies at every
-finite-difference coordinate on the same native quadrature, in both spin layouts
-and all cold/replay/changed-geometry phases. Machine-readable `forces` evidence
-binds the functional/source, binary, method, plan, spin, grid and solver identities;
-incomplete or failing matrices cannot claim endpoint coverage. These receipts are
-qualification data, not a positive public method list. See the
-[generic CPU force decision](../../.agents/notes/implemented/architecture/2026-10-11-automatic-libxc-cpu-forces.md)
-for retained rationale and boundaries.
+The [qualification procedure](../developer/libxc_bulk_capabilities.md#native-endpoint-catalog)
+describes fresh CPU/CUDA campaigns and evidence updates. Independent PySCF
+2.14.0 / Libxc 7.0.0 references are used only by offline qualification tools.
 
 The native method ID used internally is only an ingredient/spin execution
 provider. The scientific identity, component name, Graph, compiler work policy, SCF domain

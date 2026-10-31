@@ -397,3 +397,60 @@ Libxc diagnostic, not the production acceptance target. Bare derivative roots om
 the wrapper and cannot establish the production entry point's status. This bounded
 qualification does not promote the bulk inventory's production-domain or
 public-method capabilities.
+
+## Native endpoint catalog
+
+`tools/qualify_libxc_native_catalog.py` assembles current native measurements;
+`tools/check_libxc_native_catalog.py` revalidates them without loading a library
+or a reference oracle. The manifest is
+`manifests/libxc/native-qualification.json`, and the generated
+[report](../reference/libxc_qualification.md) is the count/coverage authority.
+The ordinary no-evidence capability query still returns intrinsic claims only.
+
+The campaign reuses the CPU force producer and native CUDA force lifecycle
+producer. Its production-domain adapter applies the existing versioned boundary
+cases and unchanged tolerances to the current common native point emitter.
+LDA RKS executes the U1 density worker; the other admitted ingredients use their
+installed P2 differential on equal physical spin coordinates. Historical raw
+bulk candidates are a different domain and cannot substitute for this evidence.
+All numerical, compiled-object, independent-oracle and control receipts retain
+their original identities. Boundary E/vxc success does not qualify response or
+physical empty-spin particle birth.
+
+For a fresh qualified native build, run the following in a finite Slurm GPU
+allocation, preserving the assigned device visibility:
+
+```console
+PYTHONPATH=python:tests/python:. python tools/qualify_libxc_native_catalog.py \
+  --build-dir build/integration --output .artifacts/libxc-catalog \
+  --source-commit "$(git rev-parse HEAD)"
+```
+
+Use `--backend cpu` for a CPU-only campaign. `--name` may be repeated for bounded
+shards. The native build and point probes require a verified compiler cache;
+the receipt checks actual Ninja commands because CMake compilation databases
+can omit compiler launchers. `--build-receipt` permits another machine to execute
+the identical ELF, only after exact binary and source-inventory checks.
+
+The adapter authenticates all loaded point/force descriptor and executable
+owners, both spin layouts, explicit derivative ABI, original scientific gates,
+J-only semantic work, and lifecycle coverage. Endpoint claims intersect the
+existing capability DAG with exact measured geometry, basis, grid, precision and
+Hamiltonian context. Missing prerequisites cannot be borrowed from another
+backend/product/spin. `resolve_context` is an offline evidence lookup; it never
+participates in `Calculator` or native runtime admission.
+
+CI runs the checker directly on retained real receipts and current source
+inputs. Modified importer/Graph/domain/native ABI inputs demote stale evidence;
+missing stages remove dependent claims. Changed build/toolchain or loaded-object
+identity and changed endpoint coverage cannot preserve a stored report. Tests
+also corrupt actual retained numerical rows and execution receipts. Public
+structural default-allow selection is unchanged by these evidence counters.
+
+To publish a deliberate qualification change, retain the previous exact summary,
+regenerate measurements or preserve explicit demotions, and put the exact
+`capability_regressions` tokens in the manifest's `acknowledgements` list. Then
+run `tools/check_libxc_native_catalog.py --write` and the normal checker. Duplicate,
+unknown and stale acknowledgements fail. An acknowledgement documents a lost
+claim; it cannot restore one or manufacture public/response capability. Retain
+only compressed acceptance receipts; build objects and full logs remain local.
