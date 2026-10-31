@@ -701,6 +701,10 @@ typedef struct generativeqc_ks_options {
   double nonlocal_c;
   double nonlocal_coefficient;
   uint64_t nonlocal_maximum_bytes;
+  /** Optional CUDA stationary-force grid tile bound in [1,4096]. Zero inherits tile_points.
+   * This changes force scheduling only: SCF, quadrature and precision are
+   * unchanged. The complete force arena and nonlocal budget still apply. */
+  uint64_t force_tile_points;
 } generativeqc_ks_options;
 
 /** Select a complete build-time MethodIR program, including geometry-only

@@ -36,6 +36,7 @@ generativeqc_ks_options controls() {
   result.angular_azimuth = 11;
   result.partition_iterations = 3;
   result.tile_points = 101;
+  result.force_tile_points = 1024;
   result.coincident_tolerance = 1e-12;
   result.nonlocal_maximum_bytes = 1234567;
   return result;
@@ -75,6 +76,7 @@ void test_complete_catalog() {
                   output.angular_polar == before.angular_polar &&
                   output.angular_azimuth == before.angular_azimuth &&
                   output.tile_points == before.tile_points &&
+                  output.force_tile_points == before.force_tile_points &&
                   output.nonlocal_maximum_bytes == before.nonlocal_maximum_bytes &&
                   output.coincident_tolerance == before.coincident_tolerance,
               "catalog selection changed caller execution policy");

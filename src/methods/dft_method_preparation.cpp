@@ -577,6 +577,9 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
   if (!input.tile_points || input.tile_points > static_cast<std::uint64_t>(INT_MAX))
     throw std::invalid_argument("invalid KS XC tile points");
   options.xc_tile_points = input.tile_points;
+  if (input.force_tile_points > 4096)
+    throw std::invalid_argument("invalid KS stationary force tile points");
+  options.xc_force_tile_points = input.force_tile_points;
   switch (input.xc_execution_schedule) {
     case GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED:
       options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::DeviceFused;
