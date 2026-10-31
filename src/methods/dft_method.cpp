@@ -811,13 +811,17 @@ class KsPreparedState final : public KsSingleOwnerPort {
     try {
       runtime::CpuRetainedCapacity retained(host_numeric_capacity());
       scf::initial_guess::EigenOperation eigen;
+      scf::initial_guess::MatrixProductOperation products;
 #if GENERATIVEQC_HAS_CUDA
       // The prepared CUDA owner already charges its idle solver workspace.
       // Borrow it synchronously rather than running CPU Jacobi for a CUDA seed.
-      if (cuda_) eigen = cuda_->seed_eigen_operation();
+      if (cuda_) {
+        eigen = cuda_->seed_eigen_operation();
+        products = cuda_->seed_product_operation();
+      }
 #endif
       auto density = scf::initial_guess::prepare_preliminary_density(
-          fock_, *options_.preliminary_guess, diagnostic, eigen);
+          fock_, *options_.preliminary_guess, diagnostic, eigen, products);
       diagnostic.preparation_seconds =
           std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
       return density;

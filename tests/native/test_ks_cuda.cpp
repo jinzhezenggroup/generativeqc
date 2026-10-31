@@ -2678,6 +2678,57 @@ std::size_t observe_minao_reference(const char* name, std::size_t) noexcept {
 }
 void finish_minao_reference(std::size_t, int) noexcept {}
 
+void seed_product_case() {
+  // This owner is only a scratch/lifetime fixture: no SCF or reference energy
+  // is computed for the separated H centers. The independent sparse matrix
+  // oracle below exercises every transpose/layout combination at the crossover.
+  const auto system = hydrogens(512, true);
+  const dft::AoBasis basis(system);
+  const auto grid = dft::MolecularGrid::from_cuda(system, {1, 4, 2, 4, 3, 1e-12}, 0);
+  const scf::PreparedFockPlan gpu(system, nullptr, strategy(true, scf::FockBackend::Cuda), 0);
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 128);
+  const auto products = plan.seed_product_operation();
+  require(static_cast<bool>(products), "large CUDA seed lacks its prepared matrix provider");
+  const auto n = basis.nao;
+  Matrix a(n * n), b(n * n);
+  for (std::size_t i = 0; i < n; ++i) {
+    a[i * n + i] = 0.5 + 0.001 * i;
+    if (i + 1 < n) a[i * n + i + 1] = -0.125;
+    for (std::size_t j = 0; j < n; ++j) b[i * n + j] = std::sin(0.1 * i + 0.2 * j);
+  }
+  for (bool ta : {false, true})
+    for (bool tb : {false, true}) {
+      const auto result = products(a, b, n, ta, tb);
+      for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = 0; j < n; ++j) {
+          const auto right = [&](std::size_t k) { return tb ? b[j * n + k] : b[k * n + j]; };
+          double expected = (0.5 + 0.001 * i) * right(i);
+          if (ta && i) expected -= 0.125 * right(i - 1);
+          if (!ta && i + 1 < n) expected -= 0.125 * right(i + 1);
+          require(std::abs(result[i * n + j] - expected) < 1e-12,
+                  "borrowed seed product disagrees with independent sparse oracle");
+        }
+    }
+  bool refused = false;
+  try {
+    (void)products(a, b, n - 1, false, false);
+  } catch (const std::invalid_argument&) {
+    refused = true;
+  }
+  require(refused, "seed product accepted a changed owner dimension");
+  plan.begin(nullptr, false);
+  refused = false;
+  try {
+    (void)products(a, b, n, false, false);
+  } catch (const std::invalid_argument&) {
+    refused = true;
+  }
+  require(refused, "seed product borrowed active iteration storage");
+  std::cout << "CUDA seed products preserve layout, dimensions and idle ownership\n";
+}
+
 void minao_gpu_case() {
   using namespace scf::initial_guess;
   const auto system = water();
@@ -2697,6 +2748,7 @@ void minao_gpu_case() {
   options.max_iterations = 100;
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
   const auto eigen = plan.seed_eigen_operation();
+  require(!plan.seed_product_operation(), "small CUDA seed lost its host-product fallback");
   PreliminaryOptions policy;
   policy.kind = PreliminaryKind::Minao;
   PreliminaryDiagnostic diagnostic;
@@ -2756,6 +2808,10 @@ int main(int argc, char** argv) {
     run();
   };
   try {
+    if (argc == 2 && std::string(argv[1]) == "--seed-products") {
+      run_control("seed_product_case()", [&] { seed_product_case(); });
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--precision-census") {
       for (const auto* selection : std::array<const char*, 3>{nullptr, "0", "1"}) {
         run_control(
@@ -2835,6 +2891,7 @@ int main(int argc, char** argv) {
           << "Native CUDA Fast anchor default, independent oracle and lifetime gates passed\n";
       return 0;
     }
+    run_control("seed_product_case()", [&] { seed_product_case(); });
     run_control("minao_gpu_case()", [&] { minao_gpu_case(); });
     run_control("ks_density_provider_cases()", [&] { ks_density_provider_cases(); });
     run_control("prepared_cuda_fock_seam()", [&] { prepared_cuda_fock_seam(); });

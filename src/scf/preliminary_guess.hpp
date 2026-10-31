@@ -60,12 +60,14 @@ std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
  * MINAO borrows the target's idle eigen operation for overlap, occupation
  * construction and strict admission. Host-scalar HF supplies its native owner;
  * other callers retain their existing default operation when none is supplied.
- * a failing supplied operation never silently retries on the reference backend.
+ * Huckel/MINAO strict admission may also borrow synchronous square products;
+ * the provider-specific density construction remains unchanged. A failing
+ * supplied operation never silently retries on the reference backend.
  */
-std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
-                                                               const PreliminaryOptions& policy,
-                                                               PreliminaryDiagnostic& diagnostic,
-                                                               const EigenOperation& eigen = {});
+std::optional<std::vector<double>> prepare_preliminary_density(
+    const PreparedFockPlan& target, const PreliminaryOptions& policy,
+    PreliminaryDiagnostic& diagnostic, const EigenOperation& eigen = {},
+    const MatrixProductOperation& products = {});
 
 using TargetSolve = std::function<ScfResult(const std::vector<double>*)>;
 /** The callback executes immutable target equations with fresh iterative state.
