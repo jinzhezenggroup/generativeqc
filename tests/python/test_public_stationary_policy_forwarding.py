@@ -26,10 +26,15 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
 
+@pytest.mark.parametrize("force_tile", [None, 1024])
 @pytest.mark.parametrize("composite", [False, True])
 @pytest.mark.parametrize("admitted", [False, True])
 def test_public_force_preserves_admission_and_selected_policy(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, composite: bool, admitted: bool
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    composite: bool,
+    admitted: bool,
+    force_tile: int | None,
 ) -> None:
     class Basis:
         natom, nao = 2, 2
@@ -64,6 +69,10 @@ def test_public_force_preserves_admission_and_selected_policy(
     gradient = np.arange(6.0).reshape(2, 3)
 
     def select(workload: Any) -> Any:
+        assert workload.tile_points == force_tile
+        assert workload.tile_policy == (
+            "budget-auto" if force_tile is None else "fixed"
+        )
         assert workload.device_name == "test execution device"
         assert workload.architecture == target.architecture
         assert workload.composition == ("composite" if composite else "ordinary")
@@ -84,6 +93,7 @@ def test_public_force_preserves_admission_and_selected_policy(
         return {"mode": "admitted"}
 
     def check_options(kwargs: Any) -> None:
+        assert kwargs["tile_points"] == force_tile
         prefix = "active_ao" if composite else "resident_ao"
         assert kwargs[prefix + "_producer"] == decision.producer
         assert kwargs[prefix + "_max_active_fraction"] == decision.max_active_fraction
@@ -142,6 +152,7 @@ def test_public_force_preserves_admission_and_selected_policy(
     monkeypatch.setattr(_composite_precision, "composite_gradient_precision", precision)
     batch = SimpleNamespace(
         _calculator=SimpleNamespace(
+            _ks_options=SimpleNamespace(force_tile_points=force_tile),
             _basis=object(),
             _representation_name="cartesian",
             _density_fitting_mode=0,

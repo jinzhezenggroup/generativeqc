@@ -379,6 +379,7 @@ def test_native_refusal_never_retries_compiler_lowering(
         "struct_size",
         "abi_version",
         "tile_points",
+        "force_tile_points",
         "application_energy_budget",
         "selection",
     ],

@@ -122,3 +122,8 @@ This removes the demonstrated memory cliff without increasing a production cap.
 The larger diagnostic tile remains unpromoted: an automatic force policy still
 needs to preserve explicit tile requests and bound replay storage jointly with
 response. The earlier method-wide reserve still covers raw/truncated consumers.
+
+The subsequent [explicit force-tile interface](../implemented/performance/2026-10-31-independent-force-tiles.md)
+separates a caller's CUDA force bound from SCF tiling while retaining the
+production 16-MiB geometry cap. It does not promote an automatic default or
+supersede the joint replay/response planning constraints above.

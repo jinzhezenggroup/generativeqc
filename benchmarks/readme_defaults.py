@@ -192,9 +192,16 @@ def prepare_inputs(destination: Path) -> None:
         )
 
 
-def native_calculator(method: str, arm: str, mode: str, inputs: Path) -> Any:
-    """Use the public Standard/Fast owner and implicit XC/VV10 defaults."""
-    from generativeqc import Calculator, PrecisionCalculator
+def native_calculator(
+    method: str,
+    arm: str,
+    mode: str,
+    inputs: Path,
+    *,
+    force_tile_points: int | None = None,
+) -> Any:
+    """Use public owners; an explicit force tile preserves scientific defaults."""
+    from generativeqc import Calculator, KsOptions, PrecisionCalculator
 
     options = {
         "method": METHODS[method][0],
@@ -203,6 +210,10 @@ def native_calculator(method: str, arm: str, mode: str, inputs: Path) -> Any:
     }
     if method != "r2scan-3c":
         options["basis"] = "def2-svp"
+    if force_tile_points is not None:
+        if method == "hf":
+            raise ValueError("HF has no stationary XC force tile")
+        options["ks_options"] = KsOptions(force_tile_points=force_tile_points)
     if mode == "df":
         options.update(
             density_fitting="cuda", auxiliary_basis=inputs / f"{method}-auxiliary.json"
@@ -250,6 +261,8 @@ def native_settings(calculator: Any, result: Any) -> dict:
         if ks is not None
         else None,
         "force_grid_response": True if ks is not None else None,
+        "scf_tile_points": ks.tile_points if ks is not None else None,
+        "force_tile_points": ks.force_tile_points if ks is not None else None,
     }
 
 
@@ -261,7 +274,13 @@ def run_native(args: Any, atoms: Any, record: dict, retain: Any) -> None:
 
     cp.cuda.runtime.deviceSynchronize()
     started = perf_counter()
-    calculator = native_calculator(args.method, args.arm, args.mode, args.inputs)
+    calculator = native_calculator(
+        args.method,
+        args.arm,
+        args.mode,
+        args.inputs,
+        force_tile_points=args.force_tile_points,
+    )
     owner = calculator.prepare_batch([atoms], warm_start=True)
     try:
         for repeat in range(args.warm_repeats + 1):
@@ -462,6 +481,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--mode", choices=("direct", "df"), default="direct")
     parser.add_argument("--atoms", type=int, choices=SIZES, default=3)
     parser.add_argument("--warm-repeats", type=int, default=3)
+    parser.add_argument(
+        "--force-tile-points",
+        type=int,
+        help="explicit native CUDA stationary-force bound; preserves SCF and grid defaults",
+    )
     parser.add_argument("--inputs", type=Path, required=True)
     parser.add_argument("--source-revision", required=False)
     parser.add_argument("--output", type=raw_output_path)
@@ -473,6 +497,12 @@ def main(argv: list[str] | None = None) -> None:
         parser.error("measured arms require --method, --output and --source-revision")
     if args.warm_repeats < 1:
         parser.error("warm repeats must be positive")
+    if args.force_tile_points is not None and (
+        not 1 <= args.force_tile_points <= 4096
+        or args.arm == "gpu4pyscf"
+        or args.method == "hf"
+    ):
+        parser.error("force tiles require native KS and a point count in [1,4096]")
     if not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")):
         parser.error("real GPU work requires a finite Slurm or LSF GPU allocation")
     if args.output.exists():
