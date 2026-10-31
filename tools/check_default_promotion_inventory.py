@@ -302,23 +302,19 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
 
 
 def _discover_md_j_default(root: Path) -> dict[str, str]:
-    """Keep the admitted domain and diagnostic opt-out reviewable.
+    """Keep diagnostic controls registered without pinning admission syntax.
 
-    Capacity is enforced by executable owner-budget and rollback probes in
-    test_md_j_resources, not by pinning a private shape-estimate constant.
+    Domain, opt-out behavior, capacity and rollback are enforced by executable
+    probes in test_md_j_resources and test_device_ledger_requested_bytes. A
+    source spelling is not proof that mandatory future owners remain protected.
     """
     relative = Path("src/scf/cuda/direct_jk.cpp")
     source = _read(root / relative)
     if (
         'std::getenv("GENERATIVEQC_DISABLE_MD_J")' not in source
         or 'std::getenv("GENERATIVEQC_MD_J_ENGINE")' not in source
-        or 'std::strcmp(disabled, "1") == 0' not in source
-        or "host.nbf < 8" not in source
-        or "return angular > 2;" not in source
-        or "!resident_source_only && !runtime::active_device_resource_ledger"
-        not in source
     ):
-        raise ValueError("MD-J default admission/opt-out guard drifted")
+        raise ValueError("MD-J default diagnostic control registration drifted")
     return {
         "dft-policy:md-j-default": relative.as_posix(),
         "dft-policy:GENERATIVEQC_DISABLE_MD_J": relative.as_posix(),

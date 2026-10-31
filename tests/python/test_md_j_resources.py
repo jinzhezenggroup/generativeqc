@@ -146,7 +146,8 @@ cudaError_t prepare_md_j_engine_layout(cudaStream_t,MdJView) {
 """
 
 MD_DRIVER = r"""
-int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char* disabled) {
+int exercise(bool resident_source_only,bool ledger,bool complete,bool headroom,
+             unsigned domain,int stage,int kind,const char* disabled) {
   assert(live.empty());
   runtime::active_device_resource_ledger=ledger;
   if(disabled) setenv("GENERATIVEQC_DISABLE_MD_J",disabled,1);
@@ -157,7 +158,13 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
     CudaDirectJkPlan owner; auto* plan=&owner;
     allocate(owner,8);
     HostBatch host;
+    if(domain==1) host.nbf=7;
+    if(domain==2) host.shell_angular.back()=3;
     std::size_t budget=128U<<20;
+    const bool optional_coulomb=ledger && complete;
+    // Supply the independently tested unpromised-capacity boundary to this
+    // allocation/failure probe; it executes production MD preparation below.
+    const auto optional_available=[&] { return headroom ? budget : 0; };
     unsigned derivative_order=1;
     std::string detail="";
     auto upload=[&](const void* source,std::size_t bytes) {
@@ -174,7 +181,7 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
     } catch(const DirectJkFailure& f) {
       propagated=true; assert(f.status!=GENERATIVEQC_STATUS_OUT_OF_MEMORY);
     }
-    const bool eligible=!resident_source_only && !ledger &&
+    const bool eligible=!resident_source_only && (!ledger || complete) && headroom && domain==0 &&
                         !(disabled && std::strcmp(disabled,"1")==0);
     const bool faulted=stage>=0 && allocation_index>stage;
     assert(eligible || allocation_index==0);
@@ -207,9 +214,15 @@ int main() {
     for(const char* disabled:{static_cast<const char*>(nullptr),"1","0"}) {
       // The same construction path is revisited after ledger binding/unbinding.
       for(bool ledger:{false,true,true,false}) {
-        const auto allocations=exercise(resident_source_only,ledger,-1,1,disabled);
-        for(int stage=0;stage<allocations;++stage)
-          for(int kind:{0,1,3,6}) exercise(resident_source_only,ledger,stage,kind,disabled);
+        for(bool complete:{false,true}) for(bool headroom:{false,true}) {
+          for(unsigned domain:{0U,1U,2U}) {
+            const auto allocations=exercise(resident_source_only,ledger,complete,headroom,
+                                            domain,-1,1,disabled);
+            for(int stage=0;stage<allocations;++stage)
+              for(int kind:{0,1,3,6}) exercise(resident_source_only,ledger,complete,headroom,
+                                              domain,stage,kind,disabled);
+          }
+        }
       }
     }
   }
