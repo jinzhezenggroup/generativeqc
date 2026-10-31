@@ -139,7 +139,11 @@ def test_retry_seams_keep_preparation_opt_in_and_raw_seed_admission() -> None:
         "admissible_minao_density(system, ints, x, projected.density, eigen)"
         in preparation
     )
-    assert "admit_preliminary_density(target, std::move(density), eigen)" in preparation
+    assert "solver::validate_seed(ints.overlap, density, ints.nbf," in preparation
+    assert (
+        "{static_cast<unsigned>(system.electron_count)}, 2.0, eigen, products)"
+        in preparation
+    )
     assert "symmetric_overlap(ints.overlap, ints.nbf, eigen)" in preparation
 
 
@@ -151,8 +155,12 @@ def test_cuda_minao_borrows_owner_eigen_operation() -> None:
         "  std::optional<std::vector<double>> prepare_cold_initial_guess",
         "\n  void invalidate_result()",
     )
-    assert "if (cuda_) eigen = cuda_->seed_eigen_operation();" in preparation
-    assert "fock_, *options_.preliminary_guess, diagnostic, eigen" in preparation
+    borrowed = between(preparation, "if (cuda_) {", "\n      }")
+    assert "eigen = cuda_->seed_eigen_operation();" in borrowed
+    assert "products = cuda_->seed_product_operation();" in borrowed
+    assert (
+        "fock_, *options_.preliminary_guess, diagnostic, eigen, products" in preparation
+    )
     cuda = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     admission = between(cuda, "  std::vector<double> seed(", "\n  /** Construct X")
     assert "return seed_eigen(matrix, dimension);" in admission
