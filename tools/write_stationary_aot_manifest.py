@@ -40,7 +40,6 @@ from generativeqc_compiler.method.stationary_cuda import (
     stationary_aot_profile_weight_programs,
 )
 
-
 from tools.write_stationary_aot_reference import REFERENCE_SCHEMA
 
 
@@ -120,6 +119,7 @@ def _expected_component_sources(
         )
     )
     return wrapper, primitive_hashes
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)

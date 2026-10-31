@@ -97,12 +97,15 @@ def test_manifest_uses_independent_reference_without_relowering_per_profile(
 def test_cmake_recomputes_reference_once_and_validates_every_manifest() -> None:
     cmake = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text()
     assert cmake.count("NAME generativeqc_stationary_expected_primitives_codegen") == 1
-    assert cmake.count(
-        '--expected-primitives "${_generativeqc_stationary_expected_primitives}"'
-    ) == 2
-    assert cmake.count(
-        '          "${_generativeqc_stationary_expected_primitives}"'
-    ) == 2
+    assert (
+        cmake.count(
+            '--expected-primitives "${_generativeqc_stationary_expected_primitives}"'
+        )
+        == 2
+    )
+    assert (
+        cmake.count('          "${_generativeqc_stationary_expected_primitives}"') == 2
+    )
     assert "DEPENDS ${_generativeqc_stationary_contract_inputs}" in cmake
     identity = (ROOT / "cmake/GenerativeQCSourceIdentity.json").read_text()
     assert "tools/write_stationary_aot_reference.py" in identity
