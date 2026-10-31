@@ -86,6 +86,10 @@ struct DeviceCapacityPromise {
   std::shared_ptr<DeviceResourceLedger> ledger;
   std::size_t remaining{};
   bool open{true};
+  /** Complete Direct D4 owners may prepare optional Coulomb storage outside
+   * this promise. The flag is authority to try, never permission to spend
+   * mandatory credit or another owner's reservation. */
+  bool optional_direct_coulomb{};
 };
 
 struct DeviceAllocationOwner {
@@ -265,8 +269,10 @@ class DeviceCapacityReservation {
    * returns no promise and leaves the incumbent unpromised path available.
    * Test and charge are atomic with other owners sharing this ledger. */
   static std::unique_ptr<DeviceCapacityReservation> try_create(
-      std::shared_ptr<DeviceResourceLedger> ledger, std::size_t bytes) {
+      std::shared_ptr<DeviceResourceLedger> ledger, std::size_t bytes,
+      bool optional_direct_coulomb = false) {
     auto result = std::make_unique<DeviceCapacityReservation>(std::move(ledger), 0);
+    result->promise_->optional_direct_coulomb = optional_direct_coulomb;
     bool admitted = false;
     {
       std::lock_guard<std::mutex> lock(device_resource_mutex);

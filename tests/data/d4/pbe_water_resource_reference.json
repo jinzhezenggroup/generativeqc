@@ -1,0 +1,96 @@
+{
+  "oracle": "independent dftd4 Python API",
+  "version": "4.3.1",
+  "numbers": [
+    8,
+    1,
+    1
+  ],
+  "positions": [
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      1.8,
+      0.0,
+      0.0
+    ],
+    [
+      -0.45,
+      1.75,
+      0.0
+    ]
+  ],
+  "total_charge": 0.0,
+  "parameters": {
+    "s6": 1.0,
+    "s8": 0.95948085,
+    "s9": 1.0,
+    "a1": 0.38574991,
+    "a2": 4.80688534,
+    "alp": 16.0
+  },
+  "charge_scaling": {
+    "ga": 3.0,
+    "gc": 2.0,
+    "wf": 6.0
+  },
+  "cutoffs_bohr": {
+    "disp2": 60.0,
+    "disp3": 40.0,
+    "cn": 30.0
+  },
+  "energy": -0.00019484166024843835,
+  "gradient": [
+    [
+      3.6491356127036796e-05,
+      4.6819018114444474e-05,
+      0.0
+    ],
+    [
+      -3.717157546607511e-05,
+      -8.834744136970197e-06,
+      0.0
+    ],
+    [
+      6.802193390383267e-07,
+      -3.7984273977474294e-05,
+      0.0
+    ]
+  ],
+  "units": {
+    "positions": "bohr",
+    "energy": "hartree",
+    "gradient": "hartree/bohr"
+  },
+  "input_science": "PBE D4(BJ)-EEQ with ATM; no GenerativeQC scientific computation",
+  "generator_sha256": "20eadb71e7653dfba758dcbcfee89784017abe81c20f6c90972a086ecd98cea5",
+  "oracle_binaries": [
+    {
+      "path": "/home/jzzeng/codes/qc-2227-precision-policy-20261029/artifacts/reference-python-v2/dftd4/_libdftd4.cpython-313-x86_64-linux-gnu.so",
+      "sha256": "357d6d6268840a9ccbab8996d22d204be835eabc18fcf30f9fb577f52e41c987"
+    },
+    {
+      "path": "/home/jzzeng/codes/qc-2227-precision-policy-20261029/artifacts/reference-python-v2/dftd4.libs/libblas-86127935.so.3.8.0",
+      "sha256": "bdd4c248f6d49c392589c3e39a5288014f0d172a385241317315558e24797040"
+    },
+    {
+      "path": "/home/jzzeng/codes/qc-2227-precision-policy-20261029/artifacts/reference-python-v2/dftd4.libs/libgfortran-e2a3c254.so.5.0.0",
+      "sha256": "49aa50442c02fc39943630b283a4eb1072fc167a8b0412934a69d41fc0d386e9"
+    },
+    {
+      "path": "/home/jzzeng/codes/qc-2227-precision-policy-20261029/artifacts/reference-python-v2/dftd4.libs/libgomp-6a29c32d.so.1.0.0",
+      "sha256": "2aa037784caec5079de4f23a7d526a62bcc03a3fb98ac94031345daabe21c465"
+    },
+    {
+      "path": "/home/jzzeng/codes/qc-2227-precision-policy-20261029/artifacts/reference-python-v2/dftd4.libs/liblapack-f8948d82.so.3.8.0",
+      "sha256": "d8efb2837249e2c6ed6cf8854a9ad3d2bf16e77dced426b7d34716d8344a6db6"
+    },
+    {
+      "path": "/home/jzzeng/codes/qc-2227-precision-policy-20261029/artifacts/reference-python-v2/dftd4.libs/libquadmath-80a2a415.so.0.0.0",
+      "sha256": "8a70d17e6117e1b732a9e77b7f433867b6a2093472c71b6680cb60c59cf866da"
+    }
+  ]
+}

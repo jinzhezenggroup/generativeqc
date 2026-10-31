@@ -17,10 +17,10 @@
       "verified_against_git_revision": "9e6e2aec0953c307bae96215121e78e9d64e03b1"
     },
     "equal-384.json": {
-      "path": "equal-384.json.gz",
-      "compression": "gzip",
-      "stored_bytes": 10676,
-      "stored_sha256": "f33ff528451908bbfef4a1b20d12e1c829e8792d7e71061e7593b1e3d9143fbd",
+      "path": "equal-384.json.xz",
+      "compression": "xz",
+      "stored_bytes": 7864,
+      "stored_sha256": "df573bc3c948b075c53ff031ed19dcd32e110b6762c0b045a638f35d1c8ef9ad",
       "decoded_sha256": "eb71153d3f1a48670ff3038e3e6ea441578ab5104e47f39c91d788e8ea492fa4",
       "decoded_bytes": 71950,
       "verified_against_git_revision": "9e6e2aec0953c307bae96215121e78e9d64e03b1"

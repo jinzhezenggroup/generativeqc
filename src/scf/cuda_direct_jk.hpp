@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -47,7 +48,8 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
  * plus the exact bounded generic fallback. A retained derivative order also
  * reserves the full-range shell J/K density/force lease used by stationary
  * consumers. Counts are totals as above. Optional MD capacity is requested only
- * by private unbudgeted KS preparation; public ledger plans retain normal J.
+ * by private unbudgeted KS preparation or an authorized complete D4 promise.
+ * Optional allocations never consume the promise's mandatory credit.
  * When shell metadata is available, cartesian_nao supplies the exact per-item
  * Cartesian dimension. Zero retains the conservative shape-only envelope.
  */
@@ -56,6 +58,11 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
                                              unsigned derivative_order = 0,
                                              bool reserve_optional_md = false,
                                              std::size_t cartesian_nao = 0);
+
+/** Conservative host/device headroom for an individual through-d MD-J owner.
+ * This allocation-free query shares the native optional storage ceiling. Host
+ * bytes cover value metadata and staging, not allocator overhead or RSS. */
+std::array<std::size_t, 2> cuda_direct_coulomb_optional_capacity(std::size_t nao);
 
 /** Bind normalized, homogeneous public AO dimensions and coordinate counts.
  * Each item retains its own shell/geometry metadata. A geometry or basis change

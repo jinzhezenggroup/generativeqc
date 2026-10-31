@@ -901,7 +901,6 @@ def test_new_response_option_must_be_registered(
 @pytest.mark.parametrize(
     "relative,before,after",
     [
-        ("src/scf/cuda/direct_jk.cpp", "host.nbf < 8", "host.nbf < 4"),
         (
             "src/scf/cuda/direct_jk.cpp",
             'std::getenv("GENERATIVEQC_MD_J_ENGINE")',
@@ -914,17 +913,12 @@ def test_new_response_option_must_be_registered(
         ),
         (
             "src/scf/cuda/direct_jk.cpp",
-            "md_ready = !resident_source_only && !runtime::active_device_resource_ledger",
-            "md_ready = !resident_source_only",
-        ),
-        (
-            "src/scf/cuda/direct_jk.cpp",
-            'std::strcmp(disabled, "1") == 0',
-            'std::strcmp(disabled, "0") == 0',
+            'std::getenv("GENERATIVEQC_DISABLE_MD_J")',
+            'std::getenv("GENERATIVEQC_DISABLE_MD_J_RENAMED")',
         ),
     ],
 )
-def test_md_j_default_domain_and_opt_out_are_audited(
+def test_md_j_diagnostic_controls_remain_registered(
     tmp_path: Path, relative: str, before: str, after: str
 ) -> None:
     payload = _payload()

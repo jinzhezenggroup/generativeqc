@@ -50,6 +50,14 @@ uses scalar layout queries from the library selected by `GENERATIVEQC_LIBRARY`,
 loaded without profile selection or a device query. Neither estimator chooses a
 GPU by free memory.
 
+CUDA resource identities retain the binary digest of an already-loaded native
+image across frontend wrappers. A bounded process-local cache holds the actual
+library owners, preventing loader-handle reuse from aliasing another image;
+per-wrapper profile identity stays separate. New images and metadata-only
+adapters without loader ownership are hashed independently. Replacing a library
+path does not change the identity of an image already loaded from that path;
+in-place modification of loaded library bytes is unsupported.
+
 ## Native composition authority
 
 Hückel preparation planning queries the selected native library's
@@ -240,8 +248,11 @@ point batches can spend only capacity left after those promises. The dense XC
 fallback remains reserved even while optional storage is live. Shared resource
 handles retain separate promises for separate prepared owners.
 
+Individual legacy/named D4 corrections add their allocator-owned retained
+device capacity to the same fleet promise. Their tables and force workspace
+remain protected through warm replay, failed rebuild and later fleet preparation.
 Selected external inventories retain the dense/single-tile path. Preliminary
-guesses, range/nonlocal corrections, legacy D4 and all named D3/D4 corrections,
+guesses, range/nonlocal corrections, named D3 and composite gCP corrections,
 automatic/generated-split programs,
 explicit incremental J/K, application precision budgets and experimental PBE
 point precision retain incumbent admission. A native bound that does not fit
@@ -425,6 +436,39 @@ checks local budget eligibility; global declared-capacity selection uses the
 separately discovered native composition owner. The prepared native D3 owner
 continues to enforce its local retained-byte cap. These numeric capacities are
 not process RSS receipts or new CUDA scientific qualification.
+
+Named D4(BJ)-EEQ global planning requires the native
+`generativeqc_ks_d4_resource_query_v1` protocol and an admitted complete KS program.
+It sums the actual per-system correction owners, including replicated tables,
+and uses the largest individual retained capacity times the fleet size for the
+existing equal-share dispersion cap. The standalone D4 worker schedule and this
+query share one native sizing authority. CPU plans also reserve the native-sized
+standalone correction-gradient owner for an electronic force compatibility path;
+CUDA plans require the existing native stationary-capacity context. Selected
+native failures propagate. Missing inventory support leaves ordinary D4 available
+but rejects global D4 plans. Composite D4/gCP and electronic domains already
+excluded by KS planning remain unsupported.
+
+Complete native CUDA D4 batches retain their validated electronic resource request
+across replay. The scientific model and remaining planning inputs, including the
+effective KS profile and process environment, are checked before reuse. Changed
+inputs trigger full request validation against the prepared plan. External plans
+are validated before preparation; CPU force rebudgeting remains output-aware.
+
+For bounded strict-FP64 all-electron s/p/d Direct PBE/PBE0-D4 CUDA contexts, the additive
+`generativeqc_resource_ks_d4_optional_cuda_v1` query supplies an optional XC
+headroom candidate. It reserves mapped AO arenas, spatial copies, the native
+default point-panel ceiling and optional MD-J headroom concurrently. MD-J and
+optional component reuse share the existing 128 MiB native device ceiling and
+can use only unpromised capacity after the complete mandatory fleet is reserved.
+Their host staging and value metadata have a separate conservative envelope.
+Other public resource owners retain their original direct Coulomb admission.
+This is a conservative declared
+capacity, not a measured allocation peak. The selected complete KS+D4 owner
+receives a numeric cap containing only its own estimates, including provider
+allowances that native preparation converts into retained leases. It cannot
+spend unrelated global-plan capacity. Original selected-inventory candidates
+remain available when the extra headroom does not fit or the protocol is absent.
 
 | Provider | Retained storage | Temporary peak and execution schedule |
 | --- | --- | --- |

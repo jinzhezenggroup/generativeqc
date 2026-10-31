@@ -1,0 +1,23 @@
+{
+  "cpu-samples.json.xz": {
+    "git_commit": "d1387a772118e1c927f84c605447320a6aeb601c",
+    "git_path": "benchmarks/results/seed-capacity-20261029/cpu-samples.json.xz",
+    "sha256": "a9ab67cebd7ef0a8dc083958f6f03fb3a19634ac96c2b1c5228ca410ab3dc79a",
+    "bytes": 32740,
+    "scope": "Final production 115cc3c72, CPU 1792-call independently audited matrix."
+  },
+  "cuda-samples.json.xz": {
+    "git_commit": "647b6daa04963ff946a0ac2703b8e12c088ad502",
+    "git_path": "benchmarks/results/seed-capacity-20261029/cuda-samples.json.xz",
+    "sha256": "f3fbdb9757f107e108c13030ed38bed4340ee689dfa6375707f95f88bb86767c",
+    "bytes": 78640,
+    "scope": "Final source 115cc3c72, Slurm 14843, 1792-call audited CUDA matrix."
+  },
+  "controls.json.xz": {
+    "git_commit": "bab21a22a06a62c374f2429dde06e0e82018a987",
+    "git_path": "benchmarks/results/seed-capacity-20261029/controls.json.xz",
+    "sha256": "93eac26f89593bf76744e2b28f4545703bed4e88f06a84c3bc3e48ae8d95381b",
+    "bytes": 39368,
+    "scope": "Original accepted qualification payload; recover exact bytes from existing Git history."
+  }
+}

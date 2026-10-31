@@ -44,23 +44,29 @@
   "receipts": {
     "receipts.json.xz": {
       "sha256": "d2e465c12b079aebcf6acc8c9a2086f84a668381890e00fc58051ced6d875a1d",
-      "bytes": 12644
+      "bytes": 12644,
+      "git_commit": "162ea8332179af8e2974562e30ae92f284bcc4f8",
+      "git_path": "benchmarks/results/ks-d3-resources-20261028/integrated/receipts.json.xz"
     },
     "profile-summary.json": {
       "sha256": "be423ef86b92bec688b6fc525a41f99605b9b898be496f30b6ab94c44c055680",
       "bytes": 652
     },
     "cpu-samples.json.xz": {
-      "storage": "../endpoint-samples.json.xz",
       "member": "integrated/cpu-samples.json.xz",
       "uncompressed_sha256": "540d32bba90ab67c7be4315455a88046c75778d9cde56024d39b2b54c002cbd7",
-      "historical_compressed_sha256": "746129ce6c8c22804af0521e09351ad7cbe1c8cef3755234c9e88aac020ef9bd"
+      "historical_compressed_sha256": "746129ce6c8c22804af0521e09351ad7cbe1c8cef3755234c9e88aac020ef9bd",
+      "git_commit": "162ea8332179af8e2974562e30ae92f284bcc4f8",
+      "git_path": "benchmarks/results/ks-d3-resources-20261028/endpoint-samples.json.xz",
+      "sha256": "b438bb8162524c0fb3c7b6275da4a4567017ce973fd16cf30cec8f528566fba1"
     },
     "cuda-samples.json.xz": {
-      "storage": "../endpoint-samples.json.xz",
       "member": "integrated/cuda-samples.json.xz",
       "uncompressed_sha256": "7b145ebeca268c3b79486757d111ab7fd7a18cecfc9db2b8689d3fdd1c9b3129",
-      "historical_compressed_sha256": "dfe83880ced1896727c095f5008be4ebde8d35064c70fe7980ba128402d69f91"
+      "historical_compressed_sha256": "dfe83880ced1896727c095f5008be4ebde8d35064c70fe7980ba128402d69f91",
+      "git_commit": "162ea8332179af8e2974562e30ae92f284bcc4f8",
+      "git_path": "benchmarks/results/ks-d3-resources-20261028/endpoint-samples.json.xz",
+      "sha256": "b438bb8162524c0fb3c7b6275da4a4567017ce973fd16cf30cec8f528566fba1"
     }
   },
   "sample_storage_sha256": "b438bb8162524c0fb3c7b6275da4a4567017ce973fd16cf30cec8f528566fba1"
