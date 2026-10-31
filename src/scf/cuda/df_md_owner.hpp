@@ -71,4 +71,14 @@ cudaError_t cuda_df_md_three_center_gradient(CudaDfMdOwner* owner, const double*
                                              const double* potential, double coefficient,
                                              double* gradient);
 
+/** Add (coefficient / 2) * sum_PQ v_P v_Q d(P|Q)/dR to an existing
+ * device gradient. Both metric orientations are identical after exchanging
+ * P/Q, so one raised auxiliary contraction supplies their combined derivative.
+ * Refreshes the caller's signed potential on every replay, allocates nothing,
+ * and reuses the auxiliary response storage after three-center contraction.
+ * This is a full-rank pure-Coulomb response consumer, not a general metric
+ * weight matrix or an exchange/truncated-metric approximation. */
+cudaError_t cuda_df_md_metric_gradient(CudaDfMdOwner* owner, const double* potential,
+                                       double coefficient, double* gradient);
+
 }  // namespace generativeqc::scf::cuda_execution

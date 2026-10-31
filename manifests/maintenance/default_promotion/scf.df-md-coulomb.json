@@ -14,12 +14,14 @@
     "src/scf/cuda/df_coulomb.cpp",
     ".agents/notes/proposed/2026-10-22-df-consumer-work-gap.md"
   ],
-  "rationale": "Automatic pure-J Hermite contractions replace dense three-center regeneration for a fresh single-system streamed full-rank plan with sufficient remaining value capacity. The same source owner recomputes current-density response charge and contracts three-center atom derivatives; metric response remains in the existing bridge. Resident factors, unsupported angular domains, rank truncation and bounded capacity refusals retain their existing paths. Explicit 0 restores raw regeneration. Independent angular, metric, force, geometry/replay, sanitizer and complete cold/warm endpoints qualify the bounded default.",
+  "rationale": "Automatic pure-J Hermite contractions replace dense three-center regeneration for a fresh single-system streamed full-rank plan with sufficient remaining value capacity. The same source owner recomputes current-density response charge and contracts three-center atom derivatives. Full-rank pure-J response also contracts the factored metric cotangent from the current solved potential with the same generated Hermite algebra; general matrix weights retain the existing bridge. Resident factors, unsupported angular domains, rank truncation and bounded capacity refusals retain their existing paths. Explicit 0 restores raw regeneration. Independent angular, metric, force, geometry/replay, sanitizer and complete cold/warm endpoints qualify the bounded default.",
   "revisit_condition": "Renew source-matched endpoint, resource, independent numerical and lifetime qualification before broadening residency, angular domains or screening. Keep the optional owner inside the existing value/response allowance and preserve rank/capacity fallbacks; explicit resource changes are not default timing evidence.",
   "evidence": [
     "tests/python/test_df_md_plan_cuda.py",
     "tests/python/test_df_md_endpoint_cuda.py",
     "docs/developer/df_packed_storage.md",
-    "note:.agents/notes/implemented/performance/2026-10-22-default-df-hermite-and-xc-proposals.md"
+    "note:.agents/notes/implemented/performance/2026-10-22-default-df-hermite-and-xc-proposals.md",
+    "tests/python/test_df_md_j_cuda.py",
+    ".agents/notes/implemented/performance/2026-10-31-portable-factored-df-response.md"
   ]
 }
