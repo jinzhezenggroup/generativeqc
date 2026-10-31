@@ -600,6 +600,38 @@ numerical work and cannot qualify a method or replace an explicit observable
 audit. The companion `generativeqc_precision_controls_query_v1` selects the
 incumbent budget-Fock SCF controls from qualified model traits and preserves
 explicit caller ceilings. Availability still comes from the Direct capability
-or the fitted model qualification owner. Python retains other solver defaults,
-model-gradient qualification, candidate/auditor execution and seed lifetimes. Missing additive symbols retain
+or the fitted model qualification owner. Python retains model-gradient
+qualification, candidate/auditor execution and independent seed-history
+selection. Missing additive symbols retain
 compatibility; a selected native query failure propagates.
+
+Default SCF convergence controls are queried through
+`generativeqc_scf_defaults_query_v1` in `<generativeqc/scf_defaults.h>`. The native
+method layer uses the generated complete-model catalog and the existing default-grid
+owner for its scoped CUDA policy. Python transports the already selected model,
+backend, ECP and grid metadata; it does not repeat model qualification. Explicit
+caller controls and native physical final-state checks are unchanged. Missing
+additive support retains the explicit older-library policy; a selected native
+failure cannot retry Python selection. This query does not move the precision
+candidate/auditor execution or their independent seed lifetimes.
+Each Calculator may retain one copied metadata answer keyed by every consumed
+input and the selected native query; returned control dictionaries are detached.
+
+Prepared precision audits query numeric seed staging bounds through
+`generativeqc_batch_query_warm_seed_capacity_v1` in `<generativeqc/warm_seed.h>`.
+The existing prepared warm-state owner supplies density dimensions, including
+spin and AO representation; ordered atom counts supply coordinate capacity.
+The query includes every slot without materializing resident densities, so
+budget refusal can precede any seed export. Native snapshots then own immutable
+host density/coordinate arrays independently of the supplying batch and context.
+`generativeqc_batch_capture_warm_seeds_v1` checks the all-slot envelope before
+materialization; `generativeqc_batch_restore_warm_seeds_v1` reuses the target's
+physical overlap/occupation validator without running SCF or changing updates.
+Borrowed diagnostic views expire with the snapshot; Python exposes only detached
+diagnostic copies. Missing capture support alone retains descriptor compatibility.
+
+Python retains same-model eligibility, validation reservations, metadata and
+separate candidate/auditor history selection. A snapshot is not a cross-model
+projection or admission token, and no auditor seed enters candidate history.
+Numeric bounds exclude descriptor/allocator overhead, validation scratch and
+opaque provider memory. Only absent capacity support uses topology compatibility.

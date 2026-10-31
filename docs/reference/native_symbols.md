@@ -226,6 +226,12 @@ capability authorities, serialization, and status handling.
 - [generativeqc::KsComposition::prepare](#native-cpp-generativeqc-kscomposition-prepare)
 - [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
 - [generativeqc_precision_controls_query_v1](#native-c-generativeqc-precision-controls-query-v1)
+- [generativeqc_scf_defaults_query_v1](#native-c-generativeqc-scf-defaults-query-v1)
+- [generativeqc_batch_query_warm_seed_capacity_v1](#native-c-generativeqc-batch-query-warm-seed-capacity-v1)
+- [generativeqc_batch_capture_warm_seeds_v1](#native-c-generativeqc-batch-capture-warm-seeds-v1)
+- [generativeqc_batch_restore_warm_seeds_v1](#native-c-generativeqc-batch-restore-warm-seeds-v1)
+- [generativeqc_warm_seed_snapshot_read_v1](#native-c-generativeqc-warm-seed-snapshot-read-v1)
+- [generativeqc_warm_seed_snapshot_destroy](#native-c-generativeqc-warm-seed-snapshot-destroy)
 
 (native-c-generativeqc-ks-options-version)=
 ## generativeqc_ks_options_version
@@ -5990,3 +5996,164 @@ This neither admits an arithmetic provider nor supplies an observable-error proo
 
 **Units.** Energy allowance is Eh; force allowances are Eh/bohr; controls use existing
 native SCF units. Explicit tighter caller controls remain unchanged.
+
+(native-c-generativeqc-scf-defaults-query-v1)=
+## generativeqc_scf_defaults_query_v1
+
+Source: [scf_defaults.h](../../include/generativeqc/scf_defaults.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_scf_defaults_query_v1 ( const generativeqc_scf_defaults_context_v1 * context , const generativeqc_ks_options * ks_options , const char * model_identity , size_t model_identity_size , generativeqc_scf_defaults_v1 * output ) ;
+```
+
+**Behavior.** Query shared versioned default SCF convergence controls.
+
+**Inputs.** Nonnull versioned context and output; optional KS descriptor and complete
+lowercase 64-byte MethodIR identity. A missing identity cannot qualify KS defaults.
+KS grid fields, dense element radii and XC schedule are inspected; other descriptor
+fields are outside this metadata query. A null KS descriptor denotes a non-KS model.
+
+**Outputs.** Transactionally writes policy version 1, three tolerances, and whether the
+qualified CUDA default policy applied. CPU/ECP/other models retain strict defaults.
+
+**Errors.** INVALID_ARGUMENT for invalid backend/flags, malformed identity or grid data;
+ABI_MISMATCH for invalid descriptor headers. Output is unchanged on failure.
+
+**Lifetime.** All pointers are borrowed for this call only; no pointer is retained.
+
+**Execution.** Synchronous allocation-free host metadata query; no provider, GPU,
+quadrature, compiler or scientific solve. Unknown model identities keep strict defaults.
+
+**Units.** Energy tolerance is Eh; density and screening retain their native SCF units.
+
+(native-c-generativeqc-batch-query-warm-seed-capacity-v1)=
+## generativeqc_batch_query_warm_seed_capacity_v1
+
+Source: [warm_seed.h](../../include/generativeqc/warm_seed.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_query_warm_seed_capacity_v1 ( const generativeqc_batch * batch , generativeqc_warm_seed_capacity_v1 * output ) ;
+```
+
+**Behavior.** Query the prepared owner's numeric warm-seed staging envelope.
+
+**Inputs.** A live batch and initialized versioned output descriptor.
+
+**Outputs.** Transactionally writes all-slot density/coordinate/total bytes and the
+largest density buffer. Includes cold/missing slots and both spins where needed.
+
+**Errors.** INVALID_ARGUMENT for null inputs; ABI_MISMATCH for descriptor headers;
+NOT_IMPLEMENTED for owners without warm seeds; OUT_OF_MEMORY for byte overflow.
+Failures leave output unchanged. Other owner errors propagate without fallback.
+
+**Lifetime.** The batch/context must remain alive. No pointer or seed is retained.
+
+**Execution.** Synchronous locked topology query. It does not inspect/materialize a
+seed, transfer device data, execute science or allocate density buffers. Serialize
+with execution/destruction as for other operations on the same batch/context.
+
+**Units.** All sizes are bytes of binary64 densities and Bohr coordinates.
+
+(native-c-generativeqc-batch-capture-warm-seeds-v1)=
+## generativeqc_batch_capture_warm_seeds_v1
+
+Source: [warm_seed.h](../../include/generativeqc/warm_seed.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_capture_warm_seeds_v1 ( const generativeqc_batch * batch , uint64_t maximum_numeric_bytes , generativeqc_warm_seed_snapshot_info_v1 * info , generativeqc_warm_seed_snapshot * * output ) ;
+```
+
+**Behavior.** Copy the supplying solver's scientific warm seeds into native host storage.
+
+**Inputs.** A live warm-enabled batch, numeric byte limit, initialized info and output handle.
+
+**Outputs.** On success writes a new immutable snapshot and its actual numeric storage.
+
+**Errors.** INVALID_ARGUMENT for null inputs or a non-warm batch; ABI_MISMATCH for info;
+NOT_IMPLEMENTED for absent seed support; OUT_OF_MEMORY for overflow, a limit below
+the all-slot envelope, or allocation failure. Both outputs are unchanged on failure.
+
+**Lifetime.** Caller destroys the snapshot; it may outlive the source batch and context.
+
+**Execution.** Checks the full envelope before materializing any seed. Existing owner
+export may perform D2H copies. No integrals or SCF execute; source seeds are unchanged.
+Serialize source execution/destruction with this call. Metadata/allocator overhead
+and scientific validation scratch are outside the numeric limit.
+
+**Units.** The limit and receipt are bytes; stored coordinates are Bohr and energy is Eh.
+
+(native-c-generativeqc-batch-restore-warm-seeds-v1)=
+## generativeqc_batch_restore_warm_seeds_v1
+
+Source: [warm_seed.h](../../include/generativeqc/warm_seed.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_restore_warm_seeds_v1 ( generativeqc_batch * batch , const generativeqc_warm_seed_snapshot * snapshot ) ;
+```
+
+**Behavior.** Restore immutable captured seeds through the target's existing scientific validator.
+
+**Inputs.** A live warm-enabled target batch and snapshot from the same ordered model/topology.
+The caller must preserve model, basis, charge and spin identity, as with the descriptor
+restore API. This handle is not a cross-model projection or capability token.
+
+**Outputs.** Present slots replace target seeds transactionally; absent slots are unchanged.
+
+**Errors.** INVALID_ARGUMENT for null inputs, shape or physical validation failures;
+NOT_IMPLEMENTED for absent seed support; allocation/provider errors propagate.
+
+**Lifetime.** The snapshot remains reusable and independent of both batches/contexts.
+
+**Execution.** Synchronous target lock and retained resource-ledger binding; existing
+overlap/occupation validation and provider-scratch admission are retained.
+Does not execute target SCF or change the target's warm-update policy. Serialize target
+execution/destruction and keep the snapshot alive throughout the call.
+
+**Units.** Native binary64 seed conventions; Bohr coordinates and Eh source diagnostics.
+
+(native-c-generativeqc-warm-seed-snapshot-read-v1)=
+## generativeqc_warm_seed_snapshot_read_v1
+
+Source: [warm_seed.h](../../include/generativeqc/warm_seed.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_warm_seed_snapshot_read_v1 ( const generativeqc_warm_seed_snapshot * snapshot , uint32_t index , generativeqc_warm_seed_view_v1 * view ) ;
+```
+
+**Behavior.** Inspect one immutable snapshot slot without copying numeric arrays.
+
+**Inputs.** A live snapshot, original input index and initialized versioned view.
+
+**Outputs.** Transactionally publishes borrowed read-only arrays and source diagnostics.
+
+**Errors.** INVALID_ARGUMENT for null inputs or invalid index; ABI_MISMATCH for view.
+
+**Lifetime.** Borrowed pointers expire when the snapshot is destroyed; never free or mutate them.
+
+**Execution.** Allocation-free host metadata read. Concurrent reads are safe; destruction
+must be externally serialized. No source batch, context or device is accessed.
+
+**Units.** Density is row-major RHF total or UHF alpha then beta; coordinates Bohr, energy Eh.
+
+(native-c-generativeqc-warm-seed-snapshot-destroy)=
+## generativeqc_warm_seed_snapshot_destroy
+
+Source: [warm_seed.h](../../include/generativeqc/warm_seed.h)
+
+```cpp
+GENERATIVEQC_API void generativeqc_warm_seed_snapshot_destroy ( generativeqc_warm_seed_snapshot * snapshot ) ;
+```
+
+**Behavior.** Release a captured seed snapshot and its native host arrays.
+
+**Inputs.** A snapshot returned by capture, or NULL.
+
+**Outputs.** None; all borrowed views become invalid.
+
+**Errors.** No error return; NULL is a no-op.
+
+**Lifetime.** Call exactly once for a non-NULL owned handle, after all readers finish.
+
+**Execution.** Synchronous host-only destruction; requires no live context or GPU.
+
+**Units.** Not applicable.
