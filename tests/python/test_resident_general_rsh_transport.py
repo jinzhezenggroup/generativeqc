@@ -1,0 +1,186 @@
+"""Execute resident RSH transport/status contracts with labeled source buffers.
+
+Native CUDA composition tests own the independent integral qualification. This
+probe covers borrowed rows, route admission, capture and callback failure drains.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from _cpp_source_support import cpp_function_definition, cpp_record_definition
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_general_rsh_borrowing_routing_and_failures(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
+    helpers = cpp_record_definition(source, "DirectJkFailure") + ";\n"
+    for name in ["direct_jk_check", "direct_jk_require"]:
+        helpers += cpp_function_definition(source, name) + "\n"
+    helpers += cpp_function_definition(source, "direct_jk_guard", include_template=True)
+    for name in [
+        "consume_cuda_direct_rsh_energy_derivatives_device",
+        "consume_cuda_direct_shell_rsh_energy_derivatives_device",
+    ]:
+        helpers += "\n" + cpp_function_definition(source, name)
+    cpp, binary = tmp_path / "resident.cpp", tmp_path / "resident"
+    cpp.write_text(PREFIX + helpers + MAIN)
+    native_cxx.build_executable(
+        [cpp], binary, compile_args=["-std=c++20", "-O0", "-I" + str(ROOT / "src")]
+    )
+    subprocess.run([binary], check=True, timeout=10)
+
+
+PREFIX = r"""
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <cstring>
+#include <new>
+#include <stdexcept>
+#include <string>
+#include "scf/cuda_derivative_sources.hpp"
+using namespace generativeqc::scf;
+enum generativeqc_status { GENERATIVEQC_STATUS_SUCCESS, GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+  GENERATIVEQC_STATUS_NOT_IMPLEMENTED, GENERATIVEQC_STATUS_CUDA_ERROR,
+  GENERATIVEQC_STATUS_OUT_OF_MEMORY, GENERATIVEQC_STATUS_NUMERICAL_FAILURE };
+namespace generativeqc {
+class Error : public std::runtime_error {
+  generativeqc_status code_;
+ public:
+  Error(generativeqc_status code, const char* text) : std::runtime_error(text), code_(code) {}
+  generativeqc_status status() const { return code_; }
+};
+}
+enum cudaError_t { cudaSuccess, cudaErrorUnknown };
+using cudaStream_t = void*;
+enum cudaStreamCaptureStatus { cudaStreamCaptureStatusNone, cudaStreamCaptureStatusActive };
+enum class FockSpin { Restricted, Unrestricted };
+struct Exchange { bool force_capability{true}; };
+struct Diagnostic { std::size_t batch_size{1}, nbf{2}; unsigned derivative_order{1}; };
+struct CudaDirectJkPlan {
+  int device_id{2};
+  cudaStream_t stream{reinterpret_cast<void*>(5)};
+  Diagnostic diagnostic;
+  Exchange* generated_exchange{};
+  double* derivative{};
+  std::size_t coordinates_per_item{3}, coordinate_elements{3};
+};
+cudaStreamCaptureStatus capture_state = cudaStreamCaptureStatusNone;
+unsigned kernels{}, shell_calls{}, clears{}, drains{}, callbacks{}, pending{};
+cudaError_t device_error = cudaSuccess, capture_error = cudaSuccess;
+const double* expected_alpha{};
+const double* expected_beta{};
+double expected_omega{};
+generativeqc_status source_cuda_status(cudaError_t) { return GENERATIVEQC_STATUS_CUDA_ERROR; }
+const char* cudaGetErrorString(cudaError_t) { return "injected driver failure"; }
+cudaError_t cudaSetDevice(int device) { assert(device == 2); return device_error; }
+cudaError_t cudaStreamIsCapturing(cudaStream_t, cudaStreamCaptureStatus* state) {
+  *state = capture_state; return capture_error;
+}
+cudaError_t cudaStreamSynchronize(cudaStream_t) { ++drains; pending = 0; return cudaSuccess; }
+cudaError_t cudaMemsetAsync(void* values, int value, std::size_t bytes, cudaStream_t) {
+  ++clears; std::memset(values, value, bytes); return cudaSuccess;
+}
+namespace runtime::cuda_trace {
+struct Shape { std::size_t batch, nbf, naux; bool derivative, streamed; };
+struct TraceOperation { TraceOperation(const char*, cudaStream_t, Shape) {} };
+void trace_counter(const char*, std::size_t) {}
+}
+void direct_rsh_derivatives(CudaDirectJkPlan* plan, std::size_t item, double cj,
+    double cs, double cl, bool unrestricted, double omega, const double* alpha, const double* beta) {
+  assert(item == 0 && omega == expected_omega && alpha == expected_alpha && beta == expected_beta);
+  assert(unrestricted ? beta != nullptr : beta == nullptr);
+  ++kernels;
+  const double coefficients[]{cj, cs, cl};
+  for (unsigned source = 0; source < 3; ++source)
+    for (unsigned coordinate = 0; coordinate < 3; ++coordinate)
+      plan->derivative[3*source + coordinate] = coefficients[source] * (coordinate + 1);
+}
+namespace cuda_execution {
+cudaError_t consume_generated_rsh_energy_derivatives(Exchange&, bool, const double*,
+    const double*, double cj, double cs, double, double omega,
+    const CudaDerivativeSourceConsumer& consumer) {
+  assert(cj == 0 && cs == 0 && omega == 0.3);
+  ++shell_calls;
+  static double force[9]{};
+  consumer({CudaDerivativeSourceKind::RangeSeparatedJk, CudaDerivativeConvention::Force,
+            2, reinterpret_cast<void*>(5), force, 3, 3});
+  return cudaSuccess;
+}
+}
+"""
+
+MAIN = r"""
+int main() {
+  Exchange exchange;
+  double density[4]{}, beta[4]{}, scratch[9]{};
+  CudaDirectJkPlan plan; plan.generated_exchange = &exchange; plan.derivative = scratch;
+  std::string detail;
+  auto receive = [&](const CudaDerivativeSourceView& view) {
+    assert(view.kind == CudaDerivativeSourceKind::RangeSeparatedJk && view.channels == 3);
+    assert(view.device == 2 && view.producer_stream == plan.stream && view.coordinates == 3);
+    ++callbacks;
+  };
+  for (bool unrestricted : {false, true})
+    for (double omega : {0.3, 0.4, 0.5}) {
+      expected_alpha = density; expected_beta = unrestricted ? beta : nullptr; expected_omega = omega;
+      const auto old_drains = drains;
+      const auto old_kernels = kernels;
+      assert(consume_cuda_direct_shell_rsh_energy_derivatives_device(
+          &plan, unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted,
+          1, -0.1, -0.25, omega, density, unrestricted ? beta : nullptr, 4,
+          [&](const auto& view) {
+            receive(view);
+            assert(view.values == scratch && view.convention == CudaDerivativeConvention::EnergyGradient);
+            assert(view.values[0] == 1 && view.values[3] == -0.1 && view.values[6] == -0.25);
+            pending = 1;
+          }, detail) == GENERATIVEQC_STATUS_SUCCESS);
+      assert(kernels == old_kernels + 1 && !shell_calls && drains == old_drains && pending);
+      cudaStreamSynchronize(plan.stream);
+    }
+  assert(consume_cuda_direct_shell_rsh_energy_derivatives_device(
+      &plan, FockSpin::Restricted, 0, 0, -0.25, 0.3, density, nullptr, 4,
+      [&](const auto& view) { receive(view); assert(view.convention == CudaDerivativeConvention::Force); },
+      detail) == GENERATIVEQC_STATUS_SUCCESS && shell_calls == 1);
+  plan.generated_exchange = nullptr; // General fallback needs no optional shell allocation.
+  expected_alpha = density; expected_beta = nullptr; expected_omega = 0.4;
+  const auto old_kernels = kernels;
+  assert(consume_cuda_direct_shell_rsh_energy_derivatives_device(
+      &plan, FockSpin::Restricted, 0, 0, 0, 0.4, density, nullptr, 4,
+      [&](const auto& view) { receive(view); for (unsigned i=0;i<9;++i) assert(view.values[i] == 0); },
+      detail) == GENERATIVEQC_STATUS_SUCCESS && kernels == old_kernels);
+  for (auto status : {GENERATIVEQC_STATUS_CUDA_ERROR, GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                     GENERATIVEQC_STATUS_NUMERICAL_FAILURE, GENERATIVEQC_STATUS_INVALID_ARGUMENT}) {
+    const auto old_drains = drains;
+    assert(consume_cuda_direct_shell_rsh_energy_derivatives_device(
+        &plan, FockSpin::Restricted, 1, -0.1, -0.25, 0.4, density, nullptr, 4,
+        [&](const auto& view) { receive(view); pending = 1; throw generativeqc::Error(status,"typed failure"); },
+        detail) == status);
+    assert(drains == old_drains + 1 && !pending);
+  }
+  const auto before_capture = std::array{kernels, clears, callbacks, drains};
+  capture_state = cudaStreamCaptureStatusActive;
+  assert(consume_cuda_direct_shell_rsh_energy_derivatives_device(
+      &plan, FockSpin::Restricted, 1, -0.1, -0.25, 0.4, density, nullptr, 4, receive, detail) ==
+      GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  assert((before_capture == std::array{kernels, clears, callbacks, drains}));
+  capture_state = cudaStreamCaptureStatusNone;
+  const auto before_invalid = std::array{kernels, clears, callbacks};
+  assert(consume_cuda_direct_shell_rsh_energy_derivatives_device(
+      &plan, FockSpin::Unrestricted, 1, -0.1, -0.25, 0.4, density, nullptr, 4, receive, detail) ==
+      GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  assert((before_invalid == std::array{kernels, clears, callbacks}));
+  assert(consume_cuda_direct_shell_rsh_energy_derivatives_device(
+      &plan, FockSpin::Restricted, 1, -0.1, -0.25, 0.4, density, nullptr, 4, receive, detail) ==
+      GENERATIVEQC_STATUS_SUCCESS); // Recovery after capture/input/callback refusals.
+}
+"""
