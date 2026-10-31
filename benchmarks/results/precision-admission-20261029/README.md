@@ -97,3 +97,26 @@ and a reference cuSOLVER search path. Full failed logs are retained. Successful
 runs use complete source/provenance inputs, verified current stationary binaries,
 and isolated reference dependencies with the actual CUDA toolkit path. Production
 code was not changed to conceal these missing inputs or retry Python policy.
+
+
+## Qualification-driver repair (2026-10-31)
+
+The replay driver now rejects non-finite energies, derivative components and
+non-finite or non-positive timings before applying the unchanged scientific and
+1.05 per-case performance gates. Derivative array shapes must match exactly.
+`--response-timeout` (default 900 seconds) bounds each startup/sample response,
+including partial lines; cleanup terminates and reaps only harness-owned sessions.
+Reports reject NaN/Infinity during JSON serialization.
+
+This is a harness repair, not a new CPU/GPU qualification campaign. All retained
+measurements, sample order, production source identities and historical receipt
+checksums remain unchanged. `identities.json` describes the original driver; its
+exact bytes remain recoverable offline by applying the retained reverse patch:
+
+```bash
+cp qualify.py /tmp/original-qualify.py
+xz -dc original-driver.reverse.patch.xz | patch /tmp/original-qualify.py
+sha256sum /tmp/original-qualify.py
+```
+
+Expected original-driver SHA-256: `0c10cf39c9383ff262b3ae42c1b7c72de3c38d54996797341e8fe12ec365e849`.
