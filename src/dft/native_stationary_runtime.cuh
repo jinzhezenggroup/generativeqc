@@ -279,7 +279,8 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
       }
     } else if (view->kind == CudaDerivativeSourceKind::RangeSeparatedJk) {
       if constexpr (native_short_exchange_slot >= 0 && native_long_exchange_slot >= 0) {
-        if (view->channels != 3 || view->convention != CudaDerivativeConvention::Force)
+        if (view->channels != 3 || (view->convention != CudaDerivativeConvention::Force &&
+                                    view->convention != CudaDerivativeConvention::EnergyGradient))
           throw std::invalid_argument("native stationary RSH source convention mismatch");
         const size_t slots[]{native_coulomb_slot, size_t(native_short_exchange_slot),
                              size_t(native_long_exchange_slot)};
@@ -288,9 +289,10 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
           throw std::invalid_argument("duplicate native stationary RSH source");
         owner->integral_stream = stream;
         owner->integral_pending = true;
+        const auto sign = view->convention == CudaDerivativeConvention::Force ? -1.0 : 1.0;
         for (size_t channel = 0; channel < 3; ++channel)
           cuda_check(generativeqc::dft::launch_native_stationary_source_transport(
-              view->values + channel * view->coordinates, view->coordinates, 1, -1.0,
+              view->values + channel * view->coordinates, view->coordinates, 1, sign,
               scientific.sources + slots[channel] * view->coordinates, nullptr,
               scientific.context.error, stream));
         scientific.launches += 3;

@@ -1,6 +1,6 @@
 # Historical ECNU A100 stationary force qualification
 
-The exact six-file bundle from merged PR #2886 is retained in Git at
+The exact five-file bundle from merged PR #2886 is retained in Git at
 `bc77e0b62d5fe67c2502d6b8f5440ac27463c0f0`. The
 [recovery manifest](historical.manifest.json) pins every original byte length
 and SHA256, including the independent force arrays, frozen basis, observations

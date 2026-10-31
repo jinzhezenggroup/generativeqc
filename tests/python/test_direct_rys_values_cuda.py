@@ -44,7 +44,16 @@ if FAMILY == "primary":
         item
         for item in PROFILE.selections
         if KernelConsumer.FOCK in item.consumers
-        and (item.fock_recurrence or item.recurrence).startswith("rys")
+        and (
+            (
+                item.consumers == (KernelConsumer.FOCK,)
+                and item.recurrence.startswith("rys")
+            )
+            or (
+                item.fock_recurrence is not None
+                and item.fock_recurrence.startswith("rys")
+            )
+        )
     )
 else:
     SELECTIONS = (

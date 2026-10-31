@@ -12,7 +12,7 @@ from benchmarks.df_component_ledger import read_host_trace, read_trace
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
-    reason="requires an explicitly Slurm-allocated GPU",
+    reason="requires an explicitly Slurm- or LSF-allocated GPU",
 )
 
 
@@ -34,7 +34,7 @@ def test_occupied_response_replay_and_zero_rank_spin(
     """Independent forces, changed geometry, rank-zero beta and dense fallback."""
     from pyscf import gto, scf
 
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "occupied")
     monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "jk-scratch")
     monkeypatch.setenv(
@@ -182,7 +182,7 @@ def test_packed_response_crosses_ao_blocks_and_auxiliary_panels(
     """
     from pyscf import gto, scf
 
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     case = benchmark_cases()["water-tetramer-def2-svp-spherical"]
     mol = gto.M(atom=case.atoms, unit="Bohr", basis="def2-svp", verbose=0)
     reference = scf.RHF(mol).density_fit(auxbasis="def2-svp")
@@ -257,7 +257,7 @@ def test_batched_full_response_keeps_rectangular_output(
     """
     from pyscf import gto, scf
 
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     case = benchmark_cases()["water-octamer-s4-def2-svp-spherical"]
     mol = gto.M(atom=case.atoms, unit="Bohr", basis="def2-svp", verbose=0)
     reference = (scf.RHF if method == "rhf" else scf.UHF)(mol).density_fit(

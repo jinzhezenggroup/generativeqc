@@ -24,6 +24,15 @@
       "decoded_sha256": "eb71153d3f1a48670ff3038e3e6ea441578ab5104e47f39c91d788e8ea492fa4",
       "decoded_bytes": 71950,
       "verified_against_git_revision": "9e6e2aec0953c307bae96215121e78e9d64e03b1"
+    },
+    "equal-768.json": {
+      "path": "equal-768.json.gz",
+      "compression": "gzip",
+      "stored_bytes": 17896,
+      "stored_sha256": "d5499fba644123a54e0f3ed97051181960f42f4d3eb876a310c07eafe7d49e3a",
+      "decoded_sha256": "c49113d035ccf8632f501a1fceeb365d4d2f1522f927cccb5a713c2e78415d0b",
+      "decoded_bytes": 114671,
+      "verified_against_git_revision": "f088d3fcd30435c125a5b92422e4d91088884977"
     }
   }
 }

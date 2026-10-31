@@ -4,8 +4,9 @@
 
 The retained `equal-96.json`, `equal-384.json`, and `equal-768.json` controls
 are stored as `.json.gz`. Decompression reproduces their retained JSON bytes;
-`retention.json` records the new storage checksums separately from the original
-scientific receipt checksums. For example, `gzip -dc equal-384.json.gz` reads
+The [storage manifest](storage.json) records the compressed and original byte
+checksums separately from the original scientific receipt checksums in
+`retention.json`. For example, `gzip -dc equal-384.json.gz` reads
 the unchanged 384-AO control. No measurement or acceptance gate changed.
 
 ## Change and scope

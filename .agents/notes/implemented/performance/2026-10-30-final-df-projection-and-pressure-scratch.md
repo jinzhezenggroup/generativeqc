@@ -85,3 +85,7 @@ J/K ownership, OOM after overwriting U, and planner capacity boundaries.
 Revisit the panel preference when another measured workload/device improves
 complete endpoints with an equally bounded plan; preserve the fallback and
 observable correctness instead of adding a GPU-name whitelist.
+
+The later [panel-width correction](2026-10-31-preserve-df-response-panel-width.md)
+additionally preserves viable owned panel capacity when the dead projection is
+smaller. The historical measurements above remain bound to their original source.

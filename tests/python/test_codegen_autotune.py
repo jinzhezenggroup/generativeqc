@@ -157,7 +157,7 @@ def test_autotune_keeps_benchmark_executor_distinct_from_compile_pool(
     compiled = []
     monkeypatch.setenv("GENERATIVEQC_BENCHMARK_PARTITION", "test-partition")
     monkeypatch.setenv("GENERATIVEQC_BENCHMARK_GRES", "gpu:environment:1")
-    monkeypatch.setattr(driver, "supported_schedule_trials", lambda *a: (trial,))
+    monkeypatch.setattr(driver, "supported_schedule_trials", lambda *a, **kw: (trial,))
     for name in (
         "emit_schedule_oracle_translation_unit",
         "emit_schedule_translation_unit",
@@ -866,7 +866,7 @@ def test_fock_autotune_rejects_candidates_without_baseline_runtime(
 
     monkeypatch.setattr(
         "generativeqc_compiler.integral.tuning.driver._production_fock_schedule_index",
-        lambda architecture: ((PSPS_SPEC.name, baseline.schedule),),
+        lambda architecture, manifest_path: ((PSPS_SPEC.name, baseline.schedule),),
     )
     monkeypatch.setattr(
         "generativeqc_compiler.integral.tuning.driver.supported_schedule_trials",

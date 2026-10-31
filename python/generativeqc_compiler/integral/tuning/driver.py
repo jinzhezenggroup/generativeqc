@@ -286,14 +286,18 @@ def _run_autotune(
     # target and prevents the independent recompute oracle from becoming an
     # accidentally weaker baseline for an already-promoted class.
     production_baselines = (
-        dict(_production_fock_schedule_index(arguments.architecture))
+        dict(
+            _production_fock_schedule_index(arguments.architecture, arguments.manifest)
+        )
         if selected_consumer == KernelConsumer.FOCK
         else {}
     )
     trials = tuple(
         trial
         for spec in specifications
-        for trial in supported_schedule_trials(spec, selected_consumer, target)
+        for trial in supported_schedule_trials(
+            spec, selected_consumer, target, manifest_path=arguments.manifest
+        )
         if (
             not selected_schedule_kinds
             or trial.schedule.kind in selected_schedule_kinds
