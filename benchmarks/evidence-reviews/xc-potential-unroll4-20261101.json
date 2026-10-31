@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "xc-potential-unroll4-20261101",
+  "owner": "Portable CUDA XC potential schedules",
+  "reason": "128 complete original populations independently qualified; two counterbalanced cold/three-warm source pairs for every README functional on three devices; larger/moved/finite-memory controls and 510 independent contraction cases. Original incomplete metadata/deployment attempts and the invalid fully unrolled tile32 launch remain visible.",
+  "review_document": "benchmarks/results/xc-potential-unroll4-20261101/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/xc-potential-unroll4-20261101/receipts.json.xz",
+      "family": "xc-potential-unroll4-20261101",
+      "classification": "required-compact-accepted-evidence",
+      "role": "original-endpoints-work-independent-gates-provenance-and-negative-controls",
+      "bytes": 1045252,
+      "sha256": "94a35104ba2d775643154dc928c8d047ff46c93ae95abef655c2a24e86dbf4e2"
+    }
+  ]
+}

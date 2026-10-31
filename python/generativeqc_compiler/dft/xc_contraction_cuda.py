@@ -399,6 +399,9 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
   const I x = threadIdx.x, y = threadIdx.y;
   const I mu = tile_mu*@TILE@+x, nu = tile_nu*@TILE@+y;
   const I nu_load = tile_nu*@TILE@+x, panel = count*n;
+  // Bound live operand registers instead of fully expanding every point term.
+  // The single accumulator and ordered FMA/fallback operations are unchanged.
+  // Full unrolling can leave only one resident CTA even for a 16x16 tile.
   Arithmetic value = 0.0;
   for (I jet = 0; jet < work_jets; ++jet) {
     // Additional panels are diagonal bilinears derived by compact_panel_program.
@@ -449,11 +452,13 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
           // Each product is at most 2^256, with at most 64 ordered additions
           // for any supported tile. The incoming bound therefore proves all
           // intermediate FMAs finite. Keep their exact ordering and rounding.
+          #pragma unroll 4
           for (I k = 0; k < @TILE@; ++k)
             value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
         } else if (cross) {
           if constexpr (std::is_same_v<Arithmetic, double>) {
             const double tile_prior = value;
+            #pragma unroll 4
             for (I k = 0; k < @TILE@; ++k)
               value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
             // A nonfinite FMA accumulator cannot become finite in a later
@@ -463,6 +468,7 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
             // opposite cross legs can cancel an intermediate overflow.
             if (!(fabs(value) <= 0x1.fffffffffffffp1023)) {
               value = tile_prior;
+              #pragma unroll 4
               for (I k = 0; k < @TILE@; ++k) {
                 const double prior = value;
                 value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
@@ -471,10 +477,12 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
               }
             }
           } else {
+            #pragma unroll 4
             for (I k = 0; k < @TILE@; ++k)
               value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
           }
         } else if (reuse_diagonal)
+          #pragma unroll 4
           for (I k = 0; k < @TILE@; ++k) {
             if constexpr (std::is_same_v<Arithmetic, double>)
               value = fma(am[k][x], wn[k][y], value);
@@ -482,6 +490,7 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
               value += am[k][x]*wn[k][y];
           }
         else
+          #pragma unroll 4
           for (I k = 0; k < @TILE@; ++k) {
             const Arithmetic original_right = scaled_wn[k][y] ? wn[k][y]*0.5 : wn[k][y];
             value += am[k][x]*original_right+wm[k][x]*an[k][y];
