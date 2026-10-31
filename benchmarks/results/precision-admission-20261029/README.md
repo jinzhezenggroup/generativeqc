@@ -98,6 +98,14 @@ runs use complete source/provenance inputs, verified current stationary binaries
 and isolated reference dependencies with the actual CUDA toolkit path. Production
 code was not changed to conceal these missing inputs or retry Python policy.
 
+## Raw receipt recovery
+
+To remain within the unchanged 80 MiB repository evidence budget, the three
+raw `cpu-samples.json.xz`, `cuda-samples.json.xz` and `receipts.json.xz` payloads
+are retained in Git commit `8d6225b4fa49a82fdaca1abc1d56927008dde76c` at their
+original paths in this directory. `identities.json` records exact hashes and
+recovery paths. Use `git show COMMIT:PATH` to restore them. All failures, samples
+and original source identities remain unchanged; no new external archive exists.
 
 ## Qualification-driver repair (2026-10-31)
 
