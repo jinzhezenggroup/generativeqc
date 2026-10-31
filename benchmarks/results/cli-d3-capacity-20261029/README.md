@@ -27,7 +27,8 @@ Every current timing/reference output is in `current-samples.json.xz`;
 receipts. Historical samples, identity receipt and runner are restored through
 `original-history.json` with `tools/restore_retained_evidence.py`. Restoration
 was verified before removing duplicate current-tree bytes. The separate
-`storage.json` continues to describe the original RHF record compaction.
+`storage.json` describes the current RHF record storage and links the unchanged
+original XZ manifest, `rhf-xz-storage.history.json`.
 
 ## Original source qualification
 
@@ -60,6 +61,8 @@ the measured replay-script text. The readable `qualify.py` may receive formattin
 only; adapt its frozen installation paths before replay. Bulk build/CTest logs
 remain ignored. No runtime performance or #2227 whole-slice closure is implied.
 
-`storage.json` records lossless XZ storage of one historical CPU response record
-to stay below the unchanged 80 MiB evidence limit. The original Git blob and
-decoded/encoded hashes preserve every historical endpoint value.
+`storage.json` records the current deterministic gzip storage of one historical
+CPU response record. The duplicate XZ container was removed after both formats
+were verified to decode exactly to the original Git blob. The unchanged
+`rhf-xz-storage.history.json` and its Git recovery identity preserve the prior
+container's bytes and digest; every historical endpoint value remains retained.

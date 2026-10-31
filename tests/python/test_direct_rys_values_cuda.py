@@ -6,6 +6,10 @@ task/value inventory and never uses NVRTC or a native recurrence as its oracle.
 
 GENERATIVEQC_RYS_VALUE_SYMBOL_PREFIX also permits testing the actual production
 bundle (for example, sm120_rys_task_generated) instead of a standalone shard.
+Select the compiled target/profile and any external experimental manifest with
+GENERATIVEQC_RYS_VALUE_ARCHITECTURE, GENERATIVEQC_RYS_VALUE_PROFILE and
+GENERATIVEQC_RYS_VALUE_MANIFEST. This keeps the oracle inventory aligned with
+the actual artifact, including portable builds on finite LSF allocations.
 """
 
 import ctypes
@@ -27,9 +31,12 @@ from generativeqc_compiler.integral.production_rys_values import (
 # Qualify the complete compiled inventory, rather than using the earlier six
 # arithmetic fixtures as a production class allowlist.
 PROFILE = resolve_production_profile(
-    Path(__file__).resolve().parents[2]
+    Path(os.environ["GENERATIVEQC_RYS_VALUE_MANIFEST"])
+    if os.environ.get("GENERATIVEQC_RYS_VALUE_MANIFEST")
+    else Path(__file__).resolve().parents[2]
     / "python/generativeqc_compiler/integral/production_shell_classes.json",
-    "sm_120",
+    os.environ.get("GENERATIVEQC_RYS_VALUE_ARCHITECTURE", "sm_120"),
+    os.environ.get("GENERATIVEQC_RYS_VALUE_PROFILE", "auto"),
 )
 FAMILY = os.environ.get("GENERATIVEQC_RYS_VALUE_FAMILY")
 if FAMILY == "primary":
@@ -45,10 +52,19 @@ else:
     )(PROFILE)
 CLASSES = tuple(item.spec.name for item in SELECTIONS)
 
+CAMPAIGN_REQUESTED = os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") == "1" and bool(
+    os.environ.get("GENERATIVEQC_RYS_VALUE_LIBRARY")
+)
+if CAMPAIGN_REQUESTED and not CLASSES:
+    raise ValueError(
+        "requested Rys qualification has an empty kernel inventory; "
+        "select a compiled family (GENERATIVEQC_RYS_VALUE_FAMILY=primary "
+        "for the portable primary bundle)"
+    )
+
 pytestmark = pytest.mark.skipif(
-    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1"
-    or not os.environ.get("GENERATIVEQC_RYS_VALUE_LIBRARY"),
-    reason="requires a Slurm GPU and an explicitly built Rys value library",
+    not CAMPAIGN_REQUESTED,
+    reason="requires a scheduled GPU and an explicitly built Rys value library",
 )
 
 
@@ -117,7 +133,9 @@ def test_value_rys_fixed_density_matrices_match_libcint(
     """Exercise task tails with ordinary and compensated Fock output planes."""
     import cupy as cp
 
-    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID"), (
+        "real GPU tests require a finite Slurm or LSF allocation"
+    )
     assert ctypes.sizeof(ShellTask) == 192
     name, fixture, eri = quartet_case
     n = fixture.density.shape[0]

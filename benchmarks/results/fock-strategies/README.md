@@ -58,7 +58,7 @@ matrix identities from these controlled experiments.
 The initial small H2 UHF DF warm-batch outlier did not persist in six
 alternating-order baseline/candidate cycles (nine samples each): median ratio
 0.999811, range 0.990932–1.011094. See
-[focused samples](cpu/focused-repeats.json). Every repeat also passed its
+[focused samples](cpu/focused-repeats.json.gz). Every repeat also passed its
 energy/force and raw-matrix comparison.
 
 ## Reproduction and retained bytes

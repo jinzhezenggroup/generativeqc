@@ -258,3 +258,59 @@ profile summary/CSV, exact runner, source/library identity and validation receip
 The exact source builds in Release/sm120 with verified sccache; 869 host checks
 and 25 subtests pass (27 skipped). Source-bound earlier CPU timing remains in
 `resolved-and-basis-history.json` and is not reclassified as a new CPU benchmark.
+
+## Acceptance-driver hardening (post-measurement)
+
+`qualify.py` now rejects non-finite energies/forces, mismatched force shapes,
+missing forces on force-requested rows, and non-finite or non-positive timings
+before reduction. A requested budget campaign requires the candidate to report
+that its global D4 budget is enabled; the original baseline may still use ordinary
+execution because it has no global D4 protocol. Complete worker
+responses have a finite deadline, and failure cleanup stops only the harness's
+own process sessions. Scientific tolerances and the 1.05 performance gate are
+unchanged. `qualify.original.py.xz` preserves the exact pre-hardening driver;
+retained source/library identities and raw samples are not relabeled.
+
+Offline replay of both retained `integrated-cuda-*-samples.json.xz` populations
+through the hardened entry point preserves every sample, ratio and reported
+scientific maximum: 1,792 calls each, default maximum 1.0167437095874685 and
+budget maximum 1.0330590474587127. This is validation of existing observations,
+not a new GPU measurement. CPU-only regressions cover malformed science and
+timing, broadcastable force mismatches, unchanged tolerances, complete/partial
+worker responses, deadlines and cleanup, plus both retained populations.
+
+The profile gate requires observed CUDA kernels and explicit device allocations
+in both roles before comparing their complete work/storage counts. Failed traces
+still produce a diagnostic summary. The image-identity and complete GPU runners
+verify frozen inputs on exit, including qualification and profiler failures.
+The complete runner retains both campaigns' profiles after a failed timing gate
+and returns the original qualification failure; a checksum failure also fails an
+otherwise successful run. Host-only subprocess regressions exercise these paths
+with controlled external commands and real checksum verification.
+
+`review-driver-history.json` preserves the six exact checked-in workers, drivers
+and shell runners from `8008c8276cdeb5624833a44a6387771a64d58c62`, before these
+review repairs. All six files were restored offline and checked byte-for-byte:
+
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/d4-capacity-20261029/review-driver-history.json \
+  --output .artifacts/d4-review-original-drivers
+```
+
+The measurement-specific runners already embedded in `integrated-cuda-*` and
+earlier capsules remain authoritative for their original campaigns. The original
+pre-hardening `qualify.original.py.xz`, raw populations, profiles and historical
+receipts are unchanged. These checks validate the harness and retained records;
+they do not claim a new GPU measurement.
+
+## Closed-owner optional-storage repair
+
+Optional direct Coulomb storage now requires an open capacity promise, with the
+authorization check synchronized against owner destruction. An expired promise
+left in a borrowing scope cannot authorize a later optional MD-J allocation.
+The compiled host regression executes the production authorization function and
+real reservation APIs for absent, live, nested, temporarily unpromised, restored
+and closed owners. The source-bound GPU timings above remain associated with
+their original production revision; this lifecycle repair has no new GPU timing
+or scientific qualification claim.

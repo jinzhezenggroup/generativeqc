@@ -20,7 +20,7 @@ the directional finite-difference gate uses absolute tolerance 1e-6.
 | CPU | 1.9804e-14 | Pass |
 | RTX 5090 CUDA | 1.9846e-14 | Pass |
 
-`evidence.json` contains the shared numerical gates and provenance.
+`evidence.json.gz` contains the shared numerical gates and provenance.
 `samples.json` retains actual/reference arrays and timing samples.
 `artifacts.json` records source, binary, program and compiler-resource
 identities. `resources.json` contains shared resource plans, including

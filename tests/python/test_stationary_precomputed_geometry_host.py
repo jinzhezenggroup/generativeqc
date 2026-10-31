@@ -38,7 +38,9 @@ def test_precomputed_status_joins_the_block_vote_before_scratch_reads() -> None:
     )
 
 
-@pytest.mark.parametrize(("atoms", "aos"), [(12, 0), (12, 96), (12, 1024), (96, 768)])
+@pytest.mark.parametrize(
+    ("atoms", "aos"), [(12, 0), (12, 96), (12, 1024), (48, 544), (96, 768), (96, 1088)]
+)
 def test_precomputed_point_preserves_phased_channels_and_fails_closed(
     tmp_path: Path, native_cxx: NativeCxx, atoms: int, aos: int
 ) -> None:

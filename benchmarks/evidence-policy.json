@@ -2,11 +2,6 @@
   "benchmark_results_max_bytes": 83886080,
   "change_review_max_bytes": 2097152,
   "exceptions": {
-    "benchmarks/results/h100-provider-owner-20261027/v4-v6-receipts.tar.xz": {
-      "owner": "h100-provider-owner-20261027",
-      "reason": "Exact lossless shared representation of already published privacy-redacted V4/V6 engineering receipts. Both original compressed byte sequences are independently reconstructed; no new run or science is admitted.",
-      "sha256": "0aeef5da2c72945093e2098cda0a024cde22a89edab6693e44b510b8b5da2c99"
-    },
     "benchmarks/results/pbe0-fast-20261013/complete-gradient-test-prehybrid-guard.log.xz": {
       "owner": "pbe0-fast-20261013",
       "reason": "Original complete-gradient test receipt from the superseded small-hybrid candidate; retained as historical evidence, not integrated-head validation.",

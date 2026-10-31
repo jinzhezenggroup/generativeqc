@@ -12,6 +12,7 @@
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/density_fitting.hpp"
 #include "scf/fleet_item.hpp"
+#include "scf/fleet_projection.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/types.hpp"
 #include "scf/warm_state.hpp"
@@ -51,6 +52,21 @@ class FleetPlan {
   /** Validate every supplied seed before changing any retained state. Missing
    * entries preserve neighbors. Imported densities always re-enter target SCF. */
   void restore_warm_states(std::vector<std::optional<HfWarmState>> states);
+
+  /** Revoke projection-source eligibility without discarding a last-good seed.
+   * The prepared lifecycle invokes this even for rejected/throwing replays. */
+  void invalidate_projection_source() noexcept;
+
+  /** Bound or execute CPU all-electron projection from another prepared fleet.
+   * Coordinates are an explicit target request, with the ordinary prepared
+   * geometry used for missing entries. Callers serialize both owners. All
+   * accepted candidates validate before a single no-throw seed commit. */
+  [[nodiscard]] fleet_projection::Capacity projection_capacity(
+      const FleetPlan& source, const fleet_projection::Coordinates& coordinates,
+      const fleet_projection::Controls& controls) const;
+  [[nodiscard]] fleet_projection::Result initialize_from(
+      const FleetPlan& source, const fleet_projection::Coordinates& coordinates,
+      const fleet_projection::Controls& controls);
 
   /**
    * Control whether successful executions replace the retained warm guesses.
@@ -107,6 +123,9 @@ class FleetPlan {
   std::vector<std::size_t> execution_order_;
   std::vector<std::size_t> bucket_ids_;
   std::vector<std::optional<HfWarmState>> warm_densities_;
+  // CPU transfer eligibility is distinct from retained last-good/frozen seeds.
+  // Imported proposals and unsuccessful/malformed replays never grant it.
+  std::vector<std::uint8_t> projection_sources_;
   // Compact per-source overlap state survives a neighboring item's failure
   // or a value/force provider replan. This owner fixes basis and device;
   // each cache independently checks the actual geometry and overlap values.
@@ -115,6 +134,10 @@ class FleetPlan {
   // ragged bucket population cannot reinterpret another item's source slot.
   std::vector<std::unique_ptr<PreparedFockPlan>> independent_fock_plans_;
   void retain_warm_state(std::size_t index, const core::System& system, const ScfResult& result);
+  struct ProjectionTransaction;
+  [[nodiscard]] ProjectionTransaction project_fleet(
+      const FleetPlan& source, const fleet_projection::Coordinates& coordinates,
+      const fleet_projection::Controls& controls, bool execute) const;
   std::optional<CudaRhfShellClassProfile> last_shell_class_profile_;
   std::optional<CudaPppsQueueProfile> last_ppps_queue_profile_;
   std::vector<CudaEigensolverDiagnostic> last_eigensolver_diagnostics_;
