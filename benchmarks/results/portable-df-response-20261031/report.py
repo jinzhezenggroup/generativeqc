@@ -6,6 +6,8 @@ import argparse
 import hashlib
 import json
 import lzma
+import os
+import sys
 from pathlib import Path
 from statistics import median
 
@@ -84,12 +86,31 @@ def paired_errors(left: dict, right: dict) -> list[dict]:
 
 def main() -> None:
     """Print complete populations and optionally recompute independent checks."""
+    if sys.flags.optimize or os.environ.get("PYTHONOPTIMIZE", "") not in ("", "0"):
+        raise SystemExit(
+            "report.py requires assertions; omit -O/-OO and unset PYTHONOPTIMIZE"
+        )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify", action="store_true")
     args = parser.parse_args()
-    bundle = json.loads(
-        lzma.decompress(Path(__file__).with_name("receipts.json.xz").read_bytes())
+    archive = Path(__file__).with_name("receipts.json.xz").read_bytes()
+    manifest = json.loads(
+        (
+            ROOT / "benchmarks/evidence-reviews/portable-df-response-20261031.json"
+        ).read_text()
     )
+    entries = [
+        row
+        for row in manifest["files"]
+        if row["path"]
+        == "benchmarks/results/portable-df-response-20261031/receipts.json.xz"
+    ]
+    assert len(entries) == 1, "receipts.json.xz manifest entry"
+    assert len(archive) == entries[0]["bytes"], "receipts.json.xz size"
+    assert hashlib.sha256(archive).hexdigest() == entries[0]["sha256"], (
+        "receipts.json.xz sha256"
+    )
+    bundle = json.loads(lzma.decompress(archive))
     oracle_bytes = checked_file(bundle["oracle_path"], bundle["oracle_sha256"])
     reuse_bytes = checked_file(bundle["reuse_path"], bundle["reuse_sha256"])
     oracles = json.loads(lzma.decompress(oracle_bytes))

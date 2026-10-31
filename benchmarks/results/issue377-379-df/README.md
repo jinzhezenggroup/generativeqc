@@ -5,7 +5,7 @@ source-audit receipt with `gzip -dc`; encoded/decoded identities are recorded in
 `source-validation-storage.json`. No scientific record or acceptance changes.
 The historical `sources/*.patch.gz` files likewise preserve the exact original
 patch bytes; `sources/storage.json` records both identities. Restore a patch
-with `gzip -dc sources/<name>.patch.gz > /tmp/<name>.patch` before applying it.
+with `gzip -dc benchmarks/results/issue377-379-df/sources/<name>.patch.gz > /tmp/<name>.patch` before applying it.
 This lossless storage change leaves measured source identities unchanged.
 
 This bundle records current-master comparisons on NVIDIA GeForce RTX 5090
