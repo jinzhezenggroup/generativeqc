@@ -11,7 +11,9 @@ import ctypes
 import json
 import math
 import os
+import threading
 import typing
+from collections import OrderedDict
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -111,14 +113,45 @@ _CUDA_SCHEDULE_VARIABLES = (
 )
 
 
+# A retained CDLL keeps its loader handle alive, so another wrapper for that
+# handle denotes the same loaded image even if its original path was replaced.
+# Bound ownership to 32 loaded libraries; ordinary wrappers retain their own
+# digest after eviction. Do not use stat-keyed file caching: same-tick in-place
+# edits can preserve every observed timestamp on supported filesystems.
+_RESOURCE_LIBRARY_IDENTITIES: OrderedDict[int, tuple[ctypes.CDLL, str]] = OrderedDict()
+_RESOURCE_LIBRARY_IDENTITY_LOCK = threading.Lock()
+
+
 def _cuda_library_identity(library: typing.Any) -> typing.Any:
-    """Hash an explicitly loaded artifact once without selecting/probing a GPU."""
+    """Reuse provenance of a retained loaded image without probing a GPU.
+
+    New loader handles are hashed independently. Metadata-only adapters have no
+    loader lifetime guarantee and retain the uncached file-hash behavior. Profile
+    identity remains local to each wrapper, independent of shared binary bytes.
+    """
     from .profiles import file_hash
 
     digest = getattr(library, "_generativeqc_resource_binary_sha256", None)
     path = getattr(library, "_name", None)
     if digest is None and path is not None:
-        digest = file_hash(Path(path))
+        handle = library._handle if isinstance(library, ctypes.CDLL) else None
+        if handle is None:
+            digest = file_hash(Path(path))
+        else:
+            # Hashing releases the GIL. Serialize first publication and LRU
+            # updates so concurrent calculator construction cannot lose a lease.
+            with _RESOURCE_LIBRARY_IDENTITY_LOCK:
+                retained = _RESOURCE_LIBRARY_IDENTITIES.get(handle)
+                if retained is not None:
+                    digest = retained[1]
+                    _RESOURCE_LIBRARY_IDENTITIES.move_to_end(handle)
+                else:
+                    digest = file_hash(Path(path))
+                    # Keep the loaded owner, not just its reusable integer address.
+                    # No scientific handles, device probes or CUDA buffers are made.
+                    _RESOURCE_LIBRARY_IDENTITIES[handle] = (library, digest)
+                    if len(_RESOURCE_LIBRARY_IDENTITIES) > 32:
+                        _RESOURCE_LIBRARY_IDENTITIES.popitem(last=False)
         library._generativeqc_resource_binary_sha256 = digest
     profile = getattr(library, "_generativeqc_profile_diagnostics", {})
     return {"native_binary_sha256": digest, "profile_identity": profile.get("identity")}

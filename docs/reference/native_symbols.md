@@ -83,6 +83,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_calculation_prepare_named_ks_v1](#native-c-generativeqc-calculation-prepare-named-ks-v1)
 - [generativeqc_batch_prepare_named_ks_v1](#native-c-generativeqc-batch-prepare-named-ks-v1)
 - [generativeqc_ks_d3_resource_query_v1](#native-c-generativeqc-ks-d3-resource-query-v1)
+- [generativeqc_ks_d4_resource_query_v1](#native-c-generativeqc-ks-d4-resource-query-v1)
 - [generativeqc_calculation_prepare_named_ks_with_device_resources_v1](#native-c-generativeqc-calculation-prepare-named-ks-with-device-resources-v1)
 - [generativeqc_batch_prepare_named_ks_with_device_resources_v1](#native-c-generativeqc-batch-prepare-named-ks-with-device-resources-v1)
 - [generativeqc_calculation_prepare_with_device_resources](#native-c-generativeqc-calculation-prepare-with-device-resources)
@@ -2253,6 +2254,34 @@ it can exceed the sum of retained bytes for ragged inputs. Output is unchanged o
 This is correction capacity only, not complete KS admission, RSS or vendor-memory sizing.
 
 **Units.** Atom counts are dimensionless and all capacities are bytes.
+
+(native-c-generativeqc-ks-d4-resource-query-v1)=
+## generativeqc_ks_d4_resource_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_d4_resource_query_v1 ( generativeqc_backend backend , const uint32_t * atom_counts , uint32_t system_count , generativeqc_d4_runtime_diagnostic * output ) ;
+```
+
+**Behavior.** Query the capacities of KS's retained per-system D4(BJ)-EEQ correction owners.
+
+**Inputs.** A CPU_REFERENCE or CUDA selector, nonempty uint32 atom counts, and an ABI-headed
+output are required. Each item has 1 through 256 atoms, matching the production EEQ bound.
+
+**Outputs.** Publishes summed host/device/table/workspace capacities and per-item worker slots.
+maximum_bytes is the minimum aggregate correction cap under equal-per-item budget shares.
+profile, ATM and execution counters are zero (unspecified), not scientific results.
+Output is unchanged on failure. Composite gCP storage is excluded.
+
+**Lifetime.** Borrows inputs only for this call; no owner or pointer is retained.
+
+**Errors.** Invalid shape/backend returns INVALID_ARGUMENT; bad output header ABI_MISMATCH.
+
+**Execution.** Allocation-free shape query; CUDA is a selector even in CPU-only libraries.
+This is correction capacity only, not complete KS admission, RSS or vendor-memory sizing.
+
+**Units.** Atom and worker counts are dimensionless; all capacities are bytes.
 
 (native-c-generativeqc-calculation-prepare-named-ks-with-device-resources-v1)=
 ## generativeqc_calculation_prepare_named_ks_with_device_resources_v1

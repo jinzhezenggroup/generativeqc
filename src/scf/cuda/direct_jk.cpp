@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <new>
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -73,6 +74,12 @@ void direct_jk_check(cudaError_t error) {
 }
 void direct_jk_require(bool condition, const char* message) {
   if (!condition) throw std::invalid_argument(message);
+}
+
+/** Only a complete native endpoint can authorize this optional source. */
+bool direct_coulomb_optional_authorized() {
+  const auto& promise = runtime::active_device_capacity_promise;
+  return promise && promise->optional_direct_coulomb;
 }
 
 /** Default to bounded shell ownership for retained derivatives, not SCF values.
@@ -518,10 +525,23 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
     add(1, sizeof(cuda_execution::GeneratedShellPairStream) + 4 * sizeof(unsigned long long));
   }
   const char* disabled = std::getenv("GENERATIVEQC_DISABLE_MD_J");
-  if (reserve_optional_md && !runtime::active_device_resource_ledger && nao >= 8 &&
-      (!disabled || std::strcmp(disabled, "1") != 0))
+  if (reserve_optional_md &&
+      (!runtime::active_device_resource_ledger || direct_coulomb_optional_authorized()) &&
+      nao >= 8 && (!disabled || std::strcmp(disabled, "1") != 0))
     add(1, cuda_execution::kMdJDefaultReservation);
   return bytes;
+}
+
+std::array<std::size_t, 2> cuda_direct_coulomb_optional_capacity(std::size_t nao) {
+  if (nao < 8) return {};
+  const auto device = cuda_execution::kMdJDefaultReservation;
+  // Four copies cover descriptor-vector growth, upload metadata and bound
+  // downloads. Through-d shell expansion/signature maps have at most nao
+  // entries and nao^2 pair keys, each covered by 1024 value-metadata bytes.
+  // Include the small ordered-Schwarz permutation in the same host envelope.
+  const auto dimension = runtime::size_add(nao, 1);
+  const auto metadata = runtime::size_mul(1024, runtime::size_mul(dimension, dimension));
+  return {runtime::size_add(runtime::size_mul(4, device), metadata), device};
 }
 
 /** One authority for the retained row topology plus transient CUB inventory. */
@@ -643,6 +663,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
         "direct J/K allocation inventory drifted from packed storage");
     direct_jk_check(cudaSetDevice(device_id));
     auto plan = std::make_unique<CudaDirectJkPlan>();
+    const bool optional_coulomb = direct_coulomb_optional_authorized();
     plan->device_id = device_id;
     plan->derivative_order = derivative_order;
     plan->matrix_elements = elements;
@@ -704,7 +725,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
     std::vector<std::int32_t> bounds_order;
     const auto* order_choice = std::getenv("GENERATIVEQC_DIRECT_ORDERED_SCHWARZ");
     if ((!order_choice || std::strcmp(order_choice, "0") != 0) &&
-        !runtime::active_device_resource_ledger) {
+        (!runtime::active_device_resource_ledger || optional_coulomb)) {
       try {
         bounds_order.resize(systems.size() * host.nbf);
         for (std::size_t item = 0; item < systems.size(); ++item) {
@@ -1090,6 +1111,22 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
             *plan, true, detail, [&] { plan->canonical_range_exchange = scratch(range_bytes); },
             [&] { plan->canonical_range_exchange = nullptr; });
     }
+    // All mandatory retained owners have been prepared above. Optional MD and
+    // component reuse share one explicit ceiling and cannot convert promise
+    // credit reserved for later fleet items, forces or geometry replacement.
+    const auto optional_begin = plan->device_bytes;
+    std::optional<runtime::DeviceUnpromisedCapacityScope> optional_scope;
+    if (optional_coulomb) optional_scope.emplace();
+    const auto optional_available = [&] {
+      auto available = budget > plan->device_bytes ? budget - plan->device_bytes : 0;
+      if (optional_coulomb) {
+        const auto spent = plan->device_bytes - optional_begin;
+        const auto ceiling = cuda_execution::kMdJDefaultReservation;
+        available = std::min({available, spent < ceiling ? ceiling - spent : 0,
+                              runtime::device_resource_available(device_id)});
+      }
+      return available;
+    };
     const auto prepare_materialized_values = [&] {
       auto* materialized_owner = plan->generated_exchange ? plan->generated_exchange->shared.get()
                                                           : plan->generated_coulomb.get();
@@ -1156,7 +1193,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                   through_f ? (plan->generated_exchange ? plan->generated_exchange->device_bytes
                                                         : materialized_owner->device_bytes)
                             : 0;
-              const auto available = budget - plan->device_bytes;
+              const auto available = optional_available();
               if (owner_bytes > available || bytes > available - owner_bytes) return;
               DirectJkDownloadFence fence{plan->stream};
               const auto* input_order =
@@ -1218,11 +1255,12 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
     MdJHost md_host;
     bool md_ready = false;
     try {
-      // Public plans reserve incumbent owners and later force/rebuild capacity,
-      // not optional MD storage. Spare live bytes are not an admission allowance.
-      md_ready = !resident_source_only && !runtime::active_device_resource_ledger &&
-                 derivative_order <= 1 && budget > plan->device_bytes &&
-                 md_host.prepare(host, budget - plan->device_bytes);
+      // Complete D4 admission withholds its mandatory promise while allocating
+      // this source. Other public owners retain their established generated J.
+      md_ready = !resident_source_only &&
+                 (!runtime::active_device_resource_ledger || optional_coulomb) &&
+                 derivative_order <= 1 && optional_available() &&
+                 md_host.prepare(host, optional_available());
     } catch (const std::bad_alloc&) {
     }
     if (md_ready) {
@@ -1330,6 +1368,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
     // Keep incumbent MD-J storage ahead of optional canonical component reuse.
     // Tight SPD budgets must not trade their established J source for this K route.
     prepare_materialized_values();
+    optional_scope.reset();
     auto& info = plan->diagnostic;
     info.batch_size = systems.size();
     info.nbf = host.nbf;

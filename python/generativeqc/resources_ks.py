@@ -33,7 +33,7 @@ from .basis import BasisSet
 from .basis_capabilities import require_basis
 from .calculator import Atom, _snapshot_basis
 from .elements import electron_state
-from .ks import _native_semilocal_code, resolve_ks_options
+from .ks import KsOptions, _native_semilocal_code, resolve_ks_options
 from .resources_hf import (
     _basis_record,
     _cuda_library_identity,
@@ -937,7 +937,18 @@ def ks_resource_request(
                 "application precision must have one method/KS transport owner"
             )
     try:
-        model = resolve_ks_options(method, ks_options)
+        # Calculator has already validated this frozen snapshot against the
+        # exact selector. Reuse it for CUDA metadata; changed options, aliases
+        # and separately selected profiles take ordinary resolution. All shape,
+        # precision, native-provider and capacity admission below still runs.
+        model = (
+            ks_options
+            if backend == "cuda"
+            and type(ks_options) is KsOptions
+            and ks_options._resolved_selector is not None
+            and ks_options._resolved_selector == method
+            else resolve_ks_options(method, ks_options)
+        )
     except (TypeError, ValueError, NotImplementedError) as error:
         raise NotImplementedError(
             "KS planning requires a compiler-resolved native KS execution plan"

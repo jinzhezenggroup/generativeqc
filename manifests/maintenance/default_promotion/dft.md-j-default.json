@@ -11,13 +11,16 @@
   "sources": [
     "src/scf/cuda/direct_jk.cpp",
     "src/scf/cuda/direct_md_j.hpp",
-    "src/methods/dft_method.cpp"
+    "src/methods/dft_method.cpp",
+    "src/runtime/resource_ledger.hpp"
   ],
-  "rationale": "Eligible strict-FP64 zero-order s/p/d Coulomb defaults to complete primitive MD-J for at least eight AOs. Optional storage is charged to the actual owner capacity after retained normal owners; the private 128-MiB shape reservation is not a second hard cap. Public active-ledger plans retain normal J. Construction-time opt-out 1 retains normal J; K, mixed, response and derivatives keep existing consumers.",
-  "revisit_condition": "Broaden ledger admission only with an explicit optional candidate reserving future owners, rebuild and forces; broaden numerical/workload domains only with renewed independent gates and complete endpoints. Retained GPU receipts remain pinned to their measured source; host resource repairs do not claim new GPU qualification.",
+  "rationale": "Eligible strict-FP64 zero-order s/p/d Coulomb defaults to complete primitive MD-J for at least eight AOs. Private unbudgeted owners retain their existing actual-capacity policy. Complete individual Direct D4 promises may admit optional MD-J outside mandatory fleet/force/rebuild credit, sharing a 128-MiB ceiling with optional component reuse; other public active-ledger plans retain normal J. Construction-time opt-out 1 retains normal J; K, mixed, response and derivatives keep existing consumers.",
+  "revisit_condition": "Complete Direct D4 optional admission requires renewed independent numerical/lifetime gates and complete endpoint timing/work profiles. Broaden other ledger or numerical domains only with an explicit optional candidate protecting future owners, rebuild and forces and fresh qualification. Historical GPU receipts retain their measured source; host resource tests do not claim new GPU qualification.",
   "evidence": [
     "pr:#2100",
     "benchmarks/results/md-j-default-cold/README.md",
-    "note:.agents/notes/implemented/performance/2026-10-19-md-j-owner-capacity.md"
+    "note:.agents/notes/implemented/performance/2026-10-19-md-j-owner-capacity.md",
+    "pr:#2872",
+    "note:.agents/notes/implemented/architecture/2026-10-29-d4-optional-xc-capacity.md"
   ]
 }
