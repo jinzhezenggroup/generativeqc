@@ -54,6 +54,9 @@ int cuda_df_md_charge(CudaDfMdOwner*,const double*,double*) { assert(false); ret
 int cuda_df_md_three_center_gradient(CudaDfMdOwner*,const double*,const double*,double,double*) {
   assert(false); return 3;
 }
+int cuda_df_md_metric_gradient(CudaDfMdOwner*,const double*,double,double*) {
+  assert(false); return 3;
+}
 }
 CudaDfFinalStateToken current;
 int mode=0,precision_authentication_calls=0;

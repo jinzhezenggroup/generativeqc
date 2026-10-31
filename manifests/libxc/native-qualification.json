@@ -242,9 +242,9 @@
   ],
   "previous": {
     "path": "manifests/libxc/native-qualification-previous.json.xz",
-    "scope": "Exact preceding master snapshot summary before the one-time Libxc scalar-dependency identity v2 migration. Campaign bytes and historical qualifications remain unchanged; no current native endpoint qualification is granted. Prior baseline and acknowledgements remain recoverable at their exact Git paths in this source commit.",
+    "scope": "Exact preceding master snapshot summary after #2907 and before the one-time Libxc scalar-dependency identity v2 migration. The summary is byte-identical to the preceding #2906 baseline. Campaign bytes and historical qualifications remain unchanged; no current native endpoint qualification is granted. Both parent snapshots, baseline metadata and acknowledgements remain recoverable at their exact Git paths in the merge parents.",
     "sha256": "05d40f4baf56442a20add1de74c97c9c010d9376b4599ebb50d4a661436862e3",
-    "source_commit": "44c11960d2ca8e28f0e2e6c6433ca83f8728f3bd"
+    "source_commit": "a59d82ab60cdadf40c9e7b92d2de452a11084fdb"
   },
   "report": "docs/reference/libxc_qualification.md",
   "schema": "generativeqc.libxc-native-catalog-manifest.v1",

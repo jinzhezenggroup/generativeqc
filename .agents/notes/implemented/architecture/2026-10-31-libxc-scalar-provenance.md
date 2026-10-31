@@ -52,3 +52,14 @@ transition checks remain active. No native/GPU numerical rerun is claimed.
 
 XC emission starts using another integral mathematical owner, or native endpoint
 qualification is redesigned with independently attested component identities.
+
+## Integration with #2907
+
+Master `a59d82ab60cdadf40c9e7b92d2de452a11084fdb` changes native DF
+response/charge ownership, not Libxc scalar capability subjects. Its summary
+is identical to the retained v1 baseline. Integration with PR parent
+`b79e19dbb241064effcb78826b01165e0e4ae3b3` regenerates only the current
+whole-build source fingerprints and report; the v2 summary and all 221 exact
+transition acknowledgements are unchanged. Both parent snapshots remain in Git.
+All measured campaign identities, bytes and qualified stages are preserved;
+native evidence is stale in both parents and in the merged tree.
