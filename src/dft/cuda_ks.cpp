@@ -2990,11 +2990,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw;
     }
   }
-  /** Opt-in only until complete fallback and endpoint qualification passes. */
+  /** Avoid an unused incumbent anchor when the audited source can serve replay.
+   * Explicit disable and unsupported owners retain eager preparation; the force
+   * envelope below prevents shifting known cold work into the first warm call.
+   */
   bool defer_range_warm_energy() const {
     const auto* lazy = std::getenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY");
     const bool eligible =
-        lazy && std::strcmp(lazy, "1") == 0 && range_source_active() &&
+        (!lazy || std::strcmp(lazy, "1") == 0) && range_source_active() &&
         retain_range_source_for_replay(true) && fitted_coulomb && fitted_exchange &&
         warm_factor_storage && spins == 1 && !precision_schedule.any_lower_precision() &&
         options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
@@ -3030,7 +3033,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
             range_warm_energy = warm_energy;
             range_warm_energy_correction = warm_energy_correction;
           }
-          // Only strict factor-backed range replay participates in this pilot.
+          // Only strict factor-backed range replay can defer this anchor.
           // All other owners retain the existing eager, audited fallback.
           if (defer_range_warm_energy()) {
             warm_incumbent_deferred = true;
