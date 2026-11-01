@@ -63,3 +63,9 @@ and large groups of small records to leave the checkout without an external
 archive or Git-history rewrite.
 
 After this pass the aggregate benchmark-results budget is **64 MiB**.
+
+The recovery manifest uses an authenticated XZ storage record. The adjacent
+`.json.xz` payload preserves every original manifest byte, including all Git
+revisions, paths, sizes and checksums. `restore_retained_evidence.py` verifies
+both compressed and decoded checksums before applying its ordinary recovery
+validation. Existing recovery commands and paths are unchanged.
