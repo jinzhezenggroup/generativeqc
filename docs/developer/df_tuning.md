@@ -45,11 +45,11 @@ python tools/benchmark_df_derivatives.py \
   --profile benchmarks/results/issue395-df-work/work/384.json --pair-mode symmetric \
   --profile benchmarks/results/issue395-df-work/work/768.json --pair-mode packed \
   --directory .artifacts/df-derivatives --nvcc /path/to/cuda/bin/nvcc \
-  --generated build/cuda-release-sm120/generated \
+  --generated build/cuda-release/generated \
   --oracle-library build/cpu/libgenerativeqc.so --compile-jobs 2
 python tools/benchmark_df_values.py \
   --directory .artifacts/df-values --nvcc /path/to/cuda/bin/nvcc \
-  --generated build/cuda-release-sm120/generated --compile-jobs 2
+  --generated build/cuda-release/generated --compile-jobs 2
 ```
 
 ## Current selectors

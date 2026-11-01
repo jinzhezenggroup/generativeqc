@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -316,6 +317,13 @@ def test_cuda_only_target_wraps_host_link_and_keeps_device_link(tmp_path: Path) 
     )
     assert "CMakeFiles/probe.dir/probe.cu.o" in host_edge
     assert "CMakeFiles/probe.dir/cmake_device_link.o" in host_edge
+    commands = _run(ninja, "-C", str(build), "-t", "commands").stdout.splitlines()
+    host_commands = [line for line in commands if "tools/link_cuda_implib.py" in line]
+    device_commands = [line for line in commands if " -dlink " in line]
+    assert host_commands and device_commands
+    if _implib_target() == "x86_64":
+        assert all("cuda_wheel_payload.ld" in line for line in host_commands)
+    assert all("cuda_wheel_payload.ld" not in line for line in device_commands)
 
 
 def test_unrelated_undefined_symbol_remains_fatal(tmp_path: Path) -> None:
@@ -348,3 +356,170 @@ def test_unrelated_undefined_symbol_remains_fatal(tmp_path: Path) -> None:
         target=target,
     )
     assert status != 0
+
+
+@pytest.mark.parametrize("large_section", [None, ".nv_fatbin", "__nv_relfatbin"])
+def test_wheel_loads_with_retained_images_and_reachable_host_sections(
+    tmp_path: Path, native_cxx: Any, large_section: str | None
+) -> None:
+    """Keep opaque images out of host-relative reach, without huge physical I/O.
+
+    NOBITS reserves virtual space; a middle-placement negative control reproduces
+    the real relocation overflow. Small PROGBITS images check retained bytes.
+    """
+    if _implib_target() != "x86_64":
+        pytest.skip("the payload layout targets Linux x86-64 ELF")
+    for tool in ("cmake", "ninja", "readelf"):
+        if shutil.which(tool) is None:
+            pytest.skip(f"{tool} is required for the executable ELF contract")
+    # Copy the build helpers so editing the script can exercise relink tracking
+    # without modifying the checkout used by other tests.
+    shutil.copytree(ROOT / "cmake", tmp_path / "cmake")
+    (tmp_path / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
+    (tmp_path / "host.cpp").write_text(
+        "#include <cstdint>\n#include <stdexcept>\n"
+        'extern "C" {\n'
+        "extern const unsigned char image0[], image0_end[], image1[], image1_end[];\n"
+        "extern const void* wrappers[];\n"
+        'extern const char host_label[] = "host-rodata-oracle";\n'
+        "int cudaDeviceSynchronize();\n"
+        "int lazy_cuda_probe() { return cudaDeviceSynchronize(); }\n"
+        "static thread_local int counter;\n"
+        "int probe() {\n"
+        "  try { throw std::runtime_error(host_label); }\n"
+        "  catch (const std::runtime_error& error) {\n"
+        "    return error.what()[0] == 'h' ? ++counter + 6 : -1;\n"
+        "  }\n}\n"
+        "int image_contract() {\n"
+        "  return wrappers[0] == image0 && wrappers[1] == image1\n"
+        "    && reinterpret_cast<uintptr_t>(wrappers) < reinterpret_cast<uintptr_t>(image0)\n"
+        "    && reinterpret_cast<uintptr_t>(wrappers) < reinterpret_cast<uintptr_t>(image1);\n"
+        "}\n}\n"
+    )
+    assembly = []
+    sizes = []
+    for index, section in enumerate((".nv_fatbin", "__nv_relfatbin")):
+        large = section == large_section
+        size = 0x80001000 if large else 32
+        sizes.append(size)
+        assembly.extend(
+            [
+                # Keep both sections NOBITS in the large probe: a following
+                # PROGBITS section can make ld materialize the virtual gap.
+                f'.section {section},"a",@{"nobits" if large_section else "progbits"}',
+                ".balign 8",
+                f".global image{index}, image{index}_end",
+                f"image{index}:",
+                f".skip {size}" if large_section else f".fill {size},1,{65 + index}",
+                f"image{index}_end:",
+            ]
+        )
+    assembly.extend(
+        [
+            '.section .nvFatBinSegment,"aw",@progbits',
+            ".balign 8",
+            ".global wrappers",
+            "wrappers: .quad image0, image1",
+            '.section .note.GNU-stack,"",@progbits',
+        ]
+    )
+    (tmp_path / "images.S").write_text("\n".join(assembly) + "\n")
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(WheelLayoutProbe LANGUAGES C CXX ASM)\n"
+        f'set(Python3_EXECUTABLE "{sys.executable}")\n'
+        'include("${PROJECT_SOURCE_DIR}/cmake/GenerativeQCCudaImplib.cmake")\n'
+        "add_library(probe SHARED host.cpp images.S)\n"
+        "generativeqc_attach_cuda_implib(probe)\n"
+    )
+    build = tmp_path / "build"
+    _run(
+        "cmake",
+        "-S",
+        str(tmp_path),
+        "-B",
+        str(build),
+        "-G",
+        "Ninja",
+        f"-DCMAKE_CXX_COMPILER={native_cxx.compiler}",
+        f"-DCMAKE_CXX_COMPILER_LAUNCHER={native_cxx.cache}",
+        f"-DCMAKE_C_COMPILER_LAUNCHER={native_cxx.cache}",
+        f"-DCMAKE_ASM_COMPILER_LAUNCHER={native_cxx.cache}",
+    )
+    _run("cmake", "--build", str(build), "--parallel", "2")
+    library = build / "libprobe.so"
+    dynamic = _run("readelf", "-d", str(library)).stdout
+    assert "Shared library: [libcudart" not in dynamic
+    # The regression must stay cheap even though its mapped span exceeds 2 GiB.
+    assert library.stat().st_size < 1_000_000
+    _run(
+        sys.executable,
+        "-c",
+        """
+import ctypes
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+lib = ctypes.CDLL(sys.argv[1])
+assert [lib.probe(), lib.probe()] == [7, 8]
+with ThreadPoolExecutor(max_workers=1) as pool:
+    assert pool.submit(lib.probe).result() == 7
+assert lib.probe() == 9
+assert lib.image_contract() == 1
+for index, expected in enumerate(map(int, sys.argv[2:])):
+    start = ctypes.addressof(ctypes.c_ubyte.in_dll(lib, f'image{index}'))
+    end = ctypes.addressof(ctypes.c_ubyte.in_dll(lib, f'image{index}_end'))
+    assert end - start == expected
+    value = 0 if max(map(int, sys.argv[2:])) > 32 else 65 + index
+    assert ctypes.c_ubyte.from_address(start).value == value
+    assert ctypes.c_ubyte.from_address(end - 1).value == value
+    # GNU ld may merge synthetic NOBITS into the writable BSS reservation.
+    # The real image representation is PROGBITS; require its pages read-only.
+    for address in ((start, end - 1) if max(map(int, sys.argv[2:])) == 32 else ()):
+        mapping = next(line.split() for line in Path('/proc/self/maps').read_text().splitlines()
+                       if int(line.split('-')[0], 16) <= address
+                       < int(line.split()[0].split('-')[1], 16))
+        assert mapping[1].startswith('r--'), mapping
+""",
+        str(library),
+        *map(str, sizes),
+    )
+
+    if large_section:
+        # NOBITS normally sorts late. Force the faulty placement so the negative
+        # control exercises the same host relocation range as real huge fatbins.
+        middle = tmp_path / "middle.ld"
+        middle.write_text(
+            f"SECTIONS {{ {large_section} : {{ *({large_section}) }} }} "
+            "INSERT AFTER .rodata;\n"
+        )
+        bad = subprocess.run(
+            [
+                native_cxx.compiler,
+                "-shared",
+                str(build / "CMakeFiles/probe.dir/host.cpp.o"),
+                str(build / "CMakeFiles/probe.dir/images.S.o"),
+                f"-Wl,-T,{middle}",
+                "-o",
+                str(tmp_path / "bad.so"),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert bad.returncode != 0
+        assert any(
+            message in bad.stderr
+            for message in (
+                "relocation truncated",
+                "out of range",
+                "failed to convert GOTPCREL",
+            )
+        ), bad.stderr
+    else:
+        before = library.stat().st_mtime_ns
+        script = tmp_path / "cmake/cuda_wheel_payload.ld"
+        script.write_text(script.read_text() + "\n/* Relink dependency probe. */\n")
+        _run("cmake", "--build", str(build), "--parallel", "2")
+        assert library.stat().st_mtime_ns > before

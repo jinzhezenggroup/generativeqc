@@ -141,6 +141,8 @@ def _assert_transport(workflow: str) -> None:
             "github.run_attempt": "2",
             "steps.prose_scope.outcome": "success",
             "steps.prose_scope.outputs.scope": "full",
+            # This master-handoff matrix has no prepared PR-only store.
+            "steps.pr_fast_ccache.outputs.key": "",
             "format('file://{0}/cuda-ccache-handoff', runner.temp)": "file:///tmp/delta",
         }
         assert (

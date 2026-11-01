@@ -11,7 +11,7 @@ import importlib
 import json
 import sys
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -42,8 +42,11 @@ from generativeqc_compiler.method.spec import (
 from generativeqc_compiler.xc._generated_split_hybrids import (
     SPLIT_HYBRIDS,
 )
-from generativeqc_compiler.xc.automatic_semilocal import automatic_scf_domain
-from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+from generativeqc_compiler.xc.automatic_semilocal import (
+    automatic_composition_name,
+    automatic_scf_domain,
+)
+from generativeqc_compiler.xc.spec import POINTWISE_BULK_COMPONENTS
 
 
 @dataclass(frozen=True)
@@ -72,9 +75,9 @@ def _match_curated(plan: Any) -> Any:
         if omega != Fraction(record["range_omega"]):
             continue
         expected = {name: Fraction(value) for name, value in record["components"]}
-        if actual.keys() != expected.keys():
-            continue
         if record["coefficient_policy"] == "native-scales":
+            if actual.keys() != expected.keys():
+                continue
             if any(value < 0 for value in actual.values()):
                 continue
         elif actual != expected:
@@ -177,6 +180,21 @@ def _admit(plan: Any) -> tuple[bool, bool, str, str]:
 
     if _match_split(plan):
         return False, True, "libxc-7.0/split-global-hybrid-v1", ""
+    if (
+        not plan.nonlocal_correlation
+        and not plan.post_scf
+        and not plan.semilocal.functional.range_omega
+        and len(plan.exchange) <= 1
+        and all(
+            term.operator == "full-range" and not term.omega for term in plan.exchange
+        )
+    ):
+        name = automatic_composition_name(
+            plan.semilocal.functional.components,
+            plan.exchange[0].coefficient if plan.exchange else Fraction(0),
+        )
+        if name is not None:
+            return True, True, automatic_scf_domain(name), ""
     return False, False, "", "no qualified native semilocal lowerer for this graph"
 
 
@@ -301,9 +319,12 @@ def rows() -> tuple[Row, ...]:
             if item.name in result:
                 raise ValueError(f"duplicate MethodIR CLI selector {item.name!r}")
             result[item.name] = item
-    # Public automatic selectors are single, indivisible semilocal programs.
-    # Do not route them through curated-family matching or admit mixed graphs.
-    for functional_name in sorted(AUTO_BULK_COMPONENTS):
+            prefix = "libxc:" if spin == "unpolarized" else "libxc-uks:"
+            result[prefix + identifier.lower()] = replace(
+                item, name=prefix + identifier.lower()
+            )
+    # Atomic selectors share the same semantic specialization policy as recipes.
+    for functional_name in sorted(POINTWISE_BULK_COMPONENTS):
         for spin in ("unpolarized", "polarized"):
             try:
                 resolution = resolve_bulk_ks(functional_name, spin=spin, backend="cpu")
@@ -311,6 +332,7 @@ def rows() -> tuple[Row, ...]:
                 continue
             prefix = "libxc:" if spin == "unpolarized" else "libxc-uks:"
             name = prefix + functional_name.lower()
+            cpu, cuda, domain, reason = _admit(resolution.plan)
             result[name] = Row(
                 name=name,
                 source=resolution.method.identifier,
@@ -320,20 +342,20 @@ def rows() -> tuple[Row, ...]:
                 # as the point worker. Density-only LDA has separate RKS/UKS
                 # layouts in its own domain; using the generic work domain
                 # rejects CLI preparation and bypasses native Python selection.
-                domain=automatic_scf_domain(functional_name),
+                domain=domain,
                 components=tuple(
                     (component, float(coefficient))
                     for component, coefficient in resolution.plan.semilocal.functional.components
                 ),
                 exchange=(),
                 fock_coefficients=(),
-                cpu=True,
+                cpu=cpu,
                 # The same native program represents both backends. Actual
                 # CUDA preparation still requires a linked static provider and
                 # applies its precision/shape/spin admission; catalog selection
                 # must not fall back to Python lowering when a package omits it.
-                cuda=True,
-                reason="",
+                cuda=cuda,
+                reason=reason,
             )
     return tuple(result[name] for name in sorted(result))
 

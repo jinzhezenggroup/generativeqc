@@ -14,6 +14,7 @@ from generativeqc_compiler.method.stationary_native_cuda import (
     native_stationary_package_sources,
     native_stationary_shared_group,
 )
+from generativeqc_compiler.xc._generated_semilocal_compositions import COMPOSITIONS
 from generativeqc_compiler.xc.automatic_cuda_package import (
     _executable,
     automatic_cuda_package,
@@ -137,11 +138,35 @@ def test_similar_formulas_with_different_work_floors_do_not_alias() -> None:
     )
 
 
+@pytest.mark.parametrize("spin", ("rks", "uks"))
+@pytest.mark.parametrize(
+    "names,fraction",
+    (
+        (("GGA_X_APBE", "GGA_X_RPBE"), 0.0),
+        (
+            tuple(
+                next(
+                    key
+                    for key, record in COMPOSITIONS.items()
+                    if name in record["methods"]
+                )
+                for name in ("RSCAN0", "R2SCAN0")
+            ),
+            0.25,
+        ),
+    ),
+)
 def test_shared_host_bindings_preserve_science_and_reuse_callbacks(
-    tmp_path: Path, native_cxx: NativeCxx
+    tmp_path: Path,
+    native_cxx: NativeCxx,
+    names: tuple[str, str],
+    fraction: float,
+    spin: str,
 ) -> None:
     """Link generated registrations to one consumer and execute real dispatch."""
-    first, second = _profiles(("GGA_X_APBE", "GGA_X_RPBE"))[::2]
+    first, second = tuple(
+        f"libxc_{automatic_functional_code(name)}_{spin}" for name in names
+    )
     group = native_stationary_shared_group(first)
     assert group == native_stationary_shared_group(second)
     (tmp_path / "generated_libxc_semilocal_cuda_registry.hpp").write_text("""
@@ -160,7 +185,7 @@ const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t) noexcept;
 namespace generativeqc::dft {{
 struct CudaXcPointProgram {{ unsigned code; }};
 const CudaXcPointProgram* generated::automatic_cuda_point_entry(std::uint32_t code) noexcept {{
-  static CudaXcPointProgram points[]{{{{{automatic_functional_code("GGA_X_APBE")}}}, {{{automatic_functional_code("GGA_X_RPBE")}}}}};
+  static CudaXcPointProgram points[]{{{{{automatic_functional_code(names[0])}}}, {{{automatic_functional_code(names[1])}}}}};
   return code == points[0].code ? points : points + 1;
 }}
 static int metrics(void*, std::uint64_t*, std::size_t) {{ return 0; }}
@@ -173,7 +198,9 @@ extern "C" bool probe() {{
   const auto& b = native_stationary_profile_{second}();
   return a.metrics == b.metrics && a.metrics == metrics && a.point_program != b.point_program &&
          a.model.functional == a.point_program->code && b.model.functional == b.point_program->code &&
-         a.model.spin_blocks == 1 && b.model.spin_blocks == 1 &&
+         a.model.spin_blocks == {1 if spin == "rks" else 2} &&
+         b.model.spin_blocks == {1 if spin == "rks" else 2} &&
+         a.model.full_range_exchange == {fraction} && b.model.full_range_exchange == {fraction} &&
          std::strcmp(a.plan_identity, b.plan_identity) != 0 &&
          std::strcmp(a.method_identity, b.method_identity) != 0 &&
          std::strcmp(a.source_identity, b.source_identity) != 0;

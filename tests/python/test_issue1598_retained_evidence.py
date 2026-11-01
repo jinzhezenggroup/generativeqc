@@ -349,7 +349,10 @@ def test_every_warm_independent_reference_pair(
 
 @pytest.mark.parametrize("damage", ["tree", "manifest", "member"])
 def test_history_recovery_rejects_tampered_objects(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str
+    tmp_path: Path,
+    historical_capsule: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    damage: str,
 ) -> None:
     original = history.git
 
@@ -372,7 +375,7 @@ def test_history_recovery_rejects_tampered_objects(
         restore(tmp_path)
 
 
-def test_current_history_entrypoint() -> None:
+def test_current_history_entrypoint(historical_capsule: Path) -> None:
     result = subprocess.run(
         [sys.executable, str(CAPSULE / "verify.py")],
         capture_output=True,

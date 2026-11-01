@@ -176,7 +176,9 @@ def plan_tiles(
         host += 32 << 10
         elements = basis.packed.size + 2 * n * n + 16 * t + (jets + 8) * t * m
         if active_ao_capacity is not None:
-            elements += 2 * n * n + 4 * m * m + m
+            # One shared point evaluation feeds all local AO pairs; include the
+            # eleven energy/derivative rows even for a single active AO.
+            elements += 2 * n * n + 4 * m * m + m + 12 * t + 6
         if orbital_capacity is not None:
             elements += n * sum(orbital_capacity) + (m + 4 * t) * orbital_tile
         numeric = 8 * elements

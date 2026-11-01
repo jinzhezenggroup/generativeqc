@@ -29,7 +29,7 @@ dependencies = [
 [project.optional-dependencies]
 stability = ["scipy>=1.10"]
 # Required by the benchmark publication renderer regression; do not skip it.
-test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8", "matplotlib>=3.8", "defusedxml>=0.7.1"]
+test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8", "matplotlib>=3.8", "defusedxml>=0.7.1", "cibuildwheel==4.2.0"]
 array-api-test = ["hypothesis>=6.151.0", "ndindex>=1.8", "pytest-json-report>=1.5", "array-api-strict==2.6.1"]
 reference-test = [
   "scipy>=1.10",
@@ -106,6 +106,8 @@ wheel.py-api = "py3"
 "src/dft/cuda_grid.cu" = "generativeqc_compiler/assets/src/dft/cuda_grid.cu"
 "src/dft/cuda_grid_api.hpp" = "generativeqc_compiler/assets/src/dft/cuda_grid_api.hpp"
 "src/dft/cuda_grid_storage.hpp" = "generativeqc_compiler/assets/src/dft/cuda_grid_storage.hpp"
+"src/dft/cuda_grid_xc_batch.cuh" = "generativeqc_compiler/assets/src/dft/cuda_grid_xc_batch.cuh"
+"src/dft/cuda_xc_tile.hpp" = "generativeqc_compiler/assets/src/dft/cuda_xc_tile.hpp"
 "src/dft/ao_grid_work.hpp" = "generativeqc_compiler/assets/src/dft/ao_grid_work.hpp"
 "src/dft/grid_task_view.cuh" = "generativeqc_compiler/assets/src/dft/grid_task_view.cuh"
 "src/dft/xc_point.hpp" = "generativeqc_compiler/assets/src/dft/xc_point.hpp"
@@ -151,6 +153,7 @@ wheel.py-api = "py3"
 GENERATIVEQC_ENABLE_CUDA = { env = "GENERATIVEQC_ENABLE_CUDA", default = "ON" }
 GENERATIVEQC_ENABLE_AOT_SHELLS = { env = "GENERATIVEQC_ENABLE_AOT_SHELLS", default = "ON" }
 GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT = { env = "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT", default = "ON" }
+GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE = { env = "GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE", default = "" }
 GENERATIVEQC_CUDA_ARCHITECTURES = { env = "GENERATIVEQC_CUDA_ARCHITECTURES", default = "" }
 
 # Keep wheel production aligned with xTBloom's proven cibuildwheel path. Because
