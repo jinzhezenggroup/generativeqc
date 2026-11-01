@@ -54,6 +54,39 @@ function(_generativeqc_normalize_pkgconfig_libraries prefix usable)
   set_property(TARGET ${_pkg_target} PROPERTY INTERFACE_LINK_OPTIONS "${_options}")
 endfunction()
 
+function(_generativeqc_python_openblas_config output)
+  set(${output} "" PARENT_SCOPE)
+  # A native source build can already have the wheel build dependency in its
+  # selected Python environment without that environment being a CMake prefix.
+  # Read distribution metadata only: importing scipy_openblas32 itself loads a
+  # second BLAS into the configure process. Never infer target libraries from
+  # a host interpreter while cross-compiling, or override explicit find opt-out.
+  if(CMAKE_CROSSCOMPILING OR CMAKE_DISABLE_FIND_PACKAGE_OpenBLAS OR NOT Python3_EXECUTABLE)
+    return()
+  endif()
+  execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -c [=[
+from importlib.metadata import PackageNotFoundError, distribution
+try:
+    package = distribution("scipy-openblas32")
+except PackageNotFoundError:
+    raise SystemExit(1)
+configs = [package.locate_file(item) for item in (package.files or ())
+           if item.as_posix() == "scipy_openblas32/lib/cmake/openblas/OpenBLASConfig.cmake"]
+if len(configs) != 1 or not configs[0].is_file():
+    raise SystemExit(1)
+print(configs[0].resolve().parent.as_posix())
+]=]
+    RESULT_VARIABLE _status
+    OUTPUT_VARIABLE _directory
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+    TIMEOUT 10)
+  if(_status EQUAL 0 AND IS_DIRECTORY "${_directory}")
+    set(${output} "${_directory}" PARENT_SCOPE)
+  endif()
+endfunction()
+
 function(generativeqc_configure_cpu_linalg target)
   if(NOT GENERATIVEQC_CPU_LINALG_PROVIDER STREQUAL "auto"
      AND NOT GENERATIVEQC_CPU_LINALG_PROVIDER STREQUAL "scalar"
@@ -96,6 +129,12 @@ function(generativeqc_configure_cpu_linalg target)
     # build hosts without pkg-config and for SciPy's redistributable OpenBLAS.
     if(NOT _provider_libraries)
       find_package(OpenBLAS CONFIG QUIET)
+      if(NOT OpenBLAS_FOUND)
+        _generativeqc_python_openblas_config(_python_openblas_config)
+        if(_python_openblas_config)
+          find_package(OpenBLAS CONFIG QUIET PATHS "${_python_openblas_config}" NO_DEFAULT_PATH)
+        endif()
+      endif()
       if(OpenBLAS_FOUND AND OpenBLAS_LIBRARIES)
         set(_provider_libraries ${OpenBLAS_LIBRARIES})
         set(_include_dirs ${OpenBLAS_INCLUDE_DIRS})

@@ -44,6 +44,14 @@ mutex-protected global control. Automatic selection retains scalar fallback;
 an unavailable explicitly requested OpenBLAS provider is rejected. The linked
 eigen entry remains allocating row-major `LAPACKE_dsyevd`.
 
+Native CMake builds first use the existing pkg-config or OpenBLAS CMake package.
+If neither is available, they also inspect the selected Python interpreter's
+`scipy-openblas32` distribution metadata for its CMake package. Discovery does
+not import or load the Python package. Scalar selection, disabled OpenBLAS
+discovery and cross-compilation do not use this fallback. Finding a library
+does not admit its capabilities: the actual CBLAS/LAPACKE and thread-control
+compile/link probes still decide which operations can use it.
+
 The runtime-LP64 profile requires one complete DPOTRF_WORK, DPOCON_WORK,
 DSYEVD_WORK, DTRSM and DGEMM cohort, matching standard or SciPy-prefixed
 symbols, a valid LP64 configuration and the existing preflight. It provides
