@@ -84,9 +84,20 @@ LSF 224154 at 1200 s and Slurm n1 15037 at 1650 s. They remain incomplete and
 unranked. At a separately declared 32 GiB budget, the 120-atom 5090 eager arm
 (Slurm15038) completed cold, retained, evicted-fallback and second calls before
 its 1950 s limit interrupted the moved call. That is also an incomplete
-lifecycle; the deferred arm did not run. Other larger guarded controls remain
-pending. Neither changing the budget nor a smaller control erases the original
-timeouts. Default promotion requires this remaining lifecycle evidence.
+lifecycle; the deferred arm did not run. The guarded A100 120-atom / 32 GiB control (LSF 224157) completes both
+six-call lifecycles, including forced eviction and moved geometries. Its force
+envelope keeps the eager anchor in both arms (cold 28 iterations / 29 Focks,
+moved 20 / 21); every warm call uses one iteration / one Fock. Paired energy and
+full-force errors stay below 9.10e-13 Eh and 1.78e-12 Eh/Bohr. A single larger
+pair is a differential/lifetime control, not a ranked speedup. The separate 5090 108-atom / 32 GiB control (Slurm15039) also completes both
+six-call lifecycles with eager work retained: cold 31 iterations / 32 Focks,
+moved 20 / 21, and every warm call 1 / 1. Paired errors stay below 9.10e-13 Eh
+and 7.00e-13 Eh/Bohr. Its complete lifecycle takes 898.551 s eager and 901.854 s
+deferred-control (+0.37% for this single unranked pair). This smaller control
+does not replace either incomplete 120-atom 5090 population. The PRO6000 larger
+control remains pending. Neither changing the budget nor a smaller control
+erases the original timeouts. Default promotion requires this remaining
+lifecycle evidence.
 
 Deployment failures also remain explicit: n5 job1942 started before its binary
 copy completed and exited with SIGBUS/135. Its retry waited for all copies,
@@ -114,3 +125,7 @@ allocation, with the opt-in control set in the declared off/on/on/off order.
 
 The implementation rationale and admission boundary are in
 [the Agent Note](../../../.agents/notes/proposed/2026-11-01-deferred-range-warm-anchor.md).
+
+Two historical recovery manifests have only JSON formatting whitespace removed
+to retain these new samples within the existing checkout budget. Their data
+tokens, recovery paths, payload hashes and byte counts are unchanged.

@@ -199,6 +199,11 @@ def main() -> None:
     large = []
     for folder in bundle["large"]:
         complete = files[f"{folder}/exit-code.txt"].strip() == "0"
+        identity = json.loads(files[f"{folder}/identity.json"])
+        require(
+            identity["source_identity"] in bundle["identities"].values(),
+            "unknown larger-control source",
+        )
         controls = [
             json.loads(files[name])
             for name in (f"{folder}/large-lazy-0.json", f"{folder}/large-lazy-1.json")
@@ -206,6 +211,15 @@ def main() -> None:
         ]
         summary = {"folder": folder, "complete": complete, "completed_calls": []}
         for control in controls:
+            # A timed-out owner may have no completed sample or binary receipt.
+            # Every returned endpoint must still bind the allocation's build.
+            if control["samples"]:
+                native = control["native_build"]
+                require(
+                    native["source_identity"] == identity["source_identity"]
+                    and native["library_sha256"] == identity["binary_sha256"],
+                    "larger source/binary identity",
+                )
             for sample in control["samples"]:
                 work(sample)
                 summary["completed_calls"].append(
@@ -237,6 +251,9 @@ def main() -> None:
                 "geometry_bohr",
                 "moved_positions_bohr",
                 "density_fitting_memory_budget_bytes",
+                "method",
+                "atoms",
+                "scheduler",
             ):
                 require(controls[0][key] == controls[1][key], f"larger task: {key}")
             for a, b in zip(

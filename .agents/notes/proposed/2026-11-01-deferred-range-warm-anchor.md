@@ -103,7 +103,7 @@ and 3.80%, respectively. The 5090 retains eager work: cold varies +0.019%,
 first warm -0.022%, lifecycle +0.002%, with one Fock in every warm call.
 
 This repairs the measured work transfer without a GPU whitelist. It is not a
-global promotion: larger 32 GiB lifecycles remain pending, and the independent
+global promotion: larger qualification is still incomplete, and the independent
 5090 120-atom / 8 GiB eager control also timed out before a completed call
 (1650 s, Slurm15037). Keep both failed budgets and subsequent declared controls.
 The separate 120-atom / 32 GiB 5090 eager arm (Slurm15038) completed four calls
@@ -113,3 +113,12 @@ execute. Its partial calls are retained without a complete-lifecycle ranking.
 Raw complete endpoint samples, paired work/errors, independent reference reuse
 and executable replay are retained under
 `benchmarks/results/deferred-range-anchor-20261101/`. The default stays eager.
+
+The separately declared A100 120-atom / 32 GiB (224157) and 5090 108-atom /
+32 GiB (15039) controls now complete both six-phase lifecycles, including
+forced source eviction and moved coordinates. Both controls retain eager
+anchors under the force envelope and one Fock in every warm call. Maximum
+paired errors are below 9.10e-13 Eh / 1.78e-12 Eh/Bohr. These larger differential
+controls supplement the independent small-system/README oracles; single-pair
+latencies are not promoted to ranked speedups. PRO6000 larger work is pending,
+and the 5090 108-atom control does not erase its 120-atom timeouts.

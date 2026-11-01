@@ -2,7 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "deferred-range-anchor-20261101",
   "owner": "CUDA KS range replay and warm-anchor work placement",
-  "reason": "Original scientific samples and provenance for 30 independently qualified complete populations, including rejected unconditional deferral, explicit first-warm/Fock/lifecycle costs and unranked constrained-memory timeouts. Larger default-promotion controls remain pending.",
+  "reason": "Original scientific samples and provenance for 30 independently qualified complete populations, including rejected unconditional deferral, explicit first-warm/Fock/lifecycle costs, larger differential lifecycles and unranked constrained-memory timeouts. Default promotion remains pending.",
   "review_document": "benchmarks/results/deferred-range-anchor-20261101/README.md",
   "files": [
     {
@@ -10,8 +10,8 @@
       "family": "deferred-range-anchor-20261101",
       "classification": "required-compact-accepted-evidence",
       "role": "original-complete-endpoints-provenance-work-and-negative-controls",
-      "bytes": 184848,
-      "sha256": "93ba17bee4fe02da12275aa05790e8e357a1cf5b0c312a1444f4dc0b9255ea13"
+      "bytes": 231576,
+      "sha256": "48cd22f546edc222edbb337b56a1b8ddde7fdedec929143a18b1aa343e574a0f"
     }
   ]
 }
