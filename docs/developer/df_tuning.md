@@ -60,6 +60,7 @@ python tools/benchmark_df_values.py \
 | `GENERATIVEQC_DF_SHELL_SCHEDULE` | Class-specific manifest schedule | `warp`, `packed`, `compact` |
 | `GENERATIVEQC_DF_VALUE_MATH` | Existing generic Rys | `generic`, `polynomial`, `rys`, `candidate` |
 | `GENERATIVEQC_DF_VALUE_RAW_MAPPING` | Existing scalar raw export | `scalar`, `subgroup`, `warp`, `candidate` |
+| `GENERATIVEQC_DF_PACKED_PROJECTION` | `auto`: bounded FP64 BLAS in the admitted capability/work domain, otherwise generated projection | `generated`, `blas` |
 | `GENERATIVEQC_DF_FORCE_SCREEN_ABS` | Off | Nonnegative finite absolute force budget, or `off` |
 | `GENERATIVEQC_DF_SHELL_SCREEN_ABS` | `1e-10 Eh/Bohr` on a work-qualified automatic shell domain on any probed CUDA target; strict otherwise | Nonnegative finite absolute force-component budget, or `off` |
 | `GENERATIVEQC_DF_FINAL_PROJECTION` | Reuse under the shared resident RHF work/capacity policy | `off`, `reuse` |
@@ -95,6 +96,20 @@ frozen-density replays without repeating large initialization or holding two
 DF arenas. Both profiles undergo the same mathematical/evidence validation.
 Promoted manifests omit the campaign baseline. See the
 [campaign baseline note](../../.agents/notes/implemented/performance/2026-09-17-df-campaign-baseline.md).
+
+Packed-projection selection changes resident symmetric DF contraction only.
+Automatic admission requires a reported FP32/FP64 throughput ratio at most two,
+at least 256 AOs, 1024 auxiliaries, 64 occupied columns, and charged scratch for
+eight full-auxiliary AO rows. Unknown or lower FP64 capabilities and smaller
+domains retain generated execution. Explicit controls remain available on every
+device for paired comparisons.
+It reuses charged intermediate storage for at most 128 AO rows, retains the
+complete occupied projection for force response, and falls back to the generated
+kernel if one full-auxiliary AO row does not fit. It adds no tensor allocation.
+Changing the selector invalidates prepared Python/native plans and captured work.
+All physical integral/SCF/force gates remain unchanged. Selection uses physical
+capabilities and workload sizes, without a GPU-model allowlist or a universal
+speedup claim outside measured domains.
 
 Mathematical lowering is selected only through the class manifest. Historical
 checkpoints may retain retired controls as source provenance; importing their
@@ -276,3 +291,7 @@ The [auxiliary-f qualification](../../.agents/notes/implemented/performance/2026
 adds these classes without changing the separate workload-based consumer or
 primitive-packet policy. Candidate availability is not itself a promotion;
 independent derivative and full-endpoint evidence remains mandatory.
+
+The [packed projection decision](../../.agents/notes/implemented/performance/2026-11-01-bounded-packed-projection.md)
+records the unpack-traffic tradeoff, measured admission domain and retained
+generated fallback.
