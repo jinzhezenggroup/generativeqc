@@ -245,7 +245,13 @@ shared s/p primitives, s/p/d shards, legacy wrappers and native scientific
 wrappers. It does not cache native binding metadata or installed manifests.
 Cache hits retain generator/asset dependency checks and source integrity checks;
 corruption fails the build. CMake tracks the full recipe dependency closure even
-when a hit avoids importing a lowering module.
+when a hit avoids importing a lowering module. CUDA wheel CI enables this
+source-only cache with an exact science-input key, independently from the
+NVCC object cache. An uncached, build-local reference independently re-lowers
+both primitive domains once for all installed AOT manifest validations; each
+manifest still checks its wrapper and primitive source identity, final ELF
+SHA-256 and target architecture. A source-cache hit never substitutes for this
+independent verification.
 
 Within one multiarch build, Stationary and DF shell sources are already generated
 once and compiled for the requested architectures. Direct-shell profiles may
