@@ -462,8 +462,12 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       df_packed_projection_preferred(nbf, naux, storage.rank_capacity, tile_elements, 2)) {
     // Freeze a physical capability with this owner before any captured work.
     // Explicit controls avoid the query and remain available on every device.
-    cuda_error = cudaDeviceGetAttribute(&fp32_fp64_ratio,
-                                        cudaDevAttrSingleToDoublePrecisionPerfRatio, device_id);
+    // Read the property record: CUDA compatibility headers can expose this
+    // capability without the corresponding cudaDeviceAttr enum. Zero-initialize
+    // it so a provider leaving the optional field unset retains generated work.
+    cudaDeviceProp properties{};
+    cuda_error = cudaGetDeviceProperties(&properties, device_id);
+    if (cuda_error == cudaSuccess) fp32_fp64_ratio = properties.singleToDoublePrecisionPerfRatio;
     if (cuda_error == cudaErrorNotSupported || cuda_error == cudaErrorInvalidValue) {
       // Compatibility providers may omit this optional performance attribute.
       // Unknown capability keeps generated execution; other CUDA failures must
