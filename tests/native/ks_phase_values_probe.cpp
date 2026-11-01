@@ -34,10 +34,14 @@ void cuda_check(cudaError_t status) { require(status == cudaSuccess, cudaGetErro
 /** Independent PySCF matrices are assertions only; native KS starts cold. */
 struct Fixture {
   core::System system;
+  // An empty directory explicitly disables the optional disk tier. Disk oracle
+  // cases opt into the test's local scratch beside their independent input.
+  const std::string disk_directory;
   std::vector<double> density, coulomb, exchange;
   std::array<std::vector<double>, 2> range_exchange;
 
-  explicit Fixture(const char* path, bool read_oracle = true, bool read_range = false) {
+  explicit Fixture(const char* path, bool read_oracle = true, bool read_range = false)
+      : disk_directory(std::filesystem::canonical(path).parent_path().string()) {
     std::ifstream input(path);
     std::size_t atoms{}, shells{}, nao{};
     input >> atoms >> shells >> nao;
@@ -124,7 +128,8 @@ void raw_oracle(const Fixture& fixture, bool mixed = false, bool host = false, b
                              ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
                              : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
                          buckets, 1, false, host ? (2ULL << 30) : 0, disk ? 0x8U : (1U << 28) - 1,
-                         4096, disk ? (2ULL << 30) : 0) == GENERATIVEQC_STATUS_SUCCESS &&
+                         4096, disk ? (2ULL << 30) : 0, (1U << 28) - 1,
+                         fixture.disk_directory) == GENERATIVEQC_STATUS_SUCCESS &&
               source.active(),
           source.reason());
       const auto host_bytes = scf::cuda_direct_jk_host_value_bytes(
@@ -241,7 +246,8 @@ void raw_oracle_uks(const Fixture& fixture, bool host = false, bool disk = false
                                ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
                                : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
                            buckets, 2, false, host ? (2ULL << 30) : 0, disk ? 0x8U : (1U << 28) - 1,
-                           4096, disk ? (2ULL << 30) : 0) == GENERATIVEQC_STATUS_SUCCESS &&
+                           4096, disk ? (2ULL << 30) : 0, (1U << 28) - 1,
+                           fixture.disk_directory) == GENERATIVEQC_STATUS_SUCCESS &&
                 source.active(),
             source.reason());
     require((scf::cuda_direct_jk_host_value_bytes(static_cast<const scf::CudaDirectJkPlan*>(
@@ -301,7 +307,7 @@ void host_staging_budget_oracle(const Fixture& fixture, bool full_range = false,
   const auto prepare = [&](std::size_t device_budget) {
     return disk ? scf::prepare_cuda_direct_jk_disk_values(raw, 2ULL << 30, device_budget,
                                                           1ULL << 20, 256ULL << 20, (1U << 28) - 1,
-                                                          "/tmp", detail)
+                                                          fixture.disk_directory, detail)
                 : scf::prepare_cuda_direct_jk_host_values(raw, 2ULL << 30, device_budget,
                                                           256ULL << 20, (1U << 28) - 1, detail);
   };
@@ -353,10 +359,12 @@ void host_staging_budget_oracle(const Fixture& fixture, bool full_range = false,
 #if defined(__linux__)
   if (disk) {
     bool truncated = false;
+    const auto disk_prefix =
+        (std::filesystem::path(fixture.disk_directory) / "generativeqc-eri-").string();
     for (const auto& fd : std::filesystem::directory_iterator("/proc/self/fd")) {
       std::error_code error_code;
       const auto target = std::filesystem::read_symlink(fd.path(), error_code).string();
-      if (!error_code && target.starts_with("/tmp/generativeqc-eri-")) {
+      if (!error_code && target.starts_with(disk_prefix)) {
         require(::ftruncate(std::stoi(fd.path().filename()), 0) == 0,
                 "disk read failure injection");
         truncated = true;
@@ -420,7 +428,8 @@ void raw_range_oracle(const Fixture& fixture, bool mixed = false, bool host = fa
                       false, screening, 8ULL << 30, false,
                       scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold, buckets,
                       spins, false, host ? (2ULL << 30) : 0, disk ? 0x8U : (1U << 28) - 1, 4096,
-                      disk ? (2ULL << 30) : 0) == GENERATIVEQC_STATUS_SUCCESS &&
+                      disk ? (2ULL << 30) : 0, (1U << 28) - 1,
+                      fixture.disk_directory) == GENERATIVEQC_STATUS_SUCCESS &&
                       source.active(),
                   source.reason());
           const auto* prepared_host =
