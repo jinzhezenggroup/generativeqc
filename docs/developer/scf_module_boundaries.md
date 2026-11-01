@@ -260,7 +260,7 @@ values are not derivative integrals. Existing Hybrid graph qualification is not
 widened. `CudaKsTransfers` reports source construction, completed submitted Fock
 actions and numeric/source peaks separately from SCF iterations.
 
-After a successful source-backed solve that updates the warm cache, KS bypasses
+By default, after a successful source-backed solve that updates the warm cache, KS bypasses
 the retained value source and evaluates incumbent J/K once at the unchanged final density.
 The compensated energy uses the retained XC at that density and anchors the
 next warm solve to its actual provider, rather than comparing different FP64
@@ -270,6 +270,11 @@ It is counted in `fock_builds`, `post_scf_fock_builds`, the finalization precisi
 timeline and `CudaKsTransfers::warm_energy_rebase_fock_actions`, not as an SCF
 iteration or resident replay. Frozen warm caches do not perform this work;
 failed handoffs invalidate the new cache and cannot publish a successful state.
+The optional [deferred range anchor](xc_native_cuda.md) instead rebuilds that
+incumbent at the start of a replay that has lost its source. It restores the
+frozen density's own factor and XC scalars and charges one strict Fock action
+in the preparation phase. It does not rebuild an anchor while a live final-state
+force lease exists. A known imminent force-memory eviction keeps eager work.
 Ordinary warm/seeded solves still skip source preparation and pass all existing
 energy, density and physical-residual gates.
 If forced `1` admits another source on a warm solve, that phase does not borrow

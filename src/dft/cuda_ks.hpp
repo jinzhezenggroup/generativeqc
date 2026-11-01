@@ -382,6 +382,12 @@ class CudaKsPlan {
                                            std::array<std::uint64_t, 4>& receipt,
                                            std::string& detail);
 
+  /** Describe the imminent force consumer before submitting this solve. The
+   * prepared method supplies its existing additional-allocation envelope,
+   * subtracting retained force storage. This is a hint for warm-anchor work
+   * placement, never a reservation or permission to exceed a force budget. */
+  void set_following_force_memory(std::size_t additional_device_bytes) noexcept;
+
   const CudaKsResources& resources() const noexcept;
   /** Optional prepared-operation provenance; null means that the owner did
    * not admit a separate preparation budget. No selection happens here. */

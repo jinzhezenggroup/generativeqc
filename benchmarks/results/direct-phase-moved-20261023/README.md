@@ -165,7 +165,7 @@ before restoration or module import, since the immutable retained audit uses
 assertions for acceptance gates. Run the public replay entry point above. It
 checks publication hashes, restores the numerical/protocol logical records with
 their original bytes/SHA-256, and recomputes all selected admission/numerical
-gates. `provenance.json` retains the measured commit, SDK/library identities,
+gates. `provenance.json.xz` retains the measured commit, SDK/library identities,
 package versions, inventory counts and original manifest hashes. Full source,
 SDK and environment file lists and compiler commands are recovered separately
 from the [verified history snapshot](../retention-granularity-20261024/README.md);
@@ -211,3 +211,9 @@ restore its original filename with `xz -dc NAME.patch.xz > NAME.patch`.
 The [storage inventory](../pr-merge-storage-20261028/manifest.json) records both
 stored and original byte counts and SHA-256 values. Measurement identities,
 all samples, and acceptance decisions are unchanged.
+
+The provenance input is losslessly compressed. `xz -dc provenance.json.xz`
+restores its original 78,450 bytes with SHA-256
+`4404adf2424a88e2b38a4c1f757fafd7ff1250b0c9457dc5b525e34685b95d17`.
+This storage change preserves all source identities, numerical samples and
+acceptance results; the replay authenticates the stored bytes before decoding.

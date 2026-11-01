@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 13369,
+      "bytes": 13718,
       "path": "README.md",
       "role": "summary",
-      "sha256": "3870a6799d05c45199953eb1c2e4fb23466307feedcc186dfa0210d48eb9696e"
+      "sha256": "17c0e50e9ca285578ccc2ecea33ef70eb907a5b9c4ba60ff64983601b8773266"
     },
     {
       "bytes": 13040,
@@ -43,16 +43,16 @@
       "sha256": "551aa119e00a3f33a7b3bf1e6220ad1fc3d174f3b6a8cb0da2de8de916a912b3"
     },
     {
-      "path": "provenance.json",
+      "path": "provenance.json.xz",
       "role": "input",
-      "bytes": 78450,
-      "sha256": "4404adf2424a88e2b38a4c1f757fafd7ff1250b0c9457dc5b525e34685b95d17"
+      "bytes": 14000,
+      "sha256": "7e17fea221f894a31a3495e0e76fb2bf42da1369d042b783981a5f496035f9d5"
     },
     {
-      "bytes": 6367,
+      "bytes": 6384,
       "path": "reproduce.py",
       "role": "reproduction",
-      "sha256": "7a3d8b22ce409ded75a6f3f523afd08448cd50d1b2d5452b375a6b3b549ed3f4"
+      "sha256": "36daa7fc86f7427de7f703eabea6da95d4dc591ece3a57d4760820c201e4c309"
     },
     {
       "bytes": 80872,
