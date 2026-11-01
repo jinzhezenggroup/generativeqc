@@ -182,3 +182,41 @@ int main() {{
         compile_args=("-std=c++20", f"-I{root / 'src'}", f"-I{root / 'include'}"),
     )
     subprocess.run([str(executable)], check=True)
+
+
+def test_generated_recipe_metadata_coexists_with_atomic_grid(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Recipe metadata must not shadow the independent atomic-grid namespace."""
+    import subprocess
+
+    from generativeqc_compiler.xc.atomic_grid_native import emit_atomic_grid_header
+
+    root = Path(__file__).resolve().parents[2]
+    (tmp_path / "generated_atomic_grid.hpp").write_text(emit_atomic_grid_header())
+    source = tmp_path / "grid_recipe.cpp"
+    source.write_text(
+        """
+#include <cassert>
+#include "dft/global_hybrid_composition.hpp"
+#include "dft/grid.cpp"
+int main() {
+  const auto grid = generativeqc::dft::default_grid_spec();
+  assert(grid.version == 4 && grid.radial_points == 3);
+  for (unsigned z = 1; z < std::size(generativeqc::generated::atomic_grid::xi); ++z)
+    assert(grid.element_radii[z] == generativeqc::generated::atomic_grid::bragg[z]);
+}
+"""
+    )
+    executable = tmp_path / "grid_recipe"
+    required_native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
+            "-std=c++20",
+            f"-I{root / 'src'}",
+            f"-I{root / 'include'}",
+            f"-I{tmp_path}",
+        ),
+    )
+    subprocess.run([str(executable)], check=True)
