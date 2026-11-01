@@ -29,5 +29,11 @@ int grid_cuda_run_ao_map_device_deferred_v1(void*, const double*, std::size_t, s
 int grid_cuda_density_jets_v2(void*, std::uint64_t, unsigned, const double**, std::uint64_t*, char*,
                               std::size_t);
 int grid_cuda_metrics_v1(void*, generativeqc_tensor::Metrics*, int*, char*, std::size_t);
+int grid_cuda_xc_v3(void*, std::uint64_t, int, int, int, int, const double*, std::size_t, double*,
+                    char*, std::size_t);
+int grid_cuda_xc_batch_create_v1(void*, std::size_t, int, std::size_t, void**, char*, std::size_t);
+int grid_cuda_xc_batch_destroy_v1(void*, void*, char*, std::size_t);
+int grid_cuda_xc_batch_enqueue_v1(void*, void*, std::uint64_t, int, int, int, int, const double*,
+                                  std::size_t, double*, double*, char*, std::size_t);
 int grid_cuda_work_metrics_v1(void*, generativeqc::dft::AoGridWork*, char*, std::size_t);
 }
