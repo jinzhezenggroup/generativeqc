@@ -1363,18 +1363,7 @@ jobs:
       - name: Revalidate retained native Libxc endpoint evidence against live inputs
         if: matrix.shard == 'core-a' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
-          # Temporary, review-only source-identity regeneration diagnostic.
-          # Preserve the failed original gate; never accept modified local evidence.
-          if ! PYTHONPATH=python:. .venv/bin/python tools/check_libxc_native_catalog.py; then
-            PYTHONPATH=python:. .venv/bin/python tools/check_libxc_native_catalog.py --write
-            printf '%s\n' GQC_CATALOG_SNAPSHOT_B64_START
-            base64 -w0 manifests/libxc/native-qualification-snapshot.json.xz
-            printf '\n%s\n' GQC_CATALOG_SNAPSHOT_B64_END
-            printf '%s\n' GQC_CATALOG_REPORT_B64_START
-            base64 -w0 docs/reference/libxc_qualification.md
-            printf '\n%s\n' GQC_CATALOG_REPORT_B64_END
-            exit 1
-          fi
+          PYTHONPATH=python:. .venv/bin/python tools/check_libxc_native_catalog.py
       - name: Qualify owned sccache compiler lifetimes
         if: matrix.shard == 'compiler-heavy' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
