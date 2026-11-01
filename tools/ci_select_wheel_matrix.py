@@ -5,8 +5,11 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-from collections.abc import Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 FAST_ARCHITECTURES = "120"
 FULL_ARCHITECTURES = "80;90-real;120-real"
