@@ -83,7 +83,7 @@ counts. Preserve overrides, resource admission and conservative retry semantics.
 ## PR snapshot
 
 The retained [final-source evidence](../../../benchmarks/results/automatic-ks-tiles-20261102/README.md)
-has 19 qualified timing groups. A100 cold still trails GPU4PySCF for PBE0,
+has 20 qualified timing groups. A100 cold still trails GPU4PySCF for PBE0,
 r2SCAN-3c and WB97M-V; WB97M-V uses 28 native iterations versus GPU4's 10.
 The automatic defaults improve all completed paired 256-point controls.
 Larger/moved PBE passes, but r2SCAN-3c reference stability and corrected resource

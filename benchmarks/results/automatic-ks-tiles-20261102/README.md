@@ -22,7 +22,7 @@ Native and GPU4PySCF retain their respective convergence rules and pass the
 independent README observable gates before any successful-allocation timing ranks.
 
 Positive percentages mean slower automatic defaults. The columns compare
-complete median endpoints. This snapshot has 19 qualified comparison groups;
+complete median endpoints. This snapshot has 20 qualified comparison groups;
 no universal GPU non-regression or all-functional cold-speedup claim is made.
 
 | GPU | Method | Cold vs explicit 256 | Warm vs explicit 256 | Cold vs GPU4 | Warm vs GPU4 |
@@ -40,6 +40,7 @@ no universal GPU non-regression or all-functional cold-speedup claim is made.
 | 5090 | r2scan | -10.49% | -25.45% | -17.27% | -29.92% |
 | 5090 | r2scan-3c | -6.27% | -16.68% | -3.90% | -31.01% |
 | 5090 | m06-2x | -4.60% | -14.78% | -13.08% | -47.98% |
+| 5090 | wb97m-v | -0.91% | -6.88% | -37.89% | -76.14% |
 | pro6000 | pbe | -7.91% | -19.81% | -19.71% | -8.77% |
 | pro6000 | pbe0 | -4.46% | -13.28% | -15.20% | -41.79% |
 | pro6000 | b3lyp | -5.02% | -15.10% | -17.74% | -41.22% |
@@ -53,8 +54,9 @@ no universal GPU non-regression or all-functional cold-speedup claim is made.
   10 iterations and 11 effective-potential builds. The native initial guess also
   has separate work. Its cold endpoint is 33.43% slower, despite warm being
   50.65% faster. Investigation of the convergence difference follows this PR.
-- RTX 5090 WB97M-V is still running at the snapshot boundary. PRO 6000 WB97M-V
-  was cancelled at the user's request; its partial receipts and cancellation
+- RTX 5090 WB97M-V completed in allocation 15226 after the initial PR snapshot;
+  its complete population is now retained. PRO 6000 WB97M-V was cancelled at
+  the user's request; its partial receipts and cancellation
   proof are retained and never ranked. No further PRO 6000 tests are requested.
 - Larger/moved 120-atom PBE passes independent observable and reference-grid
   stability gates on all three measured devices. The r2SCAN-3c level5/6 reference
