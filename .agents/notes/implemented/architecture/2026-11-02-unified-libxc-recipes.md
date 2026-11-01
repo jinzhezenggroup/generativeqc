@@ -82,6 +82,72 @@ complete cold/replay/moved energy/force endpoints against PySCF. GPU checks
 require finite Slurm allocations. Existing admission, exchange-model and
 stationary contract suites remain required.
 
+### Endpoint qualification
+
+The implementation at `d577931c472595223f3511665aa7aba3fd42c1dc`, rebased on
+`3b39557b9a0b098628089cfc7f39244fd726871e`, passed the final molecular gates in
+Slurm job **15219** on node1 (SSH n1), one RTX 5090, CUDA 12.9.1, driver
+580.95.05, one CPU math thread, NumPy 2.3.5 and PySCF 2.14.0. Slurm's assigned
+`CUDA_VISIBLE_DEVICES=0` was preserved. The native library SHA256 is
+`90dca25eb2cdeee060555816d1dbfe89c19fdc033fd8b2233200d202a7911412`;
+the fully matched tracked-source manifest SHA256 is
+`9b9fcd12160be130eb5918187c3da4fccd9150d62b6771dfef4246c406194181`.
+
+- `test_unified_libxc_endpoints.py`: **24 passed**, covering CPU/CUDA, both
+  spins, rSCAN0/r²SCAN0 Direct energy/forces and matched DF J/K energies,
+  cold/replay/displaced geometries, and literal LDA/GGA registrations.
+- MN15 native force routes: **4 passed**, both spins and Direct/DF, including
+  replay, failure recovery, final-state checks and moved geometry.
+- Compiled point qualification in job 15211: **22 passed**. The independent
+  Libxc point gates cover spin tails and physical derivatives; no runtime
+  reference engine enters production.
+- Final shared-binding/selection regressions: **40 passed, 4 CUDA skips**;
+  integration with the latest FP64 matrix policy: **7 passed**. Full pre-commit
+  and the 422-file CUDA ownership inventory passed. `ty check` retains the
+  same **159 diagnostics** as the updated base, with no added/removed messages.
+
+Two planar water arrays (2×2 and 4×4, 8 bohr spacing) used spherical STO-3G,
+Treutler level 0, Direct J/K and strict FP64. Each method/schedule pair measured
+one cold call, three unchanged-geometry warm calls, a 0.02 bohr displacement
+and three moved-geometry warm calls. All **64 complete energy/force calls**
+passed the predefined `2e-8 Eh` / `3e-7 Eh/bohr` gates against independent
+PySCF with the same quadrature. The largest observed errors were
+`3.19e-12 Eh` and `2.52e-11 Eh/bohr`. These are matched-grid implementation
+checks, not grid-convergence or production-accuracy claims.
+
+The observed SCF AO-pair work per XC evaluation was:
+
+| Atoms / AOs | Dense pairs | Local pairs, original geometry | Reduction |
+| --- | ---: | ---: | ---: |
+| 12 / 28 | 7,294,336 | 5,288,920 | 27.49% |
+| 48 / 112 | 466,837,504 | 69,743,616 | 85.06% |
+
+Complete warm energy/force latency, median [min, max] of three calls in ms:
+
+| Atoms | Recipe | Dense | Local AO |
+| --- | --- | ---: | ---: |
+| 12 | rSCAN0 | 168.35 [166.63, 170.35] | 168.97 [167.36, 170.75] |
+| 12 | r²SCAN0 | 83.48 [80.87, 83.49] | 83.37 [81.11, 83.89] |
+| 48 | rSCAN0 | 493.45 [488.67, 510.89] | 494.19 [486.51, 508.54] |
+| 48 | r²SCAN0 | 414.63 [395.61, 419.26] | 397.59 [393.18, 403.90] |
+
+Work reduction does not establish a uniform endpoint speedup: most warm
+latencies overlap. Cold timing includes Calculator construction, preparation
+and the first complete call; process/runtime caches are shared between
+sequential variants, so cold observations are not isolated speedup estimates.
+Raw cold/moved timings, Fock-build/XC-evaluation counts, discovery traffic,
+capacity observations, compiler-cache statistics and source-matched receipts
+are retained in `.artifacts/unified-libxc-evidence/final/`. Earlier failed
+qualification attempts remain separate from these final passing receipts.
+
+Two integration failures are worth preserving: CPU forces correctly refused a
+build with `GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF`; enabling the
+packaged derivatives fixed that build prerequisite. Separately, the shared
+automatic force registration initially published zero EXX in its model key.
+The generated binding and derivative reservation now carry the same physical
+EXX fraction, with compiled host tests for both spins. Widening a Python force
+allow-list would not have fixed either condition.
+
 ## Revisit when
 
 Additional ingredients, range/nonlocal primitives, arbitrary runtime recipes,
