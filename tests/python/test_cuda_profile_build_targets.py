@@ -83,7 +83,11 @@ endif()
 file(WRITE "${CMAKE_BINARY_DIR}/target.txt" "${selected};${GENERATIVEQC_AOT_PROFILE}")
 """)
     presets = json.loads((ROOT / "CMakePresets.json").read_text())
-    for name in ("cuda-dev-fast", "cuda-release"):
+    for name, profile in (
+        ("cuda-dev-fast", "portable"),
+        ("cuda-release", "auto"),
+        ("cuda-release-cli", "auto"),
+    ):
         assert any(preset["name"] == name for preset in presets["configurePresets"])
         subprocess.run(
             ["cmake", "--preset", name, "-DCMAKE_CUDA_ARCHITECTURES=89-real"],
@@ -94,4 +98,4 @@ file(WRITE "${CMAKE_BINARY_DIR}/target.txt" "${selected};${GENERATIVEQC_AOT_PROF
         )
         assert (
             tmp_path / "build" / name / "target.txt"
-        ).read_text() == "89-real;portable"
+        ).read_text() == f"89-real;{profile}"

@@ -56,7 +56,8 @@ def test_grid_native_generator_matches_jit_policy(tmp_path: typing.Any) -> None:
         "__global__ void ao_kernel",
         "__global__ void ao_kernel_fp32",
         "__global__ void feature_kernel",
-        "__device__ generativeqc::dft::point::Value evaluate_xc_point",
+        "__device__ GridXcPoint evaluate_xc_point",
+        "__global__ void xc_points_kernel",
         "__global__ void xc_local_potential_kernel",
     ):
         assert scientific in source
@@ -75,10 +76,7 @@ def test_grid_native_generator_matches_jit_policy(tmp_path: typing.Any) -> None:
         assert scientific not in source
     native_template = (ROOT / "src/dft/cuda_grid.cu").read_text()
     assert "__global__ void ao_kernel" not in native_template
-    assert (
-        "__device__ generativeqc::dft::point::Value evaluate_xc_point"
-        not in native_template
-    )
+    assert "__device__ GridXcPoint evaluate_xc_point" not in native_template
     resident_template = (ROOT / "src/dft/cuda_xc_kernels.cuh").read_text()
     for retired in (
         "__global__ void density_product",
