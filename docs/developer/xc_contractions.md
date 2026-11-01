@@ -148,6 +148,59 @@ native response owner. `apply_spin()` keeps functional-spin channels;
 `apply()` and `apply_transpose()` retain the restricted total-D convention.
 This does not register a new complete KS/CPKS method capability.
 
+## Resident CUDA spatial potentials
+
+`PreparedXCContractions` can borrow a CUDA `PreparedSpatialGrid` and evaluate
+fixed-density energy and potential without downloading AO jets or density
+features. Ordinary grid artifacts include canonical LDA/PBE. To bind another
+audited semilocal composition, compile the grid artifact explicitly:
+
+```python
+from generativeqc_compiler.xc.spatial_cuda import compile_spatial_cuda
+
+spec = functional("R2SCAN", spin="polarized")
+artifact = compile_spatial_cuda(spec, cuda_compiler, cache)
+with PreparedSpatialGrid(
+    basis, grid, backend="cuda", artifact=artifact,
+    ingredients=("rho", "gradient", "tau"), tile_points=128,
+) as spatial:
+    program = NativeContractionProgram(spec, compiler=cpu_compiler, cache=cache)
+    with PreparedXCContractions(program, basis, grid, spatial=spatial) as prepared:
+        result = prepared.execute(source, stamp=source.stamp)
+```
+
+`source` is a `DensitySource`. Both density-matrix and validated orbital-factor
+routes are supported. The CPU program supplies the shared contract and explicit
+host alternative; the selected device execution performs no CPU XC evaluation.
+
+The generated extension admits linear combinations of the audited LDA/PW,
+PBE and SCAN/r²SCAN components in `spec.PUBLIC_COMPONENTS`. Full expression
+identity, coefficients and the interior domain bind the artifact. Restricted
+and polarized layouts share the polarized evaluator, with exact equality checks
+on restricted spin features. Other component families retain their existing
+route until their additional domain checks receive device qualification.
+An unavailable exact artifact selects `host_unfused` only when the existing
+host ingredient contract is satisfied; explicitly requesting `device_fused`
+then fails at preparation. Execution failures propagate.
+
+Point evaluation occurs once per grid point. A bounded FP64 panel stores energy,
+two density derivatives, six Cartesian gradient coefficients and two kinetic
+coefficients. All AO pairs reuse these eleven rows; meta-GGA matrix assembly
+includes tau's one-half factor exactly once. The grid resource plan charges
+`88 * tile_points` additional device bytes for every local plan, including a
+one-AO tile. Features and AO jets remain intact for the task lease. Statistics
+report `xc_point_evaluations` and `xc_point_cache_bytes`.
+
+This is the fixed-grid `interior-v1` energy/potential contract. It does not use
+native SCF tail continuations or add molecular force, response, hybrid exchange
+or nonlocal-correlation capabilities. Native KS admission and its PBE launch
+schedule remain independently owned.
+
+`test_spatial_xc_codegen.py` compares the emitted adapter to independent Libxc.
+`test_spatial_xc_cuda.py` checks the actual prepared endpoint, density directional
+derivatives, resource accounting, leases and rejection/recovery. Run real CUDA
+tests with `GENERATIVEQC_GRID_CUDA_TEST=1` inside a finite Slurm GPU allocation.
+
 ## Geometry and memory scope
 
 `GeometryPartials.centers`, `.points` and `.weights` are independent gradients

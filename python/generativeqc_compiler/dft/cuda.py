@@ -34,8 +34,9 @@ from .density_source import DensitySource
 from .features import requested_ingredients, spin_densities
 from .grid import checked_int
 from .indexed_layout import AoGridBlockLayout
-from .native_semilocal import device_feature_ingredients, legacy_grid_xc_selector
+from .native_semilocal import device_feature_ingredients
 from .plan import plan_tiles
+from .xc_kernel import GridXcConsumer, grid_xc_consumer
 
 
 @dataclass(frozen=True)
@@ -270,7 +271,7 @@ class DeviceGridTask:
         reset: typing.Any = False,
         download: typing.Any = False,
     ) -> typing.Any:
-        """Evaluate one qualified native grid-XC family and scatter its potential.
+        """Evaluate artifact-admitted XC and scatter its local spin potentials.
 
         AO jets and density features remain device-resident. Only the tile's
         three scalar integrals and, when requested, the accumulated global
@@ -279,21 +280,24 @@ class DeviceGridTask:
         if self._owner.plan.features_only:
             raise RuntimeError("features-only CUDA grids cannot assemble potentials")
         view = self.view
+        capability = self._owner.xc_capability(
+            functional, spin="unpolarized" if restricted else "polarized"
+        )
+        if capability is None:
+            raise ValueError("native CUDA XC artifact does not support this functional")
         if (
             type(restricted) is not bool
             or type(reset) is not bool
             or type(download) is not bool
         ):
             raise ValueError("XC flags must be boolean")
-        spin = "unpolarized" if restricted else "polarized"
-        selector = legacy_grid_xc_selector(functional, spin=spin)
         weights = immutable(weights, shape=(view.npoint,))
         integrals = np.empty(3)
         self._owner._call(
             "grid_cuda_xc_v2",
             self._owner._handle,
             view.generation,
-            selector,
+            capability.evaluator,
             int(restricted),
             1,
             pointer(weights),
@@ -305,10 +309,16 @@ class DeviceGridTask:
 
 
 def compile_cuda(
-    compiler: typing.Any, cache: typing.Any, *, ao_radial_reuse: bool = False
+    compiler: typing.Any,
+    cache: typing.Any,
+    *,
+    ao_radial_reuse: bool = False,
+    xc_kernel: typing.Any = None,
 ) -> typing.Any:
     """Compile the device runtime without running a GPU or importing PySCF."""
-    source, identity, headers = emit_grid_source(ao_radial_reuse=ao_radial_reuse)
+    source, identity, headers = emit_grid_source(
+        ao_radial_reuse=ao_radial_reuse, xc_kernel=xc_kernel
+    )
     folder = Path(cache).resolve() / "source" / identity
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / "grid.cu"
@@ -354,6 +364,7 @@ class CudaGrid:
             "artifact",
             "resource_plan",
             "device_id",
+            "compiled_xc_identity",
         )
     )
 
@@ -388,6 +399,12 @@ class CudaGrid:
     def source_statistics(self) -> typing.Any:
         """Detached identity, packing and upload diagnostics."""
         return dict(self._source_statistics)
+
+    def xc_capability(
+        self, functional: typing.Any, *, spin: str | None = None
+    ) -> typing.Any:
+        """Resolve exact scientific identity against this immutable artifact."""
+        return grid_xc_consumer(functional, self.compiled_xc_identity, spin=spin)
 
     def __init__(
         self,
@@ -453,6 +470,9 @@ class CudaGrid:
         self.artifact = artifact
         self.device_id = device_id
         lib = self._library = ct.CDLL(str(artifact.library))
+        lib.grid_cuda_xc_identity_v1.restype = ct.c_char_p
+        lib.grid_cuda_xc_identity_v1.argtypes = []
+        self.compiled_xc_identity = lib.grid_cuda_xc_identity_v1().decode()
         lib.grid_cuda_create_v1.argtypes = [
             ct.c_int,
             ct.c_int,
@@ -1102,7 +1122,15 @@ class CudaGrid:
         block_layout: AoGridBlockLayout | None = None,
     ) -> typing.Any:
         """Lend the minimal prepared feature layout required by native CUDA XC."""
-        required = device_feature_ingredients(functional)
+        if isinstance(functional, GridXcConsumer):
+            capability = self.xc_capability(functional)
+            if capability is None:
+                raise ValueError(
+                    "native CUDA XC artifact does not support this functional"
+                )
+            required = capability.ingredients
+        else:
+            required = device_feature_ingredients(functional)
         # Scientific XC evaluation belongs to the downstream consumer; this
         # lease is selected solely from the functional ingredient contract.
         with self.feature_task(
@@ -1502,7 +1530,15 @@ class CudaGrid:
         stamp: typing.Any = None,
     ) -> typing.Any:
         """Compatibility wrapper over the ingredient-driven resident feature lease."""
-        required = device_feature_ingredients(functional)
+        if isinstance(functional, GridXcConsumer):
+            capability = self.xc_capability(functional)
+            if capability is None:
+                raise ValueError(
+                    "native CUDA XC artifact does not support this functional"
+                )
+            required = capability.ingredients
+        else:
+            required = device_feature_ingredients(functional)
         with self.feature_task_with_features(
             points, ao_ids, required, stamp=stamp
         ) as borrowed:

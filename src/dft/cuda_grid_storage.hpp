@@ -57,8 +57,11 @@ inline CudaGridStorage cuda_grid_storage(std::size_t packed_size, std::size_t ao
   const auto tile = product(capacity, active);
   auto elements =
       add(add(packed_size, matrices), add(product(16, capacity), product(jets + 8, tile)));
+  // Local XC reuses eleven energy/derivative rows across all AO pairs.
+  // Keep this panel separate from contracted jets, including one-AO tiles.
   if (active_capacity)
-    elements = add(elements, add(matrices, add(product(4, product(active, active)), active)));
+    elements = add(elements, add(matrices, add(product(4, product(active, active)),
+                                               add(active, product(11, capacity)))));
   if (orbital_capacity)
     elements = add(elements, add(product(aos, add(orbital_capacity[0], orbital_capacity[1])),
                                  product(add(active, product(4, capacity)), orbital_tile)));

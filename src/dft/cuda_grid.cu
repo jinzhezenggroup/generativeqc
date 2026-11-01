@@ -74,7 +74,7 @@ struct GridPlan {
   unsigned feature_mask = 15;
   double *basis{}, *density{}, *points{}, *ao{}, *work{}, *features{};
   const double* current_points{};
-  double *local_density{}, *local_potential{}, *potential{};
+  double *local_density{}, *local_potential{}, *potential{}, *xc_values{};
   double *factors[2]{}, *factor_panel{}, *psi{};
   size_t* ao_ids{};
   const size_t* current_ao_ids{};
@@ -312,10 +312,10 @@ int grid_cuda_create_v3(int device, int major, int minor, const size_t* dimensio
       p->local_potential = p->local_density + 2 * active_capacity * active_capacity;
       p->potential = p->local_potential + 2 * active_capacity * active_capacity;
       p->ao_ids = reinterpret_cast<size_t*>(p->potential + matrices);
+      p->xc_values = reinterpret_cast<double*>(p->ao_ids + active_capacity);
     }
     if (p->orbital_enabled) {
-      p->factors[0] = p->local ? reinterpret_cast<double*>(p->ao_ids + active_capacity)
-                               : p->features + 13 * capacity;
+      p->factors[0] = p->local ? p->xc_values + 11 * capacity : p->features + 13 * capacity;
       p->factors[1] = p->factors[0] + p->nao * p->orbital_capacity[0];
       p->factor_panel = p->factors[1] + p->nao * p->orbital_capacity[1];
       p->psi = p->factor_panel + p->active_capacity * orbital_tile;
@@ -1144,20 +1144,23 @@ int grid_cuda_density_jets_v2(void* pointer, std::uint64_t generation, unsigned 
   });
 }
 
-int grid_cuda_xc_v2(void* pointer, std::uint64_t generation, int pbe, int restricted, int interior,
-                    const double* weights, size_t npoint, double* integrals, char* error,
-                    size_t size) {
+int grid_cuda_xc_v2(void* pointer, std::uint64_t generation, int evaluator, int restricted,
+                    int interior, const double* weights, size_t npoint, double* integrals,
+                    char* error, size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !integrals || (pbe != 0 && pbe != 1) || (restricted != 0 && restricted != 1) ||
+    const unsigned required_features = evaluator == 0   ? 1U
+                                       : evaluator == 1 ? 3U
+                                       : evaluator == 2 ? grid_custom_xc_mask
+                                                        : 0U;
+    if (!pointer || !integrals || !required_features || (restricted != 0 && restricted != 1) ||
         interior != 1 || (npoint && !weights))
       throw std::invalid_argument("invalid CUDA XC task");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
     ctx.check_device();
-    const unsigned required_features = pbe ? 3U : 1U;
     if (!p.local || !p.view_ready || !p.features_ready || generation != p.generation ||
-        npoint != p.last_points || p.jets < (pbe ? 4U : 1U) ||
+        npoint != p.last_points || p.jets < ((required_features & 2U) ? 4U : 1U) ||
         (p.feature_mask & required_features) != required_features)
       throw std::invalid_argument("stale or incompatible CUDA XC task");
     // A local plan has active_capacity>=1, so its eight work panels leave at
@@ -1180,13 +1183,15 @@ int grid_cuda_xc_v2(void* pointer, std::uint64_t generation, int pbe, int restri
     });
     if (npoint) {
       ctx.section(true, ctx.metrics.kernel_ms, [&] {
-        xc_integrals_kernel<<<1, 1, 0, ctx.stream>>>(pbe != 0, restricted != 0, p.features,
-                                                     device_weights, npoint, device_integrals,
-                                                     ctx.error);
+        xc_points_kernel<<<blocks(npoint, 128), 128, 0, ctx.stream>>>(
+            evaluator, restricted != 0, p.features, npoint, p.xc_values, ctx.error);
+        cuda_check(cudaGetLastError());
+        xc_integrals_kernel<<<1, 1, 0, ctx.stream>>>(p.xc_values, p.features, device_weights,
+                                                     npoint, device_integrals, ctx.error);
         cuda_check(cudaGetLastError());
         if (matrix_elements) {
           xc_local_potential_kernel<<<blocks(matrix_elements, 128), 128, 0, ctx.stream>>>(
-              pbe != 0, restricted != 0, p.features, p.ao, device_weights, npoint, p.last_active,
+              required_features, p.xc_values, p.ao, device_weights, npoint, p.last_active,
               p.local_potential, ctx.error);
           cuda_check(cudaGetLastError());
         }
@@ -1202,6 +1207,10 @@ int grid_cuda_xc_v2(void* pointer, std::uint64_t generation, int pbe, int restri
     if (failure) throw std::runtime_error("invalid or nonfinite CUDA XC output");
   });
 }
+
+// This immutable artifact identity binds the optional evaluator to its exact
+// FunctionalSpec. The task/view ABI remains unchanged.
+const char* grid_cuda_xc_identity_v1() { return grid_custom_xc_identity; }
 
 /** Optional host input/output serves diagnostics. A native XC consumer writes
  * local_potential on the borrowed stream and passes null host buffers. */

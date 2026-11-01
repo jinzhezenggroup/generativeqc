@@ -152,7 +152,6 @@ def test_schedule_admission_is_deterministic_and_conservative() -> None:
     assert {
         "native device XC capability is unavailable",
         "device-fused schedule only supports potential output",
-        "device-fused schedule only supports canonical LDA/PBE",
         "device bytes 8388608 exceeds limit 1",
         "source bytes 180000 exceeds limit 100",
     } <= set(rejected.reasons)

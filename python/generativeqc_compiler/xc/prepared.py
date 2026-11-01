@@ -43,7 +43,6 @@ from generativeqc_compiler.dft.features import (
     spin_densities,
 )
 from generativeqc_compiler.dft.grid import checked_int
-from generativeqc_compiler.dft.native_semilocal import legacy_grid_xc_selector
 from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
 from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
@@ -57,6 +56,7 @@ from .contractions import GeometryPartials
 from .integration import _tiles
 from .native import NativeContractionProgram
 from .program_ir import fixed_density_tile_program
+from .spatial_cuda import spatial_xc_capability
 from .spec import UnsupportedXC
 
 
@@ -64,17 +64,15 @@ def _native_device_xc(
     program: typing.Any, spatial: typing.Any, density_grid: typing.Any
 ) -> typing.Any:
     """Keep feature validation and execution on the same canonical CUDA route."""
-    if (
-        spatial is None
-        or density_grid is None
-        or program.contract.request.observable != "potential"
-    ):
-        return False
-    try:
-        legacy_grid_xc_selector(program.spec)
-    except ValueError:
-        return False
-    return True
+    return (
+        spatial is not None
+        and density_grid is not None
+        and program.contract.request.observable == "potential"
+        and spatial_xc_capability(
+            program.spec, getattr(density_grid, "compiled_xc_identity", "")
+        )
+        is not None
+    )
 
 
 class PreparedXCContractions:
@@ -83,8 +81,8 @@ class PreparedXCContractions:
     Output matrices retain functional-spin layout; the existing method adapter
     owns averaging for total-density input. Geometry returns independent point,
     AO-center and weight partials. A spatial adapter keeps its fixed mask and
-    must cover the requested jet domain. Canonical LDA/PBE potentials on CUDA
-    spatial owners use native device XC; other compositions retain CPU XC.
+    must cover the requested jet domain. CUDA spatial owners use device XC when
+    their artifact admits the exact expression; other compositions retain CPU XC.
     """
 
     def __init__(
@@ -582,13 +580,13 @@ class PreparedXCContractions:
         route: typing.Any,
         nspin: typing.Any,
     ) -> typing.Any:
-        """Run the audited native grid-XC potential contract entirely on CUDA tiles."""
+        """Run the artifact-bound interior potential contract on CUDA tiles."""
         result = {
             "energy": 0.0,
             "electrons": np.zeros(2),
             "potential": np.zeros((nspin, self.basis.nao, self.basis.nao)),
         }
-        tiles = evaluated = 0
+        tiles = evaluated = point_evaluations = 0
         last_nonempty = max(
             (
                 index
@@ -597,8 +595,13 @@ class PreparedXCContractions:
             ),
             default=None,
         )
+        capability = spatial_xc_capability(
+            self.program.spec, self.density_grid.compiled_xc_identity
+        )
+        if capability is None:
+            raise ValueError("stale spatial XC artifact capability")
         with self.spatial.device_xc_tasks(
-            density, self.program.spec, stamp=stamp, route=route
+            density, capability, stamp=stamp, route=route
         ) as tasks:
             for index, (_, ids, lease) in enumerate(tasks):
                 active = lease.view.nactive
@@ -606,7 +609,7 @@ class PreparedXCContractions:
                     try:
                         integrals, potential = lease.xc(
                             self.spatial.grid.weights[ids],
-                            self.program.spec,
+                            capability,
                             restricted=nspin == 1,
                             reset=evaluated == 0,
                             download=index == last_nonempty,
@@ -620,10 +623,11 @@ class PreparedXCContractions:
                     result["energy"] += integrals[0]
                     result["electrons"] += integrals[1:]
                     evaluated += 1
+                    point_evaluations += len(ids)
                     if potential is not None:
                         result["potential"] = potential if nspin == 2 else potential[:1]
                 tiles += 1
-        return result, tiles, evaluated
+        return result, tiles, evaluated, point_evaluations
 
     def execute(
         self,
@@ -699,7 +703,7 @@ class PreparedXCContractions:
             ao_atoms: np.ndarray | None = None
             result: dict[str, typing.Any]
             if device_xc:
-                result, tiles, evaluated_tiles = self._device_xc(
+                result, tiles, evaluated_tiles, point_evaluations = self._device_xc(
                     density, stamp, route, nspin
                 )
                 cpu_contraction_seconds = 0.0
@@ -846,6 +850,11 @@ class PreparedXCContractions:
                 "planned_host_peak_bytes": self.resource_plan.peak_bytes["host"],
                 "memory_scope": "numeric capacity bound with explicit resource-plan exclusions; not a measured process peak",
             }
+            if device_xc:
+                # Nonlinear scalar work is O(points), independent of active AO
+                # pairs. Assembly reuses eleven resident FP64 rows per point.
+                self.statistics["xc_point_evaluations"] = point_evaluations
+                self.statistics["xc_point_cache_bytes"] = 11 * 8 * self.tile_points
             if self.tile_program is not None:
                 self.statistics["tile_program_identity"] = self._tile_program_identity
                 self.statistics["tile_boundary_releases"] = self._tile_releases

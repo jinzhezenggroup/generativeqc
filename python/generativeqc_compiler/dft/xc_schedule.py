@@ -535,6 +535,7 @@ def _storage_pressure(
             BufferValue("ao_jets_device", ao_bytes, "device"),
             BufferValue("density_panel_device", density_bytes, "device"),
             BufferValue("features_device", feature_bytes, "device"),
+            BufferValue("xc_points_device", scalar_bytes * 11 * points, "device"),
             BufferValue("vxc_device", vxc_bytes, "device"),
         )
         operations = (
@@ -551,8 +552,15 @@ def _storage_pressure(
                 MemoryEffect.EXPLICIT,
             ),
             BufferOp(
+                "xc_points",
+                ("features_device",),
+                ("xc_points_device",),
+                MemoryEffect.EXPLICIT,
+            ),
+            BufferOp(
                 "xc_vxc",
-                ("ao_jets_device", "density_panel_device", "features_device"),
+                # The scalar electron totals still read rho after point lowering.
+                ("ao_jets_device", "features_device", "xc_points_device"),
                 ("vxc_device",),
                 MemoryEffect.EXPLICIT,
             ),
@@ -626,7 +634,7 @@ def _storage_pressure(
     # contract, not opaque runtime/library internals.  Host-unfused stops after
     # collocation/features; device-fused additionally evaluates/scatters XC.
     launches_per_tile = (
-        (6 + shape.spins) if schedule.name == "device_fused" else (3 + shape.spins)
+        (7 + shape.spins) if schedule.name == "device_fused" else (3 + shape.spins)
     )
     return live_values, peaks, semantic_traffic, launches_per_tile * tile_count
 
@@ -685,8 +693,8 @@ def assess_grid_xc_schedule(
             reasons.append("native device XC capability is unavailable")
         if observable != "potential":
             reasons.append("device-fused schedule only supports potential output")
-        if functional not in ("LDA_XC_PW", "PBE"):
-            reasons.append("device-fused schedule only supports canonical LDA/PBE")
+        # The prepared artifact checks full expression identity and ingredients.
+        # Scheduling must not add a second, name-based capability whitelist.
     live, storage_peaks, semantic_traffic, launch_count = _storage_pressure(
         resolved, shape
     )
