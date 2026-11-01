@@ -79,7 +79,33 @@ def _assert_cold_budget(workflow: str) -> None:
         "test_packaging.py::test_wheel_grid_compiler_links_without_checkout_or_device"
         in radial
     )
-    assert "actions/cache/save@" not in job
+    # Only the isolated, bounded PR miss store may publish here. The shared
+    # snapshot still requires complete downstream CLI qualification.
+    saves = [
+        part for part in job.split("      - name: ") if "actions/cache/save@" in part
+    ]
+    assert len(saves) == 1
+    save = saves[0]
+    assert "path: ${{ steps.pr_fast_ccache.outputs.path }}" in save
+    assert "key: ${{ steps.pr_fast_ccache.outputs.key }}" in save
+    assert "~/.cache/ccache" not in save
+    assert "continue-on-error: true" in save
+    assert _minutes(save) == 2
+    for event in ("pull_request", "push", "merge_group", "pull_request_target"):
+        for outcome in ("success", "failure", "cancelled", "skipped", ""):
+            for available in ("true", "false", ""):
+                assert selected(
+                    save,
+                    {
+                        "github.event_name": event,
+                        "steps.cuda_runtime_build.outcome": outcome,
+                        "steps.pr_fast_ccache_bound.outputs.available": available,
+                    },
+                ) == (
+                    event == "pull_request"
+                    and outcome == "success"
+                    and available == "true"
+                )
 
     report = _step(job, "Summarize compiler cache")
     assert "if: always()" in report
@@ -139,6 +165,10 @@ def test_cold_budget_keeps_qualification_and_failure_diagnostics() -> None:
         ("--verbose --build-dir build/cuda-release-sm120", "--verbose"),
         ("retention-days: 14", "retention-days: 90"),
         ("uses: actions/cache/restore@", "uses: actions/cache/save@"),
+        ("path: ${{ steps.pr_fast_ccache.outputs.path }}", "path: ~/.cache/ccache"),
+        ("key: ${{ steps.pr_fast_ccache.outputs.key }}", "key: shared-cuda-cache"),
+        ("steps.pr_fast_ccache_bound.outputs.available == 'true'", "true"),
+        ("steps.cuda_runtime_build.outcome == 'success'", "true"),
     ],
 )
 def test_budget_diagnostic_and_gate_controls_reject_regressions(
