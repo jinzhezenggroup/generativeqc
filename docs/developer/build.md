@@ -281,12 +281,27 @@ resource choices; use the normal settings for performance and release binaries.
 
 ## Prebuilt CUDA wheel coverage
 
-Wheel CI builds native images for `80`, `86`, `89`, `90`, `100`, and `120`, with
-PTX for `120` for forward compatibility. It selects portable shell profiles
-for the other targets and the measured profile for `120`. This is binary
-coverage, not a claim of measured performance parity across those GPUs. Existing
-archives explicitly named `sm120` remain architecture-specific; source builds
-must select the architecture of the deployment GPU.
+Wheel CI selects `80;90-real;120-real`: native images for `sm_80`, `sm_90`
+and `sm_120`, plus `compute_80` PTX. The unsuffixed CMake target `80`
+emits both native and virtual code; the other targets emit native code only.
+Portable shell profiles remain available with the measured `sm_120` profile.
+Every AOT manifest retains its own actual compiled code-object inventory;
+profile-specific libraries are not required to contain the entire wheel matrix.
+Independent source, binary-integrity, smoke and CUDA-linkage gates remain required.
+
+NVIDIA can use a compatible cubin on the same compute-capability major version
+with an equal or higher minor version (for example, `sm_80` on 8.6/8.9).
+Other newer architectures may JIT the generic `compute_80` PTX when no compatible
+native image is available, subject to the installed driver's PTX support and
+compatible CUDA libraries. JIT adds first-use latency and does not establish
+native-target performance parity or scientific qualification. This is forward,
+not backward, compatibility: **SM 70/75 are not covered by this wheel**.
+See [NVIDIA's compatibility rules](https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/cuda-platform.html)
+and [CMake's real/virtual target semantics](https://cmake.org/cmake/help/latest/prop_tgt/CUDA_ARCHITECTURES.html).
+
+The reduced matrix is a packaging/cost policy, not a claim of qualified execution
+on every newer GPU. Existing archives explicitly named `sm120` remain
+architecture-specific. Source builds can select a different deployment target.
 
 ## Install a native SDK/runtime
 

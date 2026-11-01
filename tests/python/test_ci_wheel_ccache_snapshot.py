@@ -126,9 +126,7 @@ def test_wheel_profile_caps_are_separate_from_cpu(wheel: Any) -> None:
     assert wheel.MAX_ARCHIVE == 2 * 1024**3 - 1024**2
     assert wheel.MAX_DECODED == 3 * 1024**3 and wheel.MAX_FILES == 100_000
     assert wheel.identity()["ccache_version"] == "4.14"
-    assert (
-        wheel.identity()["cuda_arch"] == "80-real;86-real;89-real;90-real;100-real;120"
-    )
+    assert wheel.identity()["cuda_arch"] == "80;90-real;120-real"
     assert wheel.cache_root() == Path(os.environ["RUNNER_TEMP"]) / "ccache"
     assert wheel.cache_root() != Path.home() / ".cache/ccache"
 
@@ -431,11 +429,12 @@ def test_publication_requires_fresh_observed_toolchain(
 @pytest.mark.parametrize(
     "ccache,cuda,arch,valid",
     [
-        ("4.14", "12.9", "80-real;86-real;89-real;90-real;100-real;120", True),
+        ("4.14", "12.9", "80;90-real;120-real", True),
         ("4.15", "12.9", "120", False),
         ("4.14", "13.0", "120", False),
         ("4.14", "12.9", "90", False),
         ("4.14", "12.9", "120", False),
+        ("4.14", "12.9", "80-real;86-real;89-real;90-real;100-real;120", False),
     ],
 )
 def test_recording_observes_tools_not_expected_label(

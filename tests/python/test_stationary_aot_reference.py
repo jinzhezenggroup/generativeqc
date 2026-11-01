@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -122,3 +123,21 @@ def test_wheel_reuses_semantic_sources_separately_from_compiler_objects() -> Non
     ) in workflow
     assert "GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE = { env =" in project
     assert "CCACHE_DIR=/host${{ runner.temp }}/ccache" in workflow
+
+
+def test_wheel_matrix_emits_three_native_images_and_compute80_ptx() -> None:
+    """Keep the owner-selected cubins and portable PTX in actual manifest metadata."""
+    workflow = (ROOT / ".github/workflows/wheels.yml").read_text()
+    selected = re.search(r'GENERATIVEQC_CUDA_ARCHITECTURES="([^"\n]+)"', workflow)
+    assert selected is not None
+    assert manifest._code_objects(selected.group(1).split(";")) == [
+        {"architecture": "sm_120", "kind": "cubin"},
+        {"architecture": "sm_80", "kind": "cubin"},
+        {"architecture": "sm_80", "kind": "ptx"},
+        {"architecture": "sm_90", "kind": "cubin"},
+    ]
+    # Profile-specific manifests describe their own compilation, not the union
+    # of every image installed in a wheel. Keep this smaller inventory legal.
+    assert manifest._code_objects(["120-real"]) == [
+        {"architecture": "sm_120", "kind": "cubin"}
+    ]

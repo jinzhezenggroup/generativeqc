@@ -115,7 +115,7 @@ jobs:
             GENERATIVEQC_ENABLE_CUDA=ON
             GENERATIVEQC_ENABLE_AOT_SHELLS=ON
             GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE=/host${{ runner.temp }}/stationary-aot-source-cache
-            GENERATIVEQC_CUDA_ARCHITECTURES="80-real;86-real;89-real;90-real;100-real;120"
+            GENERATIVEQC_CUDA_ARCHITECTURES="80;90-real;120-real"
             CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable -DGENERATIVEQC_AOT_PROFILES=sm_120"
             CCACHE_DIR=/host${{ runner.temp }}/ccache
             CCACHE_MAXSIZE=3G
@@ -243,7 +243,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: wheel-ccache-master-manylinux-cuda12.9-multiarch-v2-${{ github.run_attempt }}
+          name: wheel-ccache-master-manylinux-cuda12.9-sm80-sm90-sm120-ptx80-v3-${{ github.run_attempt }}
           path: ${{ steps.wheel_snapshot.outputs.path }}
           if-no-files-found: error
           compression-level: 0

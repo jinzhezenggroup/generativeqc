@@ -78,3 +78,9 @@ before compilation, so it provides neither build-failure nor timing evidence.
 A full wheel run against the integrated source is now appropriate. Its successful
 build/job timing, cache statistics/size and repaired artifact size are still
 required before this packaging PR is ready.
+
+## Superseding matrix decision
+
+The owner-selected 80/90/120 native matrix and compute-80 PTX supersedes the
+six-native-target policy for new wheel builds; historical results above remain
+bound to their original inputs. See [the reduced-matrix decision](2026-11-01-three-native-wheel-targets.md).
