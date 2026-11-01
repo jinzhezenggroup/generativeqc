@@ -21,7 +21,7 @@ struct CudaDfMdOwner {
   DfMdView pair{}, auxiliary{};
   std::array<std::size_t, 8> pair_offsets{}, auxiliary_offsets{};
   std::size_t pair_hermites{}, auxiliary_hermites{}, pair_responses{}, auxiliary_responses{};
-  unsigned charge_splits{}, architecture{};
+  unsigned charge_splits{};
   std::array<void*, 16> allocations{};
   std::size_t allocation_count{};
   CudaDfMdResources resources{};
@@ -275,7 +275,7 @@ cudaError_t contract_class(const CudaDfMdOwner& owner) {
     // Reuse this existing allocation only when complete partials fit; there
     // is no added arena, capacity overcommit or allocation during replay.
     const auto capacity = owner.pair_hermites / na / components;
-    const auto splits = df_md_charge_splits(owner.charge_splits, owner.architecture, np, capacity);
+    const auto splits = df_md_charge_splits(owner.charge_splits, np, capacity);
     if (splits > 1) {
       df_md_contract<P, A, true, Response><<<dim3(na, splits), 128, 0, owner.stream>>>(
           owner.pair, p, np, owner.auxiliary, a, na, owner.pair.potential);
@@ -381,14 +381,6 @@ generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
     candidate->charge_splits = requested_charge_splits();
     candidate->device = device;
     candidate->stream = stream;
-    // Device policy is immutable for this owner's lifetime. Never query the
-    // environment or device properties while capturing/replaying its graph.
-    int major = 0, minor = 0;
-    error = cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);
-    if (error == cudaSuccess)
-      error = cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device);
-    if (error != cudaSuccess) return fail(error, detail);
-    candidate->architecture = static_cast<unsigned>(10 * major + minor);
     candidate->pair_offsets = pair_layout.offsets;
     candidate->auxiliary_offsets = aux_layout.offsets;
     candidate->pair_hermites = pair_layout.hermite_elements;
@@ -526,6 +518,60 @@ cudaError_t cuda_df_md_three_center_gradient(CudaDfMdOwner* owner, const double*
       <<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, density, coefficient, gradient);
   df_md_project_derivative<false>
       <<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, density, coefficient, gradient);
+  df_md_project_derivative<false><<<owner->auxiliary.count, 128, 0, owner->stream>>>(
+      owner->auxiliary, potential, coefficient, gradient);
+  return cudaPeekAtLastError();
+}
+
+namespace {
+template <unsigned Target, unsigned Source>
+cudaError_t metric_class(const CudaDfMdOwner& owner) {
+  const auto first = owner.auxiliary_offsets[Target];
+  const auto targets = owner.auxiliary_offsets[Target + 1] - first;
+  const auto second = owner.auxiliary_offsets[Source];
+  const auto sources = owner.auxiliary_offsets[Source + 1] - second;
+  if (!targets || !sources) return cudaSuccess;
+  // An auxiliary primitive is already represented as a unit-times-AO pair.
+  // Reuse the generated pair-potential algebra with that exact representation;
+  // the live source density and raised output are disjoint even for one view.
+  df_md_contract<Target, Source, false, true><<<targets, 128, 0, owner.stream>>>(
+      owner.auxiliary, first, targets, owner.auxiliary, second, sources);
+  return cudaPeekAtLastError();
+}
+
+template <unsigned Target>
+cudaError_t metric_row(const CudaDfMdOwner& owner) {
+  auto status = metric_class<Target, 0>(owner);
+  if (status == cudaSuccess) status = metric_class<Target, 1>(owner);
+  if (status == cudaSuccess) status = metric_class<Target, 2>(owner);
+  if (status == cudaSuccess) status = metric_class<Target, 3>(owner);
+  if (status == cudaSuccess) status = metric_class<Target, 4>(owner);
+  return status;
+}
+}  // namespace
+
+cudaError_t cuda_df_md_metric_gradient(CudaDfMdOwner* owner, const double* potential,
+                                       double coefficient, double* gradient) {
+  auto status = validate_replay(owner, potential, gradient);
+  if (status != cudaSuccess) return status;
+  if (!std::isfinite(coefficient)) return cudaErrorInvalidValue;
+  if (coefficient == 0) return cudaSuccess;
+  // No previous charge/three-center input is assumed, including graph replay
+  // after zero or changed potentials. Response never uses primal screening.
+  df_md_precontract<<<owner->auxiliary.count, 128, 0, owner->stream>>>(owner->auxiliary, potential);
+  status = cudaPeekAtLastError();
+  if (status != cudaSuccess) return status;
+  status = cudaMemsetAsync(owner->auxiliary.response_potential, 0,
+                           owner->auxiliary_responses * sizeof(double), owner->stream);
+  if (status == cudaSuccess) status = metric_row<0>(*owner);
+  if (status == cudaSuccess) status = metric_row<1>(*owner);
+  if (status == cudaSuccess) status = metric_row<2>(*owner);
+  if (status == cudaSuccess) status = metric_row<3>(*owner);
+  if (status == cudaSuccess) status = metric_row<4>(*owner);
+  if (status != cudaSuccess) return status;
+  // This is the derivative on the physical AO center of the unit-times-AO
+  // target. Symmetry cancels the energy's factor 1/2; source-center derivatives
+  // are the same complete sum after P/Q exchange, not a second kernel pass.
   df_md_project_derivative<false><<<owner->auxiliary.count, 128, 0, owner->stream>>>(
       owner->auxiliary, potential, coefficient, gradient);
   return cudaPeekAtLastError();

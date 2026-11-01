@@ -1299,6 +1299,46 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return product(doubles, sizeof(double));
   }
 
+  scf::initial_guess::MatrixProductOperation seed_products() {
+    // Match HF's size-based crossover. The existing matrix binding and three
+    // dead iteration buffers suffice; no new provider or arena is allocated.
+    if (n < 512 || !matrix_products.library_enabled()) return {};
+    return [this](const auto& a, const auto& b, std::size_t dimension, bool ta, bool tb) {
+      if (dimension != n || a.size() != matrix || b.size() != matrix || is_active || is_pending)
+        throw std::invalid_argument("CUDA KS seed product requires its idle AO owner");
+      current_device();
+      cudaStreamCaptureStatus capture{};
+      check(cudaStreamIsCapturing(stream, &capture));
+      if (capture != cudaStreamCaptureStatusNone)
+        throw std::invalid_argument("CUDA KS seed admission requires an ordinary stream");
+      // begin() resets DIIS. effective is also idle between submissions (as
+      // in warm_density()); tmp1/tmp2 can still back stationary leases and
+      // must not be borrowed. Failed admission preserves final/warm state.
+      scf::reference::Matrix output(matrix);
+      try {
+        check(cudaMemcpyAsync(fock_history, a.data(), matrix * sizeof(double),
+                              cudaMemcpyHostToDevice, stream));
+        check(cudaMemcpyAsync(residual_history, b.data(), matrix * sizeof(double),
+                              cudaMemcpyHostToDevice, stream));
+        check(launch_validation_product(matrix_products.view(), static_cast<int>(n), fock_history,
+                                        ta, residual_history, tb, effective),
+              "CUDA KS seed validation product failed");
+        check(cudaMemcpyAsync(output.data(), effective, matrix * sizeof(double),
+                              cudaMemcpyDeviceToHost, stream));
+        check(cudaStreamSynchronize(stream));
+      } catch (...) {
+        // All operands and output are borrowed host vectors. Drain even a
+        // partially submitted operation before their lifetimes can end.
+        (void)cudaStreamSynchronize(stream);
+        throw;
+      }
+      movement.setup_h2d_bytes += 2 * matrix * sizeof(double);
+      movement.matrix_d2h_bytes += matrix * sizeof(double);
+      ++movement.synchronizations;
+      return output;
+    };
+  }
+
   scf::reference::EigenResult seed_eigen(const scf::reference::Matrix& input,
                                          std::size_t dimension) {
     runtime::host_trace::Region trace("cuda_ks_seed_eigen", n);
@@ -1364,7 +1404,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     scf::solver::EigenFrameDiagnostic diagnostic;
     std::string detail;
     if (!scf::solver::validate_eigen_frame(input, nullptr, frame.values, frame.vectors, n,
-                                           diagnostic, detail))
+                                           diagnostic, detail, true, seed_products()))
       throw generativeqc::Error(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, detail);
     return frame;
   }
@@ -1386,7 +1426,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                                               const auto*, std::size_t dimension) {
         return seed_eigen(matrix, dimension);
       };
-      scf::solver::validate_seed(ints.overlap, *input, n, counts, spins == 2 ? 1.0 : 2.0, eigen);
+      scf::solver::validate_seed(ints.overlap, *input, n, counts, spins == 2 ? 1.0 : 2.0, eigen,
+                                 seed_products());
       return *input;
     }
     if (spins == 2) {
@@ -4738,6 +4779,9 @@ scf::initial_guess::EigenOperation CudaKsPlan::seed_eigen_operation() {
       throw std::invalid_argument("CUDA KS seed eigen operation accepts symmetric solves only");
     return impl_->seed_eigen(matrix, dimension);
   };
+}
+scf::initial_guess::MatrixProductOperation CudaKsPlan::seed_product_operation() {
+  return impl_->seed_products();
 }
 void CudaKsPlan::set_warm_start_updates(bool enabled) noexcept { impl_->warm_updates = enabled; }
 void CudaKsPlan::clear_warm_start() noexcept { impl_->clear_warm_state(); }

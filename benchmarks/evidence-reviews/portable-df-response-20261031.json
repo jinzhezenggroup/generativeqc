@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "portable-df-response-20261031",
+  "owner": "Portable CUDA DF response qualification",
+  "reason": "101 original endpoint populations: 98 complete and independently qualified plus three incomplete controls. Retains force vectors, timing samples, work, actual settings and original build/scheduler identities for portable DF response; includes negative larger-tile and core-guess controls. Storage review does not change numerical gates.",
+  "review_document": "benchmarks/results/portable-df-response-20261031/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/portable-df-response-20261031/receipts.json.xz",
+      "family": "portable-df-response-20261031",
+      "classification": "required-compact-accepted-evidence",
+      "role": "original-complete-endpoint-receipts-and-independent-numerical-gates",
+      "bytes": 553912,
+      "sha256": "dcd5af827ddd0b46a130224b6d575d6193112fdbafc03d90fca3460b87286330"
+    }
+  ]
+}

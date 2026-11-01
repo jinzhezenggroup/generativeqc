@@ -123,6 +123,11 @@ jobs:
           output-dir: wheelhouse
           extras: "uv"
 
+      - name: Prepare stationary source cache for host archive
+        if: ${{ always() }}
+        shell: bash
+        run: bash .github/scripts/prepare-stationary-source-cache.sh
+
       # ccache stores completed compiler outputs, so retain useful entries after
       # a compile failure/step timeout. Tool environments retain success-only saves.
       # Keep ordinary Actions cache saves, including useful partial compiler work.
