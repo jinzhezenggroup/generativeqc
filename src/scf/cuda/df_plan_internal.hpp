@@ -132,6 +132,8 @@ struct CudaDensityFittingJkPlan {
   bool packed_projection_blas{};
   bool packed_projection_auto{};
   int packed_projection_fp32_fp64_ratio{};
+  // Independent of projection overrides; frozen before any captured Gram.
+  bool occupied_gram_library_capable{};
   bool triangular_exchange{};
   bool flat_dense_exchange{};
   bool cooperative_diis{};

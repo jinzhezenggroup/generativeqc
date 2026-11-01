@@ -320,10 +320,16 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
     // buffer is dead between projection and K consumption; only its charged
     // capacity may hold deterministic triangular reduction slices. Restrict
     // promotion to packed sources; all other providers retain their BLAS path.
-    const auto gram_splits =
+    const auto planned_gram_splits =
         packed && plan.triangular_exchange
             ? generated::df_occupied_gram_splits(plan.nbf, plan.naux * rank, plan.panel_capacity)
             : 0;
+    // FP64 matrix-capable devices execute the full Gram faster through the
+    // typed library product, despite its extra triangle. Keep the generated
+    // split schedule on low/unknown FP64 capability and outside its original
+    // shape/capacity domain. Both routes preserve the final U response lease.
+    const bool library_gram = planned_gram_splits && plan.occupied_gram_library_capable;
+    const auto gram_splits = library_gram ? 0 : planned_gram_splits;
     if (gram_splits) {
       runtime::cuda_trace::TraceRegion gram("ri_k_occupied_split_gram", plan.stream);
       error = launch_split_occupied_gram(plan.stream, plan.nbf, plan.naux * rank, gram_splits,
@@ -338,8 +344,9 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
       status = trace_call("ri_k_occupied_exchange_gemm", plan.stream, [&] {
         // Triangle ownership is a semantic property. The prepared provider
         // uses SYRK where supported or retains the original full GEMM.
-        return scf_occupied_gram(plan, n, ar, weight, u, output, plan.triangular_exchange,
-                                 triangular, "resident occupied DF K product", detail);
+        return scf_occupied_gram(plan, n, ar, weight, u, output,
+                                 plan.triangular_exchange && !library_gram, triangular,
+                                 "resident occupied DF K product", detail);
       });
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (triangular && !gram_splits) {

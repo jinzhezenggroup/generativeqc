@@ -147,19 +147,34 @@ rejected until logical replay work accounting is connected for this owner.
 Native XC potential assembly also consumes a prepared shared binding.
 `dft.xc_potential_lowering` expresses the existing compact work-panel contraction
 as `einsum("jpm,jpn->mn", A, W)` plus its transpose. The shared tensor recognizer
-preserves that graph identity and offers generated execution and strict-FP64
-rank-2k execution. Functional coefficients continue to come exclusively from
-the existing compact bilinear. Generated execution remains the production
-incumbent; the library candidate is executable under test qualification but has
-no promoted endpoint profile. A provider budget alone does not promote it.
+preserves that graph identity and offers generated execution, dense/indexed
+strict-FP64 SYR2K, and a separately identified indexed FP64 GEMM recipe.
+Functional coefficients continue to come exclusively from the existing compact
+bilinear. GEMM materializes one cross product and the indexed scatter publishes
+its sum with its transpose, including both diagonal contributions. A typed FP64
+provider handle uses default math mode only for this recipe; it does not permit
+TF32, operand conversion, or a lower accumulation dtype. Mode selection precedes
+capture and never changes another owner's handle.
+
+The KS owner can admit indexed GEMM for local strict-FP64 panels with at least
+512 AOs, 2^19 points and four work jets when the reported FP32/FP64 throughput
+ratio is positive and at most two, with compute capability major at least eight.
+Older full-rate scalar FP64 devices retain generated execution because scalar
+throughput alone does not qualify the matrix schedule. The optional allowance
+is capped at 128 MiB.
+Explicit reference-memory budgets and public numeric ledgers retain generated
+execution. Unknown capability and unadmitted resource/provider domains also keep
+the incumbent. The policy preserves user SCF and force tile sizes; it does not
+identify devices by GPU name or establish a universal performance guarantee.
+Dense and indexed SYR2K remain available to explicit native qualification.
 
 `CudaXcPlan::potential_lowering()` reports the selected candidate, preparation
 time, resource reservation and alternative rejection. Its 16 KiB host binding
 allowance is separate from the unchanged numeric device arena; an optional
 library trial additionally admits the shared 96 MiB provider allowance.
 An independently qualified indexed candidate uses the same compact inputs,
-computes one temporary symmetric triangle, then scatters into validated local
-AO destinations. Its additional cache is bounded and charged at the global
+computes one temporary symmetric triangle (SYR2K) or full cross product (GEMM),
+then scatters into validated local AO destinations. Its additional cache is bounded and charged at the global
 spin-matrix capacity through the shared numeric ledger. Dense qualification
 does not admit indexed scatter; empty domains, insufficient cache/provider
 budget and unavailable providers retain generated execution. Map discovery
@@ -167,7 +182,7 @@ must precede optional preparation. `--indexed-potential` qualifies this path
 against independent scalar/CPU references, capture and resource-failure gates.
 The native `--indexed-potential-benchmark ORIGINAL MOVED` command measures
 complete fixed-density XC for both mapped geometries at several tile sizes.
-It reports preparation, all timing samples, physical rank-2k work, compact
+It reports preparation, all timing samples, semantic product work, compact
 publication/scatter traffic and paired E/V errors. The retained
 `benchmarks/results/xc-mapped-potential-1876/` receipt includes hash-bound input
 recovery and verifies the actual AO census; it does not qualify full SCF/forces.
@@ -181,8 +196,9 @@ Native density and nonlocal potential assembly are separate migration consumers.
 `common.precision.ExecutionPrecisionSchedule` and its `PrecisionDirective`;
 there is no method-local precision/provider enum. Storage, compute, accumulation,
 input, and final publication types remain explicit. Alternative arithmetic needs
-scientific qualification. The currently supported arithmetic mode continues to
-reject TF32 and implicit tensor-core modes.
+scientific qualification. The supported arithmetic contract rejects TF32 and implicit reduced-precision
+modes. Typed FP64 library operations retain FP64 inputs, computation,
+accumulation and publication even when hardware accelerates that FP64 operation.
 
 `OperandLayout` records normalized logical modes, extents, physical element
 strides, alignment, read/write effects, triangle ownership and alias groups.

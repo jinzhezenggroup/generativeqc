@@ -546,7 +546,7 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
   runtime::df_progress::Scope::number("max_active", ao_selection_work().max_active);
 }
 
-void CudaXcPlan::prepare_potential(std::size_t provider_budget) {
+void CudaXcPlan::prepare_potential(std::size_t provider_budget, bool indexed_gemm) {
   check_device();
   if (evaluation_started_)
     throw std::logic_error("XC potential preparation after evaluation began");
@@ -555,7 +555,8 @@ void CudaXcPlan::prepare_potential(std::size_t provider_budget) {
   if (potential_binding_ && potential_binding_->diagnostic().provider_allowance)
     throw std::logic_error("XC potential provider is already prepared");
   try {
-    potential_binding_ = cuda_xc_detail::prepare_potential(layout_, stream_, provider_budget);
+    potential_binding_ =
+        cuda_xc_detail::prepare_potential(layout_, stream_, provider_budget, indexed_gemm);
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     throw std::bad_alloc();
   } catch (const generativeqc_tensor::DeviceRuntimeError& error) {
