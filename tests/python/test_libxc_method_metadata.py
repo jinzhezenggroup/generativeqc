@@ -174,6 +174,7 @@ def test_fulltree_nonlocal_methods_use_pinned_source_definitions() -> None:
 
 def test_fulltree_non_vv10_hybrids_are_represented_without_public_admission() -> None:
     from generativeqc_compiler.method import resolve_method
+
     from tools.generate_libxc_methods import build_catalog
 
     generated, _ = build_catalog()
@@ -191,9 +192,7 @@ def test_fulltree_non_vv10_hybrids_are_represented_without_public_admission() ->
         assert record["direct_semilocal_component"] == (
             f"HYB_GGA_XC_{identifier.replace('-', '_')}"
         )
-        assert METHOD_CATALOG[identifier].short_range_exchange == Fraction(
-            short_range
-        )
+        assert METHOD_CATALOG[identifier].short_range_exchange == Fraction(short_range)
         assert METHOD_CATALOG[identifier].long_range_exchange == 1
         assert METHOD_CATALOG[identifier].range_omega == Fraction(omega)
         method = resolve_method(identifier, spin="unpolarized")
@@ -203,9 +202,9 @@ def test_fulltree_non_vv10_hybrids_are_represented_without_public_admission() ->
             if primitive.kind == "semilocal_xc"
         )
         payload = semilocal.functional.to_payload()
-        assert payload["expression_provenance"]["registration"] == record[
-            "registration"
-        ]
+        assert (
+            payload["expression_provenance"]["registration"] == record["registration"]
+        )
         assert payload["qualification"] == "representation-only"
         assert payload["production_admitted"] is False
 

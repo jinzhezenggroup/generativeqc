@@ -79,9 +79,8 @@ def _sources() -> list[tuple[Path, str]]:
             raise ValueError(f"pinned Libxc nonlocal owner SHA-256 mismatch: {name}")
         if path.name in original_names:
             continue
-        if (
-            b"XC_FLAGS_VV10" not in raw
-            and not name.startswith(("src/hyb_gga_xc_", "src/hyb_mgga_xc_"))
+        if b"XC_FLAGS_VV10" not in raw and not name.startswith(
+            ("src/hyb_gga_xc_", "src/hyb_mgga_xc_")
         ):
             continue
         result.append((path, actual))
