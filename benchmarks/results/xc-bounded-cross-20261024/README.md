@@ -102,3 +102,9 @@ measurement or failure data. No full-manifest restoration is promised.
 Downstream DF-charge and fitted-range checks retain a 30-path baseline projection (29 changed paths plus the endpoint driver)
 and the digests of nine original source deltas. This preserves their complete
 changed-path and file-count checks without restoring the whole repository list.
+
+The exact-FP64 v3 streams preserve every original endpoint string and the full
+outer container byte for byte, verified by their original SHA-256 digests. The
+independent reproduction gates and provenance packet are unchanged. The former
+compressed object remains in Git history; the reader authenticates the restored
+original JSON, without promising identical XZ recompression.

@@ -6,12 +6,12 @@
   "review_document": "benchmarks/results/df-charge-partitions-20261024/README.md",
   "files": [
     {
-      "path": "benchmarks/results/df-charge-partitions-20261024/endpoints.json.xz",
+      "path": "benchmarks/results/df-charge-partitions-20261024/fp64.xz",
       "family": "df-charge-partitions-20261024",
       "classification": "required-compact-accepted-evidence",
       "role": "complete-endpoints-independent-moved-and-larger-reference-contracts",
-      "bytes": 392256,
-      "sha256": "49175505473966880804d22ff7b8c1b5d882dd50e2db104fa7a534790df79715"
+      "bytes": 213176,
+      "sha256": "decab77c07b5f56f66f19f8f898d999d0cef6a45f32eb3d4af10d7d6801318f5"
     }
   ]
 }

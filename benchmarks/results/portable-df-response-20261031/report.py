@@ -93,24 +93,24 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify", action="store_true")
     args = parser.parse_args()
-    archive = Path(__file__).with_name("receipts.json.xz").read_bytes()
-    manifest = json.loads(
-        (
-            ROOT / "benchmarks/evidence-reviews/portable-df-response-20261031.json"
-        ).read_text()
-    )
-    entries = [
-        row
-        for row in manifest["files"]
-        if row["path"]
-        == "benchmarks/results/portable-df-response-20261031/receipts.json.xz"
-    ]
-    assert len(entries) == 1, "receipts.json.xz manifest entry"
-    assert len(archive) == entries[0]["bytes"], "receipts.json.xz size"
-    assert hashlib.sha256(archive).hexdigest() == entries[0]["sha256"], (
-        "receipts.json.xz sha256"
-    )
-    bundle = json.loads(lzma.decompress(archive))
+    # Both streams need an independent binding, including the metadata stream
+    # that is now smaller than the repository's large-evidence review threshold.
+    manifest = json.loads(Path(__file__).with_name("storage.json").read_text())
+    for name in ("receipts.json.xz", "fp64.xz"):
+        archive = Path(__file__).with_name(name).read_bytes()
+        relative = Path(__file__).with_name(name).relative_to(ROOT).as_posix()
+        entries = [row for row in manifest["files"] if row["path"] == relative]
+        assert len(entries) == 1, f"{name} manifest entry"
+        assert len(archive) == entries[0]["bytes"], f"{name} size"
+        assert hashlib.sha256(archive).hexdigest() == entries[0]["sha256"], (
+            f"{name} sha256"
+        )
+    # The storage codec authenticates the complete pre-compaction JSON bytes,
+    # including every embedded receipt. Scientific replay below is unchanged.
+    from benchmarks._exact_fp64_evidence import load
+
+    _, texts = load(Path(__file__).parent)
+    bundle = json.loads(texts["original-receipts.json"])
     oracle_bytes = checked_file(bundle["oracle_path"], bundle["oracle_sha256"])
     reuse_bytes = checked_file(bundle["reuse_path"], bundle["reuse_sha256"])
     oracles = json.loads(lzma.decompress(oracle_bytes))

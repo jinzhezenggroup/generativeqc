@@ -23,35 +23,56 @@ def require(condition: bool, detail: str) -> None:
 
 
 def load(folder: Path) -> tuple[dict, dict[str, str]]:
-    """Reconstruct exact receipts, including the sequential-marker v2 format.
+    """Reconstruct exact receipts and authenticate their original text bytes.
 
     V2 omits redundant cursor integers from the JSON stream. Traversal order,
     the final float count and each original byte checksum still authenticate
-    every FP64 word; neither representation rounds numerical evidence.
+    every FP64 word. V3 additionally permits compact JSON and references to
+    earlier authenticated texts, so historical containers with embedded JSON
+    strings do not defeat FP64 compression. References cannot form cycles or
+    read files outside the bundle. No representation rounds numerical evidence.
     """
+    authenticated = set()
     for line in (folder / "sha256.txt").read_text().splitlines():
         digest, name = line.split()
         require(
+            name in ("receipts.json.xz", "fp64.xz") and name not in authenticated,
+            "compressed stream manifest",
+        )
+        require(
             hashlib.sha256((folder / name).read_bytes()).hexdigest() == digest, name
         )
+        authenticated.add(name)
+    require(authenticated == {"receipts.json.xz", "fp64.xz"}, "missing stream digest")
     bundle = json.loads(lzma.decompress((folder / "receipts.json.xz").read_bytes()))
     require(
         bundle["schema"]
         in (
             "generativeqc.bounded-projection-evidence.v1",
             "generativeqc.exact-fp64-evidence.v2",
+            "generativeqc.exact-fp64-evidence.v3",
         ),
         "schema",
     )
-    sequential = bundle["schema"] == "generativeqc.exact-fp64-evidence.v2"
+    nested = bundle["schema"] == "generativeqc.exact-fp64-evidence.v3"
+    sequential = bundle["schema"] != "generativeqc.bounded-projection-evidence.v1"
     planes = lzma.decompress((folder / "fp64.xz").read_bytes())
     count = bundle["float_count"]
     require(len(planes) == 8 * count, "FP64 storage size")
     last: dict[tuple, int] = {}
     cursor = 0
+    files: dict[str, str] = {}
 
     def decode(value: object, path: tuple) -> object:
         nonlocal cursor
+        if nested and isinstance(value, dict) and "$text" in value:
+            require(
+                set(value) == {"$text"}
+                and isinstance(value["$text"], str)
+                and value["$text"] in files,
+                "text reference must name an earlier authenticated receipt",
+            )
+            return files[value["$text"]]
         if isinstance(value, dict) and "$fp64" in value:
             require(
                 value == {"$fp64": None if sequential else cursor} and cursor < count,
@@ -70,13 +91,30 @@ def load(folder: Path) -> tuple[dict, dict[str, str]]:
             return {k: decode(v, path + (k,)) for k, v in value.items()}
         return value
 
-    files = {}
     for row in bundle["files"]:
-        text = (
-            (json.dumps(decode(row["json"], (row["anchor"],)), indent=2) + "\n")
-            if "json" in row
-            else row["text"]
-        )
+        if nested and "text_ref" in row:
+            require(
+                "json" not in row and "text" not in row, "ambiguous receipt storage"
+            )
+            text = decode({"$text": row["text_ref"]}, ())
+        elif "json" in row:
+            formatting = row.get("json_format", "indent2-lf")
+            require(
+                formatting == "indent2-lf"
+                or (nested and formatting in ("compact", "compact-lf", "spaced")),
+                "JSON text format",
+            )
+            value = decode(row["json"], (row["anchor"],))
+            text = (
+                json.dumps(value, indent=2) + "\n"
+                if formatting == "indent2-lf"
+                else json.dumps(value)
+                if formatting == "spaced"
+                else json.dumps(value, separators=(",", ":"))
+                + ("\n" if formatting == "compact-lf" else "")
+            )
+        else:
+            text = row["text"]
         require(hashlib.sha256(text.encode()).hexdigest() == row["sha256"], row["path"])
         require(row["path"] not in files, "duplicate receipt")
         files[row["path"]] = text
