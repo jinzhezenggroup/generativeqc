@@ -371,7 +371,7 @@ jobs:
         run: python3 tools/report_ci_ccache.py --label "CPU CTest ${{ matrix.compiler }}"
       - name: Test
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --parallel 2
       - name: Generate current CUDA ownership report
         if: matrix.compiler == 'gcc'
         run: |
@@ -640,6 +640,27 @@ jobs:
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
+      # A PR may otherwise recompile hundreds of generated CUDA objects on
+      # every push. Keep a small immutable miss delta per PR; ccache still
+      # checks source, flags, toolchain and generated contents at every lookup.
+      # PR objects never seed master or merge-group caches.
+      - name: Prepare isolated PR fast CUDA compiler delta
+        id: pr_fast_ccache
+        if: github.event_name == 'pull_request' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 tools/ci_pr_fast_ccache.py prepare
+      - name: Restore only this PR fast CUDA compiler delta
+        id: pr_fast_ccache_restore
+        if: github.event_name == 'pull_request' && steps.pr_fast_ccache.outputs.key != ''
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pr_fast_ccache.outputs.path }}
+          key: ${{ steps.pr_fast_ccache.outputs.key }}
       - name: Reset ccache statistics
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --zero-stats
@@ -649,7 +670,9 @@ jobs:
       - name: Configure production CUDA compile check
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
-          cmake --preset cuda-release-sm120
+          cmake --preset cuda-release
+          -DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120
+          -DGENERATIVEQC_AOT_PROFILE=sm_120
           -DGENERATIVEQC_BUILD_TESTS=ON
           -DGENERATIVEQC_CUDA_FAST_COMPILE=ON
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
@@ -661,25 +684,42 @@ jobs:
         # Its objects/device link are reused, never compiled in a second context.
         # The outer job budget also reserves setup, probes and cleanup time.
         run: >-
-          cmake --build --preset cuda-release-sm120
+          cmake --build --preset cuda-release
           --target generativeqc_direct_native --parallel 3
         env:
-          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || '' }}
+          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || github.event_name == 'pull_request' && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && (steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' || steps.pr_fast_ccache_restore.outputs.cache-matched-key == '') && format('file://{0}{1}', steps.pr_fast_ccache.outputs.path, steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' && ' read-only' || '') || '' }}
           CCACHE_NORESHARE: "true"
       - name: Compile production CUDA and runtime CTest
+        id: cuda_runtime_build
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 45
         # This target links the full generativeqc shared library. Native GFN2 CUDA is
         # therefore compiled, device-linked, and consumed through the public
         # method adapter as part of this existing integration gate.
         run: >-
-          cmake --build --preset cuda-release-sm120
+          cmake --build --preset cuda-release
           --target generativeqc_cuda_runtime_tests --parallel 3
         # File-backed secondary storage records misses, not the restored cache.
         # Only trusted master pushes hand this delta to the ordered CLI job.
         env:
-          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || '' }}
+          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || github.event_name == 'pull_request' && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && (steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' || steps.pr_fast_ccache_restore.outputs.cache-matched-key == '') && format('file://{0}{1}', steps.pr_fast_ccache.outputs.path, steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' && ' read-only' || '') || '' }}
           CCACHE_NORESHARE: "true"
+      - name: Bound successful PR fast CUDA compiler misses
+        id: pr_fast_ccache_bound
+        if: always() && github.event_name == 'pull_request' && steps.cuda_runtime_build.outcome == 'success' && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && steps.pr_fast_ccache_restore.outputs.cache-hit != 'true' && steps.pr_fast_ccache_restore.outputs.cache-matched-key == ''
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 tools/ci_pr_fast_ccache.py bound
+      - name: Save this PR fast CUDA compiler delta once
+        if: always() && github.event_name == 'pull_request' && steps.cuda_runtime_build.outcome == 'success' && steps.pr_fast_ccache_bound.outputs.available == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pr_fast_ccache.outputs.path }}
+          key: ${{ steps.pr_fast_ccache.outputs.key }}
       - name: Compile opted-in AO radial kernels with release resources
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         # Default native emission intentionally omits this experimental schedule.
@@ -712,8 +752,8 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ""
         run: |
-          cmake --build --preset cuda-release-sm120 --target generativeqc_fock_build_tests generativeqc_scf_proposal_tests generativeqc_ordered_gram_host_admission_tests --parallel 2
-          ctest --test-dir build/cuda-release-sm120 \
+          cmake --build --preset cuda-release --target generativeqc_fock_build_tests generativeqc_scf_proposal_tests generativeqc_ordered_gram_host_admission_tests --parallel 2
+          ctest --test-dir build/cuda-release \
             -R '^generativeqc_(fock_build|scf_proposal|ordered_gram_host_admission)_tests$' --output-on-failure
       - name: Show CUDA ccache statistics
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
@@ -725,7 +765,7 @@ jobs:
         run: |
           mkdir -p build
           python3 tools/report_ci_ccache.py --label "CUDA 12.9 compile sm120" \
-            --verbose --build-dir build/cuda-release-sm120 \
+            --verbose --build-dir build/cuda-release \
             | tee build/cuda-fast-compile-cache.txt
       - name: Preserve failed fast CUDA build diagnostics
         if: ${{ (failure() || cancelled()) && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose') }}
@@ -737,7 +777,7 @@ jobs:
           # Only per-target timings and the report's allowlisted compiler/build
           # identities: never upload the complete CMake cache or environment.
           path: |
-            build/cuda-release-sm120/.ninja_log
+            build/cuda-release/.ninja_log
             build/cuda-fast-compile-cache.txt
           include-hidden-files: true
           if-no-files-found: warn
@@ -930,7 +970,9 @@ jobs:
       - name: Configure native grid source generation
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
-          cmake --preset cuda-release-sm120
+          cmake --preset cuda-release
+          -DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120
+          -DGENERATIVEQC_AOT_PROFILE=sm_120
           -DGENERATIVEQC_BUILD_TESTS=ON
           -DGENERATIVEQC_CUDA_FAST_COMPILE=ON
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
@@ -941,7 +983,7 @@ jobs:
         # The validator below checks these bytes against compiler emission and
         # still uses release flags, independently of the fast compile preset.
         run: >-
-          cmake --build --preset cuda-release-sm120
+          cmake --build --preset cuda-release
           --target generated/generated_grid_policy.cu --parallel 2
       # This is release resource evidence. The separate production compile-only
       # job uses fast compilation and cannot supply acceptance resources.
@@ -1001,8 +1043,8 @@ jobs:
           python3 tools/validate_native_xc_resources.py
           --nvcc "$CUDACXX" --architecture sm_120
           --ao-radial-reuse
-          --generated-dir build/cuda-release-sm120/generated
-          --cmake-source build/cuda-release-sm120/generated/generated_grid_policy.cu
+          --generated-dir build/cuda-release/generated
+          --cmake-source build/cuda-release/generated/generated_grid_policy.cu
           --output build/native-xc-resource
           --functional PBE --npoint 4096 --tile-points 256 --nao 96 --spins 2
       - name: Restore stationary CUDA compile cache
@@ -1165,7 +1207,9 @@ jobs:
       - name: Configure direct J/K AOT release context
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
-          cmake --preset cuda-release-sm120
+          cmake --preset cuda-release -B build/cuda-release-sm120
+          -DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120
+          -DGENERATIVEQC_AOT_PROFILE=sm_120
           -DGENERATIVEQC_BUILD_TESTS=ON
           -DGENERATIVEQC_CUDA_FAST_COMPILE=OFF
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
@@ -2091,12 +2135,14 @@ jobs:
           ccache --zero-stats
           echo "cache_stats_reset=true" >> "$GITHUB_OUTPUT" || \
             echo "::warning::Unable to record compiler-cache statistics boundary"
-          cmake --preset cuda-release-sm120 \
+          cmake --preset cuda-release \
+            -DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120 \
+            -DGENERATIVEQC_AOT_PROFILE=sm_120 \
             -DGENERATIVEQC_BUILD_TESTS=ON \
             -DGENERATIVEQC_CUDA_FAST_COMPILE=ON \
             -DGENERATIVEQC_CUDA_COMPILE_JOBS=3 \
             -DGENERATIVEQC_COMPILER_CACHE=ccache
-          cmake --build --preset cuda-release-sm120 \
+          cmake --build --preset cuda-release \
             --target generativeqc_cuda_runtime_tests --parallel 3
       - name: Report fast CUDA seed compiler cache
         if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.fast_cuda_seed.outputs.cache_stats_reset == 'true'
@@ -2105,7 +2151,7 @@ jobs:
         run: >-
           python3 tools/report_ci_ccache.py
           --label "CUDA native CLI fast seed (shared library)"
-          --verbose --build-dir build/cuda-release-sm120
+          --verbose --build-dir build/cuda-release
       # A Ninja log has no reliable invocation boundary. Only report a fresh
       # CLI tree; the master fast seed above owns a different build directory.
       - name: Record fresh CLI Ninja timing boundary
@@ -2115,7 +2161,7 @@ jobs:
         timeout-minutes: 1
         run: >-
           python3 tools/report_ci_ninja_timing.py
-          --check-fresh --build-dir build/cuda-release-cli-sm120
+          --check-fresh --build-dir build/cuda-release-cli
       - name: Build monolithic C++ CUDA CLI (release or fast PR)
         id: native_cli_build
         if: steps.cli_scope.outputs.tier != 'skip'
@@ -2133,10 +2179,12 @@ jobs:
             echo "::warning::Unable to record compiler-cache statistics boundary"
           # PCH calls bypass strict ccache. Disable only this CI preset use;
           # retain normal header/macro validation instead of cache sloppiness.
-          cmake --preset cuda-release-cli-sm120 \
+          cmake --preset cuda-release-cli \
+            -DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120 \
+            -DGENERATIVEQC_AOT_PROFILE=sm_120 \
             -DGENERATIVEQC_ENABLE_CXX_PCH=OFF \
             -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
-          cmake --build --preset cuda-release-cli-sm120 --parallel 3
+          cmake --build --preset cuda-release-cli --parallel 3
       - name: Report completed CLI Ninja command timings
         if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outcome != '' && steps.native_cli_build.outcome != 'skipped'
         continue-on-error: true
@@ -2145,7 +2193,7 @@ jobs:
           FRESH_NINJA_LOG: ${{ steps.cli_ninja_boundary.outputs.fresh }}
         run: >-
           python3 tools/report_ci_ninja_timing.py
-          --build-dir build/cuda-release-cli-sm120 --fresh-log "$FRESH_NINJA_LOG"
+          --build-dir build/cuda-release-cli --fresh-log "$FRESH_NINJA_LOG"
       - name: Show detailed CLI compiler cache statistics
         if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
         continue-on-error: true
@@ -2175,7 +2223,7 @@ jobs:
           from pathlib import Path
           from generativeqc_compiler.xc.automatic_semilocal import automatic_registry_entries
 
-          build = Path("build/cuda-release-cli-sm120")
+          build = Path("build/cuda-release-cli")
           cache = (build / "CMakeCache.txt").read_text()
           assert re.search(
               r"^GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT:BOOL=ON$",
@@ -2205,14 +2253,14 @@ jobs:
         shell: bash
         run: |
           python3 tools/check_native_cli_stationary.py \
-            --build-tree build/cuda-release-cli-sm120 \
-            --cli build/cuda-release-cli-sm120/generativeqc
+            --build-tree build/cuda-release-cli \
+            --cli build/cuda-release-cli/generativeqc
       - name: Smoke-test release-mode native command
         id: cli_smoke
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         run: |
-          cli="$PWD/build/cuda-release-cli-sm120/generativeqc"
+          cli="$PWD/build/cuda-release-cli/generativeqc"
           test -x "$cli"
           "$cli" --version | tee build/native-cli-version.txt
           grep -F "${{ steps.cli_version.outputs.version }}" build/native-cli-version.txt
@@ -2236,7 +2284,7 @@ jobs:
           if command -v nvidia-smi >/dev/null 2>&1 && \
              nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | grep -Eq '^12[.]'; then
             python3 tests/native/test_cli_cuda_stationary.py \
-              build/cuda-release-cli-sm120/generativeqc
+              build/cuda-release-cli/generativeqc
           else
             echo "::notice::No sm_120 GPU on hosted CI: ten-method CLI E+F device test NOT RUN; run tests/native/test_cli_cuda_stationary.py under a real sm_120 Slurm allocation."
           fi
@@ -2247,7 +2295,7 @@ jobs:
         run: >-
           python3 tools/report_ci_ccache.py
           --label "CUDA native CLI monolithic build"
-          --build-dir build/cuda-release-cli-sm120
+          --build-dir build/cuda-release-cli
       # A cache snapshot can contain entries for long-abandoned source/flag
       # identities even when the 5 GiB cap was respected. Evict only entries
       # untouched for a week; hits during either seed/build refresh recency.
@@ -2297,7 +2345,7 @@ jobs:
           CLI_RELEASE: ${{ steps.cli_version.outputs.release }}
           CLI_VERSION: ${{ steps.cli_version.outputs.version }}
         run: |
-          cmake --install build/cuda-release-cli-sm120 --prefix "$PWD/build/native-cli-prefix"
+          cmake --install build/cuda-release-cli --prefix "$PWD/build/native-cli-prefix"
           args=()
           if [[ "$CLI_RELEASE" == 'true' ]]; then
             args+=(--release)

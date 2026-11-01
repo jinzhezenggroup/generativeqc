@@ -203,7 +203,7 @@ disabled or reported as unsupported. For example, inside the scheduled shell
 with the optional profiling venv activated and `PYTHONPATH="$PWD/python:$PWD"`:
 
 ```bash
-export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release-sm120/libgenerativeqc.so"
+export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release/libgenerativeqc.so"
 python tools/capture_prepared_allocations.py --pin --method rhf \
   --source-manifest .artifacts/joint-allocation-audit/source.json \
   --library "$GENERATIVEQC_LIBRARY" \

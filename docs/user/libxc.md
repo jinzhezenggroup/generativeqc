@@ -62,6 +62,10 @@ mathematics. Explicit analytic forces execute through the prepared native
 stationary owner, with the selected rho/sigma/tau differential, moving-grid
 partition response, AO-center derivatives, Pulay terms and Coulomb response.
 The installed package must contain the requested provider and derivative artifacts.
+Official CUDA wheels and release CLI presets package the complete structurally
+representable automatic Libxc catalog for their selected CUDA architecture(s),
+not just SM120. Development builds may opt out of automatic CUDA AOT.
+Packaging is not molecular SCF/force qualification for every registration.
 Energy remains the default in one-shot and prepared calls:
 
 ```python

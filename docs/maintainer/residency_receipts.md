@@ -144,7 +144,7 @@ collection:
 
 ```bash
 export PYTHONPATH="$PWD/python:$PWD"
-export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release-sm120/libgenerativeqc.so"
+export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release/libgenerativeqc.so"
 python tools/capture_prepared_residency.py --pin --method rhf \
   --source-manifest .artifacts/residency-audit/source.json \
   --library "$GENERATIVEQC_LIBRARY" \
