@@ -471,7 +471,9 @@ def _automatic_semilocal_name(method_ir: typing.Any) -> str | None:
     """Select generic code only after preserving existing semantic specializations."""
     if not isinstance(method_ir, MethodIR):
         return None
-    plan = _native_execution_plan(method_ir)
+    # Selection is a predicate: corrected compositions retain their existing
+    # owner instead of entering the electronic-only native projection.
+    plan = compile_ks_execution_plan(method_ir)
     if (
         plan.nonlocal_correlation is not None
         or plan.post_scf

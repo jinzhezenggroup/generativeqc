@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from generativeqc.ks import (
+    _automatic_semilocal_name,
     _native_semilocal_code,
     ks_coefficients,
     native_xc_functional_code,
@@ -76,6 +77,15 @@ def test_composition_registry_reproduces_from_method_recipes() -> None:
         resolve_method("RSCAN0").semantic_payload()
         != resolve_method("R2SCAN0").semantic_payload()
     )
+
+
+@pytest.mark.parametrize("name", ("PBE", "SCAN", "R2SCAN"))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_corrected_recipes_retain_the_separate_composition_owner(
+    name: str, spin: str
+) -> None:
+    method = resolve_method(f"{name}-D4(BJ-EEQ-ATM)", spin=spin)
+    assert _automatic_semilocal_name(method) is None
 
 
 COMPOSED_NAMES = tuple(
