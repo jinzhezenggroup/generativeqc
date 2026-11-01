@@ -1,4 +1,4 @@
-# Automatic Libxc semilocal functionals
+# Libxc functionals and method recipes
 
 GenerativeQC exposes structurally supported imported Libxc semilocal registrations
 without a positive method allow-list.
@@ -26,6 +26,18 @@ result = calculator.singlepoint(
 - `libxc-rks:NAME` for unpolarized RKS;
 - `libxc-uks:NAME` for polarized UKS.
 
+The same prefixes also accept catalog method recipes. For example,
+`libxc-rks:RSCAN0` and `rscan0-rks` select the same method; likewise
+`libxc-rks:R2SCAN0` and `r2scan0-rks`. rSCAN0 contains 75% rSCAN exchange,
+100% rSCAN correlation and 25% full-range exact exchange. r²SCAN0 uses the
+corresponding r²SCAN components and is a different functional.
+
+Existing optimized providers remain preferred when the component graph and
+exchange contract match. Thus `libxc-rks:PBE0` keeps the ordinary PBE0 provider,
+and `libxc-rks:MN15` keeps the split-hybrid provider. Atomic registrations such
+as `GGA_X_PBE` and `GGA_X_B88` are available even when they also participate in
+an existing optimized family. An atomic selector never adds a missing X/C partner.
+
 List the currently admitted automatic selectors with:
 
 ```console
@@ -41,6 +53,14 @@ registration is available when its Graph can be represented with the currently
 supported `rho`, `sigma`, and `tau` ingredients. Registrations that require
 another ingredient are rejected structurally. Adding another representable
 Libxc registration does not require adding it to a positive GenerativeQC method table.
+
+Supported catalog compositions are generated from exact rational MethodSpec
+recipes. Their point evaluator sums component E/vxc inside the shared traversal;
+full-range exact exchange uses the native J/K owner. No method-specific CUDA
+kernel is required. Each component retains its own worker thresholds and
+derivatives. Imported representations needing unsupported ingredients,
+range-separated exchange or nonlocal correlation still require their respective
+execution providers; importing a formula alone does not supply those operators.
 
 Zero-spin channels, zero gradients, density tails, and zero tau are not encoded
 as functional-name exclusions. The compiler applies the pinned Libxc work-domain
@@ -73,7 +93,7 @@ result = calculator.singlepoint(atoms, properties=("energy", "forces"))
 ```
 
 CUDA automatic forces currently require strict FP64, device-fused XC,
-all-electron s/p bases, Direct J, and three partition iterations. Prepared replay
+all-electron s/p bases, Direct J/K, and three partition iterations. Prepared replay
 rechecks the current state and resources; a failed force request cannot become a
 successful energy-only result. CPU force admission also follows the current
 native owner and its resource estimate. The historical small Python stationary
@@ -110,6 +130,13 @@ provider. The scientific identity, component name, Graph, compiler work policy, 
 and final state retain the selected Libxc registration. Work-coordinate floors
 and clamps are not differentiated through; E/vxc is evaluated at work coordinates
 and the energy uses the original physical total density.
+
+Generated recipes use the ordinary native XC matrix assembly, bounded tiles,
+equal-spin RKS specialization, compact AO selection and scatter machinery.
+Existing specialized providers retain their numerical domains and independently
+qualified precision and response paths. Generic recipes currently retain the
+strict-FP64 envelope above; they do not inherit mixed precision or response
+qualification merely because a component also has a specialized implementation.
 
 ## Registration names are literal
 

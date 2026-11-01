@@ -288,8 +288,12 @@ def automatic_cuda_package(
     registrations = {}
     parameter_providers = {}
     if share_parameters:
+        from ._generated_semilocal_compositions import COMPOSITIONS
+
         parameter_workers, parameter_providers = parameterized_cuda_package(
-            names, force_profiles=force_profiles, policy=parameter_policy
+            tuple(name for name in names if name not in COMPOSITIONS),
+            force_profiles=force_profiles,
+            policy=parameter_policy,
         )
         workers.update(
             (
