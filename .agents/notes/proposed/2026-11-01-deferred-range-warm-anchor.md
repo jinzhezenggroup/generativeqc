@@ -120,5 +120,8 @@ forced source eviction and moved coordinates. Both controls retain eager
 anchors under the force envelope and one Fock in every warm call. Maximum
 paired errors are below 9.10e-13 Eh / 1.78e-12 Eh/Bohr. These larger differential
 controls supplement the independent small-system/README oracles; single-pair
-latencies are not promoted to ranked speedups. PRO6000 larger work is pending,
-and the 5090 108-atom control does not erase its 120-atom timeouts.
+latencies are not promoted to ranked speedups. The PRO6000 120-atom / 32 GiB
+control (3838) also completes both six-phase lifecycles with eager work retained,
+paired energy/force errors at most 4.55e-13 Eh / 1.35e-12 Eh/Bohr, and a single-pair
+lifecycle change of +0.004%. The 5090 108-atom control does not
+erase its 120-atom timeouts; default promotion remains a separate decision.

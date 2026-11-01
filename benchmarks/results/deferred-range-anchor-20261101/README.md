@@ -94,10 +94,13 @@ six-call lifecycles with eager work retained: cold 31 iterations / 32 Focks,
 moved 20 / 21, and every warm call 1 / 1. Paired errors stay below 9.10e-13 Eh
 and 7.00e-13 Eh/Bohr. Its complete lifecycle takes 898.551 s eager and 901.854 s
 deferred-control (+0.37% for this single unranked pair). This smaller control
-does not replace either incomplete 120-atom 5090 population. The PRO6000 larger
-control remains pending. Neither changing the budget nor a smaller control
-erases the original timeouts. Default promotion requires this remaining
-lifecycle evidence.
+does not replace either incomplete 120-atom 5090 population. The PRO6000 120-atom / 32 GiB control (Slurm3838) also completes both six-call
+lifecycles. It retains eager work (cold 28 / 29, moved 20 / 21, all warm 1 / 1);
+paired errors are at most 4.55e-13 Eh and 1.35e-12 Eh/Bohr. Its complete lifecycle
+takes 1778.698 s and 1778.778 s (+0.004% for this
+single unranked pair). Neither changing the budget nor a smaller control erases
+the original timeouts. Default promotion remains separate from these bounded
+differential controls and incomplete 120-atom 5090 lifecycles.
 
 Deployment failures also remain explicit: n5 job1942 started before its binary
 copy completed and exited with SIGBUS/135. Its retry waited for all copies,
