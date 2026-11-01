@@ -434,7 +434,11 @@ def test_fast_cuda_cache_identity_and_bound(
 
     def trim(command: list[str], **kwargs: Any) -> None:
         assert command == [
-            "ccache", "--trim-dir", str(path), "--trim-max-size", "512MiB"
+            "ccache",
+            "--trim-dir",
+            str(path),
+            "--trim-max-size",
+            "512MiB",
         ]
         assert kwargs == {"check": True, "timeout": 45}
 
@@ -473,6 +477,10 @@ def test_fast_cuda_compiler_delta_does_not_weaken_required_build() -> None:
         assert "CCACHE_SLOPPINESS" not in step
     assert "steps.cuda_runtime_build.outcome == 'success'" in field(bound, "if")
     assert "steps.cuda_runtime_build.outcome == 'success'" in field(save, "if")
-    assert "steps.pr_fast_ccache_restore.outputs.cache-hit != 'true'" in field(bound, "if")
-    assert "steps.pr_fast_ccache_restore.outputs.cache-matched-key == ''" in field(bound, "if")
+    assert "steps.pr_fast_ccache_restore.outputs.cache-hit != 'true'" in field(
+        bound, "if"
+    )
+    assert "steps.pr_fast_ccache_restore.outputs.cache-matched-key == ''" in field(
+        bound, "if"
+    )
     assert "ctest --test-dir build --output-on-failure --parallel 2" in WORKFLOW
