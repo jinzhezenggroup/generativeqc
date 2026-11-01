@@ -4,6 +4,7 @@ import base64
 import copy
 import json
 import lzma
+import os
 from pathlib import Path
 import struct
 import tempfile
@@ -72,6 +73,25 @@ class ReaderTests(unittest.TestCase):
             ):
                 reader.decode_xz(bad, limit=64)
 
+    def test_text_storage_preserves_v1_bytes_and_rejects_ambiguous_encodings(self):
+        legacy = copy.deepcopy(self.document)
+        legacy["schema"] = "generativeqc.h100-direct-content-objects.v1"
+        legacy["objects"] = {
+            digest: base64.b64encode(raw).decode()
+            for digest, raw in self.evidence.objects.items()
+        }
+        self.assertEqual(reader.Evidence(legacy).objects, self.evidence.objects)
+        digest = next(iter(self.document["objects"]))
+        for encoding in (
+            {"utf8": 1},
+            {"unknown": "x"},
+            {"utf8": "x", "base64": "eA=="},
+        ):
+            bad = copy.deepcopy(self.document)
+            bad["objects"][digest] = encoding
+            with self.subTest(encoding=encoding), self.assertRaises(ValueError):
+                reader.Evidence(bad)
+
     def test_unsafe_paths_fail_before_restoration(self):
         for name in (
             ".",
@@ -97,10 +117,10 @@ class ReaderTests(unittest.TestCase):
     def test_corrupt_missing_and_unreferenced_objects_are_rejected(self):
         digest = next(iter(self.document["objects"]))
         bad = copy.deepcopy(self.document)
-        bad["objects"][digest] = "bad-base64!"
+        bad["objects"][digest] = {"base64": "bad-base64!"}
         with self.assertRaises(ValueError):
             reader.Evidence(bad)
-        bad["objects"][digest] = base64.b64encode(b"wrong original").decode()
+        bad["objects"][digest] = {"utf8": "wrong original"}
         with self.assertRaises(ValueError):
             reader.Evidence(bad)
         bad = copy.deepcopy(self.document)
@@ -108,7 +128,7 @@ class ReaderTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             reader.Evidence(bad)
         bad = copy.deepcopy(self.document)
-        bad["objects"][reader.sha(b"unused")] = base64.b64encode(b"unused").decode()
+        bad["objects"][reader.sha(b"unused")] = {"utf8": "unused"}
         with self.assertRaises(ValueError):
             reader.Evidence(bad)
 
@@ -216,7 +236,11 @@ class ReaderTests(unittest.TestCase):
                 reader.statistics(bad)
 
     def test_original_host_failure_is_not_promoted_to_a_full_suite_pass(self):
-        history = reader.host_history(ROOT)
+        # Historical HOST capsules have a separately authenticated Git snapshot.
+        # Let the explicit offline audit supply that restored fixture; never
+        # fetch or silently skip missing/corrupt history in this integrity test.
+        history_root = Path(os.environ.get("GQC_H100_HOST_HISTORY_ROOT", ROOT))
+        history = reader.host_history(history_root, reference_root=ROOT)
         self.assertEqual(history["original_uncompressed_members"], 37)
         self.assertEqual(history["standalone_original_compressed_files"], 4)
         self.assertEqual(history["V2_probe_returncode"], 1)

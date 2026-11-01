@@ -131,7 +131,7 @@
   "attachments": [
     {
       "path": "receipts.json.xz",
-      "sha256": "226813e5e07af11387926a1ec1dd9f5dbfa1054be54cbe78faa692a6d03327bb"
+      "sha256": "386c67e3445b07fc4db618f717ef123cb73476cf1ed7572563fb120634cc320b"
     },
     {
       "path": "job-outcomes.json.xz",

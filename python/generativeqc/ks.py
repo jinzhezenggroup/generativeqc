@@ -159,6 +159,10 @@ class KsOptions:
     GridSpec explicitly also retains sharing. Matching point counts alone
     never authorize sharing points or weights.
 
+    tile_points=None requests native automatic SCF tiling; a positive integer
+    fixes the tile exactly. CPU and constrained execution retain 256 points.
+    When both tiles are omitted, native force tiling is selected independently.
+
     force_tile_points optionally bounds CUDA stationary-force batches independently
     of the SCF tile (1..4096 points). None preserves the existing force policy.
     It changes neither scientific controls nor CPU tiling and remains subject to
@@ -169,7 +173,9 @@ class KsOptions:
     composition: MethodIR | None = None
     grid: GridSpec | None = None
     grid_accuracy: str = "standard"
-    tile_points: int = 256
+    # None delegates SCF tiling to the native preparation policy. An integer,
+    # including the old default 256, is an exact user override.
+    tile_points: int | None = None
     # None preserves the native force owner's existing tile. An explicit
     # force bound is independent of SCF and remains subject to arena admission.
     force_tile_points: int | None = None
@@ -218,7 +224,8 @@ class KsOptions:
             raise TypeError("KS nonlocal_grid must be a GridSpec or None")
         if self.grid_accuracy not in ("standard", "tight"):
             raise ValueError("KS grid_accuracy must be 'standard' or 'tight'")
-        checked_int(self.tile_points, "KS XC tile points")
+        if self.tile_points is not None:
+            checked_int(self.tile_points, "KS XC tile points")
         if self.force_tile_points is not None and (
             type(self.force_tile_points) is not int
             or not 1 <= self.force_tile_points <= 4096
@@ -1257,7 +1264,7 @@ def native_ks_options(
             angular_azimuth=nonlocal_spec.angular_azimuth,
             partition_iterations=nonlocal_spec.partition_iterations,
             coincident_tolerance=nonlocal_spec.coincident_tolerance,
-            tile_points=options.tile_points,
+            tile_points=options.tile_points or 0,
             force_tile_points=options.force_tile_points or 0,
             element_radii=nonlocal_radii,
             element_radius_count=119 if nonlocal_radii is not None else 0,
@@ -1291,7 +1298,7 @@ def native_ks_options(
         angular_azimuth=grid.angular_azimuth,
         partition_iterations=grid.partition_iterations,
         coincident_tolerance=grid.coincident_tolerance,
-        tile_points=options.tile_points,
+        tile_points=options.tile_points or 0,
         force_tile_points=options.force_tile_points or 0,
         element_radii=radii,
         element_radius_count=119 if radii is not None else 0,
@@ -1386,7 +1393,7 @@ def native_ks_options(
         grid.angular_azimuth,
         grid.partition_iterations,
         grid.coincident_tolerance,
-        options.tile_points,
+        options.tile_points or 0,
         radii,
         119 if radii is not None else 0,
         _native.XC_EXECUTION_DEVICE_FUSED

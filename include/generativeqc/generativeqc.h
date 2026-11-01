@@ -681,6 +681,8 @@ typedef struct generativeqc_ks_options {
   uint32_t angular_azimuth;
   uint32_t partition_iterations;
   double coincident_tolerance;
+  /** Zero requests native automatic SCF tiling; a positive value is explicit.
+   * An omitted force tile is resolved independently during preparation. */
   uint64_t tile_points;
   /** Radii [0..118] in Bohr, indexed by atomic number; slot zero is unused. */
   const double* element_radii;
@@ -701,7 +703,8 @@ typedef struct generativeqc_ks_options {
   double nonlocal_c;
   double nonlocal_coefficient;
   uint64_t nonlocal_maximum_bytes;
-  /** Optional CUDA stationary-force grid tile bound in [1,4096]. Zero inherits tile_points.
+  /** Optional CUDA stationary-force grid tile bound in [1,4096]. Zero inherits an
+   * explicit tile_points, or requests automatic force tiling with automatic SCF.
    * This changes force scheduling only: SCF, quadrature and precision are
    * unchanged. The complete force arena and nonlocal budget still apply. */
   uint64_t force_tile_points;

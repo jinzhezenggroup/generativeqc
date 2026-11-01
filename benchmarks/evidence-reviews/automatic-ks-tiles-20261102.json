@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "automatic-ks-tiles-20261102",
+  "owner": "Automatic KS SCF and force tile PR qualification",
+  "reason": "Exact final-source campaign retained independently of outcome, including all conditioning, slow, failed and cancelled observations. Storage classification does not promote incomplete numerical or resource qualification.",
+  "review_document": "benchmarks/results/automatic-ks-tiles-20261102/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/automatic-ks-tiles-20261102/fp64.xz",
+      "family": "automatic-ks-tiles-20261102",
+      "classification": "required-compact-accepted-evidence",
+      "role": "exact-final-source-endpoints-including-failures-and-cancellation",
+      "bytes": 465528,
+      "sha256": "2cc0193a8482d3c0b477e6d1807bdd730a30ef79cf5ba1cfac26c90a474a568f"
+    }
+  ]
+}

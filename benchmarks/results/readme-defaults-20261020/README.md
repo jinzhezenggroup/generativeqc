@@ -167,3 +167,8 @@ restore its original filename with `xz -dc NAME.patch.xz > NAME.patch`.
 The [storage inventory](../pr-merge-storage-20261028/manifest.json) records both
 stored and original byte counts and SHA-256 values. Measurement identities,
 all samples, and acceptance decisions are unchanged.
+
+The historical 256-population list now uses authenticated exact-FP64 streams
+(`receipts.json.xz`, `fp64.xz`, `sha256.txt`). The current report loader restores
+every original record and verifies the complete original JSON container SHA-256.
+Values, population ordering, failures and historical conclusions are unchanged.

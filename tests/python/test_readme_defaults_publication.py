@@ -26,7 +26,7 @@ def test_default_campaign_retains_complete_inventory_and_actual_work() -> None:
     }
     validate_publication(manifest, files)
     assert manifest["decision"]["status"] == "inconclusive"
-    records = json.loads(lzma.decompress(files["receipts.json.xz"]))
+    records = load_records([directory / "receipts.json.xz"])
     expected = {
         (arm, method, mode, size)
         for arm in ARMS

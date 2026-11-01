@@ -86,7 +86,11 @@ def _cpu_host_shape(
     requires_first_ao_derivatives: bool,
     model: typing.Any,
 ) -> tuple[int, ...]:
-    """Marshal the same compact topology for the per-item and fleet ABIs."""
+    """Marshal the same compact topology for the per-item and fleet ABIs.
+
+    Automatic CPU and numeric-budget owners retain the 256-point incumbent;
+    the unpromised CUDA preparation policy cannot enlarge a quoted owner.
+    """
     orbital = item["orbital"]
     dimensions = (
         item["atoms"],
@@ -100,7 +104,7 @@ def _cpu_host_shape(
         item["grid_points"],
         model.grid.radial_points,
         model.grid.angular_polar,
-        model.tile_points,
+        model.tile_points or 256,
         diis_history,
         max_iterations,
         int(requires_first_ao_derivatives),
@@ -369,7 +373,7 @@ def _item_host_inventory(
     xc_tile = (
         byte_product(
             8,
-            min(points, model.tile_points),
+            min(points, model.tile_points or 256),
             n,
             4 if requires_first_ao_derivatives else 1,
         )
@@ -410,7 +414,7 @@ def _item_host_inventory(
         matrix_factor = 3 if spins == 2 else 1
         nonlocal_work = (
             byte_product(8, points, 6)
-            + byte_product(8, min(points, model.tile_points), n, 4)
+            + byte_product(8, min(points, model.tile_points or 256), n, 4)
             + byte_product(8, n2, matrix_factor)
         )
         retained += nonlocal_provider
@@ -1371,7 +1375,7 @@ def ks_resource_request(
                 "requires_first_ao_derivatives": requires_first_ao_derivatives,
                 "functional_code": _native_semilocal_code(model.method_ir),
                 "requires_tau": requires_tau,
-                "tile": model.tile_points,
+                "tile": model.tile_points or 256,
             }
             native_device = _native_cuda_fleet_inventory(
                 library,
