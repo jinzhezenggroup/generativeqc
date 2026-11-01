@@ -985,6 +985,22 @@ baselines preserve the original convergence checks in both cases. Every call
 still evaluates the physical Fock, convergence gates, derivatives and force
 assembly.
 
+`GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY=1` enables an experimental deferred
+incumbent energy anchor. It admits only strict FP64 fitted RKS with an exact
+warm AO factor and an audited replayable range source. For energy-and-force
+requests, the already planned additional force envelope must fit available
+device memory; otherwise the eager anchor remains in place. Selection uses
+resource requirements, with no GPU-model condition. Unset or other values keep
+the eager default.
+
+If a later replay loses its source, preparation restores the frozen warm density
+and factor and rebuilds their matching incumbent energy using their own saved
+XC scalars. This extra Fock action appears in the `preparation` precision phase
+and the ordinary public work census. Current final-state force leases remain
+untouched during eviction. Explicit and transported seeds cannot inherit the
+source owner's deferred anchor. Performance validation must inspect the first
+warm call and the whole lifecycle separately from a pooled warm median.
+
 `GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE=1` is a default-off Direct RSH force
 experiment. A token-authenticated host snapshot may reuse only the two-electron
 response when every density bit agrees within the same immutable prepared owner.

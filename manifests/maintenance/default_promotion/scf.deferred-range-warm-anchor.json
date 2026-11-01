@@ -1,0 +1,10 @@
+{
+  "id": "scf.deferred-range-warm-anchor",
+  "classification": "needs-qualification",
+  "controls": ["ks-runtime:GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY"],
+  "owner_issues": [2426],
+  "sources": ["src/dft/cuda_ks.cpp", "src/methods/dft_method.cpp"],
+  "rationale": "Opt-in strict fitted range replay defers its unused incumbent warm-energy baseline until source invalidation, provided the imminent force envelope fits available memory. It binds accepted XC scalars to the frozen warm density, restores the matching occupied-factor primary schedule and charges fallback work in the preparation phase. Unset retains eager behavior. The first prototype moved cold work into the first 5090 warm call and is not a promotion result.",
+  "revisit_condition": "Promote only after independent complete E/F, frozen warm, changed geometry, policy/factor changes, deterministic eviction, failure/snapshot and A100/Blackwell endpoint gates. Check first-warm and complete lifecycle costs separately; a pooled warm median can hide deferred preparation. Larger constrained-memory timeouts remain incomplete evidence.",
+  "evidence": [".agents/notes/proposed/2026-11-01-deferred-range-warm-anchor.md", "tests/python/test_lazy_range_warm_anchor_cuda.py", "tests/python/test_lazy_range_warm_snapshot_cuda.py", "tests/python/test_lazy_range_force_headroom.py", "tests/python/test_range_resident_ks_cuda.py"]
+}

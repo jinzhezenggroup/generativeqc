@@ -211,6 +211,12 @@ chunks/graph capture and AUTO/mixed conditional dispatches remain unavailable
 until their separately owned execution is instrumented. Fixed-density profiling
 does not append applications to the completed solve's census.
 
+Deferred warm-anchor reconstruction is a strict Fock action in the
+`preparation` precision phase, before physical SCF iterations. Eager anchoring
+remains a post-SCF action in `finalization`. Both contribute to `fock_builds`
+and to their actually executed J/K provider counts; neither increments the
+physical iteration count.
+
 Only `complete=True` certifies these J/K counts. Unsupported producers, lost
 attempts and overflow stay incomplete; Python exposes unavailable counts as
 `None`, not zero. Older native libraries without the additive v1 query return

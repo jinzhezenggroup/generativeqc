@@ -2338,9 +2338,35 @@ class KsPreparedState final : public KsSingleOwnerPort {
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
-  /** The native single-system and batch entry points must consume identical
-   * token-qualified stationary derivative sources and one complete force sink.
-   * This is intentionally not a second batch-specific DFT force equation. */
+  /** Give SCF the already-owned force envelope before it chooses where to
+   * prepare its warm energy. Energy-only requests clear an older force hint. */
+  void set_following_force_memory(bool compute_forces) {
+#if GENERATIVEQC_HAS_CUDA
+    if (!cuda_) return;
+    std::size_t additional{};
+    if (compute_forces) {
+      // Match native_cuda_stationary_gradient's imminent allocation exactly.
+      // The hint only prevents deferring work past an expected source eviction;
+      // force allocation, retirement and resource failure retain their owners.
+      dft::CudaStationaryCapacity capacity;
+      std::string detail;
+      const auto status = native_cuda_stationary_capacity(capacity, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) throw MethodError(status, detail);
+      const auto envelope =
+          std::min(stationary_device_allowance_.value_or(capacity.cached_device_bytes),
+                   capacity.cached_device_bytes);
+      const auto retained =
+          stationary_controller_ ? stationary_controller_->resources().device_upper_bytes : 0;
+      additional = envelope > retained ? envelope - retained : 0;
+    }
+    cuda_->set_following_force_memory(additional);
+#else
+    (void)compute_forces;
+#endif
+  }
+
+  /** The native single-system and batch entry points consume identical
+   * token-qualified stationary sources and one complete force sink. */
   void add_prepared_native_forces(Result& result) {
     runtime::DeviceCapacityScope capacity_scope(capacity_);
     if (!supports_native_gga_force())
@@ -3090,6 +3116,7 @@ class KsPreparedBatch final : public PreparedBatch,
           if (auto* cuda = item.plan->cuda_plan()) {
             if (!result.target_fock_work) result.target_fock_work.emplace();
             result.target_fock_work->begin_attempt();
+            item.plan->set_following_force_memory(wants_forces(i));
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
             cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i],
                         !attempt && !reuse && preliminary_seeds[i]
