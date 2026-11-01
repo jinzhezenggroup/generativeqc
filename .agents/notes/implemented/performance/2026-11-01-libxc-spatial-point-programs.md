@@ -135,3 +135,20 @@ and method qualification remain separate from fixed-density point reuse.
 - `python/generativeqc_compiler/xc/spatial_program.py`
 - `tests/python/test_spatial_libxc_codegen.py`
 - `tests/python/test_spatial_libxc_cuda.py`
+
+## Master integration after qualification
+
+Integrating master `1e1ae33b5838d8abb87e366c5bc666b70d66e4cd` into
+`18cbb12298889daa220b0d5e42e307053a2ddfb0` required resolving only the generated
+catalog snapshot and rendered report. Production compiler/spatial XC source
+merged unchanged. Regenerate the catalog against the combined native inputs,
+retaining the exact preceding PR summary as the new previous snapshot. There
+are zero capability identity/stage transitions in this integration. The prior
+221 identity acknowledgements remain recoverable in `18cbb122`; they are not
+new transitions against the updated previous snapshot.
+
+The historical campaign and retained manifest bytes are unchanged, and remain
+stale: no current-source native context is admitted. This integration does not
+rerun or relabel the earlier GPU timings or numerical receipts. Catalog checking
+passes under normal and optimized Python, compiler structure checks 580 modules
+with zero errors, and the catalog/transition/schedule regression passes 103 tests.

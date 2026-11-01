@@ -62,7 +62,7 @@ def restore(bundle: Path, output: Path) -> None:
         ):
             raise ValueError("duplicate, escaping or oversized publication entry")
         entries[name] = (entry, path)
-    if "provenance.json" not in entries:
+    if "provenance.json.xz" not in entries:
         raise ValueError("missing compact provenance entry")
     payloads = {}
     for entry, path in entries.values():
@@ -102,7 +102,7 @@ def restore(bundle: Path, output: Path) -> None:
     # The numerical audit uses the selected receipts' source/SDK identities,
     # not the thousands of paths in the original environment/source censuses.
     # Their exact bytes are independently recoverable via the history manifest.
-    provenance = json.loads((bundle / "provenance.json").read_bytes())
+    provenance = json.loads(decode_xz((bundle / "provenance.json.xz").read_bytes()))
     source = provenance["source"]
     verified = source["verification"]
     if (

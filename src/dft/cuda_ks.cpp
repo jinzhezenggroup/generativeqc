@@ -442,6 +442,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
   double warm_energy{std::numeric_limits<double>::infinity()};
   double warm_energy_correction{};
   bool warm_energy_baseline{};
+  // These three scalars belong to the immutable warm density, which can be
+  // older than the latest final state when warm_updates is false. Never use
+  // xc->view(generation) to reconstruct that frozen seed's energy later.
+  std::array<double, 3> warm_xc_totals{};
+  bool warm_incumbent_deferred{};
+  std::size_t following_force_device_bytes{};
   unsigned pending_iterations{};
   std::array<std::uint64_t, kCudaKsChunkCapacity> pending_generations{};
   runtime::SolverRegionCudaExecutor solver_region_executor;
@@ -1116,6 +1122,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     warm_energy = std::numeric_limits<double>::infinity();
     warm_energy_correction = 0.0;
     warm_energy_baseline = false;
+    warm_incumbent_deferred = false;
+    warm_xc_totals = {};
     invalidate_warm_orbitals();
   }
 
@@ -1180,6 +1188,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                         pending_fitted_occupied && warm_orbitals_ready && warm_orbitals_are_ao &&
                         spins == 1 && !precision_schedule.any_lower_precision();
     warm_ready = false;
+    warm_incumbent_deferred = false;
     warm_factor_storage = false;
     check(cudaMemcpyAsync(warm, factor ? proposal : density, elements * sizeof(double),
                           cudaMemcpyDeviceToDevice, stream));
@@ -2014,8 +2023,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
          host_xc_beta.capacity() + host_xc_potential.capacity()) *
             sizeof(double) +
         output.dft_diagnostic.history.capacity() * sizeof(ScfIteration) + sizeof(host_xc_totals) +
-        sizeof(host_xc_error) + sizeof(host_spin_counts) + sizeof(host_selected) +
-        sizeof(host_all_spins) + sizeof(host_one) +
+        sizeof(warm_xc_totals) + sizeof(host_xc_error) + sizeof(host_spin_counts) +
+        sizeof(host_selected) + sizeof(host_all_spins) + sizeof(host_one) +
         (diis_work_enabled ? sizeof(scf::DiisWorkReadback) : 0) +
         final_validation_diagnostic.determinant.eigenframes.capacity() *
             sizeof(scf::solver::EigenFrameDiagnostic) +
@@ -2616,6 +2625,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemsetAsync(nonlocal_cache_counters, 0, 3 * sizeof(std::uint64_t), stream));
       if (use_warm) {
         restore_warm_seed();
+        if (warm_incumbent_deferred && !retain_range_source) rebase_warm_energy(true);
       } else if (input) {
         check(cudaMemcpyAsync(density, prepared.data(), elements * sizeof(double),
                               cudaMemcpyHostToDevice, stream));
@@ -2946,6 +2956,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw;
     }
   }
+  /** Opt-in only until complete fallback and endpoint qualification passes. */
+  bool defer_range_warm_energy() const {
+    const auto* lazy = std::getenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY");
+    const bool eligible =
+        lazy && std::strcmp(lazy, "1") == 0 && range_source_active() &&
+        retain_range_source_for_replay(true) && fitted_coulomb && fitted_exchange &&
+        warm_factor_storage && spins == 1 && !precision_schedule.any_lower_precision() &&
+        options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
+            GENERATIVEQC_PRECISION_FP64 &&
+        options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+    if (!eligible || !following_force_device_bytes) return eligible;
+    // A cold E+F call must not move its incumbent work into the first warm
+    // call when the already-planned force consumer will evict the source.
+    // Use the consumer's actual shape/budget envelope, never GPU model names.
+    // This conservative check cannot promise future residency; later external
+    // pressure and policy changes retain the explicit preparation fallback.
+    std::size_t free{}, total{};
+    check(cudaMemGetInfo(&free, &total));
+    return following_force_device_bytes <= free;
+  }
+
   bool finish() {
     // A partial density/frame copy or rejected iteration cannot lend the old
     // intermediate frame. Preserve the independent last-good warm density.
@@ -2965,7 +2996,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
             range_warm_energy = warm_energy;
             range_warm_energy_correction = warm_energy_correction;
           }
-          rebase_warm_energy();
+          // Only strict factor-backed range replay participates in this pilot.
+          // All other owners retain the existing eager, audited fallback.
+          if (defer_range_warm_energy()) {
+            warm_incumbent_deferred = true;
+            warm_energy = std::numeric_limits<double>::infinity();
+            warm_energy_correction = 0.0;
+          } else {
+            rebase_warm_energy();
+          }
         }
         auditing_phase = false;
       }
@@ -3002,11 +3041,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * sub-ulp gate even at identical D. Evaluate the incumbent once at that D,
    * retaining its already-qualified XC. This is cache metadata, not a new
    * SCF proposal or convergence waiver: the next warm iteration must still
-   * pass every physical gate. Keep the returned resident F[D] untouched.
+   * pass every physical gate. Eager finalization keeps the returned resident
+   * F[D] untouched; deferred preparation runs after begin revokes that lease.
    */
-  void rebase_warm_energy() {
+  void rebase_warm_energy(bool restored_warm_seed = false) {
     runtime::df_progress::Scope trace("cuda_ks_warm_energy_rebase", "cuda_device");
     std::string status_detail;
+    if (restored_warm_seed && (!warm_ready || !warm_incumbent_deferred ||
+                               !warm_density_generation || range_source_active()))
+      throw std::logic_error("deferred warm energy requires its restored frozen seed");
     // Warm replay retires optional values before selecting a new source. Its
     // baseline must therefore use the incumbent without destroying the final
     // solve's value lease or changing the returned physical F[D]/XC frame.
@@ -3015,12 +3058,28 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // already the incumbent values. A dense rebuild would revoke the final
     // U lease and change that primary summation schedule unnecessarily.
     const bool retain_fitted_primary =
-        range_source_active() && fitted_coulomb &&
+        !restored_warm_seed && range_source_active() && fitted_coulomb &&
         (!fitted_exchange || (final_fitted_projection_ready && warm_factor_storage));
-    if (!retain_fitted_primary)
+    if (restored_warm_seed && occupied_fitted_factor_ready && occupied_fock_binding) {
+      // restore_warm_seed left the exact accepted AO factor in tmp1. Rebuild
+      // the same occupied J/K schedule as the ensuing physical warm iteration;
+      // the dense facade has different rounding at sub-ulp energy gates.
+      const scf::PreparedCudaOccupiedFockInput occupied{tmp1, spins == 2 ? tmp1 + matrix : nullptr,
+                                                        occupations[0],
+                                                        spins == 2 ? occupations[1] : 0};
+      check(observe_value_dispatch(
+                scf::enqueue_prepared_cuda_occupied_fock(
+                    provider, density, spins == 2 ? density + matrix : nullptr, matrix, occupied, j,
+                    exchange, spins == 2 ? exchange + matrix : nullptr, jk_error, status_detail),
+                true, 1),
+            status_detail);
+      ++movement.fitted_occupied_exchange_builds;
+    } else if (!retain_fitted_primary) {
       check(enqueue_primary_jk(density, spins == 2 ? density + matrix : nullptr, false,
                                status_detail, false),
             status_detail);
+      if (restored_warm_seed && fitted_exchange) ++movement.fitted_dense_exchange_builds;
+    }
     runtime::df_progress::Scope::number("retained_fitted_primary", retain_fitted_primary);
     // A warm replay uses the incumbent radial provider too. Rebase both raw
     // exchange terms, with their own coefficients, at this unchanged density.
@@ -3029,11 +3088,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                false);
     ++movement.warm_energy_rebase_fock_actions;
     ++output.fock_builds;
-    ++output.precision.post_scf_fock_builds;
+    if (restored_warm_seed)
+      ++output.precision.strict_stage_fock_builds;
+    else
+      ++output.precision.post_scf_fock_builds;
     output.precision_work.events.push_back(
-        {scf::PrecisionWorkEventKind::PostScfFock, scf::PrecisionWorkPhase::Finalization,
+        {restored_warm_seed ? scf::PrecisionWorkEventKind::StrictFock
+                            : scf::PrecisionWorkEventKind::PostScfFock,
+         restored_warm_seed ? scf::PrecisionWorkPhase::Preparation
+                            : scf::PrecisionWorkPhase::Finalization,
          static_cast<std::uint64_t>(output.precision_work.events.size()), output.iterations, owner,
-         solve_epoch, final_generation});
+         solve_epoch, restored_warm_seed ? warm_density_generation : final_generation});
     for (const auto kind :
          {scf::PrecisionOperatorKind::CoulombJ, scf::PrecisionOperatorKind::ExchangeK,
           scf::PrecisionOperatorKind::Diagnostics})
@@ -3044,12 +3109,30 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (has_range_correction)
       record_precision_operator(scf::PrecisionOperatorKind::ExchangeK, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
-    const auto potential =
-        options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused
-            ? xc->view(generation)
-            : CudaXcView{generation, n, spins, nullptr, staged_xc_totals, staged_xc_error, stream};
-    // Only the compensated energy is consumed. Proposal/residual still belong
-    // to the resident final state and must not be exported as incumbent gates.
+    CudaXcView potential;
+    if (restored_warm_seed) {
+      // begin() already revoked final-state leases. These dead proposal slots
+      // must not carry a prior failed iteration's NaNs into the energy-only
+      // diagnostics. Frozen XC scalars were independently accepted with D.
+      check(cudaMemcpyAsync(proposal, density, elements * sizeof(double), cudaMemcpyDeviceToDevice,
+                            stream));
+      check(cudaMemsetAsync(residual, 0, elements * sizeof(double), stream));
+      check(cudaMemsetAsync(solver_info, 0, spins * sizeof(int), stream));
+      check(cudaMemcpyAsync(staged_xc_totals, warm_xc_totals.data(), sizeof(warm_xc_totals),
+                            cudaMemcpyHostToDevice, stream));
+      check(cudaMemsetAsync(staged_xc_error, 0, sizeof(int), stream));
+      movement.xc_host_h2d_bytes += sizeof(warm_xc_totals);
+      potential = {warm_density_generation, n,     spins, nullptr, staged_xc_totals,
+                   staged_xc_error,         stream};
+    } else {
+      potential = options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused
+                      ? xc->view(generation)
+                      : CudaXcView{generation,      n,     spins, nullptr, staged_xc_totals,
+                                   staged_xc_error, stream};
+    }
+    // Only the compensated energy is consumed. Proposal/residual are either
+    // the retained final state or dead preparation scratch; neither can be
+    // exported as a new incumbent convergence proof.
     cuda_ks_detail::diagnostics(stream, n, spins, density, proposal, residual, hcore, overlap, j,
                                 exchange, exchange_coefficient, range_exchange,
                                 range_exchange_coefficient, potential.totals, potential.error,
@@ -3072,16 +3155,25 @@ struct CudaKsPlan::Impl : KsStateStorage {
         std::snprintf(text, sizeof(text), "%.17e", value);
         runtime::df_progress::Scope::label(key, text);
       };
-      label_energy("energy_shift_Eh",
-                   detail::electronic_energy_change(rebased.electronic_energy,
-                                                    rebased.electronic_energy_correction,
-                                                    warm_energy, warm_energy_correction));
-      label_energy("exact_exchange_shift_Eh",
-                   rebased.exact_exchange - output.dft_diagnostic.components.exact_exchange);
-      label_energy("xc_shift_Eh", rebased.xc - output.dft_diagnostic.components.xc);
+      if (restored_warm_seed) {
+        // There was no incumbent anchor before this action, and output was
+        // reset at begin. Do not report a fictitious shift against infinity
+        // or against a different generation's diagnostic components.
+        label_energy("frozen_electronic_energy_Eh", rebased.electronic_energy);
+      } else {
+        label_energy("energy_shift_Eh",
+                     detail::electronic_energy_change(rebased.electronic_energy,
+                                                      rebased.electronic_energy_correction,
+                                                      warm_energy, warm_energy_correction));
+        label_energy("exact_exchange_shift_Eh",
+                     rebased.exact_exchange - output.dft_diagnostic.components.exact_exchange);
+        label_energy("xc_shift_Eh", rebased.xc - output.dft_diagnostic.components.xc);
+      }
     }
     warm_energy = rebased.electronic_energy;
     warm_energy_correction = rebased.electronic_energy_correction;
+    warm_incumbent_deferred = false;
+    runtime::df_progress::Scope::number("restored_warm_seed", restored_warm_seed);
     trace.finish("completed");
   }
 
@@ -4140,6 +4232,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         publish_warm_seed();
         warm_energy = physical.electronic_energy;
         warm_energy_correction = physical.electronic_energy_correction;
+        warm_xc_totals = {physical.xc, physical.grid_electrons[0], physical.grid_electrons[1]};
         occupied_fitted_factor_ready = false;
       } else if (is_active &&
                  (confirm_nonlocal_stationary_density || confirm_direct_stationary_density)) {
@@ -5329,6 +5422,9 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
 }
 
 const CudaKsResources& CudaKsPlan::resources() const noexcept { return impl_->resource; }
+void CudaKsPlan::set_following_force_memory(std::size_t additional_device_bytes) noexcept {
+  impl_->following_force_device_bytes = additional_device_bytes;
+}
 const tensor::PanelProductDiagnostic* CudaKsPlan::density_provider_diagnostic() const noexcept {
   return impl_->xc ? impl_->xc->density_provider_diagnostic() : nullptr;
 }
