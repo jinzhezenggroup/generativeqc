@@ -267,6 +267,11 @@ struct Plan {
   const auto& initial_guess_policy() const { return policy; }
   void invalidate_final_state() { cuda.invalidate_final_state(); }
   void clear_warm_start() { cuda.clear_warm_start(); }
+  // Seed-control probes execute energy only. Keep the production handoff in
+  // the extracted scheduler, rejecting accidental force storage requests.
+  void set_following_force_memory(bool forces) {
+    if (forces) throw std::logic_error("energy-only probe requested force storage");
+  }
   void add_prepared_native_forces(Result&) { throw std::logic_error("unexpected force request"); }
   void apply_dispersion(Result&) {}
   // This fixture models cold preparation without a NumericCap DF reservation.
