@@ -1204,7 +1204,8 @@ void validate_physical_reference(PhysicalReference& ref) {
 
 void validate_hf_warm_density(const core::System& source, generativeqc_method method,
                               const std::vector<double>& density,
-                              const initial_guess::EigenOperation& eigen) {
+                              const initial_guess::EigenOperation& eigen,
+                              const initial_guess::MatrixProductOperation& products) {
   posthf::RawSource raw(source);
   const auto n = raw.nbf();
   Matrix overlap(n * n);
@@ -1214,11 +1215,12 @@ void validate_hf_warm_density(const core::System& source, generativeqc_method me
       method == GENERATIVEQC_METHOD_PBE_UKS) {
     const auto [alpha, beta] = spin_occupations(source);
     validate_seed(overlap, density, n, {static_cast<unsigned>(alpha), static_cast<unsigned>(beta)},
-                  1.0, eigen);
+                  1.0, eigen, products);
   } else {
     if (source.electron_count <= 0 || source.electron_count % 2 || source.multiplicity != 1)
       throw std::invalid_argument("invalid checkpoint RHF electron/spin counts");
-    validate_seed(overlap, density, n, {static_cast<unsigned>(source.electron_count)}, 2.0, eigen);
+    validate_seed(overlap, density, n, {static_cast<unsigned>(source.electron_count)}, 2.0, eigen,
+                  products);
   }
 }
 

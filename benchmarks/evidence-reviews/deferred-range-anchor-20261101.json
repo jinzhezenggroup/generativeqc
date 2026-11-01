@@ -10,8 +10,8 @@
       "family": "deferred-range-anchor-20261101",
       "classification": "required-compact-accepted-evidence",
       "role": "original-complete-endpoints-provenance-work-and-negative-controls",
-      "bytes": 252856,
-      "sha256": "3b2f795b34d536b3322afb614dd606ecaddd0015bdc094cee9fca30d956157af"
+      "bytes": 244400,
+      "sha256": "b0afbe6188ac0df1ba7edd6c4724319965a096efdaeb1c5b2b38c73e511b328f"
     }
   ]
 }

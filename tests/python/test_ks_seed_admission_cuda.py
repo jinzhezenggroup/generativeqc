@@ -265,3 +265,16 @@ def test_large_idle_seed_rejection_preserves_final_state(
         )
         assert changed.energy == pytest.approx(fresh.energy, abs=1e-8)
         np.testing.assert_allclose(changed.forces, fresh.forces, atol=1e-7, rtol=0)
+
+        # Positive admission is independent of the rejected mixed batch. Do it
+        # after the original replay/moved checks so those retain their seeds.
+        neighbor = warm_snapshot(batch, 1)
+        assert (
+            restore_snapshots(batch, [(good, saved[0][1], saved[0][2]), None])
+            == _native.STATUS_SUCCESS
+        )
+        np.testing.assert_array_equal(warm_snapshot(batch, 0)[0], good)
+        retained = warm_snapshot(batch, 1)
+        np.testing.assert_array_equal(retained[0], neighbor[0])
+        np.testing.assert_array_equal(retained[1], neighbor[1])
+        assert retained[2] == neighbor[2]
