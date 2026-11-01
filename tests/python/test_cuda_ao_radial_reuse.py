@@ -539,9 +539,9 @@ def _assert_cuda_ci_ao_gate(workflow: str) -> None:
     assert "always()" not in save and "failure()" not in save
     assert "continue-on-error: true" in save
     # Tier-aware display labels may change without changing build admission.
-    assert producer.index(
-        "cmake --build --preset cuda-release-cli"
-    ) < producer.index(save_marker)
+    assert producer.index("cmake --build --preset cuda-release-cli") < producer.index(
+        save_marker
+    )
     assert producer.index(
         "      - name: Smoke-test release-mode native command\n"
     ) < producer.index(save_marker)
