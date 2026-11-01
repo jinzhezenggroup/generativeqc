@@ -10,7 +10,10 @@
 #include <initializer_list>
 #include <stdexcept>
 
+#include "scf/df_exchange_policy.hpp"
 #include "scf/df_streamed_k_policy.hpp"
+
+using generativeqc::scf::df_packed_projection_preferred;
 
 using cudaError_t = int;
 constexpr auto cudaSuccess = 0, cudaMemcpyHostToDevice = 1;
@@ -53,6 +56,9 @@ struct CudaDensityFittingJkPlan : BorrowedBlasPlan {
   std::size_t stored_tensor_elements_per_system{}, tensor_elements_per_system{};
   std::size_t completed_occupied_projection_rank{};
   bool streamed{}, resident_exchange_enabled{}, triangular_exchange{}, resident_raw_coulomb{};
+  bool packed_projection_blas{};
+  bool packed_projection_auto{};
+  int packed_projection_fp32_fp64_ratio{};
   void* integral_source{};
   std::vector<bool> metric_full_rank;
   struct {
@@ -76,15 +82,35 @@ ProjectedSchedule df_projected_exchange_schedule(std::size_t, std::size_t, std::
 namespace generated {
 std::size_t df_occupied_gram_splits(std::size_t, std::size_t, std::size_t) { return 0; }
 }  // namespace generated
-// Unexercised integral-source and packed GPU kernels must not silently succeed.
-template <class... Args>
-void launch_project_packed_df(Args...) {
-  std::abort();
+// Numerical layout doubles exercise the actual occupied caller and BLAS adapter.
+// Independent full-tensor contractions below check the complete K output.
+double packed_value(const double* packed, std::size_t a, std::size_t mu, std::size_t nu,
+                    std::size_t q) {
+  const auto hi = std::max(mu, nu), lo = std::min(mu, nu);
+  return packed[(hi * (hi + 1) / 2 + lo) * a + q];
 }
-template <class... Args>
-void launch_unpack_df_values(Args...) {
-  std::abort();
+void launch_project_packed_df(cudaStream_t, std::size_t n, std::size_t a, std::size_t rank,
+                              bool column_major, const double* packed, const double* c, double* u) {
+  for (std::size_t mu = 0; mu < n; ++mu)
+    for (std::size_t i = 0; i < rank; ++i)
+      for (std::size_t q = 0; q < a; ++q) {
+        double value = 0;
+        for (std::size_t nu = 0; nu < n; ++nu)
+          value +=
+              packed_value(packed, a, mu, nu, q) * c[column_major ? nu + i * n : nu * rank + i];
+        u[(mu * rank + i) * a + q] = value;
+      }
 }
+void launch_unpack_df_values(cudaStream_t, std::size_t n, std::size_t a, std::size_t begin,
+                             std::size_t rows, std::size_t qb, std::size_t nq, bool auxiliary_major,
+                             const double* packed, double* output) {
+  for (std::size_t row = 0; row < rows; ++row)
+    for (std::size_t nu = 0; nu < n; ++nu)
+      for (std::size_t q = 0; q < nq; ++q)
+        output[auxiliary_major ? (q * rows + row) * n + nu : (row * n + nu) * nq + q] =
+            packed_value(packed, a, begin + row, nu, qb + q);
+}
+// Unexercised integral-source kernels must not silently succeed.
 template <class... Args>
 int launch_split_occupied_gram(Args...) {
   std::abort();
@@ -150,13 +176,20 @@ int main(int argc, char** argv) {
   assert(argc == 2);
   const std::string mode = argv[1];
   const bool is_projected = mode == "projected" || mode == "projected_failure";
+  const bool is_packed = mode.starts_with("packed");
+  const bool is_resident = mode == "resident" || is_packed;
   constexpr std::size_t n = 3, a = 3, rank = 2;
   const double c[n][rank] = {{1, 2}, {3, -1}, {0.5, 4}};
   std::vector<double> factors(n * n * a);
   for (std::size_t mu = 0; mu < n; ++mu)
     for (std::size_t nu = 0; nu < n; ++nu)
       for (std::size_t q = 0; q < a; ++q)
-        factors[(mu * n + nu) * a + q] = 0.25 + mu + 2 * nu - 0.5 * q;
+        factors[(mu * n + nu) * a + q] =
+            0.25 + (is_packed ? std::max(mu, nu) + 2 * std::min(mu, nu) : mu + 2 * nu) - 0.5 * q;
+  std::vector<double> packed;
+  for (std::size_t mu = 0; mu < n; ++mu)
+    for (std::size_t nu = 0; nu <= mu; ++nu)
+      for (std::size_t q = 0; q < a; ++q) packed.push_back(factors[(mu * n + nu) * a + q]);
   for (bool column_major : {false, true}) {
     for (bool triangular : {false, true}) {
       cublasContext handle{};
@@ -170,8 +203,9 @@ int main(int argc, char** argv) {
       plan.matrix_elements = n * n;
       plan.tensor_elements_per_system = plan.stored_tensor_elements_per_system = factors.size();
       plan.row_tile = mode == "streamed" ? 2 : n;
-      plan.auxiliary_tile = mode == "resident" ? a : 1;
-      plan.resident_exchange_enabled = mode == "resident";
+      plan.auxiliary_tile = is_resident ? a : 1;
+      plan.resident_exchange_enabled = is_resident;
+      plan.packed_projection_blas = is_packed && mode != "packed_generated";
       plan.streamed = mode == "streamed" || is_projected;
       plan.resident_raw_coulomb = mode == "raw";
       if (is_projected) {
@@ -181,13 +215,21 @@ int main(int argc, char** argv) {
       plan.triangular_exchange = triangular;
       plan.panel_capacity = n * n * a;
       plan.three_center = factors.data();
+      if (is_packed) {
+        plan.value_storage = {1, rank};
+        plan.stored_pair_count = n * (n + 1) / 2;
+        plan.stored_tensor_elements_per_system = packed.size();
+        plan.three_center = packed.data();
+        plan.panel_capacity = mode == "packed_tight" ? n * a - 1 : 2 * n * a;
+      }
       plan.streamed_raw_three_center = factors;
       plan.streamed_inverse_square_roots.assign(a * a, 0);
       for (std::size_t q = 0; q < a; ++q) plan.streamed_inverse_square_roots[q * a + q] = 1;
       std::vector<double> u(n * n * a), v(u.size()), w(u.size()), x(u.size());
+      w.assign(plan.panel_capacity + 2, sentinel);
       plan.auxiliary_tile_values = u.data();
       plan.exchange_contributions = v.data();
-      plan.exchange_intermediate = w.data();
+      plan.exchange_intermediate = w.data() + 1;
       plan.exchange_tile_output = x.data();
       double coefficients[n * rank];
       for (std::size_t nu = 0; nu < n; ++nu)
@@ -198,23 +240,31 @@ int main(int argc, char** argv) {
       std::vector<double> output(n * n + 2, sentinel);
       std::fill(output.begin() + 1, output.end() - 1, std::numeric_limits<double>::quiet_NaN());
       cleared_bytes = 0;
+      const bool blas_failure = mode == "packed_failure";
+      if (blas_failure) handle.result = CUBLAS_STATUS_EXECUTION_FAILED;
       std::string detail;
       projected = {&plan,          coefficients, output.data() + 1,
                    requested_rank, column_major, mode == "projected_failure",
                    false};
       const auto expected_status = plan.resident_raw_coulomb ? GENERATIVEQC_STATUS_INVALID_ARGUMENT
-                                   : projected.fail          ? GENERATIVEQC_STATUS_CUDA_ERROR
-                                                             : GENERATIVEQC_STATUS_SUCCESS;
+                                   : projected.fail || blas_failure ? GENERATIVEQC_STATUS_CUDA_ERROR
+                                                                    : GENERATIVEQC_STATUS_SUCCESS;
       assert(build_occupied_exchange(plan, 0, coefficients, requested_rank, column_major, 1.25,
                                      output.data() + 1, detail) == expected_status);
       assert(output.front() == sentinel && output.back() == sentinel);
+      assert(w.front() == sentinel && w.back() == sentinel);
+      if (blas_failure) {
+        assert(!detail.empty() && plan.completed_occupied_projection_rank == 0);
+        for (std::size_t i = 1; i <= n * n; ++i) assert(std::isnan(output[i]));
+        continue;
+      }
       if (plan.resident_raw_coulomb) {
         // Rejection must precede writes or provider submission: A is not B.
         assert(cleared_bytes == 0 && !projected.submitted && !detail.empty());
         for (std::size_t i = 1; i <= n * n; ++i) assert(std::isnan(output[i]));
         continue;
       }
-      assert(cleared_bytes == (mode == "resident" || is_projected ? 0 : n * n * sizeof(double)));
+      assert(cleared_bytes == (is_resident || is_projected ? 0 : n * n * sizeof(double)));
       if (is_projected) {
         assert(projected.submitted);
         assert(detail == (projected.fail ? "projected provider failure" : ""));
@@ -240,7 +290,7 @@ int main(int argc, char** argv) {
         }
       }
       assert(plan.blas == &handle && plan.stream == stream && handle.stream == stream);
-      if (mode == "resident") assert(plan.completed_occupied_projection_rank == rank);
+      if (is_resident) assert(plan.completed_occupied_projection_rank == rank);
     }
   }
 }

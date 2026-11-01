@@ -129,6 +129,9 @@ struct CudaDensityFittingJkPlan {
   // the existing spectral-response validity check.
   std::vector<std::uint8_t> metric_full_rank;
   bool resident_exchange_enabled{};
+  bool packed_projection_blas{};
+  bool packed_projection_auto{};
+  int packed_projection_fp32_fp64_ratio{};
   bool triangular_exchange{};
   bool flat_dense_exchange{};
   bool cooperative_diis{};

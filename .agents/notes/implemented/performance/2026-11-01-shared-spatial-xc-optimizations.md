@@ -201,3 +201,16 @@ MN15 capability has its own native endpoint acceptance boundary.
 A workload justifies whole-XC mixed precision, density-provider batching,
 additional derivative consumers, or larger resident queues. Require independent
 oracles and full endpoint timing before changing precision/admission/defaults.
+
+## Subsequent master integration
+
+Master `f1e0e871a434a445d40ce391611e09e6049de81b` (#2914) integrated into
+PR head `3bc0643d9e835e974b37a2699dc40c0af729ab81` without compiler or spatial
+XC runtime conflicts. Only the generated catalog snapshot/report conflicted.
+Regeneration preserves the exact preceding head's summary and every historical
+campaign/manifest byte. There are zero capability identity/stage transitions;
+prior identity acknowledgements remain recoverable in `3bc0643`. Native input
+identities change, but old receipts remain stale with zero admitted current
+contexts. No earlier GPU measurements are relabelled or rerun by this metadata
+integration. Normal and optimized catalog checks and compiler ownership checks
+pass on the combined source.
