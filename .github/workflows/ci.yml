@@ -371,7 +371,7 @@ jobs:
         run: python3 tools/report_ci_ccache.py --label "CPU CTest ${{ matrix.compiler }}"
       - name: Test
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --parallel 2
       - name: Generate current CUDA ownership report
         if: matrix.compiler == 'gcc'
         run: |
@@ -640,6 +640,27 @@ jobs:
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
+      # A PR may otherwise recompile hundreds of generated CUDA objects on
+      # every push. Keep a small immutable miss delta per PR; ccache still
+      # checks source, flags, toolchain and generated contents at every lookup.
+      # PR objects never seed master or merge-group caches.
+      - name: Prepare isolated PR fast CUDA compiler delta
+        id: pr_fast_ccache
+        if: github.event_name == 'pull_request' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 tools/ci_pr_fast_ccache.py prepare
+      - name: Restore only this PR fast CUDA compiler delta
+        id: pr_fast_ccache_restore
+        if: github.event_name == 'pull_request' && steps.pr_fast_ccache.outputs.key != ''
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pr_fast_ccache.outputs.path }}
+          key: ${{ steps.pr_fast_ccache.outputs.key }}
       - name: Reset ccache statistics
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --zero-stats
@@ -664,9 +685,10 @@ jobs:
           cmake --build --preset cuda-release-sm120
           --target generativeqc_direct_native --parallel 3
         env:
-          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || '' }}
+          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || github.event_name == 'pull_request' && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && (steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' || steps.pr_fast_ccache_restore.outputs.cache-matched-key == '') && format('file://{0}{1}', steps.pr_fast_ccache.outputs.path, steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' && ' read-only' || '') || '' }}
           CCACHE_NORESHARE: "true"
       - name: Compile production CUDA and runtime CTest
+        id: cuda_runtime_build
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 45
         # This target links the full generativeqc shared library. Native GFN2 CUDA is
@@ -678,8 +700,24 @@ jobs:
         # File-backed secondary storage records misses, not the restored cache.
         # Only trusted master pushes hand this delta to the ordered CLI job.
         env:
-          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || '' }}
+          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || github.event_name == 'pull_request' && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && (steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' || steps.pr_fast_ccache_restore.outputs.cache-matched-key == '') && format('file://{0}{1}', steps.pr_fast_ccache.outputs.path, steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' && ' read-only' || '') || '' }}
           CCACHE_NORESHARE: "true"
+      - name: Bound successful PR fast CUDA compiler misses
+        id: pr_fast_ccache_bound
+        if: always() && github.event_name == 'pull_request' && steps.cuda_runtime_build.outcome == 'success' && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && steps.pr_fast_ccache_restore.outputs.cache-hit != 'true' && steps.pr_fast_ccache_restore.outputs.cache-matched-key == ''
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 tools/ci_pr_fast_ccache.py bound
+      - name: Save this PR fast CUDA compiler delta once
+        if: always() && github.event_name == 'pull_request' && steps.cuda_runtime_build.outcome == 'success' && steps.pr_fast_ccache_bound.outputs.available == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pr_fast_ccache.outputs.path }}
+          key: ${{ steps.pr_fast_ccache.outputs.key }}
       - name: Compile opted-in AO radial kernels with release resources
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         # Default native emission intentionally omits this experimental schedule.
