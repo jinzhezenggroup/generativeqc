@@ -1025,6 +1025,31 @@ comparison scratch, is capped at 64 MiB and one quarter of the host budget, and
 uses only remaining admitted capacity. Hits report zero executed geometry and
 pair work. This control is also default-off pending endpoint qualification.
 
+The native stationary and standalone VV10 force owners retain exact force seeds
+within their immutable geometry, quadrature and parameter lifetime. Before
+reusing them, the device compares all seven density-dependent pair ingredients
+bitwise, including finite values and prior/current error status. The current AO
+and moving-grid force assembly still executes with the current density features.
+Schedule changes, explicit disable, errors and owner replacement prevent reuse.
+`GENERATIVEQC_VV10_COMPONENT_REUSE` defaults to this comparison at 65,536 grid
+points; `1` also admits smaller fixtures, and other nonempty values disable it.
+There is no GPU-model restriction.
+
+The native stationary owner adds no device allocation or capacity tier. Its
+existing pair workspace retains the key after those scratch rows become dead,
+and its existing force-seed buffer retains the result. The unused scalar energy
+slot following the six force-seed rows holds the comparison predicate; scalar
+pair energy uses the dead energy-term scratch before the key is stored. Both
+cached and minimum-capacity owners can reuse exact seeds without displacing
+geometry or AO maps. Disabled selectors, absent/unequal keys and refused
+scientific domains retain the complete pair sweep.
+The `stationary_force` trace records `nonlocal_pair_key_comparisons`,
+`nonlocal_pair_cache_hits` and `nonlocal_pair_sweeps` for each complete force call.
+Use `tests/python/test_native_stationary_nonlocal_reuse_cuda.py` with
+`GENERATIVEQC_TEST_WB97MV_CUDA=1` in a finite GPU allocation for independent
+energy/force, movement, failure, schedule and capacity gates. Complete endpoint
+timing must run separately with tracing disabled.
+
 The explicit `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-wide` experiment uses
 eight rows per lane and retains row inputs for admitted VV10 domains with at
 least 65,536 active points. Smaller domains use the existing four-row schedule.

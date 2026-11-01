@@ -24,6 +24,8 @@ struct CudaStationaryResources {
   bool cached_geometry{};
   std::array<std::uint64_t, 24> stationary_work{};
   std::array<std::uint64_t, 3> point_work{};
+  /** Last force call: exact-key comparisons, hits, and executed VV10 pair sweeps. */
+  std::array<std::uint64_t, 3> nonlocal_pair_work{};
   AoGridWork grid_work;
 };
 

@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <stdexcept>
+#include <string_view>
 
 #include "dft/cuda_grid_api.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
@@ -36,6 +38,12 @@ void stationary_cuda_check(cudaError_t status) {
   if (status != cudaSuccess)
     throw Error(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(status));
 }
+
+/** Share the standalone force owner's explicit override and work crossover. */
+bool nonlocal_reuse_selected(std::size_t points) {
+  const auto* selector = std::getenv("GENERATIVEQC_VV10_COMPONENT_REUSE");
+  return selector && *selector ? std::string_view(selector) == "1" : points >= 65536;
+}
 }  // namespace
 
 /** Full-grid VV10 seeds stay on device; only topology is retained on host. */
@@ -47,6 +55,12 @@ struct CudaStationaryController::NonlocalOwner {
   std::vector<double> xc_radii, radii;
   runtime::OwnedCudaBuffer<double> effective, seeds, workspace;
   runtime::OwnedCudaBuffer<int> errors;
+  // Coordinates, weights, parameters and grid lifetime are fixed by this
+  // controller. The device key additionally compares every density-dependent
+  // ingredient bitwise and retains the previous generation's error status.
+  bool comparison_issued{};
+  std::string reuse_schedule;
+  bool reuse_ready{};
 };
 
 CudaStationaryController::CudaStationaryController(const core::System& system, const AoBasis& basis,
@@ -256,6 +270,13 @@ generativeqc_status CudaStationaryController::gradient(
     const scf::PreparedFockPlan* range_provider,
     const CudaKsResidentFittedProjectionBinding* fitted_projection) {
   detail.clear();
+  struct ReuseAttempt {
+    NonlocalOwner* owner;
+    bool complete{};
+    ~ReuseAttempt() {
+      if (owner && !complete) owner->reuse_ready = false;
+    }
+  } reuse_attempt{nonlocal_.get()};
   try {
     const auto provider = scf::prepared_cuda_fock_binding(fock);
     const bool fitted =
@@ -314,6 +335,7 @@ generativeqc_status CudaStationaryController::gradient(
                                               reinterpret_cast<cudaStream_t>(density.stream),
                                               {1, aos_, 0, true, true});
     const auto previous_grid_work = resources_.grid_work;
+    resources_.nonlocal_pair_work = {};
     std::array<char, 512> error{};
     require_stationary_call(
         binding_->reset_geometry(stationary_, centers_.data(), coincident_tolerance_, error.data(),
@@ -408,15 +430,45 @@ generativeqc_status CudaStationaryController::gradient(
           nonlocal->density, nonlocal->gradient, effective, effective + points,
           effective + 2 * points, pair.errors.get() + 1);
       const auto& model = binding_->model;
+      const nlc::Vv10Parameters parameters{nlc::Vv10Variant::vv10, model.nonlocal_b,
+                                           model.nonlocal_c, model.nonlocal_coefficient};
+      const auto* selected = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
+      const std::string schedule = selected ? selected : "";
+      const bool reuse_admitted = nonlocal_reuse_selected(points) &&
+                                  points <= (std::uint64_t{1} << 32) &&
+                                  model.nonlocal_coefficient <= 0x1p32;
+      const int* mismatch = nullptr;
+      pair.comparison_issued = false;
+      if (reuse_admitted && pair.reuse_ready && schedule == pair.reuse_schedule) {
+        // Force assembly consumes only the six seed rows. Borrow its otherwise
+        // unused scalar energy slot as the predicate; scalar pair energy goes
+        // into dead energy-term scratch, as in the standalone force owner.
+        auto* flag = reinterpret_cast<int*>(seeds + 6 * points);
+        nlc::enqueue_vv10_force_key_compare_cuda(
+            stream, points, parameters, effective, effective + points, effective + 2 * points,
+            pair.workspace.get(), pair.errors.get() + 1, pair.errors.get() + 2, flag);
+        mismatch = flag;
+        pair.comparison_issued = true;
+      }
+      pair.reuse_ready = false;
       nlc::enqueue_vv10_cuda_device(
-          pair.layout,
-          {nlc::Vv10Variant::vv10, model.nonlocal_b, model.nonlocal_c, model.nonlocal_coefficient},
-          device_, stream, quadrature.points, effective, effective + points, effective + 2 * points,
-          pair.workspace.get(), pair.layout.workspace_bytes, seeds + 6 * points, seeds,
-          seeds + points, effective + 2 * points, seeds + 5 * points, pair.errors.get() + 2);
+          pair.layout, parameters, device_, stream, quadrature.points, effective,
+          effective + points, effective + 2 * points, pair.workspace.get(),
+          pair.layout.workspace_bytes, pair.workspace.get() + 6 * points, seeds, seeds + points,
+          effective + 2 * points, seeds + 5 * points, pair.errors.get() + 2, mismatch);
       nlc::enqueue_vv10_pack_force_seeds_cuda(stream, points, effective, effective + 2 * points,
                                               seeds, pair.errors.get(), pair.errors.get() + 1,
-                                              pair.errors.get() + 2);
+                                              pair.errors.get() + 2, mismatch);
+      if (reuse_admitted) {
+        // Reduction and packing have retired the per-point energy/index
+        // scratch. Preserve the exact key there only
+        // after the force seeds and error-aware validity have been produced.
+        nlc::enqueue_vv10_store_force_key_cuda(stream, points, effective + points,
+                                               pair.workspace.get(), pair.errors.get(),
+                                               pair.errors.get() + 1, pair.errors.get() + 2);
+        pair.reuse_schedule = schedule;
+        pair.reuse_ready = true;
+      }
       // The same bounded AO/grid owner can serve a distinct nonlocal grid.
       // Changing atom-prefix/radius topology first drains prior geometry work.
       require_stationary_call(
@@ -535,6 +587,25 @@ generativeqc_status CudaStationaryController::gradient(
     require_grid_call(
         grid_cuda_work_metrics_v1(grid_, &resources_.grid_work, error.data(), error.size()), error);
     if (!token_current()) throw std::invalid_argument("native stationary terminal token changed");
+    if (nonlocal_) {
+      // finish_gradient has already drained this consumer's grid stream. Read
+      // only the predicate that actually selected pair execution. No additional
+      // device allocation or capacity tier is needed, including at the minimum.
+      resources_.nonlocal_pair_work = {0, 0, 1};
+      if (nonlocal_->comparison_issued) {
+        int mismatch{};
+        stationary_cuda_check(
+            cudaMemcpy(&mismatch, nonlocal_->seeds.get() + 6 * nonlocal_->quadrature.point_count,
+                       sizeof(mismatch), cudaMemcpyDeviceToHost));
+        const auto hit = std::uint64_t{mismatch == 0};
+        resources_.nonlocal_pair_work = {1, hit, 1 - hit};
+      }
+      runtime::cuda_trace::trace_counter("nonlocal_pair_key_comparisons",
+                                         resources_.nonlocal_pair_work[0]);
+      runtime::cuda_trace::trace_counter("nonlocal_pair_cache_hits",
+                                         resources_.nonlocal_pair_work[1]);
+      runtime::cuda_trace::trace_counter("nonlocal_pair_sweeps", resources_.nonlocal_pair_work[2]);
+    }
     // Existing host counters describe work actually submitted, including map
     // discovery on the first call. Report per-call differences without another
     // device readback. Tracing is opt-in and its timings are diagnostic only.
@@ -561,6 +632,7 @@ generativeqc_status CudaStationaryController::gradient(
     runtime::cuda_trace::trace_counter("cached_geometry", resources_.cached_geometry ? 1 : 0);
     runtime::cuda_trace::trace_counter("grid_tile_points", tile_points_);
     output.swap(candidate);
+    reuse_attempt.complete = true;
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     detail = "native stationary controller exceeds its admitted resource capacity";
