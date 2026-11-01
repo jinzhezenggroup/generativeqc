@@ -213,12 +213,37 @@ commands invoke sccache; local compiled-host tests use verified ccache 4.5.1.
 The build's initial missing dependency prefix and wrapper-nvcc setup attempts
 remain in the raw build logs. No cache was cleared or disabled.
 
-From the repository root, with NumPy installed:
+The 865,196-byte receipt archive is now recovered from the already merged
+revision `f5d8df5a0d2c5ba4602e8aaaa5eefe94147a28fc`, with its exact SHA-256 and
+size in [`historical.manifest.json`](historical.manifest.json). All source-qualified,
+quarantined, failed and interrupted populations remain byte-identical. Numerical
+summaries and the original reference manifest/reader stay in this checkout.
+No release, external upload, history rewrite or storage-cap increase is used.
+
+To inspect the original receipt bytes without executing code or accessing a GPU:
 
 ```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/pbe0-ao-batch-capacity-20261024/historical.manifest.json \
+  --output .artifacts/pbe0-capacity-history
+```
+
+Numerical replay also requires the original qualifier: the current helper has
+changed since this campaign and the original reader correctly refuses its hash.
+With NumPy installed, create a separate checkout at the recorded revision and
+run the original reader there. The checkout includes the unchanged archive and
+all original Python dependencies; no solver, compiler or GPU is invoked:
+
+```bash
+git worktree add --detach .artifacts/pbe0-capacity-replay \
+  f5d8df5a0d2c5ba4602e8aaaa5eefe94147a28fc
+cd .artifacts/pbe0-capacity-replay
 PYTHONPATH=python:. python benchmarks/results/pbe0-ao-batch-capacity-20261024/reproduce.py
 PYTHONPATH=python:. python -O benchmarks/results/pbe0-ao-batch-capacity-20261024/reproduce.py
 ```
+
+Both recovery paths use existing local Git objects. A shallow clone missing the
+recorded revision needs an explicit fetch of that revision first.
 
 Replay verifies the exact population (including the failed attempt), every
 independent E/F gate, binary identities, paired settings/Fock work, resource

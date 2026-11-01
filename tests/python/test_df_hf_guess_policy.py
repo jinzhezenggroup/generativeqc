@@ -87,7 +87,7 @@ ScfResult run_rhf_density_fitting_cuda(
 }
 void validate_hf_warm_density(const core::System&, generativeqc_method method,
                               const std::vector<double>& density,
-                              const initial_guess::EigenOperation&) {
+                              const initial_guess::EigenOperation&, const initial_guess::MatrixProductOperation&) {
   assert(method == GENERATIVEQC_METHOD_RHF && density.size() == 4);
   if (behavior == 3) throw std::invalid_argument("invalid provisional density");
 }

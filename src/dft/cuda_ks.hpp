@@ -288,6 +288,10 @@ class CudaKsPlan {
    * The callback must not outlive this plan; shared seed validation retains
    * its existing reference fallback for legacy near-symmetric inputs. */
   scf::initial_guess::EigenOperation seed_eigen_operation();
+  /** Borrow idle, precharged scratch for large FP64 seed-validation products.
+   * Small owners and unavailable library bindings return an empty callback,
+   * retaining the host validator. The callback must not outlive this owner. */
+  scf::initial_guess::MatrixProductOperation seed_product_operation();
   /** Freeze replacement without disabling reuse of the last-good density. */
   void set_warm_start_updates(bool enabled) noexcept;
   /** Forget the seed without downloading or changing the current result. */

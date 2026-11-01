@@ -2,16 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "pbe0-ao-batch-capacity-20261024",
   "owner": "GGA live-panel XC capacity and complete cold DFT qualification",
-  "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
+  "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase. The exact large bundle is now recovered from existing merged Git history via historical.manifest.json; no below-threshold file needs a large-evidence row.",
   "review_document": "benchmarks/results/pbe0-ao-batch-capacity-20261024/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/pbe0-ao-batch-capacity-20261024/receipts.json.xz",
-      "family": "pbe0-ao-batch-capacity-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete source-matched endpoints, independent references, bounded work and retained failure/validation provenance",
-      "bytes": 865196,
-      "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
-    }
-  ]
+  "files": []
 }

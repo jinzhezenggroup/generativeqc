@@ -15,8 +15,8 @@ from generativeqc import Calculator, PrecisionCalculator
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1"
-    or not os.environ.get("SLURM_JOB_ID"),
-    reason="requires an explicitly allocated finite Slurm GPU job",
+    or not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")),
+    reason="requires an explicitly allocated finite Slurm/LSF GPU job",
 )
 
 

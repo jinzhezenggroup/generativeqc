@@ -85,6 +85,12 @@ jobs:
         with:
           github-token: ${{ github.token }}
 
+      # Independent source-only cache; exact science keys limit stale growth.
+      - name: Restore stationary AOT semantic sources
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/stationary-aot-source-cache
+          key: stationary-aot-source-v1-${{ hashFiles('python/generativeqc_compiler/common/**', 'python/generativeqc_compiler/integral/**', 'python/generativeqc_compiler/method/**', 'python/generativeqc_compiler/dft/**', 'python/generativeqc_compiler/xc/**', 'python/generativeqc_compiler/tensor/**', 'src/integrals/**', 'src/dft/stationary_gradient_cuda.cuh', 'tools/generate_stationary_force_aot.py') }}
       - name: Restore cibuildwheel tool cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -108,6 +114,7 @@ jobs:
           CIBW_ENVIRONMENT: >-
             GENERATIVEQC_ENABLE_CUDA=ON
             GENERATIVEQC_ENABLE_AOT_SHELLS=ON
+            GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE=/host${{ runner.temp }}/stationary-aot-source-cache
             GENERATIVEQC_CUDA_ARCHITECTURES="80-real;86-real;89-real;90-real;100-real;120"
             CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable -DGENERATIVEQC_AOT_PROFILES=sm_120"
             CCACHE_DIR=/host${{ runner.temp }}/ccache
@@ -119,6 +126,11 @@ jobs:
           package-dir: .
           output-dir: wheelhouse
           extras: "uv"
+
+      - name: Prepare stationary source cache for host archive
+        if: ${{ always() }}
+        shell: bash
+        run: bash .github/scripts/prepare-stationary-source-cache.sh
 
       # ccache stores completed compiler outputs, so retain useful entries after
       # a compile failure/step timeout. Tool environments retain success-only saves.

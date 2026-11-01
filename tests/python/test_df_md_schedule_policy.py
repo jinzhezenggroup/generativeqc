@@ -1,4 +1,4 @@
-"""Executable work, device-domain and borrowed-capacity schedule contracts."""
+"""Executable work and borrowed-capacity schedule contracts."""
 
 import subprocess
 from pathlib import Path
@@ -22,17 +22,14 @@ def test_charge_schedule_bounds(
 int main() {
   using generativeqc::scf::df_md_charge_splits;
   constexpr auto maximum = std::numeric_limits<std::size_t>::max();
-  // The automatic domain is explicit; unqualified devices and short classes
-  // cannot become partitioned merely because abundant scratch is available.
-  for (unsigned architecture : {0U, 80U, 90U, 100U, 121U})
-    assert(df_md_charge_splits(0, architecture, maximum, maximum) == 1);
+  // Small workloads avoid partition/reduction overhead regardless of capacity.
   for (std::size_t sources : {0U, 1U, 8191U})
-    assert(df_md_charge_splits(0, 120, sources, maximum) == 1);
-  assert(df_md_charge_splits(0, 120, 8192, maximum) > 1);
+    assert(df_md_charge_splits(0, sources, maximum) == 1);
+  assert(df_md_charge_splits(0, 8192, maximum) > 1);
   for (auto sources : {std::size_t{8192}, maximum}) {
     for (unsigned requested : {0U, 1U, 3U, 8U, 32U, 64U}) {
       for (std::size_t capacity = 0; capacity <= 65; ++capacity) {
-        const auto splits = df_md_charge_splits(requested, 120, sources, capacity);
+        const auto splits = df_md_charge_splits(requested, sources, capacity);
         assert(splits >= 1 && splits <= 64);
         if (splits > 1) assert(splits <= capacity);
         if (capacity <= 1 || requested == 1) assert(splits == 1);

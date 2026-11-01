@@ -111,6 +111,7 @@
     "tools/generate_stationary_cpu_derivative_aot.py",
     "tools/stationary_cpu_source_receipt.py",
     "tools/write_stationary_aot_manifest.py",
+    "tools/write_stationary_aot_reference.py",
     "manifests/derivative_aot_radials.json",
     "tools/generate_derivative_range_aot.py",
     "tools/generate_derivative_cuda_shell_aot.py",

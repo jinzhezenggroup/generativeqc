@@ -8,16 +8,40 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from generativeqc import Calculator
-
-from benchmarks._cases import benchmark_cases
-from benchmarks._retained_basis import load_retained_comparison_basis
-from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly scheduler-allocated GPU",
 )
+
+
+def _expected_rys_choices(
+    manifest: typing.Any, target: str, policy: str
+) -> dict[str, bool]:
+    """Resolve the campaign's expected per-class lowering without device work."""
+    choices = {}
+    for profile in (
+        manifest.get("portable", {}),
+        manifest["architectures"].get(target, {}),
+    ):
+        selected = (
+            profile.get("baseline", profile) if policy != "candidate" else profile
+        )
+        if (
+            policy == "auto"
+            and "portable" in manifest
+            and profile is not manifest["portable"]
+            and not selected.get("qualified", False)
+        ):
+            continue
+        choices.update(
+            {
+                row["class"]: row["lowering"] == "rys"
+                and (selected.get("qualified", False) or policy == "candidate")
+                for row in selected.get("kernels", [])
+            }
+        )
+    return choices
 
 
 @pytest.fixture(scope="module")
@@ -68,7 +92,12 @@ def test_qualified_lowering_without_ao_shape_admission(
     control. The explicit shell consumer isolates lowering admission from
     the separately qualified automatic consumer/packet selection policy.
     """
+    from generativeqc import Calculator
     from pyscf import gto, scf
+
+    from benchmarks._cases import benchmark_cases
+    from benchmarks._retained_basis import load_retained_comparison_basis
+    from benchmarks.df_component_ledger import read_trace
 
     assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     case = benchmark_cases()[
@@ -146,23 +175,7 @@ def test_qualified_lowering_without_ao_shape_admission(
             counters = response["counters"]
             assert counters["three_center_shell_panels"] > 0
             manifest, target = production_profile
-            choices = {}
-            for profile in (
-                manifest.get("portable", {}),
-                manifest["architectures"].get(target, {}),
-            ):
-                selected = (
-                    profile.get("baseline", profile)
-                    if policy != "candidate"
-                    else profile
-                )
-                choices.update(
-                    {
-                        row["class"]: row["lowering"] == "rys"
-                        and (selected.get("qualified", False) or policy == "candidate")
-                        for row in selected.get("kernels", [])
-                    }
-                )
+            choices = _expected_rys_choices(manifest, target, policy)
             for key, value in counters.items():
                 if key.endswith("_rys_selected"):
                     expected_rys = policy != "legacy" and choices.get(
