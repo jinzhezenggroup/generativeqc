@@ -139,6 +139,7 @@ def test_prepared_density_preserves_local_ao_component_precision(
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_ks_precision.hpp"
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/cuda_fp64_matrix_policy.hpp"
 #include "runtime/resource_ledger.hpp"
 using namespace generativeqc;
 using namespace generativeqc::dft;
@@ -161,7 +162,7 @@ std::size_t product(std::size_t left, std::size_t right) {
 """
         + "namespace generativeqc::dft {\n"
         + "// Scalar layout facts supplied to the production capacity policy.\n"
-        + "struct CudaXcLayout { std::size_t jets, work_jets, nao, npoint; };\n"
+        + "struct CudaXcLayout { std::size_t jets, work_jets, nao, npoint; bool local_ao{}; };\n"
         + cpp_function_definition(source, "cuda_ks_point_batch_budget")
         + "\n}\n"
         + r"""
@@ -185,6 +186,12 @@ int cudaMemsetAsync(void*, int, std::size_t, int) {
   throw std::logic_error("ordinary precision must not initialize mixed nonlocal counters");
 }
 void check(int status) { assert(status == 0); }
+struct cudaDeviceProp { int major{}, singleToDoublePrecisionPerfRatio{}; };
+constexpr int cudaSuccess = 0, cudaErrorNotSupported = 801, cudaErrorInvalidValue = 1;
+int cudaGetDeviceProperties(cudaDeviceProp*, int) {
+  throw std::logic_error("small density-only panels must not query optional matrix capability");
+}
+int cudaGetLastError() { return cudaSuccess; }
 // Provider facts are stubbed; the extracted production block owns the choice
 // between strict generated J and admitted mixed arithmetic.
 struct Provider {
@@ -207,6 +214,10 @@ struct Xc {
   bool qualified{};
   std::size_t reserved{};
   tensor::PanelProductDiagnostic diagnostic{};
+  void prepare_potential(std::size_t, bool) {
+    throw std::logic_error("small density-only panels must retain generated potential");
+  }
+  const tensor::PanelProductDiagnostic& potential_lowering() const { return diagnostic; }
   struct BatchPlan { std::size_t device_bytes{}, tiles = 1; } batch;
   std::size_t batch_tiles{}, batch_budget{};
   bool batch_compact{}, batch_ragged{};
@@ -286,7 +297,10 @@ int main() {
     Xc owner{{}, {{runtime::strict_fp64_precision()}}, capable};
     owner.qualified = qualified;
     auto* xc = &owner;
-    struct { std::uint64_t max_iterations = 50; } options;
+    struct {
+      std::uint64_t max_iterations = 50;
+      std::size_t reference_memory_budget_bytes{};
+    } options;
     const CudaXcPreparationBudget xc_budget{device, host};
     CudaKsResources resource;
     resource.xc_device_bytes = 1000;

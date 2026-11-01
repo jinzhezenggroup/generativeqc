@@ -59,6 +59,7 @@ struct CudaDensityFittingJkPlan : BorrowedBlasPlan {
   bool packed_projection_blas{};
   bool packed_projection_auto{};
   int packed_projection_fp32_fp64_ratio{};
+  bool occupied_gram_library_capable{};
   void* integral_source{};
   std::vector<bool> metric_full_rank;
   struct {
@@ -80,7 +81,10 @@ ProjectedSchedule df_projected_exchange_schedule(std::size_t, std::size_t, std::
   return {2};
 }
 namespace generated {
-std::size_t df_occupied_gram_splits(std::size_t, std::size_t, std::size_t) { return 0; }
+std::size_t planned_gram_splits{};
+std::size_t df_occupied_gram_splits(std::size_t, std::size_t, std::size_t) {
+  return planned_gram_splits;
+}
 }  // namespace generated
 // Numerical layout doubles exercise the actual occupied caller and BLAS adapter.
 // Independent full-tensor contractions below check the complete K output.
@@ -113,7 +117,10 @@ void launch_unpack_df_values(cudaStream_t, std::size_t n, std::size_t a, std::si
 // Unexercised integral-source kernels must not silently succeed.
 template <class... Args>
 int launch_split_occupied_gram(Args...) {
-  std::abort();
+  // An unavailable generated kernel must propagate its error. The optional
+  // library-capable route never reaches this injected failure; its complete
+  // output is independently checked against full-tensor contractions below.
+  return 801;
 }
 template <class... Args>
 void launch_transpose_streamed_df_tile_kernel(Args...) {
@@ -178,6 +185,9 @@ int main(int argc, char** argv) {
   const bool is_projected = mode == "projected" || mode == "projected_failure";
   const bool is_packed = mode.starts_with("packed");
   const bool is_resident = mode == "resident" || is_packed;
+  const bool library_gram = mode == "packed_library_gram";
+  const bool generated_gram = mode == "packed_generated_gram";
+  generated::planned_gram_splits = library_gram || generated_gram ? 1 : 0;
   constexpr std::size_t n = 3, a = 3, rank = 2;
   const double c[n][rank] = {{1, 2}, {3, -1}, {0.5, 4}};
   std::vector<double> factors(n * n * a);
@@ -206,6 +216,7 @@ int main(int argc, char** argv) {
       plan.auxiliary_tile = is_resident ? a : 1;
       plan.resident_exchange_enabled = is_resident;
       plan.packed_projection_blas = is_packed && mode != "packed_generated";
+      plan.occupied_gram_library_capable = library_gram;
       plan.streamed = mode == "streamed" || is_projected;
       plan.resident_raw_coulomb = mode == "raw";
       if (is_projected) {
@@ -246,13 +257,20 @@ int main(int argc, char** argv) {
       projected = {&plan,          coefficients, output.data() + 1,
                    requested_rank, column_major, mode == "projected_failure",
                    false};
-      const auto expected_status = plan.resident_raw_coulomb ? GENERATIVEQC_STATUS_INVALID_ARGUMENT
-                                   : projected.fail || blas_failure ? GENERATIVEQC_STATUS_CUDA_ERROR
-                                                                    : GENERATIVEQC_STATUS_SUCCESS;
+      const auto expected_status =
+          plan.resident_raw_coulomb ? GENERATIVEQC_STATUS_INVALID_ARGUMENT
+          : projected.fail || blas_failure || (generated_gram && triangular)
+              ? GENERATIVEQC_STATUS_CUDA_ERROR
+              : GENERATIVEQC_STATUS_SUCCESS;
       assert(build_occupied_exchange(plan, 0, coefficients, requested_rank, column_major, 1.25,
                                      output.data() + 1, detail) == expected_status);
       assert(output.front() == sentinel && output.back() == sentinel);
       assert(w.front() == sentinel && w.back() == sentinel);
+      if (generated_gram && triangular) {
+        assert(plan.completed_occupied_projection_rank == 0);
+        for (std::size_t i = 1; i <= n * n; ++i) assert(std::isnan(output[i]));
+        continue;
+      }
       if (blas_failure) {
         assert(!detail.empty() && plan.completed_occupied_projection_rank == 0);
         for (std::size_t i = 1; i <= n * n; ++i) assert(std::isnan(output[i]));

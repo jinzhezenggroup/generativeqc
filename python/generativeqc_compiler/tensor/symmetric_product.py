@@ -162,9 +162,33 @@ def emit_symmetric_product_portfolio(
             ),
         ),
     )
+    # GEMM materializes one cross product, then publishes X + X^T. It is
+    # separate from triangular SYR2K in both algorithm and provider identity;
+    # a component speedup cannot silently relabel the older endpoint recipe.
+    assert indexed.execution is not None
+    indexed_gemm = replace(
+        indexed,
+        implementation="indexed-symmetric-cross-gemm",
+        providers=(
+            ProviderDescriptor(
+                "cublas",
+                "library",
+                "indexed-symmetric-cross-gemm",
+                version="runtime-bound-typed-fp64-default",
+            ),
+        ),
+        execution=replace(
+            indexed.execution,
+            algorithm="indexed-symmetric-cross-gemm",
+            topology=ScheduleTopology(
+                materialization="caller-owned-panels/compact-cross/indexed-symmetric-scatter",
+                reduction="provider-reproducible",
+            ),
+        ),
+    )
     return native_lowering_portfolio(
         request,
-        (*candidates, indexed),
+        (*candidates, indexed, indexed_gemm),
         target,
         CompilationIdentity(scientific_identity, source),
         name=name,

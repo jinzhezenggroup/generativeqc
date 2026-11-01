@@ -279,8 +279,9 @@ class CudaXcPlan {
    * numeric arena and covers opaque provider storage plus any compact-output
    * cache, reported separately by the binding. Discover maps before preparing
    * optional resources; a dense preparation does not qualify indexed scatter.
-   * Production currently has no qualified alternative endpoint profile. */
-  void prepare_potential(std::size_t provider_budget = 0);
+   * The method owner must explicitly admit a qualified indexed GEMM recipe;
+   * budget alone never promotes a library path. */
+  void prepare_potential(std::size_t provider_budget = 0, bool indexed_gemm = false);
   const tensor::SymmetricProductDiagnostic& potential_lowering() const noexcept {
     return potential_binding_->diagnostic();
   }
@@ -441,7 +442,8 @@ bool compact_point_batch_admitted(const CudaXcLayout& layout,
                                   std::size_t first_tile, std::size_t end_tile, bool ragged);
 std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(const CudaXcLayout& layout,
                                                                     cudaStream_t stream,
-                                                                    std::size_t provider_budget);
+                                                                    std::size_t provider_budget,
+                                                                    bool indexed_gemm = false);
 /** Compiler-emitted bounded selection; no CUDA calls and no runtime probing. */
 CudaXcDensityBinding prepare_density_binding(std::int64_t n, std::int64_t count, std::int64_t spins,
                                              std::int64_t work_jets,
