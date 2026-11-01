@@ -372,3 +372,164 @@ def test_real_trim_enforces_cap_without_touching_local_cache(environment: Path) 
     assert (environment / "outputs").read_text() == "available=true\n"
     assert sum(p.stat().st_size for p in cache.cache_files(delta)) <= cache.MAX_BYTES
     assert sentinel.read_text() == "trusted cache must remain unchanged"
+
+
+# Fast CUDA uses the same strict, single-PR compiler-delta contract as CLI,
+# but retains an independent cache namespace and a bounded 512 MiB budget.
+FAST_SPEC = importlib.util.spec_from_file_location(
+    "pr_fast_cache", ROOT / "tools/ci_pr_fast_ccache.py"
+)
+assert FAST_SPEC and FAST_SPEC.loader
+fast_cache = importlib.util.module_from_spec(FAST_SPEC)
+FAST_SPEC.loader.exec_module(fast_cache)
+
+
+def fast_step(name: str) -> str:
+    job = WORKFLOW.split("\n  cuda-compile:\n", 1)[1].split(
+        "\n  master-cache-cleanup:\n", 1
+    )[0]
+    return job.split(f"      - name: {name}\n", 1)[1].split("\n      - ", 1)[0]
+
+
+@pytest.mark.parametrize(
+    ("event", "ref", "number"),
+    [
+        ("push", "refs/heads/master", "2498"),
+        ("merge_group", "refs/heads/gh-readonly-queue/master/pr-2498", "2498"),
+        ("pull_request_target", "refs/heads/master", "2498"),
+        ("pull_request", "refs/pull/2499/merge", "2498"),
+        ("pull_request", "refs/pull/2498/head", "2498"),
+        ("pull_request", "refs/pull/0/merge", "0"),
+    ],
+)
+def test_fast_cuda_cache_rejects_untrusted_ref(
+    environment: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    event: str,
+    ref: str,
+    number: str,
+) -> None:
+    monkeypatch.setenv("GITHUB_EVENT_NAME", event)
+    monkeypatch.setenv("GITHUB_REF", ref)
+    monkeypatch.setenv("PR_NUMBER", number)
+    with pytest.raises(ValueError):
+        fast_cache.identity()
+    assert not (environment / "outputs").exists()
+
+
+def test_fast_cuda_cache_identity_and_bound(
+    environment: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key, path = fast_cache.identity()
+    assert "ccache-pr-fast-cuda-" in key
+    assert path == environment / "cuda-fast-pr-ccache-2498"
+    for value in ("GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT"):
+        monkeypatch.setenv(value, "another-run")
+        assert fast_cache.identity() == (key, path)
+    assert fast_cache.MAX_BYTES == 512 * 1024**2
+    fast_cache.bound(path)
+    assert not (environment / "outputs").exists()
+    path.mkdir()
+    (path / "new-object").write_bytes(b"compiled-ccache-output")
+
+    def trim(command: list[str], **kwargs: Any) -> None:
+        assert command == [
+            "ccache",
+            "--trim-dir",
+            str(path),
+            "--trim-max-size",
+            "512MiB",
+        ]
+        assert kwargs == {"check": True, "timeout": 45}
+
+    monkeypatch.setattr(fast_cache.subprocess, "run", trim)
+    fast_cache.bound(path)
+    assert (environment / "outputs").read_text() == "available=true\n"
+    (path / "unsafe-link").symlink_to(environment / "outputs")
+    with pytest.raises(ValueError):
+        fast_cache.bound(path)
+
+
+def test_fast_cuda_compiler_delta_does_not_weaken_required_build() -> None:
+    prepare = fast_step("Prepare isolated PR fast CUDA compiler delta")
+    restore = fast_step("Restore only this PR fast CUDA compiler delta")
+    prerequisite = fast_step("Compile production CUDA prerequisite archive")
+    build = fast_step("Compile production CUDA and runtime CTest")
+    bound = fast_step("Bound successful PR fast CUDA compiler misses")
+    save = fast_step("Save this PR fast CUDA compiler delta once")
+    for optional in (prepare, restore, bound, save):
+        assert field(optional, "continue-on-error") == "true"
+        assert field(optional, "timeout-minutes") in ("1", "2")
+        assert "github.event_name == 'pull_request'" in field(optional, "if")
+    assert "restore-keys:" not in restore
+    assert field(restore, "path") == field(save, "path")
+    assert field(restore, "key") == field(save, "key")
+    assert "~/.cache/ccache" not in restore + save
+    assert "id: cuda_runtime_build" in build
+    assert "continue-on-error:" not in prerequisite + build
+    for step in (prerequisite, build):
+        assert 'CCACHE_NORESHARE: "true"' in step
+        remote = field(step, "CCACHE_REMOTE_STORAGE")
+        assert "cuda-ccache-handoff" in remote
+        assert "steps.pr_fast_ccache_restore.outputs.cache-hit == 'true'" in remote
+        assert "read-only" in remote
+        assert "CCACHE_REMOTE_ONLY" not in step
+        assert "CCACHE_SLOPPINESS" not in step
+    assert "steps.cuda_runtime_build.outcome == 'success'" in field(bound, "if")
+    assert "steps.cuda_runtime_build.outcome == 'success'" in field(save, "if")
+    assert "steps.pr_fast_ccache_restore.outputs.cache-hit != 'true'" in field(
+        bound, "if"
+    )
+    assert "steps.pr_fast_ccache_restore.outputs.cache-matched-key == ''" in field(
+        bound, "if"
+    )
+    assert "ctest --test-dir build --output-on-failure --parallel 2" in WORKFLOW
+
+
+def test_fast_cuda_remote_and_publication_follow_exact_pr_cache_state() -> None:
+    """Execute cache expressions for hits, misses and unavailable accelerators."""
+    remote_steps = (
+        fast_step("Compile production CUDA prerequisite archive"),
+        fast_step("Compile production CUDA and runtime CTest"),
+    )
+    bound = fast_step("Bound successful PR fast CUDA compiler misses")
+    for event in ("pull_request", "merge_group", "pull_request_target", "push"):
+        for prepared in ("", "exact-pr-key"):
+            for outcome in ("success", "failure", "cancelled", "skipped", ""):
+                for hit, matched in (
+                    ("true", "exact-pr-key"),
+                    ("false", ""),
+                    ("", ""),
+                    ("false", "other-key"),
+                ):
+                    context = {
+                        "github.event_name": event,
+                        "github.ref": "refs/pull/2498/merge",
+                        "runner.temp": "/tmp/runner",
+                        "steps.pr_fast_ccache.outputs.key": prepared,
+                        "steps.pr_fast_ccache.outputs.path": "/tmp/runner/cuda-fast-pr-ccache-2498",
+                        "steps.pr_fast_ccache_restore.outcome": outcome,
+                        "steps.pr_fast_ccache_restore.outputs.cache-hit": hit,
+                        "steps.pr_fast_ccache_restore.outputs.cache-matched-key": matched,
+                        "steps.cuda_runtime_build.outcome": "success",
+                    }
+                    allowed = (
+                        event == "pull_request"
+                        and bool(prepared)
+                        and outcome == "success"
+                        and (hit == "true" or matched == "")
+                    )
+                    expected = (
+                        "file:///tmp/runner/cuda-fast-pr-ccache-2498" if allowed else ""
+                    )
+                    if allowed and hit == "true":
+                        expected += " read-only"
+                    for step in remote_steps:
+                        assert (
+                            expression(field(step, "CCACHE_REMOTE_STORAGE"), context)
+                            == expected
+                        )
+                    publish = allowed and hit != "true" and matched == ""
+                    assert bool(expression(field(bound, "if"), context)) == publish
+                    context["steps.cuda_runtime_build.outcome"] = "failure"
+                    assert not expression(field(bound, "if"), context)
