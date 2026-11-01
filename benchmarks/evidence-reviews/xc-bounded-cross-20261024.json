@@ -6,12 +6,12 @@
   "review_document": "benchmarks/results/xc-bounded-cross-20261024/README.md",
   "files": [
     {
-      "path": "benchmarks/results/xc-bounded-cross-20261024/endpoints.json.xz",
+      "path": "benchmarks/results/xc-bounded-cross-20261024/fp64.xz",
       "family": "xc-bounded-cross-20261024",
       "classification": "required-compact-accepted-evidence",
       "role": "complete-endpoints-and-independent-moved-references",
-      "bytes": 534772,
-      "sha256": "97f18093e34c5559e7e47a16e83a371a581f421d2c44431dd0fd796f3dbb421f"
+      "bytes": 278524,
+      "sha256": "131e9eab4f169f121c27e99540a1310ad56cd69278d9a28055a0cb3ed9fc1278"
     }
   ]
 }

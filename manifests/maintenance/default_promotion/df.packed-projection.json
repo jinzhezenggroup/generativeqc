@@ -1,0 +1,22 @@
+{
+  "id": "df.packed-projection",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DF_PACKED_PROJECTION"
+  ],
+  "owner_issues": [
+    2426
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/df_exchange_policy.hpp",
+    "src/scf/cuda/df_occupied_exchange.cpp"
+  ],
+  "rationale": "Bounded unpack plus FP64 BLAS uses physical throughput, workload and charged-capacity gates. Explicit generated/blas controls preserve paired ablations. Unknown or limited FP64 capability, smaller work or insufficient scratch keeps the generated kernel; no GPU model controls availability.",
+  "revisit_condition": "Expand the work/capability domain only with independent-reference complete endpoint timings, warm/moved controls and bounded scratch/lifetime evidence; current measurements do not establish an optimum on unmeasured devices.",
+  "evidence": [
+    "issue:#2426",
+    "docs:docs/developer/df_tuning.md",
+    "file:benchmarks/results/bounded-packed-projection-20261101/README.md"
+  ]
+}
