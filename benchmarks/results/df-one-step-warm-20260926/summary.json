@@ -856,9 +856,12 @@
   ],
   "parts": [
     {
-      "path": "samples.json",
-      "sha256": "478edc74c0c8d3fd78641353d1772954de3d95a7b1b50c0891275a34873e86b4",
-      "bytes": 54150
+      "path": "samples.json.gz",
+      "sha256": "84bcd0ca7718d97be54943e54a878f5e670a74828f0db34044baffabbf9a02b6",
+      "bytes": 9539,
+      "encoding": "gzip",
+      "decoded_bytes": 54150,
+      "decoded_sha256": "478edc74c0c8d3fd78641353d1772954de3d95a7b1b50c0891275a34873e86b4"
     },
     {
       "path": "references.json.gz",
