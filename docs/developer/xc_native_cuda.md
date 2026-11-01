@@ -880,6 +880,11 @@ energy-plus-force default.
 
 ## SCF local AO selection
 
+The split-hybrid capability manifest admits both M06-2X and MN15 for physical
+FP64 local AO execution. This admission does not enable mixed density/AO
+arithmetic or response. The shared resource and map rules below apply equally
+to source-derived and built-in point programs.
+
 Geometry-bound AO discovery is requested automatically for device-fused XC
 layouts whose compiler-emitted point program and physical FP64 layout support
 local AO selection. The XC owner determines legality; SCF does not add a
