@@ -20,7 +20,7 @@ SPEC.loader.exec_module(REPLAY)
 
 class PopulationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.packet = REPLAY.read("endpoints.json.xz")
+        self.packet = REPLAY.read("receipts.json.xz")
         self.decoded = {
             cohort: {name: json.loads(raw) for name, raw in records.items()}
             for cohort, records in self.packet["cohorts"].items()
@@ -99,7 +99,7 @@ class PopulationTests(unittest.TestCase):
         original = REPLAY.read
         try:
             REPLAY.read = lambda name: (
-                self.packet if name == "endpoints.json.xz" else original(name)
+                self.packet if name == "receipts.json.xz" else original(name)
             )
             with (
                 contextlib.redirect_stdout(io.StringIO()),

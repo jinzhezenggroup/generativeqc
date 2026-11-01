@@ -539,9 +539,9 @@ def _assert_cuda_ci_ao_gate(workflow: str) -> None:
     assert "always()" not in save and "failure()" not in save
     assert "continue-on-error: true" in save
     # Tier-aware display labels may change without changing build admission.
-    assert producer.index(
-        "cmake --build --preset cuda-release-cli-sm120"
-    ) < producer.index(save_marker)
+    assert producer.index("cmake --build --preset cuda-release-cli") < producer.index(
+        save_marker
+    )
     assert producer.index(
         "      - name: Smoke-test release-mode native command\n"
     ) < producer.index(save_marker)
@@ -609,7 +609,7 @@ def test_cuda_ci_ao_gate_rejects_lifecycle_regressions(before: str, after: str) 
 )
 def test_cuda_complete_cache_order_ignores_build_display_label(label: str) -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
-    command = workflow.index("cmake --build --preset cuda-release-cli-sm120")
+    command = workflow.index("cmake --build --preset cuda-release-cli")
     start = workflow.rfind("      - name:", 0, command)
     assert start >= 0
     end = workflow.index("\n", start) + 1
@@ -625,7 +625,7 @@ def test_cuda_complete_cache_cannot_precede_cli_build() -> None:
     )
     save = workflow[start:end]
     broken = workflow[:start] + workflow[end:]
-    command = broken.index("cmake --build --preset cuda-release-cli-sm120")
+    command = broken.index("cmake --build --preset cuda-release-cli")
     insertion = broken.rfind("      - name:", 0, command)
     assert insertion >= 0
     broken = broken[:insertion] + save + broken[insertion:]

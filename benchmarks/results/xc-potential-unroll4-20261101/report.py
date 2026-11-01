@@ -11,6 +11,7 @@ from statistics import median
 
 import numpy as np
 
+from benchmarks._exact_fp64_evidence import load
 from benchmarks.readme_defaults_qualification import qualify
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -166,23 +167,7 @@ def paired_errors(left: dict, right: dict, *, large: bool = False) -> list[dict]
 
 def main() -> None:
     folder = Path(__file__).parent
-    bundle = json.loads(
-        lzma.decompress(
-            checked(
-                (folder / "receipts.json.xz").read_bytes(),
-                (folder / "sha256.txt").read_text().split()[0],
-                "receipts.json.xz",
-            )
-        )
-    )
-    require(
-        bundle["schema"] == "generativeqc.xc-potential-unroll.v1",
-        "unknown evidence schema",
-    )
-    files = {
-        name: checked(entry["text"].encode(), entry["sha256"], name).decode()
-        for name, entry in bundle["files"].items()
-    }
+    bundle, files = load(folder)
     references = {
         name: json.loads(
             lzma.decompress(checked((ROOT / name).read_bytes(), digest, name))

@@ -171,3 +171,10 @@ uses its already-merged Git snapshot for the unchanged 811,824-byte receipt bund
 Its complete byte recovery and original numerical reader were verified before
 retirement; summaries, negative results, reader and recovery manifest remain.
 No storage limit, acceptance gate or external publication boundary changed.
+
+The receipt container now separates exact FP64 words from JSON structure. The
+shared decoder reconstructs all 603 original members and verifies their original
+SHA-256 before running this report. No sample, failed attempt, timing or force
+component is rounded or removed. The storage change reduces the 1,045,252-byte
+container to 629,544 bytes in two XZ payloads; original producer identities and
+scientific acceptance remain unchanged.

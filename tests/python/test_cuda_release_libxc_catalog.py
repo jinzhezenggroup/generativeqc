@@ -30,9 +30,7 @@ def _cache_variables(name: str) -> dict[str, str]:
 def test_all_release_cuda_presets_package_the_complete_libxc_catalog() -> None:
     for name in (
         "cuda-release",
-        "cuda-release-sm120",
         "cuda-release-cli",
-        "cuda-release-cli-sm120",
     ):
         options = _cache_variables(name)
         assert options["GENERATIVEQC_ENABLE_CUDA"] == "ON", name
@@ -41,22 +39,19 @@ def test_all_release_cuda_presets_package_the_complete_libxc_catalog() -> None:
         assert options["GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS"] == "", name
 
 
-def test_portable_release_cli_does_not_inherit_sm120() -> None:
-    portable = _cache_variables("cuda-release-cli")
-    assert "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES" not in portable
-    assert portable["GENERATIVEQC_AOT_PROFILE"] == "portable"
-    assert (
-        _cache_variables("cuda-release-cli-sm120")[
-            "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES"
-        ]
-        == "120"
-    )
+def test_release_presets_remain_architecture_neutral() -> None:
+    assert set(BY_NAME) == {"cuda-dev-fast", "cuda-release", "cuda-release-cli"}
+    for name in ("cuda-release", "cuda-release-cli"):
+        options = _cache_variables(name)
+        assert "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES" not in options
+        assert "CMAKE_CUDA_ARCHITECTURES" not in options
+        assert options["GENERATIVEQC_AOT_PROFILE"] == "auto"
     # Ordinary development builds should not incur release AOT costs.
     assert "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT" not in _cache_variables(
         "cuda-dev-fast"
     )
     builds = {item["name"] for item in PRESETS["buildPresets"]}
-    assert {"cuda-release-cli", "cuda-release-cli-sm120"} <= builds
+    assert builds == set(BY_NAME)
 
 
 def test_wheel_build_enables_full_catalog_for_any_cuda_architecture() -> None:

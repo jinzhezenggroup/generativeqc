@@ -41,3 +41,14 @@ successful three-target CUDA wheel or a new numerical qualification.
 
 Coding-Agent: ChatGPT
 Model: GPT-6
+
+## Integration with architecture-neutral presets
+
+Master `c402f61fbbfaf33162795d7b87c11bfcfbc0f0d0` (#2924) removes
+SM-specific preset names. The integrated full-catalog policy therefore applies
+to `cuda-release` and `cuda-release-cli`, retaining their `auto` tuned/portable
+profile selection and caller-selected architectures. No removed SM120 preset is
+restored. This changes preset organization, not the catalog ownership above.
+The SM120 wheel receipts on the pre-integration branch remain historical; the
+combined source still requires new checks, and #2832 multi-target acceptance
+remains a separate requirement.

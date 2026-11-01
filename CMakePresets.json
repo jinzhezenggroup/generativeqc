@@ -20,8 +20,8 @@
     },
     {
       "name": "cuda-release",
-      "displayName": "CUDA release (explicit target)",
-      "description": "Release settings for caller-selected CUDA architectures with portable kernels.",
+      "displayName": "CUDA release (caller-selected architectures)",
+      "description": "Optimized CUDA build for caller-selected targets; automatic per-architecture tuned/portable AOT selection.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/cuda-release",
       "cacheVariables": {
@@ -30,33 +30,15 @@
         "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
         "GENERATIVEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
         "GENERATIVEQC_AOT_UNIT_MODE": "stable-shards",
-        "GENERATIVEQC_AOT_PROFILE": "portable",
-        "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT": "ON",
-        "GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS": ""
-      }
-    },
-    {
-      "name": "cuda-release-sm120",
-      "displayName": "CUDA release (sm_120)",
-      "description": "Production sm_120 AOT manifest with release compiler settings.",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/cuda-release-sm120",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "GENERATIVEQC_ENABLE_CUDA": "ON",
-        "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120",
-        "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
-        "GENERATIVEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
-        "GENERATIVEQC_AOT_UNIT_MODE": "stable-shards",
-        "GENERATIVEQC_AOT_PROFILE": "sm_120",
+        "GENERATIVEQC_AOT_PROFILE": "auto",
         "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT": "ON",
         "GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS": ""
       }
     },
     {
       "name": "cuda-release-cli",
-      "displayName": "Standalone native CUDA CLI distribution (select architecture)",
-      "description": "Complete automatic Libxc CUDA catalog with caller-selected architecture and portable AOT, without Python stationary plug-ins.",
+      "displayName": "Standalone native CUDA CLI distribution",
+      "description": "Single native C++/CUDA executable: production AOT compiled into core, no Python-only stationary plug-ins; ccache/PCH enabled.",
       "inherits": "cuda-release",
       "binaryDir": "${sourceDir}/build/cuda-release-cli",
       "cacheVariables": {
@@ -75,17 +57,6 @@
         "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT": "ON",
         "GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS": ""
       }
-    },
-    {
-      "name": "cuda-release-cli-sm120",
-      "displayName": "Standalone native CUDA CLI distribution (sm_120)",
-      "description": "Single native C++/CUDA executable: production AOT compiled into core, no Python-only stationary plug-ins; ccache/PCH enabled.",
-      "inherits": "cuda-release-cli",
-      "binaryDir": "${sourceDir}/build/cuda-release-cli-sm120",
-      "cacheVariables": {
-        "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120",
-        "GENERATIVEQC_AOT_PROFILE": "sm_120"
-      }
     }
   ],
   "buildPresets": [
@@ -98,16 +69,8 @@
       "configurePreset": "cuda-release"
     },
     {
-      "name": "cuda-release-sm120",
-      "configurePreset": "cuda-release-sm120"
-    },
-    {
       "name": "cuda-release-cli",
       "configurePreset": "cuda-release-cli"
-    },
-    {
-      "name": "cuda-release-cli-sm120",
-      "configurePreset": "cuda-release-cli-sm120"
     }
   ]
 }
