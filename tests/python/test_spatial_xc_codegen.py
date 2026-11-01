@@ -191,13 +191,17 @@ def independent_xc(
     )
 
 
-def host_adapter(tmp_path: Path, spec: FunctionalSpec) -> typing.Callable:
+def host_adapter(
+    tmp_path: Path, spec: FunctionalSpec, *, source: str | None = None
+) -> typing.Callable:
     """Execute the exact emitted device adapter as C++ for a CPU oracle gate."""
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("C++ compiler unavailable")
     code = "#include <cmath>\nusing I = long long;\nusing std::isfinite;\n#define __device__\n"
-    code += GRID_XC_POINT_TYPE + emit_spatial_xc(spec).source
+    code += GRID_XC_POINT_TYPE + (
+        emit_spatial_xc(spec).source if source is None else source
+    )
     code += """
 extern "C" int evaluate(const double* features, long long n, int restricted, double* output) {
   for (I p = 0; p < n; ++p) {

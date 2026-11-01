@@ -147,6 +147,12 @@ contracts independently before extending admission. Thread/tile tuning and
 family-specific coefficient compression are separate optimizations; retain
 complete endpoint timings and semantic scalar-work counts when comparing them.
 
+## Subsequent extension
+
+[Libxc spatial point programs](2026-11-01-libxc-spatial-point-programs.md) extends
+the admission boundary to existing source-derived work-domain lowerers without
+changing this interior contract or the common point cache/assembly.
+
 ## References
 
 - `docs/developer/xc_contractions.md`

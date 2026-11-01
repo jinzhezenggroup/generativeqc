@@ -57,7 +57,16 @@ from .integration import _tiles
 from .native import NativeContractionProgram
 from .program_ir import fixed_density_tile_program
 from .spatial_cuda import spatial_xc_capability
+from .spatial_program import SpatialContractionProgram
 from .spec import UnsupportedXC
+
+
+def _spatial_capability(program: typing.Any, density_grid: typing.Any) -> typing.Any:
+    """Keep the scalar worker/domain identity attached across the grid boundary."""
+    identity = getattr(density_grid, "compiled_xc_identity", "")
+    if isinstance(program, SpatialContractionProgram):
+        return program.consumer if program.consumer.identity == identity else None
+    return spatial_xc_capability(program.spec, identity)
 
 
 def _native_device_xc(
@@ -68,10 +77,7 @@ def _native_device_xc(
         spatial is not None
         and density_grid is not None
         and program.contract.request.observable == "potential"
-        and spatial_xc_capability(
-            program.spec, getattr(density_grid, "compiled_xc_identity", "")
-        )
-        is not None
+        and _spatial_capability(program, density_grid) is not None
     )
 
 
@@ -129,9 +135,9 @@ class PreparedXCContractions:
         schedule: GridXcExecutionSchedule | str | None,
     ) -> None:
         """Capture the complete borrowed configuration under its spatial lock."""
-        if not isinstance(program, NativeContractionProgram) or not isinstance(
-            basis, NativeAO
-        ):
+        if not isinstance(
+            program, (NativeContractionProgram, SpatialContractionProgram)
+        ) or not isinstance(basis, NativeAO):
             raise TypeError("expected native contraction program and NativeAO")
         if not isinstance(grid, (ExplicitGrid, MolecularGrid)):
             raise TypeError("expected fixed explicit or molecular quadrature")
@@ -168,6 +174,13 @@ class PreparedXCContractions:
         if selected_schedule.name == "device_fused" and not device_xc_available:
             raise ValueError(
                 "device_fused grid/XC schedule is incompatible with this prepared consumer"
+            )
+        if (
+            isinstance(program, SpatialContractionProgram)
+            and selected_schedule.name != "device_fused"
+        ):
+            raise ValueError(
+                "Libxc spatial point programs require their matching device_fused artifact"
             )
         if density_grid is not None:
             if not isinstance(density_grid, CudaGrid):
@@ -595,9 +608,7 @@ class PreparedXCContractions:
             ),
             default=None,
         )
-        capability = spatial_xc_capability(
-            self.program.spec, self.density_grid.compiled_xc_identity
-        )
+        capability = _spatial_capability(self.program, self.density_grid)
         if capability is None:
             raise ValueError("stale spatial XC artifact capability")
         with self.spatial.device_xc_tasks(
