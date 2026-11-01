@@ -2,16 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "xc-structural-default-20261028",
   "owner": "Automatic XC compiler and CUDA qualification",
-  "reason": "Retains every direct-event, steady Graph, confirmation and rejected scheduling population; 681 passing independent numerical checks and both larger UKS nonconvergence arms; 1700 complete converged endpoint calls with scientific work; exact published-base producer overlays, native/CPU/CUDA bindings and verified compiler-cache provenance. Event durations are losslessly interned and authenticated before reduction. Generated products remain transient, and no storage limit is raised.",
+  "reason": "Retains every direct-event, steady Graph, confirmation and rejected scheduling population; 681 passing independent numerical checks and both larger UKS nonconvergence arms; 1700 complete converged endpoint calls with scientific work; exact published-base producer overlays, native/CPU/CUDA bindings and verified compiler-cache provenance. Event durations are losslessly interned and authenticated before reduction. Generated products remain transient, and no storage limit is raised. The exact 811824-byte historical bundle is now recovered through historical.manifest.json from existing merged Git history; all current numerical and diagnostic summaries and the original readers remain. Recovery was verified byte-for-byte before retirement.",
   "review_document": "benchmarks/results/xc-structural-default-20261028/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/xc-structural-default-20261028/receipts.json.xz",
-      "family": "xc-structural-default-20261028",
-      "classification": "required-compact-accepted-evidence",
-      "role": "default-sharing-qualification-with-complete-endpoints-and-retained-negative-controls",
-      "bytes": 811824,
-      "sha256": "3681eb231aa27f2afe6747a6dbf44a0c5fdd52becb0bba85385f8b2eb17d7e3e"
-    }
-  ]
+  "files": []
 }

@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
 from generativeqc_compiler.dft.xc_contraction_cuda import (
-    DEFAULT_XC_MATRIX_SCHEDULE,
+    XcMatrixSchedule,
     _emit_panels,
     _emit_tiled,
     compact_panel_program,
@@ -20,19 +20,28 @@ from generativeqc_compiler.dft.xc_contraction_cuda import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.fixture(scope="module", params=["false", "true"])
+@pytest.fixture(
+    scope="module",
+    params=[(tile, fmad) for tile in (8, 16, 32) for fmad in ("false", "true")],
+    ids=lambda value: f"tile{value[0]}-fmad{value[1]}",
+)
 def contraction_probe(native_cxx: Any, tmp_path_factory: Any, request: Any) -> Any:
     """Compile the production bodies, not a parallel test implementation."""
     if os.environ.get("GENERATIVEQC_RUN_CUDA_TESTS") != "1":
         pytest.skip("scheduled CUDA qualification is opt-in")
-    if not os.environ.get("SLURM_JOB_ID"):
-        pytest.fail("CUDA qualification requires finite srun")
+    # The ECNU A100 queue uses LSF; retain its real allocation identity rather
+    # than requiring a fabricated Slurm ID for the same device qualification.
+    if not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")):
+        pytest.fail("CUDA qualification requires a finite scheduler allocation")
     nvcc = shutil.which("nvcc")
     if nvcc is None:
         pytest.fail("scheduled CUDA qualification requires nvcc")
     directory = tmp_path_factory.mktemp("mixed-contractions")
+    # Launch every supported schedule: tile32 previously exceeded the per-block
+    # register limit despite passing the host thread/shared-memory admission.
+    tile, fmad = request.param
     generated = _emit_panels(diagonal_one_sided=True) + _emit_tiled(
-        DEFAULT_XC_MATRIX_SCHEDULE
+        XcMatrixSchedule(tile)
     )
     generated = generated[: generated.index("inline bool tiled_xc_admitted(")]
     (directory / "generated_xc_mixed_contractions.cuh").write_text(generated)
@@ -44,7 +53,8 @@ def contraction_probe(native_cxx: Any, tmp_path_factory: Any, request: Any) -> A
             "-forward-unknown-to-host-compiler",
             "-std=c++20",
             "-O2",
-            f"--fmad={request.param}",
+            f"--fmad={fmad}",
+            f"-DGQC_TEST_XC_MATRIX_TILE={tile}",
             "--ftz=false",
             "-arch=native",
             f"-I{directory}",

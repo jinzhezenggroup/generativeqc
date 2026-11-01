@@ -6,6 +6,10 @@
 
 using I = std::int64_t;
 
+// The test emitter and launch dimensions must name the same supported schedule.
+constexpr I matrix_tile = GQC_TEST_XC_MATRIX_TILE;
+static_assert(matrix_tile == 8 || matrix_tile == 16 || matrix_tile == 32);
+
 __device__ double finite(double value, int* error, int code) {
   if (!::isfinite(value)) atomicOr(error, code);
   return value;
@@ -65,36 +69,37 @@ extern "C" int mixed_contractions(const double* density, const double* ao, const
           cudaSuccess &&
       cudaMemcpy(device_ids, ids, active * sizeof(size_t), cudaMemcpyHostToDevice) == cudaSuccess;
   if (setup) {
-    const dim3 density_grid((active + 15) / 16, (count + 15) / 16, spins * jets);
-    const I columns = (active + 15) / 16;
+    const dim3 density_grid((active + matrix_tile - 1) / matrix_tile,
+                            (count + matrix_tile - 1) / matrix_tile, spins * jets);
+    const I columns = (active + matrix_tile - 1) / matrix_tile;
     const dim3 potential_grid(columns * (columns + 1) / 2, 1, spins);
     if (mixed == 1 || mixed == 4 || mixed == 5) {
-      density_probe<float><<<density_grid, dim3(16, 16)>>>(
+      density_probe<float><<<density_grid, dim3(matrix_tile, matrix_tile)>>>(
           allocation, device_ao, device_products, count, active, full, jets, device_ids, error);
       if (mixed == 4)
-        potential_probe<float, true><<<potential_grid, dim3(16, 16)>>>(
+        potential_probe<float, true><<<potential_grid, dim3(matrix_tile, matrix_tile)>>>(
             device_ao, device_work, device_potential, count, active, full, jets, device_ids, error,
             device_weights);
       else if (mixed == 5)
-        tiled_diagonal_potential<float><<<potential_grid, dim3(16, 16)>>>(
+        tiled_diagonal_potential<float><<<potential_grid, dim3(matrix_tile, matrix_tile)>>>(
             device_ao, device_work, active, count, jets, nullptr, device_potential, nullptr, true,
             error, device_ids, full, device_weights);
       else
-        potential_probe<float><<<potential_grid, dim3(16, 16)>>>(
+        potential_probe<float><<<potential_grid, dim3(matrix_tile, matrix_tile)>>>(
             device_ao, device_work, device_potential, count, active, full, jets, device_ids, error);
     } else {
-      density_probe<double><<<density_grid, dim3(16, 16)>>>(
+      density_probe<double><<<density_grid, dim3(matrix_tile, matrix_tile)>>>(
           allocation, device_ao, device_products, count, active, full, jets, device_ids, error);
       if (mixed == 2)
-        potential_probe<double, true><<<potential_grid, dim3(16, 16)>>>(
+        potential_probe<double, true><<<potential_grid, dim3(matrix_tile, matrix_tile)>>>(
             device_ao, device_work, device_potential, count, active, full, jets, device_ids, error,
             device_weights);
       else if (mixed == 3)
-        tiled_diagonal_potential<<<potential_grid, dim3(16, 16)>>>(
+        tiled_diagonal_potential<<<potential_grid, dim3(matrix_tile, matrix_tile)>>>(
             device_ao, device_work, active, count, jets, nullptr, device_potential, nullptr, true,
             error, device_ids, full, device_weights);
       else
-        potential_probe<double><<<potential_grid, dim3(16, 16)>>>(
+        potential_probe<double><<<potential_grid, dim3(matrix_tile, matrix_tile)>>>(
             device_ao, device_work, device_potential, count, active, full, jets, device_ids, error);
     }
     if (cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess &&
