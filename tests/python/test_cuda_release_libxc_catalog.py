@@ -42,9 +42,12 @@ def test_portable_release_cli_does_not_inherit_sm120() -> None:
     portable = _cache_variables("cuda-release-cli")
     assert "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES" not in portable
     assert portable["GENERATIVEQC_AOT_PROFILE"] == "portable"
-    assert _cache_variables("cuda-release-cli-sm120")[
-        "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES"
-    ] == "120"
+    assert (
+        _cache_variables("cuda-release-cli-sm120")[
+            "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES"
+        ]
+        == "120"
+    )
     # Ordinary development builds should not incur release AOT costs.
     assert "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT" not in _cache_variables(
         "cuda-dev-fast"
