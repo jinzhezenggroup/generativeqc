@@ -14,7 +14,7 @@ from tools.validate_df_source import fixture_systems, write_input
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
-    reason="requires an explicitly Slurm-allocated GPU",
+    reason="requires an explicitly scheduler-allocated GPU",
 )
 
 
@@ -31,7 +31,7 @@ def test_packed_streamed_raw_and_nonsymmetric_coulomb(
     qualify auto independently of every explicit control. Work counts measure
     raw values produced, not kernel call spelling.
     """
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     probe = os.environ.get("GENERATIVEQC_DF_SOURCE_PROBE")
     assert probe, "build tests/native/df_value_probe.cpp against the tested library"
     systems = fixture_systems(representation)

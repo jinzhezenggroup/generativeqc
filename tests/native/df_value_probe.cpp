@@ -1,4 +1,4 @@
-/** Manual Slurm-only probe of the exact native DF source and J/K integration.
+/** Scheduler-allocated probe of the exact native DF source and J/K integration.
  *
  * Text inputs describe unnormalized physical basis shells; independent Python
  * libcint references use the same input. Binary outputs are raw FP64 M/A/J/K
@@ -43,6 +43,14 @@ void write_values(const std::string& path, const std::vector<double>& values) {
   stream.write(reinterpret_cast<const char*>(values.data()), values.size() * sizeof(double));
   require(static_cast<bool>(stream), "cannot write " + path);
 }
+// Missing scheduler fields are JSON null, never fabricated identities or null
+// pointers passed to std::quoted (which expects a valid C string).
+void write_optional_string(const char* value) {
+  if (value)
+    std::cout << std::quoted(value);
+  else
+    std::cout << "null";
+}
 void read_shells(std::istream& input, System& system, std::size_t count) {
   require(count > 0 && count <= 100, "invalid fixture shell count");
   for (std::size_t shell = 0; shell < count; ++shell) {
@@ -74,7 +82,12 @@ int main(int argc, char** argv) {
             "usage: probe input output-prefix pair-tile auxiliary-tile "
             "[--derivatives|--source-derivatives|--packed-values]");
     const bool derivatives = argc == 6 && !packed_values;
-    require(std::getenv("SLURM_JOB_ID") != nullptr, "native DF probe requires a Slurm allocation");
+    // Remote qualification also uses LSF. Preserve its actual job identity;
+    // callers must not invent a Slurm identifier to run the same native oracle.
+    const auto* slurm_job = std::getenv("SLURM_JOB_ID");
+    const auto* lsf_job = std::getenv("LSB_JOBID");
+    require((slurm_job && *slurm_job) || (lsf_job && *lsf_job),
+            "native DF probe requires a Slurm or LSF allocation");
     const std::string prefix = argv[2];
     const std::size_t pair_tile = std::stoul(argv[3]), auxiliary_tile = std::stoul(argv[4]);
     require(pair_tile > 0 && auxiliary_tile > 0, "positive tile dimensions required");
@@ -391,9 +404,13 @@ int main(int argc, char** argv) {
               << ",\"public_transform_on_device\":"
               << (placement.public_transform_on_device ? "true" : "false")
               << ",\"metric_staged_on_host\":"
-              << (placement.metric_staged_on_host ? "true" : "false")
-              << ",\"slurm_job_id\":" << std::quoted(std::getenv("SLURM_JOB_ID"))
-              << ",\"warm_jk_ms\":[";
+              << (placement.metric_staged_on_host ? "true" : "false") << ",\"slurm_job_id\":";
+    write_optional_string(slurm_job);
+    std::cout << ",\"lsf_job_id\":";
+    write_optional_string(lsf_job);
+    std::cout << ",\"cuda_visible_devices\":";
+    write_optional_string(std::getenv("CUDA_VISIBLE_DEVICES"));
+    std::cout << ",\"warm_jk_ms\":[";
     for (std::size_t i = 0; i < warm_ms.size(); ++i) std::cout << (i ? "," : "") << warm_ms[i];
     std::cout << "],\"metrics\":[";
     for (std::size_t i = 0; i < diagnostics.size(); ++i) {
