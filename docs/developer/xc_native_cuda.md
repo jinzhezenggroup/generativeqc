@@ -990,13 +990,15 @@ baselines preserve the original convergence checks in both cases. Every call
 still evaluates the physical Fock, convergence gates, derivatives and force
 assembly.
 
-`GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY=1` enables an experimental deferred
-incumbent energy anchor. It admits only strict FP64 fitted RKS with an exact
+The incumbent warm-energy anchor is deferred by default for strict FP64 fitted
+RKS with an exact
 warm AO factor and an audited replayable range source. For energy-and-force
 requests, the already planned additional force envelope must fit available
 device memory; otherwise the eager anchor remains in place. Selection uses
-resource requirements, with no GPU-model condition. Unset or other values keep
-the eager default.
+resource requirements, with no GPU-model condition. Setting
+`GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY=0` restores eager preparation.
+Unset and `1` select the guarded default; other explicit values conservatively
+retain eager preparation. Unsupported owners retain the eager path.
 
 If a later replay loses its source, preparation restores the frozen warm density
 and factor and rebuilds their matching incumbent energy using their own saved
