@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
+from functools import lru_cache
 from typing import Any
 
 from generativeqc_compiler.common.provenance import canonical_hash
@@ -72,13 +73,14 @@ class SpatialPointProgram:
             "functional": self.spec.to_payload(),
             "points": self.point_contracts,
             "consumer": self.kernel.consumer.identity,
+            "selector": self.kernel.consumer.evaluator - 2,
             "source": canonical_hash(self.kernel.source),
             "output": "semilocal energy and spin AO potentials; no exact exchange",
         }
 
 
 def emit_libxc_spatial(
-    value: str | FunctionalSpec, *, spin: str | None = None
+    value: str | FunctionalSpec, *, spin: str | None = None, shared_group: Any = None
 ) -> SpatialPointProgram:
     """Adapt existing Libxc work-domain lowerers without a functional whitelist.
 
@@ -100,6 +102,31 @@ def emit_libxc_spatial(
         1 | (2 if "gradient" in ingredients else 0) | (8 if "tau" in ingredients else 0)
     )
     bodies, calls, contracts = [], [], []
+    selector = 0
+    if shared_group is not None:
+        if (
+            len(active) != 1
+            or active[0][1] != 1
+            or active[0][0] not in shared_group.names
+        ):
+            raise ValueError(
+                "shared spatial worker requires a registered unit component"
+            )
+        selector = shared_group.names.index(active[0][0])
+        rows = [p.point.parameters for p in shared_group.providers]
+        if not rows[0] or any(
+            p.point.parameters != p.restricted.parameters
+            for p in shared_group.providers
+        ):
+            raise ValueError("shared spatial worker requires a paired parameter ABI")
+        bodies.append(
+            f"__device__ const double spatial_parameters[{len(rows)}][{len(rows[0])}] = {{\n"
+            + ",\n".join(
+                "{" + ",".join(float(value).hex() for _, value in row) + "}"
+                for row in rows
+            )
+            + "\n};"
+        )
     split = any(name in SPLIT_HYBRID_COMPONENTS for name, _ in active)
     if split:
         entry = next(
@@ -135,13 +162,20 @@ def emit_libxc_spatial(
         for index, (name, coefficient) in enumerate(active):
             # LDA RKS has its own total-density worker: folding P2 inputs would
             # change floors. Other RKS workers retain independent P2 partials.
-            point = emit_automatic_point(name, backend="cuda")
-            restricted = emit_automatic_point(
-                name,
-                backend="cuda",
-                spin="unpolarized" if point.ingredient_mask == 1 else "polarized",
-                equal_spin=point.ingredient_mask != 1,
-            )
+            if shared_group is None:
+                point = emit_automatic_point(name, backend="cuda")
+                restricted = emit_automatic_point(
+                    name,
+                    backend="cuda",
+                    spin="unpolarized" if point.ingredient_mask == 1 else "polarized",
+                    equal_spin=point.ingredient_mask != 1,
+                )
+            else:
+                # The existing package planner proves both exact worker bodies
+                # and parameter ABIs. Never infer sharing from a family label.
+                provider = shared_group.providers[0]
+                point, restricted = provider.point, provider.restricted
+            parameters = ", spatial_parameters[selector]" if shared_group else ""
             namespace = f"spatial_libxc_{index}"
             bodies.append(
                 f"namespace {namespace} {{\nusing DevicePointValue = GridXcPoint;\n"
@@ -153,8 +187,8 @@ def emit_libxc_spatial(
             calls.append(
                 (
                     (
-                        f"restricted ? {namespace}::{restricted.function_name}(rho, gradient, kinetic)"
-                        f" : {namespace}::{point.function_name}(rho, gradient, kinetic)"
+                        f"restricted ? {namespace}::{restricted.function_name}(rho, gradient, kinetic{parameters})"
+                        f" : {namespace}::{point.function_name}(rho, gradient, kinetic{parameters})"
                     ),
                     coefficient,
                 )
@@ -171,8 +205,9 @@ def emit_libxc_spatial(
     lines = [
         f"constexpr unsigned grid_custom_xc_mask = {mask};",
         *bodies,
-        "__device__ inline GridXcPoint grid_custom_xc_point(bool restricted, const double* features, I npoint, I point) {",
+        "__device__ inline GridXcPoint grid_custom_xc_point(int selector, bool restricted, const double* features, I npoint, I point) {",
         "  GridXcPoint out;",
+        f"  if (selector < 0 || selector >= {len(shared_group.names) if shared_group else 1}) {{ out.valid = false; return out; }}",
         "  const double rho[2]{features[point], features[5*npoint + point]};",
         "  double gradient[2][3]{}, kinetic[2]{};",
         # Split workers assume physical inputs; reject before their fmax floors
@@ -225,17 +260,63 @@ def emit_libxc_spatial(
         "",
     ]
     source = "\n".join(lines)
+    if shared_group is not None:
+        contracts = [
+            {
+                "name": provider.point.name,
+                "polarized": provider.point.mathematical_contract,
+                "restricted": provider.restricted.mathematical_contract,
+                "parameters": provider.point.parameters,
+            }
+            for provider in shared_group.providers
+        ]
     identity = canonical_hash(
         {
             "schema": "generativeqc.spatial-libxc-work.v1",
-            "functional": payload,
+            "functional": payload
+            if shared_group is None
+            else {"package": shared_group.names},
             "points": contracts,
             "source": source,
         }
     )
     source = f'constexpr const char* grid_custom_xc_identity = "{identity}";\n' + source
-    kernel = GridXcKernel(source, GridXcConsumer(2, ingredients, identity))
+    kernel = GridXcKernel(source, GridXcConsumer(2 + selector, ingredients, identity))
     return SpatialPointProgram(spec, kernel, tuple(contracts))
+
+
+@lru_cache(maxsize=8)
+def _spatial_groups(names: tuple[str, ...]) -> dict[str, Any]:
+    """Reuse exact native parameter-worker discovery for this catalog snapshot."""
+    from .parameter_cuda_package import parameter_worker_groups
+
+    return {
+        name: group for group in parameter_worker_groups(names) for name in group.names
+    }
+
+
+def shared_libxc_spatial(
+    value: str | FunctionalSpec, *, spin: str | None = None
+) -> SpatialPointProgram:
+    """Bind a registration to its compatible immutable parameter package.
+
+    Distinct functionals retain distinct metadata and selectors. Package source
+    and its read-only coefficient table are common; no per-owner mutable CUDA
+    symbol is used. Unmatched/composed graphs keep their specialized executable.
+    """
+    from .automatic_semilocal import automatic_registry_entries
+
+    spec = _semilocal_spec(value, spin)
+    active = tuple((name, c) for name, c in spec.components if c)
+    group = None
+    if (
+        len(active) == 1
+        and active[0][1] == 1
+        and active[0][0] not in SPLIT_HYBRID_COMPONENTS
+    ):
+        names = tuple(entry.name for entry in automatic_registry_entries())
+        group = _spatial_groups(names).get(active[0][0])
+    return emit_libxc_spatial(spec, shared_group=group)
 
 
 @dataclass(frozen=True, init=False)
@@ -259,9 +340,17 @@ class SpatialContractionProgram:
         compiler: Any,
         cache: Any,
         spin: str | None = None,
+        share_workers: bool = True,
+        ao_radial_reuse: bool = True,
     ) -> None:
-        point = emit_libxc_spatial(value, spin=spin)
-        artifact = compile_cuda(compiler, cache, xc_kernel=point.kernel)
+        if type(share_workers) is not bool or type(ao_radial_reuse) is not bool:
+            raise ValueError("spatial XC compilation choices must be boolean")
+        point = (shared_libxc_spatial if share_workers else emit_libxc_spatial)(
+            value, spin=spin
+        )
+        artifact = compile_cuda(
+            compiler, cache, xc_kernel=point.kernel, ao_radial_reuse=ao_radial_reuse
+        )
         object.__setattr__(self, "point", point)
         object.__setattr__(self, "artifact", artifact)
         object.__setattr__(

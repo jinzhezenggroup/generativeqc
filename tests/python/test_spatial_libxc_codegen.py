@@ -14,6 +14,48 @@ from test_spatial_xc_codegen import host_adapter, independent_xc, spatial_case
 LIBXC_CASES = ("LDA_C_PZ", "GGA_X_B88", "GGA_C_LYP", "MGGA_X_MVS", "MN15", "M06-2X")
 
 
+@pytest.mark.parametrize(
+    "names",
+    [
+        ("LDA_C_BR78", "LDA_C_WIGNER"),
+        ("GGA_X_APBE", "GGA_X_PBE_SOL"),
+        ("MGGA_X_KTBM_0", "MGGA_X_KTBM_1"),
+    ],
+)
+def test_shared_parameter_package_keeps_independent_science(
+    tmp_path: Path, names: tuple[str, ...]
+) -> None:
+    """One immutable worker/table can serve distinct owners and both spins."""
+    from generativeqc_compiler.xc.parameter_cuda_package import parameter_worker_groups
+
+    (group,) = parameter_worker_groups(names)
+    points = [emit_libxc_spatial(name, shared_group=group) for name in names]
+    assert points[0].kernel.source == points[1].kernel.source
+    assert points[0].kernel.consumer.identity == points[1].kernel.consumer.identity
+    assert points[0].metadata != points[1].metadata
+    for index, point in enumerate(points):
+        folder = tmp_path / str(index)
+        folder.mkdir()
+        evaluate = host_adapter(
+            folder,
+            point.spec,
+            source=point.kernel.source,
+            selector=point.kernel.consumer.evaluator - 2,
+        )
+        for restricted in (False, True):
+            inputs = _inputs(names[index], 0 if restricted else 1)
+            status, actual = evaluate(physical_features(inputs), restricted)
+            assert status == 0
+            if restricted:
+                actual = actual[[0, 1, 3, 4, 5, 9]]
+            np.testing.assert_allclose(
+                actual.T,
+                _oracle(names[index], inputs, 0 if restricted else 1),
+                atol=3e-10,
+                rtol=3e-10,
+            )
+
+
 def physical_features(inputs: np.ndarray) -> np.ndarray:
     """Pack independent physical density/Cartesian gradients/tau into grid rows."""
     features = np.zeros((13, len(inputs)))

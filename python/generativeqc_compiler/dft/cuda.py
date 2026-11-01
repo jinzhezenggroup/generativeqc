@@ -270,6 +270,7 @@ class DeviceGridTask:
         restricted: typing.Any = False,
         reset: typing.Any = False,
         download: typing.Any = False,
+        matrix_precision: str = "fp64",
     ) -> typing.Any:
         """Evaluate artifact-admitted XC and scatter its local spin potentials.
 
@@ -292,14 +293,17 @@ class DeviceGridTask:
         ):
             raise ValueError("XC flags must be boolean")
         weights = immutable(weights, shape=(view.npoint,))
+        if matrix_precision not in ("fp64", "fp32"):
+            raise ValueError("XC matrix precision must be fp64 or fp32")
         integrals = np.empty(3)
         self._owner._call(
-            "grid_cuda_xc_v2",
+            "grid_cuda_xc_v3",
             self._owner._handle,
             view.generation,
             capability.evaluator,
             int(restricted),
             1,
+            int(matrix_precision == "fp32"),
             pointer(weights),
             len(weights),
             pointer(integrals),
@@ -637,14 +641,45 @@ class CudaGrid:
                 ct.c_char_p,
                 ct.c_size_t,
             ]
-        lib.grid_cuda_xc_v2.argtypes = [
+        lib.grid_cuda_xc_v3.argtypes = [
             ct.c_void_p,
             ct.c_uint64,
             ct.c_int,
             ct.c_int,
             ct.c_int,
+            ct.c_int,
             DOUBLE,
             ct.c_size_t,
+            DOUBLE,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
+        lib.grid_cuda_xc_batch_create_v1.argtypes = [
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_int,
+            ct.c_size_t,
+            ct.POINTER(ct.c_void_p),
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
+        lib.grid_cuda_xc_batch_destroy_v1.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
+        lib.grid_cuda_xc_batch_enqueue_v1.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_uint64,
+            ct.c_int,
+            ct.c_int,
+            ct.c_int,
+            ct.c_int,
+            DOUBLE,
+            ct.c_size_t,
+            DOUBLE,
             DOUBLE,
             ct.c_char_p,
             ct.c_size_t,

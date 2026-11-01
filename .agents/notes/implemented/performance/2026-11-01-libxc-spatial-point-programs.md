@@ -152,3 +152,7 @@ stale: no current-source native context is admitted. This integration does not
 rerun or relabel the earlier GPU timings or numerical receipts. Catalog checking
 passes under normal and optimized Python, compiler structure checks 580 modules
 with zero errors, and the catalog/transition/schedule regression passes 103 tests.
+
+Follow-up: [shared spatial XC optimizations](2026-11-01-shared-spatial-xc-optimizations.md)
+supersedes the scalar assembly/reduction, one-tile execution, compilation and
+scratch-capacity limitations recorded above; the point-domain contract remains.

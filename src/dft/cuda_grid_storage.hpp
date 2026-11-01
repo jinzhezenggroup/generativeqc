@@ -61,7 +61,7 @@ inline CudaGridStorage cuda_grid_storage(std::size_t packed_size, std::size_t ao
   // Keep this panel separate from contracted jets, including one-AO tiles.
   if (active_capacity)
     elements = add(elements, add(matrices, add(product(4, product(active, active)),
-                                               add(active, product(11, capacity)))));
+                                               add(active, add(product(12, capacity), 6)))));
   if (orbital_capacity)
     elements = add(elements, add(product(aos, add(orbital_capacity[0], orbital_capacity[1])),
                                  product(add(active, product(4, capacity)), orbital_tile)));

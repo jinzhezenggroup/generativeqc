@@ -192,7 +192,11 @@ def independent_xc(
 
 
 def host_adapter(
-    tmp_path: Path, spec: FunctionalSpec, *, source: str | None = None
+    tmp_path: Path,
+    spec: FunctionalSpec,
+    *,
+    source: str | None = None,
+    selector: int = 0,
 ) -> typing.Callable:
     """Execute the exact emitted device adapter as C++ for a CPU oracle gate."""
     compiler = shutil.which("c++")
@@ -205,7 +209,7 @@ def host_adapter(
     code += """
 extern "C" int evaluate(const double* features, long long n, int restricted, double* output) {
   for (I p = 0; p < n; ++p) {
-    const auto value = grid_custom_xc_point(restricted != 0, features, n, p);
+    const auto value = grid_custom_xc_point(@SELECTOR@, restricted != 0, features, n, p);
     if (!value.valid) return 1;
     output[p] = value.energy;
     for (int s = 0; s < 2; ++s) {
@@ -218,7 +222,7 @@ extern "C" int evaluate(const double* features, long long n, int restricted, dou
 }
 """
     source, library = tmp_path / "adapter.cpp", tmp_path / "adapter.so"
-    source.write_text(code)
+    source.write_text(code.replace("@SELECTOR@", str(selector)))
     cache = [shutil.which("ccache")] if shutil.which("ccache") else []
     subprocess.run(
         [

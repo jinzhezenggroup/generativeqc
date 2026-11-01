@@ -20,6 +20,7 @@ from ._generated_split_hybrid_consumers import SPLIT_HYBRID_POINT_CONSUMERS
 from .ao import jet_indices
 from .feature_policy import emit_feature_policy
 from .grid_contraction import emit_grid_contraction
+from .spatial_xc_cuda import emit_spatial_xc_assembly, emit_spatial_xc_batches
 from .xc_contraction_cuda import (
     DEFAULT_XC_MATRIX_SCHEDULE,
     XcMatrixSchedule,
@@ -36,9 +37,12 @@ from .xc_totals_cuda import emit_compensated_xc_totals
 _GRID_SCIENTIFIC_KERNELS = r"""#include "../tensor/cuda_runtime.cuh"
 #include "xc_point.hpp"
 #include "semilocal_family.hpp"
+#include "cuda_xc_tile.hpp"
+#include <type_traits>
 
 namespace {
 using namespace generativeqc_tensor;
+using generativeqc::dft::CudaXcCompactTile;
 // AO and density arithmetic is emitted by dft/ao_cuda.py.
 using generativeqc_grid_policy::axis_jet;
 using generativeqc_grid_policy::derivatives;
@@ -254,7 +258,7 @@ __global__ void finish_orbital_sigma(double* output, I npoint, int* error) {
 
 __device__ GridXcPoint evaluate_xc_point(int evaluator, bool restricted,
                                                        const double* features, I npoint, I point) {
-  if (evaluator == 2) return grid_custom_xc_point(restricted, features, npoint, point);
+  if (evaluator >= 2) return grid_custom_xc_point(evaluator-2, restricted, features, npoint, point);
   const bool pbe = evaluator == 1;
   const double rho[2]{features[point], features[5 * npoint + point]};
   double gradient[2][3]{};
@@ -305,25 +309,7 @@ __global__ void xc_points_kernel(int evaluator, bool restricted, const double* f
   }
 }
 
-/** Deterministic scalar reduction. This correctness baseline intentionally
- * uses one device thread; matrix assembly remains parallel and later tuning
- * may replace only this reduction after endpoint-equivalence evidence.
- */
-__global__ void xc_integrals_kernel(const double* values, const double* features,
-                                    const double* weights, I npoint, double* integrals,
-                                    int* error) {
-  if (blockIdx.x || threadIdx.x) return;
-  double energy = 0.0, electrons[2]{};
-  for (I point = 0; point < npoint; ++point) {
-    const double weight = weights[point];
-    energy += weight * values[point];
-    electrons[0] += weight * features[point];
-    electrons[1] += weight * features[5 * npoint + point];
-  }
-  integrals[0] = finite(energy, error, 3);
-  integrals[1] = finite(electrons[0], error, 3);
-  integrals[2] = finite(electrons[1], error, 3);
-}
+@SPATIAL_XC_ASSEMBLY@
 
 __global__ void xc_local_potential_kernel(unsigned ingredients, const double* values,
                                           const double* ao, const double* weights, I npoint,
@@ -353,6 +339,7 @@ __global__ void xc_local_potential_kernel(unsigned ingredients, const double* va
     potential[index] = finite(value, error, 3);
   }
 }
+@SPATIAL_XC_BATCHES@
 @AO_SCHEDULE@
 }  // namespace
 """
@@ -1352,6 +1339,8 @@ def emit_grid_scientific_kernels(
             "@AO_RADIAL_KERNELS@", _emit_ao_radial_kernels() if ao_radial_reuse else ""
         )
         .replace("@SPATIAL_XC@", grid_xc_extension(xc_kernel))
+        .replace("@SPATIAL_XC_ASSEMBLY@", emit_spatial_xc_assembly())
+        .replace("@SPATIAL_XC_BATCHES@", emit_spatial_xc_batches())
         .replace("@AO_SCHEDULE@", _emit_ao_schedule(ao_radial_reuse=ao_radial_reuse))
         + emit_ao_region_screen_cuda()
         + "namespace {\n"
@@ -1478,6 +1467,8 @@ def emit_grid_source(
             asset_path("src/dft/cuda_grid.cu"),
             asset_path("src/dft/cuda_grid_api.hpp"),
             asset_path("src/dft/cuda_grid_storage.hpp"),
+            asset_path("src/dft/cuda_grid_xc_batch.cuh"),
+            asset_path("src/dft/cuda_xc_tile.hpp"),
             asset_path("src/dft/ao_grid_work.hpp"),
             asset_path("src/tensor/cuda_runtime.cuh"),
             asset_path("src/runtime/bounded_workspace.hpp"),

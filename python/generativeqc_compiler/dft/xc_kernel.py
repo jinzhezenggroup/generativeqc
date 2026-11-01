@@ -18,7 +18,7 @@ class GridXcConsumer:
     identity: str = ""
 
     def __post_init__(self) -> None:
-        if self.evaluator not in (0, 1, 2):
+        if type(self.evaluator) is not int or not 0 <= self.evaluator <= 65535:
             raise ValueError("unknown grid XC evaluator")
         allowed = (("rho",), ("rho", "gradient"), ("rho", "gradient", "tau"))
         if self.ingredients not in allowed:
@@ -40,10 +40,7 @@ class GridXcKernel:
     consumer: GridXcConsumer
 
     def __post_init__(self) -> None:
-        if (
-            not isinstance(self.consumer, GridXcConsumer)
-            or self.consumer.evaluator != 2
-        ):
+        if not isinstance(self.consumer, GridXcConsumer) or self.consumer.evaluator < 2:
             raise ValueError("grid XC extension requires a compiled consumer")
         if not isinstance(self.source, str) or not self.source:
             raise ValueError("grid XC extension requires generated source")
@@ -63,7 +60,7 @@ def grid_xc_consumer(
         return GridXcConsumer(
             evaluator, ("rho",) if evaluator == 0 else ("rho", "gradient")
         )
-    if value.evaluator == 2 and value.identity != compiled_identity:
+    if value.evaluator >= 2 and value.identity != compiled_identity:
         return None
     return value
 
@@ -86,7 +83,7 @@ def grid_xc_extension(kernel: GridXcKernel | None = None) -> str:
         + """
 constexpr unsigned grid_custom_xc_mask = 0;
 constexpr const char* grid_custom_xc_identity = "";
-__device__ inline GridXcPoint grid_custom_xc_point(bool, const double*, I, I) {
+__device__ inline GridXcPoint grid_custom_xc_point(int, bool, const double*, I, I) {
   GridXcPoint out;
   out.valid = false;
   return out;

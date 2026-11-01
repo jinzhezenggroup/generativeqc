@@ -173,3 +173,250 @@ def test_libxc_mismatch_rejected(program: SpatialContractionProgram) -> None:
         pytest.raises(ValueError, match="matching device_fused"),
     ):
         PreparedXCContractions(program, basis, grid, spatial=spatial)
+
+
+def test_batch_overlapping_maps_and_lifetime(
+    program: SpatialContractionProgram,
+) -> None:
+    """Heterogeneous mapped tiles retain order and own copied lease storage."""
+    from generativeqc_compiler.dft.spatial_xc_batch import (
+        SpatialXcBatch,
+        SpatialXcOptions,
+        batch_request,
+    )
+
+    basis, grid, density = spatial_case(21, 43)
+    cuda = CudaGrid(
+        basis,
+        program.artifact,
+        tile_points=32,
+        active_ao_capacity=19,
+        ingredients=program.consumer.ingredients,
+    )
+    options = SpatialXcOptions(batch_tiles=2)
+    resources = batch_request(cuda, options)
+    batch = SpatialXcBatch(cuda, 2, resources.candidates[0].estimates[0].bytes, options)
+    try:
+        cuda.set_density(density)
+        expected = np.zeros_like(density)
+        expected_totals = np.zeros(3)
+        for index, (ids, count) in enumerate(
+            ((np.arange(19), 19), (np.arange(1, 21, 2), 3), (np.arange(2, 21), 7))
+        ):
+            with cuda.xc_task(grid.points[:count], ids, program.consumer) as lease:
+                reference, _, _ = independent_xc(
+                    program.spec,
+                    basis.evaluate(grid.points[:count], ao_ids=ids),
+                    density[:, ids[:, None], ids[None, :]],
+                    grid.weights[:count],
+                )
+                expected[:, ids[:, None], ids[None, :]] += reference["potential"]
+                expected_totals += np.r_[reference["energy"], reference["electrons"]]
+                totals, actual = batch.enqueue(
+                    lease,
+                    grid.weights[:count],
+                    program.consumer,
+                    restricted=False,
+                    reset=index == 0,
+                    download=index == 2,
+                )
+                if index < 2:
+                    assert actual is None
+                    np.testing.assert_array_equal(totals, 0)
+        np.testing.assert_allclose(actual, expected, atol=5e-10, rtol=5e-10)
+        np.testing.assert_allclose(totals, expected_totals, atol=5e-10, rtol=5e-10)
+        with pytest.raises(RuntimeError, match="expired"):
+            batch.enqueue(
+                lease,
+                grid.weights[:7],
+                program.consumer,
+                restricted=False,
+                reset=True,
+                download=True,
+            )
+        cuda.set_density(-density)
+        with (
+            pytest.raises(RuntimeError, match="invalid or nonfinite"),
+            cuda.xc_task(grid.points[:19], np.arange(19), program.consumer) as live,
+        ):
+            batch.enqueue(
+                live,
+                grid.weights[:19],
+                program.consumer,
+                restricted=False,
+                reset=True,
+                download=True,
+            )
+        cuda.set_density(density)
+        with cuda.xc_task(grid.points[:19], np.arange(19), program.consumer) as live:
+            _, recovered = batch.enqueue(
+                live,
+                grid.weights[:19],
+                program.consumer,
+                restricted=False,
+                reset=True,
+                download=True,
+            )
+        reference, _, _ = independent_xc(
+            program.spec,
+            basis.evaluate(grid.points[:19], ao_ids=np.arange(19)),
+            density[:, :19, :19],
+            grid.weights[:19],
+        )
+        np.testing.assert_allclose(
+            recovered[:, :19, :19], reference["potential"], atol=5e-10, rtol=5e-10
+        )
+    finally:
+        # The native owner must free a still-live queue before its stream.
+        cuda.close()
+        batch.close()
+
+
+def test_optional_batch_allocation_fallback(
+    program: SpatialContractionProgram, monkeypatch: Any
+) -> None:
+    basis, grid, density = spatial_case(19, 67)
+    source = DensitySource(density, basis_identity=basis.identity)
+    if program.spec.spin == "unpolarized":
+        density[1] = density[0]
+        source = DensitySource(density, basis_identity=basis.identity)
+    expected, _, _ = independent_xc(
+        program.spec, basis.evaluate(grid.points), density, grid.weights
+    )
+    with PreparedSpatialGrid(
+        basis,
+        grid,
+        backend="cuda",
+        artifact=program.artifact,
+        tile_points=32,
+        ingredients=program.consumer.ingredients,
+    ) as spatial:
+
+        def fail_allocation(*args: Any, **kwargs: Any) -> None:
+            raise MemoryError("optional queue allocation")
+
+        monkeypatch.setattr(
+            "generativeqc_compiler.xc.prepared.SpatialXcBatch", fail_allocation
+        )
+        with PreparedXCContractions(program, basis, grid, spatial=spatial) as prepared:
+            actual = prepared.execute(source, stamp=source.stamp)
+            expected_potential = (
+                expected["potential"][:1]
+                if program.spec.spin == "unpolarized"
+                else expected["potential"]
+            )
+            np.testing.assert_allclose(
+                actual["potential"], expected_potential, atol=5e-10, rtol=5e-10
+            )
+            assert prepared.statistics["xc_batch_tiles"] == 1
+            assert prepared.statistics["xc_batch_fallback"] == "allocation_failure"
+            assert (
+                dict(prepared.resource_plan.selections)["spatial_xc_batch"] == "single"
+            )
+
+
+def test_shared_spatial_executable_isolates_parameter_owners() -> None:
+    from contextlib import ExitStack
+
+    compiler = CudaCompilerAdapter(find_nvcc(), cuda_target_info("sm_120"))
+    programs = [
+        SpatialContractionProgram(name, compiler=compiler, cache=CACHE)
+        for name in ("GGA_X_APBE", "GGA_X_PBE_SOL")
+    ]
+    assert programs[0].artifact.library == programs[1].artifact.library
+    assert programs[0].metadata != programs[1].metadata
+    basis, grid, density = spatial_case(19, 67)
+    source = DensitySource(density, basis_identity=basis.identity)
+    with ExitStack() as owners:
+        prepared = []
+        for program in programs:
+            spatial = owners.enter_context(
+                PreparedSpatialGrid(
+                    basis,
+                    grid,
+                    backend="cuda",
+                    artifact=program.artifact,
+                    tile_points=32,
+                    ingredients=program.consumer.ingredients,
+                )
+            )
+            prepared.append(
+                owners.enter_context(
+                    PreparedXCContractions(program, basis, grid, spatial=spatial)
+                )
+            )
+        for index in (0, 1, 0):
+            expected, _, _ = independent_xc(
+                programs[index].spec, basis.evaluate(grid.points), density, grid.weights
+            )
+            actual = prepared[index].execute(source, stamp=source.stamp)
+            for key in expected:
+                np.testing.assert_allclose(
+                    actual[key], expected[key], atol=5e-10, rtol=5e-10
+                )
+
+
+@pytest.mark.parametrize(
+    "precision,tiles", (("fp64", 1), ("fp64", 3), ("fp32", 3), ("fp32", 1))
+)
+def test_compact_spatial_assembly(
+    program: SpatialContractionProgram, precision: str, tiles: int
+) -> None:
+    """Large mapped tiles and signed weights exercise the shared matrix path."""
+    from generativeqc_compiler.dft import ExplicitGrid
+    from generativeqc_compiler.dft.spatial_xc_batch import SpatialXcOptions
+
+    restricted = program.spec.spin == "unpolarized"
+    basis, original, density = spatial_case(19, 67, restricted=restricted)
+    if restricted:
+        # Separate BLAS calls can differ by an ulp with differently aligned
+        # operands. This fixture must supply the exact paired-spin witness.
+        density[1] = density[0]
+    weights = original.weights.copy()
+    weights[::3] *= -0.7
+    grid = ExplicitGrid(original.points, weights, (0,) * len(weights), {})
+    expected, _, _ = independent_xc(
+        program.spec, basis.evaluate(grid.points), density, grid.weights
+    )
+    if restricted:
+        expected["potential"] = expected["potential"][:1]
+    source = DensitySource(density, basis_identity=basis.identity)
+    with (
+        PreparedSpatialGrid(
+            basis,
+            grid,
+            backend="cuda",
+            artifact=program.artifact,
+            tile_points=32,
+            policy=SpatialPolicy(region_points=43),
+            ingredients=program.consumer.ingredients,
+        ) as spatial,
+        PreparedXCContractions(
+            program,
+            basis,
+            grid,
+            spatial=spatial,
+            device_options=SpatialXcOptions(
+                batch_tiles=tiles, matrix_precision=precision
+            ),
+        ) as prepared,
+    ):
+        for _ in range(2):
+            actual = prepared.execute(source, stamp=source.stamp)
+            for key in expected:
+                np.testing.assert_allclose(
+                    actual[key],
+                    expected[key],
+                    atol=2e-6 if precision == "fp32" and key == "potential" else 5e-10,
+                    rtol=2e-6 if precision == "fp32" and key == "potential" else 5e-10,
+                )
+            assert (
+                prepared.statistics["native_metrics"]["owned_device_bytes"]
+                == spatial.tile_plan.allocation_bytes
+            )
+            assert prepared.statistics["xc_batch_tiles"] == tiles
+            assert prepared.statistics["xc_point_evaluations"] == len(grid.points)
+            assert prepared.statistics["owned_device_bytes"] == (
+                spatial.tile_plan.allocation_bytes
+                + prepared.statistics["xc_batch_device_bytes"]
+            )

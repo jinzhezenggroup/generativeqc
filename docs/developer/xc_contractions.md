@@ -222,9 +222,45 @@ Point evaluation occurs once per grid point. A bounded FP64 panel stores energy,
 two density derivatives, six Cartesian gradient coefficients and two kinetic
 coefficients. All AO pairs reuse these eleven rows; meta-GGA matrix assembly
 includes tau's one-half factor exactly once. The grid resource plan charges
-`88 * tile_points` additional device bytes for every local plan, including a
+`88 * tile_points` bytes for these coefficients plus `8 * (tile_points + 6)`
+bytes for weights and integration scratch in every local plan, including a
 one-AO tile. Features and AO jets remain intact for the task lease. Statistics
-report `xc_point_evaluations` and `xc_point_cache_bytes`.
+report `xc_point_evaluations`, the per-tile `xc_point_cache_bytes`, and
+`xc_total_point_cache_bytes` including optional batch slots.
+
+Spatial XC uses the native compact potential panels and tiled symmetric matrix
+contraction. Tiny or out-of-domain shapes retain the bounded scalar fallback.
+Integration uses a fixed-warp compensated FP64 reduction; batch accumulation
+retains its low words until final publication. The optional queue defaults to
+eight tiles with a 32 MiB limit. It preserves original point/AO maps and uses the
+native deterministic ordered scatter. The resource plan charges all copied AO,
+feature, coefficient, weight, matrix, descriptor and error storage. Insufficient
+budget or optional allocation failure selects the single-tile path; execution
+errors propagate. `xc_batch_tiles`, `xc_batch_device_bytes`, `xc_batch_flushes`
+and complete `owned_device_bytes` expose the selected work and storage.
+
+Use `device_options=SpatialXcOptions(batch_tiles=1)` on `PreparedXCContractions`
+to disable batching. Import `SpatialXcOptions` from
+`generativeqc_compiler.dft.spatial_xc_batch`. Its explicit
+`matrix_precision="fp32"` option uses the existing float compact matrix body,
+while point evaluation, storage, energy/electron integration and global matrix
+scatter remain FP64. The default is `"fp64"`; precision is part of prepared
+identity and statistics. FP32 potential acceptance is `2e-6` absolute/relative
+against independent Libxc on the spatial qualification fixtures. FP64 uses
+`5e-10`; these fixture gates are not universal error bounds or SCF admission.
+
+`SpatialContractionProgram` enables the existing AO radial/axis reuse emitter
+by default (`ao_radial_reuse=False` selects its scalar alternative). Compatible
+single-component registrations share parameterized compiled packages by default.
+The native package planner must prove both polarized and restricted worker ABIs;
+a common family name is insufficient. Each package contains immutable parameter
+rows selected per call, so distinct prepared owners cannot overwrite each
+other's coefficients. Functional metadata stays distinct from package identity.
+Unmatched graphs and compositions retain specialized artifacts. Set
+`share_workers=False` to request a specialized artifact without catalog worker
+discovery. The first shared request incurs structural discovery; subsequent
+requests in the process reuse the plan, and compatible programs reuse the same
+compiled artifact.
 
 Both APIs evaluate fixed-grid energy/potential, with their respective interior
 or Libxc worker domains. Neither adds molecular force, response, hybrid exchange

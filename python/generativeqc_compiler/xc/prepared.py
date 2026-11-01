@@ -9,7 +9,7 @@ import json
 import threading
 import typing
 from contextlib import ExitStack
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from time import perf_counter
 
 import numpy as np
@@ -44,6 +44,11 @@ from generativeqc_compiler.dft.features import (
 )
 from generativeqc_compiler.dft.grid import checked_int
 from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
+from generativeqc_compiler.dft.spatial_xc_batch import (
+    SpatialXcBatch,
+    SpatialXcOptions,
+    batch_request,
+)
 from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     HOST_UNFUSED,
@@ -102,6 +107,7 @@ class PreparedXCContractions:
         spatial: typing.Any = None,
         density_grid: typing.Any = None,
         schedule: GridXcExecutionSchedule | str | None = None,
+        device_options: SpatialXcOptions | None = None,
     ) -> None:
         # Reconfiguration publishes several related fields under this lock.
         # Keep validation, identity capture and resource composition in one
@@ -120,6 +126,7 @@ class PreparedXCContractions:
                 spatial=spatial,
                 density_grid=density_grid,
                 schedule=schedule,
+                device_options=device_options,
             )
 
     def _initialize(
@@ -133,6 +140,7 @@ class PreparedXCContractions:
         spatial: typing.Any,
         density_grid: typing.Any,
         schedule: GridXcExecutionSchedule | str | None,
+        device_options: SpatialXcOptions | None,
     ) -> None:
         """Capture the complete borrowed configuration under its spatial lock."""
         if not isinstance(
@@ -210,6 +218,16 @@ class PreparedXCContractions:
                     "CUDA density basis or requested ingredients do not match XC"
                 )
             tile_points = density_grid.plan.tile_points
+        if device_options is not None and not isinstance(
+            device_options, SpatialXcOptions
+        ):
+            raise TypeError("device_options must be SpatialXcOptions")
+        if device_options is not None and selected_schedule.name != "device_fused":
+            raise ValueError("spatial XC device options require device_fused execution")
+        self.device_options = device_options or SpatialXcOptions()
+        self._device_options = self.device_options
+        self._batch = None
+        self._batch_fallback = None
         selected_schedule = selected_schedule.resolved(tile_points)
         npoint = grid.npoint if isinstance(grid, MolecularGrid) else len(grid.points)
         grid_bytes = (
@@ -250,6 +268,7 @@ class PreparedXCContractions:
                 "basis": basis.identity,
                 "grid": grid.identity,
                 "mask": self._mask,
+                "matrix_precision": self.device_options.matrix_precision,
             }
         )
         self.identity = canonical_hash(
@@ -259,6 +278,7 @@ class PreparedXCContractions:
                 "native": program.artifact.metadata["key"],
                 "tile_points": tile_points,
                 "schedule": selected_schedule.to_payload(),
+                "device_options": asdict(self.device_options),
                 **(
                     {"density_collocation": self._density_signature}
                     if density_grid is not None
@@ -330,9 +350,12 @@ class PreparedXCContractions:
         if density_grid is not None and spatial is None:
             # The spatial plan already charges its complete CUDA owner.
             requests += density_grid.resource_plan.requests
-        self.resource_plan = plan_resources(
-            (*requests, request), self.budget
-        ).require_feasible()
+        requests = (*requests, request)
+        batch_resources = None
+        if selected_schedule.name == "device_fused":
+            batch_resources = batch_request(density_grid, self.device_options)
+            requests = (*requests, batch_resources)
+        self.resource_plan = plan_resources(requests, self.budget).require_feasible()
         # Phase A ProgramIR describes only the synchronous dense CPU E/V
         # boundary. Its estimates are NOT added to the conservative total
         # resource plan above: those allocations are already accounted for.
@@ -396,6 +419,29 @@ class PreparedXCContractions:
         # Async/aliasing providers still require a different explicit contract.
         self._release_tile_boundaries = bool(self._tile_releases)
         self.statistics = {}
+        if batch_resources is not None:
+            selected = dict(self.resource_plan.selections)[batch_resources.name]
+            if selected != "single":
+                candidate = next(
+                    c for c in batch_resources.candidates if c.name == selected
+                )
+                try:
+                    self._batch = SpatialXcBatch(
+                        density_grid,
+                        int(selected.split("_")[1]),
+                        candidate.estimates[0].bytes,
+                        self.device_options,
+                    )
+                except MemoryError:
+                    # Only optional allocation failure authorizes this retry;
+                    # invalid shapes, device failures and numerical errors propagate.
+                    fallback = replace(
+                        batch_resources, candidates=(batch_resources.candidates[-1],)
+                    )
+                    self.resource_plan = plan_resources(
+                        (*requests[:-1], fallback), self.budget
+                    ).require_feasible()
+                    self._batch_fallback = "allocation_failure"
 
     @property
     def tile_program(self) -> typing.Any:
@@ -448,7 +494,7 @@ class PreparedXCContractions:
             grid_identity=self.grid.identity,
             grid_model=grid_model,
             screening_identity=self._mask,
-            precision="fp64",
+            precision=self.device_options.matrix_precision,
             spin=self.program.spec.spin,
             observable=self.program.contract.request.observable,
             density_route=density_route,
@@ -471,6 +517,8 @@ class PreparedXCContractions:
         )
 
     def _check(self) -> None:
+        if self.device_options != self._device_options:
+            raise ValueError("stale spatial XC device options")
         if self._closed:
             raise RuntimeError("prepared XC contractions are closed")
         if (
@@ -618,13 +666,25 @@ class PreparedXCContractions:
                 active = lease.view.nactive
                 if active:
                     try:
-                        integrals, potential = lease.xc(
-                            self.spatial.grid.weights[ids],
-                            capability,
-                            restricted=nspin == 1,
-                            reset=evaluated == 0,
-                            download=index == last_nonempty,
-                        )
+                        flags = {
+                            "restricted": nspin == 1,
+                            "reset": evaluated == 0,
+                            "download": index == last_nonempty,
+                        }
+                        if self._batch is not None:
+                            integrals, potential = self._batch.enqueue(
+                                lease,
+                                self.spatial.grid.weights[ids],
+                                capability,
+                                **flags,
+                            )
+                        else:
+                            integrals, potential = lease.xc(
+                                self.spatial.grid.weights[ids],
+                                capability,
+                                matrix_precision=self.device_options.matrix_precision,
+                                **flags,
+                            )
                     except RuntimeError as error:
                         if str(error) == "invalid or nonfinite CUDA XC output":
                             raise UnsupportedXC(
@@ -866,6 +926,26 @@ class PreparedXCContractions:
                 # pairs. Assembly reuses eleven resident FP64 rows per point.
                 self.statistics["xc_point_evaluations"] = point_evaluations
                 self.statistics["xc_point_cache_bytes"] = 11 * 8 * self.tile_points
+                self.statistics["xc_matrix_precision"] = (
+                    self.device_options.matrix_precision
+                )
+                self.statistics["xc_batch_tiles"] = (
+                    self._batch.tiles if self._batch else 1
+                )
+                self.statistics["xc_batch_device_bytes"] = (
+                    self._batch.device_bytes if self._batch else 0
+                )
+                self.statistics["xc_batch_fallback"] = self._batch_fallback
+                self.statistics["xc_total_point_cache_bytes"] = (
+                    88
+                    * self.tile_points
+                    * (1 + (self._batch.tiles if self._batch else 0))
+                )
+                self.statistics["xc_batch_flushes"] = (
+                    (evaluated_tiles + self._batch.tiles - 1) // self._batch.tiles
+                    if self._batch
+                    else evaluated_tiles
+                )
             if self.tile_program is not None:
                 self.statistics["tile_program_identity"] = self._tile_program_identity
                 self.statistics["tile_boundary_releases"] = self._tile_releases
@@ -916,6 +996,9 @@ class PreparedXCContractions:
             if self.density_grid is not None:
                 cuda = self.density_grid
                 after_metrics = cuda.metrics()
+                self.statistics["owned_device_bytes"] = after_metrics[
+                    "owned_device_bytes"
+                ] + (self._batch.device_bytes if self._batch else 0)
                 count = (
                     2
                     if cuda.source_kind == "density_matrix"
@@ -987,6 +1070,9 @@ class PreparedXCContractions:
     def close(self) -> None:
         """End this execution lease without closing borrowed basis/spatial owners."""
         with self._lock:
+            if self._batch is not None:
+                self._batch.close()
+                self._batch = None
             self._closed = True
 
     def __enter__(self) -> typing.Any:

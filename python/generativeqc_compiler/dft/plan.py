@@ -178,7 +178,7 @@ def plan_tiles(
         if active_ao_capacity is not None:
             # One shared point evaluation feeds all local AO pairs; include the
             # eleven energy/derivative rows even for a single active AO.
-            elements += 2 * n * n + 4 * m * m + m + 11 * t
+            elements += 2 * n * n + 4 * m * m + m + 12 * t + 6
         if orbital_capacity is not None:
             elements += n * sum(orbital_capacity) + (m + 4 * t) * orbital_tile
         numeric = 8 * elements
