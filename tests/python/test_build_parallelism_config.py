@@ -86,13 +86,31 @@ generativeqc_set_cuda_compile_pool(${{compile_owner}} "{pool}")
 
 def test_cuda_presets_follow_ninja_parallelism() -> None:
     presets = json.loads((ROOT / "CMakePresets.json").read_text(encoding="utf-8"))
-    for name in ("cuda-dev-fast", "cuda-release-sm120"):
+    for name in ("cuda-dev-fast", "cuda-release"):
         preset = next(
             item for item in presets["configurePresets"] if item["name"] == name
         )
         variables = preset["cacheVariables"]
         assert "GENERATIVEQC_CUDA_COMPILE_JOBS" not in variables
         assert "GENERATIVEQC_AOT_COMPILE_JOBS" not in variables
+
+
+def test_release_presets_are_architecture_neutral_and_auto_tuned() -> None:
+    presets = json.loads((ROOT / "CMakePresets.json").read_text(encoding="utf-8"))
+    configured = {preset["name"]: preset for preset in presets["configurePresets"]}
+    expected = {"cuda-dev-fast", "cuda-release", "cuda-release-cli"}
+    assert set(configured) == expected
+    assert {preset["name"] for preset in presets["buildPresets"]} == expected
+    assert (
+        configured["cuda-release"]["cacheVariables"]["GENERATIVEQC_AOT_PROFILE"]
+        == "auto"
+    )
+    assert configured["cuda-release-cli"]["inherits"] == "cuda-release"
+    for preset in configured.values():
+        options = preset["cacheVariables"]
+        assert "CMAKE_CUDA_ARCHITECTURES" not in options
+        assert "GENERATIVEQC_CUDA_ARCHITECTURES" not in options
+        assert "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES" not in options
 
 
 def test_host_pch_is_opt_in_and_cxx_only() -> None:
@@ -136,7 +154,7 @@ def test_release_preset_keeps_aot_split_compile_disabled() -> None:
     release = next(
         preset
         for preset in presets["configurePresets"]
-        if preset["name"] == "cuda-release-sm120"
+        if preset["name"] == "cuda-release"
     )
     assert "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS" not in release["cacheVariables"]
 
