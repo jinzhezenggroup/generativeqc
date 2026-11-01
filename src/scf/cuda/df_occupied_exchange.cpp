@@ -11,6 +11,7 @@
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
 #include "scf/cuda/df_scf_library.hpp"
+#include "scf/df_exchange_policy.hpp"
 #include "scf/df_projected_exchange_schedule.hpp"
 
 namespace generativeqc::scf::cuda_df {
@@ -248,12 +249,53 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
     generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
     if (packed) {
       runtime::cuda_trace::TraceRegion projection("ri_k_occupied_packed_projection", plan.stream);
-      launch_project_packed_df(plan.stream, plan.nbf, plan.naux, rank, column_major, b,
-                               coefficients, u);
-      error = cudaPeekAtLastError();
-      if (error != cudaSuccess) return cuda_failure(error, "packed occupied DF projection", detail);
+      // exchange_intermediate is dead until the K Gram below. Borrow only its
+      // charged capacity; U stays disjoint and retains its final-response lease.
+      // Division avoids a new n*a product before checking the scratch envelope.
+      const bool use_blas =
+          plan.packed_projection_blas ||
+          (plan.packed_projection_auto &&
+           df_packed_projection_preferred(n, a, r, plan.panel_capacity,
+                                          plan.packed_projection_fp32_fp64_ratio));
+      const auto rows = use_blas ? std::min({n, std::size_t{128}, plan.panel_capacity / n / a}) : 0;
+      if (rows) {
+        for (std::size_t begin = 0; begin < n; begin += rows) {
+          const auto count = std::min(rows, n - begin);
+          launch_unpack_df_values(plan.stream, n, a, begin, count, 0, a, false, b,
+                                  plan.exchange_intermediate);
+          error = cudaPeekAtLastError();
+          if (error != cudaSuccess)
+            return cuda_failure(error, "unpack bounded occupied DF rows", detail);
+          status = scf_matrix_product_batched_view(plan,
+                                                   {{plan.exchange_intermediate, a, a * n},
+                                                    {coefficients, column_major ? n : r, 0},
+                                                    {u + begin * ar, a, ar},
+                                                    a,
+                                                    r,
+                                                    n,
+                                                    count,
+                                                    false,
+                                                    !column_major,
+                                                    one,
+                                                    zero},
+                                                   "bounded packed occupied DF projection", detail);
+          if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+          trace_counter("packed_projection_unpack_panels", 1);
+          trace_counter("packed_projection_unpack_values", count * n * a);
+          trace_counter("packed_projection_unpack_write_bytes", count * n * a * sizeof(double));
+        }
+        trace_counter("packed_projection_scratch_bytes", rows * n * a * sizeof(double));
+      } else {
+        // A legal packed plan may have less than one full-Q AO row of scratch.
+        // Preserve the direct kernel in that case without adding an allocation.
+        launch_project_packed_df(plan.stream, plan.nbf, plan.naux, rank, column_major, b,
+                                 coefficients, u);
+        error = cudaPeekAtLastError();
+        if (error != cudaSuccess)
+          return cuda_failure(error, "packed occupied DF projection", detail);
+        trace_counter("packed_projection_launches", 1);
+      }
       trace_counter("value_packed_pairs", plan.stored_pair_count);
-      trace_counter("packed_projection_launches", 1);
     } else {
       status = trace_call("ri_k_occupied_projection_gemm", plan.stream, [&] {
         return scf_matrix_product_batched_view(plan,

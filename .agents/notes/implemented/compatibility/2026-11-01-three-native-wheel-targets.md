@@ -33,3 +33,23 @@ cold/warm recurring cost must be qualified separately; no speedup is claimed her
 - PR #2832; owner direction: native 80/90/120.
 - https://cmake.org/cmake/help/latest/prop_tgt/CUDA_ARCHITECTURES.html
 - https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/cuda-platform.html
+
+## Master integration and completed historical wheel receipts
+
+The `b5ad34e9` three-target wheel passed run `41295942074`: build/test
+253m12s, 107/639 compiler cache hits, approximately 2.1 GB wheel. The preceding
+six-target `1ac31a2f` run `41279261469` passed in 306m11s with 358/675 hits
+and approximately 3.8 GB wheel. These are different source/cache populations,
+not a controlled speedup or a cold-build bound.
+
+Integration with master `19f5ddb3` retains architecture-neutral release presets
+and full automatic Libxc CUDA AOT from #2922, alongside this PR's matrix,
+compute80 PTX, host-link layout, per-manifest validation and finite budgets.
+The historical wheels do not qualify that combined full-catalog build.
+
+The catalog previous-summary ratchet advances to the exact `19f5ddb3` snapshot
+summary. Its obsolete identity-transition acknowledgements remain in that
+master commit's history, not as current transitions. The new summary, retained
+execution/history/endpoint evidence and stale state are unchanged; only live
+source identities and baseline-relative transition reporting are refreshed.
+No new GPU numerical qualification or capability promotion is claimed.

@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "portable-integration-20261101",
+  "owner": "Portable CUDA complete-endpoint qualification",
+  "reason": "All three-device seven-functional populations, warm repeats, independent energy/force gates, semantic work, and unsuccessful controls; exact FP64 storage preserves original byte checksums.",
+  "review_document": "benchmarks/results/portable-integration-20261101/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/portable-integration-20261101/fp64.xz",
+      "family": "portable-integration-20261101",
+      "classification": "required-compact-accepted-evidence",
+      "role": "exact-original-endpoint-evidence",
+      "bytes": 468676,
+      "sha256": "02e323b9675129c5a038915b2019f59fc1c25491b2793ce6329b83f09c668245"
+    }
+  ]
+}

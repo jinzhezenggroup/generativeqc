@@ -86,11 +86,23 @@ def test_cli_ci_configures_non_pch_strict_caching_and_preserves_failures(
     configure = configures[0]
     preset_name = configure[configure.index("--preset") + 1]
     presets = json.loads((ROOT / "CMakePresets.json").read_text())["configurePresets"]
-    preset = next(preset for preset in presets if preset["name"] == preset_name)
-    # The normal preset keeps its optional cold-build PCH policy. Only this
-    # cache-oriented CI invocation overrides it, for both compiler tiers.
-    assert preset["cacheVariables"]["GENERATIVEQC_ENABLE_CXX_PCH"] == "ON"
-    options = dict(preset["cacheVariables"])
+    by_name = {preset["name"]: preset for preset in presets}
+
+    def resolved_options(name: str) -> dict[str, str]:
+        preset = by_name[name]
+        parents = preset.get("inherits", ())
+        if isinstance(parents, str):
+            parents = (parents,)
+        options: dict[str, str] = {}
+        for parent in reversed(parents):
+            options.update(resolved_options(parent))
+        options.update(preset.get("cacheVariables", {}))
+        return options
+
+    # The normal preset keeps its optional cold-build PCH policy, including
+    # inherited defaults. Only CI overrides it, for both compiler tiers.
+    options = resolved_options(preset_name)
+    assert options["GENERATIVEQC_ENABLE_CXX_PCH"] == "ON"
     options.update(arg[2:].split("=", 1) for arg in configure if arg.startswith("-D"))
     assert options["GENERATIVEQC_ENABLE_CXX_PCH"] == "OFF"
     assert options["GENERATIVEQC_COMPILER_CACHE"] == "ccache"

@@ -63,7 +63,7 @@ def _assert_cold_budget(workflow: str) -> None:
         ),
         (
             "Check Fock and proposal preflight without a GPU",
-            "ctest --test-dir build/cuda-release-sm120",
+            "ctest --test-dir build/cuda-release",
         ),
     )
     positions = []
@@ -79,12 +79,38 @@ def _assert_cold_budget(workflow: str) -> None:
         "test_packaging.py::test_wheel_grid_compiler_links_without_checkout_or_device"
         in radial
     )
-    assert "actions/cache/save@" not in job
+    # Only the isolated, bounded PR miss store may publish here. The shared
+    # snapshot still requires complete downstream CLI qualification.
+    saves = [
+        part for part in job.split("      - name: ") if "actions/cache/save@" in part
+    ]
+    assert len(saves) == 1
+    save = saves[0]
+    assert "path: ${{ steps.pr_fast_ccache.outputs.path }}" in save
+    assert "key: ${{ steps.pr_fast_ccache.outputs.key }}" in save
+    assert "~/.cache/ccache" not in save
+    assert "continue-on-error: true" in save
+    assert _minutes(save) == 2
+    for event in ("pull_request", "push", "merge_group", "pull_request_target"):
+        for outcome in ("success", "failure", "cancelled", "skipped", ""):
+            for available in ("true", "false", ""):
+                assert selected(
+                    save,
+                    {
+                        "github.event_name": event,
+                        "steps.cuda_runtime_build.outcome": outcome,
+                        "steps.pr_fast_ccache_bound.outputs.available": available,
+                    },
+                ) == (
+                    event == "pull_request"
+                    and outcome == "success"
+                    and available == "true"
+                )
 
     report = _step(job, "Summarize compiler cache")
     assert "if: always()" in report
     assert _minutes(report) == 1
-    assert "--verbose --build-dir build/cuda-release-sm120" in report
+    assert "--verbose --build-dir build/cuda-release" in report
     receipt = _step(job, "Preserve failed fast CUDA build diagnostics")
     for failed, cancelled in ((False, False), (True, False), (False, True)):
         assert selected(
@@ -102,7 +128,7 @@ def _assert_cold_budget(workflow: str) -> None:
     paths = re.search(r"          path: \|\n((?:            .+\n)+)", receipt)
     assert paths is not None
     assert set(paths[1].split()) == {
-        "build/cuda-release-sm120/.ninja_log",
+        "build/cuda-release/.ninja_log",
         "build/cuda-fast-compile-cache.txt",
     }
     assert job.index("      - name: Summarize compiler cache\n") < job.index(
@@ -128,17 +154,21 @@ def test_cold_budget_keeps_qualification_and_failure_diagnostics() -> None:
         ("timeout-minutes: 45", "timeout-minutes: 45\n        continue-on-error: true"),
         ("timeout-minutes: 45", "timeout-minutes: 45\n        if: false"),
         ("--target generativeqc_cuda_runtime_tests --parallel 3", "--target help"),
-        ("ctest --test-dir build/cuda-release-sm120", "echo skipped"),
+        ("ctest --test-dir build/cuda-release", "echo skipped"),
         ("if: always()", "if: success()"),
         ("failure() || cancelled()", "success()"),
-        ("build/cuda-release-sm120/.ninja_log", "build/cuda-release-sm120/**"),
+        ("build/cuda-release/.ninja_log", "build/cuda-release/**"),
         (
             "build/cuda-fast-compile-cache.txt",
-            "build/cuda-release-sm120/CMakeCache.txt",
+            "build/cuda-release/CMakeCache.txt",
         ),
-        ("--verbose --build-dir build/cuda-release-sm120", "--verbose"),
+        ("--verbose --build-dir build/cuda-release", "--verbose"),
         ("retention-days: 14", "retention-days: 90"),
         ("uses: actions/cache/restore@", "uses: actions/cache/save@"),
+        ("path: ${{ steps.pr_fast_ccache.outputs.path }}", "path: ~/.cache/ccache"),
+        ("key: ${{ steps.pr_fast_ccache.outputs.key }}", "key: shared-cuda-cache"),
+        ("steps.pr_fast_ccache_bound.outputs.available == 'true'", "true"),
+        ("steps.cuda_runtime_build.outcome == 'success'", "true"),
     ],
 )
 def test_budget_diagnostic_and_gate_controls_reject_regressions(
@@ -170,7 +200,7 @@ def test_diagnostic_step_runs_after_partial_setup_without_dumping_config(
     tmp_path: Path, configured: bool
 ) -> None:
     (tmp_path / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
-    build = tmp_path / "build/cuda-release-sm120"
+    build = tmp_path / "build/cuda-release"
     if configured:
         build.mkdir(parents=True)
         (build / "CMakeCache.txt").write_text(

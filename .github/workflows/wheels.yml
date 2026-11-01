@@ -124,9 +124,11 @@ jobs:
           # invocation. Normalize those transient absolute paths before ccache
           # hashes the CMake/NVCC command line; otherwise generated-source and
           # generated-include paths make identical compilations miss across runs.
+          # Package all structural Libxc providers independently of CUDA SM.
           CIBW_ENVIRONMENT: >-
             GENERATIVEQC_ENABLE_CUDA=ON
             GENERATIVEQC_ENABLE_AOT_SHELLS=ON
+            SKBUILD_CMAKE_DEFINE="GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON"
             GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE=/host${{ runner.temp }}/stationary-aot-source-cache
             GENERATIVEQC_CUDA_ARCHITECTURES="${{ steps.wheel_matrix.outputs.architectures }}"
             CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable -DGENERATIVEQC_AOT_PROFILES=sm_120"

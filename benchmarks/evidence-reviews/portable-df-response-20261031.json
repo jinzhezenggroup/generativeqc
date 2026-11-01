@@ -6,12 +6,12 @@
   "review_document": "benchmarks/results/portable-df-response-20261031/README.md",
   "files": [
     {
-      "path": "benchmarks/results/portable-df-response-20261031/receipts.json.xz",
+      "path": "benchmarks/results/portable-df-response-20261031/fp64.xz",
       "family": "portable-df-response-20261031",
       "classification": "required-compact-accepted-evidence",
       "role": "original-complete-endpoint-receipts-and-independent-numerical-gates",
-      "bytes": 553912,
-      "sha256": "dcd5af827ddd0b46a130224b6d575d6193112fdbafc03d90fca3460b87286330"
+      "bytes": 273676,
+      "sha256": "6ebd79631422722f078b1d36e5989238a101d6d25453b4c4a769ca5801f07def"
     }
   ]
 }

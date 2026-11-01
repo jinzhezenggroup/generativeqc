@@ -84,11 +84,15 @@ as grid-only time. The bounded response workspace reservation is unchanged.
 
 ## Retention and limits
 
-`receipts.json.xz` retains the complete original JSON including force vectors,
+`receipts.json.xz` and `fp64.xz` retain the complete original JSON including force vectors,
 timing samples, settings, work and source/binary/scheduler identities, together
 with independently reproducible qualification results. `provenance.json.xz`
 retains launchers, source changes, build/cache identities, test and sanitizer
-outputs, and failed setup/control logs. Both are JSON XZ streams. The original
+outputs, and failed setup/control logs. The shared exact-FP64 v3 reader restores
+all 101 original receipt strings and the complete original compact JSON container,
+checking their original SHA-256 digests. The numerical bits, formatting, failed
+populations and all reference identities are preserved; `sha256.txt` authenticates
+the compressed streams. `provenance.json.xz` remains a JSON XZ stream. The original
 files and large compiler outputs remain under ignored
 `.artifacts/a100-remaining-gaps-20261031/`.
 

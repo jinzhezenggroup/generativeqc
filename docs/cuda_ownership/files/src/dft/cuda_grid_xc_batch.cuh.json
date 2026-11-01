@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_grid_xc_batch.cuh",
+  "reason": "Bounded spatial XC queue allocation, descriptor staging, stream lifetime and launch orchestration. Point evaluation, compact matrix algebra, deterministic scatter and compensated integration are shared compiler-emitted kernels.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "ao_grid"
+}

@@ -74,11 +74,12 @@ cmake --build build -j10
 
 ## CUDA build profiles
 
-The generic `cuda-dev-fast` and `cuda-release` presets require a caller-selected
-numeric CUDA target and use portable kernels. The development preset uses
-compile-oriented NVCC settings. The release preset retains production
-optimization settings. Both leave process-level CUDA compile parallelism to
-the build tool. For example, build for an Ada GPU with:
+`cuda-dev-fast`, `cuda-release`, and `cuda-release-cli` never pin a CUDA GPU
+architecture. Select the target at configuration time. The development preset
+uses portable kernels and compile-oriented NVCC settings; release builds use
+production optimization and `auto` AOT selection (qualified tuned kernels when
+available, portable fallback otherwise). The development and library-release
+presets leave CUDA compile parallelism to the build tool. For example, build for an Ada GPU with:
 
 ```bash
 cmake --preset cuda-dev-fast -DCMAKE_CUDA_ARCHITECTURES=89-real
@@ -86,10 +87,10 @@ cmake --build --preset cuda-dev-fast
 ```
 
 Use `cuda-release` with the same target option for performance measurements.
-`cuda-release-sm120` and `cuda-release-cli-sm120` are explicitly specialized
-Blackwell builds with the measured `sm_120` shell profile. To use that profile
-with `cuda-dev-fast`, pass `-DCMAKE_CUDA_ARCHITECTURES=120-real
--DGENERATIVEQC_AOT_PROFILE=sm_120`.
+`cuda-release-cli` inherits this generic release preset and enables the full
+native CLI distribution. For reproducibility, a compatible device may opt into
+its measured profile with `-DGENERATIVEQC_AOT_PROFILE=sm_120`; this is an
+architecture-specific optimization argument, not a separate build preset.
 
 By default, `GENERATIVEQC_CUDA_COMPILE_JOBS` is empty, so native CUDA and
 generated AOT compilation follow the build tool's normal parallelism (for
@@ -122,7 +123,7 @@ executable images, PTX and retained relocatable images remain present. The scrip
 applies only to the final host link, with no compression or device-link change.
 Configuration requires a linker with `INSERT` script support (GNU ld or lld).
 
-The distributable `cuda-release-cli-sm120` preset **always includes the
+The distributable `cuda-release-cli` preset **always includes the
 entire structurally representable automatic CUDA XC catalog**. It explicitly
 sets `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` and leaves
 `GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS` empty (full catalog, no name
