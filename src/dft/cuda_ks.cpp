@@ -34,6 +34,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/compiled_execution_region.hpp"
 #include "runtime/cuda_component_trace.hpp"
+#include "runtime/cuda_fp64_matrix_policy.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/host_cache_budget.hpp"
 #include "runtime/host_component_trace.hpp"
@@ -2190,6 +2191,33 @@ struct CudaKsPlan::Impl : KsStateStorage {
               sum(resource.provider_device_bytes, prepared->provider_allowance);
           resource.retained_host_numeric_bytes =
               sum(resource.retained_host_numeric_bytes, prepared->host_bytes);
+        }
+        // A large strict-FP64 meta-GGA panel can amortize indexed publication
+        // with a library cross product on FP64 matrix-capable hardware. This
+        // is a capability/work gate, never a GPU model-name whitelist. Public
+        // ledgers and explicit reference budgets keep their bounded incumbent
+        // until a complete optional-provider quote has been qualified there.
+        if (!runtime::active_device_resource_ledger && !options.reference_memory_budget_bytes &&
+            !precision_schedule.any_lower_precision() && xc_layout.local_ao &&
+            xc_layout.nao >= 512 && xc_layout.npoint >= (1U << 19) && xc_layout.work_jets >= 4) {
+          cudaDeviceProp properties{};
+          const auto capability = cudaGetDeviceProperties(&properties, device);
+          if (capability == cudaErrorNotSupported || capability == cudaErrorInvalidValue) {
+            const auto pending = cudaGetLastError();
+            if (pending != cudaSuccess && pending != capability) check(pending);
+          } else {
+            check(capability);
+            if (runtime::cuda_fp64_matrix_acceleration_supported(
+                    properties.major, properties.singleToDoublePrecisionPerfRatio)) {
+              runtime::DeviceUnpromisedCapacityScope optional_scope;
+              xc->prepare_potential(std::min(std::size_t{128ULL << 20}, optional_device_capacity()),
+                                    true);
+              const auto& prepared = xc->potential_lowering();
+              resource.xc_device_bytes = sum(resource.xc_device_bytes, prepared.matrix_bytes);
+              resource.provider_device_bytes =
+                  sum(resource.provider_device_bytes, prepared.provider_allowance);
+            }
+          }
         }
         // Default batching retains the compiler's bounded admission and the
         // one-tile fallback. Overrides keep the incumbent available for ablations;

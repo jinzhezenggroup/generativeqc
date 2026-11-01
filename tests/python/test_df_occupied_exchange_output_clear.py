@@ -82,6 +82,8 @@ def occupied_probe(
         "packed_generated",
         "packed_tight",
         "packed_failure",
+        "packed_library_gram",
+        "packed_generated_gram",
     ),
 )
 def test_occupied_exchange_output_contract(occupied_probe: Path, mode: str) -> None:
