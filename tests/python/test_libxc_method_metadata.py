@@ -172,7 +172,6 @@ def test_fulltree_nonlocal_methods_use_pinned_source_definitions() -> None:
         assert rows[name]["nonlocal_variant"] is None
 
 
-
 def test_fulltree_non_vv10_hybrids_are_represented_without_public_admission() -> None:
     from generativeqc_compiler.method import resolve_method
     from tools.generate_libxc_methods import build_catalog
