@@ -32,6 +32,7 @@
 #include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/reference/observation.hpp"
+#include "scf/solver/validation_products.hpp"
 
 extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
@@ -2690,7 +2691,10 @@ void seed_product_case() {
   options.compute_forces = false;
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 128);
   const auto products = plan.seed_product_operation();
-  require(static_cast<bool>(products), "large CUDA seed lacks its prepared matrix provider");
+  // The library binding is optional even above the size crossover. Exercise
+  // the same validation adapter in both cases so a supported host fallback
+  // must satisfy the independent oracle instead of being rejected or skipped.
+  const scf::solver::ValidationProducts multiply(products);
   const auto n = basis.nao;
   Matrix a(n * n), b(n * n);
   for (std::size_t i = 0; i < n; ++i) {
@@ -2700,7 +2704,7 @@ void seed_product_case() {
   }
   for (bool ta : {false, true})
     for (bool tb : {false, true}) {
-      const auto result = products(a, b, n, ta, tb);
+      const auto result = multiply(a, b, n, ta, tb);
       for (std::size_t i = 0; i < n; ++i)
         for (std::size_t j = 0; j < n; ++j) {
           const auto right = [&](std::size_t k) { return tb ? b[j * n + k] : b[k * n + j]; };
@@ -2708,9 +2712,14 @@ void seed_product_case() {
           if (ta && i) expected -= 0.125 * right(i - 1);
           if (!ta && i + 1 < n) expected -= 0.125 * right(i + 1);
           require(std::abs(result[i * n + j] - expected) < 1e-12,
-                  "borrowed seed product disagrees with independent sparse oracle");
+                  "seed validation product disagrees with independent sparse oracle");
         }
     }
+  if (!products) {
+    std::cout << "CUDA seed host fallback preserves all product layouts\n";
+    return;
+  }
+  // Only the borrowed device operation has an AO-owner lifetime contract.
   bool refused = false;
   try {
     (void)products(a, b, n - 1, false, false);
