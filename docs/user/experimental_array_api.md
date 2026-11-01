@@ -836,7 +836,7 @@ srun --partition=main --nodelist=node4 --gres=gpu:5090:1 \
   bash -lc '
     set -e
     export PYTHONPATH=python:.
-    export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release-sm120/libgenerativeqc.so"
+    export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release/libgenerativeqc.so"
     export GENERATIVEQC_ARRAY_API_CUDA_TEST=1 GENERATIVEQC_TENSOR_ARCH=sm_120
     python -m pytest -q tests/python/test_array_api_native_cuda.py \
       tests/python/test_array_api_molecular.py
