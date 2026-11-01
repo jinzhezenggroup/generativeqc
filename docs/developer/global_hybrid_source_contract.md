@@ -25,8 +25,8 @@ does not define a separate Coulomb/exchange implementation:
   Curated CUDA KS capabilities stay in
   `manifests/native_semilocal_families.json`; registered split-hybrid DF
   support remains explicitly gated by
-  `manifests/cuda_split_hybrids.json`. M06-2X has its proposed CUDA DF
-  admission; MN15 remains Direct-only.
+  `manifests/cuda_split_hybrids.json`. Consult that generated registry for each
+  method's CUDA DF energy/force and FP64 local-AO admission.
 
 The same final-state proof is consumed by prepared CUDA, Python snapshots,
 and complete forces; neither a descriptor method label nor an XC family name
