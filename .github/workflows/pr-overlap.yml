@@ -110,3 +110,68 @@ jobs:
               echo "For hotspot overlap, prefer stacking on the owning PR or moving mutable registration/ownership data into per-domain shards instead of independently editing the aggregate file."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # Temporary diagnostic on a separate fast workflow, to be removed after
+      # committing the matched snapshot. No acceptance gate is weakened.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Preview exact-source Libxc catalog identities (temporary)
+        shell: bash
+        run: |
+          PYTHONPATH=python:. python3 - <<'PY'
+          import base64
+          import json
+          import lzma
+          from pathlib import Path
+
+          from generativeqc_compiler.common.provenance import canonical_hash, file_hash
+          from tools.generate_build_identity import _inventory, _source_identity
+
+          root = Path.cwd()
+          dirs = ("src", "include", "cmake", "python/generativeqc", "python/generativeqc_compiler")
+          suffixes = {".py", ".json", ".cpp", ".hpp", ".h", ".cu", ".cuh", ".c", ".cmake", ".in"}
+          files = {root / "CMakeLists.txt"}
+          for directory in dirs:
+              files.update(
+                  p for p in (root / directory).rglob("*")
+                  if p.is_file() and p.suffix in suffixes
+              )
+          live = {p.relative_to(root).as_posix(): file_hash(p) for p in sorted(files)}
+          source = canonical_hash(live)
+          native = _source_identity(
+              root, _inventory(root, root / "cmake/GenerativeQCSourceIdentity.json")
+          )
+          snapshot_path = root / "manifests/libxc/native-qualification-snapshot.json.xz"
+          original = json.loads(lzma.decompress(snapshot_path.read_bytes()))
+          if not original["stale"] or original["endpoints"] or original["observed_endpoints"]:
+              raise RuntimeError("Unexpected catalog admission: do not rewrite qualification")
+          original["source_identity"] = source
+          original["native_source_identity"] = native
+          data = (json.dumps(original, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode()
+          snapshot = lzma.compress(data)
+          report = (root / "docs/reference/libxc_qualification.md").read_text()
+          import re
+          report, first = re.subn(
+              r"Current checked source inputs: \x60[0-9a-f]{64}\x60\.",
+              "Current checked source inputs: \x60" + source + "\x60.",
+              report,
+          )
+          report, second = re.subn(
+              r"Current checked native input identity: \x60[0-9a-f]{64}\x60\.",
+              "Current checked native input identity: \x60" + native + "\x60.",
+              report,
+          )
+          if (first, second) != (1, 1):
+              raise RuntimeError("Cannot match exactly two current-source catalog fields")
+          print("GQC_SNAPSHOT_B64_START")
+          print(base64.b64encode(snapshot).decode())
+          print("GQC_SNAPSHOT_B64_END")
+          print("GQC_REPORT_B64_START")
+          print(base64.b64encode(report.encode()).decode())
+          print("GQC_REPORT_B64_END")
+          print("GQC_SOURCE_ID", source)
+          print("GQC_NATIVE_ID", native)
+          print("GQC_SNAPSHOT_SIZE", len(snapshot))
+          PY
