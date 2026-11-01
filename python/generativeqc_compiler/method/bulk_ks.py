@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import typing
 from dataclasses import dataclass
+from fractions import Fraction
 
 from generativeqc_compiler.xc.capability_resolution import (
     CapabilityResolution,
@@ -29,10 +30,41 @@ from generativeqc_compiler.xc.libxc_bulk_capabilities import (
     BulkFunctionalCapability,
     functional_capability,
 )
-from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, functional
+from generativeqc_compiler.xc.spec import POINTWISE_BULK_COMPONENTS, FunctionalSpec
 
 from .ks_execution import KsExecutionPlan, compile_ks_execution_plan
-from .spec import MethodIR, SemilocalXCPrimitive, UnsupportedMethod
+from .spec import (
+    ExactExchangePrimitive,
+    MethodIR,
+    SemilocalXCPrimitive,
+    UnsupportedMethod,
+)
+
+
+def automatic_method(name: str, *, spin: str) -> MethodIR:
+    """Reconstruct a packaged electronic recipe for stationary consumers.
+
+    This applies the same explicit blacklist to every atomic dependency. The
+    generated composition binds only semilocal XC and full-range exact exchange.
+    """
+    from generativeqc_compiler.xc._generated_semilocal_compositions import COMPOSITIONS
+    from generativeqc_compiler.xc.automatic_semilocal import automatic_components
+
+    if name not in COMPOSITIONS:
+        return resolve_bulk_ks(name, spin=spin, backend="cuda").method
+    components = automatic_components(name)
+    for component, _ in components:
+        _structural_capability(component, enforce_blacklist=True)
+    fraction = Fraction(COMPOSITIONS[name]["exact_exchange"])
+    return MethodIR(
+        identifier=name,
+        spin=spin,
+        primitives=(
+            SemilocalXCPrimitive(FunctionalSpec(name, components, spin=spin)),
+            *((ExactExchangePrimitive(fraction),) if fraction else ()),
+        ),
+    )
+
 
 BULK_KS_RESOLUTION_SCHEMA = "generativeqc.bulk-libxc-ks-resolution.v2"
 _CPU_EXECUTION_STAGES = ("compiled-cpu", "production-domain")
@@ -111,10 +143,9 @@ def _structural_capability(
     enforce_blacklist: bool,
 ) -> BulkFunctionalCapability:
     capability = functional_capability(name, evidence=evidence)
-    if capability.name not in AUTO_BULK_COMPONENTS:
+    if capability.name not in POINTWISE_BULK_COMPONENTS:
         raise UnsupportedMethod(
-            "automatic bulk Libxc KS requires a non-curated imported semilocal "
-            "registration"
+            "automatic bulk Libxc KS requires an imported semilocal registration"
         )
 
     unsupported = tuple(
@@ -149,7 +180,9 @@ def _build_resolution(
     admission: str,
     backend: str = "cpu",
 ) -> BulkKsResolution:
-    functional_spec = functional(functional_name, spin=spin)
+    functional_spec = FunctionalSpec(
+        functional_name, ((functional_name, Fraction(1)),), spin=spin
+    )
     method = MethodIR(
         identifier=identifier if identifier is not None else f"LIBXC:{functional_name}",
         spin=spin,

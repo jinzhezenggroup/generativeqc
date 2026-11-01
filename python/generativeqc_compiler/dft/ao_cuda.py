@@ -1124,7 +1124,9 @@ def emit_native_xc_point_dispatch() -> str:
             "  if (!response && generated::split_hybrid_registered(functional))",
             "    return {generated::split_hybrid_fp64_local_ao(functional), false};",
             "  if (!response && generated::automatic_cuda_point_entry(functional))",
-            "    return {false, false};",
+            "    // AO selection changes only density/matrix traversal; the registered",
+            "    // physical point ABI and its component-local policies are unchanged.",
+            "    return {true, false};",
             '  throw std::invalid_argument("unsupported CUDA XC point consumer");',
             "}",
         )

@@ -24,6 +24,7 @@
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/energy_change.hpp"
+#include "dft/global_hybrid_fock.hpp"
 #include "dft/ks_incremental_policy.hpp"
 #include "dft/ks_stopping_policy.hpp"
 #include "dft/mixed_precision_warmup.hpp"
@@ -1543,7 +1544,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // qualifications. Refuse policies that could stage XC on the host or
     // inherit unrelated exchange, precision and derivative capabilities.
     if (automatic_program &&
-        (has_exchange || has_range_correction || nonlocal_correlation ||
+        ((has_exchange &&
+          !global_hybrid_coefficients_match(
+              strategy.spec, functional, strategy.spec.spin == scf::FockSpin::Restricted ? 1U : 2U,
+              options.semilocal_exchange_scale, options.semilocal_correlation_scale)) ||
+         has_range_correction || nonlocal_correlation ||
          options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused ||
          options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) !=
              GENERATIVEQC_PRECISION_FP64 ||
@@ -1552,7 +1557,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
          std::any_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; })))
       throw std::invalid_argument(
-          "automatic CUDA KS requires strict-FP64 device-fused all-electron pure semilocal "
+          "automatic CUDA KS requires strict-FP64 device-fused all-electron "
+          "semilocal/global-hybrid "
           "execution");
     if (has_range_correction) {
       scf::validate_resolved_fock_build(*range_correction);

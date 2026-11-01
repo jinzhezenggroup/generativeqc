@@ -14,7 +14,7 @@ from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 from ._generated_split_hybrids import SPLIT_HYBRIDS
 from .automatic_point import emit_automatic_point
-from .automatic_semilocal import automatic_functional_name
+from .automatic_semilocal import automatic_components, automatic_functional_name
 from .coefficients import jet_pullback_program
 from .grid_native import emit_grid_adjoint, emit_grid_partials
 from .scalar_schedule import XcScalarConsumer, select_xc_scalar_schedule
@@ -64,7 +64,7 @@ def _emit_automatic_point(code: int, semilocal: FunctionalSpec | None) -> str:
     name = automatic_functional_name(code)
     if (
         not isinstance(semilocal, FunctionalSpec)
-        or semilocal.components != ((name, Fraction(1)),)
+        or tuple(sorted(semilocal.components)) != automatic_components(name)
         or semilocal.exact_exchange
         or semilocal.range_omega
         or semilocal.long_range_exchange

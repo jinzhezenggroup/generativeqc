@@ -98,17 +98,17 @@ not a clipped density or a successful Fast result after strict recovery.
 `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc
 entries from the common structural automatic registry. It is off by default;
 the disabled registry returns no automatic entries. An enabled library can
-prepare public automatic pure-semilocal RKS/UKS energy endpoints through the
+prepare public automatic semilocal and registered global-hybrid RKS/UKS energy endpoints through the
 ordinary native KS owner. The contract is strict-FP64, device-fused, all-electron
-execution with J only. Missing static providers fail with a build-option
+execution with J and, for a global hybrid, matching full-range K. Missing static providers fail with a build-option
 diagnostic; there is no CPU fallback or runtime NVCC/Maple/Libxc.
 With `GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON` and a matching linked force
 profile, explicit analytic forces use the same native prepared owner. The force
-envelope is strict FP64, device-fused, all-electron s/p orbitals, direct J only
+envelope is strict FP64, device-fused, all-electron s/p orbitals, direct J/K
 and three Becke partition iterations. Preparation and resource planning query
 the same exact model/domain/spin binding. Missing force artifacts and unsupported
 shapes fail explicitly; automatic methods keep energy-only default outputs.
-Hessian/HVP, Laplacian/current ingredients, nonlocal and exact-exchange additions
+Hessian/HVP, Laplacian/current ingredients, nonlocal and range-exchange additions
 do not follow from this semilocal force contract.
 Automatic CUDA UKS additionally requires nonzero occupations in both spin
 channels. Empty-spin requests fail at preparation with an explicit physical-birth
