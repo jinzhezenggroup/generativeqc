@@ -807,6 +807,16 @@ def _discover_prepared_df_controls(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_nonlocal_force_reuse(root: Path) -> dict[str, str]:
+    """Register native force reuse; executed numerical/work gates own admission."""
+    relative = Path("src/dft/cuda_stationary_controller.cpp")
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
+    return {
+        f"dft-policy:{name}": relative.as_posix()
+        for name in re.findall(r'"(GENERATIVEQC_VV10_COMPONENT_REUSE)"', source)
+    }
+
+
 def _discover_response_host_controls(root: Path) -> dict[str, str]:
     """Track resource controls without prescribing admission implementation."""
     relative = Path("src/hf/rhf_frame_response.cu")
@@ -824,6 +834,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_public_precision(root),
         _discover_runtime_controls(root),
         _discover_prepared_df_controls(root),
+        _discover_nonlocal_force_reuse(root),
         _discover_ks_phase_values(root),
         _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),
