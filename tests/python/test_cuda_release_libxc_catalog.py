@@ -6,6 +6,9 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+from cibuildwheel.environment import parse_environment
+
 ROOT = Path(__file__).resolve().parents[2]
 PRESETS = json.loads((ROOT / "CMakePresets.json").read_text(encoding="utf-8"))
 BY_NAME = {item["name"]: item for item in PRESETS["configurePresets"]}
@@ -61,11 +64,22 @@ def test_wheel_build_enables_full_catalog_for_any_cuda_architecture() -> None:
     wheel_step = workflow.split("      - name: Build and test wheel\n", 1)[1].split(
         "\n      - name:", 1
     )[0]
-    # scikit-build-core turns this environment setting into a CMake -D flag.
-    assert re.search(
-        r"(?m)^\s+SKBUILD_CMAKE_DEFINE="
-        r"GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON\s*$",
-        wheel_step,
+    environment_block = wheel_step.split("          CIBW_ENVIRONMENT: >-\n", 1)[
+        1
+    ].split("\n        with:", 1)[0]
+    # Actions resolves these before cibuildwheel sees the folded YAML scalar.
+    environment = re.sub(r"\$\{\{.*?\}\}", "123", environment_block)
+    parsed = parse_environment(" ".join(environment.splitlines())).as_dictionary({})
+    assert parsed["SKBUILD_CMAKE_DEFINE"] == (
+        "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON"
     )
-    assert "GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS=" not in wheel_step
-    assert "GENERATIVEQC_CUDA_ARCHITECTURES=" in wheel_step
+    assert "GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS" not in parsed
+    assert parsed["GENERATIVEQC_CUDA_ARCHITECTURES"]
+
+
+def test_cibuildwheel_rejects_unquoted_nested_assignment() -> None:
+    # shlex accepts this, but the actual wheel parser rejects it before building.
+    with pytest.raises(ValueError, match="Unsupported bash construct"):
+        parse_environment(
+            "SKBUILD_CMAKE_DEFINE=GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON"
+        ).as_dictionary({})
