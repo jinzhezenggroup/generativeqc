@@ -20,14 +20,16 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
 @pytest.mark.parametrize("dependent", [False, True])
-@pytest.mark.parametrize("mapping", ["auxiliary", "component", "primitive"])
+@pytest.mark.parametrize("mapping", ["auto", "auxiliary", "component", "primitive"])
 def test_packed_streamed_raw_and_nonsymmetric_coulomb(
     tmp_path: Path, representation: str, dependent: bool, mapping: str
 ) -> None:
     """Different batch layouts, auxiliary g, ragged panels and signed D.
 
     The dense fallback is checked against the same independent libcint/NumPy
-    result. Work counts measure raw values produced, not kernel call spelling.
+    result. Automatic metric and transformed-value schedules may differ, so
+    qualify auto independently of every explicit control. Work counts measure
+    raw values produced, not kernel call spelling.
     """
     assert os.environ.get("SLURM_JOB_ID")
     probe = os.environ.get("GENERATIVEQC_DF_SOURCE_PROBE")
