@@ -132,3 +132,14 @@ The implementation rationale and admission boundary are in
 Two historical recovery manifests have only JSON formatting whitespace removed
 to retain these new samples within the existing checkout budget. Their data
 tokens, recovery paths, payload hashes and byte counts are unchanged.
+
+The retained experiment now uses the shared exact-FP64 v3 storage reader.
+Both compressed streams and every reconstructed original text are authenticated.
+The migration reconstructs the original container and its XZ archive byte for
+byte; numerical gates, sample order, incomplete controls and conclusions are
+unchanged. This storage change is not a new performance qualification.
+The referenced XC-unroll v2 streams also reconstruct their former compact
+container and XZ archive before checking the original cross-package digest.
+Thus neither a storage migration nor a changed filename bypasses reference
+authentication. The anchor archive shrinks from 244,400 to 138,936 bytes across
+the two streams, retaining all 92 original texts and 107,388 FP64 values.

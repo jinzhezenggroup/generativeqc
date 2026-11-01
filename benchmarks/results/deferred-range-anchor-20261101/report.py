@@ -10,6 +10,7 @@ from statistics import median
 
 import numpy as np
 
+from benchmarks._exact_fp64_evidence import load
 from benchmarks.readme_defaults_qualification import qualify
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -25,6 +26,38 @@ def require(condition: bool, message: str) -> None:
 def authenticated(raw: bytes, digest: str, label: str) -> bytes:
     require(hashlib.sha256(raw).hexdigest() == digest, f"checksum: {label}")
     return raw
+
+
+def reference(name: str, digest: str) -> dict:
+    """Preserve the original cross-package digest after lossless XC repacking.
+
+    The XC v2 streams retain every original text and all container metadata.
+    Reconstruct its former sorted compact container and XZ bytes before applying
+    the historical digest. This is a storage migration, not a new reference or
+    permission to accept a changed numerical payload.
+    """
+    path = ROOT / name
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != digest:
+        require(
+            name == "benchmarks/results/xc-potential-unroll4-20261101/receipts.json.xz",
+            "unsupported reference migration: " + name,
+        )
+        packed, texts = load(path.parent)
+        require(packed["schema"] == "generativeqc.exact-fp64-evidence.v2", "XC storage")
+        original = {
+            k: v for k, v in packed.items() if k not in ("schema", "float_count", "files")
+        }
+        original["schema"] = "generativeqc.xc-potential-unroll.v1"
+        original["files"] = {
+            key: {"sha256": hashlib.sha256(text.encode()).hexdigest(), "text": text}
+            for key, text in texts.items()
+        }
+        raw = lzma.compress(
+            json.dumps(original, sort_keys=True, separators=(",", ":")).encode(),
+            preset=9,
+        )
+    return json.loads(lzma.decompress(authenticated(raw, digest, name)))
 
 
 def work(sample: dict) -> None:
@@ -96,9 +129,16 @@ def same_task(left: dict, right: dict) -> None:
 
 def main() -> None:
     """Replay scientific gates before computing any complete-endpoint timing."""
-    raw = (FAMILY / "receipts.json.xz").read_bytes()
-    digest = (FAMILY / "sha256.txt").read_text().split()[0]
-    bundle = json.loads(lzma.decompress(authenticated(raw, digest, "receipts")))
+    storage, recovered = load(FAMILY)
+    # Authenticate the historical container and its exact original XZ bytes;
+    # no numerical data, incomplete population or reference digest is rewritten.
+    original = recovered["original-receipts.json"].encode()
+    authenticated(
+        lzma.compress(original, preset=9 | lzma.PRESET_EXTREME),
+        storage["original_archive_sha256"],
+        "original deferred-anchor archive",
+    )
+    bundle = json.loads(original)
     files = {}
     for name, member in bundle["files"].items():
         files[name] = authenticated(
@@ -106,9 +146,7 @@ def main() -> None:
         ).decode()
     references = {}
     for name, digest in bundle["references"].items():
-        references[name] = json.loads(
-            lzma.decompress(authenticated((ROOT / name).read_bytes(), digest, name))
-        )
+        references[name] = reference(name, digest)
     oracles = references["benchmarks/results/readme-refresh-20261026/oracles.json.xz"]
     reuse = references[
         "benchmarks/results/independent-force-tiles-20261031/receipts.json.xz"
