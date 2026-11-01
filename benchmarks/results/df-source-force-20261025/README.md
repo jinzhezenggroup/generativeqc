@@ -21,8 +21,8 @@ from 256/512 MiB host/device to 512 MiB/1 GiB; these are additional force
 reservations. Public DFT DF exact-byte resource planning remains unsupported.
 There is no tolerance screening, relaxed convergence or reduced DF value budget.
 
-`paired.json.gz` retains all timed populations, `moved.json.gz` the independent
-original/moved references and native checks, and `ablations.json.gz` the separate
+`paired.json.xz` retains all timed populations, `moved.json.xz` the independent
+original/moved references and native checks, and `ablations.json.xz` the separate
 source-only and capacity comparisons. Shared-process qualification-reference
 timings are not comparison populations. `provenance.json` and the compressed
 patch bind the final production source; native, Python and final test snapshot
@@ -33,3 +33,8 @@ Qualification is limited to the measured water workloads. PBE96 and r2SCAN96
 remain slower cold than GPU4PySCF. Root README figures are unchanged. See the
 [decision note](../../../.agents/notes/implemented/performance/2026-10-25-df-source-and-force-work.md)
 for resource, numerical, response and graph-lifetime boundaries.
+
+The four numerical/execution bundles use lossless XZ storage.
+`storage.json` binds the original Git blobs and compressed hashes to the new
+compressed bytes and unchanged decoded bytes. Every original sample, failure,
+script and FP64 value is retained; replay gates and historical claims are unchanged.
