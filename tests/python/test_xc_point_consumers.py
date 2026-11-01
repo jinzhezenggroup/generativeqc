@@ -85,9 +85,16 @@ int main() {
   const auto automatic = resolve_point_binding(0x10042U, false);
   if (automatic.launch != generated::automatic_launch || automatic.launch_batch ||
       automatic.automatic_program != generated::automatic_cuda_point_entry(0x10042U)) return 19;
+  const auto automatic_capability = resolve_point_capabilities(0x10042U, false);
+  if (!automatic_capability.local_ao_selection ||
+      automatic_capability.mixed_density_contraction) return 21;
   try {
     resolve_point_binding(0x10042U, true);
     return 20;
+  } catch (const std::invalid_argument&) {}
+  try {
+    resolve_point_capabilities(0x10042U, true);
+    return 22;
   } catch (const std::invalid_argument&) {}
   mixed_pbe_point_launcher()();
   if(selected_functional != 17) return 13;
@@ -132,7 +139,7 @@ int main() {
     if (binding.launch_batch != &launch_point_batches<5, 128>) return 18;
     if (launch != &launch_split_hybrid_points<5>) return 7;
     const auto capability = resolve_point_capabilities(code, false);
-    if (capability.local_ao_selection != (code == generated::kM062XFunctionalCode) ||
+    if (!capability.local_ao_selection ||
         capability.mixed_density_contraction) return 12;
     launch();
     if (selected_functional != 5 || selected_response) return 8;

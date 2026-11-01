@@ -41,6 +41,7 @@ from generativeqc_compiler.method import (
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
+    automatic_composition_name,
     automatic_functional_code,
     automatic_scf_domain,
 )
@@ -48,7 +49,6 @@ from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
 from generativeqc_compiler.xc.spec import (
     CATALOG,
     FunctionalSpec,
-    UnsupportedXC,
     functional,
 )
 
@@ -83,6 +83,8 @@ def parse_automatic_libxc_selector(method: typing.Any) -> tuple[str, str] | None
         name = method[len(prefix) :].strip().upper()
         if not name:
             raise ValueError("Libxc selector requires a functional registration name")
+        if name.lower() in _PUBLIC_DFT_IDENTIFIERS:
+            return None
         automatic_functional_code(name)
         return name, spin
     return None
@@ -128,6 +130,12 @@ def _public_dft_binding(method: typing.Any) -> tuple[str, str]:
     if not isinstance(method, str):
         raise TypeError("KS options require a string RKS/UKS method selector")
     selector = method.lower()
+    for prefix, spin in _AUTOMATIC_LIBXC_PREFIXES:
+        if selector.startswith(prefix):
+            identifier = _PUBLIC_DFT_IDENTIFIERS.get(selector[len(prefix) :].strip())
+            if identifier is None:
+                raise ValueError(f"unknown DFT method selector {method!r}")
+            return identifier, spin
     legacy = _LEGACY_KS_SELECTORS.get(selector)
     if legacy is not None:
         return legacy
@@ -460,21 +468,34 @@ def _native_semilocal(method_ir: typing.Any) -> typing.Any:
 
 
 def _automatic_semilocal_name(method_ir: typing.Any) -> str | None:
-    """Return the sole default-allow automatic component in a pure semilocal IR."""
-    if not isinstance(method_ir, MethodIR) or len(method_ir.primitives) != 1:
+    """Select generic code only after preserving existing semantic specializations."""
+    if not isinstance(method_ir, MethodIR):
         return None
-    plan = _native_execution_plan(method_ir)
-    if plan.exchange or plan.nonlocal_correlation is not None or plan.post_scf:
+    # Selection is a predicate: corrected compositions retain their existing
+    # owner instead of entering the electronic-only native projection.
+    plan = compile_ks_execution_plan(method_ir)
+    if (
+        plan.nonlocal_correlation is not None
+        or plan.post_scf
+        or plan.semilocal.functional.range_omega
+    ):
         return None
-    components = plan.semilocal.functional.components
-    if len(components) != 1 or components[0][1] != Fraction(1):
+    if len(plan.exchange) > 1 or any(
+        term.operator != "full-range" or term.omega for term in plan.exchange
+    ):
         return None
-    name = components[0][0]
+    if _split_hybrid_record(method_ir) is not None:
+        return None
     try:
-        automatic_functional_code(name)
-    except UnsupportedXC:
-        return None
-    return name
+        _curated_semilocal_record(
+            plan.semilocal.functional, plan=plan, method_ir=method_ir
+        )
+    except NotImplementedError:
+        return automatic_composition_name(
+            plan.semilocal.functional.components,
+            plan.exchange[0].coefficient if plan.exchange else Fraction(0),
+        )
+    return None
 
 
 def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
@@ -736,7 +757,7 @@ def _curated_semilocal_record(
     for record in SEMILOCAL_FAMILIES:
         expected = _record_components(record)
         if record["coefficient_policy"] == "native-scales":
-            if not set(components) <= set(expected):
+            if set(components) != set(expected):
                 continue
         elif components != expected:
             continue
@@ -980,19 +1001,12 @@ def scf_domain_for_method(method: typing.Any) -> str:
     """Return the exact native point domain for a public selector or resolved IR."""
     if isinstance(method, MethodIR):
         return _scf_domain_for_ir(method)
-    automatic = parse_automatic_libxc_selector(method)
-    if automatic is not None:
-        return automatic_scf_domain(automatic[0])
     method_ir, _ = resolve_ks_method(method)
     return _scf_domain_for_ir(method_ir)
 
 
 def native_xc_functional_code(method: typing.Any) -> int:
     """Return the lowerer code selected from one public or automatic KS selector."""
-    automatic = parse_automatic_libxc_selector(method)
-    if automatic is not None:
-        name, _ = automatic
-        return automatic_functional_code(name)
     method_ir, _ = resolve_ks_method(method)
     d4_electronic = _d4_electronic_projection(method_ir)
     if d4_electronic is not None:
