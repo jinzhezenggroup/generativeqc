@@ -484,3 +484,52 @@ def test_fast_cuda_compiler_delta_does_not_weaken_required_build() -> None:
         bound, "if"
     )
     assert "ctest --test-dir build --output-on-failure --parallel 2" in WORKFLOW
+
+
+def test_fast_cuda_remote_and_publication_follow_exact_pr_cache_state() -> None:
+    """Execute cache expressions for hits, misses and unavailable accelerators."""
+    remote_steps = (
+        fast_step("Compile production CUDA prerequisite archive"),
+        fast_step("Compile production CUDA and runtime CTest"),
+    )
+    bound = fast_step("Bound successful PR fast CUDA compiler misses")
+    for event in ("pull_request", "merge_group", "pull_request_target", "push"):
+        for prepared in ("", "exact-pr-key"):
+            for outcome in ("success", "failure", "cancelled", "skipped", ""):
+                for hit, matched in (
+                    ("true", "exact-pr-key"),
+                    ("false", ""),
+                    ("", ""),
+                    ("false", "other-key"),
+                ):
+                    context = {
+                        "github.event_name": event,
+                        "github.ref": "refs/pull/2498/merge",
+                        "runner.temp": "/tmp/runner",
+                        "steps.pr_fast_ccache.outputs.key": prepared,
+                        "steps.pr_fast_ccache.outputs.path": "/tmp/runner/cuda-fast-pr-ccache-2498",
+                        "steps.pr_fast_ccache_restore.outcome": outcome,
+                        "steps.pr_fast_ccache_restore.outputs.cache-hit": hit,
+                        "steps.pr_fast_ccache_restore.outputs.cache-matched-key": matched,
+                        "steps.cuda_runtime_build.outcome": "success",
+                    }
+                    allowed = (
+                        event == "pull_request"
+                        and bool(prepared)
+                        and outcome == "success"
+                        and (hit == "true" or matched == "")
+                    )
+                    expected = (
+                        "file:///tmp/runner/cuda-fast-pr-ccache-2498" if allowed else ""
+                    )
+                    if allowed and hit == "true":
+                        expected += " read-only"
+                    for step in remote_steps:
+                        assert (
+                            expression(field(step, "CCACHE_REMOTE_STORAGE"), context)
+                            == expected
+                        )
+                    publish = allowed and hit != "true" and matched == ""
+                    assert bool(expression(field(bound, "if"), context)) == publish
+                    context["steps.cuda_runtime_build.outcome"] = "failure"
+                    assert not expression(field(bound, "if"), context)
