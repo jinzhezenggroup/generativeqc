@@ -23,8 +23,13 @@ from benchmarks.pbe0_precision import (
     (("water-def2-svp-spherical", False), ("water-def2-svp", True)),
 )
 @pytest.mark.parametrize("backend", ("pyscf", "gpu4pyscf"))
+@pytest.mark.parametrize("scheduler", ("SLURM_JOB_ID", "LSB_JOBID"))
 def test_reference_preserves_basis_representation(
-    case_name: str, cartesian: bool, backend: str, monkeypatch: pytest.MonkeyPatch
+    case_name: str,
+    cartesian: bool,
+    backend: str,
+    scheduler: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A force oracle must not silently replace six Cartesian d AOs by five."""
 
@@ -41,7 +46,9 @@ def test_reference_preserves_basis_representation(
             lib=SimpleNamespace(num_threads=lambda _: None),
         ),
     )
-    monkeypatch.setenv("SLURM_JOB_ID", "host-only-molecule-port")
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.delenv("LSB_JOBID", raising=False)
+    monkeypatch.setenv(scheduler, "host-only-molecule-port")
     with pytest.raises(RuntimeError, match="stop before SCF"):
         reference(case_name, GridSpec(), 1, backend=backend)
 
@@ -51,6 +58,7 @@ def test_gpu_reference_requires_scheduling_and_matched_provider(
 ) -> None:
     """Reject unsupported requests before importing either numerical engine."""
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.delenv("LSB_JOBID", raising=False)
     with pytest.raises(ValueError, match="reference backend"):
         reference(CASES[0], GridSpec(), 1, backend="unknown")
     with pytest.raises(RuntimeError, match="Slurm"):

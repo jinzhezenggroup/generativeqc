@@ -608,6 +608,72 @@ def test_mixed_numerical_oracle_and_work_negative_controls(
             _check_run(altered, campaign, row, contract, tmp_path)
 
 
+def test_preparation_work_is_counted_without_claiming_refinement(
+    tmp_path: Path, contract: dict
+) -> None:
+    """The ledger admits a frozen-input anchor but rejects hidden/late work.
+
+    This synthetic mixed record exercises the general ledger consumer; it is
+    not evidence that the strict-only native optimization admits mixed owners.
+    """
+    row = next(r for r in contract["rows"] if r["id"] == "pbe/rks/water/mixed_correct")
+    campaign = _campaign(tmp_path)
+    value = _run_record(tmp_path, contract, row, campaign)
+    value["checks"]["finite_difference"].update(
+        step_bohr=[0.01, 0.005], reconverged_each_displacement=True
+    )
+    value["checks"]["grid_convergence"]["independent_finer_grid"] = True
+    value["checks"]["changed_geometry"].update(
+        input_sha256=contract["cases"]["water"]["changed_input_sha256"],
+        grid_identity=contract["cases"]["water"]["changed_grid_identity"],
+        complete_energy_forces=True,
+    )
+    precision = value["precision"]
+    events = precision["scf_fock_timeline"]
+    events.insert(
+        0,
+        {
+            "kind": "strict_fock",
+            "phase": "preparation",
+            "sequence": 0,
+            "iteration": 0,
+            "state": "cuda-ks:17:3:5",
+            "count": 1,
+        },
+    )
+    for index, event in enumerate(events):
+        event["sequence"] = index
+    precision["strict_stage_fock_builds"] += 1
+    precision["native_provenance"]["strict_stage_fock_builds"] += 1
+    _check_run(value, campaign, row, contract, tmp_path)
+
+    for fields in (
+        {"iteration": 1},
+        {"kind": "post_scf_fock"},
+        {"kind": "mixed_fock"},
+        {"count": 0},
+    ):
+        altered = copy.deepcopy(value)
+        altered["precision"]["scf_fock_timeline"][0].update(fields)
+        with pytest.raises(InvalidEvidence):
+            _check_run(altered, campaign, row, contract, tmp_path)
+
+    altered = copy.deepcopy(value)
+    late = altered["precision"]["scf_fock_timeline"]
+    late[0], late[1] = late[1], late[0]
+    for index, event in enumerate(late):
+        event["sequence"] = index
+    with pytest.raises(InvalidEvidence, match="preparation must be strict Fock"):
+        _check_run(altered, campaign, row, contract, tmp_path)
+
+    for field in ("strict_stage_fock_builds", "refinement_iterations"):
+        altered = copy.deepcopy(value)
+        altered["precision"][field] += 1
+        altered["precision"]["native_provenance"][field] += 1
+        with pytest.raises(InvalidEvidence):
+            _check_run(altered, campaign, row, contract, tmp_path)
+
+
 @pytest.mark.parametrize(
     "provider",
     [None, "", False, 7, [], {}, "generativeqc", "native-dft"],

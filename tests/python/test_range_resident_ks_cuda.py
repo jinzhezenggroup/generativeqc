@@ -51,8 +51,8 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
     refusal while requiring a fully converged physical result at every call.
     """
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated GPU")
-    assert os.environ.get("SLURM_JOB_ID")
+        pytest.skip("requires an explicitly scheduled GPU")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     import numpy as np
     from generativeqc import Calculator, GridSpec, KsOptions
 
@@ -229,8 +229,8 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
     parity obtained by silently using the ordinary provider throughout.
     """
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated GPU")
-    assert os.environ.get("SLURM_JOB_ID")
+        pytest.skip("requires an explicitly scheduled GPU")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     import numpy as np
     from generativeqc import (
         BatchItemResult,

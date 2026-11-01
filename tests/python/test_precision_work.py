@@ -117,7 +117,13 @@ def test_df_shell_work_is_not_direct_hf_or_an_xc_census(
     assert "weighted_orders_above_5" not in record["fp64_components"]
 
 
-def _library(*, unknown: bool = False, unavailable: bool = False) -> SimpleNamespace:
+def _library(
+    *,
+    unknown: bool = False,
+    unavailable: bool = False,
+    phase: int = _native.PRECISION_PHASE_SCF,
+    iteration: int = 13,
+) -> SimpleNamespace:
     def work(
         handle: object,
         version: int,
@@ -142,9 +148,9 @@ def _library(*, unknown: bool = False, unavailable: bool = False) -> SimpleNames
         if events is not None:
             assert event_capacity == 1
             events[0].kind = _native.PRECISION_EVENT_STRICT_FOCK
-            events[0].phase = _native.PRECISION_PHASE_SCF
+            events[0].phase = phase
             events[0].sequence = 0
-            events[0].iteration = 13
+            events[0].iteration = iteration
             events[0].owner_id = 9
             events[0].solve_epoch = 8
             events[0].state_generation = 7
@@ -196,6 +202,25 @@ def test_decoder_preserves_execution_rows_without_certifying_them() -> None:
             "count": 23,
         }
     ]
+
+
+def test_decoder_preserves_preparation_work_without_an_scf_iteration() -> None:
+    precision = query_precision_work(
+        _library(phase=_native.PRECISION_PHASE_PREPARATION, iteration=0),
+        ctypes.c_void_p(),
+    )
+    assert precision is not None
+    assert precision["scf_fock_timeline"] == [
+        {
+            "kind": "strict_fock",
+            "sequence": 0,
+            "iteration": 0,
+            "state": "cuda-ks:9:8:7",
+            "phase": "preparation",
+            "count": 1,
+        }
+    ]
+    assert precision["complete"] is False
 
 
 def test_unknown_values_old_library_and_unavailable_run_fail_closed() -> None:

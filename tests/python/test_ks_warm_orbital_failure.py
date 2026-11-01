@@ -57,6 +57,7 @@ def orbital_probe(
     harness = (
         r"""
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -108,6 +109,9 @@ struct Owner {
   bool warm_ready = true, warm_orbitals_ready = false, warm_updates = true;
   bool warm_orbitals_are_ao = false;
   bool warm_energy_baseline = false, final_state_ready = false;
+  bool warm_incumbent_deferred = false;
+  std::array<double, 3> warm_xc_totals{};
+  bool defer_range_warm_energy() const { return false; }
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
   bool occupied_xc_frame_ready = false;
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
@@ -128,6 +132,7 @@ struct Owner {
   double warm_energy = -41.0, warm_energy_correction = -0x1p-42;
   struct {
     double electronic_energy = -2569.0, electronic_energy_correction = 0x1p-43;
+    double xc = -1.0, grid_electrons[2]{1.0, 1.0};
   } physical;
   std::size_t elements = 8, matrix = 4;
   std::uint64_t final_generation = 0, generation = 7, solve_epoch = 11;
