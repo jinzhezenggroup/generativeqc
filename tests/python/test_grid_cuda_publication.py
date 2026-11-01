@@ -390,7 +390,7 @@ def publication_probe(
         )
     )
     getter_begin = source.index("int grid_cuda_density_jets_v1(")
-    getter_end = source.index("\nint grid_cuda_xc_v2(", getter_begin)
+    getter_end = source.index("\nint grid_cuda_xc_v3(", getter_begin)
     getter = source[getter_begin:getter_end]
     directory = tmp_path_factory.mktemp("grid-publication")
     path, executable = directory / "probe.cpp", directory / "probe"

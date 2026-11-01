@@ -17,7 +17,7 @@ Retained evidence is stale before and after the refresh. No scientific threshold
 native execution qualification, or public-method admission is changed.
 
 The merge reconciliation uses the exact retained master snapshot at commit
-`c2d776e75818433bf7a702341a1c9b4c48983ada` as its immediately preceding baseline.
+`c402f61fbbfaf33162795d7b87c11bfcfbc0f0d0` as its immediately preceding baseline.
 Its exact summary is retained in
 `manifests/libxc/native-qualification-previous.json.xz`. The combined source
 changes only the same 221 identities; no intervening qualification transition

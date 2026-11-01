@@ -10,6 +10,7 @@
 #include "dft/ao_grid.hpp"
 #include "dft/ao_selection_work.hpp"
 #include "dft/cuda_xc_point_program.hpp"
+#include "dft/cuda_xc_tile.hpp"
 #include "dft/grid.hpp"
 #include "dft/xc_capabilities.hpp"
 #include "runtime/bounded_workspace.hpp"
@@ -59,13 +60,6 @@ struct CudaXcPointBatchPlan {
   bool ragged{};
   /** Prepared nonempty domains above the incumbent 128-AO admission. */
   std::size_t compact_large_tiles{};
-};
-
-/** Immutable offsets into one reusable batch arena. AO labels borrow the
- * original CSR map and every tile retains its own channel-major strides. */
-struct CudaXcCompactTile {
-  std::size_t begin{}, count{}, active{}, map_offset{}, ao_offset{}, work_offset{},
-      potential_offset{};
 };
 
 /** Compiler-emitted facts for one resolved point program. Runtime schedulers

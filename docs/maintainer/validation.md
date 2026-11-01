@@ -280,7 +280,7 @@ their outputs instead of replacing ctest, pytest, autotune, or the f-shell runne
 
 ```bash
 python benchmarks/validation_gate.py run --tier cuda-compile --subject release-build \
-  --output /tmp/compile.json -- cmake --build --preset cuda-release-sm120 --parallel 2
+  --output /tmp/compile.json -- cmake --build --preset cuda-release --parallel 2
 
 python benchmarks/validation_gate.py run --tier gpu-numerical --subject f-matrix \
   --unavailable 'GPU job has not been allocated' --output /tmp/gpu-not-run.json
@@ -293,7 +293,7 @@ For actual GPU work on this machine, preserve Slurm's assigned visibility:
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env GENERATIVEQC_LIBRARY=$PWD/build/cuda-release-sm120/libgenerativeqc.so \
+  env GENERATIVEQC_LIBRARY=$PWD/build/cuda-release/libgenerativeqc.so \
   python benchmarks/validation_gate.py hf --case h2 --device cuda --repeats 5 \
   --output /tmp/hf-cuda.json
 ```
