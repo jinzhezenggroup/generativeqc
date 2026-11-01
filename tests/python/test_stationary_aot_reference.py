@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import pytest
 from generativeqc_compiler.common.provenance import canonical_hash
 
+from tools import ci_select_wheel_matrix as wheel_matrix
 from tools import write_stationary_aot_manifest as manifest
 from tools import write_stationary_aot_reference as reference
 
@@ -128,9 +128,11 @@ def test_wheel_reuses_semantic_sources_separately_from_compiler_objects() -> Non
 def test_wheel_matrix_emits_three_native_images_and_compute80_ptx() -> None:
     """Keep the owner-selected cubins and portable PTX in actual manifest metadata."""
     workflow = (ROOT / ".github/workflows/wheels.yml").read_text()
-    selected = re.search(r'GENERATIVEQC_CUDA_ARCHITECTURES="([^"\n]+)"', workflow)
-    assert selected is not None
-    assert manifest._code_objects(selected.group(1).split(";")) == [
+    assert (
+        'GENERATIVEQC_CUDA_ARCHITECTURES="'
+        '${{ steps.wheel_matrix.outputs.architectures }}"'
+    ) in workflow
+    assert manifest._code_objects(wheel_matrix.FULL_ARCHITECTURES.split(";")) == [
         {"architecture": "sm_120", "kind": "cubin"},
         {"architecture": "sm_80", "kind": "cubin"},
         {"architecture": "sm_80", "kind": "ptx"},

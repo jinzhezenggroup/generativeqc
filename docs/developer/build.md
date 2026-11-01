@@ -281,7 +281,23 @@ resource choices; use the normal settings for performance and release binaries.
 
 ## Prebuilt CUDA wheel coverage
 
-Wheel CI selects `80;90-real;120-real`: native images for `sm_80`, `sm_90`
+The wheel workflow selects the architecture set by event and PR diff. Ordinary
+wheel-scoped pull requests build `120` (SM120 only) with the same installed-wheel
+smoke, payload, and linkage checks. PRs changing the wheel workflow, CUDA
+architecture/toolchain/linker integration, NVIDIA host ABI or packaging build
+scripts automatically require the full matrix before merging; missing PR diff
+evidence fails the job. The base `CMakeLists.txt` and matrix selector are also
+covered by the PR trigger. Master pushes, scheduled checks, and explicit
+workflow dispatches always build the full matrix. Source changes outside the
+wheel-specific PR paths continue to use the other CI workflows; maintainers
+can dispatch a full wheel check explicitly when needed.
+
+Only a successful full-matrix `master` push may publish a trusted compiler
+snapshot. A single-architecture PR build cannot qualify or publish that
+snapshot. The published release wheel must come from an accepted full-matrix
+master/release build, not an ordinary PR artifact.
+
+The full wheel matrix selects `80;90-real;120-real`: native images for `sm_80`, `sm_90`
 and `sm_120`, plus `compute_80` PTX. The unsuffixed CMake target `80`
 emits both native and virtual code; the other targets emit native code only.
 Portable shell profiles remain available with the measured `sm_120` profile.

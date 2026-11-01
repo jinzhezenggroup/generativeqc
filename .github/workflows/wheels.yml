@@ -6,14 +6,16 @@ name: Python wheels
 # resolution through a CUDA-backed native call.
 on:
   # Qualify every master push and seed the default-branch compiler cache that
-  # later PRs can restore. Keep PR qualification scoped to wheel/link contracts.
-  # Weekly and explicit maintainer qualification remain available.
+  # later PRs can restore. Ordinary scoped PRs use SM120; architecture, toolchain,
+  # and wheel-packaging PRs retain the full multiarch qualification before merge.
+  # Weekly and explicit maintainer qualification always use the full matrix.
   schedule:
     - cron: "17 4 * * 1"
   push:
     branches: [master]
   pull_request:
     paths:
+      - "CMakeLists.txt"
       - ".github/workflows/wheels.yml"
       - "cmake/GenerativeQCCudaImplib.cmake"
       - "cmake/cuda_wheel_payload.ld"
@@ -26,6 +28,7 @@ on:
       - "python/ci/prepare-wheel-build.sh"
       - ".github/actions/restore-wheel-ccache/**"
       - "tools/ci_cpu_ccache_snapshot.py"
+      - "tools/ci_select_wheel_matrix.py"
       - "python/ci/repair-wheel.sh"
       - "src/runtime/nvidia_host_api/**"
       - "tools/generate_cuda_implib.py"
@@ -64,6 +67,16 @@ jobs:
           persist-credentials: false
       - name: Audit generated CUDA ABI call coverage
         run: python3 tools/generate_nvidia_host_api.py --check-usage
+
+      # Diff the actual PR base/head, not a name or label that a fork can spoof.
+      # Missing commits or an unreadable diff fail the wheel gate closed.
+      - name: Select CUDA wheel architectures
+        id: wheel_matrix
+        shell: bash
+        env:
+          GQC_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GQC_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 tools/ci_select_wheel_matrix.py
 
       - name: Restore ccache
         id: wheel_ccache
@@ -115,13 +128,13 @@ jobs:
             GENERATIVEQC_ENABLE_CUDA=ON
             GENERATIVEQC_ENABLE_AOT_SHELLS=ON
             GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE=/host${{ runner.temp }}/stationary-aot-source-cache
-            GENERATIVEQC_CUDA_ARCHITECTURES="80;90-real;120-real"
+            GENERATIVEQC_CUDA_ARCHITECTURES="${{ steps.wheel_matrix.outputs.architectures }}"
             CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable -DGENERATIVEQC_AOT_PROFILES=sm_120"
             CCACHE_DIR=/host${{ runner.temp }}/ccache
             CCACHE_MAXSIZE=3G
             CCACHE_BASEDIR=/tmp
             CCACHE_COMPILERCHECK=content
-            GQC_WHEEL_SNAPSHOT_ID=${{ github.run_id }}-${{ github.run_attempt }}
+            GQC_WHEEL_SNAPSHOT_ID=${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('{0}-{1}', github.run_id, github.run_attempt) || '' }}
         with:
           package-dir: .
           output-dir: wheelhouse
