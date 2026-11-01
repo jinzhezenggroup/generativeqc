@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import runpy
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -200,7 +202,12 @@ def test_strict_acceptance_survives_for_every_executed_group(
     monkeypatch.setitem(runtime, "stream_process", run)
     if outcome == "budget":
         times = iter((0, runtime["SUITE_BUDGET_SECONDS"] + 1))
-        monkeypatch.setattr(runtime["time"], "monotonic", lambda: next(times))
+        monkeypatch.setitem(
+            runtime, "time", SimpleNamespace(monotonic=lambda: next(times))
+        )
+        # Diagnostics and other threads share the real time module. Their reads
+        # must not consume this runner's deterministic budget observations.
+        time.monotonic()
     if outcome == "pass":
         runtime["main"]()
         assert "Executed 1 CuMetal CUDA endpoint groups" in capsys.readouterr().out
