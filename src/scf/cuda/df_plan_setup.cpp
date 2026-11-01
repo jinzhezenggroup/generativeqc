@@ -449,9 +449,35 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     detail = "GENERATIVEQC_DF_RESIDENT_EXCHANGE must be auto, full, flat or legacy";
     return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
+  if (!df_packed_projection_policy_valid()) {
+    detail = "GENERATIVEQC_DF_PACKED_PROJECTION must be auto, generated or blas";
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  }
   cudaError_t cuda_error = cudaSetDevice(device_id);
   if (cuda_error != cudaSuccess) {
     return fail_before_plan(cuda_failure(cuda_error, "select CUDA DF device", detail));
+  }
+  int fp32_fp64_ratio = 0;
+  if (packed && df_packed_projection_auto_requested() &&
+      df_packed_projection_preferred(nbf, naux, storage.rank_capacity, tile_elements, 2)) {
+    // Freeze a physical capability with this owner before any captured work.
+    // Explicit controls avoid the query and remain available on every device.
+    // Read the property record: CUDA compatibility headers can expose this
+    // capability without the corresponding cudaDeviceAttr enum. Zero-initialize
+    // it so a provider leaving the optional field unset retains generated work.
+    cudaDeviceProp properties{};
+    cuda_error = cudaGetDeviceProperties(&properties, device_id);
+    if (cuda_error == cudaSuccess) fp32_fp64_ratio = properties.singleToDoublePrecisionPerfRatio;
+    if (cuda_error == cudaErrorNotSupported || cuda_error == cudaErrorInvalidValue) {
+      // Compatibility providers may omit this optional performance attribute.
+      // Unknown capability keeps generated execution; other CUDA failures must
+      // still propagate instead of being mistaken for a resource fallback.
+      const auto pending = cudaGetLastError();
+      if (pending != cudaSuccess && pending != cuda_error)
+        return fail_before_plan(cuda_failure(pending, "query CUDA DF FP64 throughput", detail));
+      fp32_fp64_ratio = 0;
+    } else if (cuda_error != cudaSuccess)
+      return fail_before_plan(cuda_failure(cuda_error, "query CUDA DF FP64 throughput", detail));
   }
   auto* candidate = new (std::nothrow) CudaDensityFittingJkPlan{};
   if (candidate == nullptr) return fail_before_plan(GENERATIVEQC_STATUS_OUT_OF_MEMORY);
@@ -459,6 +485,9 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   candidate->occupied_scf_reserved = occupied_scf_reserved;
   candidate->automatic_rhf_rank = automatic_rhf_rank;
   candidate->resident_exchange_enabled = df_resident_exchange_requested();
+  candidate->packed_projection_blas = df_packed_projection_blas_requested();
+  candidate->packed_projection_auto = df_packed_projection_auto_requested();
+  candidate->packed_projection_fp32_fp64_ratio = fp32_fp64_ratio;
   candidate->triangular_exchange = df_triangular_exchange_requested();
   candidate->flat_dense_exchange = df_flat_dense_exchange_requested();
   candidate->cooperative_diis = df_cooperative_diis_requested();

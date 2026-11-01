@@ -151,3 +151,9 @@ aggregate budget. This cleanup does not change either configured limit.
 
 Agent: ChatGPT
 Model: GPT-6 Astra Pro
+
+The recovery manifest uses an authenticated XZ storage record. The adjacent
+`.json.xz` payload preserves every original manifest byte, including all Git
+revisions, paths, sizes and checksums. `restore_retained_evidence.py` verifies
+both compressed and decoded checksums before applying its ordinary recovery
+validation. Existing recovery commands and paths are unchanged.
