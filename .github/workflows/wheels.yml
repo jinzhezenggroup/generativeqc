@@ -111,6 +111,8 @@ jobs:
           CIBW_ENVIRONMENT: >-
             GENERATIVEQC_ENABLE_CUDA=ON
             GENERATIVEQC_ENABLE_AOT_SHELLS=ON
+          # The full Libxc CUDA catalog is common to every release architecture.
+            SKBUILD_CMAKE_DEFINE=GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON
             GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE=/host${{ runner.temp }}/stationary-aot-source-cache
             GENERATIVEQC_CUDA_ARCHITECTURES=120
             CCACHE_DIR=/host${{ runner.temp }}/ccache
