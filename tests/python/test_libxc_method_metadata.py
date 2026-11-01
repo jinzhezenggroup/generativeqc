@@ -172,6 +172,48 @@ def test_fulltree_nonlocal_methods_use_pinned_source_definitions() -> None:
         assert rows[name]["nonlocal_variant"] is None
 
 
+
+def test_fulltree_non_vv10_hybrids_are_represented_without_public_admission() -> None:
+    from generativeqc_compiler.method import resolve_method
+    from tools.generate_libxc_methods import build_catalog
+
+    generated, _ = build_catalog()
+    expected = {
+        "WB97": (463, "0", "2/5"),
+        "WB97X": (464, "78853/500000", "3/10"),
+        "WB97X-D": (471, "55509/250000", "1/5"),
+        "WB97X-D3": (399, "12233/62500", "1/4"),
+    }
+    for identifier, (libxc_id, short_range, omega) in expected.items():
+        record = LIBXC_METHODS[identifier]
+        assert record == generated[identifier]
+        assert record["libxc_id"] == libxc_id
+        assert record["nonlocal_variant"] is None
+        assert record["direct_semilocal_component"] == (
+            f"HYB_GGA_XC_{identifier.replace('-', '_')}"
+        )
+        assert METHOD_CATALOG[identifier].short_range_exchange == Fraction(
+            short_range
+        )
+        assert METHOD_CATALOG[identifier].long_range_exchange == 1
+        assert METHOD_CATALOG[identifier].range_omega == Fraction(omega)
+        method = resolve_method(identifier, spin="unpolarized")
+        semilocal = next(
+            primitive
+            for primitive in method.primitives
+            if primitive.kind == "semilocal_xc"
+        )
+        payload = semilocal.functional.to_payload()
+        assert payload["expression_provenance"]["registration"] == record[
+            "registration"
+        ]
+        assert payload["qualification"] == "representation-only"
+        assert payload["production_admitted"] is False
+
+    # Unsupported source-defined setters must not be advertised as DFT methods.
+    assert "CASE21" not in generated
+
+
 def test_nonlocal_libxc_methods_have_representation_only_method_ir() -> None:
     from generativeqc_compiler.method import resolve_method
     from generativeqc_compiler.xc._generated_libxc_methods import LIBXC_METHODS

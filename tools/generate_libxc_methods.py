@@ -60,10 +60,9 @@ def _sources() -> list[tuple[Path, str]]:
         if actual != expected:
             raise ValueError(f"pinned Libxc hybrid owner SHA-256 mismatch: {name}")
         result.append((path, actual))
-    # Discover complete nonlocal method owners from the separately authenticated
-    # fulltree, without a named-functional or file-name allowlist. An owner may
-    # contain several Libxc registrations; only its VV10-bearing cases enter
-    # the method inventory (ordinary hybrids retain the existing source policy).
+    # Discover source-backed hybrid and VV10 owners from the authenticated
+    # fulltree without a named-functional allowlist. Ordinary semilocal methods
+    # remain the responsibility of the independent bulk Libxc importer.
     extended = registry["sources"][NONLOCAL_SOURCE_ID]
     if extended.get("revision") != REVISION:
         raise ValueError("unexpected fulltree Libxc source-registry revision")
@@ -78,7 +77,12 @@ def _sources() -> list[tuple[Path, str]]:
         actual = hashlib.sha256(raw).hexdigest()
         if actual != metadata["sha256"]:
             raise ValueError(f"pinned Libxc nonlocal owner SHA-256 mismatch: {name}")
-        if b"XC_FLAGS_VV10" not in raw or path.name in original_names:
+        if path.name in original_names:
+            continue
+        if (
+            b"XC_FLAGS_VV10" not in raw
+            and not name.startswith(("src/hyb_gga_xc_", "src/hyb_mgga_xc_"))
+        ):
             continue
         result.append((path, actual))
     if not result:
@@ -99,7 +103,12 @@ def build_catalog() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
         ):
             if fulltree and (
                 record["status"] != "generated"
-                or record.get("nonlocal_variant") is None
+                or (
+                    record.get("nonlocal_variant") is None
+                    and not record["registration"].startswith(
+                        ("HYB_GGA_XC_", "HYB_MGGA_XC_")
+                    )
+                )
             ):
                 continue
             registration = record["registration"]

@@ -147,14 +147,14 @@
         "python/generativeqc_compiler/xc/libxc_method_metadata.py": "1c0517435e8101d83f19cfb35cc094e42a242b52adf141249013382cec4ec096"
       },
       "generator": "tools/generate_libxc_methods.py",
-      "generator_sha256": "96cfc85191d49673f50586861f47ef897f54736e6b6e6a0b0d2a40705d59a6fa",
+      "generator_sha256": "eddc50f5d051d0d0c3f1b65f14687312e9bca45a9133033eacfeb3338ff13691",
       "input_identity_sha256": "aa1123524c7c173d270806ce1f0eebaf7131448d99d77c633a912d6c31bbaea2",
       "inputs": [
         "libxc-7.0.0",
         "libxc-7.0.0-fulltree"
       ],
       "outputs": {
-        "python/generativeqc_compiler/xc/_generated_libxc_methods.py": "bd9ae4b3898818b2fdc207f0b6be11e701f60700dbc357f2d57809437ccd17c3"
+        "python/generativeqc_compiler/xc/_generated_libxc_methods.py": "208cbaf401fef5d0056e0279dd60bc07cfc95cceb2a0c74322cccfe4f2e136c7"
       }
     },
     "libxc-xc-admission": {
