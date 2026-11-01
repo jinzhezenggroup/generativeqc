@@ -54,6 +54,7 @@
     "cmake/GenerativeQCHessianAot.cmake",
     "cmake/GenerativeQCCutlass.cmake",
     "cmake/GenerativeQCCudaImplib.cmake",
+    "cmake/cuda_wheel_payload.ld",
     "cmake/GenerativeQCGenerated.cmake",
     "cmake/GenerativeQCGeneratedSources.cmake",
     "cmake/GenerativeQCSources.cmake",
