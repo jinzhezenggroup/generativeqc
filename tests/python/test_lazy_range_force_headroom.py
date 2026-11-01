@@ -76,6 +76,13 @@ int main(int argc,char** argv) {
 @pytest.mark.parametrize(
     ("mode", "enabled", "expected"),
     [
+        ("fits", None, "1 1"),
+        ("equal", None, "1 1"),
+        ("pressure", None, "0 1"),
+        ("energy-only", None, "1 0"),
+        ("driver-failure", None, "error 1"),
+        ("no-replay", None, "0 0"),
+        ("mixed", None, "0 0"),
         ("fits", "1", "1 1"),
         ("equal", "1", "1 1"),
         ("pressure", "1", "0 1"),
@@ -91,11 +98,14 @@ def test_imminent_force_headroom(
     headroom_probe: Path,
     monkeypatch: pytest.MonkeyPatch,
     mode: str,
-    enabled: str,
+    enabled: str | None,
     expected: str,
 ) -> None:
     """Insufficient force headroom keeps eager work; driver errors never select it."""
-    monkeypatch.setenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY", enabled)
+    if enabled is None:
+        monkeypatch.delenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY", enabled)
     result = subprocess.run(
         [str(headroom_probe), mode], check=True, capture_output=True, text=True
     )

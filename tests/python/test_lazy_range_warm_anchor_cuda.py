@@ -38,7 +38,7 @@ def independent_reference() -> dict[str, Any]:
 
     case = "water-def2-svp-spherical"
     _, auxiliary = auxiliary_bases(benchmark_cases()[case])
-    return reference(
+    result = reference(
         case,
         GridSpec(12, 4, 8),
         1,
@@ -48,6 +48,17 @@ def independent_reference() -> dict[str, Any]:
         backend="gpu4pyscf",
         vv10_density_threshold=float(MOLECULAR_VV10_DENSITY_THRESHOLD),
     )
+    # The matched GPU4PySCF adapter binds methods back to its engine, creating
+    # collectible cycles. Its result contains only host scalars/lists. Release
+    # the oracle and idle CuPy blocks before testing native ownership; otherwise
+    # separate module fixtures can retain gigabytes until interpreter teardown.
+    import gc
+
+    import cupy as cp
+
+    gc.collect()
+    cp.get_default_memory_pool().free_all_blocks()
+    return result
 
 
 @pytest.mark.parametrize(
@@ -77,8 +88,14 @@ def test_deferred_range_anchor_preserves_frozen_warm_state(
 
     populations = []
     evidence = []
-    for lazy in (False, True):
-        monkeypatch.setenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY", str(int(lazy)))
+    for lazy in (False, True, None):
+        # The public default must exercise the same eviction and frozen-seed
+        # behavior as explicit admission, including the counted fallback work.
+        deferred = lazy is not False
+        if lazy is None:
+            monkeypatch.delenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY", raising=False)
+        else:
+            monkeypatch.setenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY", str(int(lazy)))
         monkeypatch.setenv("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES", "1")
         monkeypatch.setenv("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY", "1")
         monkeypatch.setenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES", str(8 << 30))
@@ -195,12 +212,15 @@ def test_deferred_range_anchor_preserves_frozen_warm_state(
             [e for e in r.precision["scf_fock_timeline"] if e["phase"] == "preparation"]
             for r in population
         ]
-        assert [len(p) for p in phases] == [0, 0, int(lazy), 0]
-        if lazy:
+        assert [len(p) for p in phases] == [0, 0, int(deferred), 0]
+        if deferred:
             assert phases[2][0]["kind"] == "strict_fock"
             assert fallback.fock_builds == fallback.iterations + 1
             assert second.fock_builds == second.iterations
         populations.append(population)
-    for eager, deferred in zip(*populations, strict=True):
-        assert abs(eager.energy - deferred.energy) < 1e-10
-        np.testing.assert_allclose(eager.forces, deferred.forces, atol=1e-7, rtol=0)
+    for eager, explicit, default in zip(*populations, strict=True):
+        for candidate in (explicit, default):
+            assert abs(eager.energy - candidate.energy) < 1e-10
+            np.testing.assert_allclose(
+                eager.forces, candidate.forces, atol=1e-7, rtol=0
+            )

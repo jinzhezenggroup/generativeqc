@@ -13,10 +13,10 @@ from test_lazy_range_warm_anchor_cuda import (
 )
 
 
-@pytest.mark.parametrize("lazy", (False, True))
+@pytest.mark.parametrize("lazy", (False, True, None))
 def test_range_seed_export_preserves_final_state_and_outlives_owner(
     monkeypatch: pytest.MonkeyPatch,
-    lazy: bool,
+    lazy: bool | None,
     independent_reference: dict[str, Any],
 ) -> None:
     """Export must preserve a live final lease; imports rebuild their own proof.
@@ -30,8 +30,12 @@ def test_range_seed_export_preserves_final_state_and_outlives_owner(
     from generativeqc._warm_seed_native import capture_snapshot
     from test_range_resident_ks_cuda import _auxiliary_basis
 
+    # Unset is a separate public entry point, including transported-seed safety.
+    if lazy is None:
+        monkeypatch.delenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY", str(int(lazy)))
     for key, value in {
-        "GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY": str(int(lazy)),
         "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
         "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
         "GENERATIVEQC_KS_RESIDENT_MAX_BYTES": str(8 << 30),
@@ -83,7 +87,7 @@ def test_range_seed_export_preserves_final_state_and_outlives_owner(
             fallback = source.execute(strict=True).items[0]
             check_result(fallback)
             assert fallback.iterations == 1
-            assert fallback.fock_builds == fallback.iterations + int(lazy)
+            assert fallback.fock_builds == fallback.iterations + int(lazy is not False)
         calculator.clear_cache()
 
         # The source context has gone away. Repeated imports retain only the

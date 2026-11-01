@@ -125,3 +125,12 @@ control (3838) also completes both six-phase lifecycles with eager work retained
 paired energy/force errors at most 4.55e-13 Eh / 1.35e-12 Eh/Bohr, and a single-pair
 lifecycle change of +0.004%. The 5090 108-atom control does not
 erase its 120-atom timeouts; default promotion remains a separate decision.
+
+## Default admission follow-up
+
+The default-off policy is superseded by the bounded candidate described in
+[the default-anchor decision](../implemented/performance/2026-11-01-default-range-warm-anchor.md).
+It retains this proposal's force-envelope guard and rejected unconditional
+control. Its exact source has separate 5090/PRO6000 qualification; A100
+requalification remains pending. Historical identities and conclusions above
+remain unchanged.
