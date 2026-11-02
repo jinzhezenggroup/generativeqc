@@ -77,6 +77,15 @@ Raw positive and negative receipts live in
 `benchmarks/results/dft-local-autotune-20261103/df-receipts.json.xz`; see `DF.md`
 for source identities, complete timing scope and reproduction.
 
+After preserving the separately updated parent, normally rebuild source
+`e9c8b3a00` rather than reusing an incompatible binary or weakening source
+checks. Slurm 1450 passes all 10 independent XC/J/K/DF GPU tests; focused CPU
+suites pass 187 tests with 11 skipped. Water repeats the packed-value holdout
+at 13.378 to 12.660 ms (1.057x, lower 95% 1.052x) and actually replays; the
+dimer remains a no-winner. Three J/K recipes and XC's real profile/explicit/
+budget fallback cases also replay on this integrated source. Keep this
+campaign separate from the earlier measured identities in the raw archive.
+
 ## Revisit when
 
 Independent rank-deficient metric/derivative semantics, complete native UHF

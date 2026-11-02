@@ -42,3 +42,8 @@ allocation, run `python -m generativeqc.tune_cli` with `--grid-level 3`,
 device visibility. The current workflow and exact solver controls are in
 `docs/user/local_autotuning.md`; new machine/noise conditions can select a
 different winner or no winner.
+
+Related exact-workload policy campaigns are documented in [JK.md](JK.md) and
+[DF.md](DF.md). DF's archive also retains separately source-bound integration
+checks after the parent branches are combined; these do not relabel this XC
+campaign's measurements.

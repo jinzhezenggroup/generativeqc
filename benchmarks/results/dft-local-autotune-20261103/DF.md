@@ -55,6 +55,39 @@ policies, against independent E/F, observed full-rank/Fock work and native
 resource admission. Initial focused CPU validation passes 183 tests with 11
 optional cases skipped; pre-commit passes.
 
+## Updated-parent integration
+
+Source `e9c8b3a00`, native input identity
+`413127726534f605780873d80f46ed23e717969d07423c3e067a6293cbd32496`,
+is rebuilt normally after integrating the updated XC/J/K parent and its master
+changes. Slurm job 1450 independently passes all **10** opt-in XC/J/K/DF GPU
+tests. The broader focused CPU suites pass **187**, with 11 optional cases
+skipped, including the compiled library/source ABI check.
+
+Water again selects packed values: fresh holdout **13.378 -> 12.660 ms,
+1.057x**, lower 95% **1.052x**. The maximum independent energy/force errors
+are `7.11e-14` Hartree / `1.10e-12` Hartree/Bohr. The 8 MiB dimer again passes
+all six policies' numerical/work/resource gates but produces no winner.
+These reports are retained separately from jobs 1448/1449; timing samples
+from different source identities are never pooled.
+
+The accepted DF recipe actually replays under CUDA with three observed Fock
+builds. The same integration job also repeats and replays all three J/K
+recipes, still selecting Rys Coulomb rather than proving a K-specific win:
+
+| Integration J/K workload | Fresh holdout baseline -> candidate, ms | Speedup / lower 95% |
+| --- | --- | --- |
+| Water PBE-RKS/def2-SVP | 82.359 -> 71.021 | 1.160 / 1.154 |
+| Water PBE0-RKS/def2-SVP | 113.287 -> 101.911 | 1.112 / 1.102 |
+| Water PBE0-UKS/def2-SVP, cation doublet | 218.781 -> 196.430 | 1.114 / 1.112 |
+
+H2 PBE-RKS/sto-3g XC search installs a tile-512 profile in the isolated
+qualification cache. Actual Calculator replay selects 512, preserves explicit
+tile 64 and retains native tile 256 under a 1 GiB ResourceBudget, with matching
+energies and forces. The archive retains these separately labelled integration
+reports and the runtime transcript; the user's default profile cache is not
+changed. Local pre-commit and the offline Libxc catalog check pass.
+
 ## Reproduction and consumption
 
 Decode the archive with Python `lzma.open`; each campaign run's `report.workload`
