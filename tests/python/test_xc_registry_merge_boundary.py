@@ -6,6 +6,7 @@ import typing
 
 import pytest
 from generativeqc import ks
+from generativeqc_compiler.xc.spec import UnsupportedXC
 
 # Native automatic-selector namespace plus the pinned Libxc GGA_X_APBE ID.
 APBE_CODE = 0x30000 | 184
@@ -29,13 +30,13 @@ def test_automatic_code_precedes_curated_and_split_dispatch(
 @pytest.mark.parametrize(
     "selector", ("libxc:GGA_X_APBE", "libxc-rks:GGA_X_APBE", "libxc-uks:GGA_X_APBE")
 )
-def test_automatic_public_selector_does_not_enter_named_resolution(
-    monkeypatch: pytest.MonkeyPatch, selector: str
-) -> None:
-    monkeypatch.setattr(ks, "resolve_ks_method", _unexpected)
-
-    # Exercise the real public parser and generated registration lookup together.
+def test_automatic_public_selector_preserves_atomic_recipe(selector: str) -> None:
+    # Public aliases now share ordinary resolution, but must retain precisely
+    # the requested component rather than adding a curated X/C partner.
+    method, _ = ks.resolve_ks_method(selector)
+    assert method.primitives[0].functional.components == (("GGA_X_APBE", 1),)
     assert ks.native_xc_functional_code(selector) == APBE_CODE
+    assert ks._native_semilocal_code(method) == APBE_CODE
 
 
 @pytest.mark.parametrize(
@@ -44,18 +45,18 @@ def test_automatic_public_selector_does_not_enter_named_resolution(
         ("libxc:", ValueError, "requires a functional registration name"),
         (
             "libxc:NOT_A_FUNCTIONAL",
-            ks.UnsupportedXC,
+            UnsupportedXC,
             "not an automatic semilocal registration",
         ),
     ),
 )
-def test_invalid_automatic_selector_fails_before_named_resolution(
+def test_invalid_automatic_selector_fails_before_native_lowering(
     monkeypatch: pytest.MonkeyPatch,
     selector: str,
     error: type[Exception],
     message: str,
 ) -> None:
-    monkeypatch.setattr(ks, "resolve_ks_method", _unexpected)
+    monkeypatch.setattr(ks, "_native_semilocal_code", _unexpected)
 
     with pytest.raises(error, match=message):
         ks.native_xc_functional_code(selector)

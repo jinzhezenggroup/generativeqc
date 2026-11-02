@@ -36,7 +36,7 @@ SPLIT_HYBRIDS: Mapping[str, SplitHybridRecord] = MappingProxyType({
         ),
         "exact_exchange": "11/25",
         "cuda_df_energy_force": True,
-        "cuda_fp64_local_ao": False,
+        "cuda_fp64_local_ao": True,
     })),
 })
 

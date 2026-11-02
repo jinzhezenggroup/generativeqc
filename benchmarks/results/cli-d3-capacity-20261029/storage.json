@@ -1,0 +1,21 @@
+{
+  "scope": "Lossless historical record storage; numerical references, every raw endpoint value and acceptance decisions unchanged.",
+  "original_revision": "8b681c7e8d64b3d6dc10fd8d2c1cd5da6ec83fb1",
+  "original_path": "benchmarks/results/rhf-host-response-20261025/records.json",
+  "original_git_blob": "839e64fe5ea2f9db1eb8a0b4824c7dbf4821d4d5",
+  "original_bytes": 74813,
+  "original_sha256": "f2cf55787de2985126b53a1ded41f6b66b874d1c225a2ada88ec266712a2ef7a",
+  "stored_path": "benchmarks/results/rhf-host-response-20261025/records.json.gz",
+  "stored_bytes": 7536,
+  "stored_sha256": "ae0c69b1e3488de7c9b74ca3cb1b9db193c48f294017b7ea06227068ff75c3d5",
+  "stored_revision": "0388bcfbb42834e20fad577ac237d573772e9266",
+  "stored_git_blob": "67cb8c3af1fae0767fbbee8080630b2dba783b63",
+  "historical_storage": [
+    {
+      "manifest_path": "benchmarks/results/cli-d3-capacity-20261029/rhf-xz-storage.history.json",
+      "manifest_sha256": "aa3834061cc87d6acea9295c6d3b1bd3fe3c8fa27653c1f9ef8ced24f0f4af73",
+      "revision": "e3d273fabb9985edd1c05c879c944854fb3748fd",
+      "stored_git_blob": "76d391dc059cda2a92bef16ba968b38e04889391"
+    }
+  ]
+}

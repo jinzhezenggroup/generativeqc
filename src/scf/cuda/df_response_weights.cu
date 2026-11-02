@@ -582,7 +582,8 @@ static cudaError_t contract_raw_coulomb_response(
     const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>& consume,
     const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels,
     const std::function<void(const double*, double*)>& read_raw_charge,
-    const std::function<void(const double*, const double*, double)>& consume_raw_derivative) {
+    const std::function<void(const double*, const double*, double)>& consume_raw_derivative,
+    const std::function<void(const double*, double)>& consume_raw_metric_derivative) {
   const auto matrix = n * n, aa = a * a;
   auto* bar_metric = workspace + aa;
   auto* raw = workspace + 4 * aa;
@@ -639,12 +640,15 @@ static cudaError_t contract_raw_coulomb_response(
     runtime::cuda_trace::trace_counter("response_raw_coulomb_factor_gemvs", 2 * terms.size());
     runtime::cuda_trace::trace_counter("response_raw_coulomb_factor_flops", 4 * terms.size() * aa);
   }
-  auto error = cudaMemsetAsync(bar_metric, 0, aa * sizeof(double), stream);
-  if (error != cudaSuccess) return error;
-  for (std::size_t t = 0; t < terms.size(); ++t)
-    if (terms[t].coulomb_coefficient != 0)
-      coulomb_metric_kernel<<<blocks(aa), threads, 0, stream>>>(a, -terms[t].coulomb_coefficient,
-                                                                potentials + t * a, bar_metric);
+  auto error = cudaSuccess;
+  if (!consume_raw_metric_derivative) {
+    error = cudaMemsetAsync(bar_metric, 0, aa * sizeof(double), stream);
+    if (error != cudaSuccess) return error;
+    for (std::size_t t = 0; t < terms.size(); ++t)
+      if (terms[t].coulomb_coefficient != 0)
+        coulomb_metric_kernel<<<blocks(aa), threads, 0, stream>>>(a, -terms[t].coulomb_coefficient,
+                                                                  potentials + t * a, bar_metric);
+  }
   if (consume_raw_derivative) {
     for (std::size_t t = 0; t < terms.size(); ++t)
       if (terms[t].coulomb_coefficient != 0)
@@ -666,7 +670,15 @@ static cudaError_t contract_raw_coulomb_response(
       runtime::cuda_trace::trace_counter("response_auxiliary_blocks", 1);
     }
   }
-  consume(1, {}, aa, bar_metric);
+  if (consume_raw_metric_derivative) {
+    // The exact pure-J cotangent is a sum of signed rank-one terms. Contract
+    // each original term without materializing or traversing an AO-pair matrix.
+    for (std::size_t t = 0; t < terms.size(); ++t)
+      if (terms[t].coulomb_coefficient != 0)
+        consume_raw_metric_derivative(potentials + t * a, -terms[t].coulomb_coefficient);
+  } else {
+    consume(1, {}, aa, bar_metric);
+  }
   return cudaGetLastError();
 }
 
@@ -1802,12 +1814,15 @@ cudaError_t contract_cuda_df_response_weights(
     const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels,
     const std::function<void(const double*, double*)>& read_raw_charge,
     const std::function<void(const double*, const double*, double)>& consume_raw_derivative,
-    bool compact_fitted_metric_workspace) {
+    bool compact_fitted_metric_workspace,
+    const std::function<void(const double*, double)>& consume_raw_metric_derivative) {
   if (compact_fitted_metric_workspace &&
       (!streamed_occupied || !streamed_occupied->fitted_occupied_source || !metric.full_rank ||
        borrowed || packed_pairs || single_fitted_tensor))
     return cudaErrorInvalidValue;
-  if ((read_raw_panels || read_raw_charge || consume_raw_derivative) && !raw_coulomb)
+  if ((read_raw_panels || read_raw_charge || consume_raw_derivative ||
+       consume_raw_metric_derivative) &&
+      !raw_coulomb)
     return cudaErrorInvalidValue;
   if (raw_coulomb) {
     if (!metric.full_rank || borrowed || streamed_occupied || single_fitted_tensor ||
@@ -1817,9 +1832,9 @@ cudaError_t contract_cuda_df_response_weights(
           return term.exchange_coefficient == 0;
         }))
       return cudaErrorInvalidValue;
-    return contract_raw_coulomb_response(n, a, terms, densities, metric, tile, workspace, stream,
-                                         blas, read_values, consume, read_raw_panels,
-                                         read_raw_charge, consume_raw_derivative);
+    return contract_raw_coulomb_response(
+        n, a, terms, densities, metric, tile, workspace, stream, blas, read_values, consume,
+        read_raw_panels, read_raw_charge, consume_raw_derivative, consume_raw_metric_derivative);
   }
   if (!metric.full_rank) {
     if (packed_pairs || streamed_occupied || single_fitted_tensor) return cudaErrorInvalidValue;

@@ -177,6 +177,16 @@ struct ScfOptions {
   dft::XcDensityRoute xc_density_route{dft::XcDensityRoute::DensityMatrix};
   /** Bounded AO/XC tile schedule; does not alter the grid or functional. */
   std::size_t xc_tile_points{256};
+  /** Public zero/unspecified request; resolved once per prepared geometry.
+   * Internal callers that set xc_tile_points keep their explicit schedule. */
+  bool automatic_xc_tile_points{};
+  /** Independent CUDA stationary-force bound; zero preserves the SCF tile.
+   * Keep the request separate so explicit SCF tiles and default behavior do
+   * not change when an application selects a larger force batch. */
+  std::size_t xc_force_tile_points{};
+  [[nodiscard]] std::size_t stationary_tile_points() const noexcept {
+    return xc_force_tile_points ? xc_force_tile_points : xc_tile_points;
+  }
   /** #237 experimental CPU PBE-RKS anchor/update path. Default-off and not
    * exposed by the public descriptor until complete-solve benefit is proven. */
   bool experimental_incremental_xc{};

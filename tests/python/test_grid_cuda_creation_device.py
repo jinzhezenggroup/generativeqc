@@ -148,6 +148,8 @@ std::unique_ptr<tensor::PreparedBoundedContraction> prepare_grid_panel(
 }
 }
 using namespace generativeqc_tensor;
+// Factory-only probe never creates optional XC queues.
+struct SpatialXcBatch {};
 """
     for marker in (
         "struct ResidentAoMap",

@@ -35,7 +35,7 @@ struct SymmetricProductInvocation {
 struct SymmetricProductDiagnostic {
   runtime::NativeLoweringCandidate candidate;
   // Dense qualification never admits indexed scatter. Indexed preparation
-  // publishes its separate candidate only after cache/resource admission.
+  // publishes the actual SYR2K or GEMM recipe only after cache/resource admission.
   runtime::NativeLoweringCandidate indexed_candidate;
   std::string_view alternative_rejection;
   std::size_t host_bytes{}, provider_allowance{}, retained_provider_bytes{};

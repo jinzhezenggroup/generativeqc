@@ -8,6 +8,7 @@ parameter binding from GenerativeQC participates in the reference calculation.
 
 from __future__ import annotations
 
+import argparse
 import ctypes
 import json
 from pathlib import Path
@@ -86,6 +87,21 @@ def evaluate_reference(
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--functional",
+        action="append",
+        default=[],
+        help="Generate an independent reference before importing this registration",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write selected registrations to one fixture (requires --functional)",
+    )
+    args = parser.parse_args()
+    if bool(args.functional) != bool(args.output):
+        parser.error("--functional and --output must be used together")
     import pyscf
     from pyscf.dft import libxc
 
@@ -106,11 +122,24 @@ def main() -> int:
         )
         function.restype = None
     catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+    requested = {name.upper() for name in args.functional}
+    records = {record["name"]: record for record in catalog["registrations"]}
+    if requested - records.keys():
+        parser.error(
+            f"unknown Libxc registrations: {sorted(requested - records.keys())}"
+        )
+    if requested and len({records[name]["family"] for name in requested}) != 1:
+        parser.error("one selected fixture must use one Libxc ingredient family")
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for family in ("lda", "gga", "mgga"):
         cases = []
         for record in catalog["registrations"]:
-            if record["graph_status"] != "imported" or record["family"] != family:
+            selected = (
+                record["name"] in requested
+                if requested
+                else record["graph_status"] == "imported"
+            )
+            if not selected or record["family"] != family:
                 continue
             for spin in ("polarized", "unpolarized"):
                 samples = [
@@ -125,6 +154,8 @@ def main() -> int:
                         "expected": [expected for _, expected in samples],
                     }
                 )
+        if not cases:
+            continue
         result = {
             "schema": "generativeqc.libxc-bulk-interior-reference/v1",
             "oracle": {
@@ -137,7 +168,7 @@ def main() -> int:
             "family": family,
             "cases": cases,
         }
-        (OUTPUT / f"{family}.json").write_text(
+        (args.output or OUTPUT / f"{family}.json").write_text(
             json.dumps(result, indent=2, allow_nan=False) + "\n", encoding="utf-8"
         )
         print(f"{family}: {len(cases)} spin cases, {2 * len(cases)} reference points")

@@ -1,0 +1,39 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_commit": "c36509e7917f0656d3c7869e323afa3479b4fcf7",
+  "files": [
+    {
+      "original_path": "benchmarks/results/hf-seed-preparation-20261025/paired.json.gz",
+      "original_git_blob": "b56b8409125dfccab7b80a75d4166cf81cf03c95",
+      "original_sha256": "1ad04020cc1bec21cdb8f7709cee3105db8805ef8d95dca433615724208f8da6",
+      "original_bytes": 67605,
+      "stored_path": "benchmarks/results/hf-seed-preparation-20261025/paired.json.xz",
+      "stored_sha256": "d09edb0ee7e622f28914766d96cb9e61d0e798429a9a3a7eeebe59405e1cba06",
+      "stored_bytes": 33476,
+      "decoded_sha256": "253534d37d00ef4499a691c5239f4af81d579413ae6adee4210b9858deebde84",
+      "decoded_bytes": 357793
+    },
+    {
+      "original_path": "benchmarks/results/hf-seed-preparation-20261025/execution-receipts.json.gz",
+      "original_git_blob": "155b0a68a84a65e684ed15ccfbbc0a1047602307",
+      "original_sha256": "f3e5cfd2ce680d57e16d45efe427a709d188108385833dec3af7ca897af3dbd1",
+      "original_bytes": 113810,
+      "stored_path": "benchmarks/results/hf-seed-preparation-20261025/execution-receipts.json.xz",
+      "stored_sha256": "f494dc0e60db5bcc78a2682d0492ac3ab6ff4ad12c1919f5a8f774b9a4a42f63",
+      "stored_bytes": 27776,
+      "decoded_sha256": "9c87c72b5558ccbab72617b2e65c8b4a58e316ae56b4e92a1b520ed0778ca2af",
+      "decoded_bytes": 3539087
+    },
+    {
+      "original_path": "benchmarks/results/hf-seed-preparation-20261025/moved.json.gz",
+      "original_git_blob": "c911022be4dafde6e7bbdbd40cd6ad4d2c7a88e4",
+      "original_sha256": "a1c6abd38144f730b7075eae0994db28ff5cc8f8e466f367e89fd62add9bce9a",
+      "original_bytes": 23582,
+      "stored_path": "benchmarks/results/hf-seed-preparation-20261025/moved.json.xz",
+      "stored_sha256": "7cfb3ebea00ac644d948aa0c79ec7788cde27ac7ac46d30ab7beef55f3f65390",
+      "stored_bytes": 17872,
+      "decoded_sha256": "043bfd3839fb930c7a4a2e2e01b6ded477180be4509bff165a8cb62de8b0d494",
+      "decoded_bytes": 82173
+    }
+  ]
+}

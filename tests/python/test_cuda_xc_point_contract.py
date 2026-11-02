@@ -61,7 +61,14 @@ def test_semantic_cuda_resolution_does_not_grant_optional_mechanisms() -> None:
 def test_cpu_and_cuda_share_structural_registry_without_a_positive_whitelist() -> None:
     entries = automatic_registry_entries()
     assert entries == cpu_registry.registry_entries()
-    assert len(entries) == 197
+    from generativeqc_compiler.xc._generated_semilocal_compositions import COMPOSITIONS
+    from generativeqc_compiler.xc.spec import POINTWISE_BULK_COMPONENTS
+
+    # Atomic programs and semantic compositions must both reach each backend;
+    # inventory growth is not a regression, but dropping any entry is.
+    assert {entry.name for entry in entries} == set(POINTWISE_BULK_COMPONENTS) | set(
+        COMPOSITIONS
+    )
     assert len({entry.code for entry in entries}) == len(entries)
     assert cuda_registry.automatic_registry_entries is automatic_registry_entries
     assert cuda_registry.SHARD_COUNT == 32

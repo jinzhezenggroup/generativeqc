@@ -118,5 +118,6 @@ if __name__ == "__main__":
         required=True,
         help="new directory; existing paths are refused",
     )
+    parser.add_argument("--capsule", type=Path, default=CAPSULE, help="verified restored historical capsule")
     args = parser.parse_args()
-    print(json.dumps(restore(args.output), indent=2))
+    print(json.dumps(restore(args.output, args.capsule), indent=2))

@@ -70,7 +70,21 @@ def occupied_probe(
 
 @pytest.mark.parametrize(
     "mode",
-    ("resident", "tiled", "streamed", "zero", "projected", "projected_failure", "raw"),
+    (
+        "resident",
+        "tiled",
+        "streamed",
+        "zero",
+        "projected",
+        "projected_failure",
+        "raw",
+        "packed",
+        "packed_generated",
+        "packed_tight",
+        "packed_failure",
+        "packed_library_gram",
+        "packed_generated_gram",
+    ),
 )
 def test_occupied_exchange_output_contract(occupied_probe: Path, mode: str) -> None:
     subprocess.run([str(occupied_probe), mode], check=True, timeout=15)

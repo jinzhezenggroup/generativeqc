@@ -1,0 +1,620 @@
+{
+  "candidate_production_commit": "15d8894c90a5f00c7ab03ef3034c4bed796dd43f",
+  "baseline_production_commit": "7adf42ceaab0fb32bb69232676fbfbba326d441e",
+  "cpu": {
+    "metadata": {
+      "A": {
+        "source": "/tmp/qc-2227-precision-policy-fix-20261029",
+        "library": "/tmp/qc-2227-non-r3-20261028/.artifacts/scf-defaults-baseline/libgenerativeqc-cpu.so.0",
+        "library_sha256": "ac6eca02cef833cb3f2a834418d30c9e81cfde533362ecae4d57654af63c8a15",
+        "backend": "cpu",
+        "constructor_included": true,
+        "native_budget_controls": false,
+        "cpu_affinity": [
+          0
+        ],
+        "slurm_job_id": null,
+        "cuda_visible_devices": ""
+      },
+      "B": {
+        "source": "/tmp/qc-2227-precision-budget-controls-20261029",
+        "library": "/tmp/qc-2227-precision-controls-cpu-install/lib/libgenerativeqc.so.0",
+        "library_sha256": "3c00a47692bf5a4cd5cbee5e8f0a9b4f30e6889f1da27afc3eb23e4500e44c78",
+        "backend": "cpu",
+        "constructor_included": true,
+        "native_budget_controls": true,
+        "cpu_affinity": [
+          0
+        ],
+        "slurm_job_id": null,
+        "cuda_visible_devices": ""
+      }
+    },
+    "groups": 8,
+    "endpoint_count": 1792,
+    "max_energy_difference": 0.0,
+    "max_force_difference": 0.0,
+    "maximum_ratio": 1.0051806418477298,
+    "all_within_1_05": true
+  },
+  "scope": "CPU/CUDA construction-inclusive complete endpoints, all 1.05 gates passed. Production source 15d8894c9; subsequent commits retain evidence only.",
+  "cuda": {
+    "metadata": {
+      "A": {
+        "source": "/home/jzzeng/codes/qc-2227-precision-policy-20261029",
+        "library": "/home/jzzeng/codes/qc-2227-precision-policy-20261029/artifacts/libgenerativeqc.so.0",
+        "library_sha256": "85877880d969f2bdbf3b124347224fa540bef3bd9a2760e7f01f09b4d54c63aa",
+        "backend": "cuda",
+        "constructor_included": true,
+        "native_budget_controls": false,
+        "cpu_affinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127
+        ],
+        "slurm_job_id": "14846",
+        "cuda_visible_devices": "0"
+      },
+      "B": {
+        "source": "/home/jzzeng/codes/qc-2227-precision-controls-15d8894c9-20261029",
+        "library": "/home/jzzeng/codes/qc-2227-precision-controls-15d8894c9-20261029/artifacts/libgenerativeqc.so.0",
+        "library_sha256": "391243874c9be6bfe6069fc9ef5444394337500480d174d83f88cc69bed56e78",
+        "backend": "cuda",
+        "constructor_included": true,
+        "native_budget_controls": true,
+        "cpu_affinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127
+        ],
+        "slurm_job_id": "14846",
+        "cuda_visible_devices": "0"
+      }
+    },
+    "groups": 8,
+    "endpoint_count": 1792,
+    "max_energy_difference": 1.4210854715202004e-13,
+    "max_force_difference": 1.325606291402437e-13,
+    "maximum_ratio": 1.0114521078447871,
+    "all_within_1_05": true
+  },
+  "slurm": {
+    "job_id": 14846,
+    "node": "node1",
+    "partition": "main",
+    "gpu_request": "gpu:5090:1",
+    "state": "COMPLETED",
+    "exit_code": "0:0",
+    "elapsed": "00:20:20",
+    "time_limit": "01:00:00",
+    "cuda_visible_devices": "0"
+  },
+  "validation": {
+    "cpu_ctests": 129,
+    "python_tests": 355,
+    "python_subtests": 25,
+    "gpu_independent_tests": 47,
+    "gpu_test_seconds": 703.16,
+    "sdk": "Installed CPU/CUDA public headers, -O3 -DNDEBUG, PATH=/nonexistent; CUDA inside Slurm 14846",
+    "controls": "Eight alternating ABBA/BAAB groups; four RHF/UHF/PBE/PBE0 methods; E and E+F; cold/warm/moved; complete scalar and fleet protocols including construction and cleanup; source-isolated workers; candidate compatibility poisoned. Science gates E<=2e-9, Fmax<=2e-8, identical semantic work; each median time ratio<=1.05."
+  },
+  "superseded_checks": [
+    {
+      "file": "host-tests.log",
+      "outcome": "Initial fake native refusal asserted the wrong error enum; corrected before passing rerun."
+    },
+    {
+      "file": "library-lifetime-tests.log",
+      "outcome": "Initial assertion required immediate ctypes cycle retirement; corrected to verify retirement after gc.collect(). Production binding does not mutate fresh library attributes."
+    },
+    {
+      "source": "aca4afb33",
+      "outcome": "Initial CPU/CUDA build and install superseded by 15d8894c9 after binding fix. Final installed host/SDK tests and full endpoints use final binaries."
+    }
+  ],
+  "local_debug_receipts": [
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/precision-controls/cuda-build.log",
+      "bytes": 13035,
+      "sha256": "e7b3563af59d8a2c438ac95c65d1e60de1080073c5dc4988fd0348339af4dee6"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/precision-controls/cuda-cache-after.txt",
+      "bytes": 1706,
+      "sha256": "14b2ed9b0990205e4feb59c598b844d194fafc9dc96a092e415f1060fc1ebd3f"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/precision-controls/cuda-cache-before.txt",
+      "bytes": 1038,
+      "sha256": "1d3cf5485cf723d53564decde68ad08a6fc1e62851ecdeaeff6a5c671621ce5b"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/precision-controls/cuda-final-cache.txt",
+      "bytes": 1706,
+      "sha256": "28c9511f1bdac97763b6608220e980a6c5bd5bdc44ec8143156929b71c7f468b"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/precision-controls/cuda-install.log",
+      "bytes": 8741,
+      "sha256": "9fde7cd68de26dfde5f7cfe6f66e82f68bbc90bad56ea07ee96a4f26d944e6de"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/precision-controls/final-cuda-build.log",
+      "bytes": 9876,
+      "sha256": "84b357fe42bffbd16fa0caa876ee917ce089a318f87a9526319a0802131da3e7"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/precision-controls/final-cuda-install.log",
+      "bytes": 8741,
+      "sha256": "b8560c235390e1963a8cc079190a2b64c76d13f11cabf827983718f9c28a4553"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/precision-controls/build.log",
+      "bytes": 7828,
+      "sha256": "0aacf3c11042c2c53f8cfed56f333135275a7d269c95e8e9e6fbdb7c1e46e1ce"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/precision-controls/cpu-cache-after.txt",
+      "bytes": 1166,
+      "sha256": "4a00e9532b547189e88dc4bead943e9f7a1592cfc311d55820ba38c1785bf168"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/precision-controls/cpu-cache-before.txt",
+      "bytes": 1038,
+      "sha256": "1d3cf5485cf723d53564decde68ad08a6fc1e62851ecdeaeff6a5c671621ce5b"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/precision-controls/cpu-final-cache.txt",
+      "bytes": 1706,
+      "sha256": "28c9511f1bdac97763b6608220e980a6c5bd5bdc44ec8143156929b71c7f468b"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/precision-controls/ctest.log",
+      "bytes": 18869,
+      "sha256": "8f3b13b84ed0a5cd7d46ce497688aa21ea4d32997952c7938ba088e7e4e8341c"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/precision-controls/final-build.log",
+      "bytes": 6623,
+      "sha256": "e767f57ec866d14c37cd547e2a03adddabdee4f6922d3d25d944613658d9df0a"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/precision-controls/final-ctest.log",
+      "bytes": 18869,
+      "sha256": "5a0cc2ac02a9a43633c7915e7e1811b97c053f83613e52414ecdea3ec5395011"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/precision-controls/final-install.log",
+      "bytes": 1864,
+      "sha256": "d178a6cbff4c6faa0899d12c0b279b3353a236069a4f519ddafa24d9c5e13b34"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/precision-controls/install.log",
+      "bytes": 1864,
+      "sha256": "a6b92f251e49cfcea564b91fe1ee57fc7c65beb0bb074b1a09c1e7d37fa64873"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/cpu-endpoints.log",
+      "bytes": 1143,
+      "sha256": "fcb4fae4a058ad627d0417db4d183824c0d31375f58de8de99461e142b56b523"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/final-binding-hooks.log",
+      "bytes": 2817,
+      "sha256": "b6caf25e0262bcb92e71daeda29f106660f61fb19eb18c6405f357d296ed89a6"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/final-installed-host-tests.log",
+      "bytes": 495,
+      "sha256": "d12648bd3be712c4f37e9cea7bc9960f7dca00452acbeae5f0431cf72925187c"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/final-sdk-cpu.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/gpu/baseline-profile.log",
+      "bytes": 182249,
+      "sha256": "6b07a45555022865d508c9e6161a4e00409125dfcf71c58a45bcf305563e9509"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/gpu/candidate-profile.log",
+      "bytes": 182319,
+      "sha256": "fe8498eaaca5a01fe65062f7938eeeaae50093250b5a3eb9b4d01a362185ae9b"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/gpu/gpu-tests.xml",
+      "bytes": 15251,
+      "sha256": "4ce42188eedcf65bb7912d957a6a9035ff4b6b583bab7e5d5c53bc35e0bda818"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/gpu/input-sha256.txt",
+      "bytes": 662979,
+      "sha256": "9f0f4aad21f0c7504882a8a7cf9003f9585379321dddbb928066886b8e4c2172"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/gpu/integrity-after.log",
+      "bytes": 290855,
+      "sha256": "24f5d8b7bbbbe5fa2447e7fbc4ecaf5faae48de810c2b10503f094ce5e49f726"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/gpu/integrity-before.log",
+      "bytes": 290855,
+      "sha256": "24f5d8b7bbbbe5fa2447e7fbc4ecaf5faae48de810c2b10503f094ce5e49f726"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/gpu/slurm-job.txt",
+      "bytes": 1181,
+      "sha256": "ae960388ebf1e50b170b0b74ddb536fa42ac0dc6842eb2d1c055e84560ba0ce2"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/gpu/source-sha.txt",
+      "bytes": 41,
+      "sha256": "6b5f9ab82df98fc11921d8b8d8ed3edf18aad6d9d7584362b7f9a043c884657d"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/gpu-run.log",
+      "bytes": 11777,
+      "sha256": "2cc5e5c2bab6fd8db38c66fa5bfeaf380f18a25b9c2497fab0c48de68f910318"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/hooks-final.log",
+      "bytes": 2862,
+      "sha256": "4aa3dcb364078910436770e9d2b79e81a1f78969444bde71e3c8b1887c01610d"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/hooks.log",
+      "bytes": 2966,
+      "sha256": "156c1c5f1c7eac488606be33aaea4706274b8838a75934800487ca6d98927a32"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/host-tests-final.log",
+      "bytes": 415,
+      "sha256": "14e0e03df34068606faa3c48b9be402309e81af1e5ca28f045c435678db8bfef"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/host-tests.log",
+      "bytes": 3368,
+      "sha256": "5685b37c64f1c1e8791dfd6da15bc3628efc132c7cf59fd02616db229a333a1b"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/installed-host-tests.log",
+      "bytes": 495,
+      "sha256": "4c554132b3fa739418327c3e5f1757db69255732396a41ecc63c11e394529a1f"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/library-lifetime-final.log",
+      "bytes": 99,
+      "sha256": "2b77420459e78def4af5939142a0475cc4ce726daa057d35f0901fe7a3727ef7"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/library-lifetime-tests.log",
+      "bytes": 1630,
+      "sha256": "451fb8e4eced00339f8f270f6240dcec01dbd5e5414b9b3596f015d277608e25"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/sdk-cpu.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/sphinx.log",
+      "bytes": 35636,
+      "sha256": "8214da1211f0cf2616eaf0a5cf67a46ab05a4165458248f53fb0b1290d2b8c5f"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/typed-binding-format.log",
+      "bytes": 160,
+      "sha256": "32a865c8756b0c1c6f1b4808f34a7f14aa57de99c6f552a9da0fe0ef246f3496"
+    },
+    {
+      "path": "/tmp/qc-2227-precision-budget-controls-20261029/.artifacts/precision-controls/typed-binding-tests.log",
+      "bytes": 420,
+      "sha256": "253efc8e539836ba732264cbef0e496f7e068155b7f120c7f35e378c7ffbb6bb"
+    }
+  ],
+  "debug_retention": "Ignored local logs, XML and profiler databases retain unsuccessful and successful populations. They are debugging provenance, not required for replay. Raw accepted samples, readable reproduction and profile summary remain in Git; no external publication.",
+  "retained_files": [
+    {
+      "path": "cpu-samples.json.xz",
+      "bytes": 32952,
+      "sha256": "88039a5c3c5e756bd6d01168bf45eb627ba52bbbe4d24f24710b83d6b7577031"
+    },
+    {
+      "path": "cuda-samples.json.xz",
+      "bytes": 67168,
+      "sha256": "8da137a381e75eed0b85c54a04a0f4148b55b99477a8603eb79acca399182e20"
+    },
+    {
+      "path": "profile-summary.json",
+      "bytes": 1383,
+      "sha256": "c01316f1eb09f687dddf266b39d5c98438041f676e61ce466d85a56d80679bf5"
+    },
+    {
+      "path": "qualification/endpoint_worker.py",
+      "bytes": 9576,
+      "sha256": "d3d2e0ef33254e404069bc96901888b5dee3162d70f84e80e9e63e6359cb2948"
+    },
+    {
+      "path": "qualification/native_budget_guard.py",
+      "bytes": 628,
+      "sha256": "cc8a63a28f501a89e256f1588c002e9bea5518987884eb876d0817b0b330f598"
+    },
+    {
+      "path": "qualification/profile_summary.py",
+      "bytes": 3169,
+      "sha256": "5b867d81f0720c5dbf1e39964d523586ad89d56c9cdbc855208a0880f59cb9e5"
+    },
+    {
+      "path": "qualification/qualify.py",
+      "bytes": 6262,
+      "sha256": "0c10cf39c9383ff262b3ae42c1b7c72de3c38d54996797341e8fe12ec365e849"
+    },
+    {
+      "path": "qualification/run-gpu.sh",
+      "bytes": 3024,
+      "sha256": "5b314f650f1f028472586da2ba35a793edadd42fb3f523e3d6bc3b45b245aeec"
+    },
+    {
+      "path": "qualification/sdk.cpp",
+      "bytes": 3163,
+      "sha256": "9abc32318f45e2bc8185370498a26f9c9d7b801bb53f19b1f90fe7459673b21e"
+    }
+  ],
+  "sdk_reproduction": {
+    "formatting": "Retained sdk.cpp was clang-formatted after execution; only line wrapping/indentation changed. Executed source identity is below. All Python/shell reproduction sources match executed bytes.",
+    "executed_source_sha256": "5393b06dfa350606b3ca9079041caef4e799e4f873bb256c9eecf0791e4b8e04",
+    "executed_source_bytes": 3165
+  }
+}

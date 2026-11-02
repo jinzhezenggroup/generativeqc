@@ -89,10 +89,12 @@ std::size_t minao_numeric_capacity_shape(std::size_t n, std::size_t atom_count,
 std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
                                                 const PreliminaryOptions& policy,
                                                 PreliminaryDiagnostic& diagnostic,
-                                                const EigenOperation& eigen) {
+                                                const EigenOperation& eigen,
+                                                const MatrixProductOperation& products) {
   const auto& system = target.system();
   if (policy.kind == PreliminaryKind::Huckel)
-    return prepare_huckel_initial_density(system, target.one_electron(), policy, diagnostic, eigen);
+    return prepare_huckel_initial_density(system, target.one_electron(), policy, diagnostic, eigen,
+                                          products);
   // The CPU integral provider admits g, but the LDA AO-grid primitive only
   // admits through f. Decline before building an unusable extra integral owner.
   if (policy.kind == PreliminaryKind::Lda &&
@@ -113,7 +115,10 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
     auto density = admissible_minao_density(system, ints, x, projected.density, eigen);
     diagnostic.preliminary_iterations = 0;
     diagnostic.preliminary_fock_builds = 0;
-    density = admit_preliminary_density(target, std::move(density), eigen);
+    // Only the strict validator borrows device products; the native occupied
+    // ANO construction and its independent ensemble admission stay unchanged.
+    solver::validate_seed(ints.overlap, density, ints.nbf,
+                          {static_cast<unsigned>(system.electron_count)}, 2.0, eigen, products);
     diagnostic.outcome = PreliminaryOutcome::Used;
     return density;
   }
@@ -155,11 +160,11 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
 }
 }  // namespace
 
-std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
-                                                               const PreliminaryOptions& policy,
-                                                               PreliminaryDiagnostic& diagnostic,
-                                                               const EigenOperation& eigen) {
-  return prepare_impl(target, policy, diagnostic, eigen);
+std::optional<std::vector<double>> prepare_preliminary_density(
+    const PreparedFockPlan& target, const PreliminaryOptions& policy,
+    PreliminaryDiagnostic& diagnostic, const EigenOperation& eigen,
+    const MatrixProductOperation& products) {
+  return prepare_impl(target, policy, diagnostic, eigen, products);
 }
 
 std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,

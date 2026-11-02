@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "capability-fp64-20261101",
+  "owner": "Capability-selected FP64 matrix and portable endpoint qualification",
+  "reason": "Complete source-bound GPU endpoint populations, all slow/failed controls, independent numerical gates, exact FP64 and original text checksums; pilots and final source remain separate.",
+  "review_document": "benchmarks/results/capability-fp64-20261101/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/capability-fp64-20261101/receipts.json.xz",
+      "family": "capability-fp64-20261101",
+      "classification": "required-compact-accepted-evidence",
+      "role": "exact-original-endpoint-and-provenance-evidence",
+      "bytes": 348612,
+      "sha256": "3c057c664b06a9a9842e5e313950e9f6a89009e68069095891ba87e137a7d43b"
+    },
+    {
+      "path": "benchmarks/results/capability-fp64-20261101/fp64.xz",
+      "family": "capability-fp64-20261101",
+      "classification": "required-compact-accepted-evidence",
+      "role": "exact-original-endpoint-and-provenance-evidence",
+      "bytes": 474068,
+      "sha256": "1cfe92914fbb2d3b40d78d098f5ccd2dff3a7201c3f1d0a4f49e740cab3996e4"
+    }
+  ]
+}

@@ -3,6 +3,10 @@
 Status: proposed; bounded candidate qualified on the retained SM 12.0 domain
 Date: 2026-10-24
 
+The GPU-model restriction is superseded by the
+[portable response decision](../implemented/performance/2026-10-31-portable-factored-df-response.md).
+The measurements and original admission rationale below remain historical.
+
 ## Motivation and boundaries
 
 Stage24's source-matched water96 r2SCAN-3c DF profile still contains long

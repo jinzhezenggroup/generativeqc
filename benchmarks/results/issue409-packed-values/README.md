@@ -261,3 +261,10 @@ Read it with the shared `load_record` reader or `gzip -dc`. All eight cells,
 overlapping-counter cautions and four unmeasured limitations are unchanged.
 Historical manifest paths and hashes continue to identify the decoded bytes;
 restore the original snapshot before running its historical collectors.
+
+The thirteen historical `dataflow/` observations are likewise stored as
+`.json.gz`. `dataflow/storage.json` binds each stored file to its exact original
+bytes and Git blob. Use `load_record` on the compressed path, or `gzip -dc`
+to restore the original path in a separate recovery directory before running
+historical collectors. This storage change preserves every observation byte
+and leaves the original campaign manifest's decoded-byte hashes unchanged.

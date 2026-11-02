@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.restore_retained_evidence import _records
+from tools.restore_retained_evidence import _manifest, _records
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "benchmarks/results/retention-checkout/snapshot.manifest.json"
@@ -21,7 +21,7 @@ PROFILES = sorted(
 
 def test_profile_inventory_is_complete() -> None:
     assert len(PROFILES) == 8
-    snapshot = json.loads(MANIFEST.read_text())
+    snapshot = _manifest(MANIFEST)
     compacted = {
         entry["path"] for entry in snapshot["files"] if entry.get("compacted_fields")
     }
@@ -57,7 +57,7 @@ def test_retained_aggregates_and_recovery_identity(path: typing.Any) -> None:
 
 
 def test_snapshot_moved_totals_and_compacted_savings() -> None:
-    snapshot = json.loads(MANIFEST.read_text())
+    snapshot = _manifest(MANIFEST)
     records = _records(MANIFEST)
     moved = [entry for entry in records if entry["checkout"] == "git-history"]
     assert snapshot["moved_files"] == len(moved)

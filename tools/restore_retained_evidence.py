@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import lzma
 import os
 import re
 import shutil
@@ -33,8 +34,45 @@ def _safe_path(path: str) -> None:
         raise ValueError("unsafe historical evidence path")
 
 
+def _manifest(path: Path) -> dict:
+    """Read a manifest, including an authenticated lossless XZ storage record.
+
+    Storage records keep existing recovery links stable while retaining the
+    original manifest bytes. Only a bounded, adjacent payload is admitted;
+    decoded content still passes the ordinary inventory validation below.
+    """
+    audit = json.loads(path.read_text())
+    if (
+        isinstance(audit, dict)
+        and audit.get("schema") == "generativeqc.compressed-manifest.v1"
+    ):
+        name = audit.get("payload")
+        if (
+            not isinstance(name, str)
+            or Path(name).name != name
+            or not name.endswith(".xz")
+        ):
+            raise ValueError("unsafe compressed manifest path")
+        size = audit.get("decoded_bytes")
+        if type(size) is not int or not 0 < size <= 64 << 20:
+            raise ValueError("invalid compressed manifest size")
+        payload = (path.parent / name).read_bytes()
+        if hashlib.sha256(payload).hexdigest() != audit.get("payload_sha256"):
+            raise ValueError("compressed manifest checksum mismatch")
+        decoder = lzma.LZMADecompressor(memlimit=96 << 20)
+        raw = decoder.decompress(payload, max_length=size + 1)
+        if not decoder.eof or decoder.unused_data or len(raw) != size:
+            raise ValueError("compressed manifest size mismatch")
+        if hashlib.sha256(raw).hexdigest() != audit.get("decoded_sha256"):
+            raise ValueError("decoded manifest checksum mismatch")
+        audit = json.loads(raw)
+    if not isinstance(audit, dict):
+        raise TypeError("unsupported evidence migration manifest")
+    return audit
+
+
 def _records(manifest: Path | None) -> list[dict]:
-    audit = json.loads(Path(manifest or AUDIT).read_text())
+    audit = _manifest(Path(manifest or AUDIT))
     if not isinstance(audit, dict):
         raise TypeError("unsupported evidence migration manifest")
     schema = audit.get("schema")

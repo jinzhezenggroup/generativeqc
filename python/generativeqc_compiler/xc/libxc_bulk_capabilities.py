@@ -18,6 +18,7 @@ from typing import Any
 
 from generativeqc_compiler.common import paths
 from generativeqc_compiler.common.evidence import canonical_hash, validate_outcome
+from generativeqc_compiler.common.provenance import file_hash
 
 from . import libxc_bulk, libxc_production_domain
 from .libxc_maple import MapleImportError
@@ -198,17 +199,33 @@ def _capability_source_identity(catalog: Mapping[str, Any]) -> str:
 
     This conservative source inventory uses stable logical paths in both wheels
     and checkouts. Compute it once per bulk query, without lowering any Graph or
-    importing a native runtime. Source edits invalidate previously attached proof.
+    importing a native runtime. Edits to these inputs invalidate previously attached proof. Integral shell
+    recurrences, schedules and tuning publication are not XC scalar dependencies;
+    only Graph algebra and scalar C/CUDA emission belong to this inventory.
+    Native endpoint receipts retain their separate whole-build identity checks.
     """
     return canonical_hash(
         {
-            "schema": "generativeqc.libxc-bulk-capability-sources.v1",
+            "schema": "generativeqc.libxc-bulk-capability-sources.v2",
             "provider": libxc_bulk.SOURCE_ASSET,
             "upstream": catalog["upstream"],
             "source_files": catalog["source_files"],
             "importer_semantics": catalog["importer_semantics"],
             "parameter_binding_semantics": catalog["parameter_binding_semantics"],
-            "compiler_sources": paths.source_hashes("common", "integral", "xc"),
+            "compiler_sources": {
+                **paths.source_hashes("common", "xc"),
+                **{
+                    "python/generativeqc_compiler/" + name: file_hash(
+                        paths.PACKAGE / name
+                    )
+                    for name in (
+                        "integral/__init__.py",
+                        "integral/expr.py",
+                        "integral/scalar_c.py",
+                        "integral/cuda.py",
+                    )
+                },
+            },
         }
     )
 

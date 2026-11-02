@@ -1005,7 +1005,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
        raw_charge->stream != stream_handle || raw_charge->nbf != n || raw_charge->naux != a ||
        !raw_charge->device_bytes || !raw_charge->owner_identity ||
        raw_charge->owner_identity != device_metric->owner_identity ||
-       (raw_charge->derivative && raw_charge->natom != orbital.atoms.size()) ||
+       ((raw_charge->derivative || raw_charge->metric_derivative) &&
+        raw_charge->natom != orbital.atoms.size()) ||
        !std::all_of(terms.begin(), terms.end(),
                     [](const auto& term) { return term.exchange_coefficient == 0; }))) {
     detail = "borrowed raw charge differs from the full-rank Coulomb source/metric owner";
@@ -1997,6 +1998,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
       std::function<void(std::size_t, std::size_t, double*)> raw_coulomb_reader;
       std::function<void(const double*, double*)> raw_charge_reader;
       std::function<void(const double*, const double*, double)> raw_derivative_consumer;
+      std::function<void(const double*, double)> raw_metric_consumer;
       if (raw_coulomb && coulomb_policy == "auto" && raw_charge) {
         // Recompute from the exact density frame supplied to this force call.
         // The value owner's stream and identity were checked before allocation;
@@ -2022,6 +2024,17 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                                        coefficient, derivative_output, detail);
             if (status != GENERATIVEQC_STATUS_SUCCESS) throw RawChargeFailure{status};
             runtime::cuda_trace::trace_counter("response_md_derivative_calls", 1);
+          };
+        }
+        if (raw_charge->metric_derivative && !mixed_shell && gradient_copies == 1 &&
+            !shell_diagnostics && !screening_features && shell_target == 0) {
+          raw_metric_consumer = [&](const double* potential, double coefficient) {
+            runtime::cuda_trace::TraceRegion contraction("metric_md_derivative", arena.stream);
+            const auto status = raw_charge->metric_derivative(
+                raw_charge->context, potential, coefficient, derivative_output, detail);
+            if (status != GENERATIVEQC_STATUS_SUCCESS) throw RawChargeFailure{status};
+            runtime::cuda_trace::trace_counter("response_md_metric_derivative_calls", 1);
+            runtime::cuda_trace::trace_counter("response_metric_weight_elements_avoided", a * a);
           };
         }
       } else if (raw_coulomb && packed_raw && coulomb_policy == "auto") {
@@ -2377,7 +2390,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
           packed_block_rows, read_fitted, single_fitted_tensor,
           owned_occupied ? &owned_buffers : nullptr,
           coulomb_policy != "panels" ? whitened : nullptr, raw_coulomb, raw_coulomb_reader,
-          raw_charge_reader, raw_derivative_consumer, compact_fitted_metric_workspace));
+          raw_charge_reader, raw_derivative_consumer, compact_fitted_metric_workspace,
+          raw_metric_consumer));
       if (gradient_copies > 1) {
         runtime::cuda_trace::TraceRegion reduction("gradient_probe_shard_reduction", arena.stream);
         // Each column is already a complete contracted atom gradient, not an

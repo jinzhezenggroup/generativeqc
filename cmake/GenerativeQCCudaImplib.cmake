@@ -87,6 +87,25 @@ function(generativeqc_attach_cuda_implib target)
   string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" processor)
   if(processor MATCHES "^(x86_64|amd64)$")
     set(implib_target x86_64)
+    # Multi-architecture device images can exceed the host small code model's
+    # +/-2 GiB reach. Keep their opaque bytes after host code/data, while the
+    # small registration wrappers retain ordinary host-relative addressing.
+    # Probe the actual compiler/linker pair: GNU ld and lld support INSERT;
+    # incompatible linkers must fail here instead of after hours of CUDA work.
+    set(_generativeqc_payload_layout
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/cuda_wheel_payload.ld")
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "LINKER:-T,${_generativeqc_payload_layout}"
+                     GENERATIVEQC_CUDA_WHEEL_PAYLOAD_LAYOUT_SUPPORTED)
+    if(NOT GENERATIVEQC_CUDA_WHEEL_PAYLOAD_LAYOUT_SUPPORTED)
+      message(FATAL_ERROR
+        "x86-64 CUDA wheels require a linker supporting INSERT layout scripts "
+        "(GNU ld or lld)")
+    endif()
+    target_link_options(${target} PRIVATE
+      "$<HOST_LINK:LINKER:-T,${_generativeqc_payload_layout}>")
+    set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS
+                 "${_generativeqc_payload_layout}")
   elseif(processor MATCHES "^(aarch64|arm64)$")
     set(implib_target aarch64)
   else()

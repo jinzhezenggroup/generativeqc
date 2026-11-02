@@ -21,6 +21,18 @@ def _standard_models() -> frozenset[str]:
 
 
 def default_scf_controls(calculator: Any) -> dict[str, float]:
+    """Query the selected native policy while preserving explicit caller choices."""
+    from ._scf_defaults_native import default_controls
+
+    controls = default_controls(calculator)
+    return (
+        _compatibility_default_scf_controls(calculator)
+        if controls is None
+        else controls
+    )
+
+
+def _compatibility_default_scf_controls(calculator: Any) -> dict[str, float]:
     """Keep older libraries, CPU, correlated and unqualified owners strict.
 
     Default convergence is separate from FP64 arithmetic. The native owner

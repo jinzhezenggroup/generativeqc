@@ -777,9 +777,9 @@ qualification remain required before claiming the full migration complete.
 For a source build with a verified compiler-cache launcher configured:
 
 ```bash
-cmake -S . -B build/cuda-release-sm120 \
+cmake -S . -B build/cuda-release \
   -DGENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON
-cmake --build build/cuda-release-sm120 --target \
+cmake --build build/cuda-release --target \
   generativeqc_hessian_aot_probe generativeqc_cuda_gmres_probe \
   generativeqc_cuda_cpks_probe generativeqc_cuda_wb97mv_grid_probe \
   generativeqc_ks_wb97mv_grid_probe \
@@ -787,37 +787,37 @@ cmake --build build/cuda-release-sm120 --target \
   generativeqc_cuda_ecp_nuclear_probe \
   generativeqc_ks_resident_frame_tests
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env GENERATIVEQC_HESSIAN_AOT_PROBE="$PWD/build/cuda-release-sm120/generativeqc_hessian_aot_probe" \
+  env GENERATIVEQC_HESSIAN_AOT_PROBE="$PWD/build/cuda-release/generativeqc_hessian_aot_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_hessian_aot_cuda.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env GENERATIVEQC_CUDA_GMRES_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_gmres_probe" \
+  env GENERATIVEQC_CUDA_GMRES_PROBE="$PWD/build/cuda-release/generativeqc_cuda_gmres_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_cuda_gmres.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env GENERATIVEQC_CUDA_CPKS_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_cpks_probe" \
+  env GENERATIVEQC_CUDA_CPKS_PROBE="$PWD/build/cuda-release/generativeqc_cuda_cpks_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_ks_cpks.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env GENERATIVEQC_CUDA_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_wb97mv_grid_probe" \
+  env GENERATIVEQC_CUDA_WB97MV_GRID_PROBE="$PWD/build/cuda-release/generativeqc_cuda_wb97mv_grid_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_native_grid.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
+  env GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release/generativeqc_ks_wb97mv_grid_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_native_grid.py \
   -k live_molecular
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
+  env GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release/generativeqc_ks_wb97mv_grid_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_native_fock.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env GENERATIVEQC_CUDA_GRID_GEOMETRY_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_grid_geometry_probe" \
-  GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
+  env GENERATIVEQC_CUDA_GRID_GEOMETRY_PROBE="$PWD/build/cuda-release/generativeqc_cuda_grid_geometry_probe" \
+  GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release/generativeqc_ks_wb97mv_grid_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_native_grid_geometry.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env GENERATIVEQC_CUDA_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_wb97mv_grid_probe" \
-  GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
+  env GENERATIVEQC_CUDA_WB97MV_GRID_PROBE="$PWD/build/cuda-release/generativeqc_cuda_wb97mv_grid_probe" \
+  GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release/generativeqc_ks_wb97mv_grid_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_nuclear_grid.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:05:00 \
-  build/cuda-release-sm120/generativeqc_ks_resident_frame_tests
+  build/cuda-release/generativeqc_ks_resident_frame_tests
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:30:00 \
-  env GENERATIVEQC_CUDA_ECP_NUCLEAR_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_ecp_nuclear_probe" \
-  GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
+  env GENERATIVEQC_CUDA_ECP_NUCLEAR_PROBE="$PWD/build/cuda-release/generativeqc_cuda_ecp_nuclear_probe" \
+  GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release/generativeqc_ks_wb97mv_grid_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_native_ecp_nuclear_response.py
 ```
 

@@ -110,7 +110,8 @@ struct Owner {
   bool pending_fitted_occupied=true, final_fitted_projection_ready=true;
   bool warm_orbitals_ready=true, occupied_fitted_factor_ready=false;
   bool warm_orbitals_are_ao=true;
-  bool is_pending=false, warm_energy_baseline=false;
+  bool is_pending=false, warm_energy_baseline=false, warm_incumbent_deferred=false;
+  std::array<double, 3> warm_xc_totals{};
   unsigned spins=1;
   std::size_t n=3, matrix=9, elements=9, warm_factor_rank=0;
   std::array<std::size_t,2> occupations{1,1};

@@ -515,9 +515,34 @@ def _assert_cuda_ci_ao_gate(workflow: str) -> None:
         in step
     )
     assert "--basetemp build/ao-radial-compile" in step
-    # The required fast job is read-only. Its AO gate must finish successfully
-    # before the separate master CLI producer can publish a complete snapshot.
-    assert "uses: actions/cache/save@" not in cuda
+    # The shared cache remains read-only here. Only the separate bounded PR
+    # miss store may be saved; master/queue runs cannot publish it. A complete
+    # shared snapshot still requires the downstream CLI/AO qualification.
+    saves = [
+        item
+        for item in cuda.split("      - name: ")
+        if "uses: actions/cache/save@" in item
+    ]
+    assert len(saves) == 1
+    pr_save = saves[0]
+    assert "path: ${{ steps.pr_fast_ccache.outputs.path }}" in pr_save
+    assert "key: ${{ steps.pr_fast_ccache.outputs.key }}" in pr_save
+    assert "~/.cache/ccache" not in pr_save
+    for event in ("pull_request", "push", "merge_group", "pull_request_target"):
+        for outcome in ("success", "failure", "cancelled", "skipped", ""):
+            for available in ("true", "false", ""):
+                assert selected(
+                    pr_save,
+                    {
+                        "github.event_name": event,
+                        "steps.cuda_runtime_build.outcome": outcome,
+                        "steps.pr_fast_ccache_bound.outputs.available": available,
+                    },
+                ) == (
+                    event == "pull_request"
+                    and outcome == "success"
+                    and available == "true"
+                )
     assert cuda.index(
         "      - name: Compile production CUDA and runtime CTest\n"
     ) < cuda.index(marker)
@@ -539,9 +564,9 @@ def _assert_cuda_ci_ao_gate(workflow: str) -> None:
     assert "always()" not in save and "failure()" not in save
     assert "continue-on-error: true" in save
     # Tier-aware display labels may change without changing build admission.
-    assert producer.index(
-        "cmake --build --preset cuda-release-cli-sm120"
-    ) < producer.index(save_marker)
+    assert producer.index("cmake --build --preset cuda-release-cli") < producer.index(
+        save_marker
+    )
     assert producer.index(
         "      - name: Smoke-test release-mode native command\n"
     ) < producer.index(save_marker)
@@ -595,6 +620,18 @@ def test_cuda_ci_compiles_opted_in_ao_and_retains_ptxas() -> None:
             "always() && github.event_name != 'push'",
             "success() && github.event_name != 'push'",
         ),
+        (
+            "path: ${{ steps.pr_fast_ccache.outputs.path }}",
+            "path: ~/.cache/ccache",
+        ),
+        (
+            "key: ${{ steps.pr_fast_ccache.outputs.key }}",
+            "key: shared-master-cache",
+        ),
+        (
+            "always() && github.event_name == 'pull_request' && steps.cuda_runtime_build.outcome == 'success'",
+            "always()",
+        ),
     ],
 )
 def test_cuda_ci_ao_gate_rejects_lifecycle_regressions(before: str, after: str) -> None:
@@ -609,7 +646,7 @@ def test_cuda_ci_ao_gate_rejects_lifecycle_regressions(before: str, after: str) 
 )
 def test_cuda_complete_cache_order_ignores_build_display_label(label: str) -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
-    command = workflow.index("cmake --build --preset cuda-release-cli-sm120")
+    command = workflow.index("cmake --build --preset cuda-release-cli")
     start = workflow.rfind("      - name:", 0, command)
     assert start >= 0
     end = workflow.index("\n", start) + 1
@@ -625,7 +662,7 @@ def test_cuda_complete_cache_cannot_precede_cli_build() -> None:
     )
     save = workflow[start:end]
     broken = workflow[:start] + workflow[end:]
-    command = broken.index("cmake --build --preset cuda-release-cli-sm120")
+    command = broken.index("cmake --build --preset cuda-release-cli")
     insertion = broken.rfind("      - name:", 0, command)
     assert insertion >= 0
     broken = broken[:insertion] + save + broken[insertion:]

@@ -1,0 +1,45 @@
+{
+  "schema": "generativeqc.git-object-snapshot.v1",
+  "source_revision": "8008c8276cdeb5624833a44a6387771a64d58c62",
+  "file_count": 6,
+  "total_bytes": 28687,
+  "files": [
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/endpoint_worker.py",
+      "bytes": 8934,
+      "sha256": "b7770bab5b698094853cc3ae5d2b073363b2320ce40c3ea2b6757be26bdd8370",
+      "git_blob_sha1": "10433669478902d5a0dd9442e00d2524891b8bc9"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/profile-budget.sh",
+      "bytes": 1729,
+      "sha256": "5d446162dc9adf53eec4d8990fec5dc39aaf4922aec638e4608b56208ff2ddc9",
+      "git_blob_sha1": "c6b2f16e055cd633561e0ff2b30eb1cdf4267553"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/profile-image-identity.sh",
+      "bytes": 1235,
+      "sha256": "4ab30cce1c8bc4401676633de8954e5d7a9b5fee08fd2df5b69d436c5cd3f617",
+      "git_blob_sha1": "9fac2c3a1bf6db424ff023477cd261151dd26d49"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/profile_summary.py",
+      "bytes": 3260,
+      "sha256": "f468d7af99ddf3f9271d1be05779bc85786cd30fc4574da66effcb402482c666",
+      "git_blob_sha1": "0365970c4690285468959a65640d8206c96b74d0"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/qualify.py",
+      "bytes": 9712,
+      "sha256": "549d4c813ff4ac37a40dc36a8d1999090e77abd1d16c4d607d5378a37328cd10",
+      "git_blob_sha1": "23c7f9b463a058aeca0b1aff08419898f9c4898a"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/run-gpu.sh",
+      "bytes": 3817,
+      "sha256": "ebcdc8ffe5af4a731f3bbb4e034087982f8750610d6e1f3d651156764fbe6f15",
+      "git_blob_sha1": "cc9898854276d2835a1a936a6931d595d35fffb2"
+    }
+  ],
+  "retention": "Exact checked-in replay drivers before review hardening, retained in existing Git ancestry. Measurement-specific runners already embedded in historical capsules remain authoritative for their original campaigns. No observations, qualification decisions or scientific tolerances are changed."
+}

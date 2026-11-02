@@ -710,3 +710,20 @@ def test_semantic_abi_serializes_range_exchange_without_named_method_branch() ->
     assert (short.fock_coefficient, long.fock_coefficient) == pytest.approx(
         (-0.1, -0.4)
     )
+
+
+def test_automatic_scf_tile_transport_preserves_explicit_overrides() -> None:
+    """Automatic/default and explicit 256 must remain distinguishable at the ABI."""
+    automatic = resolve_ks_options("pbe-rks", KsOptions())
+    explicit = resolve_ks_options("pbe-rks", KsOptions(tile_points=256))
+    assert automatic.tile_points is None
+    assert native_ks_options(automatic).tile_points == 0
+    assert native_ks_options(explicit).tile_points == 256
+    overridden = resolve_ks_options(
+        "pbe-rks", replace(automatic, tile_points=31, force_tile_points=512)
+    )
+    native = native_ks_options(overridden)
+    assert native.tile_points == 31 and native.force_tile_points == 512
+    assert automatic.to_payload()["tile_points"] is None
+    with pytest.raises((TypeError, ValueError)):
+        KsOptions(tile_points=0)

@@ -1,0 +1,23 @@
+{
+  "id": "dft.nonlocal-force-reuse",
+  "classification": "already-default",
+  "controls": [
+    "dft-policy:GENERATIVEQC_VV10_COMPONENT_REUSE"
+  ],
+  "owner_issues": [
+    2426
+  ],
+  "sources": [
+    "src/dft/cuda_stationary_controller.cpp",
+    "src/api/c_api_nonlocal.cpp",
+    "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu"
+  ],
+  "rationale": "The native stationary force owner shares the standalone owner's exact FP64 VV10 key and 65536-point default crossover. Immutable geometry/grid/parameters and a bitwise comparison of every density-dependent pair ingredient protect retained force seeds. The key and predicate borrow already allocated dead scratch and the unused force scalar slot; no new device allocation, capacity receipt or fleet tier is introduced. Small grids, disabled selectors and absent/unequal keys retain complete pair sweeps. Minimum-capacity owners can also reuse seeds, without a GPU-model whitelist or approximate arithmetic.",
+  "revisit_condition": "Retain complete endpoint, independent force, geometry change, failure, schedule change, minimum-capacity and actual pair-work gates when changing reuse admission or lifetime. New device rankings require real measurements; the measured Blackwell cohorts do not establish A100 performance or a universal no-regression claim.",
+  "evidence": [
+    "tests/python/test_native_stationary_nonlocal_reuse_cuda.py",
+    "docs/developer/xc_native_cuda.md",
+    ".agents/notes/implemented/performance/2026-11-01-stationary-vv10-force-reuse.md",
+    "benchmarks/results/stationary-vv10-reuse-20261101/README.md"
+  ]
+}

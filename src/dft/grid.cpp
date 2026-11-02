@@ -176,8 +176,8 @@ GridSpec default_grid_spec() {
   result.version = 4;
   result.radial_points = 3;  // version-4 wire level, not an element's radial count
   result.angular_polar = result.angular_azimuth = 0;
-  for (unsigned z = 1; z < std::size(generated::atomic_grid::xi); ++z)
-    result.element_radii[z] = generated::atomic_grid::bragg[z];
+  for (unsigned z = 1; z < std::size(::generativeqc::generated::atomic_grid::xi); ++z)
+    result.element_radii[z] = ::generativeqc::generated::atomic_grid::bragg[z];
   return result;
 }
 
@@ -190,7 +190,7 @@ double grid_radius_adjustment(const GridSpec& spec, unsigned first, unsigned sec
 namespace {
 template <class Consumer>
 void treutler_shells(unsigned z, unsigned level, Consumer consume) {
-  namespace rule = generated::atomic_grid;
+  namespace rule = ::generativeqc::generated::atomic_grid;
   const auto [radial, maximum] = rule::counts(z, level);
   const auto step = std::numbers::pi / (radial + 1);
   for (unsigned rank = radial; rank; --rank) {
@@ -230,7 +230,7 @@ std::vector<std::array<double, 4>> treutler_atomic_rule(unsigned z, unsigned lev
   result.reserve(count);
   treutler_shells(z, level, [&](double radius, double dr, unsigned angular) {
     const double measure = 4.0 * std::numbers::pi * radius * radius * dr;
-    for (const auto& direction : generated::atomic_grid::angular(angular))
+    for (const auto& direction : ::generativeqc::generated::atomic_grid::angular(angular))
       result.push_back({radius * direction.x, radius * direction.y, radius * direction.z,
                         measure * direction.weight});
   });

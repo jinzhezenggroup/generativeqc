@@ -54,7 +54,7 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   --sample=none --cpuctxsw=none --capture-range=cudaProfilerApi \
   --capture-range-end=stop --output=.artifacts/response-default \
   /path/to/python benchmarks/issue308_response_timeline.py \
-  --library build/cuda-release-sm120/libgenerativeqc.so \
+  --library build/cuda-release/libgenerativeqc.so \
   --output .artifacts/response-default-run --component-trace --nsys
 ```
 

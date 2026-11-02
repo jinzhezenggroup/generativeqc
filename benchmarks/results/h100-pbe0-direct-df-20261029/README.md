@@ -1,5 +1,7 @@
 # PBE0 H100 Direct/DF complete endpoint matrix
 
+Storage update: restore the historical payloads with [the offline recovery commands](../h100-history-retention-20261031/README.md) before running the replay examples below. Original scientific results and gates are unchanged.
+
 Refs #2731 and #2739. After the historical missing-companion pilot, a separate registered
 single-H100 Job returned all 144 complete E+F endpoints: water48/96, Direct/DF,
 Standard/Fast/GPU4PySCF, three fresh processes per group. Offline replay validates
@@ -8,8 +10,15 @@ level-5 energy/force gates, level-4/5 stability, actual work and process statist
 This is a focused evidence candidate; parent closure awaits independent review.
 The historical spent pilot and its failures remain separate and unchanged.
 
-Run `python -I -S -B replay.py` using Python 3.10+; no network, solver, native
-library, GPU or oracle execution is used. `evidence.tar.xz` is a standard TAR/XZ
+After the linked offline recovery, run from the repository root:
+
+```bash
+uv run --no-env-file --no-project --python 3.12 python -I -S -B \
+  benchmarks/results/h100-pbe0-direct-df-20261029/replay.py \
+  --payload-root .artifacts/h100-history-20261031/benchmarks/results/h100-pbe0-direct-df-20261029
+```
+
+No network, solver, native library, GPU or oracle execution is used. `evidence.tar.xz` is a standard TAR/XZ
 containing every raw member, full supplements and an index of public SHA256 values
 and separate original-byte SHA witnesses. Path aliases redact private canonical
 roots only. For changed members, original bytes are unavailable in this public
@@ -61,3 +70,7 @@ retirement. Its 98 actual E/F returns, 72 formal returns, 10 NOT_RUN, independen
 oracles and full runtime/scientific/source originals remain in-tree and still
 replay offline. Optional HOST history is audited explicitly. This storage change
 adds no numerical qualification or current-default performance claim.
+
+## Historical payload recovery
+
+The large original payloads for this historical source are stored byte-for-byte in existing Git history. Numerical summaries, unfavorable outcomes, original hashes and test fixtures remain in this checkout. Follow [the offline recovery commands](../h100-history-retention-20261031/README.md) before replay. Recovery does not rerun chemistry or promote this source to current production acceptance.

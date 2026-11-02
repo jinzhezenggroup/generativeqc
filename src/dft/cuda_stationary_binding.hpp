@@ -5,6 +5,7 @@
 #include <span>
 #include <string_view>
 
+#include "dft/generated_semilocal_compositions.hpp"
 #include "scf/cuda_derivative_sources.hpp"
 
 namespace generativeqc::dft {
@@ -83,13 +84,17 @@ const CudaStationaryBinding* cuda_stationary_binding(std::string_view profile) n
 /** Match the complete point/spin/weight contract, never a functional name. */
 const CudaStationaryBinding* cuda_stationary_binding(const CudaStationaryModel& model) noexcept;
 
-/** Shared preparation/planner predicate for unit automatic semilocal sources.
+/** Shared preparation/planner predicate for automatic electronic recipes.
  * This selects retained integral storage only; shape and endpoint admission
  * still belong to the prepared calculation. Omitted artifacts retain order 0. */
 inline unsigned automatic_stationary_derivative_order(std::uint32_t functional,
                                                       std::uint32_t domain,
                                                       std::uint32_t spins) noexcept {
-  return cuda_stationary_binding(CudaStationaryModel{functional, domain, spins, 3, 1.0, 1.0, 0.0})
+  // The binding key carries the physical energy fraction, not the spin-scaled
+  // Fock coefficient. A hybrid cannot reserve derivatives through a J-only key.
+  return cuda_stationary_binding(
+             CudaStationaryModel{functional, domain, spins, 3, 1.0, 1.0,
+                                 generated::automatic_libxc_exact_exchange(functional)})
              ? 1U
              : 0U;
 }

@@ -398,7 +398,7 @@ def test_archive_verification_uses_installed_bytes(
     installed = prefix / "bin/generativeqc"
     shutil.copyfile("/bin/true", installed)
     installed.chmod(0o755)
-    build_cli = tmp_path / "build/cuda-release-cli-sm120/generativeqc"
+    build_cli = tmp_path / "build/cuda-release-cli/generativeqc"
     build_cli.parent.mkdir()
     # Model the distinct ELF bytes caused by CMake's install-time RUNPATH edit.
     shutil.copyfile("/bin/false", build_cli)

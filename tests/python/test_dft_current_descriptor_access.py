@@ -72,12 +72,13 @@ void validate_grid_spec(const GridSpec& g) {if(!g.radial_points)throw std::inval
 namespace scf {struct ScfOptions {
  std::optional<dft::GridSpec> nonlocal_grid_spec;
  enum class XcExecutionSchedule {DeviceFused,HostUnfused};
- std::uint64_t xc_tile_points=256;
+ std::uint64_t xc_tile_points=256, xc_force_tile_points=0;
+ bool automatic_xc_tile_points=false;
  XcExecutionSchedule xc_execution_schedule=XcExecutionSchedule::DeviceFused;
 };}
 struct generativeqc_ks_options {
  std::size_t struct_size=sizeof(generativeqc_ks_options); unsigned abi_version=1;
- const char* scf_domain="current-domain"; std::uint64_t tile_points=37;
+ const char* scf_domain="current-domain"; std::uint64_t tile_points=37, force_tile_points=0;
  unsigned xc_execution_schedule=GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED;
  unsigned grid_version=2,radial_points=7,angular_polar=5,angular_azimuth=9,partition_iterations=4;
  double coincident_tolerance=1e-10; const double* element_radii=nullptr; std::size_t element_radius_count=0;
@@ -99,9 +100,17 @@ int main() {
  generativeqc_method_descriptor d; scf::ScfOptions options; NativeKsExecutionPlan plan;
  auto defaults=ks_grid_options(d,options,plan);
  assert(defaults==dft::default_grid_spec() && options.xc_tile_points==256);
+ assert(options.automatic_xc_tile_points);
  generativeqc_ks_options input; d.ks_options=&input;
  auto copied=ks_grid_options(d,options,plan);
  assert(copied.version==2 && copied.radial_points==7 && options.xc_tile_points==37);
+ assert(!options.automatic_xc_tile_points);
+ auto automatic=input; automatic.tile_points=0; d.ks_options=&automatic;
+ (void)ks_grid_options(d,options,plan);
+ assert(options.automatic_xc_tile_points && options.xc_tile_points==256);
+ d.ks_options=&input;
+ (void)ks_grid_options(d,options,plan);
+ assert(!options.automatic_xc_tile_points && options.xc_tile_points==37);
  assert(copied.element_radii==dft::GridSpec{}.element_radii);
  auto explicit_default=input; explicit_default.grid_version=4; d.ks_options=&explicit_default;
  assert(ks_grid_options(d,options,plan).element_radii==defaults.element_radii);
@@ -113,7 +122,7 @@ int main() {
   if(mode==0)bad.struct_size=0;
   if(mode==1)bad.abi_version=0;
   if(mode==2)bad.scf_domain="wrong";
-  if(mode==3)bad.tile_points=0;
+  if(mode==3)bad.tile_points=static_cast<std::uint64_t>(INT_MAX)+1;
   if(mode==4)bad.xc_execution_schedule=9;
   if(mode==5)bad.element_radius_count=119;
   d.ks_options=&bad;

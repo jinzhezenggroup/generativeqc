@@ -138,19 +138,31 @@ when qualifying another architecture.
 
 ## Replay
 
-Normal replay requires no compiler, GPU, network or historical Git objects:
+The original receipt bundle is retained in already-merged commit
+`997ceca11e1dd6cb89a74ba66d33d4bfbfbd7d1c`, authenticated by
+`historical.manifest.json` (811,824 bytes, SHA-256
+`3681eb231aa27f2afe6747a6dbf44a0c5fdd52becb0bba85385f8b2eb17d7e3e`).
+All event populations, 1,700 endpoint calls, numerical/failure records and source
+overlays remain byte-identical. The tables and original readers above remain
+available in this checkout. This storage change adds no measurement, changes
+no acceptance gate and publishes no new external archive.
+
+Restore the bytes offline into a new ignored directory, then run the unchanged
+numerical reader beside that restored bundle. The recorded commit must already
+exist locally; the restorer never fetches missing history automatically.
 
 ```bash
-python benchmarks/results/xc-structural-default-20261028/reduce.py
+python tools/restore_retained_evidence.py --all --manifest benchmarks/results/xc-structural-default-20261028/historical.manifest.json --output .artifacts/xc-structural-default-history
+cp benchmarks/results/xc-structural-default-20261028/reduce.py .artifacts/xc-structural-default-history/benchmarks/results/xc-structural-default-20261028/
+python .artifacts/xc-structural-default-history/benchmarks/results/xc-structural-default-20261028/reduce.py
 ```
 
-The optional source audit needs the published base locally and normal compiler
-Python dependencies, but no native compilation or GPU:
-
-```bash
-PYTHONPATH=python:. python benchmarks/results/xc-structural-default-20261028/reproduce_sources.py \
-  --output .cache/xc-structural-default-audit
-```
+Both exact byte recovery and the original numerical gates were verified before
+removing the duplicate checkout payload. A shallow clone may need an explicit
+fetch of the recorded commit before restoration. For the optional generated-source
+audit, use a separate checkout of that commit, its retained receipt bundle and
+`reproduce_sources.py`; it additionally requires the producer's published base
+locally and normal compiler Python dependencies, but no native compilation or GPU.
 
 See the [decision note](../../../.agents/notes/implemented/performance/2026-10-28-xc-structural-default.md)
 for the storage-ABI rationale, bounded fallbacks and revisit conditions.

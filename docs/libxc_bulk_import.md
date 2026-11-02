@@ -4,7 +4,7 @@
 
 Pinned Libxc 7.0.0: **285 Maple files**, including **268 energy-source files**. The C owners contain **544 registrations** (including parameter variants).
 
-**221 registrations from 108 distinct mathematical source files** actually lower and differentiate through the shared Graph in both spin layouts. **323 registrations remain explicitly blocked.**
+**222 registrations from 109 distinct mathematical source files** actually lower and differentiate through the shared Graph in both spin layouts. **322 registrations remain explicitly blocked.**
 
 These are real compiler imports, not static parser candidates or new public SCF methods. One source can define multiple parameterized registrations; those are not counted as distinct Maple equations. No runtime Libxc, Maple, PySCF, Torch or GPU is required.
 
@@ -46,7 +46,6 @@ Archive SHA-256: `8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a
 | MapleImportError: Maple exponents must be compile-time scalars | 11 |
 | MapleImportError: only two-argument eval(diff(f(x1,x2), xi), substitutions) is supported | 4 |
 | MapleImportError: redefinition of 'params_a_c1' would change captured assignment 'scan_f_alpha_left_cutoff'; assignment-time rebinding is not supported | 1 |
-| MapleImportError: unknown Maple symbol 'Fermi_D' | 1 |
 | MapleImportError: unknown Maple symbol 'Heaviside' | 2 |
 | MapleImportError: unknown Maple symbol 'KAPPA_PBE' | 4 |
 | MapleImportError: unknown Maple symbol 'LambertW' | 1 |
@@ -57,8 +56,6 @@ Archive SHA-256: `8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a
 | MapleImportError: unknown Maple symbol 'evalf' | 1 |
 | MapleImportError: unknown Maple symbol 'gga_stoll_par' | 1 |
 | MapleImportError: unknown Maple symbol 'm_recexp' | 2 |
-| MapleImportError: unknown Maple symbol 'mgga_exchange_nsp' | 2 |
-| MapleImportError: unknown Maple symbol 'mgga_series_w' | 3 |
 | MapleImportError: unknown Maple symbol 'params_a_alpha' | 5 |
 | MapleImportError: unknown Maple symbol 'params_a_bx' | 1 |
 | MapleImportError: unknown Maple symbol 'params_a_c1' | 1 |
@@ -92,7 +89,7 @@ Archive SHA-256: `8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a
 | custom parameter setter: set_ext_params | 1 |
 | custom parameter setter: set_ext_params_cpy_lc | 1 |
 | custom parameter setter: set_ext_params_cpy_omega | 18 |
-| independent both-spin E/vxc/fxc fixtures required | 1 |
+| independent both-spin E/vxc/fxc fixtures required | 6 |
 | non-3D functional | 17 |
 | non-XC functional (e.g. kinetic) | 64 |
 | non-double parameter layout | 23 |

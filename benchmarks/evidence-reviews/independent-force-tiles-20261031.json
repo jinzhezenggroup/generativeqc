@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "independent-force-tiles-20261031",
+  "owner": "Portable CUDA stationary-force qualification",
+  "reason": "Complete original 212 endpoint populations: 201 independently qualified, three failed HF gates, two pre-alignment AOT failures and six rejected abbreviated-revision controls repeated with full source tags. Retains vectors, timing samples, work and original source identities under unchanged storage limits.",
+  "review_document": "benchmarks/results/independent-force-tiles-20261031/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/independent-force-tiles-20261031/receipts.json.xz",
+      "family": "independent-force-tiles-20261031",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-original-endpoint-receipts-with-numerical-gates-and-negative-controls",
+      "bytes": 927624,
+      "sha256": "410e50124dc26cd1e2df012dce4affce854e1eef62308a0a664a6cb1271cc73a"
+    }
+  ]
+}

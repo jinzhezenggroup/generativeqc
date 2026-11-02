@@ -75,14 +75,32 @@ def _budget_fock_controls(
         "generativeqc_application_fock_precision_version_v2",
         None,
     )
-    ks_options = getattr(calculator, "_ks_options", None)
-    model = getattr(ks_options, "_method_ir", None)
     fitted = bool(getattr(calculator, "_density_fitting_mode", None))
     available = (
         fitted_scf_budget_admitted(calculator, budget)
         if fitted
         else capability is not None and capability() == 2
     )
+    from ._precision_native import budget_controls
+
+    selected = budget_controls(calculator, budget, requested, available=available)
+    if selected is not None:
+        return selected
+    return _compatibility_budget_fock_controls(
+        calculator, budget, requested, available=available
+    )
+
+
+def _compatibility_budget_fock_controls(
+    calculator: Calculator,
+    budget: TargetErrorBudget,
+    requested: dict,
+    *,
+    available: bool,
+) -> dict[str, float]:
+    """Retain the incumbent selection only for libraries without native policy."""
+    ks_options = getattr(calculator, "_ks_options", None)
+    model = getattr(ks_options, "_method_ir", None)
     if (
         not available
         or model is None
@@ -107,6 +125,66 @@ def _budget_fock_controls(
 
 
 def _budget_fock_work_admitted(calculator: Calculator, work: dict) -> bool:
+    """Use native work admission; retain only missing-protocol compatibility."""
+    from ._precision_native import admission
+
+    decision = admission(calculator, work)
+    return (
+        _compatibility_budget_fock_work_admitted(calculator, work)
+        if decision is None
+        else decision[0]
+    )
+
+
+def _budget_fock_strict_warm_admitted(
+    calculator: Calculator, result: typing.Any, *, qualified_gradient: bool = False
+) -> bool:
+    """Require the shared native policy's exact returned-state physical proof."""
+    from ._precision_native import admission
+
+    decision = admission(
+        calculator,
+        result.precision or {},
+        result=result,
+        qualified_gradient=qualified_gradient,
+    )
+    return (
+        _compatibility_budget_fock_strict_warm_admitted(
+            calculator, result, qualified_gradient=qualified_gradient
+        )
+        if decision is None
+        else decision[1]
+    )
+
+
+def _standard_fallback_admitted(
+    calculator: Calculator,
+    candidate: typing.Any,
+    precision: str,
+    budget: TargetErrorBudget,
+) -> bool:
+    """Query strict fallback without treating absent counts as measured zeros."""
+    from ._precision_native import admission
+
+    decision = admission(
+        calculator,
+        candidate.precision or {},
+        result=candidate,
+        precision=precision,
+        budget=budget,
+    )
+    return (
+        _compatibility_standard_fallback_admitted(
+            calculator, candidate, precision, budget
+        )
+        if decision is None
+        else decision[2]
+    )
+
+
+def _compatibility_budget_fock_work_admitted(
+    calculator: Calculator, work: dict
+) -> bool:
     """Require executed mixed modules and physical closure, not a method label.
 
     Pure semilocal graphs have no K work to prove. Use the existing native
@@ -169,7 +247,7 @@ def _budget_fock_work_admitted(calculator: Calculator, work: dict) -> bool:
     )
 
 
-def _budget_fock_strict_warm_admitted(
+def _compatibility_budget_fock_strict_warm_admitted(
     calculator: Calculator, result: typing.Any, *, qualified_gradient: bool = False
 ) -> bool:
     """Accept a fully revalidated FP64 warm endpoint without inventing mixed work.
@@ -230,7 +308,7 @@ def _budget_fock_strict_warm_admitted(
     return required <= observed and {"strict_fock", "final_audit"} <= bound
 
 
-def _standard_fallback_admitted(
+def _compatibility_standard_fallback_admitted(
     calculator: Calculator,
     candidate: typing.Any,
     precision: str,

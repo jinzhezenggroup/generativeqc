@@ -1,0 +1,37 @@
+{
+  "schema": "generativeqc.lossless-source-patch-storage.v1",
+  "files": [
+    {
+      "original_path": "candidate-v3.patch",
+      "original_bytes": 61981,
+      "original_sha256": "890183e14903b1fbd6da3a10a9f158de7a22693564d221e014772beff0816676",
+      "stored_path": "candidate-v3.patch.gz",
+      "stored_bytes": 13792,
+      "stored_sha256": "85369cc9b304a865467b2439493d66d1a4249494c79312cfc9a134fafa5fc696"
+    },
+    {
+      "original_path": "candidate-v4.patch",
+      "original_bytes": 63206,
+      "original_sha256": "6339efa5229a30590a113d29ad6f4410a296ede117c0e643038197ccb2701918",
+      "stored_path": "candidate-v4.patch.gz",
+      "stored_bytes": 14143,
+      "stored_sha256": "643d324ebe299e8adecb48148798e0383ef904093cdf7297de3f6ece801ac833"
+    },
+    {
+      "original_path": "candidate-v6.patch",
+      "original_bytes": 75032,
+      "original_sha256": "dbdd7a885f646ef002fad554692399b69447fc732b6d730211f3c0651146de5a",
+      "stored_path": "candidate-v6.patch.gz",
+      "stored_bytes": 16695,
+      "stored_sha256": "fc702b85132b2f699286e636c4ef337d6663d0dfba31bcacddabccd28c07dc10"
+    },
+    {
+      "original_path": "final-v9.patch",
+      "original_bytes": 64914,
+      "original_sha256": "7956994cb359a251c14b6366861da89784feddda95f5df9c0485425bdac4e999",
+      "stored_path": "final-v9.patch.gz",
+      "stored_bytes": 14589,
+      "stored_sha256": "a07e7a89100ed718feb5971195c1478198953b4042177fe95fbbe12b72bacbc2"
+    }
+  ]
+}

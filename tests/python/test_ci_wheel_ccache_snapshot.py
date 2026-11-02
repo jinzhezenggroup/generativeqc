@@ -126,7 +126,7 @@ def test_wheel_profile_caps_are_separate_from_cpu(wheel: Any) -> None:
     assert wheel.MAX_ARCHIVE == 2 * 1024**3 - 1024**2
     assert wheel.MAX_DECODED == 3 * 1024**3 and wheel.MAX_FILES == 100_000
     assert wheel.identity()["ccache_version"] == "4.14"
-    assert wheel.identity()["cuda_arch"] == "120"
+    assert wheel.identity()["cuda_arch"] == "80;90-real;120-real"
     assert wheel.cache_root() == Path(os.environ["RUNNER_TEMP"]) / "ccache"
     assert wheel.cache_root() != Path.home() / ".cache/ccache"
 
@@ -429,10 +429,12 @@ def test_publication_requires_fresh_observed_toolchain(
 @pytest.mark.parametrize(
     "ccache,cuda,arch,valid",
     [
-        ("4.14", "12.9", "120", True),
+        ("4.14", "12.9", "80;90-real;120-real", True),
         ("4.15", "12.9", "120", False),
         ("4.14", "13.0", "120", False),
         ("4.14", "12.9", "90", False),
+        ("4.14", "12.9", "120", False),
+        ("4.14", "12.9", "80-real;86-real;89-real;90-real;100-real;120", False),
     ],
 )
 def test_recording_observes_tools_not_expected_label(
@@ -520,7 +522,7 @@ def test_wheel_workflow_preserves_optional_budgets_and_required_gates() -> None:
     entries = steps(build_text, 6)
     named = {entry.get("name"): entry for entry in entries}
     assert job["permissions"] == {"contents": "read", "actions": "read"}
-    assert job["timeout-minutes"] == 180
+    assert job["timeout-minutes"] == 360
     restore = named["Restore trusted wheel snapshot after primary miss"]
     assert (
         restore["if"]
@@ -551,7 +553,7 @@ def test_wheel_workflow_preserves_optional_budgets_and_required_gates() -> None:
     ):
         assert entry["continue-on-error"] is True
         assert entry["timeout-minutes"] <= 2
-    assert named["Build and test wheel"]["timeout-minutes"] == 150
+    assert named["Build and test wheel"]["timeout-minutes"] == 330
     assert "continue-on-error" not in named["Build and test wheel"]
     assert "continue-on-error" not in named["Verify wheel payload and CUDA linkage"]
     action = steps(

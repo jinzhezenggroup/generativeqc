@@ -82,7 +82,7 @@ From the repository root:
 PYTHONPATH=python:. python benchmarks/results/scf-validation-gemm-20261024/reproduce.py
 ```
 
-`endpoints.json.xz` retains all 96 original endpoint JSON texts and their byte
+`receipts.json.xz` plus `fp64.xz` retains all 96 original endpoint JSON texts and their byte
 hashes, including every force component and the moved references.
 `provenance.json.xz` retains a compact identity for the 12,425-file measured source tree,
 verification receipt, build/cache/package identities, scripts, allocations and
@@ -110,3 +110,9 @@ remain byte-for-byte unchanged inside provenance. The verifier checks the
 recorded identity and historical pre-build verification receipt; it does not
 re-enumerate the Git tree or restore the original full manifest. Numerical
 inputs, endpoint records and qualification thresholds are unchanged.
+
+The exact-FP64 v3 reader restores all 96 original endpoint JSON strings and the
+original outer JSON container byte for byte, checking their original SHA-256
+digests. The storage migration preserves all controls, numerical bits,
+formatting, work and producer identities. The old compressed container remains
+in parent Git history; recompression is not claimed to reproduce its XZ bytes.

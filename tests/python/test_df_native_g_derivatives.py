@@ -23,7 +23,7 @@ from tools.validate_df_source import write_input
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_DF_DERIVATIVE_CUDA_TEST") != "1",
-    reason="requires finite Slurm CUDA allocation",
+    reason="requires finite scheduler CUDA allocation",
 )
 
 
@@ -73,7 +73,7 @@ def g_fixture(orbital_rep: str, auxiliary_rep: str, shared: bool) -> tuple[dict,
 def test_weighted_all_centers_with_g_expansion_and_tail_tiles(
     orbital_rep: str, auxiliary_rep: str, shared: bool
 ) -> None:
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     orbital, auxiliary = g_fixture(orbital_rep, auxiliary_rep, shared)
     a, m, da, dm = reference_df_matrices(orbital, auxiliary)
     rng = np.random.default_rng(1804)
@@ -113,7 +113,7 @@ def test_weighted_all_centers_with_g_expansion_and_tail_tiles(
 
 def test_g_nuclear_direction_against_recomputed_independent_values() -> None:
     """One fixed-weight Lagrangian direction moves orbital and auxiliary atoms."""
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     orbital, auxiliary = g_fixture("spherical", "spherical", False)
     a, m, _, _ = reference_df_matrices(orbital, auxiliary)
     rng = np.random.default_rng(1765)
@@ -149,7 +149,7 @@ def test_g_nuclear_direction_against_recomputed_independent_values() -> None:
 
 
 def test_g_weighted_tight_budget_and_nonfinite_rejection() -> None:
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     orbital, auxiliary = g_fixture("spherical", "spherical", False)
     a, m, _, _ = reference_df_matrices(orbital, auxiliary)
     atoms = [
@@ -184,7 +184,7 @@ def test_native_g_raw_metric_and_fixed_transform_tiles(
     tests. All coordinates are reconstructed only in this independent oracle
     tier; the production weighted traversal visits all centers together.
     """
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     probe = os.environ.get("GENERATIVEQC_DF_SOURCE_PROBE")
     assert probe, (
         "build tests/native/df_value_probe.cpp and set GENERATIVEQC_DF_SOURCE_PROBE"

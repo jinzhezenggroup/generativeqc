@@ -24,7 +24,7 @@ struct Ledger {
   }
   ~Ledger() { generativeqc::runtime::active_device_resource_ledger = previous; }
 };
-void scalar_cases() {
+void scalar_cases(bool gemm) {
   for (std::size_t active : {1U, 17U})
     for (bool uks : {false, true}) {
       Stream stream;
@@ -34,10 +34,13 @@ void scalar_cases() {
       layout.ao_map_entries = active;
       const auto spins = layout.spins;
       Ledger ledger(spins * full * full * sizeof(double));
-      xc_potential_indexed_qualification_for_test(true);
+      xc_potential_indexed_qualification_for_test(!gemm);
+      xc_potential_indexed_gemm_for_test(gemm);
       auto binding = cuda_xc_detail::prepare_potential(layout, stream.value, 128ULL << 20);
       xc_potential_indexed_qualification_for_test(false);
-      require(binding->diagnostic().candidate.algorithm == "indexed-symmetric-cross-rank2k",
+      xc_potential_indexed_gemm_for_test(false);
+      require(binding->diagnostic().candidate.algorithm ==
+                  (gemm ? "indexed-symmetric-cross-gemm" : "indexed-symmetric-cross-rank2k"),
               "scalar gate did not admit indexed rank-2k");
       require(ledger.value->live == ledger.value->limit &&
                   binding->diagnostic().matrix_bytes == ledger.value->live,
@@ -153,7 +156,7 @@ void scalar_cases() {
 /** Compare scaled-PBE local panels with independent full-AO CPU integration.
  * These are XC component gates, not a complete PBE0 SCF/force qualification.
  */
-void indexed_potential_discovery_cases() {
+void indexed_potential_discovery_cases(bool gemm) {
   for (bool spherical : {false, true}) {
     generativeqc::core::System molecule;
     molecule.atoms = {{1, {0, 0, 0}}, {1, {0.1, 0.2, 8.0}}};
@@ -217,9 +220,10 @@ void indexed_potential_discovery_cases() {
         require(!selected.plan->layout().local_ao, "budget miss installed a partial map");
         require(selected.plan->select_local_ao(cutoff, bound.host_peak_bytes),
                 "scaled-PBE local AO admission failed");
-        selected.plan->prepare_potential(128ULL << 20);
+        selected.plan->prepare_potential(128ULL << 20, gemm);
         const auto& diagnostic = selected.plan->potential_lowering();
-        require((diagnostic.indexed_candidate.algorithm == "indexed-symmetric-cross-rank2k") ==
+        require((diagnostic.indexed_candidate.algorithm ==
+                 (gemm ? "indexed-symmetric-cross-gemm" : "indexed-symmetric-cross-rank2k")) ==
                     (cutoff < 1),
                 "discovered indexed potential admission");
         selected.submit(input);
@@ -241,8 +245,8 @@ void indexed_potential_discovery_cases() {
   }
 }
 
-void indexed_potential_cases() {
-  indexed_potential_test::scalar_cases();
+void indexed_potential_recipe_cases(bool gemm) {
+  indexed_potential_test::scalar_cases(gemm);
   auto molecule = system(3);
   molecule.shells.push_back({0, 2, {{0.4, 1.0}}});
   const AoBasis basis(molecule);
@@ -250,16 +254,20 @@ void indexed_potential_cases() {
   for (unsigned route = 0; route != 7; ++route) {
     const auto maps = local_maps(grid.point_count(), 7, basis.nao, route == 5 ? 2 : 1);
     Fixture fixture(basis, grid, 4U, true, 7, CudaXcAoPrecision::Fp64, false, 1.0, 1.0, &maps);
-    xc_potential_indexed_qualification_for_test(route != 0 && route != 4);
+    xc_potential_indexed_qualification_for_test(!gemm && route != 0 && route != 4);
+    xc_potential_indexed_gemm_for_test(gemm && route != 0 && route != 4);
     xc_potential_qualification_for_test(route == 4, route == 3);
     indexed_potential_test::Ledger ledger(route == 6 ? 0 : 128ULL << 20);
     fixture.plan->prepare_potential(route == 2 ? 96ULL << 20 : 128ULL << 20);
     xc_potential_indexed_qualification_for_test(false);
+    xc_potential_indexed_gemm_for_test(false);
     xc_potential_qualification_for_test(false, false);
     const auto& diagnostic = fixture.plan->potential_lowering();
     const bool selected = route == 1;
-    require((diagnostic.candidate.algorithm == "indexed-symmetric-cross-rank2k") == selected,
-            "indexed potential admission route");
+    require(
+        (diagnostic.candidate.algorithm ==
+         (gemm ? "indexed-symmetric-cross-gemm" : "indexed-symmetric-cross-rank2k")) == selected,
+        "indexed potential admission route");
     require(diagnostic.indexed_candidate.provider == (selected ? "cublas" : "generated.cuda"),
             "indexed candidate provenance disagrees with execution");
     require(
@@ -276,11 +284,18 @@ void indexed_potential_cases() {
     fixture.plan.reset();
     require(ledger.value->live == 0, "indexed XC teardown retained its numeric cache");
   }
-  xc_potential_indexed_qualification_for_test(true);
+  xc_potential_indexed_qualification_for_test(!gemm);
+  xc_potential_indexed_gemm_for_test(gemm);
   potential_qualification_budget = 128ULL << 20;
   local_ao_cases();
   potential_qualification_budget = 0;
-  indexed_potential_discovery_cases();
+  indexed_potential_discovery_cases(gemm);
   xc_potential_indexed_qualification_for_test(false);
-  std::cout << "Indexed potential scalar, capture, local-map CPU and resource gates passed\n";
+  xc_potential_indexed_gemm_for_test(false);
+}
+
+void indexed_potential_cases() {
+  indexed_potential_recipe_cases(false);
+  indexed_potential_recipe_cases(true);
+  std::cout << "Indexed SYR2K/GEMM scalar, capture, local-map CPU and resource gates passed\n";
 }

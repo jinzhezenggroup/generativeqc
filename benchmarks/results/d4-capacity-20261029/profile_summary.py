@@ -78,6 +78,12 @@ def main() -> None:
         for role in ("baseline", "candidate")
     ):
         raise SystemExit("dynamic CUDA allocations remain live")
+    for role in ("baseline", "candidate"):
+        if (
+            report[role]["kernels"] <= 0
+            or report[role]["explicit_device_allocation_count"] <= 0
+        ):
+            raise SystemExit(f"{role} profile captured no CUDA kernels or allocations")
     if report["baseline"] != report["candidate"]:
         raise SystemExit("actual GPU work or storage changed")
 

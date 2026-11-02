@@ -6,12 +6,12 @@
   "review_document": "benchmarks/results/scf-validation-gemm-20261024/README.md",
   "files": [
     {
-      "path": "benchmarks/results/scf-validation-gemm-20261024/endpoints.json.xz",
+      "path": "benchmarks/results/scf-validation-gemm-20261024/fp64.xz",
       "family": "scf-validation-gemm-20261024",
       "classification": "required-compact-accepted-evidence",
       "role": "complete-endpoints-and-independent-moved-references",
-      "bytes": 500048,
-      "sha256": "8ff3395641e4db3704676b36a5579547c5274e2d7f9dcb0c9f93148ce0492263"
+      "bytes": 259344,
+      "sha256": "8a2029f36a1bb268ef17f554428dd06a764eefea1838814755db89e3f6115189"
     }
   ]
 }

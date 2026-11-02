@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 # Order only: preserve every selected file, duplicate, and missing-file failure.
 ci_prioritize_runtime_files() {
-  # PR #2888/run 41152461345 timed out at 30 minutes. The four-case ECP
-  # Hessian file started after minute 25, and its final case was still running
-  # after all other files completed. Start it first, followed by descending
-  # observed whole-file elapsed time; preserve all module-local fixtures.
+  # Whole-file cost still determines startup priority after the ECP Hessian
+  # module moved to ecp-forces. Keep shared fixtures local and avoid a late
+  # numerical tail from xdist's default ordering by descending test count.
   local -a priority=(
-    tests/python/test_wb97mv_ecp_hessian.py
     tests/python/test_uccsd_triples_response.py
     tests/python/test_native_stationary_phased_budget.py
     tests/python/test_correlation_convergence.py

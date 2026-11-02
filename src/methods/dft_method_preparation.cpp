@@ -117,7 +117,8 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
 
   if (auto curated = admit_curated_semilocal(input)) return *curated;
 
-  if (input.semilocal_component_count == 1 && input.semilocal_range_omega == 0.0) {
+  if (input.semilocal_component_count == 1 && input.semilocal_range_omega == 0.0 &&
+      input.exchange_term_count == 0 && !input.has_nonlocal_correlation) {
     const auto& component = input.semilocal_components[0];
     if (!component.component_id || !*component.component_id ||
         !std::isfinite(component.coefficient) || component.coefficient < 0.0)
@@ -136,6 +137,15 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
                     std::string_view(component.component_id))};
     }
   }
+
+  if (const auto automatic = dft::generated::automatic_libxc_composition(input))
+    return {dft::SemilocalFamily::Lda,
+            1.0,
+            1.0,
+            automatic.functional_code,
+            false,
+            automatic.program,
+            dft::generated::automatic_restricted_libxc_program(automatic.program->identifier)};
 
 #if GENERATIVEQC_HAS_CUDA
   if (input.semilocal_component_count == 2 && input.semilocal_range_omega == 0.0) {
@@ -250,9 +260,10 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     execution_plan.automatic_restricted_program = semilocal.automatic_restricted_program;
     if (execution_plan.automatic_program) {
       if ((backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
-          ks_input->exchange_term_count != 0 || ks_input->has_nonlocal_correlation != 0)
-        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                          "automatic Libxc KS requires pure CPU/CUDA semilocal execution");
+          ks_input->has_nonlocal_correlation != 0)
+        throw MethodError(
+            GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+            "automatic Libxc KS requires CPU/CUDA semilocal or global-hybrid execution");
 #if GENERATIVEQC_HAS_CUDA
       if (backend == GENERATIVEQC_BACKEND_CUDA) {
         const auto* program = dft::generated::automatic_cuda_point_entry(execution_plan.functional);
@@ -563,7 +574,10 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
                               scf::ScfOptions& options,
                               const NativeKsExecutionPlan& execution_plan) {
   dft::GridSpec grid = dft::default_grid_spec();
-  if (!descriptor.ks_options) return grid;
+  if (!descriptor.ks_options) {
+    options.automatic_xc_tile_points = true;
+    return grid;
+  }
   // Explicit legacy descriptors must not inherit the default's Bragg radii.
   if (descriptor.ks_options->grid_version != 4) grid = dft::GridSpec{};
   const auto& input = *descriptor.ks_options;
@@ -574,9 +588,13 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
       std::string_view(input.scf_domain) != expected_scf_domain(execution_plan))
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "unsupported KS tail/spin domain policy");
-  if (!input.tile_points || input.tile_points > static_cast<std::uint64_t>(INT_MAX))
+  if (input.tile_points > static_cast<std::uint64_t>(INT_MAX))
     throw std::invalid_argument("invalid KS XC tile points");
-  options.xc_tile_points = input.tile_points;
+  options.automatic_xc_tile_points = input.tile_points == 0;
+  options.xc_tile_points = input.tile_points ? input.tile_points : 256;
+  if (input.force_tile_points > 4096)
+    throw std::invalid_argument("invalid KS stationary force tile points");
+  options.xc_force_tile_points = input.force_tile_points;
   switch (input.xc_execution_schedule) {
     case GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED:
       options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::DeviceFused;

@@ -21,15 +21,19 @@ def emit_native_xc_tile_batches(
     return _SOURCE.replace("@TILE@", str(schedule.tile))
 
 
-_SOURCE = r"""
+_BATCH_OPEN = r"""
 namespace generativeqc::dft::cuda_xc_detail {
 namespace {
-__device__ const size_t* compact_tile_ids(const CudaXcCompactTile& tile,
+"""
+
+_COMPACT_TILE_IDS = r"""__device__ const size_t* compact_tile_ids(const CudaXcCompactTile& tile,
                                          const size_t* ids, I full_n) {
   return tile.active && tile.active < size_t(full_n) ? ids + tile.map_offset : nullptr;
 }
 
-template <class Arithmetic = double, bool Occupied = false>
+"""
+
+_BATCH_CONTRACTIONS = r"""template <class Arithmetic = double, bool Occupied = false>
 __global__ void batch_density_products(const CudaXcCompactTile* tiles, const double* density,
     const double* ao, double* work, I full_n, I spins, I work_jets, const size_t* ids, int* error,
     CudaXcOccupiedDensity occupied) {
@@ -111,7 +115,9 @@ __global__ void batch_local_diagonal_potentials(const CudaXcCompactTile* tiles, 
       error, nullptr, tile.active, blockIdx.z % spins, weights + tile.begin);
 }
 
-__device__ I compact_row_lower_bound(const size_t* map, I active, I row) {
+"""
+
+_ORDERED_SCATTER = r"""__device__ I compact_row_lower_bound(const size_t* map, I active, I row) {
   if (!map) return row < active ? row : active;
   I first = 0, end = active;
   while (first < end) {
@@ -192,7 +198,9 @@ __global__ void batch_ordered_scatter(const CudaXcCompactTile* tiles, I tile_cou
   }
 }
 
-template <class Arithmetic, bool Occupied = false>
+"""
+
+_BATCH_LAUNCHES = r"""template <class Arithmetic, bool Occupied = false>
 inline void launch_batch_density_typed(cudaStream_t stream, const CudaXcLayout& layout,
     const CudaXcCompactTile* tiles, I tile_count, I max_active, const double* density, const double* ao,
     double* work, double* features, I batch_begin, const size_t* ids, int* error,
@@ -271,3 +279,20 @@ inline void launch_batch_potential(cudaStream_t stream, const CudaXcLayout& layo
 }  // namespace
 }  // namespace generativeqc::dft::cuda_xc_detail
 """
+
+_SOURCE = (
+    _BATCH_OPEN
+    + _COMPACT_TILE_IDS
+    + _BATCH_CONTRACTIONS
+    + _ORDERED_SCATTER
+    + _BATCH_LAUNCHES
+)
+
+
+def emit_xc_ordered_scatter(
+    schedule: XcMatrixSchedule = DEFAULT_XC_MATRIX_SCHEDULE,
+) -> str:
+    """Share deterministic compact-map scatter with a non-native buffer owner."""
+    if not isinstance(schedule, XcMatrixSchedule):
+        raise TypeError("XC scatter requires XcMatrixSchedule")
+    return (_COMPACT_TILE_IDS + _ORDERED_SCATTER).replace("@TILE@", str(schedule.tile))

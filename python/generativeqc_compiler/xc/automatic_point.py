@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from fractions import Fraction
 
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
@@ -149,6 +152,14 @@ def emit_automatic_point(
         raise ValueError("automatic point spin must be polarized or unpolarized")
     if equal_spin and spin != "polarized":
         raise ValueError("equal-spin lowering requires polarized derivative roots")
+    from ._generated_semilocal_compositions import COMPOSITIONS
+
+    if name in COMPOSITIONS:
+        if parameter_names or precompute_parameters or parameterize_constants:
+            raise ValueError("composed point workers retain component-local constants")
+        return _emit_composed_point(
+            name, backend=backend, spin=spin, equal_spin=equal_spin
+        )
     policy = automatic_work_policy(name)
     density_only = policy.family == "lda"
     if spin == "unpolarized" and not density_only:
@@ -355,4 +366,120 @@ def emit_automatic_point(
             DENSITY_WORK_DOMAIN_VERSION if density_only else LIBXC_WORK_DOMAIN_VERSION
         ),
         parameters=parameters,
+    )
+
+
+def _emit_composed_point(
+    name: str,
+    *,
+    backend: Literal["cpu", "cuda"],
+    spin: Literal["polarized", "unpolarized"],
+    equal_spin: bool,
+) -> AutomaticPointSource:
+    """Fuse rational physical E/vxc sums inside the existing point traversal.
+
+    Each component keeps its own density/sigma/tau work projection. Projecting
+    one shared input first would change tails when component thresholds differ.
+    Exact exchange never enters this sum; the prepared Fock owner supplies it.
+    """
+    from .automatic_semilocal import automatic_components, automatic_scf_domain
+
+    terms = automatic_components(name)
+    density_only = automatic_scf_domain(name) == DENSITY_WORK_DOMAIN
+    if spin == "unpolarized" and not density_only:
+        raise ValueError("unpolarized point ABI requires density-only composition")
+    parts: list[tuple[AutomaticPointSource, Fraction]] = []
+    for component, weight in terms:
+        lda = automatic_work_policy(component).family == "lda"
+        # RKS density components always use total-density U1, including when
+        # nested in a gradient-dependent sum. UKS retains physical P2 roots.
+        unpolarized = spin == "unpolarized" or (equal_spin and lda)
+        parts.append(
+            (
+                emit_automatic_point(
+                    component,
+                    backend=backend,
+                    spin="unpolarized" if unpolarized else "polarized",
+                    equal_spin=equal_spin and not unpolarized,
+                ),
+                weight,
+            )
+        )
+    features = max((part.features for part, _ in parts), key=lambda values: len(values))
+    mask = AUTOMATIC_POINT_LAYOUTS[features]
+    suffix = (
+        "_unpolarized" if spin == "unpolarized" else "_equal_spin" if equal_spin else ""
+    )
+    function = f"automatic_{name.lower()}_point{suffix}"
+    value_type = "SemilocalPointValue" if backend == "cpu" else "DevicePointValue"
+    qualifier = "" if backend == "cpu" else "__device__ inline "
+    source = []
+    for index, (part, _) in enumerate(parts):
+        source.append(f"namespace {function}_component_{index} {{\n{part.source}\n}}")
+    source.extend(
+        [
+            f"{qualifier}{value_type} {function}(const double rho[2],",
+            "    const double (&gradient)[2][3], const double tau[2]) {",
+            f"  {value_type} out{{}};",
+        ]
+    )
+    for index, (part, weight) in enumerate(parts):
+        coefficient = float(weight).hex()
+        source.append(
+            f"  const auto term{index} = {function}_component_{index}::{part.function_name}(rho, gradient, tau);"
+        )
+        if backend == "cuda":
+            source.append(f"  if (!term{index}.valid) return term{index};")
+        source.extend(
+            [
+                f"  out.energy += {coefficient} * term{index}.energy;",
+                "  for (unsigned spin = 0; spin < 2; ++spin) {",
+                f"    out.rho[spin] += {coefficient} * term{index}.rho[spin];",
+                f"    out.kinetic[spin] += {coefficient} * term{index}.kinetic[spin];",
+                "    for (unsigned axis = 0; axis < 3; ++axis)",
+                f"      out.gradient[spin][axis] += {coefficient} * term{index}.gradient[spin][axis];",
+                "  }",
+            ]
+        )
+    finite = "std::isfinite" if backend == "cpu" else "isfinite"
+    rejection = (
+        'throw std::domain_error("nonfinite composed XC output");'
+        if backend == "cpu"
+        else "out.valid = false; return out;"
+    )
+    source.extend(
+        [
+            f"  bool valid = {finite}(out.energy);",
+            "  for (unsigned spin = 0; spin < 2; ++spin) {",
+            f"    valid = valid && {finite}(out.rho[spin]) && {finite}(out.kinetic[spin]);",
+            "    for (double value : out.gradient[spin])",
+            f"      valid = valid && {finite}(value);",
+            "  }",
+            f"  if (!valid) {{ {rejection} }}",
+            "  return out;",
+            "}",
+        ]
+    )
+    identity = canonical_hash(
+        {
+            "schema": "generativeqc.composed-physical-xc.v1",
+            "components": [
+                (part.mathematical_contract, str(weight)) for part, weight in parts
+            ],
+        }
+    )
+    return AutomaticPointSource(
+        name=name,
+        backend=backend,
+        function_name=function,
+        ingredient_mask=mask,
+        features=features,
+        outputs=((), *((index,) for index in range(len(features)))),
+        expression_identity=identity,
+        source="\n".join(source),
+        spin=spin,
+        domain=DENSITY_WORK_DOMAIN if density_only else LIBXC_WORK_DOMAIN,
+        domain_version=DENSITY_WORK_DOMAIN_VERSION
+        if density_only
+        else LIBXC_WORK_DOMAIN_VERSION,
     )

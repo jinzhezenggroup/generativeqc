@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import io
 import json
@@ -40,6 +41,9 @@ def canonical(value: object) -> bytes:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--payload-root", type=Path, default=HERE, help="verified restored historical payload directory")
+    payload = parser.parse_args().payload_root
     manifest = json.loads((HERE / "manifest.json").read_text())
     check(
         manifest["schema"] == "generativeqc.h100-integrated-baseline-evidence.v1"
@@ -48,16 +52,16 @@ def main() -> None:
     )
     for name, binding in manifest["files"].items():
         check(Path(name).name == name, "unsafe stored member")
-        data = (HERE / name).read_bytes()
+        data = (payload / name).read_bytes()
         check(
             {"bytes": len(data), "sha256": digest(data)} == binding,
             "stored payload differs",
         )
-    documents = json.loads(lzma.decompress((HERE / "documents.json.xz").read_bytes()))
-    index = json.loads(lzma.decompress((HERE / "bindings.json.xz").read_bytes()))
+    documents = json.loads(lzma.decompress((payload / "documents.json.xz").read_bytes()))
+    index = json.loads(lzma.decompress((payload / "bindings.json.xz").read_bytes()))
     bindings = index["documents"]
     values = np.load(
-        io.BytesIO(lzma.decompress((HERE / "forces.npy.xz").read_bytes())),
+        io.BytesIO(lzma.decompress((payload / "forces.npy.xz").read_bytes())),
         allow_pickle=False,
     )
     check(
@@ -90,7 +94,7 @@ def main() -> None:
             digest(canonical(value)) == bindings[name]["normalized_sha256"],
             "normalized original JSON differs after full-force reconstruction",
         )
-    text = lzma.decompress((HERE / "text-streams.bin.xz").read_bytes())
+    text = lzma.decompress((payload / "text-streams.bin.xz").read_bytes())
     cursor = 0
     for name, segment in index["byte_segments"].items():
         check(segment["begin"] == cursor, "text stream overlap or gap")

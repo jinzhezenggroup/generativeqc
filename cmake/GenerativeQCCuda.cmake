@@ -494,6 +494,18 @@ macro(generativeqc_configure_cuda_backend target)
       list(APPEND _generativeqc_stationary_spd_primitive_args
            --primitive-source "${_generativeqc_stationary_shard_source}")
     endforeach()
+    # Each manifest retains independent generated-source and ELF integrity checks.
+    # Compute the expected primitive identities just once per build, without
+    # loading or trusting the persistent semantic source cache.
+    set(_generativeqc_stationary_expected_primitives
+        "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}/expected_primitives.json")
+    generativeqc_register_generated_sources(
+      NAME generativeqc_stationary_expected_primitives_codegen
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/write_stationary_aot_reference.py"
+      OUTPUTS "${_generativeqc_stationary_expected_primitives}"
+      DEPENDS ${_generativeqc_stationary_contract_inputs}
+      ARGS --output "${_generativeqc_stationary_expected_primitives}"
+      COMMENT "Computing independent stationary CUDA primitive hashes once")
     # One command owns every shard: separate Python processes cannot reuse the
     # compiler's in-process inventory cache and would repeat all lowering work.
     generativeqc_register_generated_sources(
@@ -708,10 +720,12 @@ macro(generativeqc_configure_cuda_backend target)
                 --output "${_generativeqc_stationary_manifest}"
                 --profile "${_generativeqc_stationary_name}"
                 --iterations 3
+                --expected-primitives "${_generativeqc_stationary_expected_primitives}"
                 ${_generativeqc_stationary_architecture_args}
                 ${_generativeqc_stationary_compile_architecture_args}
         DEPENDS
           ${_generativeqc_stationary_target}
+          "${_generativeqc_stationary_expected_primitives}"
           "${_generativeqc_stationary_source}"
           "${_generativeqc_stationary_sp_primitive_source}"
           ${_generativeqc_stationary_contract_inputs}
@@ -794,11 +808,13 @@ macro(generativeqc_configure_cuda_backend target)
                 --profile "${_generativeqc_stationary_name}"
                 --iterations 3
                 --component-domain spd
+                --expected-primitives "${_generativeqc_stationary_expected_primitives}"
                 ${_generativeqc_stationary_spd_primitive_args}
                 ${_generativeqc_stationary_architecture_args}
                 ${_generativeqc_stationary_compile_architecture_args}
         DEPENDS
           ${_generativeqc_stationary_spd_target}
+          "${_generativeqc_stationary_expected_primitives}"
           "${_generativeqc_stationary_spd_source}"
           ${_generativeqc_stationary_spd_primitive_sources}
           ${_generativeqc_stationary_contract_inputs}

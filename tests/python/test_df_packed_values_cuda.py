@@ -12,13 +12,14 @@ from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
-    reason="requires an explicitly Slurm-allocated GPU",
+    reason="requires an explicitly scheduler-allocated GPU",
 )
 
 
 @pytest.mark.parametrize("response_space", ["auto", "dense", "occupied"])
+@pytest.mark.parametrize("projection", ["auto", "generated", "blas"])
 def test_single_packed_factor_cold_warm_and_force_replay(
-    monkeypatch: typing.Any, tmp_path: typing.Any, response_space: str
+    monkeypatch: typing.Any, tmp_path: typing.Any, response_space: str, projection: str
 ) -> None:
     """A retained fitted B must reproduce independent energies and forces.
 
@@ -27,7 +28,7 @@ def test_single_packed_factor_cold_warm_and_force_replay(
     """
     from pyscf import gto, scf
 
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.5, 0.0, -0.5))]
     moved = list(atoms)
     moved[1] = ("H", (0.0, 0.0, 1.801))
@@ -41,6 +42,7 @@ def test_single_packed_factor_cold_warm_and_force_replay(
         references.append((reference.e_tot, -reference.nuc_grad_method().kernel()))
 
     monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed-single")
+    monkeypatch.setenv("GENERATIVEQC_DF_PACKED_PROJECTION", projection)
     monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", response_space)
     if response_space == "occupied":
         monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "occupied")
@@ -57,6 +59,7 @@ def test_single_packed_factor_cold_warm_and_force_replay(
     )
     occupied_responses = 0
     borrowed_fitted_responses = 0
+    unpacked_projection_values = 0
     with calculator.prepare_batch([atoms], warm_start=True) as batch:
         for index, geometry in enumerate((None, None, moved)):
             trace = tmp_path / f"single-packed-{index}.jsonl"
@@ -72,6 +75,10 @@ def test_single_packed_factor_cold_warm_and_force_replay(
             assert item.energy == pytest.approx(energy, abs=1e-8, rel=0)
             np.testing.assert_allclose(item.forces, forces, atol=1e-7, rtol=0)
             records = read_trace(trace)
+            unpacked_projection_values += sum(
+                record["counters"].get("packed_projection_unpack_values", 0)
+                for record in records
+            )
             occupied_responses += sum(
                 record["counters"].get("response_owned_occupied_projection_bytes", 0)
                 > 0
@@ -103,6 +110,15 @@ def test_single_packed_factor_cold_warm_and_force_replay(
                 assert len(owners) == 1
                 assert owners[0]["counters"].get("resident_raw_bytes", 0) == 0
                 assert owners[0]["counters"].get("resident_transformed_bytes", 0) > 0
+        # Reusing a Python owner must invalidate a captured value plan when the
+        # projection policy changes, even though the packed source is identical.
+        monkeypatch.setenv(
+            "GENERATIVEQC_DF_PACKED_PROJECTION",
+            "blas" if projection == "generated" else "generated",
+        )
+        replay = batch.execute(strict=True).items[0]
+        assert replay.energy == pytest.approx(references[0][0], abs=1e-8, rel=0)
+        np.testing.assert_allclose(replay.forces, references[0][1], atol=1e-7, rtol=0)
         monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed")
         trace = tmp_path / "dual-packed-after-single.jsonl"
         monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
@@ -116,6 +132,7 @@ def test_single_packed_factor_cold_warm_and_force_replay(
         ]
         assert len(owners) == 1
         assert owners[0]["counters"].get("resident_raw_bytes", 0) > 0
+    assert (unpacked_projection_values > 0) == (projection == "blas")
     if response_space == "occupied":
         assert occupied_responses > 0
     elif response_space == "auto":

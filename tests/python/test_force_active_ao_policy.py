@@ -149,9 +149,18 @@ def test_fitted_bitmask_has_its_own_continuous_work_crossover(tile_policy: str) 
 
 @pytest.mark.parametrize("derivative_order", [1, 2])
 @pytest.mark.parametrize("spin_blocks", [1, 2])
-@pytest.mark.parametrize("tile_policy", ["fixed", "budget-auto"])
+@pytest.mark.parametrize(
+    "tile_policy,tile_points",
+    [
+        ("budget-auto", None),
+        ("fixed", 128),
+        ("fixed", 256),
+        ("fixed", 1024),
+        ("fixed", 4096),
+    ],
+)
 def test_fitted_force_qualifies_exact_jets_without_relaxing_cutoff(
-    derivative_order: int, spin_blocks: int, tile_policy: str
+    derivative_order: int, spin_blocks: int, tile_policy: str, tile_points: int | None
 ) -> None:
     """The new domain is integral-provider based, not a molecule whitelist."""
     workload = _workload(
@@ -159,7 +168,7 @@ def test_fitted_force_qualifies_exact_jets_without_relaxing_cutoff(
         derivative_order=derivative_order,
         spin_blocks=spin_blocks,
         tile_policy=tile_policy,
-        tile_points=256 if tile_policy == "fixed" else None,
+        tile_points=tile_points,
         grid_points=1_179_648,
     )
     decision = resolve_force_active_ao_policy(workload)

@@ -758,11 +758,15 @@ class PreparedBatch:
     ) -> typing.Any:
         """Execute a stationary CUDA force with an optional fixed-tile request.
 
-        Qualification callers bind the force-policy workload and execution to
-        the same explicit tile size. Unspecified requests retain budget-auto.
+        Qualification callers and KsOptions bind the force-policy workload and
+        execution to the same explicit tile size. With neither request this
+        generated route retains its existing budget-auto policy.
         The prepared native-force capability route is separate and does not
         consume this private entry point's request.
         """
+        if tile_points is None:
+            options = getattr(self._calculator, "_ks_options", None)
+            tile_points = getattr(options, "force_tile_points", None)
         if tile_points is not None and (
             type(tile_points) is not int or tile_points <= 0
         ):

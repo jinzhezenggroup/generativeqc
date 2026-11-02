@@ -68,6 +68,7 @@ PRECISION_PHASE_SCF = 1
 PRECISION_PHASE_REFINEMENT = 2
 PRECISION_PHASE_FINALIZATION = 3
 PRECISION_PHASE_RETRY = 4
+PRECISION_PHASE_PREPARATION = 5
 PRECISION_OPERATOR_COULOMB_J = 1
 PRECISION_OPERATOR_EXCHANGE_K = 2
 PRECISION_OPERATOR_XC = 3
@@ -330,6 +331,7 @@ class KsOptionsDescriptor(ctypes.Structure):
         ("nonlocal_c", ctypes.c_double),
         ("nonlocal_coefficient", ctypes.c_double),
         ("nonlocal_maximum_bytes", ctypes.c_uint64),
+        ("force_tile_points", ctypes.c_uint64),
     ]
 
 

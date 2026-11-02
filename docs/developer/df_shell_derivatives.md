@@ -178,7 +178,7 @@ For the 384/768 AO headline cases, reduce a single force-call trace with:
 ```bash
 PYTHONPATH=python:. python -m benchmarks.df_shell_work_ledger \
   --trace detailed.jsonl --measurement measured.json \
-  --generated-header build/cuda-release-sm120/generated/generated_df_shell_derivatives.cuh \
+  --generated-header build/cuda-release/generated/generated_df_shell_derivatives.cuh \
   --nsys measured.sqlite --output work.json
 ```
 

@@ -32,7 +32,8 @@ def test_every_advertised_import_has_an_independent_both_spin_fixture() -> None:
     imported = set(libxc_bulk.available_functionals())
     assert CATALOG["counts"]["maple_files"] == 285
     assert CATALOG["counts"]["energy_source_files"] == 268
-    assert len(imported) == CATALOG["counts"]["graph_imported_registrations"] == 221
+    assert len(imported) == CATALOG["counts"]["graph_imported_registrations"]
+    assert "MGGA_X_RSCAN" in imported
     assert {(case["name"], case["spin"]) for case in CASES} == {
         (name, spin) for name in imported for spin in ("polarized", "unpolarized")
     }

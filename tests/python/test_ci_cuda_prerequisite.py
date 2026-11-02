@@ -48,7 +48,7 @@ def _assert_phases(workflow: str) -> None:
         assert argv[0] == "cmake"
         args, unknown = parser.parse_known_args(argv[1:])
         assert not unknown, "no rebuild, cleanup, dry-run or failure swallowing"
-        assert args.build and args.preset == "cuda-release-sm120"
+        assert args.build and args.preset == "cuda-release"
         assert args.target == [target] and args.parallel == 3
         assert "working-directory:" not in step
         assert "CMAKE_" not in step and "CCACHE_DIR:" not in step
@@ -66,8 +66,8 @@ def test_phases_keep_the_same_build_tree_and_required_final_gate() -> None:
         (PREREQUISITE, "        if:", "        continue-on-error: true\n        if:"),
         (
             PREREQUISITE,
-            "--preset cuda-release-sm120",
-            "--preset cuda-release-cli-sm120",
+            "--preset cuda-release",
+            "--preset cuda-release-cli",
         ),
         (PREREQUISITE, "--parallel 3", "--parallel 3 --clean-first"),
         (PREREQUISITE, "--parallel 3", "--parallel 3 || true"),
@@ -174,16 +174,16 @@ def test_production_archive_dependency_is_built_once_and_consumed_by_final_gate(
                 "version": 5,
                 "configurePresets": [
                     {
-                        "name": "cuda-release-sm120",
+                        "name": "cuda-release",
                         "generator": "Ninja",
-                        "binaryDir": "${sourceDir}/build/cuda-release-sm120",
+                        "binaryDir": "${sourceDir}/build/cuda-release",
                         "cacheVariables": {"CMAKE_CXX_COMPILER_LAUNCHER": "ccache"},
                     }
                 ],
                 "buildPresets": [
                     {
-                        "name": "cuda-release-sm120",
-                        "configurePreset": "cuda-release-sm120",
+                        "name": "cuda-release",
+                        "configurePreset": "cuda-release",
                     }
                 ],
             }
@@ -191,7 +191,7 @@ def test_production_archive_dependency_is_built_once_and_consumed_by_final_gate(
     )
     env = {**os.environ, "CCACHE_DIR": str(tmp_path / "cache")}
     subprocess.run(
-        ["cmake", "--preset", "cuda-release-sm120"],
+        ["cmake", "--preset", "cuda-release"],
         cwd=tmp_path,
         env=env,
         check=True,
@@ -216,7 +216,7 @@ def test_production_archive_dependency_is_built_once_and_consumed_by_final_gate(
         )
         return
     assert result.returncode == 0, result.stderr + result.stdout
-    build = tmp_path / "build/cuda-release-sm120"
+    build = tmp_path / "build/cuda-release"
     archive = build / "libgenerativeqc_direct_native.a"
     before = archive.stat().st_mtime_ns
     first_log = (build / ".ninja_log").read_text().splitlines()

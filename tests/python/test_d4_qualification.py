@@ -30,8 +30,11 @@ def invoke(
     tmp_path: Path,
     samples: list[dict[str, Any]],
     metadata: dict[str, Any] | None = None,
+    *,
+    global_budget: bool = False,
 ) -> dict[str, Any]:
     """Replay the complete entry point with deterministic worker responses."""
+    monkeypatch.setenv("D4_QUALIFY_GLOBAL_BUDGET", "1" if global_budget else "0")
     workers = []
 
     def start(*args: object, **kwargs: Any) -> SimpleNamespace:
@@ -164,6 +167,66 @@ def test_valid_complete_entry_point(
     assert report["all_within_1_05"] and report["maximum_ratio"] == 1.0
 
 
+@pytest.mark.parametrize("role", ["A", "B", "both"])
+def test_force_requested_rows_require_force_publication(
+    driver: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    role: str,
+) -> None:
+    samples = population()
+    for record in samples:
+        row = record["rows"][0]
+        row["case"] += "/energy+forces"
+        if role in (record["engine"], "both"):
+            row["items"][0]["forces"] = None
+    with pytest.raises(RuntimeError, match="missing requested forces"):
+        invoke(driver, monkeypatch, tmp_path, samples)
+
+
+def test_energy_only_rows_allow_no_force_publication(
+    driver: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    samples = population()
+    for record in samples:
+        for row in record["rows"]:
+            row["case"] += "/energy"
+            row["items"][0]["forces"] = None
+    report = invoke(driver, monkeypatch, tmp_path, samples)
+    assert report["all_within_1_05"] and report["max_force_difference"] == 0.0
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [{}, {"global_budget": False}, {"global_budget": "true"}, {"global_budget": 1}],
+)
+def test_requested_budget_requires_explicit_candidate_admission(
+    driver: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    candidate: dict[str, Any],
+) -> None:
+    with pytest.raises(RuntimeError, match="candidate did not enable"):
+        invoke(
+            driver,
+            monkeypatch,
+            tmp_path,
+            population(),
+            {"A": {"global_budget": False}, "B": candidate},
+            global_budget=True,
+        )
+
+
+def test_budget_campaign_keeps_the_ordinary_baseline(
+    driver: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    metadata = {"A": {"global_budget": False}, "B": {"global_budget": True}}
+    report = invoke(
+        driver, monkeypatch, tmp_path, population(), metadata, global_budget=True
+    )
+    assert report["all_within_1_05"] and report["metadata"] == metadata
+
+
 def test_serialization_rejects_nonfinite_metadata(
     driver: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -189,7 +252,12 @@ def test_actual_retained_population_replays_without_remeasurement(
     ) as stream:
         retained = json.load(stream)
     report = invoke(
-        driver, monkeypatch, tmp_path, retained["samples"], retained["metadata"]
+        driver,
+        monkeypatch,
+        tmp_path,
+        retained["samples"],
+        retained["metadata"],
+        global_budget=campaign == "budget",
     )
     for key in (
         "groups",

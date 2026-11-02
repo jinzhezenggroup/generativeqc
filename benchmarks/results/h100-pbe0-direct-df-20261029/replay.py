@@ -1,4 +1,5 @@
 """Offline retained PBE0 evidence replay. Standard library; no chemistry execution."""
+import argparse
 import hashlib
 import io
 import json
@@ -32,12 +33,15 @@ def metrics(sample, reference, atoms):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--payload-root", type=Path, default=ROOT, help="verified restored historical payload directory")
+    payload = parser.parse_args().payload_root
     manifest = load((ROOT/'manifest.json').read_bytes())
     for name, row in manifest['files'].items():
-        data = (ROOT/name).read_bytes()
+        data = ((payload if name == 'evidence.tar.xz' else ROOT)/name).read_bytes()
         assert len(data) == row['bytes'] and digest(data) == row['sha256'], name
     members = {}
-    with tarfile.open(fileobj=io.BytesIO((ROOT/'evidence.tar.xz').read_bytes()), mode='r:xz') as archive:
+    with tarfile.open(fileobj=io.BytesIO((payload/'evidence.tar.xz').read_bytes()), mode='r:xz') as archive:
         for entry in archive:
             name = entry.name
             path = PurePosixPath(name)

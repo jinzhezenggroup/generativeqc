@@ -1,0 +1,16 @@
+{
+  "cpu-samples.json.xz": {
+    "git_commit": "46c95408d192964467a0e2a0adae9b5686da363c",
+    "git_path": "benchmarks/results/seed-snapshots-20261029/cpu-samples.json.xz",
+    "sha256": "6711bd528e5e98a04bb2597c79ff944f58da541f0b4920ba7d6c2e8ddce01950",
+    "bytes": 33324,
+    "scope": "Complete accepted 1792-call CPU audited matrix, source f7c7d6ba9."
+  },
+  "cuda-samples.json.xz": {
+    "git_commit": "0be3a9fcb5c9aa4cb60d0b494122ad8a37756a03",
+    "git_path": "benchmarks/results/seed-snapshots-20261029/cuda-samples.json.xz",
+    "sha256": "2dcb9cccff9aa4f3d7227696644ec6654c685c38b959fb8be87b9daecb5f05ba",
+    "bytes": 78312,
+    "scope": "Slurm 14845, complete accepted 1792-call audited CUDA matrix, source f7c7d6ba9."
+  }
+}

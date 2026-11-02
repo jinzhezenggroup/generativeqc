@@ -2,16 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "h100-small-cbs-correctness-20261024",
   "owner": "H100 small CBS bounded correctness and admission evidence",
-  "reason": "Retains all255 actual originals,16 numerical returns,two provider refusals and14 NOT_RUN slots with independent reference/model gates and executable offline replay. Historical HOST source/test/cache packets are recoverable byte-for-byte from the verified already-merged Git snapshot; they are not active numerical inputs. The fixed32 matrix remains incomplete; caps and scientific gates are unchanged.",
+  "reason": "Retains all255 actual originals,16 numerical returns,two provider refusals and14 NOT_RUN slots with independent reference/model gates and executable offline replay. Historical HOST source/test/cache packets are recoverable byte-for-byte from the verified already-merged Git snapshot; they are not active numerical inputs. The fixed32 matrix remains incomplete; caps and scientific gates are unchanged. Historical large raw payloads now have exact existing-Git recovery in benchmarks/results/h100-history-retention-20261031/snapshot.manifest.json; numerical summaries, original decisions and test inputs remain unchanged. No large payload from this family remains in the current checkout.",
   "review_document": "benchmarks/results/h100-small-cbs-correctness-20261024/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/actual-terminal-originals-v2.json.xz",
-      "family": "h100-small-cbs-correctness-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "all-255-actual-source-preflight-release-IEEE-return-and-failure-originals",
-      "bytes": 436816,
-      "sha256": "2e9a5aa83bd998bcf2b63703f590f97c93a67b87fc0e573c034fbb438510816f"
-    }
-  ]
+  "files": []
 }

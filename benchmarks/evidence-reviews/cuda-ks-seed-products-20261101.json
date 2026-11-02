@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cuda-ks-seed-products-20261101",
+  "owner": "CUDA KS seed validation and portable endpoint qualification",
+  "reason": "139 original populations: 136 complete and independently qualified, including separately labelled traces and native-only MINAO diagnostics, plus three incomplete/failed controls. Retains full forces, timing/work/settings and original build/scheduler identities. Final production comparisons match explicit CPU reservations; no numerical gate is changed.",
+  "review_document": "benchmarks/results/cuda-ks-seed-products-20261101/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cuda-ks-seed-products-20261101/receipts.json.xz",
+      "family": "cuda-ks-seed-products-20261101",
+      "classification": "required-compact-accepted-evidence",
+      "role": "original-endpoint-receipts-independent-gates-and-provenance-binding",
+      "bytes": 411288,
+      "sha256": "d5989a92dc6d693a97a42a20369a8af175287583d7aa86b9d3d43950dd2c0e7e"
+    }
+  ]
+}

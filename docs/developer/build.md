@@ -74,11 +74,12 @@ cmake --build build -j10
 
 ## CUDA build profiles
 
-The generic `cuda-dev-fast` and `cuda-release` presets require a caller-selected
-numeric CUDA target and use portable kernels. The development preset uses
-compile-oriented NVCC settings. The release preset retains production
-optimization settings. Both leave process-level CUDA compile parallelism to
-the build tool. For example, build for an Ada GPU with:
+`cuda-dev-fast`, `cuda-release`, and `cuda-release-cli` never pin a CUDA GPU
+architecture. Select the target at configuration time. The development preset
+uses portable kernels and compile-oriented NVCC settings; release builds use
+production optimization and `auto` AOT selection (qualified tuned kernels when
+available, portable fallback otherwise). The development and library-release
+presets leave CUDA compile parallelism to the build tool. For example, build for an Ada GPU with:
 
 ```bash
 cmake --preset cuda-dev-fast -DCMAKE_CUDA_ARCHITECTURES=89-real
@@ -86,10 +87,10 @@ cmake --build --preset cuda-dev-fast
 ```
 
 Use `cuda-release` with the same target option for performance measurements.
-`cuda-release-sm120` and `cuda-release-cli-sm120` are explicitly specialized
-Blackwell builds with the measured `sm_120` shell profile. To use that profile
-with `cuda-dev-fast`, pass `-DCMAKE_CUDA_ARCHITECTURES=120-real
--DGENERATIVEQC_AOT_PROFILE=sm_120`.
+`cuda-release-cli` inherits this generic release preset and enables the full
+native CLI distribution. For reproducibility, a compatible device may opt into
+its measured profile with `-DGENERATIVEQC_AOT_PROFILE=sm_120`; this is an
+architecture-specific optimization argument, not a separate build preset.
 
 By default, `GENERATIVEQC_CUDA_COMPILE_JOBS` is empty, so native CUDA and
 generated AOT compilation follow the build tool's normal parallelism (for
@@ -114,7 +115,15 @@ builds. This changes packaging, not mathematical kernels or architecture coverag
 Set the option to `OFF` to retain the complete archives in final binaries.
 Other backends, or toolkits without `nvprune`, retain the original archives.
 
-The distributable `cuda-release-cli-sm120` preset **always includes the
+Linux x86-64 provider-free CUDA wheels place device-image sections after host
+code and data using `cmake/cuda_wheel_payload.ld`. This keeps host PC-relative,
+GOT and TLS references within the small code model's range even when the image
+matrix exceeds 2 GiB. Small registration wrappers remain near host data; all
+executable images, PTX and retained relocatable images remain present. The script
+applies only to the final host link, with no compression or device-link change.
+Configuration requires a linker with `INSERT` script support (GNU ld or lld).
+
+The distributable `cuda-release-cli` preset **always includes the
 entire structurally representable automatic CUDA XC catalog**. It explicitly
 sets `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` and leaves
 `GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS` empty (full catalog, no name
@@ -245,7 +254,13 @@ shared s/p primitives, s/p/d shards, legacy wrappers and native scientific
 wrappers. It does not cache native binding metadata or installed manifests.
 Cache hits retain generator/asset dependency checks and source integrity checks;
 corruption fails the build. CMake tracks the full recipe dependency closure even
-when a hit avoids importing a lowering module.
+when a hit avoids importing a lowering module. CUDA wheel CI enables this
+source-only cache with an exact science-input key, independently from the
+NVCC object cache. An uncached, build-local reference independently re-lowers
+both primitive domains once for all installed AOT manifest validations; each
+manifest still checks its wrapper and primitive source identity, final ELF
+SHA-256 and target architecture. A source-cache hit never substitutes for this
+independent verification.
 
 Within one multiarch build, Stationary and DF shell sources are already generated
 once and compiled for the requested architectures. Direct-shell profiles may
@@ -264,6 +279,46 @@ the native direct kernel owners, while
 `-DGENERATIVEQC_AOT_SPLIT_COMPILE_THREADS=N` does the same for generated AOT
 owners. Both default to `1` because split compilation can change optimizer
 resource choices; use the normal settings for performance and release binaries.
+
+## Prebuilt CUDA wheel coverage
+
+The wheel workflow selects the architecture set by event and PR diff. Ordinary
+wheel-scoped pull requests build `120` (SM120 only) with the same installed-wheel
+smoke, payload, and linkage checks. PRs changing the wheel workflow, CUDA
+architecture/toolchain/linker integration, NVIDIA host ABI or packaging build
+scripts automatically require the full matrix before merging; missing PR diff
+evidence fails the job. The base `CMakeLists.txt` and matrix selector are also
+covered by the PR trigger. Master pushes, scheduled checks, and explicit
+workflow dispatches always build the full matrix. Source changes outside the
+wheel-specific PR paths continue to use the other CI workflows; maintainers
+can dispatch a full wheel check explicitly when needed.
+
+Only a successful full-matrix `master` push may publish a trusted compiler
+snapshot. A single-architecture PR build cannot qualify or publish that
+snapshot. The published release wheel must come from an accepted full-matrix
+master/release build, not an ordinary PR artifact.
+
+The full wheel matrix selects `80;90-real;120-real`: native images for `sm_80`, `sm_90`
+and `sm_120`, plus `compute_80` PTX. The unsuffixed CMake target `80`
+emits both native and virtual code; the other targets emit native code only.
+Portable shell profiles remain available with the measured `sm_120` profile.
+Every AOT manifest retains its own actual compiled code-object inventory;
+profile-specific libraries are not required to contain the entire wheel matrix.
+Independent source, binary-integrity, smoke and CUDA-linkage gates remain required.
+
+NVIDIA can use a compatible cubin on the same compute-capability major version
+with an equal or higher minor version (for example, `sm_80` on 8.6/8.9).
+Other newer architectures may JIT the generic `compute_80` PTX when no compatible
+native image is available, subject to the installed driver's PTX support and
+compatible CUDA libraries. JIT adds first-use latency and does not establish
+native-target performance parity or scientific qualification. This is forward,
+not backward, compatibility: **SM 70/75 are not covered by this wheel**.
+See [NVIDIA's compatibility rules](https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/cuda-platform.html)
+and [CMake's real/virtual target semantics](https://cmake.org/cmake/help/latest/prop_tgt/CUDA_ARCHITECTURES.html).
+
+The reduced matrix is a packaging/cost policy, not a claim of qualified execution
+on every newer GPU. Existing archives explicitly named `sm120` remain
+architecture-specific. Source builds can select a different deployment target.
 
 ## Install a native SDK/runtime
 

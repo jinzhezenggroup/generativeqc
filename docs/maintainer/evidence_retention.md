@@ -486,3 +486,9 @@ python tools/evidence.py audit-migration \
 
 Pass the revision named by a specific audit rather than assuming the current
 baseline still matches it.
+
+Recovery manifests can use `generativeqc.compressed-manifest.v1` storage records
+with an adjacent XZ payload. `tools/restore_retained_evidence.py` verifies both
+checksums and the bounded decoded size before validating the original manifest.
+This representation preserves the original manifest bytes and existing recovery
+paths; it does not change the retained Git objects or numerical evidence.

@@ -197,8 +197,10 @@ def main() -> None:
         ],
     )
     args = parser.parse_args()
-    if not os.environ.get("SLURM_JOB_ID"):
-        parser.error("run this native GPU validation through srun")
+    if not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")):
+        parser.error(
+            "run this native GPU validation in a finite Slurm or LSF GPU allocation"
+        )
     directory = args.directory.resolve()
     directory.mkdir(parents=True, exist_ok=True)
     linked = subprocess.run(

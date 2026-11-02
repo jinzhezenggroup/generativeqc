@@ -129,9 +129,9 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       !std::isfinite(model.semilocal_exchange_scale) || model.semilocal_exchange_scale < 0 ||
       !std::isfinite(model.semilocal_correlation_scale) || model.semilocal_correlation_scale < 0 ||
       (automatic_libxc &&
-       (!automatic_backend_valid || fock.spec.exchange.present || model.range_correction ||
-        model.nonlocal_correlation || model.semilocal_exchange_scale != 1.0 ||
-        model.semilocal_correlation_scale != 1.0)) ||
+       (!automatic_backend_valid || (fock.spec.exchange.present && !canonical_global_hybrid) ||
+        model.range_correction || model.nonlocal_correlation ||
+        model.semilocal_exchange_scale != 1.0 || model.semilocal_correlation_scale != 1.0)) ||
       (fock.spec.exchange.present &&
        (fock.spec.exchange.op != scf::FockOperator::FullRange ||
         (fock.spec.exchange.approximation != scf::FockApproximation::Exact &&

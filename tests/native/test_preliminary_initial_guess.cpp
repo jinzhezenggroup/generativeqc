@@ -274,6 +274,29 @@ void check() {
   for (std::size_t index = 0; index < admitted_minao.size(); ++index)
     require(std::abs((*injected)[index] - admitted_minao[index]) < 1e-10,
             "backend eigen injection changed the admitted MINAO density");
+  bool product_used = false;
+  const MatrixProductOperation observed_product = [&](const auto& a, const auto& b, std::size_t n,
+                                                      bool ta, bool tb) {
+    product_used = true;
+    return scf::reference::multiply(ta ? scf::reference::transpose(a, n) : a,
+                                    tb ? scf::reference::transpose(b, n) : b, n);
+  };
+  const auto product_seed = prepare_preliminary_density(
+      plan, *controls.preliminary_guess, injected_diagnostic, observed_eigen, observed_product);
+  require(product_used && product_seed && *product_seed == *injected,
+          "borrowed validation products changed the MINAO seed");
+  const MatrixProductOperation failed_product = [](const auto&, const auto&, std::size_t, bool,
+                                                   bool) -> Matrix {
+    throw std::runtime_error("injected seed product failure");
+  };
+  bool product_failed = false;
+  try {
+    (void)prepare_preliminary_density(plan, *controls.preliminary_guess, injected_diagnostic,
+                                      observed_eigen, failed_product);
+  } catch (const std::runtime_error&) {
+    product_failed = true;
+  }
+  require(product_failed, "failed borrowed product silently used a reference retry");
   const EigenOperation invalid_eigen = [](const auto&, const auto*, const auto*, std::size_t) {
     return scf::reference::EigenResult{};
   };
@@ -299,10 +322,11 @@ void check() {
   scf::reference::observation::Observer observer{observe_preparation, finish_observation};
   scf::reference::observation::active = &observer;
   PreliminaryDiagnostic skipped_diagnostic;
+  const auto eigen_calls_before_budget = eigen_calls;
   const auto skipped = prepare_preliminary_density(plan, *controls.preliminary_guess,
                                                    skipped_diagnostic, observed_eigen);
   scf::reference::observation::active = nullptr;
-  require(!skipped && eigen_calls == 4 && observed_preparation_calls == 0 &&
+  require(!skipped && eigen_calls == eigen_calls_before_budget && observed_preparation_calls == 0 &&
               skipped_diagnostic.outcome == PreliminaryOutcome::BudgetSkipped &&
               skipped_diagnostic.preparation_numeric_capacity == minao_cap,
           "MINAO budget was not checked before numeric preparation");

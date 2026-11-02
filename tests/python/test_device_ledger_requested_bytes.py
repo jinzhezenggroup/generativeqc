@@ -1,7 +1,8 @@
 """Exercise production ledger bookkeeping with host-only CUDA allocation doubles.
 
-The real C API translation unit and allocation wrapper are compiled unchanged.
-These tests do not establish real-GPU allocation or numerical endpoint gates.
+The real C API translation unit, allocation wrapper and optional-source
+authorization are compiled unchanged. These tests do not establish real-GPU
+allocation or numerical endpoint gates.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 from generativeqc.resources_native import NativeDeviceJournal, NativeDeviceLedger
 from generativeqc_compiler.common.resources import (
     ResourceBudget,
@@ -91,6 +93,7 @@ int generativeqc_resource_tracking_end_v1(std::uint64_t*, std::uint64_t*);
 }
 
 using namespace generativeqc::runtime;
+using generativeqc::scf::direct_coulomb_optional_authorized;
 using Metrics = std::array<std::uint64_t, 5>;
 
 void require(bool condition, const char* message) {
@@ -313,6 +316,8 @@ void capacity_reservations() {
             "public diagnostic conflated promises, numeric allocations or provider allowances");
   };
   DeviceResourceScope observation(ledger);
+  require(!direct_coulomb_optional_authorized(),
+          "an unpromised ledger gained optional-source authority");
   auto first = DeviceCapacityReservation::try_create(ledger, 80, true);
   require(first != nullptr, "complete optional-source promise was refused");
   auto second = std::make_unique<DeviceCapacityReservation>(ledger, 32);
@@ -341,11 +346,13 @@ void capacity_reservations() {
   std::unique_ptr<DeviceProviderAllowance> provider;
   {
     DeviceCapacityScope scope(*first);
-    require(active_device_capacity_promise->optional_direct_coulomb,
+    require(direct_coulomb_optional_authorized(),
             "complete owner's optional-source authority was not retained");
     require(device_resource_available(0) == 80, "owner cannot use its promised capacity");
     {
       DeviceCapacityScope unpromised_owner(nullptr);
+      require(!direct_coulomb_optional_authorized(),
+              "unpromised nested owner borrowed optional-source authority");
       require(device_resource_available(0) == 0 &&
                   resource_cuda_malloc(&denied, 1) == cudaErrorMemoryAllocation,
               "nested owner without a promise borrowed another owner's capacity");
@@ -354,7 +361,7 @@ void capacity_reservations() {
             "unpromised nested owner lost its caller's promise");
     {
       DeviceUnpromisedCapacityScope optional_scope;
-      require(!active_device_capacity_promise,
+      require(!direct_coulomb_optional_authorized(),
               "optional-source authority leaked into optional allocation scope");
       require(device_resource_available(0) == 0 &&
                   resource_cuda_malloc(&denied, 1) == cudaErrorMemoryAllocation,
@@ -370,7 +377,7 @@ void capacity_reservations() {
             "owner exceeded its declared bound");
     {
       DeviceCapacityScope nested(*second);
-      require(!active_device_capacity_promise->optional_direct_coulomb,
+      require(!direct_coulomb_optional_authorized(),
               "ordinary nested owner inherited optional-source authority");
       require(device_resource_available(0) == 32, "nested owner borrowed wrong promise");
       void* temporary{};
@@ -380,7 +387,7 @@ void capacity_reservations() {
                   device_resource_available(0) == 32, "rebuild capacity was not restored");
     }
     require(device_resource_available(0) == 0, "nested scope did not restore parent promise");
-    require(active_device_capacity_promise->optional_direct_coulomb,
+    require(direct_coulomb_optional_authorized(),
             "nested owner lost its caller's optional-source authority");
   }
   // Closing one metadata owner preserves both another owner's future and all
@@ -434,14 +441,21 @@ void capacity_reservations() {
           "reservation close leaked unused capacity");
   require(resource_cuda_free(optional) == cudaSuccess && device_resource_available(0) == 128,
           "optional cleanup changed reservation accounting");
-  auto closing = std::make_unique<DeviceCapacityReservation>(ledger, 128);
+  auto closing = DeviceCapacityReservation::try_create(ledger, 128, true);
+  require(closing != nullptr, "closing owner's optional-source promise was refused");
   {
     DeviceCapacityScope scope(*closing);
+    require(direct_coulomb_optional_authorized(),
+            "live owner lost optional-source authority before close");
     closing.reset();
+    require(!direct_coulomb_optional_authorized(),
+            "a closed active owner retained optional-source authority");
     require(device_resource_available(0) == 0 &&
                 resource_cuda_malloc(&denied, 1) == cudaErrorMemoryAllocation,
             "a closed promise was silently replaced with unbounded capacity");
   }
+  require(!direct_coulomb_optional_authorized(),
+          "closed scope leaked optional-source authority into ordinary binding");
   require(device_resource_available(0) == 128, "closed scope failed to restore ordinary binding");
   auto maximum = std::make_shared<DeviceResourceLedger>();
   maximum->limit = std::numeric_limits<std::size_t>::max();
@@ -548,7 +562,16 @@ def ledger_probe(
     )
     (folder / "cuda_runtime_api.h").write_text(CUDA_STUB)
     source = folder / "probe.cpp"
-    source.write_text(DRIVER)
+    authorization = cpp_function_definition(
+        (ROOT / "src/scf/cuda/direct_jk.cpp").read_text(),
+        "direct_coulomb_optional_authorized",
+    )
+    source.write_text(
+        '#include "runtime/resource_cuda.cuh"\n'
+        "namespace generativeqc::scf {\n"
+        f"{authorization}\n"
+        "}\n" + DRIVER
+    )
     return required_native_cxx.build_executable(
         [
             ROOT / "src/api/c_api_resources.cpp",

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from ..ir import IntegralIR, KernelConsumer, build_integral_ir
 from ..shell_spec import FUSED_SHELL_SPEC_BY_NAME
+from ..specialize import specialize_fock_integral, specialize_integral_ir
 from .policy import schedule_payload
 from .shared import _PROVENANCE_FIELDS
 
@@ -61,7 +62,7 @@ def update_manifest_payload(
     ``provenance`` may carry endpoint and compiler measurements for each
     winner.  Keeping those values beside the schedule lets a later promotion
     apply the compile/runtime Pareto policy instead of silently optimizing only
-    a synthetic kernel timer. ``qualified_integrals`` binds independent
+    a synthetic kernel timer. ``qualified_integrals`` binds measured
     consumer winners to the exact recurrence and output request that was
     measured; mismatches are rejected before any manifest row changes.
     """
@@ -81,32 +82,55 @@ def update_manifest_payload(
         raise TypeError("architecture profile requires a kernels list")
 
     selected_consumer = KernelConsumer(consumer)
+    required_consumers = (
+        (KernelConsumer.FOCK, KernelConsumer.FORCE)
+        if selected_consumer == KernelConsumer.FOCK
+        else (KernelConsumer.FORCE,)
+    )
     # Legacy schedule-only callers cannot attest which recurrence was measured.
-    # Check every independent winner before mutating any row. The driver carries
+    # Check every supplied winner before mutating any row. The driver carries
     # the complete qualified scientific request through this publication boundary.
     for row in kernels:
         if not isinstance(row, dict):
             continue
         name = row.get("shell_class")
-        if (
-            not isinstance(name, str)
-            or name not in winners
-            or row.get("fock_recurrence") is None
-        ):
+        if not isinstance(name, str) or name not in winners:
             continue
         if qualified_integrals is None or name not in qualified_integrals:
+            if row.get("fock_recurrence") is not None:
+                raise ValueError(
+                    "schedule-only tuning cannot update independent Fock/force recurrences"
+                )
+            # Legacy implicit trials publish schedules without an explicit IR.
+            # Validate supplied evidence without changing that existing contract.
+            continue
+        consumers = {KernelConsumer(item) for item in row.get("consumers", ["force"])}
+        consumers.update(required_consumers)
+        retained = build_integral_ir(
+            FUSED_SHELL_SPEC_BY_NAME[name],
+            tuple(item for item in KernelConsumer if item in consumers),
+            recurrence=row.get("recurrence", "subset_wick"),
+        )
+        measured = qualified_integrals[name]
+        if selected_consumer not in measured.consumers:
             raise ValueError(
-                "schedule-only tuning cannot update independent Fock/force recurrences"
+                "qualified tuning integral differs from the retained consumer"
             )
-        recurrence = (
-            row["fock_recurrence"]
-            if selected_consumer == KernelConsumer.FOCK
-            else row.get("recurrence", "subset_wick")
-        )
-        expected = build_integral_ir(
-            FUSED_SHELL_SPEC_BY_NAME[name], (selected_consumer,), recurrence=recurrence
-        )
-        if qualified_integrals[name] != expected:
+        if selected_consumer == KernelConsumer.FOCK:
+            expected = (
+                specialize_integral_ir(
+                    retained,
+                    consumers=(selected_consumer,),
+                    recurrence=row["fock_recurrence"],
+                )
+                if row.get("fock_recurrence") is not None
+                else specialize_fock_integral(retained)
+            )
+            measured = specialize_fock_integral(measured)
+        else:
+            expected = specialize_integral_ir(retained, consumers=(selected_consumer,))
+            measured = specialize_integral_ir(measured, consumers=(selected_consumer,))
+        if measured != expected:
             raise ValueError(
                 "qualified tuning integral differs from the retained consumer"
             )
@@ -116,11 +140,6 @@ def update_manifest_payload(
     # otherwise a batch Fock search silently retunes the force path too.
     schedule_field = (
         "fock_schedule" if selected_consumer == KernelConsumer.FOCK else "schedule"
-    )
-    required_consumers = (
-        (KernelConsumer.FOCK, KernelConsumer.FORCE)
-        if selected_consumer == KernelConsumer.FOCK
-        else (KernelConsumer.FORCE,)
     )
     installed = set()
     for row in kernels:

@@ -210,24 +210,47 @@ the [complete endpoint and accuracy qualification](../maintainer/performance_eng
 
 ## SCF and force tile policies
 
-`KsOptions.tile_points` configures SCF AO/grid/XC panels. The ordinary public
-CUDA analytic-force executor has a separate fixed 256-point policy; composite
-forces instead use their own budget-aware planner. Increasing the SCF tile does
-not request a larger Becke force workspace.
+`KsOptions.tile_points=None` (the default) selects SCF AO/grid/XC panels during
+native preparation. Large device-fused, density-fitted, strict-FP64 RKS workloads
+with gradient-dependent XC use 1024 points on devices with FP64 matrix acceleration
+and full-rate FP64 throughput; nonlocal correlation uses 512. Eligibility requires
+at least 512 AOs, 524288 grid points and 1 GiB of free device memory. CPU, small,
+unrestricted, mixed-precision, low-FP64-throughput and unknown devices retain 256.
+Numeric capacity promises, active resource ledgers and reference-memory budgets
+also retain 256. An automatically enlarged owner that cannot allocate storage
+retries preparation once at 256; other failures propagate. A positive integer
+always preserves the explicit SCF request.
+
+`force_tile_points` independently bounds CUDA stationary-force batches (1..4096
+points). When omitted, an explicit SCF tile is inherited. With automatic SCF,
+large fitted strict-FP64, gradient-dependent RKS owners independently use 1024
+force points on compute capability 8 or newer. This requires the same AO/grid
+size and free-memory thresholds, all-electron basis shells through d, 48–128
+atoms, native stationary admission and no resource promise. Other owners use
+256. An automatic force owner that exceeds an allowance or cannot allocate
+storage drains its controller and retries once at 256 with the same final-state
+token. Explicit bounds never silently shrink. CPU execution uses the SCF tile.
+Neither control changes quadrature, precision or screening thresholds.
 
 For an independently qualified larger-tile workload, request the size explicitly:
 
 ```python
 options = KsOptions(
     grid=GridSpec(radial_points=48, angular_polar=16, angular_azimuth=32),
-    tile_points=512,
+    tile_points=256,
+    force_tile_points=1024,
 )
 ```
 
 Larger tiles reduce submission/map counts but can include more local AO
 summands. They are not universally faster, and map reservation bytes are not
-complete endpoint peak memory. The default remains 256: there is no implicit
-512-point promotion or automatic replacement of an explicit tile request.
+complete endpoint peak memory. The complete force arena and nonlocal sub-budget
+still apply; a request below the required memory fails admission. A tile bound
+may be clamped to the available grid point count. Explicit SCF tiles are preserved. Generated CUDA fallback owners also
+honor an explicit force tile; without one they retain their existing force
+planner. C and C++ callers set `generativeqc_ks_options.force_tile_points` or
+`KsGrid.force_tile_points`; zero selects the force policy described above.
+For the SCF tile, C/C++ zero requests automatic selection.
 Resource budgets and the existing dense/local-AO admission remain authoritative.
 Use a new prepared owner when changing the tile, and inspect the actual
 `ks_diagnostic.tile_points` rather than assuming the requested route ran.

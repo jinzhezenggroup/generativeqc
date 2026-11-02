@@ -74,6 +74,12 @@ struct CudaDfRawChargeView {
                                              std::string&);
   Derivative derivative{};
   std::size_t natom{};
+  // Optional factored metric response: coefficient/2 * v^T(dM)v.
+  // Uses the same owner/stream/atom lifetime and leaves general matrix weights
+  // with the existing bounded derivative consumer.
+  using MetricDerivative = generativeqc_status (*)(void*, const double*, double, double*,
+                                                   std::string&);
+  MetricDerivative metric_derivative{};
 };
 /** Borrow of one canonical column-major C, with D=density_scale*C*C^T.
  * The plan owner validates the method token, exact density and device

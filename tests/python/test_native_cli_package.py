@@ -74,8 +74,18 @@ class NativeCliPackageTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         presets = json.loads((root / "CMakePresets.json").read_text())
         by_name = {preset["name"]: preset for preset in presets["configurePresets"]}
-        release_cli = by_name["cuda-release-cli-sm120"]
-        self.assertEqual(release_cli["inherits"], "cuda-release-sm120")
+        release_cli = by_name["cuda-release-cli"]
+        self.assertEqual(release_cli["inherits"], "cuda-release")
+        self.assertEqual(
+            by_name["cuda-release"]["cacheVariables"]["GENERATIVEQC_AOT_PROFILE"],
+            "auto",
+        )
+        for preset in by_name.values():
+            self.assertNotIn(
+                "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES",
+                preset["cacheVariables"],
+            )
+            self.assertNotIn("CMAKE_CUDA_ARCHITECTURES", preset["cacheVariables"])
         options = release_cli["cacheVariables"]
         self.assertEqual(options["GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT"], "ON")
         self.assertEqual(options["GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS"], "")

@@ -121,6 +121,12 @@ retain their existing precedence and admission rules.
 Hückel's atomic solves and minimal-subspace decompositions run on the native CPU
 production provider even for CUDA targets. Final strict same-AO admission uses
 the target's borrowed GPU eigensolver for CUDA KS and resident/bucketed CUDA RHF.
+For CUDA KS owners with at least 512 AOs and an available prepared matrix-library
+provider, the strict density and eigenframe validators also borrow idle GPU
+buffers for FP64 matrix products. This preserves the same occupation, charge,
+orthogonality and residual gates without additional device allocation. Smaller
+owners or unavailable providers retain the host product path. Synchronous
+transfers and validation are included in cold preparation and explicit imports.
 The independent CUDA HF Fock route already owns host SCF algebra; it uses the
 shared native scalar HF eigensolver for preparation and target iteration while
 J/K remains on the GPU. Neither route silently retries a failed admission with

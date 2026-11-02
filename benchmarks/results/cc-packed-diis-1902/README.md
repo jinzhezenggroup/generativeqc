@@ -136,7 +136,7 @@ The representation/rounding/fallback rationale is in
 Production `1b63282e1` is independently qualified by build 2334, host 2339,
 real-device solver/small all-coordinate FD 2341, shared Lambda/factor 2348 and
 complete energy/force/budget jobs 2342–2344. Report 2346 passes. Records are in
-`prepared-provider-summary.json`; its source-manifest checksum binds this version.
+`prepared-provider-summary.json.xz`; its source-manifest checksum binds this version.
 It predates the subsequent retained-RHF ownership integration.
 
 Ethane energy CCSD medians are 145.659721 / 145.552978 s (full / packed), and
@@ -165,7 +165,7 @@ relabeled as that source.
 Production `d3548f1fdcaa7e4137490f32bf7f4abfdfecbafa` passes build 2350,
 host 2351, real-device solver and independent small all-coordinate FD 2353,
 shared Lambda/factor 2354, complete energy/force/budget 2356–2358 and report 2360.
-`retained-reference-summary.json` and its source-manifest checksum preserve this version,
+`retained-reference-summary.json.xz` and its source-manifest checksum preserve this version,
 including verified source/compiler/policy files and per-allocation GPU UUIDs.
 
 | Ethane230 | Full | Packed |
@@ -250,7 +250,15 @@ translation and existing independent large two-coordinate/two-step FD gates.
 The maximum large force difference from the frozen reference is 1.393e-9
 Eh/Bohr, energy difference 4.547e-13 Eh and translation residual 2.397e-12.
 Packing stays active without refusal in every requested endpoint.
-`post-merge-summary.json` preserves all observations, validation-log outcomes
+`post-merge-summary.json.xz` preserves all observations, validation-log outcomes
 and hashes, per-allocation GPU/binary identities, and the reconstructable
 `v3-sources.sha256` receipt verified after endpoints. The limited independent
 large-force scope and capacity-only opt-in policy are unchanged.
+
+## Lossless checkout storage
+
+The `.json.xz` summaries retain every original byte, including observations,
+failed gates, ordering and source identities. `storage.json` records compressed
+and decoded SHA-256/size identities and the original Git blobs. Use
+`xz --decompress --stdout FILE.json.xz` to inspect a summary. This storage change
+does not update or requalify the historical measurements.

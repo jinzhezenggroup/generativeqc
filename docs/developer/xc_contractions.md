@@ -148,6 +148,131 @@ native response owner. `apply_spin()` keeps functional-spin channels;
 `apply()` and `apply_transpose()` retain the restricted total-D convention.
 This does not register a new complete KS/CPKS method capability.
 
+## Resident CUDA spatial potentials
+
+`PreparedXCContractions` can borrow a CUDA `PreparedSpatialGrid` and evaluate
+fixed-density energy and potential without downloading AO jets or density
+features. Point caching and AO assembly are independent of the source of the
+functional. Ordinary grid artifacts include canonical LDA/PBE. The existing
+`interior-v1` API binds an audited semilocal composition explicitly:
+
+```python
+from generativeqc_compiler.xc.spatial_cuda import compile_spatial_cuda
+
+spec = functional("R2SCAN", spin="polarized")
+artifact = compile_spatial_cuda(spec, cuda_compiler, cache)
+with PreparedSpatialGrid(
+    basis, grid, backend="cuda", artifact=artifact,
+    ingredients=("rho", "gradient", "tau"), tile_points=128,
+) as spatial:
+    program = NativeContractionProgram(spec, compiler=cpu_compiler, cache=cache)
+    with PreparedXCContractions(program, basis, grid, spatial=spatial) as prepared:
+        result = prepared.execute(source, stamp=source.stamp)
+```
+
+`source` is a `DensitySource`. Both density-matrix and validated orbital-factor
+routes are supported. The CPU program supplies the shared contract and explicit
+host alternative; the selected device execution performs no CPU XC evaluation.
+
+The generated extension admits linear combinations of the audited LDA/PW,
+PBE and SCAN/r²SCAN components in `spec.PUBLIC_COMPONENTS`. Full expression
+identity, coefficients and the interior domain bind the artifact. Restricted
+and polarized layouts share the polarized evaluator, with exact equality checks
+on restricted spin features.
+An unavailable exact artifact selects `host_unfused` only when the existing
+host ingredient contract is satisfied; explicitly requesting `device_fused`
+then fails at preparation. Execution failures propagate.
+
+For Libxc worker semantics, use `SpatialContractionProgram`. It adapts the existing
+source-derived rho/sigma/tau point lowerers, including automatic imported
+components and the registered split-hybrid semilocal pairs, to the same grid ABI:
+
+```python
+from generativeqc_compiler.xc.spatial_program import SpatialContractionProgram
+
+# MN15 selects only its semilocal XC contribution. Exact exchange is external.
+program = SpatialContractionProgram("MN15", compiler=cuda_compiler, cache=cache)
+with PreparedSpatialGrid(
+    basis, grid, backend="cuda", artifact=program.artifact,
+    ingredients=program.consumer.ingredients, tile_points=128,
+) as spatial:
+    with PreparedXCContractions(program, basis, grid, spatial=spatial) as prepared:
+        result = prepared.execute(source, stamp=source.stamp)
+```
+
+This device program needs no CPU scalar artifact. An imported component name,
+such as `GGA_X_B88` or `MGGA_X_MVS`, or a supported `FunctionalSpec` composition
+uses the existing ingredient/work-policy admission, with no spatial name list.
+Unsupported Laplacian, range/nonlocal operators and altered split-hybrid pairs
+remain outside that contract. Explicit exact-exchange metadata is rejected.
+`MN15` and `M06-2X` names select their semilocal pairs only; method owners supply
+exact exchange independently. This API does not assemble a full hybrid energy.
+
+Libxc point workers preserve vacuum screening, per-component density/sigma/tau
+floors, Fermi-hole constraints and original-density energy weighting. Their vxc
+is evaluated at work inputs; it is not differentiation through clipping or a
+new physical empty-spin particle-birth continuation. Restricted density-only
+workers use total-density U1 semantics. GGA/meta-GGA workers share equal-spin
+arithmetic after validating equal physical channels, retaining independent spin
+partials. Source bytes, coefficients and worker contracts bind the artifact
+identity. A missing/mismatched artifact or host schedule fails at preparation;
+this device program has no host scientific fallback.
+
+Point evaluation occurs once per grid point. A bounded FP64 panel stores energy,
+two density derivatives, six Cartesian gradient coefficients and two kinetic
+coefficients. All AO pairs reuse these eleven rows; meta-GGA matrix assembly
+includes tau's one-half factor exactly once. The grid resource plan charges
+`88 * tile_points` bytes for these coefficients plus `8 * (tile_points + 6)`
+bytes for weights and integration scratch in every local plan, including a
+one-AO tile. Features and AO jets remain intact for the task lease. Statistics
+report `xc_point_evaluations`, the per-tile `xc_point_cache_bytes`, and
+`xc_total_point_cache_bytes` including optional batch slots.
+
+Spatial XC uses the native compact potential panels and tiled symmetric matrix
+contraction. Tiny or out-of-domain shapes retain the bounded scalar fallback.
+Integration uses a fixed-warp compensated FP64 reduction; batch accumulation
+retains its low words until final publication. The optional queue defaults to
+eight tiles with a 32 MiB limit. It preserves original point/AO maps and uses the
+native deterministic ordered scatter. The resource plan charges all copied AO,
+feature, coefficient, weight, matrix, descriptor and error storage. Insufficient
+budget or optional allocation failure selects the single-tile path; execution
+errors propagate. `xc_batch_tiles`, `xc_batch_device_bytes`, `xc_batch_flushes`
+and complete `owned_device_bytes` expose the selected work and storage.
+
+Use `device_options=SpatialXcOptions(batch_tiles=1)` on `PreparedXCContractions`
+to disable batching. Import `SpatialXcOptions` from
+`generativeqc_compiler.dft.spatial_xc_batch`. Its explicit
+`matrix_precision="fp32"` option uses the existing float compact matrix body,
+while point evaluation, storage, energy/electron integration and global matrix
+scatter remain FP64. The default is `"fp64"`; precision is part of prepared
+identity and statistics. FP32 potential acceptance is `2e-6` absolute/relative
+against independent Libxc on the spatial qualification fixtures. FP64 uses
+`5e-10`; these fixture gates are not universal error bounds or SCF admission.
+
+`SpatialContractionProgram` enables the existing AO radial/axis reuse emitter
+by default (`ao_radial_reuse=False` selects its scalar alternative). Compatible
+single-component registrations share parameterized compiled packages by default.
+The native package planner must prove both polarized and restricted worker ABIs;
+a common family name is insufficient. Each package contains immutable parameter
+rows selected per call, so distinct prepared owners cannot overwrite each
+other's coefficients. Functional metadata stays distinct from package identity.
+Unmatched graphs and compositions retain specialized artifacts. Set
+`share_workers=False` to request a specialized artifact without catalog worker
+discovery. The first shared request incurs structural discovery; subsequent
+requests in the process reuse the plan, and compatible programs reuse the same
+compiled artifact.
+
+Both APIs evaluate fixed-grid energy/potential, with their respective interior
+or Libxc worker domains. Neither adds molecular force, response, hybrid exchange
+or nonlocal-correlation capabilities. Native KS admission and its PBE launch
+schedule remain independently owned.
+
+`test_spatial_xc_codegen.py` and `test_spatial_libxc_codegen.py` compare emitted
+adapters to independent Libxc, including worker boundaries. Their corresponding
+CUDA test files check complete prepared endpoints, interior density directional
+derivatives, resource accounting, leases and rejection/recovery. Run real CUDA
+tests with `GENERATIVEQC_GRID_CUDA_TEST=1` inside a finite Slurm GPU allocation.
+
 ## Geometry and memory scope
 
 `GeometryPartials.centers`, `.points` and `.weights` are independent gradients

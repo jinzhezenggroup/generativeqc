@@ -112,7 +112,11 @@ cudaError_t contract_cuda_df_response_weights(
     // Bridge-owned fitted/full-rank occupied response may omit dead general
     // metric scratch. Its fixed intervals must match df_occupied_response_workspace;
     // raw, borrowed and truncated consumers keep the general layout.
-    bool compact_fitted_metric_workspace = false);
+    bool compact_fitted_metric_workspace = false,
+    // Optional pure-J metric consumer takes v and the coefficient of v^T M v/2.
+    // Its owner borrows the same stream; the general dense-weight fallback is
+    // retained whenever this authenticated factored consumer is absent.
+    const std::function<void(const double*, double)>& consume_raw_metric_derivative = {});
 
 }  // namespace generativeqc::scf
 #endif

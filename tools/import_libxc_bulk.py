@@ -174,34 +174,10 @@ def make_catalog(root: Path) -> dict[str, Any]:
                 if functional_type != f"{record['family']}_exc":
                     record["reason"] = "source is not a matching energy functional"
                 else:
-                    extended_helper = next(
-                        (
-                            helper
-                            for helper in (
-                                "Fermi_D_corrected",
-                                "Fermi_D",
-                                "mgga_exchange_nsp",
-                                "mgga_series_w",
-                            )
-                            if re.search(rf"\b{helper}\b", text)
-                        ),
-                        None,
-                    )
-                    if record["name"] == "MGGA_X_RPPSCAN":
-                        extended_helper = "mgga_exchange_nsp"
-                    if extended_helper is not None:
-                        unsupported_definition = re.search(r"`([^`]+)`\s*:=", text)
-                        if unsupported_definition:
-                            record["reason"] = (
-                                "MapleImportError: unsupported Maple definition name "
-                                f"'`{unsupported_definition[1]}`'"
-                            )
-                        else:
-                            record["reason"] = (
-                                f"MapleImportError: unknown Maple symbol '{extended_helper}'"
-                            )
-                        registrations.append(record)
-                        continue
+                    # The importer owns supported operations. A helper-name denylist
+                    # becomes stale when shared lowering learns a new primitive.
+                    # Successful lowering still needs independent both-spin fixtures
+                    # before the generated catalog publishes the registration.
                     try:
                         nodes = {}
                         for spin in ("polarized", "unpolarized"):

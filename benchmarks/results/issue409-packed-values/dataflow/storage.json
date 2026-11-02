@@ -1,0 +1,123 @@
+{
+  "schema": "generativeqc.lossless-historical-observation-storage.v1",
+  "scope": "Storage-only; original manifest paths and hashes identify the decoded bytes. All observations, failed controls and numerical gates remain unchanged.",
+  "files": [
+    {
+      "original_path": "dataflow/observations/cold-dataflow-profiles-192-dense.json",
+      "original_bytes": 44366,
+      "original_sha256": "a951d0ed1141998ed5bc0ba64da998408b4a930d2a78704e8762ac2b943c2725",
+      "original_git_blob": "01a3a42fe2d06338c0fda8163a71bf7375f9b775",
+      "stored_path": "dataflow/observations/cold-dataflow-profiles-192-dense.json.gz",
+      "stored_bytes": 7361,
+      "stored_sha256": "3a04f36e4924fc76abd8fcbc257ce1158544cbc02de06c284793018c934c9bdc"
+    },
+    {
+      "original_path": "dataflow/observations/cold-dataflow-profiles-192-packed.json",
+      "original_bytes": 45703,
+      "original_sha256": "42a0206b22d8df4f9a5af206eaaa78e638aa4efb67bba420bdcb3e1af691fbbf",
+      "original_git_blob": "22d72dcecff2e90cbb3b10882ec6fb1ca971eb1e",
+      "stored_path": "dataflow/observations/cold-dataflow-profiles-192-packed.json.gz",
+      "stored_bytes": 7492,
+      "stored_sha256": "e8c88307ed429bb2d45f312458f0b3c463a792478e6e22e6786ccb035892a27d"
+    },
+    {
+      "original_path": "dataflow/observations/cold-dataflow-profiles-384-dense.json",
+      "original_bytes": 64298,
+      "original_sha256": "8da525adde7cc303ca78e4b8c0bddf0cfd878c522d028477d085992f22c4a17d",
+      "original_git_blob": "d61ff3ee24d5f18a4c40f898f6899bfc06e70c33",
+      "stored_path": "dataflow/observations/cold-dataflow-profiles-384-dense.json.gz",
+      "stored_bytes": 9923,
+      "stored_sha256": "b798a1efabd70b82d568db1c5caf004813e42225ef7786c7cf83366675816222"
+    },
+    {
+      "original_path": "dataflow/observations/cold-dataflow-profiles-96-464-dense.json",
+      "original_bytes": 30734,
+      "original_sha256": "66057d428b385fd6adee36f72857ce1ed2fa8532e5966fd07ea1e60cdee9efe3",
+      "original_git_blob": "b00fbfb37a84dbf7eecc43de540b99aa42067679",
+      "stored_path": "dataflow/observations/cold-dataflow-profiles-96-464-dense.json.gz",
+      "stored_bytes": 6121,
+      "stored_sha256": "28f984066a26d3b4a90e08343a994fc1e3847f63dddf5c71de49da64f4d77fa1"
+    },
+    {
+      "original_path": "dataflow/observations/cold-dataflow-profiles-96-464-packed.json",
+      "original_bytes": 32634,
+      "original_sha256": "1e7e5ac768781266342935fba4c7cb32042d2e17455a967f0717d01b02f130a7",
+      "original_git_blob": "40e5e0fcaaa7b7f1f0e025f237fcb89594048567",
+      "stored_path": "dataflow/observations/cold-dataflow-profiles-96-464-packed.json.gz",
+      "stored_bytes": 6338,
+      "stored_sha256": "6f59d95351170d09262377533c289f8725450238492604e640ff75da04c963b8"
+    },
+    {
+      "original_path": "dataflow/observations/dataflow-profiles-192-dense.json",
+      "original_bytes": 42890,
+      "original_sha256": "a2b770ed262136322ef35e1dc6c215f2f0416ac0c1337c342b2bbef2a9bdce97",
+      "original_git_blob": "597fe987c315ce93595e7f4ab66b0fb6668db3bb",
+      "stored_path": "dataflow/observations/dataflow-profiles-192-dense.json.gz",
+      "stored_bytes": 6661,
+      "stored_sha256": "d220a3fac840fba79845dde2e0b9536bfa6da5192625940ec56845a2b3feafa6"
+    },
+    {
+      "original_path": "dataflow/observations/dataflow-profiles-192-packed.json",
+      "original_bytes": 42452,
+      "original_sha256": "0c02863ba27375dcf722f6bd2cd3e4ff4f8c1f03de11dd2bc89b01932b2a1dba",
+      "original_git_blob": "2b396cb8ce4ff7e744ea2d3be46f23db626d3d25",
+      "stored_path": "dataflow/observations/dataflow-profiles-192-packed.json.gz",
+      "stored_bytes": 6562,
+      "stored_sha256": "7cbc63191d2e21da0a8cf867cde9b0fba3d34b81204d8a369393c0486b6591f1"
+    },
+    {
+      "original_path": "dataflow/observations/dataflow-profiles-384-dense.json",
+      "original_bytes": 58977,
+      "original_sha256": "cff54a5cdb4fef675077e520aa6fb14f5afc1319961fb4b40af2a2b1594f5674",
+      "original_git_blob": "17e6dbf886eca405ac14c0d952a917c9b7929731",
+      "stored_path": "dataflow/observations/dataflow-profiles-384-dense.json.gz",
+      "stored_bytes": 8179,
+      "stored_sha256": "1c7cd3aa43155e70f2c0d0a48bc2480327ed41fccfb777213b0f1244226bdb60"
+    },
+    {
+      "original_path": "dataflow/observations/dataflow-profiles-384-packed.json",
+      "original_bytes": 61437,
+      "original_sha256": "7cba03a844e411d0c4334cbfc5eb1648ae1e17bed1757dd1957e7ade44e74dfb",
+      "original_git_blob": "bb4c351e0177b025d52b07354099768e99a3b098",
+      "stored_path": "dataflow/observations/dataflow-profiles-384-packed.json.gz",
+      "stored_bytes": 8824,
+      "stored_sha256": "0e7d0030d0d1ea54c878f533db1822144706c506dd30fa93ca88e7a10f1fe2d7"
+    },
+    {
+      "original_path": "dataflow/observations/unequal-dataflow-profiles-96-464-dense.json",
+      "original_bytes": 29195,
+      "original_sha256": "fc3ffc2981a8a88518d27a4808dca2a1165da985f395e11ce6126aa4394c2381",
+      "original_git_blob": "9d004242c7a8a237fb79c531dc39993c41836f90",
+      "stored_path": "dataflow/observations/unequal-dataflow-profiles-96-464-dense.json.gz",
+      "stored_bytes": 5573,
+      "stored_sha256": "cd156ad3afffc8e07e3af4826b8d376feac4131a8d53d3c3ff72e480c42c9dff"
+    },
+    {
+      "original_path": "dataflow/observations/unequal-dataflow-profiles-96-464-packed.json",
+      "original_bytes": 29284,
+      "original_sha256": "ac439da8b41641e1e8a9055ed47637dd4e1eda38eeb69a440097344dd6e337f7",
+      "original_git_blob": "02575706a4c05aee8d68e1a0f3e4cee8df4e77bb",
+      "stored_path": "dataflow/observations/unequal-dataflow-profiles-96-464-packed.json.gz",
+      "stored_bytes": 5576,
+      "stored_sha256": "99e9369dd8fefa63b5f45ece8296c9d7296f5be068205b5abe08a606d95f5192"
+    },
+    {
+      "original_path": "dataflow/unequal-dataflow-profiles-96-464-dense.json",
+      "original_bytes": 44913,
+      "original_sha256": "b43ba2330a0e7b9109722393f76c9b6f625fe88ee4053ac88539eb0749634ae6",
+      "original_git_blob": "7e066b7fa1796afd2ba07a0b19169f673ccfb821",
+      "stored_path": "dataflow/unequal-dataflow-profiles-96-464-dense.json.gz",
+      "stored_bytes": 5415,
+      "stored_sha256": "b0a71fbf217a0be3b658729f7628fefa421fd589d807e0db72cbd25b72fef3ad"
+    },
+    {
+      "original_path": "dataflow/unequal-dataflow-profiles-96-464-packed.json",
+      "original_bytes": 47211,
+      "original_sha256": "74a6b796f630db4022eb473f36e1d67f94ebf25e114baab16503b8f1dcb23625",
+      "original_git_blob": "639af92049761689d03ae28c5489f7dc172c8af8",
+      "stored_path": "dataflow/unequal-dataflow-profiles-96-464-packed.json.gz",
+      "stored_bytes": 5428,
+      "stored_sha256": "b0d9a28b092772ac22dffb34f2b3ed9e14e8a609f423c77b6b08888a594ecbb4"
+    }
+  ]
+}

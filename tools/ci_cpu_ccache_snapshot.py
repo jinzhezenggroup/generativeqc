@@ -44,7 +44,7 @@ def select_profile(name: str) -> None:
     if name != "wheel":
         raise ValueError("unsupported snapshot profile")
     PROFILE, LABEL, STAGE_ENV = "wheel", "wheel", "WHEEL_CACHE_STAGE"
-    ARTIFACT = "wheel-ccache-master-manylinux-cuda12.9-sm120-v1"
+    ARTIFACT = "wheel-ccache-master-manylinux-cuda12.9-sm80-sm90-sm120-ptx80-v3"
     WORKFLOW = ".github/workflows/wheels.yml"
     MAX_ARTIFACT = 2 * 1024 * 1024 * 1024
     MAX_ARCHIVE = MAX_ARTIFACT - 1024 * 1024
@@ -74,7 +74,7 @@ def wheel_toolchain() -> dict[str, str]:
     return {
         "manylinux_image": image,
         "cuda_version": "12.9",
-        "cuda_arch": "120",
+        "cuda_arch": "80;90-real;120-real",
         "ccache_version": "4.14",
     }
 
@@ -89,7 +89,7 @@ def record_wheel_toolchain() -> None:
     if (
         version.splitlines()[0] != "ccache version 4.14"
         or not re.search(r"release 12\.9,", cuda)
-        or os.environ.get("GENERATIVEQC_CUDA_ARCHITECTURES") != "120"
+        or os.environ.get("GENERATIVEQC_CUDA_ARCHITECTURES") != expected["cuda_arch"]
         or os.environ.get("GENERATIVEQC_ENABLE_CUDA") != "ON"
     ):
         raise ValueError("unsupported observed wheel toolchain")

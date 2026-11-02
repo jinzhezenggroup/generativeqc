@@ -288,6 +288,10 @@ class CudaKsPlan {
    * The callback must not outlive this plan; shared seed validation retains
    * its existing reference fallback for legacy near-symmetric inputs. */
   scf::initial_guess::EigenOperation seed_eigen_operation();
+  /** Borrow idle, precharged scratch for large FP64 seed-validation products.
+   * Small owners and unavailable library bindings return an empty callback,
+   * retaining the host validator. The callback must not outlive this owner. */
+  scf::initial_guess::MatrixProductOperation seed_product_operation();
   /** Freeze replacement without disabling reuse of the last-good density. */
   void set_warm_start_updates(bool enabled) noexcept;
   /** Forget the seed without downloading or changing the current result. */
@@ -377,6 +381,12 @@ class CudaKsPlan {
                                            std::size_t additional_device_bytes,
                                            std::array<std::uint64_t, 4>& receipt,
                                            std::string& detail);
+
+  /** Describe the imminent force consumer before submitting this solve. The
+   * prepared method supplies its existing additional-allocation envelope,
+   * subtracting retained force storage. This is a hint for warm-anchor work
+   * placement, never a reservation or permission to exceed a force budget. */
+  void set_following_force_memory(std::size_t additional_device_bytes) noexcept;
 
   const CudaKsResources& resources() const noexcept;
   /** Optional prepared-operation provenance; null means that the owner did

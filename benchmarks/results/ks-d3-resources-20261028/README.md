@@ -128,3 +128,39 @@ Its static allocation bytes and opaque memory remain separately identified.
 The selected verified sccache launcher was used throughout the builds; one
 server-shutdown warning caused its documented local compiler fallback. Shared
 cache snapshots and that warning are retained, without claiming exclusive hits.
+
+
+## Recovery after the subsequent policy campaign
+
+The complete raw records for this earlier source campaign are retained in Git
+commit `162ea8332179af8e2974562e30ae92f284bcc4f8`. Current identity manifests
+record `git_commit` and `git_path` for archived patches, compressed CSVs,
+receipts and sample bundles; `member` selects an exact JSON string in a bundle.
+For example, `git show 162ea8332:benchmarks/results/ks-d3-resources-20261028/endpoint-samples.json.xz`
+restores the complete integrated sample bundle. Original pre-integration sample
+recovery remains bound to `bcf1124fc` as described above. Summaries and reproduction
+programs stay in the current tree. This is existing-Git retention, with no new
+external archive, release asset, changed checksum or increased storage limit.
+
+
+## Qualification-driver repair (2026-10-31)
+
+The replay driver now rejects non-finite energies, derivative components and
+non-finite or non-positive timings before applying the unchanged scientific and
+1.05 per-case performance gates. Derivative array shapes must match exactly.
+`--response-timeout` (default 900 seconds) bounds each startup/sample response,
+including partial lines; cleanup terminates and reaps only harness-owned sessions.
+Reports reject NaN/Infinity during JSON serialization.
+
+This is a harness repair, not a new CPU/GPU qualification campaign. All retained
+measurements, sample order, production source identities and historical receipt
+checksums remain unchanged. `identities.json` describes the original driver; its
+exact bytes remain recoverable offline by applying the retained reverse patch:
+
+```bash
+cp qualify.py /tmp/original-qualify.py
+xz -dc original-driver.reverse.patch.xz | patch /tmp/original-qualify.py
+sha256sum /tmp/original-qualify.py
+```
+
+Expected original-driver SHA-256: `6bf48344a0f52f2967213fa47f00aa3c1f33cc18df480bb71492f97302e70c6c`.

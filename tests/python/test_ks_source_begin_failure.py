@@ -156,6 +156,7 @@ struct Owner {
   std::size_t elements = 1;
   struct { std::size_t density_h2d_bytes{}, scalar_d2h_bytes{}, synchronizations{}; } movement;
   bool warm_energy_baseline{}, occupied_fitted_factor_ready{};
+  bool warm_incumbent_deferred{};
   struct { std::size_t state_device_bytes{}, xc_device_bytes{}, provider_device_bytes{}; } resource;
   double range_warm_energy{}, range_warm_energy_correction{};
   double warm_energy{}, warm_energy_correction{}, previous_energy{}, previous_energy_correction{};
@@ -171,6 +172,7 @@ struct Owner {
   }
   void retire_phase_source(bool) { ++retired; phase_source.reset(); }
   void restore_warm_seed() { throw std::logic_error("unexpected warm seed in cold begin probe"); }
+  void rebase_warm_energy(bool) { throw std::logic_error("unexpected warm anchor in cold begin probe"); }
   void begin() {
     const std::vector<double>* input = nullptr;
     const auto seed_origin = CudaKsSeedOrigin::External;

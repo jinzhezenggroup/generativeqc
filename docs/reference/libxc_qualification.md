@@ -2,12 +2,12 @@
 
 Measured source revision: `36085eec7d745ad0e25514468ddfa42aea2c9f86`.
 Retained measured source inputs: `ec311fd6a9bc3a7105ab42ff9f7e154400119a91d79b3b6987e62c3e09cfc0b3`.
-Current checked source inputs: `d57b95351e3b566c914e2f7921c9330d9853c81f7296f6e3b645969273b57f6c`.
-Current checked native input identity: `9f4fc6271ba9a0f7dea70fad10fbeacfe46a5bc3fe83c157aa453cf43a15b9f7`.
+Current checked source inputs: `a7f692449bfe976802a97ae589d16df87770fd2912a9abbe65c9c0599327db14`.
+Current checked native input identity: `5aa7bf5569c69f173232442e9cf7ba52be80fcb3381b618a8254215e0ae62ffc`.
 Retained evidence stale for checked inputs: `True`.
 Retained executed native library SHA-256: `d16bf758445db7fc0b1b043847979e7a12ef851ee98254be2e9a7f47dace0efa`.
 Independent oracle: PySCF 2.14.0 / Libxc 7.0.0.
-Structurally selectable non-curated automatic registrations: 197; registrations without a retained native campaign: 210.
+Structurally selectable non-curated automatic registrations: 198; registrations without a retained native campaign: 211.
 
 This offline qualification inventory does not restrict structural public selection.
 The automatic count excludes registrations already owned by curated components.
@@ -17,19 +17,19 @@ The `public-method` row counts the optional stronger admission receipt,
 not available public selectors. Its absence does not disable a method.
 
 ```text
-Libxc capability summary (221 functionals)
+Libxc capability summary (222 functionals)
 stage                qualified  ready  blocked
-graph-imported             221      0        0
-pointwise-validated        221      0        0
-compiled-cpu                 0    221       11
-compiled-cuda                0    221       11
-production-domain            0    213       11
+graph-imported             222      0        0
+pointwise-validated        222      0        0
+compiled-cpu                 0    222       11
+compiled-cuda                0    222       11
+production-domain            0    214       11
 gpu-runtime                  0      0       11
 molecular-scf                0      0       11
 forces                       0      0       11
 response                     0      0        0
 public-method                0      0        0
-public DFT: 0/221
+public DFT: 0/222
 explicit blockers: 66 across 11 functionals
 ```
 

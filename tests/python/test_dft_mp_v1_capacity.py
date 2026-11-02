@@ -2855,18 +2855,13 @@ def assert_native_grid_abi(
 #include "generativeqc/generativeqc.h"
 #include "dft/application_precision.hpp"
 #include "dft/grid.hpp"
+#include "scf/types.hpp"
 #include "generated_atomic_grid.hpp"
 namespace dft=generativeqc::dft;
+namespace scf=generativeqc::scf;
 struct MethodError:std::runtime_error { int status; MethodError(int s,const char* m):std::runtime_error(m),status(s){} };
 struct NativeKsExecutionPlan { bool nonlocal_correlation=true; };
 const char* expected_scf_domain(const NativeKsExecutionPlan&) { return "current-domain"; }
-namespace scf { struct ScfOptions {
- enum class XcExecutionSchedule { DeviceFused,HostUnfused };
- std::uint64_t xc_tile_points=256;
- XcExecutionSchedule xc_execution_schedule=XcExecutionSchedule::DeviceFused;
- std::optional<dft::GridSpec> nonlocal_grid_spec;
- std::array<double,3> application_precision_budget{};
-}; }
 auto checked_precision_mode(const generativeqc_method_descriptor& d) { return d.precision_mode; }
 """
         + "\nnamespace generativeqc::dft {\n"
@@ -2879,10 +2874,10 @@ auto checked_precision_mode(const generativeqc_method_descriptor& d) { return d.
         + "}\n"
         + r"""
 int main() {
- static_assert(sizeof(generativeqc_ks_options)==160);
- static_assert(sizeof(dft::ApplicationPrecisionKsOptions)==184);
- static_assert(sizeof(dft::NonlocalGridKsOptions)==200);
- static_assert(offsetof(dft::NonlocalGridKsOptions,grid)==192);
+ static_assert(sizeof(generativeqc_ks_options)==168);
+ static_assert(sizeof(dft::ApplicationPrecisionKsOptions)==192);
+ static_assert(sizeof(dft::NonlocalGridKsOptions)==208);
+ static_assert(offsetof(dft::NonlocalGridKsOptions,grid)==200);
  generativeqc_ks_options primary{};
  primary.struct_size=sizeof(primary); primary.abi_version=GENERATIVEQC_ABI_VERSION;
  primary.scf_domain="current-domain"; primary.tile_points=37;
@@ -2894,9 +2889,22 @@ int main() {
  auto read=[&](const generativeqc_ks_options* input) { descriptor.ks_options=input;scf::ScfOptions options;admit(descriptor,options);auto grid=ks_grid_options(descriptor,options,plan);return std::make_pair(grid,options);};
  const auto legacy=read(&primary);
  assert(legacy.first.radial_points==8 && legacy.second.xc_tile_points==37);
+ assert(!legacy.second.automatic_xc_tile_points);
+ auto automatic_tile=primary; automatic_tile.tile_points=0;
+ const auto automatic_options=read(&automatic_tile);
+ assert(automatic_options.second.automatic_xc_tile_points);
+ assert(automatic_options.second.xc_tile_points==256);
+ auto force=primary; force.force_tile_points=1024;
+ const auto force_options=read(&force);
+ assert(force_options.first==legacy.first && force_options.second.xc_tile_points==37);
+ assert(force_options.second.xc_force_tile_points==1024);
+ force.force_tile_points=4097;
+ bool invalid_force=false; try {read(&force);}catch(const std::invalid_argument&){invalid_force=true;}
+ assert(invalid_force);
  assert((legacy.first.element_radii==std::array<double,119>{}));
  descriptor.ks_options=nullptr;scf::ScfOptions default_options;
  const auto automatic=ks_grid_options(descriptor,default_options,plan);
+ assert(default_options.automatic_xc_tile_points && default_options.xc_tile_points==256);
  assert(automatic.version==4 && automatic.radial_points==3 && automatic.angular_polar==0 && automatic.angular_azimuth==0);
  for(unsigned z=1;z<std::size(generativeqc::generated::atomic_grid::xi);++z)
    assert(automatic.element_radii[z]==generativeqc::generated::atomic_grid::bragg[z]);
@@ -2913,13 +2921,13 @@ int main() {
    assert((read(&explicit_legacy).first.element_radii==std::array<double,119>{}));
  }
  assert(legacy.second.xc_execution_schedule==scf::ScfOptions::XcExecutionSchedule::HostUnfused);
- dft::ApplicationPrecisionKsOptions precision{primary,1e-6,1e-5,3e-6};precision.base.struct_size=184;
+ dft::ApplicationPrecisionKsOptions precision{primary,1e-6,1e-5,3e-6};precision.base.struct_size=sizeof(precision);
  const auto old_precision=read(&precision.base);
  assert(old_precision.first==legacy.first);
  assert((old_precision.second.application_precision_budget==std::array<double,3>{1e-6,1e-5,3e-6}));
  auto secondary=primary;secondary.radial_points=4;secondary.angular_polar=8;secondary.partition_iterations=2;
  std::array<double,119> radii;radii.fill(1.0);radii[1]=1.3;secondary.element_radii=radii.data();secondary.element_radius_count=119;
- dft::NonlocalGridKsOptions independent{};independent.base.base=primary;independent.base.base.struct_size=200;independent.grid=&secondary;
+ dft::NonlocalGridKsOptions independent{};independent.base.base=primary;independent.base.base.struct_size=sizeof(independent);independent.grid=&secondary;
  const auto split=read(&independent.base.base);
  assert(split.first==legacy.first && split.second.nonlocal_grid_spec);
  assert(split.second.nonlocal_grid_spec->radial_points==4 && split.second.nonlocal_grid_spec->angular_polar==8);
@@ -2934,7 +2942,7 @@ int main() {
  auto equal=primary;std::array<double,119> units;units.fill(1);equal.element_radii=units.data();equal.element_radius_count=119;independent.grid=&equal;
  assert(!read(&independent.base.base).second.nonlocal_grid_spec);
  unsigned rejected=0;
- for(unsigned size:{0u,159u,161u,183u,185u,199u,201u,208u}) {
+ for(unsigned size:{0u,167u,169u,191u,193u,207u,209u,216u}) {
   auto bad=primary;bad.struct_size=size;
   try {read(&bad);}catch(const MethodError& e){assert(e.status==GENERATIVEQC_STATUS_ABI_MISMATCH);++rejected;}
  }
@@ -2944,11 +2952,11 @@ int main() {
   if(mode==1)bad.version=2;
   if(mode==2)bad.reserved=1;
   if(mode==3)bad.grid=nullptr;
-  if(mode==4)inner.struct_size=184;
+  if(mode==4)inner.struct_size=sizeof(dft::ApplicationPrecisionKsOptions);
   if(mode==5)inner.abi_version=GENERATIVEQC_ABI_VERSION+1;
   if(mode==6)inner.scf_domain="wrong";
   if(mode==7)inner.radial_points=0;
-  if(mode==8)inner.tile_points=0;
+  if(mode==8)inner.tile_points=static_cast<std::uint64_t>(INT_MAX)+1;
   if(mode==9)inner.element_radius_count=118;
   if(mode==10)plan.nonlocal_correlation=false;
   try {read(&bad.base.base);}catch(const std::exception&){++rejected;}
@@ -2956,7 +2964,7 @@ int main() {
  }
  assert(rejected==19);
  precision.energy=-1;try {read(&precision.base);assert(false);}catch(const MethodError& e){assert(e.status==GENERATIVEQC_STATUS_INVALID_ARGUMENT);}
- std::cout<<"PASS real-header legacy160/184/private200, copied prescription, normalized equality, 19 invalid/unsupported controls, negative precision budget\n";
+ std::cout<<"PASS real-header legacy168/192/private208, automatic and explicit tiles, copied prescription, normalized equality, 19 invalid/unsupported controls, negative precision budget\n";
 }
 """
     )
@@ -2995,7 +3003,7 @@ def test_native_grid_abi_preserves_legacy_and_private_layouts(
             "grid.radial_points = input.radial_points + 1;",
         ),
         (
-            "options.xc_tile_points = input.tile_points;",
+            "options.xc_tile_points = input.tile_points ? input.tile_points : 256;",
             "options.xc_tile_points = input.tile_points + 1;",
         ),
         (
