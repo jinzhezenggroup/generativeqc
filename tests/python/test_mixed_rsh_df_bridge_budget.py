@@ -433,19 +433,19 @@ struct CudaKsResidentDensityBinding {
   const double* beta = nullptr;
   explicit operator bool() const { return true; }
 };
-struct CudaKsResidentFittedProjectionBinding {
+struct CudaKsResidentOccupiedFactorBinding {
   int device_id = 0;
-  const double* occupied_coefficients = nullptr;
+  const double* coefficients = nullptr;
   std::size_t nbf = 2, rank = 1;
   void* stream = (void*)1;
-  explicit operator bool() const { return occupied_coefficients != nullptr; }
+  explicit operator bool() const { return coefficients != nullptr; }
 };
 struct MockCuda {
   bool projection_available = true;
-  generativeqc_status resident_final_fitted_projection(
-      const CudaKsFinalStateToken&, CudaKsResidentFittedProjectionBinding& binding, std::string&) {
+  generativeqc_status resident_final_occupied_factor(
+      const CudaKsFinalStateToken&, CudaKsResidentOccupiedFactorBinding& binding, std::string&) {
     if (!projection_available) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-    binding.occupied_coefficients = (double*)1;
+    binding.coefficients = (double*)1;
     return GENERATIVEQC_STATUS_SUCCESS;
   }
   generativeqc_status resident_final_density(const CudaKsFinalStateToken& t,

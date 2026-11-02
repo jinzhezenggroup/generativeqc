@@ -54,7 +54,8 @@ class CudaStationaryController {
       const scf::ResolvedFockBuild* range = nullptr,
       const CudaKsResidentNonlocalFeaturesBinding* nonlocal = nullptr,
       const scf::PreparedFockPlan* range_provider = nullptr,
-      const CudaKsResidentFittedProjectionBinding* fitted_projection = nullptr);
+      const CudaKsResidentFittedProjectionBinding* fitted_projection = nullptr,
+      const CudaKsResidentOccupiedFactorBinding* occupied_factor = nullptr);
   const CudaStationaryResources& resources() const noexcept { return resources_; }
 
  private:

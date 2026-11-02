@@ -135,3 +135,21 @@ there is no extra allocation or changed integral recurrence. The output panel
 becomes live only after raw occupied products and the metric seed are complete.
 The failed original run remains evidence; this follow-up needs a new complete
 endpoint qualification before any default promotion or speed claim.
+
+## Independent occupied-factor lifetime
+
+The routed 5090 endpoint (Slurm 15254, source `87ee9abb7c4906c0f5ec211ae5115d79a66fb124a4b0803cbb79bd7594a09291`)
+also failed: the native stationary controller is a separate consumer and had
+never forwarded C to its resident LR callback. The old fallback then found U
+already consumed. This was a second incomplete endpoint, not a timing sample.
+
+The KS arena now lends an exact density-generating occupied factor independently
+of the provider's one-shot U. Its owner/epoch/generation token still expires on
+any new solve or final-state invalidation. It is retained only when an accepted
+physical K used that authenticated factor; a later canonical eigensolve cannot
+substitute a nearby determinant. Provider scratch reuse cannot revoke or alter
+this KS-owned C. Both native resident and mixed compact consumers forward the
+same factor to the LR owner's existing bounded spectral adjoint. The native
+consumer validates the complete lease before any source publication and retains
+typed errors and stream draining. Independent native tests overwrite U through
+a second KS owner and verify that C remains byte-identical and stale tokens fail.

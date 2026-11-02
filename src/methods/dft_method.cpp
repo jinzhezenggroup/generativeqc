@@ -1758,22 +1758,22 @@ class KsPreparedState final : public KsSingleOwnerPort {
         detail = "full RI-K response must not consume a Direct LR correction";
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
-      // Acquire C before primary response consumes its one-shot U. C remains
-      // KS-owned and token-valid; the LR response uses its own A/M, never U.
+      // C remains KS-owned and token-valid even after primary response consumes
+      // its one-shot U. The LR response uses its own radial A/M, never U.
       std::optional<scf::CudaDfBorrowedOccupiedFactor> range_factor;
 #if GENERATIVEQC_HAS_CUDA
       if (cuda_ && expected.identity.model.spins == 1) {
-        dft::CudaKsResidentFittedProjectionBinding lease;
+        dft::CudaKsResidentOccupiedFactorBinding lease;
         std::string lease_detail;
         const auto lease_status =
-            cuda_->resident_final_fitted_projection(expected, lease, lease_detail);
+            cuda_->resident_final_occupied_factor(expected, lease, lease_detail);
         if (lease_status == GENERATIVEQC_STATUS_SUCCESS) {
           if (!lease) {
             detail = "CUDA KS returned an invalid occupied factor lease for LR response";
             return GENERATIVEQC_STATUS_INTERNAL_ERROR;
           }
           range_factor.emplace(scf::CudaDfBorrowedOccupiedFactor{
-              lease.device_id, lease.occupied_coefficients, lease.nbf, lease.rank, lease.stream});
+              lease.device_id, lease.coefficients, lease.nbf, lease.rank, lease.stream});
         } else if (lease_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
                    lease_status != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
           detail = lease_detail;
@@ -2284,6 +2284,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
         status = cuda_->resident_final_nonlocal_features(expected, features, detail);
         if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       }
+      dft::CudaKsResidentOccupiedFactorBinding factor;
+      if (execution_plan_.density_fitted_range_exchange && density.spins == 1) {
+        status = cuda_->resident_final_occupied_factor(expected, factor, detail);
+        if (status != GENERATIVEQC_STATUS_SUCCESS && status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+          return status;
+      }
       dft::CudaKsResidentFittedProjectionBinding projection;
       if (density.spins == 1 && fock_.strategy().spec.exchange.present &&
           fock_.strategy().spec.exchange.approximation == scf::FockApproximation::DensityFitted) {
@@ -2306,7 +2312,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
           range_strategy_ ? &*range_strategy_ : nullptr, nonlocal_ ? &features : nullptr,
           range_derivative_correction_ ? range_derivative_correction_.get()
                                        : range_correction_.get(),
-          projection ? &projection : nullptr);
+          projection ? &projection : nullptr, factor ? &factor : nullptr);
       if (status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE && precision &&
           (precision->mixed_geometry || precision->mixed_grid)) {
         // Failed geometry never publishes a partial result. Reset every source
@@ -2319,7 +2325,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
             density, weights, fock_, current, output, detail, qualified_spatial_force_default(),
             nullptr, range_strategy_ ? &*range_strategy_ : nullptr, nonlocal_ ? &features : nullptr,
             range_derivative_correction_ ? range_derivative_correction_.get()
-                                         : range_correction_.get());
+                                         : range_correction_.get(),
+            nullptr, factor ? &factor : nullptr);
       }
       if (status == GENERATIVEQC_STATUS_SUCCESS) {
         resources = stationary_controller_->resources();

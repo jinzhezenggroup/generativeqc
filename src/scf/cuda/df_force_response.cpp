@@ -286,7 +286,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     if (!*borrowed_factor || borrowed_factor->device_id != plan->device_id ||
         borrowed_factor->nbf != plan->nbf || plan->batch_size != 1 || system != 0 ||
         !plan->integral_source || terms.size() != 1 || terms[0].coulomb_coefficient != 0.0 ||
-        terms[0].exchange_coefficient == 0.0 || borrowed_fitted_projection || resident_force) {
+        terms[0].exchange_coefficient == 0.0 || borrowed_fitted_projection) {
       detail = "occupied factor does not match one restricted source-backed exchange response";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }

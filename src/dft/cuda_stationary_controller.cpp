@@ -268,7 +268,8 @@ generativeqc_status CudaStationaryController::gradient(
     bool allow_spatial_default, scf::DirectForcePrecisionRequest* precision,
     const scf::ResolvedFockBuild* range, const CudaKsResidentNonlocalFeaturesBinding* nonlocal,
     const scf::PreparedFockPlan* range_provider,
-    const CudaKsResidentFittedProjectionBinding* fitted_projection) {
+    const CudaKsResidentFittedProjectionBinding* fitted_projection,
+    const CudaKsResidentOccupiedFactorBinding* occupied_factor) {
   detail.clear();
   struct ReuseAttempt {
     NonlocalOwner* owner;
@@ -305,6 +306,16 @@ generativeqc_status CudaStationaryController::gradient(
          fitted_projection->generation != density.generation))
       throw std::invalid_argument(
           "native stationary fitted projection has a stale final-state lease");
+    // C belongs to the KS arena, independently of the primary provider's
+    // one-shot U. Validate its complete final token before any response work.
+    if (occupied_factor &&
+        (!*occupied_factor || !fitted || density.spins != 1 ||
+         occupied_factor->device_id != device_ || occupied_factor->nbf != aos_ ||
+         occupied_factor->stream != density.stream || occupied_factor->owner != density.owner ||
+         occupied_factor->solve_epoch != density.solve_epoch ||
+         occupied_factor->generation != density.generation))
+      throw std::invalid_argument(
+          "native stationary occupied factor has a stale final-state lease");
     const bool composite = binding_->model.range_omega != 0;
     const auto expected_exchange =
         (density.spins == 1 ? -0.5 : -1.0) *
@@ -542,11 +553,16 @@ generativeqc_status CudaStationaryController::gradient(
         runtime::OwnedCudaEvent ready(device_, cudaEventDisableTiming, stationary_cuda_check);
         ready.record(provider.stream);
         stationary_cuda_check(cudaStreamWaitEvent(range_binding.stream, ready.get(), 0));
+        scf::CudaDfBorrowedOccupiedFactor factor;
+        if (occupied_factor)
+          factor = {occupied_factor->device_id, occupied_factor->coefficients, occupied_factor->nbf,
+                    occupied_factor->rank, occupied_factor->stream};
         status = range_provider->strategy().spec.exchange.approximation ==
                          scf::FockApproximation::DensityFitted
                      ? range_provider->consume_fitted_energy_derivatives(
                            device_, reinterpret_cast<void*>(range_binding.stream), density.alpha,
-                           density.beta, weights.density, consume, detail, true)
+                           density.beta, weights.density, consume, detail, true, nullptr, false,
+                           occupied_factor ? &factor : nullptr)
                      : scf::consume_prepared_cuda_direct_long_range_derivatives_device(
                            *range_provider, density.alpha, density.beta, density.matrix_elements,
                            consume, detail);
