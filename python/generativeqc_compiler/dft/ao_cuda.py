@@ -20,11 +20,13 @@ from ._generated_split_hybrid_consumers import SPLIT_HYBRID_POINT_CONSUMERS
 from .ao import jet_indices
 from .feature_policy import emit_feature_policy
 from .grid_contraction import emit_grid_contraction
+from .spatial_xc_cuda import emit_spatial_xc_assembly, emit_spatial_xc_batches
 from .xc_contraction_cuda import (
     DEFAULT_XC_MATRIX_SCHEDULE,
     XcMatrixSchedule,
     emit_native_xc_matrix_schedule,
 )
+from .xc_kernel import grid_xc_extension
 from .xc_point_cuda import (
     emit_device_point_value,
     emit_equal_spin_point_selector,
@@ -35,9 +37,12 @@ from .xc_totals_cuda import emit_compensated_xc_totals
 _GRID_SCIENTIFIC_KERNELS = r"""#include "../tensor/cuda_runtime.cuh"
 #include "xc_point.hpp"
 #include "semilocal_family.hpp"
+#include "cuda_xc_tile.hpp"
+#include <type_traits>
 
 namespace {
 using namespace generativeqc_tensor;
+using generativeqc::dft::CudaXcCompactTile;
 // AO and density arithmetic is emitted by dft/ao_cuda.py.
 using generativeqc_grid_policy::axis_jet;
 using generativeqc_grid_policy::derivatives;
@@ -249,8 +254,12 @@ __global__ void finish_orbital_sigma(double* output, I npoint, int* error) {
   }
 }
 
-__device__ generativeqc::dft::point::Value evaluate_xc_point(bool pbe, bool restricted,
+@SPATIAL_XC@
+
+__device__ GridXcPoint evaluate_xc_point(int evaluator, bool restricted,
                                                        const double* features, I npoint, I point) {
+  if (evaluator >= 2) return grid_custom_xc_point(evaluator-2, restricted, features, npoint, point);
+  const bool pbe = evaluator == 1;
   const double rho[2]{features[point], features[5 * npoint + point]};
   double gradient[2][3]{};
   if (pbe)
@@ -260,7 +269,7 @@ __device__ generativeqc::dft::point::Value evaluate_xc_point(bool pbe, bool rest
   // This spatial consumer implements the compiler's interior-v1 contract.
   // Native KS uses its own resident consumer of the same point algebra.
   if (restricted) {
-    generativeqc::dft::point::Value invalid;
+    GridXcPoint invalid;
     if (rho[0] != rho[1]) {
       invalid.valid = false;
       return invalid;
@@ -271,35 +280,38 @@ __device__ generativeqc::dft::point::Value evaluate_xc_point(bool pbe, bool rest
         return invalid;
       }
   }
-  return generativeqc::dft::point::evaluate_interior(pbe, rho, gradient);
-}
-
-/** Deterministic scalar reduction. This correctness baseline intentionally
- * uses one device thread; matrix assembly remains parallel and later tuning
- * may replace only this reduction after endpoint-equivalence evidence.
- */
-__global__ void xc_integrals_kernel(bool pbe, bool restricted, const double* features,
-                                    const double* weights, I npoint, double* integrals,
-                                    int* error) {
-  if (blockIdx.x || threadIdx.x) return;
-  double energy = 0.0, electrons[2]{};
-  for (I point = 0; point < npoint; ++point) {
-    const auto xc = evaluate_xc_point(pbe, restricted, features, npoint, point);
-    if (!xc.valid) {
-      atomicCAS(error, 0, 3);
-      return;
-    }
-    const double weight = weights[point];
-    energy += weight * xc.energy;
-    electrons[0] += weight * features[point];
-    electrons[1] += weight * features[5 * npoint + point];
+  const auto value = generativeqc::dft::point::evaluate_interior(pbe, rho, gradient);
+  GridXcPoint out;
+  out.valid = value.valid;
+  out.energy = value.energy;
+  for (int spin = 0; spin < 2; ++spin) {
+    out.rho[spin] = value.rho[spin];
+    for (int axis = 0; axis < 3; ++axis) out.gradient[spin][axis] = value.gradient[spin][axis];
   }
-  integrals[0] = finite(energy, error, 3);
-  integrals[1] = finite(electrons[0], error, 3);
-  integrals[2] = finite(electrons[1], error, 3);
+  return out;
 }
 
-__global__ void xc_local_potential_kernel(bool pbe, bool restricted, const double* features,
+// Evaluate the nonlinear expression once per point, independent of the number
+// of active AO pairs. Eleven FP64 rows are bounded by the prepared tile size.
+__global__ void xc_points_kernel(int evaluator, bool restricted, const double* features,
+                                 I npoint, double* values, int* error) {
+  for (I point = I(blockIdx.x) * blockDim.x + threadIdx.x; point < npoint;
+       point += I(blockDim.x) * gridDim.x) {
+    const auto xc = evaluate_xc_point(evaluator, restricted, features, npoint, point);
+    if (!xc.valid) atomicCAS(error, 0, 3);
+    values[point] = finite(xc.energy, error, 3);
+    for (int spin = 0; spin < 2; ++spin) {
+      values[(1 + spin) * npoint + point] = finite(xc.rho[spin], error, 3);
+      for (int axis = 0; axis < 3; ++axis)
+        values[(3 + 3 * spin + axis) * npoint + point] = finite(xc.gradient[spin][axis], error, 3);
+      values[(9 + spin) * npoint + point] = finite(xc.kinetic[spin], error, 3);
+    }
+  }
+}
+
+@SPATIAL_XC_ASSEMBLY@
+
+__global__ void xc_local_potential_kernel(unsigned ingredients, const double* values,
                                           const double* ao, const double* weights, I npoint,
                                           I active, double* potential, int* error) {
   for (I index = I(blockIdx.x) * blockDim.x + threadIdx.x; index < 2 * active * active;
@@ -307,21 +319,19 @@ __global__ void xc_local_potential_kernel(bool pbe, bool restricted, const doubl
     const I spin = index / (active * active), row = index / active % active, col = index % active;
     double value = 0.0;
     for (I point = 0; point < npoint; ++point) {
-      const auto xc = evaluate_xc_point(pbe, restricted, features, npoint, point);
-      if (!xc.valid) {
-        atomicCAS(error, 0, 3);
-        return;
-      }
       const I base = point * active;
       const double phi_row = ao[base + row], phi_col = ao[base + col];
-      double contribution = xc.rho[spin] * phi_row * phi_col;
-      if (pbe) {
+      double contribution = values[(1 + spin) * npoint + point] * phi_row * phi_col;
+      if (ingredients & 2U) {
         const I stride = npoint * active;
         for (int axis = 0; axis < 3; ++axis) {
           const double derivative_row = ao[(axis + 1) * stride + base + row];
           const double derivative_col = ao[(axis + 1) * stride + base + col];
           contribution +=
-              xc.gradient[spin][axis] * (derivative_row * phi_col + phi_row * derivative_col);
+              values[(3 + 3 * spin + axis) * npoint + point] *
+              (derivative_row * phi_col + phi_row * derivative_col);
+          if (ingredients & 8U)
+            contribution += values[(9 + spin) * npoint + point] * derivative_row * derivative_col;
         }
       }
       value += weights[point] * contribution;
@@ -329,6 +339,7 @@ __global__ void xc_local_potential_kernel(bool pbe, bool restricted, const doubl
     potential[index] = finite(value, error, 3);
   }
 }
+@SPATIAL_XC_BATCHES@
 @AO_SCHEDULE@
 }  // namespace
 """
@@ -1113,7 +1124,9 @@ def emit_native_xc_point_dispatch() -> str:
             "  if (!response && generated::split_hybrid_registered(functional))",
             "    return {generated::split_hybrid_fp64_local_ao(functional), false};",
             "  if (!response && generated::automatic_cuda_point_entry(functional))",
-            "    return {false, false};",
+            "    // AO selection changes only density/matrix traversal; the registered",
+            "    // physical point ABI and its component-local policies are unchanged.",
+            "    return {true, false};",
             '  throw std::invalid_argument("unsupported CUDA XC point consumer");',
             "}",
         )
@@ -1315,7 +1328,9 @@ def _emit_ao_schedule(*, ao_radial_reuse: bool) -> str:
     return "\n".join(lines)
 
 
-def emit_grid_scientific_kernels(*, ao_radial_reuse: bool = False) -> str:
+def emit_grid_scientific_kernels(
+    *, ao_radial_reuse: bool = False, xc_kernel: typing.Any = None
+) -> str:
     """Emit AO/feature kernels; radial reuse requires explicit qualification opt-in."""
     if type(ao_radial_reuse) is not bool:
         raise TypeError("AO radial-reuse selector must be boolean")
@@ -1324,7 +1339,11 @@ def emit_grid_scientific_kernels(*, ao_radial_reuse: bool = False) -> str:
     return (
         _GRID_SCIENTIFIC_KERNELS.replace(
             "@AO_RADIAL_KERNELS@", _emit_ao_radial_kernels() if ao_radial_reuse else ""
-        ).replace("@AO_SCHEDULE@", _emit_ao_schedule(ao_radial_reuse=ao_radial_reuse))
+        )
+        .replace("@SPATIAL_XC@", grid_xc_extension(xc_kernel))
+        .replace("@SPATIAL_XC_ASSEMBLY@", emit_spatial_xc_assembly())
+        .replace("@SPATIAL_XC_BATCHES@", emit_spatial_xc_batches())
+        .replace("@AO_SCHEDULE@", _emit_ao_schedule(ao_radial_reuse=ao_radial_reuse))
         + emit_ao_region_screen_cuda()
         + "namespace {\n"
         + _emit_ao_radial_kernels(selection_only=True)
@@ -1410,6 +1429,7 @@ def emit_grid_policy() -> typing.Any:
 def emit_grid_source(
     *,
     native_ks: typing.Any = False,
+    xc_kernel: typing.Any = None,
     ao_radial_reuse: bool = False,
     xc_matrix_schedule: XcMatrixSchedule = DEFAULT_XC_MATRIX_SCHEDULE,
 ) -> typing.Any:
@@ -1424,12 +1444,16 @@ def emit_grid_source(
         raise TypeError("grid source emission requires XcMatrixSchedule")
     if not native_ks and xc_matrix_schedule != DEFAULT_XC_MATRIX_SCHEDULE:
         raise ValueError("non-default XC matrix schedules require native KS emission")
+    if native_ks and xc_kernel is not None:
+        raise ValueError("custom spatial XC does not change native KS admission")
     policy = emit_grid_policy()
     from .indexed_layout_native import emit_native_ao_grid_binding
 
     source = (
         policy
-        + emit_grid_scientific_kernels(ao_radial_reuse=ao_radial_reuse)
+        + emit_grid_scientific_kernels(
+            ao_radial_reuse=ao_radial_reuse, xc_kernel=xc_kernel
+        )
         + emit_grid_contraction()
         + emit_grid_contraction(dtype="float32", suffix="_fp32")
         + emit_native_ao_grid_binding()
@@ -1445,6 +1469,8 @@ def emit_grid_source(
             asset_path("src/dft/cuda_grid.cu"),
             asset_path("src/dft/cuda_grid_api.hpp"),
             asset_path("src/dft/cuda_grid_storage.hpp"),
+            asset_path("src/dft/cuda_grid_xc_batch.cuh"),
+            asset_path("src/dft/cuda_xc_tile.hpp"),
             asset_path("src/dft/ao_grid_work.hpp"),
             asset_path("src/tensor/cuda_runtime.cuh"),
             asset_path("src/runtime/bounded_workspace.hpp"),

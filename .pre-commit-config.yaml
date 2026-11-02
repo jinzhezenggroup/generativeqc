@@ -52,6 +52,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: semilocal-compositions
+        name: Check generated rational Libxc execution recipes
+        entry: python3 tools/generate_semilocal_compositions.py --check
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: native-api-contracts
         name: Check public native contracts and reference
         entry: python3 tools/check_native_api_contracts.py

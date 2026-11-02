@@ -47,7 +47,7 @@ from generativeqc_compiler.xc.automatic_semilocal import (
 from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
 
 from ._generated_stationary_aot_profiles import STATIONARY_AOT_BUILD_PROFILES
-from .bulk_ks import resolve_bulk_ks
+from .bulk_ks import automatic_method
 from .spec import SemilocalXCPrimitive, resolve_method
 from .stationary_becke_phased import emit_stationary_phased_becke_cuda
 from .stationary_gradient import (
@@ -1021,7 +1021,7 @@ class StationaryAotProfile:
         # Automatic registrations reuse their energy owner's exact work domain.
         # The profile identifies package contents; it does not grant capability.
         method = (
-            resolve_bulk_ks(self.method, spin=self.spin, backend="cuda").method
+            automatic_method(self.method, spin=self.spin)
             if self.name.startswith("libxc_")
             else resolve_method(self.method, spin=self.spin)
         )

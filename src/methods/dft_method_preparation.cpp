@@ -117,7 +117,8 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
 
   if (auto curated = admit_curated_semilocal(input)) return *curated;
 
-  if (input.semilocal_component_count == 1 && input.semilocal_range_omega == 0.0) {
+  if (input.semilocal_component_count == 1 && input.semilocal_range_omega == 0.0 &&
+      input.exchange_term_count == 0 && !input.has_nonlocal_correlation) {
     const auto& component = input.semilocal_components[0];
     if (!component.component_id || !*component.component_id ||
         !std::isfinite(component.coefficient) || component.coefficient < 0.0)
@@ -136,6 +137,15 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
                     std::string_view(component.component_id))};
     }
   }
+
+  if (const auto automatic = dft::generated::automatic_libxc_composition(input))
+    return {dft::SemilocalFamily::Lda,
+            1.0,
+            1.0,
+            automatic.functional_code,
+            false,
+            automatic.program,
+            dft::generated::automatic_restricted_libxc_program(automatic.program->identifier)};
 
 #if GENERATIVEQC_HAS_CUDA
   if (input.semilocal_component_count == 2 && input.semilocal_range_omega == 0.0) {
@@ -250,9 +260,10 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     execution_plan.automatic_restricted_program = semilocal.automatic_restricted_program;
     if (execution_plan.automatic_program) {
       if ((backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
-          ks_input->exchange_term_count != 0 || ks_input->has_nonlocal_correlation != 0)
-        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                          "automatic Libxc KS requires pure CPU/CUDA semilocal execution");
+          ks_input->has_nonlocal_correlation != 0)
+        throw MethodError(
+            GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+            "automatic Libxc KS requires CPU/CUDA semilocal or global-hybrid execution");
 #if GENERATIVEQC_HAS_CUDA
       if (backend == GENERATIVEQC_BACKEND_CUDA) {
         const auto* program = dft::generated::automatic_cuda_point_entry(execution_plan.functional);

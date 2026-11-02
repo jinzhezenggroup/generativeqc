@@ -17,6 +17,7 @@
 
 namespace {
 using namespace generativeqc_tensor;
+#include "cuda_grid_xc_batch.cuh"
 #if GENERATIVEQC_TEST_HOOKS
 thread_local unsigned fail_next_grid_allocation = 0;
 thread_local bool fail_next_grid_runtime = false;
@@ -50,6 +51,7 @@ __global__ void ao_exact_counts_kernel(const unsigned* masks, size_t words, size
 }
 struct GridPlan {
   Context context;
+  std::vector<std::unique_ptr<SpatialXcBatch>> xc_batches;
   // The CSR buffers synchronize their lifetime stream before it is destroyed.
   std::unique_ptr<ResidentAoMap> resident_map;
   // Destroy the binding before its borrowed stream/arena owner.
@@ -74,7 +76,7 @@ struct GridPlan {
   unsigned feature_mask = 15;
   double *basis{}, *density{}, *points{}, *ao{}, *work{}, *features{};
   const double* current_points{};
-  double *local_density{}, *local_potential{}, *potential{};
+  double *local_density{}, *local_potential{}, *potential{}, *xc_values{};
   double *factors[2]{}, *factor_panel{}, *psi{};
   size_t* ao_ids{};
   const size_t* current_ao_ids{};
@@ -312,10 +314,10 @@ int grid_cuda_create_v3(int device, int major, int minor, const size_t* dimensio
       p->local_potential = p->local_density + 2 * active_capacity * active_capacity;
       p->potential = p->local_potential + 2 * active_capacity * active_capacity;
       p->ao_ids = reinterpret_cast<size_t*>(p->potential + matrices);
+      p->xc_values = reinterpret_cast<double*>(p->ao_ids + active_capacity);
     }
     if (p->orbital_enabled) {
-      p->factors[0] = p->local ? reinterpret_cast<double*>(p->ao_ids + active_capacity)
-                               : p->features + 13 * capacity;
+      p->factors[0] = p->local ? p->xc_values + 12 * capacity + 6 : p->features + 13 * capacity;
       p->factors[1] = p->factors[0] + p->nao * p->orbital_capacity[0];
       p->factor_panel = p->factors[1] + p->nao * p->orbital_capacity[1];
       p->psi = p->factor_panel + p->active_capacity * orbital_tile;
@@ -1144,27 +1146,30 @@ int grid_cuda_density_jets_v2(void* pointer, std::uint64_t generation, unsigned 
   });
 }
 
-int grid_cuda_xc_v2(void* pointer, std::uint64_t generation, int pbe, int restricted, int interior,
-                    const double* weights, size_t npoint, double* integrals, char* error,
-                    size_t size) {
+int grid_cuda_xc_v3(void* pointer, std::uint64_t generation, int evaluator, int restricted,
+                    int interior, int fp32, const double* weights, size_t npoint, double* integrals,
+                    char* error, size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !integrals || (pbe != 0 && pbe != 1) || (restricted != 0 && restricted != 1) ||
-        interior != 1 || (npoint && !weights))
+    const unsigned required_features = evaluator == 0   ? 1U
+                                       : evaluator == 1 ? 3U
+                                       : evaluator >= 2 ? grid_custom_xc_mask
+                                                        : 0U;
+    if (!pointer || !integrals || !required_features || (restricted != 0 && restricted != 1) ||
+        interior != 1 || (fp32 != 0 && fp32 != 1) || (npoint && !weights))
       throw std::invalid_argument("invalid CUDA XC task");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
     ctx.check_device();
-    const unsigned required_features = pbe ? 3U : 1U;
     if (!p.local || !p.view_ready || !p.features_ready || generation != p.generation ||
-        npoint != p.last_points || p.jets < (pbe ? 4U : 1U) ||
+        npoint != p.last_points || p.jets < ((required_features & 2U) ? 4U : 1U) ||
         (p.feature_mask & required_features) != required_features)
       throw std::invalid_argument("stale or incompatible CUDA XC task");
-    // A local plan has active_capacity>=1, so its eight work panels leave at
-    // least three doubles after the capacity-sized weight upload.
+    // The dead contracted-jet panel is fully available to compact assembly.
+    // Keep weights/totals separate even for the minimum one-AO tile.
     p.density_jets_ready = false;
-    double* device_weights = p.work;
-    double* device_integrals = p.work + p.capacity;
+    double* device_weights = p.xc_values + 11 * p.capacity;
+    double* device_integrals = device_weights + p.capacity;
     const size_t matrix_elements = 2 * p.last_active * p.last_active;
     ctx.section(true, ctx.metrics.input_ms, [&] {
       for (size_t i = 0; i < npoint; ++i)
@@ -1180,14 +1185,38 @@ int grid_cuda_xc_v2(void* pointer, std::uint64_t generation, int pbe, int restri
     });
     if (npoint) {
       ctx.section(true, ctx.metrics.kernel_ms, [&] {
-        xc_integrals_kernel<<<1, 1, 0, ctx.stream>>>(pbe != 0, restricted != 0, p.features,
-                                                     device_weights, npoint, device_integrals,
-                                                     ctx.error);
+        xc_points_kernel<<<blocks(npoint, 128), 128, 0, ctx.stream>>>(
+            evaluator, restricted != 0, p.features, npoint, p.xc_values, ctx.error);
+        cuda_check(cudaGetLastError());
+        xc_integrals_kernel<<<1, 32, 0, ctx.stream>>>(p.xc_values, p.features, device_weights,
+                                                      npoint, device_integrals, ctx.error);
         cuda_check(cudaGetLastError());
         if (matrix_elements) {
-          xc_local_potential_kernel<<<blocks(matrix_elements, 128), 128, 0, ctx.stream>>>(
-              pbe != 0, restricted != 0, p.features, p.ao, device_weights, npoint, p.last_active,
-              p.local_potential, ctx.error);
+          const I work_jets = required_features & 8U ? 4 : 1;
+          if ((fp32 ? fp32_tiled_xc_admitted : tiled_xc_admitted)(p.last_active, npoint, 2,
+                                                                  work_jets)) {
+            spatial_potential_panels<<<blocks(2 * npoint * p.last_active, 128), 128, 0,
+                                       ctx.stream>>>(required_features, p.xc_values, p.ao,
+                                                     device_weights, p.last_active, npoint, p.work,
+                                                     ctx.error);
+            cuda_check(cudaGetLastError());
+            const I columns = (p.last_active + 15) / 16;
+            if (fp32)
+              tiled_diagonal_potential<float>
+                  <<<dim3(columns * (columns + 1) / 2, 1, 2), dim3(16, 16), 0, ctx.stream>>>(
+                      p.ao, p.work, p.last_active, npoint, work_jets, nullptr, p.local_potential,
+                      nullptr, false, ctx.error, nullptr, p.last_active, device_weights);
+            else
+              tiled_diagonal_potential<double>
+                  <<<dim3(columns * (columns + 1) / 2, 1, 2), dim3(16, 16), 0, ctx.stream>>>(
+                      p.ao, p.work, p.last_active, npoint, work_jets, nullptr, p.local_potential,
+                      nullptr, false, ctx.error, nullptr, p.last_active, device_weights);
+          } else {
+            // Tiny/ragged domains retain the allocation-free scalar schedule.
+            xc_local_potential_kernel<<<blocks(matrix_elements, 128), 128, 0, ctx.stream>>>(
+                required_features, p.xc_values, p.ao, device_weights, npoint, p.last_active,
+                p.local_potential, ctx.error);
+          }
           cuda_check(cudaGetLastError());
         }
       });
@@ -1200,6 +1229,129 @@ int grid_cuda_xc_v2(void* pointer, std::uint64_t generation, int pbe, int restri
           cudaMemcpyAsync(&failure, ctx.error, sizeof(int), cudaMemcpyDeviceToHost, ctx.stream));
     });
     if (failure) throw std::runtime_error("invalid or nonfinite CUDA XC output");
+  });
+}
+
+// This immutable artifact identity binds the optional evaluator to its exact
+// FunctionalSpec. The task/view ABI remains unchanged.
+const char* grid_cuda_xc_identity_v1() { return grid_custom_xc_identity; }
+
+int grid_cuda_xc_batch_create_v1(void* pointer, size_t tiles, int fp32, size_t expected_bytes,
+                                 void** output, char* error, size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || !output || tiles < 2 || tiles > 32 || (fp32 != 0 && fp32 != 1))
+      throw std::invalid_argument("invalid spatial XC batch");
+    *output = nullptr;
+    auto& p = *static_cast<GridPlan*>(pointer);
+    std::lock_guard<std::mutex> lock(p.context.mutex);
+    p.context.check_device();
+    if (!p.local || !fp32_tiled_xc_admitted(p.active_capacity, p.capacity, 2, 4))
+      throw std::invalid_argument("spatial XC batch shape is not admitted");
+    auto batch = std::make_unique<SpatialXcBatch>();
+    batch->allocate(p.context, tiles, p.capacity, p.active_capacity, p.jets, fp32 != 0,
+                    expected_bytes);
+    auto* handle = batch.get();
+    p.xc_batches.push_back(std::move(batch));
+    *output = handle;
+  });
+}
+
+int grid_cuda_xc_batch_destroy_v1(void* pointer, void* batch, char* error, size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer) throw std::invalid_argument("null spatial XC owner");
+    auto& p = *static_cast<GridPlan*>(pointer);
+    std::lock_guard<std::mutex> lock(p.context.mutex);
+    const auto found = std::find_if(p.xc_batches.begin(), p.xc_batches.end(),
+                                    [&](const auto& value) { return value.get() == batch; });
+    if (found == p.xc_batches.end()) throw std::invalid_argument("stale spatial XC batch");
+    p.xc_batches.erase(found);
+  });
+}
+
+/** Copy a validated generation into a bounded slot. Publication waits for the
+ * last tile; producer errors and compensated low words survive every flush. */
+int grid_cuda_xc_batch_enqueue_v1(void* pointer, void* batch, std::uint64_t generation,
+                                  int evaluator, int restricted, int reset, int download,
+                                  const double* weights, size_t npoint, double* integrals,
+                                  double* potential, char* error, size_t size) {
+  return guarded(error, size, [&] {
+    const unsigned ingredients = evaluator == 0   ? 1U
+                                 : evaluator == 1 ? 3U
+                                 : evaluator >= 2 ? grid_custom_xc_mask
+                                                  : 0U;
+    if (!pointer || !weights || !integrals || !ingredients ||
+        (restricted != 0 && restricted != 1) || (reset != 0 && reset != 1) ||
+        (download != 0 && download != 1) || (download && !potential))
+      throw std::invalid_argument("invalid spatial XC batch task");
+    auto& p = *static_cast<GridPlan*>(pointer);
+    auto& ctx = p.context;
+    std::lock_guard<std::mutex> lock(ctx.mutex);
+    ctx.check_device();
+    const auto found = std::find_if(p.xc_batches.begin(), p.xc_batches.end(),
+                                    [&](const auto& value) { return value.get() == batch; });
+    if (found == p.xc_batches.end()) throw std::invalid_argument("stale spatial XC batch");
+    auto& b = **found;
+    if (!p.view_ready || !p.features_ready || generation != p.generation ||
+        npoint != p.last_points || !npoint || !p.last_active ||
+        p.jets < ((ingredients & 2U) ? 4U : 1U) || (p.feature_mask & ingredients) != ingredients)
+      throw std::invalid_argument("stale or incompatible spatial XC batch task");
+    for (size_t i = 0; i < npoint; ++i)
+      if (!std::isfinite(weights[i])) throw std::invalid_argument("nonfinite XC weight");
+    if (reset) {
+      b.queued = 0;
+      b.evaluator = evaluator;
+      b.restricted = restricted != 0;
+    } else if (b.evaluator != evaluator || b.restricted != (restricted != 0)) {
+      throw std::invalid_argument("spatial XC batch requires a consistent execution binding");
+    }
+    const size_t slot = b.queued, active = p.last_active;
+    auto& tile = b.host.at(slot);
+    tile = {slot * b.capacity,
+            npoint,
+            active,
+            slot * b.active,
+            slot * b.jets * b.capacity * b.active,
+            slot * 8 * b.capacity * b.active,
+            slot * 2 * b.active * b.active};
+    ctx.section(true, ctx.metrics.input_ms, [&] {
+      if (reset) {
+        cuda_check(cudaMemsetAsync(b.totals, 0, 6 * sizeof(double), ctx.stream));
+        cuda_check(cudaMemsetAsync(b.errors.get() + b.tiles, 0, sizeof(int), ctx.stream));
+        cuda_check(cudaMemsetAsync(p.potential, 0, 2 * p.nao * p.nao * sizeof(double), ctx.stream));
+      }
+      cuda_check(cudaMemcpyAsync(b.ao + tile.ao_offset, p.ao,
+                                 b.jets * npoint * active * sizeof(double),
+                                 cudaMemcpyDeviceToDevice, ctx.stream));
+      cuda_check(cudaMemcpyAsync(b.features + 13 * tile.begin, p.features,
+                                 13 * npoint * sizeof(double), cudaMemcpyDeviceToDevice,
+                                 ctx.stream));
+      cuda_check(cudaMemcpyAsync(b.weights + tile.begin, weights, npoint * sizeof(double),
+                                 cudaMemcpyHostToDevice, ctx.stream));
+      if (!p.last_identity_map)
+        cuda_check(cudaMemcpyAsync(b.maps.get() + tile.map_offset, p.current_ao_ids,
+                                   active * sizeof(size_t), cudaMemcpyDeviceToDevice, ctx.stream));
+      cuda_check(cudaMemcpyAsync(b.errors.get() + slot, ctx.error, sizeof(int),
+                                 cudaMemcpyDeviceToDevice, ctx.stream));
+    });
+    ++b.queued;
+    if (b.queued == b.tiles || download)
+      b.flush(ctx, evaluator, restricted != 0, ingredients, p.nao, p.potential);
+    std::fill(integrals, integrals + 3, 0.0);
+    if (download) {
+      int failure = 0;
+      fold_compensated_xc_totals<<<1, 32, 0, ctx.stream>>>(b.totals, b.errors.get() + b.tiles);
+      cuda_check(cudaGetLastError());
+      ctx.section(true, ctx.metrics.output_ms, [&] {
+        cuda_check(cudaMemcpyAsync(&failure, b.errors.get() + b.tiles, sizeof(int),
+                                   cudaMemcpyDeviceToHost, ctx.stream));
+        cuda_check(cudaMemcpyAsync(integrals, b.totals, 3 * sizeof(double), cudaMemcpyDeviceToHost,
+                                   ctx.stream));
+        cuda_check(cudaMemcpyAsync(potential, p.potential, 2 * p.nao * p.nao * sizeof(double),
+                                   cudaMemcpyDeviceToHost, ctx.stream));
+      });
+      if (failure) throw std::runtime_error("invalid or nonfinite CUDA XC output");
+      b.evaluator = -1;  // Publication ends this execution; the next one must reset.
+    }
   });
 }
 

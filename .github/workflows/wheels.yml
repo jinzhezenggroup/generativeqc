@@ -6,16 +6,19 @@ name: Python wheels
 # resolution through a CUDA-backed native call.
 on:
   # Qualify every master push and seed the default-branch compiler cache that
-  # later PRs can restore. Keep PR qualification scoped to wheel/link contracts.
-  # Weekly and explicit maintainer qualification remain available.
+  # later PRs can restore. Ordinary scoped PRs use SM120; architecture, toolchain,
+  # and wheel-packaging PRs retain the full multiarch qualification before merge.
+  # Weekly and explicit maintainer qualification always use the full matrix.
   schedule:
     - cron: "17 4 * * 1"
   push:
     branches: [master]
   pull_request:
     paths:
+      - "CMakeLists.txt"
       - ".github/workflows/wheels.yml"
       - "cmake/GenerativeQCCudaImplib.cmake"
+      - "cmake/cuda_wheel_payload.ld"
       - "cmake/3rdparty/implib/**"
       - "pyproject.toml"
       # Wheel-specific native launcher and explicit tuner packaging changes.
@@ -25,6 +28,7 @@ on:
       - "python/ci/prepare-wheel-build.sh"
       - ".github/actions/restore-wheel-ccache/**"
       - "tools/ci_cpu_ccache_snapshot.py"
+      - "tools/ci_select_wheel_matrix.py"
       - "python/ci/repair-wheel.sh"
       - "src/runtime/nvidia_host_api/**"
       - "tools/generate_cuda_implib.py"
@@ -48,10 +52,12 @@ jobs:
       actions: read
     name: Build CUDA manylinux wheel
     runs-on: ubuntu-24.04
-    # Cold qualification reached only 275/637 build tasks at the former 60m cap.
-    # Bound compilation separately, reserving time to save completed cache entries
-    # even on a build failure. Keep all repair, smoke and payload checks required.
-    timeout-minutes: 180
+    # Multi-architecture compilation needs a larger finite budget than the
+    # single-target wheel. Reserve 30 minutes for setup, cache retention and
+    # payload checks within GitHub-hosted runners' six-hour job limit.
+    # A full wheel run remains the acceptance gate; this budget is not a timing
+    # guarantee. Keep repair, smoke and payload checks required.
+    timeout-minutes: 360
     env:
       CCACHE_MAXSIZE: 3G
     steps:
@@ -61,6 +67,16 @@ jobs:
           persist-credentials: false
       - name: Audit generated CUDA ABI call coverage
         run: python3 tools/generate_nvidia_host_api.py --check-usage
+
+      # Diff the actual PR base/head, not a name or label that a fork can spoof.
+      # Missing commits or an unreadable diff fail the wheel gate closed.
+      - name: Select CUDA wheel architectures
+        id: wheel_matrix
+        shell: bash
+        env:
+          GQC_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GQC_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 tools/ci_select_wheel_matrix.py
 
       - name: Restore ccache
         id: wheel_ccache
@@ -82,6 +98,12 @@ jobs:
         with:
           github-token: ${{ github.token }}
 
+      # Independent source-only cache; exact science keys limit stale growth.
+      - name: Restore stationary AOT semantic sources
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/stationary-aot-source-cache
+          key: stationary-aot-source-v1-${{ hashFiles('python/generativeqc_compiler/common/**', 'python/generativeqc_compiler/integral/**', 'python/generativeqc_compiler/method/**', 'python/generativeqc_compiler/dft/**', 'python/generativeqc_compiler/xc/**', 'python/generativeqc_compiler/tensor/**', 'src/integrals/**', 'src/dft/stationary_gradient_cuda.cuh', 'tools/generate_stationary_force_aot.py') }}
       - name: Restore cibuildwheel tool cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -92,7 +114,7 @@ jobs:
 
       - name: Build and test wheel
         id: wheel_build
-        timeout-minutes: 150
+        timeout-minutes: 330
         uses: pypa/cibuildwheel@1828c10ab37f080699c7b81cea34097c684a7074 # v4.2
         env:
           CIBW_CACHE_PATH: ${{ runner.temp }}/cibw-cache
@@ -102,19 +124,28 @@ jobs:
           # invocation. Normalize those transient absolute paths before ccache
           # hashes the CMake/NVCC command line; otherwise generated-source and
           # generated-include paths make identical compilations miss across runs.
+          # Package all structural Libxc providers independently of CUDA SM.
           CIBW_ENVIRONMENT: >-
             GENERATIVEQC_ENABLE_CUDA=ON
             GENERATIVEQC_ENABLE_AOT_SHELLS=ON
-            GENERATIVEQC_CUDA_ARCHITECTURES=120
+            SKBUILD_CMAKE_DEFINE="GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON"
+            GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE=/host${{ runner.temp }}/stationary-aot-source-cache
+            GENERATIVEQC_CUDA_ARCHITECTURES="${{ steps.wheel_matrix.outputs.architectures }}"
+            CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable -DGENERATIVEQC_AOT_PROFILES=sm_120"
             CCACHE_DIR=/host${{ runner.temp }}/ccache
             CCACHE_MAXSIZE=3G
             CCACHE_BASEDIR=/tmp
             CCACHE_COMPILERCHECK=content
-            GQC_WHEEL_SNAPSHOT_ID=${{ github.run_id }}-${{ github.run_attempt }}
+            GQC_WHEEL_SNAPSHOT_ID=${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('{0}-{1}', github.run_id, github.run_attempt) || '' }}
         with:
           package-dir: .
           output-dir: wheelhouse
           extras: "uv"
+
+      - name: Prepare stationary source cache for host archive
+        if: ${{ always() }}
+        shell: bash
+        run: bash .github/scripts/prepare-stationary-source-cache.sh
 
       # ccache stores completed compiler outputs, so retain useful entries after
       # a compile failure/step timeout. Tool environments retain success-only saves.
@@ -227,7 +258,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: wheel-ccache-master-manylinux-cuda12.9-sm120-v1-${{ github.run_attempt }}
+          name: wheel-ccache-master-manylinux-cuda12.9-sm80-sm90-sm120-ptx80-v3-${{ github.run_attempt }}
           path: ${{ steps.wheel_snapshot.outputs.path }}
           if-no-files-found: error
           compression-level: 0

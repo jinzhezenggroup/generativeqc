@@ -63,7 +63,11 @@ def test_public_d4_discovery_remains_lowerer_gated() -> None:
     assert "pbeh-d4-rks" in selectors
     assert "b3lyp-d4-rks" in selectors
     assert "r2scan-d4-rks" in selectors
-    assert "scan-d4-rks" not in selectors
+    assert "scan-d4-rks" in selectors
+    assert "scan-d4-uks" in selectors
+    # Recipe discovery must still reject electronic graphs without a lowerer.
+    assert "m06-2x-d4-rks" not in selectors
+    assert "m06-2x-d4-uks" not in selectors
 
 
 @pytest.mark.parametrize(

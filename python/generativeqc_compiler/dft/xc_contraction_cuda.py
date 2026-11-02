@@ -229,7 +229,7 @@ __global__ void gather_density_factor(const double* density, I global_n, I n, I 
     )
 
 
-def _emit_panels(*, diagonal_one_sided: bool = False) -> str:
+def _emit_panels(*, diagonal_one_sided: bool = False, spatial: bool = False) -> str:
     lines = [
         r"""
 __device__ void compact_potential_panels_body(const double* ao, const double* coefficients,
@@ -246,6 +246,16 @@ __device__ void compact_potential_panels_body(const double* ao, const double* co
         bindings.update(
             {f"c{j}": f"coefficients[(spin*terms+{j})*count+point]" for j in range(5)}
         )
+        if spatial:
+            # The spatial point cache preserves its public eleven-row transport;
+            # only coefficient addresses differ from native compact XC.
+            rows = ("1+spin", "3+3*spin", "4+3*spin", "5+3*spin", "9+spin")
+            bindings.update(
+                {
+                    f"c{j}": f"coefficients[({row})*count+point]"
+                    for j, row in enumerate(rows)
+                }
+            )
         emitter = CudaEmitter(graph, bindings)
         emitter.emit(roots)
         lines.append(f"    if (terms == {terms}) {{")
@@ -271,7 +281,12 @@ __global__ void compact_potential_panels(const double* ao, const double* coeffic
     return source
 
 
-_TILED_TEMPLATE = r"""
+def emit_spatial_xc_panels() -> str:
+    """Adapt spatial coefficient addresses while sharing native panel algebra."""
+    return _emit_panels(spatial=True)
+
+
+_TILED_DENSITY_TEMPLATE = r"""
 // Padding avoids bank conflicts when the AO lane reads a transposed panel.
 // Partial tiles still participate in both barriers and load exact zero padding.
 template <bool Mixed, bool ActiveRowsOnly = false, class Arithmetic = double>
@@ -374,7 +389,9 @@ __global__ void tiled_density_product(const double* density, const double* ao, I
 // order while avoiding a separate kernel launch for every point tile. The first
 // point tile owns output initialization, so admitted tiled execution needs no
 // matrix-sized or totals memset before every XC evaluation.
-template <bool ActivePairsOnly = false, class Arithmetic = double, bool DiagonalJets = false>
+"""
+
+_TILED_POTENTIAL_TEMPLATE = r"""template <bool ActivePairsOnly = false, class Arithmetic = double, bool DiagonalJets = false>
 __device__ void tiled_potential_body(const double* ao, const double* work, I n, I count,
                                 I work_jets, const double* point_totals, double* potential,
     double* totals, bool accumulate, int* error, const size_t* ao_ids, I full_n, I spin,
@@ -552,7 +569,9 @@ inline bool fp32_tiled_xc_admitted(I ao_count, I count, I spins, I work_jets) {
       tiled_xc_admitted(ao_count < @TILE@ ? @TILE@ : ao_count, count < @TILE@ ? @TILE@ : count,
                        spins, work_jets);
 }
-template <bool Mixed, bool Tiled, class Arithmetic = double>
+"""
+
+_TILED_DISPATCH_TEMPLATE = r"""template <bool Mixed, bool Tiled, class Arithmetic = double>
 void launch_density_product(cudaStream_t stream, const double* density,
     const double* ao, I n, I count, I spins, I work_jets,
     double* work, int* error, const size_t* ao_ids, I full_n) {
@@ -664,8 +683,12 @@ inline void scheduled_potential(cudaStream_t stream, const double* ao,
 }
 """
 
+_TILED_TEMPLATE = (
+    _TILED_DENSITY_TEMPLATE + _TILED_POTENTIAL_TEMPLATE + _TILED_DISPATCH_TEMPLATE
+)
 
-def _emit_tiled(schedule: XcMatrixSchedule) -> str:
+
+def _emit_matrix_template(source: str, schedule: XcMatrixSchedule) -> str:
     if not isinstance(schedule, XcMatrixSchedule):
         raise TypeError("XC matrix emission requires XcMatrixSchedule")
     replacements = {
@@ -674,10 +697,26 @@ def _emit_tiled(schedule: XcMatrixSchedule) -> str:
         "@TILE_MINUS_ONE@": str(schedule.tile - 1),
         "@THREADS@": str(schedule.threads),
     }
-    source = _TILED_TEMPLATE
     for token, value in replacements.items():
         source = source.replace(token, value)
     return source
+
+
+def _emit_tiled(schedule: XcMatrixSchedule) -> str:
+    return _emit_matrix_template(_TILED_TEMPLATE, schedule)
+
+
+def emit_xc_potential_core(
+    schedule: XcMatrixSchedule = DEFAULT_XC_MATRIX_SCHEDULE,
+) -> str:
+    """Share the qualified compact potential body with other buffer owners.
+
+    Transport adapters supply canonical half-weighted panels and typed launch
+    dimensions. The arithmetic, diagonal reuse, symmetry and bounded overflow
+    fallback remain identical to native XC, including its FP32 instantiation.
+    No native method/provider dispatch or density machinery is pulled in.
+    """
+    return _emit_matrix_template(_TILED_POTENTIAL_TEMPLATE, schedule)
 
 
 def emit_native_xc_matrix_schedule(

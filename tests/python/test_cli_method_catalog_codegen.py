@@ -74,6 +74,17 @@ class NativeMethodirProjectionTests(unittest.TestCase):
         self.assertTrue(pbe0.cuda)
         self.assertEqual(table["pbe0-uks"].spin, 2)
         self.assertNotEqual(pbe0.identity, table["pbe0-uks"].identity)
+        for name in ("pbe0", "rscan0", "r2scan0", "mn15"):
+            for prefix, suffix in (("libxc:", "rks"), ("libxc-uks:", "uks")):
+                imported = table[prefix + name]
+                ordinary = table[f"{name}-{suffix}"]
+                self.assertEqual(imported.identity, ordinary.identity)
+                self.assertEqual(imported.domain, ordinary.domain)
+                self.assertEqual(imported.components, ordinary.components)
+                self.assertEqual(imported.exchange, ordinary.exchange)
+                self.assertEqual(
+                    (imported.cpu, imported.cuda), (ordinary.cpu, ordinary.cuda)
+                )
 
         b3lyp = table["b3lyp-rks"]
         self.assertEqual(len(b3lyp.components), 4)
