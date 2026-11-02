@@ -35,7 +35,10 @@ DfShellLaunch select_launch(unsigned architecture, DfShellLaunch context) {
   const char* schedule = std::getenv("GENERATIVEQC_DF_SHELL_SCHEDULE");
   if (use_choice && (!schedule || std::string_view(schedule) == "auto"))
     context.variant = choice.variant;
-  context.rys = use_choice && choice.rys && context.range_omega == 0;
+  // Both radial operators use the same generated moment/derivative program.
+  // Range scaling belongs to its shared geometry owner; unavailable classes
+  // (including auxiliary g) retain polynomial lowering through this policy.
+  context.rys = use_choice && choice.rys;
   return context;
 }
 }  // namespace
