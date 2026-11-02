@@ -29,13 +29,19 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--basis", default="def2-svp")
     root.add_argument(
         "--component",
-        choices=("xc", "jk"),
+        choices=("xc", "jk", "df"),
         help="DFT XC tile search (default for KS), or isolated native J/K policy recipes",
     )
     from ._dft_autotune import DFT_FUNCTIONALS
 
     root.add_argument(
         "--method", choices=("rhf", "uhf", *DFT_FUNCTIONALS), default="rhf"
+    )
+    root.add_argument(
+        "--auxiliary-basis", help="fixed DF auxiliary basis (defaults to orbital basis)"
+    )
+    root.add_argument(
+        "--df-memory-mib", type=int, help="fixed DF workspace hint in MiB (default 64)"
     )
     root.add_argument(
         "--grid-level",
@@ -92,13 +98,25 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser()
     args = arguments.parse_args(argv)
     is_dft = args.method not in ("rhf", "uhf")
-    if args.component is not None and not is_dft:
+    if args.component in ("xc", "jk") and not is_dft:
         arguments.error("--component requires a DFT method")
-    if args.component == "jk" and (
+    if args.component == "df" and args.method != "rhf":
+        arguments.error(
+            "DF policy recipes currently require RHF; UHF lacks complete Fock counts and KS/DF resource admission is not qualified"
+        )
+    if args.component != "df" and (
+        args.auxiliary_basis is not None or args.df_memory_mib is not None
+    ):
+        arguments.error("--auxiliary-basis and --df-memory-mib require --component df")
+    if args.component == "df":
+        args.df_memory_mib = 64 if args.df_memory_mib is None else args.df_memory_mib
+        if not 1 <= args.df_memory_mib <= 2**32 - 1:
+            arguments.error("--df-memory-mib must be a positive uint32 MiB bound")
+    if args.component in ("jk", "df") and (
         args.xc_tiles is not None or args.portable_baseline or args.export
     ):
         arguments.error(
-            "J/K recipes do not use --xc-tiles, --portable-baseline or --export"
+            "native policy recipes do not use --xc-tiles, --portable-baseline or --export"
         )
     if not 0 <= args.grid_level <= 9:
         arguments.error("--grid-level must be in [0,9]")
@@ -108,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         not 1 <= tile <= 4096 for tile in args.xc_tiles
     ):
         arguments.error("--xc-tiles must contain integers in [1,4096]")
-    if is_dft and args.repeats < 5:
+    if (is_dft or args.component == "df") and args.repeats < 5:
         arguments.error("DFT tuning requires at least five paired repeats")
     if not 0 <= args.device_id <= 2**31 - 1:
         arguments.error("--device-id must be a nonnegative int32 CUDA-visible ordinal")

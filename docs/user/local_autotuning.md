@@ -214,6 +214,47 @@ publishes a recipe or changes the active profile index. `--xc-tiles`,
 rejected for J/K recipes. All timing claims exclude preparation/cold convergence
 and warmup; they are not cold-start throughput claims.
 
+## Tune density-fitting execution
+
+`--component df --method rhf` searches native FP64 density-fitting
+storage/contraction/derivative mappings under a **fixed** auxiliary basis,
+metric threshold and memory hint. It does not switch direct and fitted
+Hamiltonians, tune the metric cutoff, or enable single-precision storage.
+This initial domain is full-rank RHF with the existing small native eigensolver,
+at most 16 orbital and 128 auxiliary AOs. Larger topologies and composed KS/DF
+resource admission are not qualified and are refused rather than run without
+the complete allocation gate.
+UHF also remains refused until its native DF owner publishes complete observed
+Fock work; an iteration-derived estimate is not a substitute for that census.
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:30:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
+  python -m generativeqc.tune_cli water.xyz --method rhf --component df \
+  --basis sto-3g --auxiliary-basis def2-svp --representation spherical \
+  --df-memory-mib 20 --repeats 5 --max-candidates 6
+```
+
+The auxiliary basis defaults to the orbital basis, **not** an implicit JK-fit
+table. The fixed relative metric threshold is `1e-10`. The memory hint defaults
+to 64 MiB and feeds the existing native phase-aware DF planner; it is not a
+total-process-memory promise. The composed ResourceBudget and observed ledger
+gate the complete endpoint, including forces. Resident/streamed and packed/dense
+fallbacks remain native decisions under that hint.
+
+An untimed independent PySCF/libcint fitted-HF oracle includes auxiliary-basis
+response in analytic forces and rebuilds integrals from the exact immutable
+Gaussian input tables, not potentially differently rounded named-basis aliases.
+Near-singular/truncated metrics are refused until
+matching pseudoinverse/derivative semantics have independent qualification.
+Every candidate retains the same independently verified full metric rank and
+observed Fock work. Absolute energy error must be at most `1e-9` Hartree,
+maximum force error `1e-8` and force RMS error `3e-9` Hartree/Bohr; the looser
+XC-grid discretization floors do not apply. All other recipe/holdout/replay
+requirements are shared with J/K tuning. Replay uses
+`python -m generativeqc.execution_tune recipe.json replay.json` under Slurm and
+never performs a production CPU reference solve or changes the global profile.
+
 ## DFT Profile Acceptance
 
 DFT grid/XC schedule tuning reuses the same bundle and activation index. Its
