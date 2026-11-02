@@ -19,8 +19,12 @@ from benchmarks._retained_basis import load_retained_basis
 
 
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+@pytest.mark.parametrize("derivative_execution", ("generic", "shell"))
 def test_readme_g_auxiliary_fitted_range_endpoint(
-    representation: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    representation: str,
+    derivative_execution: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """The actual GPU4PySCF JKFIT basis must support native E/F and rebinding."""
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
@@ -28,6 +32,8 @@ def test_readme_g_auxiliary_fitted_range_endpoint(
     assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     from generativeqc.basis import load_basis
     from test_dft_complete_cuda import no_cpu_derivatives
+
+    from benchmarks.df_component_ledger import read_trace
 
     bundle = Path(__file__).resolve().parents[2] / (
         "benchmarks/results/readme-refresh-20261026/auxiliary-inputs.json.xz"
@@ -38,6 +44,9 @@ def test_readme_g_auxiliary_fitted_range_endpoint(
     basis = load_basis(auxiliary)  # Includes checksum validation.
     assert max(s.angular_momentum for e in basis.elements for s in e.shells) == 4
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
+    monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", derivative_execution)
+    trace = tmp_path / "range-shell.jsonl"
+    monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
     # Even a forced exact-ERI cache cannot replace the selected fitted operator.
     # Automatic residency only exposes this mismatch on large production grids.
     monkeypatch.setenv("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES", "1")
@@ -84,6 +93,17 @@ def test_readme_g_auxiliary_fitted_range_endpoint(
             with closing(NativeKsSnapshot(batch, 0)) as snapshot:
                 assert snapshot.range_density_fitted
             results.append(result)
+    range_responses = [
+        row
+        for row in read_trace(trace)
+        if row["counters"].get("response_long_range_operator")
+    ]
+    assert range_responses, "the fitted LR derivative must execute"
+    assert all(
+        row["counters"]["response_derivative_shell_execution"]
+        == (derivative_execution == "shell")
+        for row in range_responses
+    )
     assert results[1].energy == pytest.approx(results[0].energy, abs=2e-10)
     np.testing.assert_allclose(results[1].forces, results[0].forces, atol=2e-8, rtol=0)
     direction = np.array(
@@ -448,8 +468,10 @@ def test_complete_ri_jk_vv10_energy_and_force(
             # The complete CUDA endpoint now owns force execution in native
             # code. Query its live radial owners, not an unused Python runner.
             with closing(NativeKsSnapshot(batch, 0)) as snapshot:
-                components, resources = snapshot.mixed_density_fitted_integral_derivatives(
-                    len(atoms), 256 << 20
+                components, resources = (
+                    snapshot.mixed_density_fitted_integral_derivatives(
+                        len(atoms), 256 << 20
+                    )
                 )
                 assert np.isfinite(components).all()
         assert not resources["additional_device_peak_includes_lazy_lr"]

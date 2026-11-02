@@ -14,6 +14,11 @@ owner. This does not extend orbital-g or higher-derivative support.
 The generated shell derivative consumer includes auxiliary g, reusing its
 primitive geometry across shell components. Generic and bounded panel paths
 remain available; mixed shell arithmetic remains limited to auxiliary s/p/d/f.
+For explicitly fitted LR, `GENERATIVEQC_DF_WEIGHTED_EXECUTION=shell` selects
+the strict FP64 shell response candidate. It shares the generated omega-aware
+radial algebra and disables Coulomb-only screening. Automatic LR response
+continues to use the generic derivative; this selector changes execution rather
+than the fitted Hamiltonian.
 
 Restricted FP64 all-electron H-Ar DF calculations use native Modified Hückel
 under `initial_guess="auto"`, on CPU and CUDA. Exact atomic preparation changes

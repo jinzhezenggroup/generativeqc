@@ -155,9 +155,9 @@ struct CudaDfMdRaw {
 
 generativeqc_status create_cuda_df_md_raw(int device, const core::System& orbital,
                                           const core::System& auxiliary, double range_omega,
-                                          std::size_t device_budget,
-                                          std::size_t host_budget, CudaDfMdRaw** owner,
-                                          CudaDfMdResources& resources, std::string& detail) {
+                                          std::size_t device_budget, std::size_t host_budget,
+                                          CudaDfMdRaw** owner, CudaDfMdResources& resources,
+                                          std::string& detail) {
   resources = {};
   detail.clear();
   if (!owner) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

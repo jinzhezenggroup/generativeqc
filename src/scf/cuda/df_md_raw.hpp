@@ -13,9 +13,9 @@ struct CudaDfMdRaw;
  * The transforms are operator-independent; radial seeds retain this operator. */
 generativeqc_status create_cuda_df_md_raw(int device, const core::System& orbital,
                                           const core::System& auxiliary, double range_omega,
-                                          std::size_t device_budget,
-                                          std::size_t host_budget, CudaDfMdRaw** owner,
-                                          CudaDfMdResources& resources, std::string& detail);
+                                          std::size_t device_budget, std::size_t host_budget,
+                                          CudaDfMdRaw** owner, CudaDfMdResources& resources,
+                                          std::string& detail);
 void destroy_cuda_df_md_raw(CudaDfMdRaw* owner) noexcept;
 
 /** Overwrite a contiguous packed-lower pair / public-auxiliary rectangle.

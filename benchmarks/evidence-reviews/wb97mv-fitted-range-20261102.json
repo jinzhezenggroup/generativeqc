@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "wb97mv-fitted-range-20261102",
+  "owner": "WB97M-V long-range DF correctness follow-up",
+  "reason": "Complete diagnostic endpoint receipts and original failed/test logs with source identities, recovered byte-exactly by the existing v3 codec. Intrusive stream originals stay in ignored local archives with hashes and labeled aggregates; no production timing or default qualification is inferred.",
+  "review_document": "benchmarks/results/wb97mv-fitted-range-20261102/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/wb97mv-fitted-range-20261102/receipts.json.xz",
+      "family": "wb97mv-fitted-range-20261102",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoint-and-failure-diagnostic-records",
+      "bytes": 746464,
+      "sha256": "88ddf79fcf403d5957dfb1972231f04d8f1629bc9e4b1e5bb140055a87d900cb"
+    }
+  ]
+}

@@ -119,7 +119,5 @@ int main() {
 """
     )
     binary = tmp_path / "allocation"
-    required_native_cxx.build_executable(
-        [unit], binary, compile_args=("-std=c++20",)
-    )
+    required_native_cxx.build_executable([unit], binary, compile_args=("-std=c++20",))
     subprocess.run([str(binary)], check=True, timeout=20)

@@ -285,14 +285,14 @@ __device__ __forceinline__ void contract_shell_task(
             } else if (work) {
               scalar::BoysWork observed;
               scalar::prepare_geometry(alpha, center_a, beta, center_b, gamma, center_c, A + B + C,
-                                       geometry, &observed);
+                                       geometry, &observed, first.range_omega);
               series_iterations += observed.series_iterations;
               series += observed.series;
               small_argument += observed.small_argument;
               large_argument += observed.large_argument;
             } else
               scalar::prepare_geometry(alpha, center_a, beta, center_b, gamma, center_c, A + B + C,
-                                       geometry);
+                                       geometry, nullptr, first.range_omega);
             ++primitive_work;
           }
           __syncwarp(mask);

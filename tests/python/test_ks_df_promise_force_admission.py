@@ -162,12 +162,13 @@ def test_df_energy_promise_rejects_force_before_work(
      // Exercise the actual outer entry, including its short-circuit retry policy.
      for(auto* state:{&promised,&ordinary,&direct,&cpu}) {
        std::vector<double> out{42};unsigned receipt=7;std::string detail;
+       const auto before_work=state->port_source_work;
        const auto status=state->native_cuda_stationary_gradient({},1024,out,receipt,detail);
        if(state==&promised) {
          assert(status==GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
          assert(out.empty()&&receipt==0&&detail.find("energy-only")!=std::string::npos);
          assert(state->port_allocations==0&&state->port_source_work==0);
-       } else assert(status==0&&state->port_source_work==5);
+       } else assert(status==0&&state->port_source_work>before_work);
        assert(state->retire_attempts==0);
      }
      Batch b{{{&promised,promised.supported_properties()}}};

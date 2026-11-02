@@ -120,17 +120,17 @@ int main(int argc, char** argv) {
     std::string detail;
     for (const double invalid : {-1.0, std::numeric_limits<double>::infinity(),
                                  std::numeric_limits<double>::quiet_NaN()}) {
-      if (create_cuda_df_md_raw(0, orbital, auxiliary, invalid, 16U << 20, 16U << 20,
-                                &raw, resources, detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT ||
+      if (create_cuda_df_md_raw(0, orbital, auxiliary, invalid, 16U << 20, 16U << 20, &raw,
+                                resources, detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT ||
           raw || resources.device_bytes)
         throw std::runtime_error("invalid range parameter allocated a raw owner");
     }
-    if (create_cuda_df_md_raw(0, orbital, auxiliary, omega, 0, 16U << 20, &raw, resources, detail) !=
-            GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
+    if (create_cuda_df_md_raw(0, orbital, auxiliary, omega, 0, 16U << 20, &raw, resources,
+                              detail) != GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
         raw)
       throw std::runtime_error("zero optional budget did not refuse transactionally");
-    if (create_cuda_df_md_raw(0, orbital, auxiliary, omega, 16U << 20, 0, &raw, resources, detail) !=
-            GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
+    if (create_cuda_df_md_raw(0, orbital, auxiliary, omega, 16U << 20, 0, &raw, resources,
+                              detail) != GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
         raw)
       throw std::runtime_error("zero host budget did not refuse transactionally");
     auto displaced = auxiliary;
@@ -139,21 +139,21 @@ int main(int argc, char** argv) {
                               detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT ||
         raw)
       throw std::runtime_error("mismatched geometry was admitted");
-    auto status =
-        create_cuda_df_md_raw(0, orbital, auxiliary, omega, 16U << 20, 16U << 20, &raw, resources, detail);
+    auto status = create_cuda_df_md_raw(0, orbital, auxiliary, omega, 16U << 20, 16U << 20, &raw,
+                                        resources, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     const auto admitted = resources.device_bytes;
     destroy_cuda_df_md_raw(raw);
     raw = nullptr;
     LedgerScope ledger(admitted - 1);
-    status =
-        create_cuda_df_md_raw(0, orbital, auxiliary, omega, 16U << 20, 16U << 20, &raw, resources, detail);
+    status = create_cuda_df_md_raw(0, orbital, auxiliary, omega, 16U << 20, 16U << 20, &raw,
+                                   resources, detail);
     if (status != GENERATIVEQC_STATUS_OUT_OF_MEMORY || raw || ledger.ledger->live ||
         !ledger.ledger->allocations || !ledger.ledger->rejected)
       throw std::runtime_error("partial allocation refusal did not roll back");
     ledger.ledger->limit = admitted;
-    status =
-        create_cuda_df_md_raw(0, orbital, auxiliary, omega, 16U << 20, 16U << 20, &raw, resources, detail);
+    status = create_cuda_df_md_raw(0, orbital, auxiliary, omega, 16U << 20, 16U << 20, &raw,
+                                   resources, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     std::unique_ptr<CudaDfMdRaw, decltype(&destroy_cuda_df_md_raw)> prepared(
         raw, destroy_cuda_df_md_raw);

@@ -1,0 +1,439 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "8804b2382fbcfda1dc3daf1e0c4a9dc44c72e887",
+  "file_count": 86,
+  "total_bytes": 1933552,
+  "scope": "Exact merged pre-AO portfolio publication, including unfavorable native-versus-sampled comparisons and original source patches. Historical qualification only; no new default or device claims. All original bytes recover locally from existing Git.",
+  "files": [
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/README.md",
+      "bytes": 6276,
+      "sha256": "1a2378e22f44388e1a617598c3a325259567851167b0f74108aa9c41d2e0b881"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/evidence.json.gz",
+      "bytes": 12486,
+      "sha256": "f3f81bc62a176c2da205b508bf30ae00d383461c5dcc084030c62de767cc0c0d"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/measured-dirty.patch.gz",
+      "bytes": 6397,
+      "sha256": "c700318b727113cc46765b094c0a2c36649d4c371b0b50cad78058bb8086c024"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/measured-full.patch.gz",
+      "bytes": 73831,
+      "sha256": "98f5db697aa8275e487d94a5ec1ad7dabb8c1c166229c182143bb05605a0b9b6"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism-dirty.patch.gz",
+      "bytes": 51841,
+      "sha256": "25be7da6732c74d6b6f8dd4352b8c4cb606a81a5ef77c16b6df1c6e0fd64b83c"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism-qualification.json.gz",
+      "bytes": 6074,
+      "sha256": "51bf24d57ca021ad444b61e51c2b14624d068d02a6fb103276d2c3ca5000fb87"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-0-dense.json.gz",
+      "bytes": 22071,
+      "sha256": "6e95ff996fefe1a686f06e4187419adfd922b982ddf9f4560232af356b7ba530"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-0-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 22948,
+      "sha256": "b40daa0c51435c5501eee2e80f3521e2342798bfb6577bd04e96f2b9cc36a5ae"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-0-sampled-jets.json.gz",
+      "bytes": 22531,
+      "sha256": "e5d9700f61399383666d957721cb795a659d575e3d5be9b46d52e3dbb5b9e536"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-1-dense.json.gz",
+      "bytes": 22248,
+      "sha256": "7e6a58e7e9b41ce57585bc0c707d1ec8c3617c19bf40e63a636e7a6c8f17852d"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-1-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 22906,
+      "sha256": "3008e09fadc618bbbb4e98025ca5e3b1868d5e07eaeec432931e69f085a00281"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-1-sampled-jets.json.gz",
+      "bytes": 22718,
+      "sha256": "689b18d3ff4f029645aff6fe253bfe3accd6cd49816351da3ea2dce2b530e203"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-2-dense.json.gz",
+      "bytes": 22097,
+      "sha256": "5642112f8f0989eb42ce4293f0245d82ee1c169811822f7a4fb32b8f54e46053"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-2-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 22816,
+      "sha256": "00174f3c2a7407625c27fac45f9f98b05bcffa8024083bce6423b1061d956530"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-2-sampled-jets.json.gz",
+      "bytes": 22738,
+      "sha256": "a639a5faf9520175a1d04938a65bcc5f08deadb5ee7d078e08257312e80bdc11"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-3-dense.json.gz",
+      "bytes": 22111,
+      "sha256": "6cabf1b367648e1be1b3f8c8c110fa9fd5962d06cf7fe92cd227a74c2b3ac595"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-3-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 22665,
+      "sha256": "1bd1e8849f395188c755887b65caecb9d598b6a962af9722820e275a41ef41b6"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-3-sampled-jets.json.gz",
+      "bytes": 22721,
+      "sha256": "93fd59d1eef3cd0676866465c97dbbd178902ffd39309f74b79fd2740b781e04"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-4-dense.json.gz",
+      "bytes": 22089,
+      "sha256": "cb0bd11e47ab6a7aaae0c3e67343f8a3628983b941c8e2d91113ac7a87addb56"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-4-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 22861,
+      "sha256": "c333706588a377f918b75e7492002ab9cd3a976de6b3488e78766e9b8517f92b"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/48-4-sampled-jets.json.gz",
+      "bytes": 22783,
+      "sha256": "29a117a6b159db14ab7639b95abe1a8c0931e329feb3611be0b81e532b08e033"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-0-dense.json.gz",
+      "bytes": 28041,
+      "sha256": "78daf6d89de9dbb171bdf85c6795395ce6ba744e8e8b6d0b9bcc2eeff2ecf2f3"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-0-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 29010,
+      "sha256": "39942f111d2a6c522400ed535304bf4cd778aa081c2bc164e9ecf6b817f9cce2"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-0-sampled-jets.json.gz",
+      "bytes": 28754,
+      "sha256": "9e7d6e81768c851d11cab61a8fc8ca1781c145746cc3a9791685fbfb8a001933"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-1-dense.json.gz",
+      "bytes": 28129,
+      "sha256": "7798fac991df9f89c784f4a64fac62c8fedf13502b15c0be6f81120c1280c863"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-1-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 28922,
+      "sha256": "d08ebb97478fc58e1157040b62407d30528e42f6caf8a77072aa633f59089129"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-1-sampled-jets.json.gz",
+      "bytes": 28847,
+      "sha256": "a1461728410bc5bc8ca2b3759a88cf215c56a16330a717371fd79c482d4022e7"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-2-dense.json.gz",
+      "bytes": 28383,
+      "sha256": "0d20524e6eed1318d69e8be81de61da83ba1ca5a275b7e56e818f5ad9c9e8bb4"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-2-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 28851,
+      "sha256": "16efdc697d9e28787841cfda6c24820d6d623cb757742130e72aa89a9d217141"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-2-sampled-jets.json.gz",
+      "bytes": 28768,
+      "sha256": "254afd10d92da4563f665763caafd0cec81e0d7925780ca3a98ee1e6780748ff"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-3-dense.json.gz",
+      "bytes": 28132,
+      "sha256": "8f6cf65aa2fb4fd8062b1b447fdbca1d78bbc088e1e2b8ad6233adfa6e4eebb5"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-3-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 29246,
+      "sha256": "36757da13cbb84ab6ba8deaa872f36816638c4c139b8203f23a4063839e71b4b"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-3-sampled-jets.json.gz",
+      "bytes": 28880,
+      "sha256": "0d414423dea6447e858865ea148b0e637bb011b180757e616ebf9936aedf6bf3"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-4-dense.json.gz",
+      "bytes": 28041,
+      "sha256": "ad3c9c621ee26b83e8fc968953a1e49607ad081958a2b98b8ca1cbbc3297414a"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-4-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 28763,
+      "sha256": "5070304111f87ec22358cefe88338b491017f69c13fdf400520ba539e562dc8a"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/96-4-sampled-jets.json.gz",
+      "bytes": 28786,
+      "sha256": "3519617aa1b4a6c86dba01ff3a067c16dcaece8df0c19c7b3fb9cd1c18ff63fe"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/profile-48-dense.json.gz",
+      "bytes": 23007,
+      "sha256": "817c0c1906a311869c6320a2d87bfa72e8ffc8eba0fcb4081df6645d5bc2e890"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/profile-48-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 23753,
+      "sha256": "63669220654dd3137d9ccccb80166b0cd2bbbe87650905d49ff6fbace91dfeae"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/profile-48-sampled-jets.json.gz",
+      "bytes": 23468,
+      "sha256": "9e73efe5d537e62b70f2efada3fb4fd956b7e18a07d3047d42326dc1cd7b7afc"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/profile-96-dense.json.gz",
+      "bytes": 28970,
+      "sha256": "184d9098312bdb165f96ba6510a8651cae2c77ec1c7203e0b17511acd7723957"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/profile-96-pre-ao-envelope-native-csr.json.gz",
+      "bytes": 29927,
+      "sha256": "a7844dc6c5d2cbcf49862e54c2a2e774686d34a115cdadd58f78cca687e9b06a"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/profile-96-sampled-jets.json.gz",
+      "bytes": 29988,
+      "sha256": "53d1b7d1b65e0e2dee2fbb2705387209903756ceaa0322e8293f8246e903e16f"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/reference-48.json.gz",
+      "bytes": 10312,
+      "sha256": "4ad517c25a88d08f8a798edded526beb08f366e24724eaacd59cc1a9079c3829"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/mechanism/reference-96.json.gz",
+      "bytes": 15474,
+      "sha256": "3631d757868a82d67930267abc2e85506a7673b2f582983026f38f2a69b82257"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/24-0-auto.json.gz",
+      "bytes": 20024,
+      "sha256": "56a678fa4918a6d7bf017116b6411da96d9b1b34f5893c0ddab8b470a387cc37"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/24-0-current-default.json.gz",
+      "bytes": 19159,
+      "sha256": "badedf44acf855846b3c47a61124818635b98e241c91273f89d11e5099cb6b06"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/24-1-auto.json.gz",
+      "bytes": 19987,
+      "sha256": "226e78027ffa731472a71eb04f777e2851750095478356ed21a5abdee826b437"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/24-1-current-default.json.gz",
+      "bytes": 19201,
+      "sha256": "9c51799c1ddb318e1006f6b543b5f8b7e43ecee8f2bed3c77f8b4bbf38ba1305"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/24-2-auto.json.gz",
+      "bytes": 20006,
+      "sha256": "8ebd5e4dff5538287490b207755ca00401cd37afb0b57947da5b63842489299f"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/24-2-current-default.json.gz",
+      "bytes": 19150,
+      "sha256": "4f49e4cfe1de11d00623d6a9de015d3e4eaed96febdc26fe54f0d06ffda67ecf"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/24-3-auto.json.gz",
+      "bytes": 20020,
+      "sha256": "9586d41a3d54d6b960fcef819fd96b8bcd200c62a3feda15bbd1d671066edebe"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/24-3-current-default.json.gz",
+      "bytes": 19187,
+      "sha256": "b9b822f476dadc622432bfcb5338134a7998bd4c19ad5111b9a5068e4a9ec414"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/24-4-auto.json.gz",
+      "bytes": 20050,
+      "sha256": "dbe41647fb16f1b7037a1d1436a497aaf0d5121b2db628d59c9b763bf1b5d699"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/24-4-current-default.json.gz",
+      "bytes": 19153,
+      "sha256": "11b57a5c58803d4ae15512a39994aa5b629a19987adc4172160878996ae613cb"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/3-0-auto.json.gz",
+      "bytes": 16625,
+      "sha256": "0cf904ec86a353ecbcbef1111403c5a96259b783db10fff5c8a55023eb737d46"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/3-0-current-default.json.gz",
+      "bytes": 15955,
+      "sha256": "76f088fbc8276007ebf4d22e4f70bc213e0b63768d717a77a244d2e4788359f2"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/3-1-auto.json.gz",
+      "bytes": 16592,
+      "sha256": "f235237c9589256431b51f0790d8cd42c47fdd01c78dd961f8e720a09f85e5b5"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/3-1-current-default.json.gz",
+      "bytes": 15962,
+      "sha256": "84ff7337b9441294d67be5f7784b2503adecc953c3116b3cbecb61ecdb4b8805"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/3-2-auto.json.gz",
+      "bytes": 16622,
+      "sha256": "93db617e3345bc51fdfc03775c9fd9968eeb99280c4eaa5e68f6776cbe4f02c3"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/3-2-current-default.json.gz",
+      "bytes": 15990,
+      "sha256": "0d15f1605faeebe8e5df3e25ad050d0514d0a7b13d58b814f0cc6e85541986e9"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/3-3-auto.json.gz",
+      "bytes": 16569,
+      "sha256": "a210aa59fa19f02c0ea1ed74f668c8eaf66b65923c4132e2907a4d21c144c7cb"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/3-3-current-default.json.gz",
+      "bytes": 15973,
+      "sha256": "ff9bbb68de65decf37ae3d3db2f948cc98d449395dc720cfd92dd519e4f6958e"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/3-4-auto.json.gz",
+      "bytes": 16537,
+      "sha256": "8a4d6457e0557daf66889a09400eda696608c91c41fd8070d5fb0ba4c58426d5"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/3-4-current-default.json.gz",
+      "bytes": 15939,
+      "sha256": "166c3741fdad600d5e38ed49763a3161d373414782bbb11834fcdab90b07f236"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/48-0-auto.json.gz",
+      "bytes": 22897,
+      "sha256": "c6bcb05c464d07e152fe8a383eade6e4354b8ba5f5f02bdbc38cdfc4739cec59"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/48-0-current-default.json.gz",
+      "bytes": 22898,
+      "sha256": "23b51ed5c921c0272b8fd98ea75123630c8a2b34c1147af2a50d660ff9eef482"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/48-1-auto.json.gz",
+      "bytes": 22869,
+      "sha256": "f7d7c31696e70034b8f65050dd879c6d68df2edcf6dfa16810c1de0766b57d83"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/48-1-current-default.json.gz",
+      "bytes": 23074,
+      "sha256": "3528d007d43c56dc1e30adc87dadc79379a76ced420023333b29eca1f4525acb"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/48-2-auto.json.gz",
+      "bytes": 22931,
+      "sha256": "6e391d6fa27b02296496f89b0e463f27b437bbef912bfa015fc15f0c9f282e9e"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/48-2-current-default.json.gz",
+      "bytes": 23022,
+      "sha256": "7354d7e04de4373c13e43cc9e87f082022c343e09bb32202dc3e83853880cc71"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/48-3-auto.json.gz",
+      "bytes": 22901,
+      "sha256": "c99bc57eb10105b8565c02f7021c23d20d2fc33acb90f70fa7d2d3b30d71deb8"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/48-3-current-default.json.gz",
+      "bytes": 22969,
+      "sha256": "d8732d12955d346f943e410f7331a79237479248fcbea491e57dd4747c1d4c30"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/48-4-auto.json.gz",
+      "bytes": 22902,
+      "sha256": "6170ee565914fc3ae018fb28cb916c317eef437d1a84f6a216109409ae614494"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/48-4-current-default.json.gz",
+      "bytes": 22996,
+      "sha256": "a287b7c946acc6690fb9536a80023dad302654376433eb46869d289e16999696"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/profile-24-auto.json.gz",
+      "bytes": 20894,
+      "sha256": "9f2f2425bb1101e7693888285133e6a2d782f019a4393bf61c9dcbd4ea57a651"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/profile-24-current-default.json.gz",
+      "bytes": 20030,
+      "sha256": "8d23bf0b910a33ba492f2ff1d0d4c6b17ca865d458a6e4afbc098248420cb095"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/profile-3-auto.json.gz",
+      "bytes": 17480,
+      "sha256": "17797699c2212421c66fdc9adb87f44c208d9490716dc9a38219804740d4f11a"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/profile-3-current-default.json.gz",
+      "bytes": 16724,
+      "sha256": "0587c455a3e7fd58ad736a61f4c399d866a1f7593f4cd5d8e1dc71958a73ceff"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/profile-48-auto.json.gz",
+      "bytes": 23790,
+      "sha256": "65e3bd6b977742e27619f48e583a06135ce4d1d6f14260ac43871267cf77d2b2"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/profile-48-current-default.json.gz",
+      "bytes": 23842,
+      "sha256": "cee8476a552f7117c0060d9d5b649340759e34105245b7dc3cd1fa80a54f8c56"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/reference-24.json.gz",
+      "bytes": 7466,
+      "sha256": "54bef0788355f24ee1c49a2a8e90c1961b7d435a0ff06a9b74ae1ca00ef0f5a6"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/reference-3.json.gz",
+      "bytes": 4809,
+      "sha256": "c2940632c36cacc8f79633346eb984d52d7efefc8c7e2ee7fb8f0d272557f453"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/public/reference-48.json.gz",
+      "bytes": 10312,
+      "sha256": "82d4fbefc7fca5b3eec032f9cc7f6dde3fc2309139bfaeb83e78c4e1053c94a9"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/publication.json",
+      "bytes": 17252,
+      "sha256": "9fb04b656268233609be06e3d76752db6a801bc9500b90265aed50edfe102949"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/qualification.json.gz",
+      "bytes": 57610,
+      "sha256": "512b25c150cd9cbfda30c6bc0a794cae6c6e4e36f10fb65424f0f3a2b5ce70a6"
+    },
+    {
+      "path": "benchmarks/results/preao-force-portfolio-20261006/support.json.gz",
+      "bytes": 15523,
+      "sha256": "9fe1207fdb768e639e247ef4671f005f51b0c4f817ec2e4d8c640b5f42b18366"
+    }
+  ]
+}

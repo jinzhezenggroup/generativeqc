@@ -53,7 +53,8 @@ def retry_probe(
             "@XC_VIEW@",
             cpp_record_definition(
                 (ROOT / "src/dft/cuda_xc.hpp").read_text(), "CudaXcView"
-            ) + ";",
+            )
+            + ";",
         )
         + "bool retry() {\n"
         + retry

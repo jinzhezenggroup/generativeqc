@@ -382,9 +382,9 @@ generativeqc_status try_prepare_cuda_df_md_raw_source(CudaDensityFittingIntegral
   const auto selected = cudaSetDevice(state.device_id);
   if (selected != cudaSuccess) return source_cuda_status(selected);
   CudaDfMdResources resources;
-  auto status = create_cuda_df_md_raw(state.device_id, orbital, auxiliary,
-                                      state.batch.df_range_omega, device_cap, host_cap,
-                                      &state.raw_hermite, resources, detail);
+  auto status =
+      create_cuda_df_md_raw(state.device_id, orbital, auxiliary, state.batch.df_range_omega,
+                            device_cap, host_cap, &state.raw_hermite, resources, detail);
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
     detail.clear();  // Transactional refusal retains the existing source.
     return GENERATIVEQC_STATUS_SUCCESS;

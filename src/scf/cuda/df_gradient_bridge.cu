@@ -1298,11 +1298,12 @@ generativeqc_status execute_cuda_df_hf_gradient(
       throw std::invalid_argument("unknown DF weighted execution (use generic, shell-sp or shell)");
     // Shell reuse includes auxiliary g using the compiler's raised polynomial
     // domain. Metric response retains its independent complete contraction.
-    // That shell consumer implements the full-range operator only. LR owners
-    // retain the omega-aware generic derivative, including auxiliary g.
-    const bool shell_execution =
-        range_omega == 0.0 && execution != "generic" && device_metric && schedule == 0;
-    mixed_shell = mixed_shell && shell_execution && !auxiliary_g;
+    // LR reuses the same generated radial geometry as the generic derivative.
+    // Its shell path remains an explicit candidate until complete endpoints
+    // qualify it; Coulomb screening and mixed precision do not apply to LR.
+    const bool shell_execution = (range_omega == 0.0 || execution_control) &&
+                                 execution != "generic" && device_metric && schedule == 0;
+    mixed_shell = mixed_shell && shell_execution && !auxiliary_g && range_omega == 0.0;
     if (mixed_shell) {
       precision_work =
           static_cast<unsigned long long*>(arena.allocate(sizeof(observed_precision_work)));
@@ -1310,6 +1311,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
       check(cudaMemsetAsync(precision_work, 0, sizeof(observed_precision_work), arena.stream));
     }
     runtime::cuda_trace::trace_counter("response_derivative_shell_execution", shell_execution);
+    runtime::cuda_trace::trace_counter("response_long_range_operator", range_omega > 0.0);
     runtime::cuda_trace::trace_counter("response_derivative_profile_promoted", promoted_default);
     runtime::cuda_trace::trace_counter("response_source_coulomb_shell_promoted",
                                        promoted_source_coulomb && !execution_control);
@@ -1318,6 +1320,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // force-component screen on every CUDA architecture. Small or diagnostic
     // workloads stay strict; explicit controls remain independent.
     if (!shell_screen_control && promoted_default) shell_target = 1e-10;
+    if (range_omega != 0.0) shell_target = 0;
     const char* pair_control = std::getenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS");
     const std::string_view pair_policy = pair_control ? pair_control : "auto";
     if (pair_policy != "auto" && pair_policy != "full" && pair_policy != "symmetric" &&
@@ -1414,6 +1417,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                                   expansion_terms);
         shell_x = std::make_unique<ShellMetadata>(auxiliary, host_a, x, arena, primitive_buckets,
                                                   expansion_terms);
+        for (auto* metadata : {shell_o.get(), shell_x.get()})
+          metadata->view.range_omega = metadata->signature_view.range_omega = range_omega;
         runtime::cuda_trace::trace_counter(
             "shell_signature_id_bytes",
             (shell_o->signature_ids.size() + shell_x->signature_ids.size()) * sizeof(std::int32_t));
@@ -1447,7 +1452,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
         arena.stats.host_bytes += sizeof(observed_shell_work);
       }
       {
-        if (target > 0 && full_shell_domain) {
+        if (target > 0 && full_shell_domain && range_omega == 0.0) {
           // S auxiliary shells have one AO and intersect exactly one response
           // panel. Ordered orbital pairs bound full/symmetric/packed work;
           // summing all primitive allowances therefore bounds every final
@@ -2245,12 +2250,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
               // Expand into the disjoint raw AO slice before projecting C.
               auto* packed = workspace + spectral_fixed;
               const auto status = generate_cuda_density_fitting_packed_raw_tile(
-                  source, source_index, 0, n * (n + 1) / 2, p, 1,
-                  stream_handle, packed, detail);
+                  source, source_index, 0, n * (n + 1) / 2, p, 1, stream_handle, packed, detail);
               if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
               if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
-              cuda_df::launch_unpack_df_values(arena.stream, n, 1, 0, n, 0, 1, true,
-                                               packed, values);
+              cuda_df::launch_unpack_df_values(arena.stream, n, 1, 0, n, 0, 1, true, packed,
+                                               values);
               check(cudaGetLastError());
               arena.stats.recomputed_value_bytes += n * (n + 1) / 2 * sizeof(double);
               runtime::cuda_trace::trace_counter("response_spectral_packed_raw_slices", 1);
