@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "wb97mv-review-a100-20261102",
+  "owner": "Current-source A100 WB97M-V fitted-LR review fixes",
+  "reason": "Exact complete paired endpoints and native/molecular outcomes, including both failed D4 package attempts and test-ID recovery. No numerical or storage-gate relaxation.",
+  "review_document": "benchmarks/results/wb97mv-review-a100-20261102/README.md",
+  "files": [
+    {
+      "bytes": 258072,
+      "classification": "required-compact-accepted-evidence",
+      "family": "wb97mv-review-a100-20261102",
+      "path": "benchmarks/results/wb97mv-review-a100-20261102/receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "f8eac136923675acd0494063622b76d75cf0080221e98a1ffe156c9e08e52ae4"
+    }
+  ]
+}
