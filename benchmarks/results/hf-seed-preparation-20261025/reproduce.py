@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import lzma
 import math
 import statistics
 from pathlib import Path
@@ -13,7 +14,9 @@ ROOT = Path(__file__).resolve().parent
 
 
 def read(name: str) -> object:
-    return json.loads(gzip.decompress((ROOT / name).read_bytes()))
+    """Read lossless XZ numerical receipts and original gzip attachments."""
+    decompress = lzma.decompress if name.endswith(".xz") else gzip.decompress
+    return json.loads(decompress((ROOT / name).read_bytes()))
 
 
 def check(sample: dict, reference: dict, atoms: int) -> dict:
@@ -35,7 +38,7 @@ def main() -> None:
     manifest = json.loads((ROOT / "manifest.json").read_text())
     for name, digest in manifest.items():
         assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest, name
-    records = read("moved.json.gz")
+    records = read("moved.json.xz")
     references = {
         (x["atoms"], x["geometry"]): x["sample"]
         for x in records
@@ -46,7 +49,7 @@ def main() -> None:
     checks = [
         check(x, references[x["atoms"], x["geometry"]], x["atoms"]) for x in moved
     ]
-    paired = read("paired.json.gz")
+    paired = read("paired.json.xz")
     populations = [x for x in paired.values() if isinstance(x, dict) and "samples" in x]
     assert len(populations) == 12
     summary = []

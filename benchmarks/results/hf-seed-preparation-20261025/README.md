@@ -11,7 +11,7 @@ independent GPU4PySCF calculations. Timing includes construction, preparation,
 SCF and host-visible analytic forces. Warm calls use each population's own
 frozen density.
 
-`paired.json.gz` and `moved.json.gz` retain every sample. `provenance.json` binds
+`paired.json.xz` and `moved.json.xz` retain every sample. `provenance.json` binds
 the source files, base revision and patch; `measured-change.patch.gz` reconstructs
 the measured source. `launchers.json.gz` retains the executed launchers and
 qualification scripts. Build receipts, test logs and resource/memory-check logs
@@ -25,3 +25,7 @@ SCF adapter boundary cleanup.
 
 The [decision note](../../../.agents/notes/implemented/performance/2026-10-25-huckel-seed-preparation.md)
 explains the numerical, scratch-lifetime and fallback boundaries.
+
+The compact numerical/execution bundles listed in `storage.json` use lossless XZ.
+That manifest binds original Git blobs and compressed/decoded hashes. Every
+sample, failure, work count and scientific acceptance decision is unchanged.
