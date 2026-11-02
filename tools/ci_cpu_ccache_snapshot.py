@@ -314,6 +314,32 @@ class LimitedWriter:
         self.handle.flush()
 
 
+def bounded_wheel_files(
+    files: list[tuple[Path, str]],
+) -> list[tuple[Path, str]]:
+    """Choose a recent optional subset, without modifying the primary cache.
+
+    Budget actual file sizes plus USTAR framing and conservative gzip headroom;
+    LimitedWriter remains the authoritative encoded-size gate. Missing cache
+    records only cause ordinary strict compiler-cache misses.
+    """
+    selected: list[tuple[Path, str]] = []
+    payload_bytes = 0
+    records = [(path.stat(), path, relative) for path, relative in files]
+    records.sort(key=lambda entry: (-entry[0].st_mtime_ns, entry[2]))
+    for info, path, relative in records:
+        proposed = payload_bytes + 512 + ((info.st_size + 511) // 512) * 512
+        tar_bytes = ((proposed + 1024 + 10239) // 10240) * 10240
+        # Do not rely on compressibility of already compressed ccache objects.
+        budget = tar_bytes + (tar_bytes + 99) // 100 + 65536
+        if budget <= MAX_ARCHIVE:
+            selected.append((path, relative))
+            payload_bytes = proposed
+    if not selected:
+        raise ValueError("no wheel compiler data fits encoded snapshot budget")
+    return selected
+
+
 def package() -> None:
     check_platform()
     if (
@@ -353,6 +379,14 @@ def package() -> None:
                 raise ValueError(f"{LABEL} snapshot exceeds decoded size/file cap")
     if not files:
         raise ValueError(f"no {LABEL} compiler data to publish")
+    if PROFILE == "wheel":
+        original_count, original_bytes = len(files), decoded
+        files = bounded_wheel_files(files)
+        decoded = sum(path.stat().st_size for path, _ in files)
+        print(
+            f"wheel snapshot selection: {len(files)}/{original_count} files, "
+            f"{decoded}/{original_bytes} cache bytes; primary cache unchanged"
+        )
     stage = Path(
         tempfile.mkdtemp(
             prefix=f"gqc-{PROFILE}-publish-", dir=os.environ["RUNNER_TEMP"]

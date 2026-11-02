@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -882,6 +883,7 @@ void independent_reference_export() {
 }
 #include "df_raw_coulomb_cases.hpp"
 #include "df_response_headroom_cases.hpp"
+#include "rsh_derivative_reference_cases.hpp"
 }  // namespace
 int main(int argc, char** argv) {
   try {
@@ -903,6 +905,7 @@ int main(int argc, char** argv) {
     resident_derivative_sources();
     retained_lr_only_derivative();
     retained_range_shell_d_parity();
+    independent_rsh_source_cases();
     independent_reference_export();
     std::cout << "CUDA common Fock composition: exact/DF/absent pairs, signed gradients, batch "
                  "items, SCF/replay/geometry PASS\n";

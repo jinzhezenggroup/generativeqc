@@ -36,7 +36,7 @@ def test_resident_range_sources_match_independent_matrices(
     """A new geometry owns new sources; signed spin matrices test raw K weights."""
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires a Slurm-allocated GPU")
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     np = pytest.importorskip("numpy")
     pyscf = pytest.importorskip("pyscf")
     from generativeqc import _native
