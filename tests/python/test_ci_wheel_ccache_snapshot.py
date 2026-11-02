@@ -570,3 +570,87 @@ def test_wheel_workflow_preserves_optional_budgets_and_required_gates() -> None:
     )
     assert activate["if"] == "steps.verify.outcome == 'success'"
     assert all(entry["continue-on-error"] is True for entry in action)
+
+
+def test_recent_wheel_subset_roundtrips_without_changing_primary(
+    wheel: Any,
+    environment: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = seed(wheel, environment, os.urandom(70 * 1024))
+    paths = [source / DATA_NAME]
+    for index in range(1, 6):
+        path = source / "a" / (f"{index:032x}" + "R")
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(os.urandom(70 * 1024))
+        paths.append(path)
+    for index, path in enumerate(paths):
+        os.utime(path, ns=(1000000000 + index, 1000000000 + index))
+    before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in paths}
+    monkeypatch.setattr(wheel, "MAX_ARCHIVE", 256 * 1024)
+    wheel.package()
+    packaged = Path(outputs(environment)["path"])
+    manifest = json.loads((packaged / "manifest.json").read_text())
+    assert manifest["archive_bytes"] <= wheel.MAX_ARCHIVE
+    assert manifest["files"] == 2
+    expected_paths = paths[-2:][::-1]
+    with tarfile.open(packaged / "cache.tar.gz") as archive:
+        assert archive.getnames() == [
+            p.relative_to(source).as_posix() for p in expected_paths
+        ]
+        for path in expected_paths:
+            stream = archive.extractfile(path.relative_to(source).as_posix())
+            assert stream and stream.read() == before[path][0]
+    assert {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in paths} == before
+    source.rename(source.with_name("original-cache"))
+    restored = stage(wheel, environment, monkeypatch)
+    for name in ("cache.tar.gz", "manifest.json"):
+        shutil.copyfile(packaged / name, restored / "download" / name)
+    expected = {k: manifest[k] for k in wheel.identity()} | {
+        "run_id": "123",
+        "run_attempt": "2",
+        "source_sha": "a" * 40,
+    }
+    (restored / "expected.json").write_text(json.dumps(expected))
+    wheel.verify()
+    wheel.activate()
+    assert sorted(
+        p.relative_to(source).as_posix() for p in source.rglob("*") if p.is_file()
+    ) == sorted(p.relative_to(source).as_posix() for p in expected_paths)
+    for path in expected_paths:
+        assert path.read_bytes() == before[path][0]
+
+
+def test_oversize_wheel_record_does_not_hide_smaller_usable_records(
+    wheel: Any,
+    environment: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = seed(wheel, environment, b"valid old cache record")
+    oversized = source / "a" / ("f" * 32 + "R")
+    oversized.parent.mkdir(exist_ok=True)
+    oversized.write_bytes(os.urandom(300 * 1024))
+    monkeypatch.setattr(wheel, "MAX_ARCHIVE", 128 * 1024)
+    wheel.package()
+    packaged = Path(outputs(environment)["path"])
+    with tarfile.open(packaged / "cache.tar.gz") as archive:
+        assert archive.getnames() == [DATA_NAME]
+    assert oversized.stat().st_size == 300 * 1024
+
+
+def test_wheel_selection_is_deterministic_for_equal_recency(
+    wheel: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    files = []
+    for name in ("z", "a", "b"):
+        path = tmp_path / name
+        path.write_bytes(b"x" * (70 * 1024))
+        os.utime(path, ns=(1000000000, 1000000000))
+        files.append((path, name))
+    monkeypatch.setattr(wheel, "MAX_ARCHIVE", 256 * 1024)
+    assert [name for _, name in wheel.bounded_wheel_files(files)] == ["a", "b"]
+    assert wheel.bounded_wheel_files(files) == wheel.bounded_wheel_files(
+        list(reversed(files))
+    )
