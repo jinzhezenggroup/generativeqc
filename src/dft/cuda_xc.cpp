@@ -897,9 +897,10 @@ void CudaXcPlan::publish_potential_work() {
 void CudaXcPlan::enqueue_nonlocal_potential(std::uint64_t generation,
                                             const double* effective_weights,
                                             const double* total_gradient, const double* vrho,
-                                            const double* vsigma, const double* nonlocal_energy) {
+                                            const double* vsigma, const double* nonlocal_energy,
+                                            double* separate_potential) {
   enqueue_nonlocal_potential_impl(generation, true, effective_weights, total_gradient, vrho, vsigma,
-                                  nonlocal_energy);
+                                  nonlocal_energy, separate_potential);
 }
 
 void CudaXcPlan::enqueue_replay_nonlocal_potential(const double* effective_weights,
@@ -914,7 +915,8 @@ void CudaXcPlan::enqueue_nonlocal_potential_impl(std::uint64_t generation, bool 
                                                  const double* effective_weights,
                                                  const double* total_gradient, const double* vrho,
                                                  const double* vsigma,
-                                                 const double* nonlocal_energy) {
+                                                 const double* nonlocal_energy,
+                                                 double* separate_potential) {
   check_device();
   if (layout_.response)
     throw std::invalid_argument("XC response plan cannot accumulate a physical nonlocal potential");
@@ -942,6 +944,29 @@ void CudaXcPlan::enqueue_nonlocal_potential_impl(std::uint64_t generation, bool 
       overlaps_arena(vsigma, scalar_bytes) || overlaps_arena(nonlocal_energy, sizeof(double)))
     throw std::invalid_argument("CUDA nonlocal AO inputs alias the semilocal XC workspace");
 
+  if (separate_potential) {
+    // Retain the contribution directly, avoiding cancellation from subtracting
+    // two large XC matrices. Every live assembly input must remain disjoint.
+    device_pointer(separate_potential, device_);
+    const auto output_bytes = size_mul(
+        size_mul(layout_.spins, size_mul(layout_.nao, layout_.nao, "nonlocal matrix overflow"),
+                 "nonlocal spin matrices overflow"),
+        sizeof(double), "nonlocal matrix bytes overflow");
+    if (overlaps_arena(separate_potential, output_bytes))
+      throw std::invalid_argument("separate nonlocal potential aliases XC workspace");
+    for (const auto& [pointer, bytes] :
+         {std::pair<const void*, std::size_t>{effective_weights, scalar_bytes},
+          {points_, gradient_bytes},
+          {total_gradient, gradient_bytes},
+          {vrho, scalar_bytes},
+          {vsigma, scalar_bytes},
+          {ao_ids_,
+           size_mul(layout_.ao_map_entries, sizeof(std::size_t), "nonlocal AO map bytes overflow")},
+          {nonlocal_energy, sizeof(double)}})
+      if (generativeqc::runtime::ranges_overlap(separate_potential, output_bytes, pointer, bytes))
+        throw std::invalid_argument("separate nonlocal potential aliases pair inputs");
+  }
+
   // Ordinary execution revokes the published semilocal generation while the
   // nonlocal contribution mutates it. Replay execution has no logical
   // generation yet; the SolverRegion publishes only after physical submission.
@@ -952,10 +977,10 @@ void CudaXcPlan::enqueue_nonlocal_potential_impl(std::uint64_t generation, bool 
     fail_next_nonlocal_xc_status = cudaSuccess;
     generativeqc_tensor::cuda_check(injected);
 #endif
-    cuda_xc_detail::enqueue_nonlocal_potential(layout_, stream_, basis_, points_, effective_weights,
-                                               total_gradient, vrho, vsigma, nonlocal_energy, ao_,
-                                               coefficients_, potential_, totals_, error_, work_,
-                                               ao_offsets_, ao_ids_);
+    cuda_xc_detail::enqueue_nonlocal_potential(
+        layout_, stream_, basis_, points_, effective_weights, total_gradient, vrho, vsigma,
+        nonlocal_energy, ao_, coefficients_, separate_potential ? separate_potential : potential_,
+        totals_, error_, work_, ao_offsets_, ao_ids_);
     if (publish_generation) generations_.commit(generation);
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     (void)cudaStreamSynchronize(stream_);

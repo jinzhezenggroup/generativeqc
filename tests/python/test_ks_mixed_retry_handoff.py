@@ -49,6 +49,11 @@ def retry_probe(
                 (ROOT / "src/dft/cuda_xc.hpp").read_text(), "CudaXcOccupiedDensity"
             )
             + ";",
+        ).replace(
+            "@XC_VIEW@",
+            cpp_record_definition(
+                (ROOT / "src/dft/cuda_xc.hpp").read_text(), "CudaXcView"
+            ) + ";",
         )
         + "bool retry() {\n"
         + retry
@@ -97,12 +102,21 @@ PREFIX = r"""
 #include <memory>
 #include <stdexcept>
 #include <string>
+using cudaStream_t = void*;
 @OCCUPIED_DENSITY@
 void require(bool ok, const char* why) { if (!ok) throw std::runtime_error(why); }
 int cudaMemsetAsync(void* p, int value, std::size_t n, void*) {
   std::memset(p, value, n); return 0;
 }
 void check(int status) { require(!status, "unexpected device failure"); }
+int cudaGetLastError() { return 0; }
+constexpr int cudaMemcpyDeviceToDevice=0;
+int cudaMemcpyAsync(void* dst,const void* src,std::size_t n,int,void*) {
+  std::memcpy(dst,src,n); return 0;
+}
+template<class... T> void launch_add_matrix_kernel(T...) {
+  require(false, "strict retry retained a provisional AO anchor");
+}
 namespace generativeqc::runtime { enum class PrecisionPhase { Admitted, StrictAudit }; }
 using Phase = generativeqc::runtime::PrecisionPhase;
 namespace runtime::cuda_trace {
@@ -116,7 +130,7 @@ int domains = 0;
 namespace nlc {
 template<class... T> void enqueue_vv10_molecular_domain_cuda(T...) { ++domains; }
 }
-struct CudaXcView {};
+@XC_VIEW@
 const double* expected_density = nullptr;
 struct Xc {
   int semilocal = 0, features = 0, potentials = 0;
@@ -143,6 +157,11 @@ struct Owner {
   bool final_closure = true, is_active{}, occupied_fitted_factor_ready = true;
   bool pending_fitted_occupied = true, final_fitted_projection_ready = true;
   bool nonlocal_seed_stage{}, nonlocal_frozen_stage{}, nonlocal_outer_active = true;
+  std::uint64_t nonlocal_anchor_generation=999;
+  double anchor_data{};
+  void* nonlocal_anchor_arena=&anchor_data;
+  double* nonlocal_anchor_potential=&anchor_data;
+  int* nonlocal_anchor_error{};
   bool device_nonlocal = true;
   bool occupied_xc_requested{}, occupied_xc_frame_ready{}, device_chunk_mode{};
   struct { bool any_lower_precision() const { return false; } } precision_schedule;
@@ -187,6 +206,9 @@ struct Owner {
   std::unique_ptr<Xc> nonlocal_xc;
   unsigned merges = 0;
   void merge_nonlocal_grid(std::uint64_t) { if (nonlocal_xc) ++merges; }
+  void merge_grid_views(const CudaXcView&,const CudaXcView&) {
+    require(false, "strict retry reused a stale nonlocal AO anchor");
+  }
   double delta_value = -2; double* incremental_delta_density = &delta_value;
   std::unique_ptr<Xc> xc = std::make_unique<Xc>();
 """

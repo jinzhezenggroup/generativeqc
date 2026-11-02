@@ -607,7 +607,7 @@ void nonlocal_potential_case(const AoBasis& basis, const MolecularGrid& grid, bo
     gradient[3 * p + 2] = 0.01 * (p + 1);
   }
   const double nonlocal_energy = 0.123456789;
-  double *d_weights{}, *d_gradient{}, *d_vrho{}, *d_vsigma{}, *d_energy{};
+  double *d_weights{}, *d_gradient{}, *d_vrho{}, *d_vsigma{}, *d_energy{}, *d_separate{};
   try {
     check(cudaMalloc(&d_weights, points * sizeof(double)));
     check(cudaMalloc(&d_gradient, gradient.size() * sizeof(double)));
@@ -665,6 +665,45 @@ void nonlocal_potential_case(const AoBasis& basis, const MolecularGrid& grid, bo
         close(after[spin * matrix + i] - before[spin * matrix + i], expected[i],
               "CUDA nonlocal AO potential composition", 3e-12 + 2e-12 * std::abs(expected[i]));
 
+    // A frozen-potential consumer retains the contribution itself, not the
+    // difference of two large XC matrices. Check its independent AO oracle,
+    // both spin planes, storage canaries and survival of a later generation.
+    fixture.submit(d);
+    const auto separate_before = fixture.potential();
+    std::vector<double> isolated(before.size() + 2, 0.0);
+    isolated.front() = isolated.back() = 987654.0;
+    check(cudaMalloc(&d_separate, isolated.size() * sizeof(double)));
+    check(cudaMemcpyAsync(d_separate, isolated.data(), isolated.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, fixture.stream));
+    for (double* alias :
+         {const_cast<double*>(fixture.plan->view(fixture.generation).potential), d_weights}) {
+      bool refused = false;
+      try {
+        fixture.plan->enqueue_nonlocal_potential(fixture.generation, d_weights, d_gradient, d_vrho,
+                                                 d_vsigma, d_energy, alias);
+      } catch (const std::invalid_argument&) {
+        refused = true;
+      }
+      require(refused, "separate nonlocal matrix accepted a live input/output alias");
+    }
+    fixture.plan->enqueue_nonlocal_potential(fixture.generation, d_weights, d_gradient, d_vrho,
+                                             d_vsigma, d_energy, d_separate + 1);
+    const auto separate_semilocal = fixture.potential();
+    for (std::size_t i = 0; i < before.size(); ++i)
+      close(separate_semilocal[i], separate_before[i], "isolated assembly changed semilocal matrix",
+            0.0);
+    close(fixture.scalars().energy - before_scalars.energy, nonlocal_energy,
+          "isolated nonlocal energy composition", 2e-13);
+    fixture.submit(d);
+    check(cudaMemcpyAsync(isolated.data(), d_separate, isolated.size() * sizeof(double),
+                          cudaMemcpyDeviceToHost, fixture.stream));
+    check(cudaStreamSynchronize(fixture.stream));
+    require(isolated.front() == 987654.0 && isolated.back() == 987654.0,
+            "isolated nonlocal matrix overwrote a canary");
+    for (std::size_t i = 0; i < before.size(); ++i)
+      close(isolated[i + 1], expected[i % matrix], "isolated nonlocal AO oracle",
+            3e-12 + 2e-12 * std::abs(expected[i % matrix]));
+
     using fail_function = void (*)();
     const std::array<std::pair<fail_function, generativeqc_status>, 2> failures{{
         {&xc_cuda_fail_next_nonlocal_runtime_for_test_v1, GENERATIVEQC_STATUS_CUDA_ERROR},
@@ -700,11 +739,12 @@ void nonlocal_potential_case(const AoBasis& basis, const MolecularGrid& grid, bo
               "CUDA nonlocal AO failure prevented the next semilocal generation");
     }
   } catch (...) {
-    for (auto* pointer : {d_energy, d_vsigma, d_vrho, d_gradient, d_weights})
+    for (auto* pointer : {d_separate, d_energy, d_vsigma, d_vrho, d_gradient, d_weights})
       if (pointer) cudaFree(pointer);
     throw;
   }
-  for (auto* pointer : {d_energy, d_vsigma, d_vrho, d_gradient, d_weights}) cudaFree(pointer);
+  for (auto* pointer : {d_separate, d_energy, d_vsigma, d_vrho, d_gradient, d_weights})
+    cudaFree(pointer);
   fixture.canary();
 }
 

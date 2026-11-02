@@ -57,10 +57,21 @@ Hamiltonian. For an explicit `df` request, missing LR fitting capability or
 insufficient memory is an error, not permission to silently switch Hamiltonians.
 Native snapshots authenticate the actual LR approximation, so derivatives never
 infer it from the current environment.
-Range-fitted orbital and auxiliary shells currently require s/p/d/f coverage.
+Range-fitted orbital shells support s/p/d/f and auxiliary shells support
+s/p/d/f/g. The generated g adapter uses the same omega-dependent value and
+center-response algebra; unsupported higher angular momenta fail at admission.
 For complete RI-J/K on CUDA, an explicit `density_fitting_memory_budget_bytes`
 is split between the two prepared radial owners; zero retains each owner's
 automatic admission.
+
+Both radial owners can consume the SCF's proved occupied coefficients for RI-K.
+Each reserves its own integral and projection storage against the live memory
+envelope. When complete occupied projection storage does not fit, a resident
+packed integral tensor can still feed bounded projection panels; if neither
+representation fits, the source remains streamed. Explicit memory caps and
+force-response capacity remain binding. Optional prepared Hermite transforms
+accelerate packed Coulomb and erf integrals with the same radial recurrence.
+An exact four-center residency request never replaces a fitted LR operator.
 
 **VV10 itself is not an RI-J/K integral.** Its nonlocal correlation remains the
 existing self-consistent grid-pair evaluation; complete DF-J/K does not replace
@@ -284,6 +295,10 @@ Raw contracted Cartesian/spherical s/p/d/f values and center derivatives are
 compared with libcint over multiple omega values in `test_df_derivatives.py`.
 CUDA implementations require separate real-device qualification; CPU evidence
 and successful compilation are not substitutes for that execution.
+`test_df_long_range_policy.py` covers auxiliary g values and center derivatives
+against libcint. `test_df_md_raw_cuda.py` independently qualifies Coulomb and
+erf packed values, mixed basis representations, dirty graph replay and
+transactional resource refusal.
 
 See the [ownership note](../../.agents/notes/implemented/architecture/2026-09-22-public-df-ks-provider.md)
 for the retained boundaries.

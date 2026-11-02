@@ -369,10 +369,14 @@ class CudaXcPlan {
                                     generativeqc::runtime::PrecisionPhase::StrictAudit);
   /** Accumulate a total-density nonlocal contribution into the already
    * submitted physical XC potential/totals for the same generation. All
-   * inputs are caller-owned full-grid device arrays/scalars. */
+   * inputs are caller-owned full-grid device arrays/scalars. An optional
+   * disjoint, zeroed potential receives only the nonlocal matrix; the caller
+   * must merge it before consuming the physical Fock. Energy and numerical
+   * status still accumulate in this plan's own outputs. */
   void enqueue_nonlocal_potential(std::uint64_t generation, const double* effective_weights,
                                   const double* total_gradient, const double* vrho,
-                                  const double* vsigma, const double* nonlocal_energy);
+                                  const double* vsigma, const double* nonlocal_energy,
+                                  double* separate_potential = nullptr);
   /** Replay-runtime counterpart for the same nonlocal AO assembly. It mutates
    * the current semilocal potential/totals but performs no generation
    * publication; the surrounding SolverRegion publishes the physical body once. */
@@ -401,7 +405,8 @@ class CudaXcPlan {
   void enqueue_nonlocal_potential_impl(std::uint64_t generation, bool publish_generation,
                                        const double* effective_weights,
                                        const double* total_gradient, const double* vrho,
-                                       const double* vsigma, const double* nonlocal_energy);
+                                       const double* vsigma, const double* nonlocal_energy,
+                                       double* separate_potential = nullptr);
   CudaXcLayout layout_;
   CudaXcPointBinding point_binding_{};
   bool mixed_pbe_points_{};

@@ -1,5 +1,7 @@
 """Full RI-J/K endpoints: independent LR fitting, moving-grid forces and replay."""
 
+import json
+import lzma
 import os
 from contextlib import closing
 from pathlib import Path
@@ -14,6 +16,99 @@ from generativeqc_compiler.dft import NativeAO
 from test_mixed_rsh_df_forces import _mixed_pyscf_energy
 
 from benchmarks._retained_basis import load_retained_basis
+
+
+@pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+def test_readme_g_auxiliary_fitted_range_endpoint(
+    representation: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The actual GPU4PySCF JKFIT basis must support native E/F and rebinding."""
+    if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+        pytest.skip("requires an explicitly allocated CUDA device")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
+    from generativeqc.basis import load_basis
+    from test_dft_complete_cuda import no_cpu_derivatives
+
+    bundle = Path(__file__).resolve().parents[2] / (
+        "benchmarks/results/readme-refresh-20261026/auxiliary-inputs.json.xz"
+    )
+    payload = json.loads(lzma.decompress(bundle.read_bytes()))["wb97m-v-auxiliary.json"]
+    auxiliary = tmp_path / "auxiliary.json"
+    auxiliary.write_text(json.dumps(payload))
+    basis = load_basis(auxiliary)  # Includes checksum validation.
+    assert max(s.angular_momentum for e in basis.elements for s in e.shells) == 4
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
+    # Even a forced exact-ERI cache cannot replace the selected fitted operator.
+    # Automatic residency only exposes this mismatch on large production grids.
+    monkeypatch.setenv("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES", "1")
+    atoms = [
+        ("O", (0.0, 0.0, 0.0)),
+        ("H", (0.1, 1.43, 1.1)),
+        ("H", (-0.15, -1.45, 1.12)),
+    ]
+    calculator = Calculator(
+        method="wb97m-v-rks",
+        basis="def2-svp",
+        auxiliary_basis=basis,
+        basis_representation=representation,
+        device="cuda",
+        density_fitting="auto",
+        initial_guess=None,
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=24, angular_polar=6, angular_azimuth=12)
+        ),
+        energy_tolerance=1e-10,
+        density_tolerance=1e-8,
+        screening_tolerance=1e-14,
+        max_iterations=200,
+    )
+    moved = list(atoms)
+    moved[1] = ("H", (0.13, 1.41, 1.14))
+    with calculator.prepare_batch([atoms], warm_start=True) as batch:
+
+        def forbidden_python_force(*args: Any, **kwargs: Any) -> None:
+            pytest.fail("fitted LR native force entered Python orchestration")
+
+        monkeypatch.setattr(batch, "_public_dft_cuda_force", forbidden_python_force)
+        # The prepared model must survive changes to the live environment.
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
+        results = []
+        for geometry in (atoms, atoms, moved):
+            with no_cpu_derivatives():
+                result = batch.execute(
+                    coordinates=([position for _, position in geometry],),
+                    strict=True,
+                    properties=("energy", "forces"),
+                ).items[0]
+            assert result.converged and result.executed_backend == "cuda"
+            with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+                assert snapshot.range_density_fitted
+            results.append(result)
+    assert results[1].energy == pytest.approx(results[0].energy, abs=2e-10)
+    np.testing.assert_allclose(results[1].forces, results[0].forces, atol=2e-8, rtol=0)
+    direction = np.array(
+        ((0.17, -0.11, 0.07), (-0.09, 0.06, 0.13), (0.04, -0.03, 0.08))
+    )
+    for geometry, result in ((atoms, results[0]), (moved, results[2])):
+        assert result.energy == pytest.approx(
+            _mixed_pyscf_energy(calculator, geometry, 0, fitted_range=True), abs=2e-8
+        )
+        for displacement in (np.eye(9)[5].reshape(3, 3), direction):
+            step = 2e-4
+            energies = []
+            for sign in (1, -1):
+                displaced = [
+                    (symbol, tuple(np.asarray(position) + sign * step * shift))
+                    for (symbol, position), shift in zip(
+                        geometry, displacement, strict=True
+                    )
+                ]
+                energies.append(
+                    _mixed_pyscf_energy(calculator, displaced, 0, fitted_range=True)
+                )
+            assert -np.sum(np.asarray(result.forces) * displacement) == pytest.approx(
+                (energies[0] - energies[1]) / (2 * step), abs=3e-7
+            )
 
 
 def _practical_auxiliary() -> Any:
@@ -37,7 +132,7 @@ def test_cuda_packed_lr_values_preserve_the_radial_operator(
     """
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly Slurm-allocated CUDA device")
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     from benchmarks.df_component_ledger import read_trace
 
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
@@ -108,7 +203,7 @@ def test_range_exchange_selection_is_frozen_for_all_endpoints(
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly Slurm-allocated CUDA device")
     if device == "cuda":
-        assert os.environ.get("SLURM_JOB_ID")
+        assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     if selector is None:
         monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
     else:
@@ -205,7 +300,7 @@ def test_practical_lr_auxiliary_stationary_force_and_replay(
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly Slurm-allocated CUDA device")
     if device == "cuda":
-        assert os.environ.get("SLURM_JOB_ID")
+        assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
         if materialized:
             pytest.skip("materialized derivative storage is a CPU diagnostic")
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
@@ -290,7 +385,7 @@ def test_complete_ri_jk_vv10_energy_and_force(
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly Slurm-allocated CUDA device")
     if device == "cuda":
-        assert os.environ.get("SLURM_JOB_ID")
+        assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
     if spin:
@@ -343,18 +438,21 @@ def test_complete_ri_jk_vv10_energy_and_force(
             warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
             with pytest.raises(ValueError, match="stale"):
                 _ = snapshot.range_density_fitted
-        work = (
-            batch._stationary_cuda_execution.last_work
-            if device == "cuda"
-            else cpu_work[-1]
-        )
         if device == "cpu":
+            work = cpu_work[-1]
             assert work["stationary_integral_derivative_route"] == "prepared-full-ri-jk"
             assert work["integral_quartet_passes"] == 0
             assert work["range_exchange_primitive_records"] == 0
-        assert not work["native_integral_resources"][
-            "additional_device_peak_includes_lazy_lr"
-        ]
+            resources = work["native_integral_resources"]
+        else:
+            # The complete CUDA endpoint now owns force execution in native
+            # code. Query its live radial owners, not an unused Python runner.
+            with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+                components, resources = snapshot.mixed_density_fitted_integral_derivatives(
+                    len(atoms), 256 << 20
+                )
+                assert np.isfinite(components).all()
+        assert not resources["additional_device_peak_includes_lazy_lr"]
         moved = list(atoms)
         moved[1] = (
             atoms[1][0],

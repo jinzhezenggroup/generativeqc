@@ -243,7 +243,8 @@ struct PreparedFockPlan::Impl {
         (strategy.backend != FockBackend::Cuda || strategy.spec.spin != FockSpin::Restricted ||
          strategy.spec.derivative_order != 0 || !strategy.spec.exchange.present ||
          strategy.spec.exchange.approximation != FockApproximation::DensityFitted ||
-         strategy.spec.exchange.op != FockOperator::FullRange || system.electron_count <= 0 ||
+         (strategy.spec.exchange.op != FockOperator::FullRange &&
+          strategy.spec.exchange.op != FockOperator::LongRange) || system.electron_count <= 0 ||
          system.electron_count % 2 || system.multiplicity != 1 ||
          reserved_rank != static_cast<std::size_t>(system.electron_count / 2) ||
          reserved_rank > molecule::ao_count(system)))
@@ -537,6 +538,8 @@ struct PreparedFockPlan::Impl {
       runtime::df_progress::number("resolved_response_budget_bytes", resolved.response_bytes);
       runtime::df_progress::number("observed_free_device_bytes", resolved.observed_free_bytes);
       runtime::df_progress::number("value_peak_bytes", tiles.peak_workspace_bytes);
+      runtime::df_progress::number("requested_occupied_rank", reserved_rank);
+      runtime::df_progress::number("retained_occupied_rank", tiles.value_storage.rank_capacity);
       runtime::df_progress::number("value_storage",
                                    static_cast<unsigned>(tiles.value_storage.pairs));
       budget_trace.finish();

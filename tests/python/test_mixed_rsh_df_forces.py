@@ -273,16 +273,37 @@ def _mixed_pyscf_energy(
     def fitted_range_provider(omega: float) -> Any:
         """Match the declared relative cutoff in normalized auxiliary coordinates.
 
-        PySCF's default Cholesky keeps tiny Cartesian LR metric modes that the
-        native relative-eigenvalue contract discards. Build the reference from
-        libcint and NumPy, not native factors or a relaxed comparison tolerance.
+        PySCF's default Cholesky keeps tiny Cartesian metric modes that the
+        native relative-eigenvalue contract discards. Explicit auxiliary
+        snapshots also have their own representation, independent of the orbital
+        basis. Build both operators from libcint and NumPy with those contracts.
         """
         if omega not in range_providers:
-            auxiliary = fitted.auxmol
+            auxiliary = fitted.auxmol.copy()
+            auxiliary.cart = (
+                getattr(
+                    calc._auxiliary_basis, "representation", calc._representation_name
+                )
+                == "cartesian"
+            )
             scales = 1 / np.sqrt(np.diag(auxiliary.intor("int1e_ovlp")))
             with mol.with_range_coulomb(omega), auxiliary.with_range_coulomb(omega):
                 metric = auxiliary.intor("int2c2e") * scales[:, None] * scales[None, :]
-                three_center = df.incore.aux_e2(mol, auxiliary, aosym="s2ij")
+                if mol.cart == auxiliary.cart:
+                    three_center = df.incore.aux_e2(mol, auxiliary, aosym="s2ij")
+                else:
+                    # libcint's public three-center wrapper requires matching
+                    # representations. Transform its independent Cartesian
+                    # tensor explicitly instead of silently changing the fit.
+                    orbital_cart, auxiliary_cart = mol.copy(), auxiliary.copy()
+                    orbital_cart.cart = auxiliary_cart.cart = True
+                    raw = df.incore.aux_e2(orbital_cart, auxiliary_cart, aosym="s1")
+                    if not mol.cart:
+                        transform = mol.cart2sph_coeff()
+                        raw = np.einsum("ci,dj,cdp->ijp", transform, transform, raw)
+                    if not auxiliary.cart:
+                        raw = raw @ auxiliary.cart2sph_coeff()
+                    three_center = raw[np.tril_indices(mol.nao_nr())]
             eigenvalues, eigenvectors = np.linalg.eigh(metric)
             retained = eigenvalues > (
                 eigenvalues[-1] * calc._density_fitting_relative_threshold
@@ -311,7 +332,8 @@ def _mixed_pyscf_energy(
             return scf.hf.get_jk(
                 molecule, density, hermi, with_j=with_j, with_k=with_k, omega=omega
             )
-        return fitted.get_jk(density, hermi, with_j, with_k)
+        provider = fitted_range_provider(0.0) if fitted_range else fitted
+        return provider.get_jk(density, hermi, with_j, with_k)
 
     mean_field.get_jk = get_jk
     grid = MolecularGrid(atoms, calc.ks_options.grid, multiplicity=spin + 1).explicit()
