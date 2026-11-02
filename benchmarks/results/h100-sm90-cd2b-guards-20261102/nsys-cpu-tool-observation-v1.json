@@ -1,0 +1,22 @@
+{
+  "status": "ACTUAL_POSTHOC_CPU_TOOL_OBSERVATION",
+  "observed_utc": "2026-11-02T15:18:00.760794+00:00",
+  "observer_sha256": "76f6687f49c34934ebef532caa724e94485d7bf3bdf7b244374d4a0d19b57db9",
+  "tools": {
+    "nsys": {
+      "path": "/usr/local/cuda-12.8/NsightSystems-cli-2025.1.1/target-linux-x64/nsys",
+      "resolved_path": "/usr/local/cuda-12.8/NsightSystems-cli-2025.1.1/target-linux-x64/nsys",
+      "bytes": 60092248,
+      "sha256": "67620bee0161e0296db2807ae8b5895fe433feb4dddc17543e712c744e2d4075",
+      "version": "NVIDIA Nsight Systems version 2025.1.1.65-251135387579v0"
+    },
+    "importer": {
+      "path": "/usr/local/cuda-12.8/NsightSystems-cli-2025.1.1/host-linux-x64/QdstrmImporter",
+      "resolved_path": "/usr/local/cuda-12.8/NsightSystems-cli-2025.1.1/host-linux-x64/QdstrmImporter",
+      "bytes": 267752,
+      "sha256": "8b4cc3e19d8d33b07fc8d4d09fc49d6a0b5a80543f993df38e4d28eaf8718361",
+      "version": "NVIDIA Nsight Systems 2025.1.1.65-251135387579v0"
+    }
+  },
+  "scope": "Authenticated existing CPU bridge read-only posthoc tool observation. Crosschecks actual conversion identity,not a preregistered before-runtime binary witness and not GPU execution."
+}
