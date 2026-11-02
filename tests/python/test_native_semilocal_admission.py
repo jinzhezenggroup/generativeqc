@@ -44,7 +44,7 @@ if TYPE_CHECKING:
         ),
     ],
 )
-def test_public_pbe_options_preserve_missing_or_cancelled_native_scales(
+def test_partial_pbe_graphs_use_their_imported_component_program(
     spin: str,
     components: tuple[tuple[str, Fraction], ...],
     expected: tuple[float, float, float],
@@ -55,8 +55,14 @@ def test_public_pbe_options_preserve_missing_or_cancelled_native_scales(
         selector, KsOptions(composition=graph, grid=GridSpec())
     )
     assert options.method_ir.identity == graph.identity
-    assert options.coefficients == expected
-    assert _native_semilocal_code(graph) == 1
+    from generativeqc_compiler.xc.automatic_semilocal import automatic_functional_code
+
+    # Partial PBE used to resolve to curated scales in Python but failed native
+    # component matching. The atomic program owns its sole surviving term;
+    # outer X/C scales therefore remain unity and no missing partner is added.
+    component = "GGA_X_PBE" if expected[0] else "GGA_C_PBE"
+    assert options.coefficients == (1.0, 1.0, 0.0)
+    assert _native_semilocal_code(graph) == automatic_functional_code(component)
 
 
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])

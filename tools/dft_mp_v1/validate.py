@@ -479,6 +479,7 @@ def _check_run(
     timeline = precision.get("scf_fock_timeline")
     require(type(timeline) is list and timeline, "SCF/Fock event timeline missing")
     previous_iteration = -1
+    preparation_finished = False
     for sequence, event in enumerate(timeline):
         require(type(event) is dict, "malformed SCF/Fock event")
         require(
@@ -495,7 +496,8 @@ def _check_run(
             "unknown SCF/Fock event",
         )
         require(
-            event.get("phase") in ("scf", "refinement", "finalization", "retry"),
+            event.get("phase")
+            in ("preparation", "scf", "refinement", "finalization", "retry"),
             "unknown precision-work phase",
         )
         require(
@@ -511,6 +513,18 @@ def _check_run(
             and event["state"],
             "SCF/Fock event iteration or state missing",
         )
+        if event["phase"] == "preparation":
+            # A deferred warm anchor is executed strict work at the frozen
+            # input density, before any proposal or final-state audit. Count
+            # it below without misclassifying it as a refinement iteration.
+            require(
+                not preparation_finished
+                and event["kind"] == "strict_fock"
+                and event["iteration"] == 0,
+                "preparation must be strict Fock work before SCF iteration",
+            )
+        else:
+            preparation_finished = True
         previous_iteration = event["iteration"]
     for kind, name in (
         ("mixed_fock", "mixed_stage_fock_builds"),

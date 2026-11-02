@@ -216,7 +216,11 @@ This registry still does **not** generate or mutate the public method manifest.
 A semilocal component may be runtime-qualified without being a complete DFT
 method. Hybrid/range-separated/nonlocal/correction primitives must be qualified
 at the MethodIR/provider layer before a method-level admission producer may
-attach `public-method` evidence.
+attach `public-method` evidence. Source-derived direct hybrid methods, including
+hybrids without VV10, may enter MethodIR as representation-only records;
+this does not create an executable XC point program, an exchange provider or a
+public SCF/force capability. In particular, method names suggesting external
+dispersion are not proof that such a correction has been implemented.
 
 The existing bulk numerical test continues to cover every intrinsic pointwise
 claim. The promotion tests additionally enforce that stages cannot jump their

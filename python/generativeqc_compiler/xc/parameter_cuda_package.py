@@ -394,7 +394,11 @@ def parameter_worker_groups(
     Structural discovery is the default execution policy. The legacy qualified
     policy can restrict selection to the established prepared-product workers.
     """
-    return _parameter_worker_plan(tuple(sorted(set(names))), include_candidates)[1]
+    from ._generated_semilocal_compositions import COMPOSITIONS
+
+    return _parameter_worker_plan(
+        tuple(sorted(set(names) - COMPOSITIONS.keys())), include_candidates
+    )[1]
 
 
 @lru_cache(maxsize=8)

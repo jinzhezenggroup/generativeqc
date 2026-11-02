@@ -123,3 +123,12 @@ checks therefore retain their original scope. Original full-manifest digests
 remain recorded identities, not claims that this checkout reconstructs their
 complete text or recomputes their SHA-256. Numerical records, force/energy gates,
 paired populations and original failure records are unchanged.
+
+## Exact storage
+
+The v3 exact-FP64 reader restores all 83 original receipt strings and the complete
+original container byte-for-byte before replaying the unchanged independent
+242-call qualification. The two streams use 232,308 bytes instead of 392,256.
+Every original FP64 word, failed attempt and source/reference binding is retained;
+`sha256.txt` authenticates both streams. The former compressed object remains in
+parent Git history; recompression is not claimed to reproduce its XZ bytes.

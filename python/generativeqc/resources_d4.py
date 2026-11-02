@@ -110,7 +110,7 @@ def with_native_xc_capacity(
             calculator._diis_history,
             item["spins"],
             _native_semilocal_code(model.method_ir),
-            model.tile_points,
+            model.tile_points or 256,
             row,
             len(row),
         )

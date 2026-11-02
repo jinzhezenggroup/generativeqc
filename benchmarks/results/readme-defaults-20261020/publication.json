@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 9743,
+      "bytes": 10064,
       "path": "README.md",
       "role": "summary",
-      "sha256": "ca6a0a95d26c3b8c1a350d2b2cae28da16a7ca9fffca4fdc0608308f991725d8"
+      "sha256": "7376b55493ff04a0c215e406c250912e0785de0ff65bc3042607dbccb6144cba"
     },
     {
       "bytes": 2788,
@@ -67,10 +67,10 @@
       "sha256": "0c2fd3efccb4dea01d4efce751af6a398c7ec36854812334792945b71b8fb53b"
     },
     {
-      "bytes": 594836,
+      "bytes": 34116,
       "path": "receipts.json.xz",
       "role": "samples",
-      "sha256": "226813e5e07af11387926a1ec1dd9f5dbfa1054be54cbe78faa692a6d03327bb"
+      "sha256": "386c67e3445b07fc4db618f717ef123cb73476cf1ed7572563fb120634cc320b"
     },
     {
       "bytes": 834,
@@ -88,7 +88,19 @@
       "bytes": 5532,
       "path": "validation.json",
       "role": "evidence",
-      "sha256": "1a363500aee068fb397faf39b458ae12ca4b205ff9b149b7a9978b670f94843d"
+      "sha256": "03bac15894bb2e8934c70c1e662350c9089b0b48b2ede1c979893244d35b91f3"
+    },
+    {
+      "path": "fp64.xz",
+      "role": "samples",
+      "bytes": 384352,
+      "sha256": "16c59f8b372ff6729f26d9826cdb1d280e7507d4763eb98867853193f6bd337b"
+    },
+    {
+      "path": "sha256.txt",
+      "role": "input",
+      "bytes": 157,
+      "sha256": "8f0cc494c12b3644470b2ab31c2345f07e55d364ceef53cbbe428e66ebc119c9"
     }
   ],
   "reproduction": {

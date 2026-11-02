@@ -1,0 +1,14 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "f5d8df5a0d2c5ba4602e8aaaa5eefe94147a28fc",
+  "file_count": 1,
+  "total_bytes": 865196,
+  "scope": "Exact historical #2746 population, including all negative and quarantined outcomes. Numerical summaries and the original manifest/reader remain in the checkout; replay uses the original frozen qualifier in the recorded source checkout. No new external publication.",
+  "files": [
+    {
+      "path": "benchmarks/results/pbe0-ao-batch-capacity-20261024/receipts.json.xz",
+      "bytes": 865196,
+      "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
+    }
+  ]
+}

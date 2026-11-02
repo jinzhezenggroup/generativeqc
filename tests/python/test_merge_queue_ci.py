@@ -148,8 +148,10 @@ def test_wheels_preserve_scoped_pr_and_periodic_qualification() -> None:
         "  workflow_dispatch:", 1
     )[0]
     assert set(re.findall(r'      - "([^"]+)"', pull_request)) == {
+        "CMakeLists.txt",
         ".github/workflows/wheels.yml",
         "cmake/GenerativeQCCudaImplib.cmake",
+        "cmake/cuda_wheel_payload.ld",
         "cmake/3rdparty/implib/**",
         "pyproject.toml",
         "src/cli/wheel_launcher.cpp",
@@ -157,6 +159,7 @@ def test_wheels_preserve_scoped_pr_and_periodic_qualification() -> None:
         "python/ci/prepare-wheel-build.sh",
         ".github/actions/restore-wheel-ccache/**",
         "tools/ci_cpu_ccache_snapshot.py",
+        "tools/ci_select_wheel_matrix.py",
         "python/ci/repair-wheel.sh",
         "src/runtime/nvidia_host_api/**",
         "tools/generate_cuda_implib.py",

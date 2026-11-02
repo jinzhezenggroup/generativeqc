@@ -10,8 +10,8 @@
       "family": "fitted-range-cold-20261024",
       "classification": "required-compact-accepted-evidence",
       "role": "source-reconstruction-work-and-validation-receipts-including-larger-failure",
-      "bytes": 587736,
-      "sha256": "46b5560fe1a50cc40c50f4d45788ffe19475a6f747387ae439333bb03598067b"
+      "bytes": 505596,
+      "sha256": "6a7ce2954fe9074b7d4f578ec6bc97407acca4bd5037b653257c3235abc3b310"
     },
     {
       "path": "benchmarks/results/fitted-range-cold-20261024/integration.json.xz",

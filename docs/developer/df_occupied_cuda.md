@@ -70,9 +70,15 @@ resident full-Gram K, resident flattened dense K, or the default panel-dense
 and triangular occupied route. The plan freezes this policy; changing it
 rebuilds captured SCF work.
 
-Packed resident plans use a compiler-generated triangular FP64 Gram when
+Packed resident plans admit a bounded Gram portfolio when
 `n >= 384`, the reduction `a*r >= 32768`, and at most 64 slices of 32768
-reduction entries fit the existing `exchange_intermediate` capacity. Each
+reduction entries fit the existing `exchange_intermediate` capacity. A positive
+FP32/FP64 throughput ratio at most two and compute capability major at least
+eight admit the typed FP64 full library Gram within this domain; its work
+counters include both triangles. Full scalar FP64 throughput on an older
+architecture is insufficient for this matrix schedule. Capability is
+frozen during preparation independently of explicit packed-projection controls.
+Older, low-FP64 or unknown capability retains the compiler-generated schedule. Each
 32-by-32 lower output tile produces disjoint partials; a second kernel sums
 them in ascending slice order, applies the occupation weight once and writes
 both triangles. Padded AO/reduction tails are explicit. This preserves U for

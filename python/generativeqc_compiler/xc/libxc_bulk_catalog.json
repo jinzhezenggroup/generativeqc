@@ -1,10 +1,10 @@
 {
   "bulk_semantics": "libxc-bulk-interior/v1",
   "counts": {
-    "blocked_registrations": 323,
+    "blocked_registrations": 322,
     "energy_source_files": 268,
-    "graph_imported_registrations": 221,
-    "graph_imported_source_files": 108,
+    "graph_imported_registrations": 222,
+    "graph_imported_source_files": 109,
     "maple_files": 285,
     "registrations": 544
   },
@@ -7287,7 +7287,7 @@
       "name": "MGGA_C_BC95",
       "owner": "src/mgga_c_bc95.c",
       "parameter_setter": "set_ext_params_cpy",
-      "reason": "MapleImportError: unknown Maple symbol 'Fermi_D'"
+      "reason": "independent both-spin E/vxc/fxc fixtures required"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",
@@ -9725,7 +9725,7 @@
       "name": "MGGA_X_M06_L",
       "owner": "src/mgga_x_m06l.c",
       "parameter_setter": "set_ext_params_cpy",
-      "reason": "MapleImportError: unknown Maple symbol 'mgga_series_w'"
+      "reason": "independent both-spin E/vxc/fxc fixtures required"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",
@@ -10498,7 +10498,7 @@
       "name": "MGGA_X_REVM06_L",
       "owner": "src/mgga_x_m06l.c",
       "parameter_setter": "set_ext_params_cpy",
-      "reason": "MapleImportError: unknown Maple symbol 'mgga_series_w'"
+      "reason": "independent both-spin E/vxc/fxc fixtures required"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",
@@ -10708,7 +10708,7 @@
       "name": "MGGA_X_RPPSCAN",
       "owner": "src/mgga_x_rppscan.c",
       "parameter_setter": "set_ext_params_cpy",
-      "reason": "MapleImportError: unknown Maple symbol 'mgga_exchange_nsp'"
+      "reason": "independent both-spin E/vxc/fxc fixtures required"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",
@@ -10724,14 +10724,17 @@
       "entry": "maple/mgga_exc/mgga_x_rscan.mpl",
       "family": "mgga",
       "flags": "XC_FLAGS_3D | XC_FLAGS_NEEDS_TAU | MAPLE2C_FLAGS",
-      "graph_status": "blocked",
+      "graph_nodes": {
+        "polarized": 1045,
+        "unpolarized": 447
+      },
+      "graph_status": "imported",
       "id": 493,
       "kind": "EXCHANGE",
       "metadata_status": "bound",
       "name": "MGGA_X_RSCAN",
       "owner": "src/mgga_x_rscan.c",
-      "parameter_setter": "set_ext_params_cpy",
-      "reason": "MapleImportError: unknown Maple symbol 'mgga_exchange_nsp'"
+      "parameter_setter": "set_ext_params_cpy"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",
@@ -10876,7 +10879,7 @@
       "name": "MGGA_X_TAU_HCTH",
       "owner": "src/mgga_x_tau_hcth.c",
       "parameter_setter": "set_ext_params_cpy",
-      "reason": "MapleImportError: unknown Maple symbol 'mgga_series_w'"
+      "reason": "independent both-spin E/vxc/fxc fixtures required"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",

@@ -267,6 +267,11 @@ struct Plan {
   const auto& initial_guess_policy() const { return policy; }
   void invalidate_final_state() { cuda.invalidate_final_state(); }
   void clear_warm_start() { cuda.clear_warm_start(); }
+  // These seed-policy scenarios are energy-only; the real owner now forwards
+  // the following force envelope before starting the CUDA solve.
+  void set_following_force_memory(bool forces) {
+    if (forces) throw std::logic_error("unexpected force envelope");
+  }
   void add_prepared_native_forces(Result&) { throw std::logic_error("unexpected force request"); }
   void apply_dispersion(Result&) {}
   // This fixture models cold preparation without a NumericCap DF reservation.

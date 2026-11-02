@@ -114,8 +114,11 @@ struct GraphOwner {
 }  // namespace
 
 int main(int argc, char** argv) {
-  const bool derivatives = argc == 3 && std::string(argv[2]) == "--gradient";
-  if ((argc != 2 && !derivatives) || !std::getenv("SLURM_JOB_ID")) return 3;
+  const bool metric_derivatives = argc == 3 && std::string(argv[2]) == "--metric-gradient";
+  const bool derivatives =
+      metric_derivatives || (argc == 3 && std::string(argv[2]) == "--gradient");
+  if ((argc != 2 && !derivatives) || (!std::getenv("SLURM_JOB_ID") && !std::getenv("LSB_JOBID")))
+    return 3;
   try {
     const auto orbital = read_system(), auxiliary = read_system();
     DeviceOwner owner;
@@ -196,7 +199,10 @@ int main(int argc, char** argv) {
       throw std::runtime_error("owner preparation entered a captured stream");
     // Projection deliberately precedes charge: neither call may depend on a
     // previous invocation's Hermite input or stale intermediate potential.
-    if (derivatives) check(cuda_df_md_three_center_gradient(raw, d, v, 1.25, gradient));
+    if (metric_derivatives)
+      check(cuda_df_md_metric_gradient(raw, v, 1.25, gradient));
+    else if (derivatives)
+      check(cuda_df_md_three_center_gradient(raw, d, v, 1.25, gradient));
     check(cuda_df_md_project(raw, v, j));
     check(cuda_df_md_charge(raw, d, rho));
     check(cudaStreamEndCapture(owner.stream, &graph.graph));
@@ -219,7 +225,10 @@ int main(int argc, char** argv) {
         check(cudaMemcpyAsync(gradient, current_gradient.data(), gradient_elements * sizeof(double),
                               cudaMemcpyHostToDevice, owner.stream));
       if (replay == 0) {
-        if (derivatives) check(cuda_df_md_three_center_gradient(raw, d, v, 1.25, gradient));
+        if (metric_derivatives)
+          check(cuda_df_md_metric_gradient(raw, v, 1.25, gradient));
+        else if (derivatives)
+          check(cuda_df_md_three_center_gradient(raw, d, v, 1.25, gradient));
         check(cuda_df_md_project(raw, v, j));
         check(cuda_df_md_charge(raw, d, rho));
       } else {

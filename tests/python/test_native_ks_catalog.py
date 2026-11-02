@@ -14,7 +14,9 @@ from generativeqc_compiler.method import (
     compile_ks_execution_plan,
     resolve_method,
 )
+from generativeqc_compiler.method._generated_xc_aliases import METHOD_ALIASES
 from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
+from generativeqc_compiler.method.spec import METHOD_CATALOG
 
 from tools.generate_cli_method_catalog import rows
 
@@ -224,9 +226,12 @@ def test_entire_catalog_against_independent_compiler_programs(library: Any) -> N
                 continue
             spin = "unpolarized" if row.spin == 1 else "polarized"
             if row.name.startswith(("libxc:", "libxc-uks:")):
-                method = resolve_bulk_ks(
-                    row.name.split(":", 1)[1].upper(), spin=spin
-                ).method
+                identifier = row.name.split(":", 1)[1].upper()
+                method = (
+                    resolve_method(identifier, spin=spin)
+                    if METHOD_ALIASES.get(identifier, identifier) in METHOD_CATALOG
+                    else resolve_bulk_ks(identifier, spin=spin).method
+                )
                 # Compare the compiled catalog with public resolution as well
                 # as its generator: a stale row must not define its own oracle.
                 assert row.domain == resolve_ks_options(row.name).scf_domain

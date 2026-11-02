@@ -19,6 +19,7 @@ from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMI
 from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.automatic_semilocal import (
+    automatic_composition_name,
     automatic_functional_code,
     automatic_scf_domain,
 )
@@ -27,7 +28,6 @@ from generativeqc_compiler.xc.density_work import (
     DENSITY_WORK_DOMAIN_VERSION,
 )
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
-from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 from .ks_execution import compile_ks_execution_plan
 from .stationary_cuda import (
@@ -68,18 +68,23 @@ def native_stationary_model(profile: str) -> tuple[int, int, Fraction, Fraction]
     plan = compile_ks_execution_plan(_qualified_aot_profile(profile).plan.method)
     functional = plan.semilocal.functional
     actual = dict(functional.components)
-    if len(actual) == 1 and next(iter(actual)) in AUTO_BULK_COMPONENTS:
-        name, coefficient = next(iter(actual.items()))
+    if profile.startswith("libxc_"):
         if (
-            coefficient != 1
-            or plan.exchange
-            or plan.nonlocal_correlation
+            plan.nonlocal_correlation
             or plan.post_scf
             or functional.range_omega
+            or len(plan.exchange) > 1
+            or any(term.operator != "full-range" for term in plan.exchange)
         ):
             raise ValueError(
-                "automatic stationary model requires one pure unit component"
+                "automatic stationary model requires a semilocal/global-hybrid recipe"
             )
+        name = automatic_composition_name(
+            functional.components,
+            plan.exchange[0].coefficient if plan.exchange else Fraction(0),
+        )
+        if name is None:
+            raise ValueError("unregistered automatic stationary composition")
         domain = (
             DENSITY_WORK_DOMAIN_VERSION
             if automatic_scf_domain(name) == DENSITY_WORK_DOMAIN
@@ -364,7 +369,7 @@ def native_stationary_shared_contract(profile: str) -> dict:
     selected = _qualified_aot_profile(profile)
     plan = selected.plan
     execution = compile_ks_execution_plan(plan.method)
-    # This also rejects non-unit components, corrections and exact exchange.
+    # This also rejects unregistered recipes, range terms and corrections.
     native_stationary_model(profile)
     from .stationary_cuda import stationary_aot_profile_weight_programs
 
@@ -393,6 +398,9 @@ def emit_native_stationary_profile_cpp(profile: str) -> str:
     plan = selected.plan
     group = native_stationary_shared_group(profile)
     functional, domain, exchange, correlation = native_stationary_model(profile)
+    # The shared consumer owns integral weights, while each registration must
+    # still authenticate the same physical EXX fraction in its public model.
+    full_range = exact_cuda_literal(plan.exchange.coefficient if plan.exchange else 0)
     identity = canonical_hash(
         {
             "schema": "generativeqc.stationary-staged-binding.v1",
@@ -420,7 +428,7 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
     value.source_identity = {json.dumps(identity)};
     value.model = {{{functional}U, {domain}U, {plan.spin_blocks}U,
                     {QUALIFIED_PARTITION_ITERATIONS}U,
-                    {exact_cuda_literal(exchange)}, {exact_cuda_literal(correlation)}, 0.0}};
+                    {exact_cuda_literal(exchange)}, {exact_cuda_literal(correlation)}, {full_range}}};
     value.point_program = generated::automatic_cuda_point_entry({functional}U);
     return value;
   }}();

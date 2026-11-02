@@ -1,0 +1,14 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "997ceca11e1dd6cb89a74ba66d33d4bfbfbd7d1c",
+  "file_count": 1,
+  "total_bytes": 811824,
+  "scope": "Exact superseded structural-XC qualification: all event populations, 1700 complete endpoints, independent gates, failed UKS controls and source overlays remain byte-identical in the already-merged Git commit. Current summaries and original readers remain here; no new external publication.",
+  "files": [
+    {
+      "path": "benchmarks/results/xc-structural-default-20261028/receipts.json.xz",
+      "bytes": 811824,
+      "sha256": "3681eb231aa27f2afe6747a6dbf44a0c5fdd52becb0bba85385f8b2eb17d7e3e"
+    }
+  ]
+}

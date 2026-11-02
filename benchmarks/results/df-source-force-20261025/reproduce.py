@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import lzma
 import math
 import statistics
 from pathlib import Path
@@ -14,7 +15,9 @@ CASES = (("pbe", 48), ("pbe", 96), ("r2scan-3c", 96))
 
 
 def read(name: str) -> object:
-    return json.loads(gzip.decompress((ROOT / name).read_bytes()))
+    """Read lossless XZ numerical receipts; gzip remains for frozen scripts."""
+    decompress = lzma.decompress if name.endswith(".xz") else gzip.decompress
+    return json.loads(decompress((ROOT / name).read_bytes()))
 
 
 def check(sample: dict, reference: dict, atoms: int) -> dict:
@@ -52,7 +55,7 @@ def main() -> None:
         ).hexdigest()
         == provenance["measured_change_sha256"]
     )
-    moved = read("moved.json.gz")
+    moved = read("moved.json.xz")
     references = {
         (item["method"], item["atoms"], item["geometry"]): item["sample"]
         for item in moved
@@ -68,10 +71,10 @@ def main() -> None:
         )
         for item in native
     ]
-    paired = read("paired.json.gz")
+    paired = read("paired.json.xz")
     assert len(populations(paired)) == 27
     assert all(item["returncode"] == 0 for item in paired["commands.json"])
-    ablations = read("ablations.json.gz")
+    ablations = read("ablations.json.xz")
     retained = populations(paired) + [
         item for records in ablations.values() for item in populations(records)
     ]

@@ -30,7 +30,6 @@ from .cuda import CudaGrid
 from .density_source import DensitySource
 from .features import density_features, requested_ingredients, spin_densities
 from .grid import ExplicitGrid, MolecularGrid, checked_int
-from .native_semilocal import device_feature_ingredients, legacy_grid_xc_selector
 from .plan import plan_tiles
 from .spatial import (
     SpatialPolicy,
@@ -540,12 +539,10 @@ class PreparedSpatialGrid:
             cuda = self._cuda
             if cuda is None:
                 raise ValueError("device XC consumption requires CUDA")
-            try:
-                legacy_grid_xc_selector(functional)
-                required = set(device_feature_ingredients(functional))
-            except ValueError as error:
-                raise ValueError("prepared CUDA XC family is not qualified") from error
-            if not required.issubset(cuda.ingredients):
+            capability = cuda.xc_capability(functional)
+            if capability is None or not set(capability.ingredients).issubset(
+                cuda.ingredients
+            ):
                 raise ValueError("prepared CUDA features do not cover native XC")
             self._start_execution(density, stamp=stamp, route=route)
             self._leased = True

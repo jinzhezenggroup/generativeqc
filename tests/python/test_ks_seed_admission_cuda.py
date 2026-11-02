@@ -18,6 +18,29 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def oracle_basis(basis: str) -> dict:
+    """Return bundled coefficients for independent PySCF overlap integration."""
+    pack = json.loads(
+        files("generativeqc").joinpath("data/basis_pack.json").read_text()
+    )
+    elements = pack["bases"][basis]["elements"]
+    return {
+        symbol: [
+            [
+                shell["angular_momentum"],
+                *[
+                    [float(exponent), float(coefficient)]
+                    for exponent, coefficient in zip(
+                        shell["exponents"], shell["coefficients"], strict=True
+                    )
+                ],
+            ]
+            for shell in elements[number]
+        ]
+        for symbol, number in (("O", "8"), ("H", "1"))
+    }
+
+
 @pytest.mark.parametrize("basis", ("sto-3g", "def2-svp"))
 @pytest.mark.parametrize("method", ("lda-rks", "lda-uks"))
 def test_idle_gpu_admission_preserves_ensemble_gates_and_atomicity(
@@ -34,26 +57,7 @@ def test_idle_gpu_admission_preserves_ensemble_gates_and_atomicity(
     # Use the exact bundled exponents/contractions with independent PySCF
     # integrals. PySCF's rounded STO-3G table differs enough to fail the
     # unchanged 1e-7 electron-count gate for the RKS ensemble.
-    pack = json.loads(
-        files("generativeqc").joinpath("data/basis_pack.json").read_text()
-    )
-    elements = pack["bases"][basis]["elements"]
-    oracle_basis = {
-        symbol: [
-            [
-                shell["angular_momentum"],
-                *[
-                    [float(exponent), float(coefficient)]
-                    for exponent, coefficient in zip(
-                        shell["exponents"], shell["coefficients"], strict=True
-                    )
-                ],
-            ]
-            for shell in elements[number]
-        ]
-        for symbol, number in (("O", "8"), ("H", "1"))
-    }
-    mol = gto.M(atom=atoms, basis=oracle_basis, unit="Bohr", verbose=0)
+    mol = gto.M(atom=atoms, basis=oracle_basis(basis), unit="Bohr", verbose=0)
     overlap = mol.intor("int1e_ovlp")
     values, vectors = np.linalg.eigh(overlap)
     x = (vectors / np.sqrt(values)) @ vectors.T
@@ -161,3 +165,116 @@ def test_idle_gpu_admission_preserves_ensemble_gates_and_atomicity(
             == _native.STATUS_SUCCESS
         )
         assert np.array_equal(warm_snapshot(batch, 0)[0], near_symmetric)
+
+
+@pytest.mark.parametrize("atom_count,df_budget_mib", ((96, 512), (120, 1024)))
+def test_large_idle_seed_rejection_preserves_final_state(
+    atom_count: int, df_budget_mib: int
+) -> None:
+    """An independent negative occupation must not corrupt a large live owner.
+
+    These 768/960-AO cases reach the borrowed product provider. PySCF supplies only
+    the overlap oracle; both production trajectories start from native seeds.
+    A successful neighbor followed by a rejected item must restore atomically,
+    including the already published final-state token and frozen warm density.
+    """
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
+    gto = pytest.importorskip("pyscf.gto")
+    from benchmarks.readme_hf_scaling import scaling_cases
+
+    atoms = list(scaling_cases()["water-96"].atoms)
+    if atom_count > len(atoms):
+        # Extend the fixture without changing any water's internal geometry.
+        atoms += [
+            (symbol, (xyz[0], xyz[1], xyz[2] + 30.0))
+            for symbol, xyz in atoms[: atom_count - len(atoms)]
+        ]
+    calc = Calculator(
+        "pbe-rks",
+        "def2-svp",
+        basis_representation="spherical",
+        device="cuda",
+        density_fitting="cuda",
+        auxiliary_basis="def2-svp",
+        # Below each multi-GiB dense source, but sufficient for its charged
+        # metric/provider scratch. Smaller 64/512-MiB caps, respectively,
+        # reject these shapes before any seed-validation operation can run.
+        density_fitting_memory_budget_bytes=df_budget_mib << 20,
+        # This checks state ownership, rather than default-grid accuracy.
+        # Tighten SCF so the cold/moved force comparison is not dominated by
+        # the Standard policy's independently allowed convergence error.
+        ks_options=KsOptions(grid=GridSpec(16, 8, 16), force_tile_points=1024),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+    )
+    molecule = gto.M(atom=atoms, unit="Bohr", basis=oracle_basis("def2-svp"), verbose=0)
+    overlap = molecule.intor("int1e_ovlp")
+    values, vectors = np.linalg.eigh(overlap)
+    x = (vectors / np.sqrt(values)) @ vectors.T
+    n = len(values)
+    assert n >= 512
+    spectrum = np.full(n, molecule.nelectron / n)
+    good = (x @ np.diag(spectrum) @ x.T).ravel()
+    spectrum[1] += spectrum[0] + 0.1
+    spectrum[0] = -0.1
+    bad = (x @ np.diag(spectrum) @ x.T).ravel()
+    for density in (good, bad):
+        assert np.dot(density, overlap.ravel()) == pytest.approx(
+            molecule.nelectron, abs=1e-8
+        )
+    with calc.prepare_batch([atoms, atoms], warm_start=True) as batch:
+        before = batch.execute(strict=True, properties=("energy", "forces"))
+        saved = [warm_snapshot(batch, i) for i in range(2)]
+        snapshot = NativeKsSnapshot(batch, 0)
+        try:
+            assert (
+                restore_snapshots(
+                    batch,
+                    [(good, saved[0][1], saved[0][2]), (bad, saved[1][1], saved[1][2])],
+                )
+                == _native.STATUS_INVALID_ARGUMENT
+            )
+            snapshot.check_current()
+            for i in range(2):
+                restored = warm_snapshot(batch, i)
+                np.testing.assert_array_equal(restored[0], saved[i][0])
+                np.testing.assert_array_equal(restored[1], saved[i][1])
+                assert restored[2] == saved[i][2]
+        finally:
+            snapshot.close()
+        after = batch.execute(strict=True, properties=("energy", "forces"))
+        for original, replay in zip(before.items, after.items, strict=True):
+            assert replay.warm_start_used and not replay.warm_start_fallback
+            assert replay.energy == pytest.approx(original.energy, abs=1e-8)
+            np.testing.assert_allclose(
+                replay.forces, original.forces, atol=1e-7, rtol=0
+            )
+        positions = np.asarray([xyz for _, xyz in atoms])
+        positions[1, 2] += 0.025
+        changed = batch.execute(
+            [positions, np.asarray([xyz for _, xyz in atoms])],
+            strict=True,
+            properties=("energy", "forces"),
+        ).items[0]
+        fresh = calc.singlepoint(
+            [
+                (symbol, tuple(xyz))
+                for (symbol, _), xyz in zip(atoms, positions, strict=True)
+            ],
+            properties=("energy", "forces"),
+        )
+        assert changed.energy == pytest.approx(fresh.energy, abs=1e-8)
+        np.testing.assert_allclose(changed.forces, fresh.forces, atol=1e-7, rtol=0)
+
+        # Positive admission is independent of the rejected mixed batch. Do it
+        # after the original replay/moved checks so those retain their seeds.
+        neighbor = warm_snapshot(batch, 1)
+        assert (
+            restore_snapshots(batch, [(good, saved[0][1], saved[0][2]), None])
+            == _native.STATUS_SUCCESS
+        )
+        np.testing.assert_array_equal(warm_snapshot(batch, 0)[0], good)
+        retained = warm_snapshot(batch, 1)
+        np.testing.assert_array_equal(retained[0], neighbor[0])
+        np.testing.assert_array_equal(retained[1], neighbor[1])
+        assert retained[2] == neighbor[2]

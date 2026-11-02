@@ -2,56 +2,6 @@
   "benchmark_results_max_bytes": 83886080,
   "change_review_max_bytes": 2097152,
   "exceptions": {
-    "benchmarks/results/pbe0-fast-20261013/complete-gradient-test-prehybrid-guard.log.xz": {
-      "owner": "pbe0-fast-20261013",
-      "reason": "Original complete-gradient test receipt from the superseded small-hybrid candidate; retained as historical evidence, not integrated-head validation.",
-      "sha256": "b7f1aa664bcc8e3255abeb0eb0927f8d6a9d9630681a0181b374964c1ab41499"
-    },
-    "benchmarks/results/pbe0-fast-20261013/complete-gradient-test.log.xz": {
-      "owner": "pbe0-fast-20261013",
-      "reason": "Exact independent complete-gradient qualification receipt for the historical FP64 source-reuse candidate, whose source/library identities are retained separately.",
-      "sha256": "a5a1883dd3fe0a1ab71c6e592795bb05bf5317daae8ca85b368ae2a520db6807"
-    },
-    "benchmarks/results/pbe0-fast-20261013/gpu-tests-missing-ccache.log.xz": {
-      "owner": "pbe0-fast-20261013",
-      "reason": "Original failed prerequisite receipt; skipped probes remain explicitly distinct from later passing qualification.",
-      "sha256": "8981375e4102ad7252b21e1a02c7374e322df102a0e316ff672ff524764a602a"
-    },
-    "benchmarks/results/pbe0-fast-20261013/gpu-tests-prehybrid-guard.log.xz": {
-      "owner": "pbe0-fast-20261013",
-      "reason": "Exact GPU test receipt for the earlier candidate before tightening the hybrid-only source policy; never relabelled as final-source acceptance.",
-      "sha256": "9be829706e9c936495c6f7c14e6888789b055ffb6dc70e18ecb9ba507a91668e"
-    },
-    "benchmarks/results/pbe0-fast-20261013/gpu-tests.log.xz": {
-      "owner": "pbe0-fast-20261013",
-      "reason": "Exact scheduled GPU test receipt for the historical small-hybrid source-reuse candidate, not a new mixed-precision speed claim.",
-      "sha256": "d1f5001b6e4eb6c6c60a9b113ec50669272056b273ce3696345cf77e5fe1d772"
-    },
-    "benchmarks/results/pbe0-fast-20261013/memcheck-prehybrid-guard.log.xz": {
-      "owner": "pbe0-fast-20261013",
-      "reason": "Exact instrumented memory-check receipt for the superseded candidate; instrumented timings are excluded from speed claims.",
-      "sha256": "cb644800f12226db8a78c85ca21c576e1c034d399c810be95db0ea1d1edd224e"
-    },
-    "benchmarks/results/pbe0-fast-20261013/memcheck.log.xz": {
-      "owner": "pbe0-fast-20261013",
-      "reason": "Exact instrumented memory-check receipt for the historical final source-reuse candidate; source and Slurm identities are recorded separately.",
-      "sha256": "7ba1b9dec25219564ae8c33f6c6ad48b4c90526c33915045fcfb4fc577ccfa82"
-    },
-    "benchmarks/results/pbe0-source-reuse-20261013/complete-gradient-test.log.xz": {
-      "owner": "pbe0-source-reuse-20261013",
-      "reason": "Exact compact passing complete-gradient receipt; oracle and reported binary identity are retained separately. This aggregate outcome does not independently bind source or job identity.",
-      "sha256": "a5a1883dd3fe0a1ab71c6e592795bb05bf5317daae8ca85b368ae2a520db6807"
-    },
-    "benchmarks/results/pbe0-source-reuse-20261013/gpu-tests.log.xz": {
-      "owner": "pbe0-source-reuse-20261013",
-      "reason": "Exact compact four-test GPU acceptance receipt. Source and Slurm bindings are reported metadata; complete measured-build provenance remains unverified. No later-master requalification is claimed.",
-      "sha256": "d1f5001b6e4eb6c6c60a9b113ec50669272056b273ce3696345cf77e5fe1d772"
-    },
-    "benchmarks/results/pbe0-source-reuse-20261013/memcheck.log.xz": {
-      "owner": "pbe0-source-reuse-20261013",
-      "reason": "Exact compact compute-sanitizer zero-error and zero-leak receipt, paired with complete endpoint results. Instrumented timing is excluded from performance claims.",
-      "sha256": "7ba1b9dec25219564ae8c33f6c6ad48b4c90526c33915045fcfb4fc577ccfa82"
-    },
     "benchmarks/results/array-api-rhf-slurm-20261011/build/configure.log": {
       "owner": "array-api-rhf-slurm-20261011",
       "reason": "Small exact compiler/toolkit/profile qualification receipt for the frozen source-matched Release/sm_120 CUDA library. Retains initial/final configuration provenance, distinguishing the measured force-AOT-off build from an unverified prebuilt library; objects and full build logs remain ignored.",
@@ -201,6 +151,12 @@
       "owner": "df-cbs-qm7-20261012",
       "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
       "sha256": "dc43b83c39e799a1f26885eda13553e3b9283d210e8292691923dba679fe5173"
+    },
+    "benchmarks/results/h100-direct-wb97mv-20261024/terminal-evidence.json.xz": {
+      "owner": "H100 Direct WB97M-V historical evidence storage",
+      "reason": "Storage-only UTF-8/base64 representation of the same 840 SHA-authenticated historical byte objects. Exact recovery and all 11 historical reader tests pass. This exception covers duplicate review cost of this exact lossless re-encoding only; no new GPU qualification or change to individual/aggregate storage caps. See the 2026-11-02 exact historical evidence storage Agent Note.",
+      "sha256": "7b11180809ab45d366690bf74df13925bc674c69a3287c118b0cd80b32fa3a3e",
+      "review_change": true
     },
     "benchmarks/results/issue206-direct-force-state/integration-e4f2f67/00-configure.log.gz": {
       "owner": "issue206-direct-force-state/integration-e4f2f67",
@@ -362,10 +318,60 @@
       "reason": "Exact compact final-source racecheck receipt: two selected resident tests pass, fourteen are deselected, and zero hazards/errors/warnings are reported. Preserves actual coverage rather than claiming all 16 tests ran under racecheck.",
       "sha256": "fe2c159a2f873bb0b512cd5b4c4d4ce0a51fcc8111e72f6e4e8dacecbd5c9160"
     },
-    "benchmarks/results/readme-defaults-20261020/receipts.json.xz": {
+    "benchmarks/results/pbe0-fast-20261013/complete-gradient-test-prehybrid-guard.log.xz": {
+      "owner": "pbe0-fast-20261013",
+      "reason": "Original complete-gradient test receipt from the superseded small-hybrid candidate; retained as historical evidence, not integrated-head validation.",
+      "sha256": "b7f1aa664bcc8e3255abeb0eb0927f8d6a9d9630681a0181b374964c1ab41499"
+    },
+    "benchmarks/results/pbe0-fast-20261013/complete-gradient-test.log.xz": {
+      "owner": "pbe0-fast-20261013",
+      "reason": "Exact independent complete-gradient qualification receipt for the historical FP64 source-reuse candidate, whose source/library identities are retained separately.",
+      "sha256": "a5a1883dd3fe0a1ab71c6e592795bb05bf5317daae8ca85b368ae2a520db6807"
+    },
+    "benchmarks/results/pbe0-fast-20261013/gpu-tests-missing-ccache.log.xz": {
+      "owner": "pbe0-fast-20261013",
+      "reason": "Original failed prerequisite receipt; skipped probes remain explicitly distinct from later passing qualification.",
+      "sha256": "8981375e4102ad7252b21e1a02c7374e322df102a0e316ff672ff524764a602a"
+    },
+    "benchmarks/results/pbe0-fast-20261013/gpu-tests-prehybrid-guard.log.xz": {
+      "owner": "pbe0-fast-20261013",
+      "reason": "Exact GPU test receipt for the earlier candidate before tightening the hybrid-only source policy; never relabelled as final-source acceptance.",
+      "sha256": "9be829706e9c936495c6f7c14e6888789b055ffb6dc70e18ecb9ba507a91668e"
+    },
+    "benchmarks/results/pbe0-fast-20261013/gpu-tests.log.xz": {
+      "owner": "pbe0-fast-20261013",
+      "reason": "Exact scheduled GPU test receipt for the historical small-hybrid source-reuse candidate, not a new mixed-precision speed claim.",
+      "sha256": "d1f5001b6e4eb6c6c60a9b113ec50669272056b273ce3696345cf77e5fe1d772"
+    },
+    "benchmarks/results/pbe0-fast-20261013/memcheck-prehybrid-guard.log.xz": {
+      "owner": "pbe0-fast-20261013",
+      "reason": "Exact instrumented memory-check receipt for the superseded candidate; instrumented timings are excluded from speed claims.",
+      "sha256": "cb644800f12226db8a78c85ca21c576e1c034d399c810be95db0ea1d1edd224e"
+    },
+    "benchmarks/results/pbe0-fast-20261013/memcheck.log.xz": {
+      "owner": "pbe0-fast-20261013",
+      "reason": "Exact instrumented memory-check receipt for the historical final source-reuse candidate; source and Slurm identities are recorded separately.",
+      "sha256": "7ba1b9dec25219564ae8c33f6c6ad48b4c90526c33915045fcfb4fc577ccfa82"
+    },
+    "benchmarks/results/pbe0-source-reuse-20261013/complete-gradient-test.log.xz": {
+      "owner": "pbe0-source-reuse-20261013",
+      "reason": "Exact compact passing complete-gradient receipt; oracle and reported binary identity are retained separately. This aggregate outcome does not independently bind source or job identity.",
+      "sha256": "a5a1883dd3fe0a1ab71c6e592795bb05bf5317daae8ca85b368ae2a520db6807"
+    },
+    "benchmarks/results/pbe0-source-reuse-20261013/gpu-tests.log.xz": {
+      "owner": "pbe0-source-reuse-20261013",
+      "reason": "Exact compact four-test GPU acceptance receipt. Source and Slurm bindings are reported metadata; complete measured-build provenance remains unverified. No later-master requalification is claimed.",
+      "sha256": "d1f5001b6e4eb6c6c60a9b113ec50669272056b273ce3696345cf77e5fe1d772"
+    },
+    "benchmarks/results/pbe0-source-reuse-20261013/memcheck.log.xz": {
+      "owner": "pbe0-source-reuse-20261013",
+      "reason": "Exact compact compute-sanitizer zero-error and zero-leak receipt, paired with complete endpoint results. Instrumented timing is excluded from performance claims.",
+      "sha256": "7ba1b9dec25219564ae8c33f6c6ad48b4c90526c33915045fcfb4fc577ccfa82"
+    },
+    "benchmarks/results/readme-defaults-20261020/fp64.xz": {
       "owner": "README default-grid baseline and replacement comparison",
-      "reason": "Exact original 256-population baseline, retained alongside the unified replacement so prior numerical values, slower Fast results and failures remain independently auditable. This source-frozen historical receipt is unchanged by the replacement campaign; waive only its duplicate change-review charge, retaining the hard per-file and aggregate checkout caps.",
-      "sha256": "226813e5e07af11387926a1ec1dd9f5dbfa1054be54cbe78faa692a6d03327bb",
+      "reason": "Exact FP64 stream of the original 256-population historical baseline, whose complete container is reconstructed byte for byte by the authenticated loader. Carry the pre-existing historical change-review exception to its lossless numerical representation; no new experiment, erased failure, or per-file/aggregate limit change.",
+      "sha256": "16c59f8b372ff6729f26d9826cdb1d280e7507d4763eb98867853193f6bd337b",
       "review_change": true
     },
     "benchmarks/results/shared-force-parameter-integration-20261028/final/build-before-cosx-fix/build.log.xz": {

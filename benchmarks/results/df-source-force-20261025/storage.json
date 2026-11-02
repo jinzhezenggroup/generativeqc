@@ -1,0 +1,50 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_commit": "b0f9aaba140988a2a626e9e4ab1b3e4921a2720f",
+  "files": [
+    {
+      "original_path": "benchmarks/results/df-source-force-20261025/paired.json.gz",
+      "original_git_blob": "096d0fb642b776ea00bd281f6abb512b9a2db1c3",
+      "original_sha256": "800fceddf5c0f96b768bec2dae3d94daaec95f4b4d113e356cf449c19696c21e",
+      "original_bytes": 231784,
+      "stored_path": "benchmarks/results/df-source-force-20261025/paired.json.xz",
+      "stored_sha256": "63aff92b4a7cc937ac16fee6f52000b106b654a5bae8ec8026a1ff89cad52a19",
+      "stored_bytes": 90624,
+      "decoded_sha256": "0c1695ff9431620b1feba5f6c83bab5dd6c6c3c4d7292c51e391c0dbc0a44497",
+      "decoded_bytes": 1180075
+    },
+    {
+      "original_path": "benchmarks/results/df-source-force-20261025/ablations.json.gz",
+      "original_git_blob": "336e492e6266a3da6f1d692600aca522206b2c97",
+      "original_sha256": "c74b88c7edf1b1139c84eb1739020714c3ac452a85a757bf49c649e22729c2b8",
+      "original_bytes": 109146,
+      "stored_path": "benchmarks/results/df-source-force-20261025/ablations.json.xz",
+      "stored_sha256": "d718f4361c6d80c1ff5e0a64861bcb064688aad6a4462475959491dbbdde5186",
+      "stored_bytes": 43776,
+      "decoded_sha256": "b603cd958f11718ce5598192bf3082dcd464307837b59bafcb34440601b49918",
+      "decoded_bytes": 619839
+    },
+    {
+      "original_path": "benchmarks/results/df-source-force-20261025/execution-receipts.json.gz",
+      "original_git_blob": "f4c1ac616743c276e8c4e9db0c570f7d106398cb",
+      "original_sha256": "300f0aa4e83564c426e3fde2fa3515e72fbfdaef29a7d8506c8633228acecd05",
+      "original_bytes": 92403,
+      "stored_path": "benchmarks/results/df-source-force-20261025/execution-receipts.json.xz",
+      "stored_sha256": "233ae4f8adf659e8a87d7e1e7fc4d2674e07485aaecab878cfeb43587c8459d3",
+      "stored_bytes": 37636,
+      "decoded_sha256": "cef1141f3380c21668eb083c8b63797ee62afc7c07dace565c31ae5163a9c8e7",
+      "decoded_bytes": 2463711
+    },
+    {
+      "original_path": "benchmarks/results/df-source-force-20261025/moved.json.gz",
+      "original_git_blob": "a583f4818eaf90374f3893a7f51c7939c1bcdd3c",
+      "original_sha256": "322a8d1ae1dadfc81ffbac0562eec7602d8fb476e96aa9f869820e43f58b2299",
+      "original_bytes": 40513,
+      "stored_path": "benchmarks/results/df-source-force-20261025/moved.json.xz",
+      "stored_sha256": "2cb2ab6d6ebbcbb3311e6aec438fba05b3cdcde6586458f20781f6004cb5f71a",
+      "stored_bytes": 29944,
+      "decoded_sha256": "ac1c69b64041e7eb756d3ca480427e933003547ab378c1b650e5d8a10faa08ae",
+      "decoded_bytes": 139181
+    }
+  ]
+}

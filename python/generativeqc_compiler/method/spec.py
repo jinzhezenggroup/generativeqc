@@ -730,6 +730,15 @@ METHOD_CATALOG = MappingProxyType(
             "R2SCAN",
             (("MGGA_X_R2SCAN", Fraction(1)), ("MGGA_C_R2SCAN", Fraction(1))),
         ),
+        "RSCAN": MethodSpec(
+            "RSCAN",
+            (("MGGA_X_RSCAN", Fraction(1)), ("MGGA_C_RSCAN", Fraction(1))),
+        ),
+        "RSCAN0": MethodSpec(
+            "RSCAN0",
+            (("MGGA_X_RSCAN", Fraction(3, 4)), ("MGGA_C_RSCAN", Fraction(1))),
+            exact_exchange=Fraction(1, 4),
+        ),
         "R2SCANH": MethodSpec(
             "R2SCANH",
             (("MGGA_X_R2SCAN", Fraction(9, 10)), ("MGGA_C_R2SCAN", Fraction(1))),

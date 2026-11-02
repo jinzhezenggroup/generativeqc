@@ -98,17 +98,17 @@ not a clipped density or a successful Fast result after strict recovery.
 `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc
 entries from the common structural automatic registry. It is off by default;
 the disabled registry returns no automatic entries. An enabled library can
-prepare public automatic pure-semilocal RKS/UKS energy endpoints through the
+prepare public automatic semilocal and registered global-hybrid RKS/UKS energy endpoints through the
 ordinary native KS owner. The contract is strict-FP64, device-fused, all-electron
-execution with J only. Missing static providers fail with a build-option
+execution with J and, for a global hybrid, matching full-range K. Missing static providers fail with a build-option
 diagnostic; there is no CPU fallback or runtime NVCC/Maple/Libxc.
 With `GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON` and a matching linked force
 profile, explicit analytic forces use the same native prepared owner. The force
-envelope is strict FP64, device-fused, all-electron s/p orbitals, direct J only
+envelope is strict FP64, device-fused, all-electron s/p orbitals, direct J/K
 and three Becke partition iterations. Preparation and resource planning query
 the same exact model/domain/spin binding. Missing force artifacts and unsupported
 shapes fail explicitly; automatic methods keep energy-only default outputs.
-Hessian/HVP, Laplacian/current ingredients, nonlocal and exact-exchange additions
+Hessian/HVP, Laplacian/current ingredients, nonlocal and range-exchange additions
 do not follow from this semilocal force contract.
 Automatic CUDA UKS additionally requires nonzero occupations in both spin
 channels. Empty-spin requests fail at preparation with an explicit physical-birth
@@ -880,6 +880,11 @@ energy-plus-force default.
 
 ## SCF local AO selection
 
+The split-hybrid capability manifest admits both M06-2X and MN15 for physical
+FP64 local AO execution. This admission does not enable mixed density/AO
+arithmetic or response. The shared resource and map rules below apply equally
+to source-derived and built-in point programs.
+
 Geometry-bound AO discovery is requested automatically for device-fused XC
 layouts whose compiler-emitted point program and physical FP64 layout support
 local AO selection. The XC owner determines legality; SCF does not add a
@@ -985,6 +990,24 @@ baselines preserve the original convergence checks in both cases. Every call
 still evaluates the physical Fock, convergence gates, derivatives and force
 assembly.
 
+The incumbent warm-energy anchor is deferred by default for strict FP64 fitted
+RKS with an exact
+warm AO factor and an audited replayable range source. For energy-and-force
+requests, the already planned additional force envelope must fit available
+device memory; otherwise the eager anchor remains in place. Selection uses
+resource requirements, with no GPU-model condition. Setting
+`GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY=0` restores eager preparation.
+Unset and `1` select the guarded default; other explicit values conservatively
+retain eager preparation. Unsupported owners retain the eager path.
+
+If a later replay loses its source, preparation restores the frozen warm density
+and factor and rebuilds their matching incumbent energy using their own saved
+XC scalars. This extra Fock action appears in the `preparation` precision phase
+and the ordinary public work census. Current final-state force leases remain
+untouched during eviction. Explicit and transported seeds cannot inherit the
+source owner's deferred anchor. Performance validation must inspect the first
+warm call and the whole lifecycle separately from a pooled warm median.
+
 `GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE=1` is a default-off Direct RSH force
 experiment. A token-authenticated host snapshot may reuse only the two-electron
 response when every density bit agrees within the same immutable prepared owner.
@@ -1006,6 +1029,31 @@ Its host allowance includes
 comparison scratch, is capped at 64 MiB and one quarter of the host budget, and
 uses only remaining admitted capacity. Hits report zero executed geometry and
 pair work. This control is also default-off pending endpoint qualification.
+
+The native stationary and standalone VV10 force owners retain exact force seeds
+within their immutable geometry, quadrature and parameter lifetime. Before
+reusing them, the device compares all seven density-dependent pair ingredients
+bitwise, including finite values and prior/current error status. The current AO
+and moving-grid force assembly still executes with the current density features.
+Schedule changes, explicit disable, errors and owner replacement prevent reuse.
+`GENERATIVEQC_VV10_COMPONENT_REUSE` defaults to this comparison at 65,536 grid
+points; `1` also admits smaller fixtures, and other nonempty values disable it.
+There is no GPU-model restriction.
+
+The native stationary owner adds no device allocation or capacity tier. Its
+existing pair workspace retains the key after those scratch rows become dead,
+and its existing force-seed buffer retains the result. The unused scalar energy
+slot following the six force-seed rows holds the comparison predicate; scalar
+pair energy uses the dead energy-term scratch before the key is stored. Both
+cached and minimum-capacity owners can reuse exact seeds without displacing
+geometry or AO maps. Disabled selectors, absent/unequal keys and refused
+scientific domains retain the complete pair sweep.
+The `stationary_force` trace records `nonlocal_pair_key_comparisons`,
+`nonlocal_pair_cache_hits` and `nonlocal_pair_sweeps` for each complete force call.
+Use `tests/python/test_native_stationary_nonlocal_reuse_cuda.py` with
+`GENERATIVEQC_TEST_WB97MV_CUDA=1` in a finite GPU allocation for independent
+energy/force, movement, failure, schedule and capacity gates. Complete endpoint
+timing must run separately with tracing disabled.
 
 The explicit `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-wide` experiment uses
 eight rows per lane and retains row inputs for admitted VV10 domains with at

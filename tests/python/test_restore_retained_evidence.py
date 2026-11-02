@@ -334,7 +334,7 @@ def test_checked_in_snapshot_has_only_git_identity() -> None:
     manifest = (
         module.ROOT / "benchmarks/results/retention-checkout/snapshot.manifest.json"
     )
-    audit = json.loads(manifest.read_text())
+    audit = module._manifest(manifest)
     assert audit["schema"] == "vibeqc.git-snapshot.v1"
     assert not any(key.startswith("archive_") for key in audit)
     records = module._records(manifest)
@@ -384,3 +384,33 @@ def test_git_object_snapshot_restores_by_blob_identity(historical: typing.Any) -
     manifest.write_text(json.dumps(object_audit))
     with pytest.raises(ValueError, match="checksum"):
         module.restore(name, manifest=manifest)
+
+
+def test_compressed_manifest_preserves_original_inventory(snapshot: typing.Any) -> None:
+    """Recovery authenticates both storage and exact original manifest bytes."""
+    import lzma
+
+    _, manifest, _, _ = snapshot
+    raw = manifest.read_bytes()
+    original = module._records(manifest)
+    payload = manifest.with_suffix(".json.xz")
+    payload.write_bytes(lzma.compress(raw))
+    descriptor = {
+        "schema": "generativeqc.compressed-manifest.v1",
+        "payload": payload.name,
+        "payload_sha256": hashlib.sha256(payload.read_bytes()).hexdigest(),
+        "decoded_bytes": len(raw),
+        "decoded_sha256": hashlib.sha256(raw).hexdigest(),
+    }
+    manifest.write_text(json.dumps(descriptor))
+    assert module._records(manifest) == original
+    for field, value in (
+        ("payload", "../escape.xz"),
+        ("payload_sha256", "0" * 64),
+        ("decoded_sha256", "0" * 64),
+        ("decoded_bytes", len(raw) - 1),
+        ("decoded_bytes", 0),
+    ):
+        manifest.write_text(json.dumps({**descriptor, field: value}))
+        with pytest.raises(ValueError):
+            module._records(manifest)

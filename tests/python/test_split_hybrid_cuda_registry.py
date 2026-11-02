@@ -53,7 +53,7 @@ def test_split_hybrid_registry_uses_stable_libxc_encoded_codes() -> None:
     assert entries["M06-2X"]["cuda_df_energy_force"] is True
     assert entries["MN15"]["cuda_df_energy_force"] is True
     assert entries["M06-2X"]["cuda_fp64_local_ao"] is True
-    assert entries["MN15"]["cuda_fp64_local_ao"] is False
+    assert entries["MN15"]["cuda_fp64_local_ao"] is True
     assert GGA_CODE_BASE != MGGA_CODE_BASE
 
 

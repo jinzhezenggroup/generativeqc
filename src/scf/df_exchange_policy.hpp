@@ -7,6 +7,36 @@
 
 namespace generativeqc::scf {
 
+/** Explicit packed-projection controls remain available for paired ablations. */
+inline bool df_packed_projection_blas_requested() noexcept {
+  const char* value = std::getenv("GENERATIVEQC_DF_PACKED_PROJECTION");
+  return value && std::strcmp(value, "blas") == 0;
+}
+
+inline bool df_packed_projection_auto_requested() noexcept {
+  const char* value = std::getenv("GENERATIVEQC_DF_PACKED_PROJECTION");
+  return !value || std::strcmp(value, "auto") == 0;
+}
+
+inline bool df_packed_projection_policy_valid() noexcept {
+  const char* value = std::getenv("GENERATIVEQC_DF_PACKED_PROJECTION");
+  return !value || std::strcmp(value, "auto") == 0 || std::strcmp(value, "generated") == 0 ||
+         std::strcmp(value, "blas") == 0;
+}
+
+/** Conservative work/resource domain for full-throughput FP64 hardware.
+ * The extra unpack traverses 2*n*n*a doubles; enough occupied columns and
+ * batched rows must amortize that traffic and the library launches. Small or
+ * narrow contractions and throughput-limited FP64 retain generated execution.
+ * The CUDA throughput ratio is a capability, never a GPU-name allowlist.
+ * This measured admission is not a universal latency model for all shapes.
+ */
+inline bool df_packed_projection_preferred(std::size_t n, std::size_t a, std::size_t rank,
+                                           std::size_t capacity, int fp32_fp64_ratio) noexcept {
+  return fp32_fp64_ratio > 0 && fp32_fp64_ratio <= 2 && n >= 256 && a >= 1024 && rank >= 64 &&
+         rank <= n && capacity / n / a >= 8;
+}
+
 /** Diagnostic legacy contraction requires a new owner: captured J/K nodes
  * and the immutable raw-buffer lifetime must follow the same frozen policy. */
 inline bool df_resident_exchange_requested() noexcept {

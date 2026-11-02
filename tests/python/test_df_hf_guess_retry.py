@@ -106,7 +106,7 @@ DensityFittingTilePlan plan_requested_density_fitting_tiles(DfPairStorageRequest
   return plan;
 }
 ScfResult run_rhf_density_fitting_cuda(const core::System& s,const core::System& a,const ScfOptions& o,int d,const std::vector<double>* density,initial_guess::OverlapOrthogonalizer*) {return ::run_rhf_density_fitting_cuda_impl(s,a,o,d,density,nullptr);}
-void validate_hf_warm_density(const core::System&,generativeqc_method,const std::vector<double>&,const initial_guess::EigenOperation&){}
+void validate_hf_warm_density(const core::System&,generativeqc_method,const std::vector<double>&,const initial_guess::EigenOperation&, const initial_guess::MatrixProductOperation&){}
 }
 
 int main() {

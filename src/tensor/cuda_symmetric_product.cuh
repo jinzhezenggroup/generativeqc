@@ -11,9 +11,10 @@
 namespace generativeqc::tensor {
 
 #if defined(GENERATIVEQC_TEST_HOOKS)
-// Explicit qualification only: production has no retained endpoint profile yet.
+// Test-only recipe probes remain independent of the consumer's device/work policy.
 inline thread_local bool symmetric_product_library_for_test = false;
 inline thread_local bool symmetric_product_indexed_library_for_test = false;
+inline thread_local bool symmetric_product_indexed_gemm_for_test = false;
 inline thread_local bool symmetric_product_unavailable_for_test = false;
 #endif
 
@@ -37,6 +38,7 @@ __global__ void publish(double* c, std::size_t n, std::size_t batches, int* erro
  * Unique sorted IDs give each thread exclusive ownership of both matrix legs;
  * successive tiles are ordered on the prepared stream, so no atomics or dense
  * zero/scatter buffer is needed. Entries outside the view remain untouched. */
+template <bool CrossProduct>
 __global__ void scatter(const double* compact, double* output, const std::size_t* ids,
                         std::size_t n, std::size_t full, std::size_t batches, bool accumulate,
                         int* error) {
@@ -50,6 +52,9 @@ __global__ void scatter(const double* compact, double* output, const std::size_t
       continue;
     }
     auto value = compact[i];
+    // A GEMM cache contains X rather than X + X^T; the diagonal also needs
+    // both legs. Each thread owns the same final triangle as the SYR2K route.
+    if constexpr (CrossProduct) value += compact[(spin * n + col) * n + row];
     if (!isfinite(value)) {
       atomicCAS(error, 0, 3);
       value = 0.0;
@@ -66,7 +71,7 @@ __global__ void scatter(const double* compact, double* output, const std::size_t
 }
 }  // namespace symmetric_product_detail
 
-/** Bounded rank-2k executor with an immutable shared-provider selection.
+/** Bounded symmetric-product executor with an immutable provider selection.
  * An independently qualified indexed recipe uses one charged compact-output
  * cache and scatters into the caller's mapped destination. No selection or
  * allocation occurs per tile. Unadmitted domains retain the generated callback.
@@ -78,9 +83,10 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
                        const std::array<runtime::NativeLoweringCandidate, N>& candidates,
                        std::string_view target, std::string_view compilation, std::size_t columns,
                        std::size_t reduction, std::size_t batches, cudaStream_t stream,
-                       std::size_t provider_budget, bool indexed = false, bool nonempty = true)
+                       std::size_t provider_budget, bool indexed = false, bool nonempty = true,
+                       bool indexed_gemm = false)
       : columns_(columns), reduction_(reduction), batches_(batches), indexed_(indexed) {
-    static_assert(N == 3);
+    static_assert(N == 4);
     static_assert(sizeof(CudaSymmetricProduct) + 3 * sizeof(candidates) + 8192 <= host_reservation);
     if (request.dtype != runtime::PrecisionDtype::Fp64 ||
         request.accumulation_dtype != runtime::PrecisionDtype::Fp64 || request.inputs != 3 ||
@@ -93,9 +99,11 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
         !request.precisions[0].casts.empty() || !request.precisions[0].refinement.empty() ||
         !request.precisions[0].audit.empty() || candidates[0].provider != "generated.cuda" ||
         candidates[1].provider != "cublas" || candidates[2].provider != "cublas" ||
+        candidates[3].provider != "cublas" ||
         candidates[0].algorithm != "symmetric-cross-generated" ||
         candidates[1].algorithm != "symmetric-cross-rank2k" ||
-        candidates[2].algorithm != "indexed-symmetric-cross-rank2k")
+        candidates[2].algorithm != "indexed-symmetric-cross-rank2k" ||
+        candidates[3].algorithm != "indexed-symmetric-cross-gemm")
       throw std::invalid_argument("symmetric product requires the canonical strict-FP64 portfolio");
     if (!columns || !reduction || !batches) throw std::invalid_argument("empty symmetric domain");
     const auto matrix_bytes = contraction_product(
@@ -107,32 +115,44 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
     // Include shared binding/preparation storage in each executable offer, so
     // candidate provenance agrees with the enclosing owner's resource charge.
     for (auto& offer : offers) offer.host_bytes = host_reservation;
-    bool qualified = false, available = true;
+    // The method owner may request the separately qualified indexed GEMM
+    // recipe. Automatic method/device selection stays outside this executor.
+    bool qualified = indexed && indexed_gemm, available = true;
 #if defined(GENERATIVEQC_TEST_HOOKS)
-    qualified =
-        indexed ? symmetric_product_indexed_library_for_test : symmetric_product_library_for_test;
+    indexed_gemm = indexed_gemm || symmetric_product_indexed_gemm_for_test;
+    qualified = qualified || (indexed ? (symmetric_product_indexed_library_for_test ||
+                                         symmetric_product_indexed_gemm_for_test)
+                                      : symmetric_product_library_for_test);
     available = !symmetric_product_unavailable_for_test;
 #endif
     // Static legality precedes resource acquisition. Unknown endpoint costs do
     // not promote an optional implementation through an optimistic heuristic.
-    const std::size_t alternative_index = indexed ? 2 : 1;
-    offers[indexed ? 1 : 2].rejection = "materialization does not match the prepared output domain";
+    const std::size_t alternative_index = indexed ? (indexed_gemm ? 3 : 2) : 1;
+    for (std::size_t i = 1; i < offers.size(); ++i)
+      if (i != alternative_index)
+        offers[i].rejection = "recipe does not match the prepared output domain and qualification";
     auto& alternative = offers[alternative_index];
     alternative.provider_bytes = CudaContractionContext::kProviderAllowance;
     alternative.cache_bytes = indexed ? matrix_bytes : 0;
     if (!nonempty)
       alternative.rejection = "indexed output domain is empty";
     else if (!qualified)
-      alternative.rejection = "rank-2k endpoint profile is not qualified";
+      alternative.rejection = "symmetric-product endpoint profile is not qualified";
     else if (columns > INT_MAX || reduction > INT_MAX)
-      alternative.rejection = "rank-2k dimensions exceed the provider integer domain";
+      alternative.rejection = "symmetric-product dimensions exceed the provider integer domain";
     else if (provider_budget < alternative.cache_bytes ||
              provider_budget - alternative.cache_bytes < CudaContractionContext::kProviderAllowance)
-      alternative.rejection = "rank-2k cache and provider allowance are not admitted";
+      alternative.rejection = "symmetric-product cache and provider allowance are not admitted";
     else if (!available)
-      alternative.rejection = "rank-2k provider is unavailable";
+      alternative.rejection = "symmetric-product provider is unavailable";
     if (alternative.rejection.empty() && !context_.prepare(stream))
-      alternative.rejection = "rank-2k provider allocation unavailable";
+      alternative.rejection = "symmetric-product provider allocation unavailable";
+    if (alternative.rejection.empty() && alternative_index == 3) {
+      // This handle executes only typed FP64 Dgemm calls: default mode cannot
+      // select TF32/FP32 input arithmetic. Set it during preparation, before
+      // graph capture, without relaxing any other shared provider handle.
+      generativeqc_tensor::blas_check(cublasSetMathMode(context_.handle(), CUBLAS_DEFAULT_MATH));
+    }
     if (alternative.rejection.empty() && indexed) {
       bool host_oom = false;
       const auto status = runtime::resource_cuda_malloc(reinterpret_cast<void**>(&matrix_),
@@ -147,7 +167,7 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
           std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
           context_.release_locked();
         }
-        alternative.rejection = "rank-2k compact output allocation unavailable";
+        alternative.rejection = "symmetric-product compact output allocation unavailable";
       } else {
         generativeqc_tensor::cuda_check(status);
       }
@@ -158,6 +178,7 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
       const auto selection =
           runtime::select_native_lowering(request, offers, target, compilation, 1, incumbent);
       library_ = selection.selected == alternative_index;
+      gemm_ = library_ && alternative_index == 3;
       diagnostic_ = {
           offers[selection.selected],
           offers[library_ && indexed ? alternative_index : 0],
@@ -204,23 +225,35 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
     // mapped destination and must never read stale compact scratch.
     const double alpha = 1.0, beta = call.accumulate && !indexed_ ? 1.0 : 0.0;
     const auto n = call.columns, k = call.reduction;
-    for (std::size_t spin = 0; spin < call.batches; ++spin)
-      // Column-major lower is row-major upper, the compiler's authoritative
-      // triangle. Packed reduction axes need neither replication nor a copy.
-      generativeqc_tensor::blas_check(
-          cublasDsyr2k(context_.handle(), CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N, static_cast<int>(n),
-                       static_cast<int>(k), &alpha, call.a, static_cast<int>(n),
-                       call.b + spin * k * n, static_cast<int>(n), &beta,
-                       (indexed_ ? matrix_ : call.output) + spin * n * n, static_cast<int>(n)));
-    if (indexed_)
-      symmetric_product_detail::
-          scatter<<<generativeqc_tensor::blocks(call.batches * n * n, 128), 128, 0, stream>>>(
-              matrix_, call.output, call.column_ids, n, full, call.batches, call.accumulate,
-              call.error);
-    else
-      symmetric_product_detail::
-          publish<<<generativeqc_tensor::blocks(call.batches * n * n, 128), 128, 0, stream>>>(
-              call.output, n, call.batches, call.error);
+    for (std::size_t spin = 0; spin < call.batches; ++spin) {
+      if (gemm_) {
+        generativeqc_tensor::blas_check(cublasDgemm(
+            context_.handle(), CUBLAS_OP_N, CUBLAS_OP_T, static_cast<int>(n), static_cast<int>(n),
+            static_cast<int>(k), &alpha, call.a, static_cast<int>(n), call.b + spin * k * n,
+            static_cast<int>(n), &beta, matrix_ + spin * n * n, static_cast<int>(n)));
+      } else {
+        // Column-major lower is row-major upper, the authoritative triangle.
+        generativeqc_tensor::blas_check(
+            cublasDsyr2k(context_.handle(), CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N,
+                         static_cast<int>(n), static_cast<int>(k), &alpha, call.a,
+                         static_cast<int>(n), call.b + spin * k * n, static_cast<int>(n), &beta,
+                         (indexed_ ? matrix_ : call.output) + spin * n * n, static_cast<int>(n)));
+      }
+    }
+    const auto blocks = generativeqc_tensor::blocks(call.batches * n * n, 128);
+    if (indexed_) {
+      if (gemm_)
+        symmetric_product_detail::scatter<true>
+            <<<blocks, 128, 0, stream>>>(matrix_, call.output, call.column_ids, n, full,
+                                         call.batches, call.accumulate, call.error);
+      else
+        symmetric_product_detail::scatter<false>
+            <<<blocks, 128, 0, stream>>>(matrix_, call.output, call.column_ids, n, full,
+                                         call.batches, call.accumulate, call.error);
+    } else {
+      symmetric_product_detail::publish<<<blocks, 128, 0, stream>>>(call.output, n, call.batches,
+                                                                    call.error);
+    }
     generativeqc_tensor::cuda_check(cudaGetLastError());
     call.epilogue(call.state);
   }
@@ -241,6 +274,6 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
   CudaContractionContext context_;
   SymmetricProductDiagnostic diagnostic_;
   double* matrix_{};
-  bool library_{}, indexed_{};
+  bool library_{}, indexed_{}, gemm_{};
 };
 }  // namespace generativeqc::tensor

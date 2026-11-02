@@ -229,7 +229,7 @@ __global__ void gather_density_factor(const double* density, I global_n, I n, I 
     )
 
 
-def _emit_panels(*, diagonal_one_sided: bool = False) -> str:
+def _emit_panels(*, diagonal_one_sided: bool = False, spatial: bool = False) -> str:
     lines = [
         r"""
 __device__ void compact_potential_panels_body(const double* ao, const double* coefficients,
@@ -246,6 +246,16 @@ __device__ void compact_potential_panels_body(const double* ao, const double* co
         bindings.update(
             {f"c{j}": f"coefficients[(spin*terms+{j})*count+point]" for j in range(5)}
         )
+        if spatial:
+            # The spatial point cache preserves its public eleven-row transport;
+            # only coefficient addresses differ from native compact XC.
+            rows = ("1+spin", "3+3*spin", "4+3*spin", "5+3*spin", "9+spin")
+            bindings.update(
+                {
+                    f"c{j}": f"coefficients[({row})*count+point]"
+                    for j, row in enumerate(rows)
+                }
+            )
         emitter = CudaEmitter(graph, bindings)
         emitter.emit(roots)
         lines.append(f"    if (terms == {terms}) {{")
@@ -271,7 +281,12 @@ __global__ void compact_potential_panels(const double* ao, const double* coeffic
     return source
 
 
-_TILED_TEMPLATE = r"""
+def emit_spatial_xc_panels() -> str:
+    """Adapt spatial coefficient addresses while sharing native panel algebra."""
+    return _emit_panels(spatial=True)
+
+
+_TILED_DENSITY_TEMPLATE = r"""
 // Padding avoids bank conflicts when the AO lane reads a transposed panel.
 // Partial tiles still participate in both barriers and load exact zero padding.
 template <bool Mixed, bool ActiveRowsOnly = false, class Arithmetic = double>
@@ -374,7 +389,9 @@ __global__ void tiled_density_product(const double* density, const double* ao, I
 // order while avoiding a separate kernel launch for every point tile. The first
 // point tile owns output initialization, so admitted tiled execution needs no
 // matrix-sized or totals memset before every XC evaluation.
-template <bool ActivePairsOnly = false, class Arithmetic = double, bool DiagonalJets = false>
+"""
+
+_TILED_POTENTIAL_TEMPLATE = r"""template <bool ActivePairsOnly = false, class Arithmetic = double, bool DiagonalJets = false>
 __device__ void tiled_potential_body(const double* ao, const double* work, I n, I count,
                                 I work_jets, const double* point_totals, double* potential,
     double* totals, bool accumulate, int* error, const size_t* ao_ids, I full_n, I spin,
@@ -399,6 +416,9 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
   const I x = threadIdx.x, y = threadIdx.y;
   const I mu = tile_mu*@TILE@+x, nu = tile_nu*@TILE@+y;
   const I nu_load = tile_nu*@TILE@+x, panel = count*n;
+  // Bound live operand registers instead of fully expanding every point term.
+  // The single accumulator and ordered FMA/fallback operations are unchanged.
+  // Full unrolling can leave only one resident CTA even for a 16x16 tile.
   Arithmetic value = 0.0;
   for (I jet = 0; jet < work_jets; ++jet) {
     // Additional panels are diagonal bilinears derived by compact_panel_program.
@@ -449,11 +469,13 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
           // Each product is at most 2^256, with at most 64 ordered additions
           // for any supported tile. The incoming bound therefore proves all
           // intermediate FMAs finite. Keep their exact ordering and rounding.
+          #pragma unroll 4
           for (I k = 0; k < @TILE@; ++k)
             value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
         } else if (cross) {
           if constexpr (std::is_same_v<Arithmetic, double>) {
             const double tile_prior = value;
+            #pragma unroll 4
             for (I k = 0; k < @TILE@; ++k)
               value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
             // A nonfinite FMA accumulator cannot become finite in a later
@@ -463,6 +485,7 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
             // opposite cross legs can cancel an intermediate overflow.
             if (!(fabs(value) <= 0x1.fffffffffffffp1023)) {
               value = tile_prior;
+              #pragma unroll 4
               for (I k = 0; k < @TILE@; ++k) {
                 const double prior = value;
                 value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
@@ -471,10 +494,12 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
               }
             }
           } else {
+            #pragma unroll 4
             for (I k = 0; k < @TILE@; ++k)
               value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
           }
         } else if (reuse_diagonal)
+          #pragma unroll 4
           for (I k = 0; k < @TILE@; ++k) {
             if constexpr (std::is_same_v<Arithmetic, double>)
               value = fma(am[k][x], wn[k][y], value);
@@ -482,6 +507,7 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
               value += am[k][x]*wn[k][y];
           }
         else
+          #pragma unroll 4
           for (I k = 0; k < @TILE@; ++k) {
             const Arithmetic original_right = scaled_wn[k][y] ? wn[k][y]*0.5 : wn[k][y];
             value += am[k][x]*original_right+wm[k][x]*an[k][y];
@@ -543,7 +569,9 @@ inline bool fp32_tiled_xc_admitted(I ao_count, I count, I spins, I work_jets) {
       tiled_xc_admitted(ao_count < @TILE@ ? @TILE@ : ao_count, count < @TILE@ ? @TILE@ : count,
                        spins, work_jets);
 }
-template <bool Mixed, bool Tiled, class Arithmetic = double>
+"""
+
+_TILED_DISPATCH_TEMPLATE = r"""template <bool Mixed, bool Tiled, class Arithmetic = double>
 void launch_density_product(cudaStream_t stream, const double* density,
     const double* ao, I n, I count, I spins, I work_jets,
     double* work, int* error, const size_t* ao_ids, I full_n) {
@@ -655,8 +683,12 @@ inline void scheduled_potential(cudaStream_t stream, const double* ao,
 }
 """
 
+_TILED_TEMPLATE = (
+    _TILED_DENSITY_TEMPLATE + _TILED_POTENTIAL_TEMPLATE + _TILED_DISPATCH_TEMPLATE
+)
 
-def _emit_tiled(schedule: XcMatrixSchedule) -> str:
+
+def _emit_matrix_template(source: str, schedule: XcMatrixSchedule) -> str:
     if not isinstance(schedule, XcMatrixSchedule):
         raise TypeError("XC matrix emission requires XcMatrixSchedule")
     replacements = {
@@ -665,10 +697,26 @@ def _emit_tiled(schedule: XcMatrixSchedule) -> str:
         "@TILE_MINUS_ONE@": str(schedule.tile - 1),
         "@THREADS@": str(schedule.threads),
     }
-    source = _TILED_TEMPLATE
     for token, value in replacements.items():
         source = source.replace(token, value)
     return source
+
+
+def _emit_tiled(schedule: XcMatrixSchedule) -> str:
+    return _emit_matrix_template(_TILED_TEMPLATE, schedule)
+
+
+def emit_xc_potential_core(
+    schedule: XcMatrixSchedule = DEFAULT_XC_MATRIX_SCHEDULE,
+) -> str:
+    """Share the qualified compact potential body with other buffer owners.
+
+    Transport adapters supply canonical half-weighted panels and typed launch
+    dimensions. The arithmetic, diagonal reuse, symmetry and bounded overflow
+    fallback remain identical to native XC, including its FP32 instantiation.
+    No native method/provider dispatch or density machinery is pulled in.
+    """
+    return _emit_matrix_template(_TILED_POTENTIAL_TEMPLATE, schedule)
 
 
 def emit_native_xc_matrix_schedule(

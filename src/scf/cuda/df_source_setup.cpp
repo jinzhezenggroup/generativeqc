@@ -341,7 +341,11 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   cuda_error = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
   if (cuda_error != cudaSuccess) return source_cuda_status(cuda_error);
   double* metric_device = nullptr;
-  const unsigned metric_outputs_per_block = candidate->value_mapping == 2U ? 4U : 128U;
+  // The two-center metric publishes raw values, with no transformed auxiliary
+  // reduction. Use the raw consumer's schedule so short contractions do not
+  // inherit the transformed consumer's full warp. Explicit mappings still win.
+  const auto metric_mapping = candidate->raw_value_mapping;
+  const unsigned metric_outputs_per_block = metric_mapping == 2U ? 4U : 128U;
   if (metric_elements >
       static_cast<std::size_t>(std::numeric_limits<unsigned>::max()) * metric_outputs_per_block) {
     (void)cudaStreamDestroy(stream);
@@ -360,7 +364,7 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
                               metric_outputs_per_block),
         128U, 0, stream, candidate->batch, cartesian_nbf, cartesian_naux, public_naux,
         candidate->dummy_index, system, 0, public_naux, -1, candidate->auxiliary_to_cartesian,
-        metric_device, candidate->value_mapping);
+        metric_device, metric_mapping);
     cuda_error = cudaGetLastError();
     if (cuda_error == cudaSuccess) cuda_error = cudaStreamSynchronize(stream);
     if (cuda_error == cudaSuccess) {

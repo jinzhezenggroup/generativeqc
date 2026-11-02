@@ -41,6 +41,7 @@ from generativeqc_compiler.method import (
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
+    automatic_composition_name,
     automatic_functional_code,
     automatic_scf_domain,
 )
@@ -48,7 +49,6 @@ from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
 from generativeqc_compiler.xc.spec import (
     CATALOG,
     FunctionalSpec,
-    UnsupportedXC,
     functional,
 )
 
@@ -83,6 +83,8 @@ def parse_automatic_libxc_selector(method: typing.Any) -> tuple[str, str] | None
         name = method[len(prefix) :].strip().upper()
         if not name:
             raise ValueError("Libxc selector requires a functional registration name")
+        if name.lower() in _PUBLIC_DFT_IDENTIFIERS:
+            return None
         automatic_functional_code(name)
         return name, spin
     return None
@@ -128,6 +130,12 @@ def _public_dft_binding(method: typing.Any) -> tuple[str, str]:
     if not isinstance(method, str):
         raise TypeError("KS options require a string RKS/UKS method selector")
     selector = method.lower()
+    for prefix, spin in _AUTOMATIC_LIBXC_PREFIXES:
+        if selector.startswith(prefix):
+            identifier = _PUBLIC_DFT_IDENTIFIERS.get(selector[len(prefix) :].strip())
+            if identifier is None:
+                raise ValueError(f"unknown DFT method selector {method!r}")
+            return identifier, spin
     legacy = _LEGACY_KS_SELECTORS.get(selector)
     if legacy is not None:
         return legacy
@@ -159,6 +167,10 @@ class KsOptions:
     GridSpec explicitly also retains sharing. Matching point counts alone
     never authorize sharing points or weights.
 
+    tile_points=None requests native automatic SCF tiling; a positive integer
+    fixes the tile exactly. CPU and constrained execution retain 256 points.
+    When both tiles are omitted, native force tiling is selected independently.
+
     force_tile_points optionally bounds CUDA stationary-force batches independently
     of the SCF tile (1..4096 points). None preserves the existing force policy.
     It changes neither scientific controls nor CPU tiling and remains subject to
@@ -169,7 +181,9 @@ class KsOptions:
     composition: MethodIR | None = None
     grid: GridSpec | None = None
     grid_accuracy: str = "standard"
-    tile_points: int = 256
+    # None delegates SCF tiling to the native preparation policy. An integer,
+    # including the old default 256, is an exact user override.
+    tile_points: int | None = None
     # None preserves the native force owner's existing tile. An explicit
     # force bound is independent of SCF and remains subject to arena admission.
     force_tile_points: int | None = None
@@ -218,7 +232,8 @@ class KsOptions:
             raise TypeError("KS nonlocal_grid must be a GridSpec or None")
         if self.grid_accuracy not in ("standard", "tight"):
             raise ValueError("KS grid_accuracy must be 'standard' or 'tight'")
-        checked_int(self.tile_points, "KS XC tile points")
+        if self.tile_points is not None:
+            checked_int(self.tile_points, "KS XC tile points")
         if self.force_tile_points is not None and (
             type(self.force_tile_points) is not int
             or not 1 <= self.force_tile_points <= 4096
@@ -460,21 +475,34 @@ def _native_semilocal(method_ir: typing.Any) -> typing.Any:
 
 
 def _automatic_semilocal_name(method_ir: typing.Any) -> str | None:
-    """Return the sole default-allow automatic component in a pure semilocal IR."""
-    if not isinstance(method_ir, MethodIR) or len(method_ir.primitives) != 1:
+    """Select generic code only after preserving existing semantic specializations."""
+    if not isinstance(method_ir, MethodIR):
         return None
-    plan = _native_execution_plan(method_ir)
-    if plan.exchange or plan.nonlocal_correlation is not None or plan.post_scf:
+    # Selection is a predicate: corrected compositions retain their existing
+    # owner instead of entering the electronic-only native projection.
+    plan = compile_ks_execution_plan(method_ir)
+    if (
+        plan.nonlocal_correlation is not None
+        or plan.post_scf
+        or plan.semilocal.functional.range_omega
+    ):
         return None
-    components = plan.semilocal.functional.components
-    if len(components) != 1 or components[0][1] != Fraction(1):
+    if len(plan.exchange) > 1 or any(
+        term.operator != "full-range" or term.omega for term in plan.exchange
+    ):
         return None
-    name = components[0][0]
+    if _split_hybrid_record(method_ir) is not None:
+        return None
     try:
-        automatic_functional_code(name)
-    except UnsupportedXC:
-        return None
-    return name
+        _curated_semilocal_record(
+            plan.semilocal.functional, plan=plan, method_ir=method_ir
+        )
+    except NotImplementedError:
+        return automatic_composition_name(
+            plan.semilocal.functional.components,
+            plan.exchange[0].coefficient if plan.exchange else Fraction(0),
+        )
+    return None
 
 
 def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
@@ -736,7 +764,7 @@ def _curated_semilocal_record(
     for record in SEMILOCAL_FAMILIES:
         expected = _record_components(record)
         if record["coefficient_policy"] == "native-scales":
-            if not set(components) <= set(expected):
+            if set(components) != set(expected):
                 continue
         elif components != expected:
             continue
@@ -980,19 +1008,12 @@ def scf_domain_for_method(method: typing.Any) -> str:
     """Return the exact native point domain for a public selector or resolved IR."""
     if isinstance(method, MethodIR):
         return _scf_domain_for_ir(method)
-    automatic = parse_automatic_libxc_selector(method)
-    if automatic is not None:
-        return automatic_scf_domain(automatic[0])
     method_ir, _ = resolve_ks_method(method)
     return _scf_domain_for_ir(method_ir)
 
 
 def native_xc_functional_code(method: typing.Any) -> int:
     """Return the lowerer code selected from one public or automatic KS selector."""
-    automatic = parse_automatic_libxc_selector(method)
-    if automatic is not None:
-        name, _ = automatic
-        return automatic_functional_code(name)
     method_ir, _ = resolve_ks_method(method)
     d4_electronic = _d4_electronic_projection(method_ir)
     if d4_electronic is not None:
@@ -1257,7 +1278,7 @@ def native_ks_options(
             angular_azimuth=nonlocal_spec.angular_azimuth,
             partition_iterations=nonlocal_spec.partition_iterations,
             coincident_tolerance=nonlocal_spec.coincident_tolerance,
-            tile_points=options.tile_points,
+            tile_points=options.tile_points or 0,
             force_tile_points=options.force_tile_points or 0,
             element_radii=nonlocal_radii,
             element_radius_count=119 if nonlocal_radii is not None else 0,
@@ -1291,7 +1312,7 @@ def native_ks_options(
         angular_azimuth=grid.angular_azimuth,
         partition_iterations=grid.partition_iterations,
         coincident_tolerance=grid.coincident_tolerance,
-        tile_points=options.tile_points,
+        tile_points=options.tile_points or 0,
         force_tile_points=options.force_tile_points or 0,
         element_radii=radii,
         element_radius_count=119 if radii is not None else 0,
@@ -1386,7 +1407,7 @@ def native_ks_options(
         grid.angular_azimuth,
         grid.partition_iterations,
         grid.coincident_tolerance,
-        options.tile_points,
+        options.tile_points or 0,
         radii,
         119 if radii is not None else 0,
         _native.XC_EXECUTION_DEVICE_FUSED

@@ -26,6 +26,7 @@ _PHASES = {
     _native.PRECISION_PHASE_REFINEMENT: "refinement",
     _native.PRECISION_PHASE_FINALIZATION: "finalization",
     _native.PRECISION_PHASE_RETRY: "retry",
+    _native.PRECISION_PHASE_PREPARATION: "preparation",
 }
 _OPERATOR_NAMES = {
     _native.PRECISION_OPERATOR_COULOMB_J: "coulomb_j",

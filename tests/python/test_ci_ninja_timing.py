@@ -295,7 +295,7 @@ def test_actual_workflow_build_then_report_keeps_build_result(
         f"#!{sys.executable}\n"
         + "import pathlib, sys\n"
         + "if '--build' in sys.argv:\n"
-        + " p = pathlib.Path('build/cuda-release-cli-sm120'); p.mkdir(parents=True, exist_ok=True)\n"
+        + " p = pathlib.Path('build/cuda-release-cli'); p.mkdir(parents=True, exist_ok=True)\n"
         + f" (p / '.ninja_log').write_bytes({log(row(10, 30, 'generativeqc'))!r})\n"
         + f" sys.exit({exit_code})\n"
     )

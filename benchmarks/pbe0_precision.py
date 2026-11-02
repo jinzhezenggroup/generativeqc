@@ -94,14 +94,16 @@ def reference(
     An explicit PySCF auxiliary basis selects its independent density-fitted
     Hamiltonian, including auxiliary-center and metric response in the forces.
     The optional ``gpu4pyscf`` oracle retains independent grids and complete
-    strict SCF/gradient work; it requires a Slurm allocation. Fitted WB97M-V
+    strict SCF/gradient work; it requires a Slurm or LSF allocation. Fitted WB97M-V
     uses full-range DF J/K plus exact long-range K and its analytic derivative,
     not the default GPU4PySCF all-fitted range-separated Hamiltonian.
     """
     if backend not in ("pyscf", "gpu4pyscf"):
         raise ValueError("reference backend must be pyscf or gpu4pyscf")
-    if backend == "gpu4pyscf" and not os.environ.get("SLURM_JOB_ID"):
-        raise RuntimeError("GPU reference requires a finite Slurm allocation")
+    if backend == "gpu4pyscf" and not (
+        os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
+    ):
+        raise RuntimeError("GPU reference requires a finite Slurm or LSF allocation")
     if (
         auxiliary_basis is not None
         and functional.upper().replace("-", "_") == "WB97M_V"

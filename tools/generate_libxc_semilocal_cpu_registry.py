@@ -9,9 +9,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
+from generativeqc_compiler.xc._generated_semilocal_compositions import COMPOSITIONS
 from generativeqc_compiler.xc.automatic_point import emit_automatic_point
 from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
+    automatic_scf_domain,
 )
 from generativeqc_compiler.xc.automatic_semilocal import (
     AutomaticRegistryEntry as RegistryEntry,
@@ -26,7 +28,6 @@ from generativeqc_compiler.xc.density_work import (
 )
 from generativeqc_compiler.xc.libxc_work import (
     LIBXC_WORK_DOMAIN_VERSION,
-    automatic_work_policy,
 )
 from generativeqc_compiler.xc.restricted_point_program import (
     bind_runtime_restricted_semilocal_point_program,
@@ -39,12 +40,32 @@ def _point_program_source(entry: RegistryEntry) -> str:
     """Bind the common point lowering to the existing CPU registry descriptor."""
     point = emit_automatic_point(entry.name)
     stem = entry.stem
-    density_only = automatic_work_policy(entry.name).family == "lda"
+    density_only = automatic_scf_domain(entry.name) == DENSITY_WORK_DOMAIN
     domain_version = (
         DENSITY_WORK_DOMAIN_VERSION if density_only else LIBXC_WORK_DOMAIN_VERSION
     )
     restricted = ""
-    if density_only:
+    if density_only and entry.name in COMPOSITIONS:
+        unpolarized = emit_automatic_point(entry.name, spin="unpolarized")
+        restricted = f"""
+namespace restricted_{stem} {{
+{unpolarized.source}
+RestrictedSemilocalPointValue evaluate(double rho, const double (&)[3], double) {{
+  const double paired[2]{{0.5 * rho, 0.5 * rho}};
+  const double gradient[2][3]{{}};
+  const double tau[2]{{}};
+  const auto point = {unpolarized.function_name}(paired, gradient, tau);
+  RestrictedSemilocalPointValue value{{}};
+  value.energy = point.energy;
+  value.rho = point.rho[0];
+  return value;
+}}
+const RestrictedSemilocalPointProgram kPointProgram{{
+  "{entry.name}", "{unpolarized.expression_identity}", 1U,
+  {DENSITY_WORK_DOMAIN_VERSION}U, evaluate}};
+}}
+"""
+    elif density_only:
         binding = bind_runtime_restricted_semilocal_point_program(
             build_bulk_runtime_program(
                 entry.name, spin="unpolarized", order=1, domain=DENSITY_WORK_DOMAIN
@@ -72,6 +93,7 @@ def emit_header() -> str:
 #include <cstdint>
 #include <string_view>
 #include "dft/xc.hpp"
+#include "generativeqc/generativeqc.h"
 
 namespace generativeqc::dft::generated {{
 inline constexpr const char* kAutomaticLibxcScfDomain =
@@ -85,6 +107,8 @@ struct AutomaticLibxcEntry {{
 }};
 AutomaticLibxcEntry automatic_libxc_entry(std::string_view name) noexcept;
 AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t functional_code) noexcept;
+// Match the complete rational recipe after ABI coefficients are converted to double.
+AutomaticLibxcEntry automatic_libxc_composition(const generativeqc_ks_options&) noexcept;
 const RestrictedSemilocalPointProgram* automatic_restricted_libxc_program(
     std::string_view name) noexcept;
 }}  // namespace generativeqc::dft::generated
@@ -103,7 +127,7 @@ def emit_shard(index: int, entries: tuple[RegistryEntry, ...]) -> str:
     restricted_cases = "\n".join(
         f'  if (name == "{entry.name}") return &restricted_{entry.stem}::kPointProgram;'
         for entry in selected
-        if automatic_work_policy(entry.name).family == "lda"
+        if automatic_scf_domain(entry.name) == DENSITY_WORK_DOMAIN
     )
     return "\n".join(
         [
@@ -137,6 +161,50 @@ def emit_shard(index: int, entries: tuple[RegistryEntry, ...]) -> str:
 
 
 def emit_registry() -> str:
+    composition_cases = []
+    for entry in registry_entries():
+        if entry.name not in COMPOSITIONS:
+            continue
+        conditions = [
+            f"input.semilocal_component_count == {len(entry.components)}U",
+            f"exchange == {float(entry.exact_exchange).hex()}",
+        ]
+        conditions += [
+            f'matches("{name}", {float(weight).hex()})'
+            for name, weight in entry.components
+        ]
+        composition_cases.append(
+            "  if ("
+            + " && ".join(conditions)
+            + f') return automatic_libxc_entry("{entry.name}");'
+        )
+    composition_source = (
+        """
+AutomaticLibxcEntry automatic_libxc_composition(const generativeqc_ks_options& input) noexcept {
+  if (!input.semilocal_components || !input.semilocal_component_count ||
+      input.semilocal_range_omega != 0.0 || input.has_nonlocal_correlation ||
+      input.exchange_term_count > 1) return {};
+  double exchange = 0.0;
+  if (input.exchange_term_count) {
+    if (!input.exchange_terms) return {};
+    const auto& term = input.exchange_terms[0];
+    if (term.operator_kind != GENERATIVEQC_KS_EXCHANGE_FULL_RANGE || term.omega != 0.0)
+      return {};
+    exchange = term.coefficient;
+  }
+  const auto matches = [&](std::string_view name, double coefficient) {
+    unsigned count = 0;
+    for (std::uint32_t i = 0; i < input.semilocal_component_count; ++i) {
+      const auto& term = input.semilocal_components[i];
+      if (term.component_id && std::string_view(term.component_id) == name &&
+          term.coefficient == coefficient) ++count;
+    }
+    return count == 1;
+  };
+"""
+        + "\n".join(composition_cases)
+        + "\n  return {};\n}\n"
+    )
     code_cases = "\n".join(
         [
             f'    case 0x{entry.code:x}U: return automatic_libxc_entry("{entry.name}");'
@@ -167,6 +235,7 @@ def emit_registry() -> str:
             '#include "generated_libxc_semilocal_registry.hpp"',
             "",
             "namespace generativeqc::dft::generated {",
+            composition_source,
             declarations,
             restricted_declarations,
             "",

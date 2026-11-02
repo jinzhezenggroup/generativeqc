@@ -13,6 +13,7 @@ from dataclasses import FrozenInstanceError
 import numpy as np
 import pytest
 from generativeqc import Atom, Calculator, KsDiagnostic, KsTransportDiagnostic, _native
+from generativeqc.ks import KsOptions
 from generativeqc_compiler.dft.grid import MolecularGrid
 
 H3 = [("H", (0, 0, 0)), ("H", (0.15, 0.13, 1.5)), ("H", (0.6, 0.26, 3.0))]
@@ -29,8 +30,9 @@ def device(request: typing.Any) -> typing.Any:
 
 
 @pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))
+@pytest.mark.parametrize("tile_points", (None, 37))
 def test_physical_components_and_history_match_independent_state(
-    method: typing.Any, device: typing.Any
+    method: typing.Any, device: typing.Any, tile_points: int | None
 ) -> None:
     pyscf = pytest.importorskip("pyscf")
     from pyscf import dft, gto
@@ -42,6 +44,7 @@ def test_physical_components_and_history_match_independent_state(
     calculator = Calculator(
         method=method,
         device=device,
+        ks_options=KsOptions(tile_points=tile_points),
         max_iterations=150,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
@@ -103,7 +106,10 @@ def test_physical_components_and_history_match_independent_state(
     assert diagnostic.occupations == ((2, 1) if unrestricted else (1, 1))
     assert diagnostic.electrons == pytest.approx(diagnostic.occupations, abs=1e-10)
     assert diagnostic.grid_points == len(grid.weights)
-    assert diagnostic.tile_points == calculator.ks_options.tile_points
+    # This small direct H3 workload retains 256 for automatic selection; an
+    # explicit override must be reported exactly, not the unresolved None.
+    assert calculator.ks_options.tile_points == tile_points
+    assert diagnostic.tile_points == (256 if tile_points is None else tile_points)
     assert diagnostic.ao_order == int(method.startswith("pbe"))
     assert diagnostic.scf_domain == calculator.ks_options.scf_domain
     components = diagnostic.components

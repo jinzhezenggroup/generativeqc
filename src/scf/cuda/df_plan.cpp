@@ -137,7 +137,9 @@ bool cuda_density_fitting_scf_policy_matches(const CudaDensityFittingJkPlan* pla
          (!resident || std::strcmp(resident, "auto") == 0 || std::strcmp(resident, "full") == 0 ||
           std::strcmp(resident, "flat") == 0 || std::strcmp(resident, "legacy") == 0) &&
          (!diis || std::strcmp(diis, "auto") == 0 || std::strcmp(diis, "serial") == 0) &&
-         cuda_density_fitting_host_policy_matches(plan) &&
+         cuda_density_fitting_host_policy_matches(plan) && df_packed_projection_policy_valid() &&
+         plan->packed_projection_blas == df_packed_projection_blas_requested() &&
+         plan->packed_projection_auto == df_packed_projection_auto_requested() &&
          plan->resident_exchange_enabled == df_resident_exchange_requested() &&
          plan->triangular_exchange == df_triangular_exchange_requested() &&
          plan->flat_dense_exchange == df_flat_dense_exchange_requested() &&

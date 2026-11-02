@@ -45,12 +45,16 @@ def definition(source: str, signature: str) -> str:
 def compact_types() -> str:
     """Use the actual public offsets/arena metadata in standalone native probes."""
     source = (ROOT / "src/dft/cuda_xc.hpp").read_text()
-    return "\n".join(
-        definition(source, f"struct {name} {{") + ";"
-        for name in (
-            "CudaXcCompactTile",
-            "CudaXcPointBatchPlan",
-            "CudaXcOccupiedDensity",
+    tile = (ROOT / "src/dft/cuda_xc_tile.hpp").read_text()
+    return (
+        definition(tile, "struct CudaXcCompactTile {")
+        + ";\n"
+        + "\n".join(
+            definition(source, f"struct {name} {{") + ";"
+            for name in (
+                "CudaXcPointBatchPlan",
+                "CudaXcOccupiedDensity",
+            )
         )
     )
 

@@ -102,8 +102,20 @@ For a symmetric density D, write `rho_P = sum_ij D_ij A_ijP` and
 `Q_PQ = A_P : (D^T A_Q D)`. A contribution to the two-electron energy has form
 
 \[
- E=\tfrac12 c_J\rho^T M^+\rho-c_K Q:M^+.
+E=\tfrac12 c_J\rho^T M^+\rho-c_K Q:M^+.
 \]
+
+For full-rank pure-Coulomb CUDA response, the optional Hermite owner contracts
+the metric term directly from `v = M^-1 rho`: `-c_J/2 * v^T (dM) v`.
+It refreshes the auxiliary Hermite density from the current signed `v`, then
+reuses the generated raised-potential contraction and center projection.
+Exchanging the two metric indices makes their derivative contributions equal;
+one complete target-center traversal cancels the energy factor of one half.
+This avoids constructing the dense metric cotangent and requires no additional
+owner allocation. The output is additive, including graph replay with changed
+or zero potentials. The callback requires matching owner, stream, device and
+atom extent; exchange, truncated metrics, diagnostic schedules and unavailable
+owners retain the general bounded metric-weight consumer below.
 
 The bounded host adapter in `src/scf/df_response_weights.cpp` forms
 

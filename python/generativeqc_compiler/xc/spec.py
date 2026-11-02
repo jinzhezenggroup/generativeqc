@@ -50,7 +50,7 @@ P86_COMPONENTS = ("LDA_C_PZ", "GGA_C_P86")
 WB97MV_COMPONENTS = ("MGGA_X_WB97M_V", "MGGA_C_WB97M_V")
 
 
-def _source_nonlocal_component_name(record: typing.Mapping[str, object]) -> str:
+def _source_method_component_name(record: typing.Mapping[str, object]) -> str:
     name = record.get("direct_semilocal_component")
     if name is None:
         name = record["registration"]
@@ -66,7 +66,7 @@ def _source_nonlocal_component_name(record: typing.Mapping[str, object]) -> str:
 SOURCE_NONLOCAL_COMPONENTS = tuple(
     sorted(
         {
-            _source_nonlocal_component_name(record)
+            _source_method_component_name(record)
             for record in LIBXC_METHODS.values()
             if record["nonlocal_variant"] is not None
             and (
@@ -75,6 +75,16 @@ SOURCE_NONLOCAL_COMPONENTS = tuple(
             )
         }
     )
+)
+SOURCE_DIRECT_HYBRID_COMPONENTS = tuple(
+    sorted(
+        _source_method_component_name(record)
+        for record in LIBXC_METHODS.values()
+        if record.get("direct_semilocal_component") is not None
+    )
+)
+SOURCE_METHOD_COMPONENTS = tuple(
+    sorted(set(SOURCE_NONLOCAL_COMPONENTS + SOURCE_DIRECT_HYBRID_COMPONENTS))
 )
 SPECIAL_EXPRESSION_COMPONENTS = RSH_COMPONENTS + PW91_COMPONENTS + P86_COMPONENTS
 CURATED_COMPONENTS = (
@@ -91,7 +101,7 @@ COMPONENTS = (
     CURATED_COMPONENTS
     + AUTO_BULK_COMPONENTS
     + tuple(sorted(SPLIT_HYBRID_COMPONENTS))
-    + SOURCE_NONLOCAL_COMPONENTS
+    + SOURCE_METHOD_COMPONENTS
 )
 CATALOG = {
     **{name: ((name, Fraction(1)),) for name in PUBLIC_COMPONENTS},
@@ -203,7 +213,7 @@ class FunctionalSpec:
             name for name, coefficient in self.components if coefficient
         )
         source_only = tuple(
-            name for name in active_names if name in SOURCE_NONLOCAL_COMPONENTS
+            name for name in active_names if name in SOURCE_METHOD_COMPONENTS
         )
         if source_only:
             if (
@@ -212,7 +222,7 @@ class FunctionalSpec:
                 or self.components[0][1] != 1
             ):
                 raise UnsupportedXC(
-                    "unqualified nonlocal method requires one intact semilocal source"
+                    "unqualified source-defined method requires one intact semilocal source"
                 )
             component = source_only[0]
             record = next(
@@ -220,7 +230,6 @@ class FunctionalSpec:
                 for row in LIBXC_METHODS.values()
                 if (row.get("direct_semilocal_component") or row["registration"])
                 == component
-                and row["nonlocal_variant"] is not None
             )
             return {
                 **payload,

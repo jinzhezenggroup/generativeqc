@@ -1,11 +1,12 @@
 {
-  "README.md": "9c9da866abd83dc8d11eecfc2cf02c7fb3441acd6c04ed092046dcd6118e931f",
-  "execution-receipts.json.gz": "f3e5cfd2ce680d57e16d45efe427a709d188108385833dec3af7ca897af3dbd1",
+  "README.md": "65309657b11955133b82339ebc6e60578920f7cc1ba549fe9fbbaa0f6ecef1b8",
+  "execution-receipts.json.xz": "f494dc0e60db5bcc78a2682d0492ac3ab6ff4ad12c1919f5a8f774b9a4a42f63",
   "launchers.json.gz": "5e9c993ebd28a2633069e9e37f0df351651cc39a6ba3476331bb4f0a6fad4388",
   "measured-change.patch.gz": "6abae891f264c5a4af2c74a99a6a9ea714f8f15f55922ab5c5f8edc0760ee086",
-  "moved.json.gz": "a1c6abd38144f730b7075eae0994db28ff5cc8f8e466f367e89fd62add9bce9a",
-  "paired.json.gz": "1ad04020cc1bec21cdb8f7709cee3105db8805ef8d95dca433615724208f8da6",
+  "moved.json.xz": "7cfb3ebea00ac644d948aa0c79ec7788cde27ac7ac46d30ab7beef55f3f65390",
+  "paired.json.xz": "d09edb0ee7e622f28914766d96cb9e61d0e798429a9a3a7eeebe59405e1cba06",
   "provenance.json": "72e63dba2a31e7a2d1c776140652aec99d249382ab2a1ca346611cd2b587173c",
-  "reproduce.py": "a67b38b2aa56769bfb44c31ff0995b9e1b2e299c2c1b77ffde6f5b42194e1c57",
+  "reproduce.py": "74abe48815f8db15df5684fe8cca25061ddec28d61e5da51bacfbc762f5e9f97",
+  "storage.json": "2faffb2a1754f2e5da6b8e55d8c3c0fd2f5908213e05908a522b5277adb6e7e8",
   "test-logs.json.gz": "4191974f4d786d926335baff694af014b5bcf8436121a9da47f481551e728671"
 }

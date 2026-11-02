@@ -615,7 +615,9 @@ void stationary_destroy(void *p) {
     public += _definition(method_header, "class MethodError final") + ";\n"
     public += _definition(failure, "inline bool retryable_seed_failure(") + "\n"
     public += _definition(controller, "void require_stationary_call(") + "\n"
-    f = _definition(method, "generativeqc_status native_cuda_stationary_gradient(")
+    # Exercise the allocation boundary inside the complete-attempt callee; the
+    # public wrapper only adds a bounded retry for optional automatic storage.
+    f = _definition(method, "generativeqc_status native_cuda_stationary_gradient_once(")
     catch = f[f.rindex("} catch (const std::bad_alloc&)") : f.index("#else")]
     public += (
         "generativeqc_status map_public_status(int status) { std::string detail; auto stationary_controller_=std::make_unique<int>(); std::array<char,512> error{}; try { require_stationary_call(status,error); return GENERATIVEQC_STATUS_SUCCESS; "
@@ -623,11 +625,61 @@ void stationary_destroy(void *p) {
         + "}\n"
     )
     public += 'bool retry_status(int status) { const auto mapped=map_public_status(status); return retryable_seed_failure(mapped,std::make_exception_ptr(MethodError(mapped,"force failure"))); }\n'
+    # Run the public retry wrapper too: an allocation failure may retire an
+    # automatic tile, but numerical/driver failures must retain their status.
+    public += r"""
+#include <vector>
+namespace dft {
+struct CudaKsFinalStateToken {};
+struct CudaStationaryResources { size_t bytes{}; };
+}
+namespace scf { struct DirectForcePrecisionRequest {}; }
+struct ForceBoundary {
+  int private_status;
+  bool automatic, retired = false;
+  generativeqc_status native_cuda_stationary_gradient_once(
+      const dft::CudaKsFinalStateToken&, size_t, std::vector<double>& output,
+      dft::CudaStationaryResources& resources, std::string&,
+      scf::DirectForcePrecisionRequest*) {
+    if (retired) {
+      assert(output.empty() && resources.bytes == 0);
+      output = {1.0};
+      return GENERATIVEQC_STATUS_SUCCESS;
+    }
+    output = {-1.0};
+    resources.bytes = 1024;
+    return map_public_status(private_status);
+  }
+  bool retire_automatic_force_tile() {
+    if (!automatic) return false;
+    assert(!retired);
+    retired = true;
+    return true;
+  }
+"""
+    public += _definition(
+        method, "generativeqc_status native_cuda_stationary_gradient("
+    )
+    public += "\n};\n"
     source += public
     source += r"""
 
 int main() {
   std::setbuf(stdout, nullptr);
+  for (int private_status : {0, 1, 2, 3, 4}) {
+    for (bool automatic : {false, true}) {
+      ForceBoundary boundary{private_status, automatic};
+      std::vector<double> output;
+      dft::CudaStationaryResources resources;
+      std::string detail;
+      const auto status = boundary.native_cuda_stationary_gradient(
+          {}, 4096, output, resources, detail);
+      const bool optional_oom = automatic && (private_status == 2 || private_status == 3);
+      assert(boundary.retired == optional_oom);
+      assert(status == (optional_oom ? GENERATIVEQC_STATUS_SUCCESS : map_public_status(private_status)));
+      if (optional_oom) assert(output == std::vector<double>{1.0});
+    }
+  }
   const size_t atoms = 96, points = 256;
   const size_t min = allocation(atoms, 224, 672, points, 1, 1, points, false);
   const size_t center = 48 * atoms * (atoms - 1) / 2, phase = phased_allocation(atoms, points);

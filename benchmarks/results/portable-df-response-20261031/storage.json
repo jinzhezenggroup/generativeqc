@@ -1,0 +1,15 @@
+{
+  "schema": "generativeqc.exact-evidence-stream-manifest.v1",
+  "files": [
+    {
+      "path": "benchmarks/results/portable-df-response-20261031/receipts.json.xz",
+      "bytes": 23060,
+      "sha256": "4f29fd65650d91b96e943e54a3885b2791df4594778c4b256930045887ab504d"
+    },
+    {
+      "path": "benchmarks/results/portable-df-response-20261031/fp64.xz",
+      "bytes": 273676,
+      "sha256": "6ebd79631422722f078b1d36e5989238a101d6d25453b4c4a769ca5801f07def"
+    }
+  ]
+}

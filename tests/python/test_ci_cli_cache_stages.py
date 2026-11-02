@@ -61,7 +61,7 @@ def _tools(tmp_path: Path, failure: str = "") -> dict[str, str]:
         else:
             stage = 'build' if '--build' in args else 'configure'
             if stage == 'build':
-                state.write_text('7' if args[args.index('--preset') + 1] == 'cuda-release-sm120' else '3')
+                state.write_text('7' if args[args.index('--preset') + 1] == 'cuda-release' else '3')
             if fail == stage:
                 sys.exit(23)
         """

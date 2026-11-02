@@ -24,6 +24,7 @@ enum class PrecisionWorkPhase : std::int32_t {
   Refinement = GENERATIVEQC_PRECISION_PHASE_REFINEMENT,
   Finalization = GENERATIVEQC_PRECISION_PHASE_FINALIZATION,
   Retry = GENERATIVEQC_PRECISION_PHASE_RETRY,
+  Preparation = GENERATIVEQC_PRECISION_PHASE_PREPARATION,
 };
 
 enum class PrecisionOperatorKind : std::int32_t {

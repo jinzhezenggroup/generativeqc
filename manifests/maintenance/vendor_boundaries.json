@@ -335,9 +335,11 @@
     "src/tensor/cuda_symmetric_product.cuh": {
       "classification": "provider",
       "contract": "src/tensor/cuda_symmetric_product.hpp",
-      "reason": "Shared strict-FP64 symmetric-product owner submits admitted rank-2k operations; canonical potential lowering retains generated indexed/empty-domain fallback and explicit resource admission.",
+      "reason": "Shared strict-FP64 symmetric-product owner submits separately identified SYR2K and indexed GEMM recipes; canonical potential lowering retains generated indexed/empty-domain fallback and explicit resource admission.",
       "references": {
-        "cublasDsyr2k": 1
+        "cublasDsyr2k": 1,
+        "cublasDgemm": 1,
+        "cublasSetMathMode": 1
       }
     },
     "src/tensor/cuda_matrix_product.cpp": {

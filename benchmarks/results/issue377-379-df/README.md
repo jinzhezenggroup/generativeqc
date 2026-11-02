@@ -3,6 +3,10 @@
 Storage-only compaction: `source-validation.json.gz` restores the exact original
 source-audit receipt with `gzip -dc`; encoded/decoded identities are recorded in
 `source-validation-storage.json`. No scientific record or acceptance changes.
+The historical `sources/*.patch.gz` files likewise preserve the exact original
+patch bytes; `sources/storage.json` records both identities. Restore a patch
+with `gzip -dc benchmarks/results/issue377-379-df/sources/<name>.patch.gz > /tmp/<name>.patch` before applying it.
+This lossless storage change leaves measured source identities unchanged.
 
 This bundle records current-master comparisons on NVIDIA GeForce RTX 5090
 (sm_120), production Release CUDA 12.9.1, spherical def2-SVP RHF water clusters,

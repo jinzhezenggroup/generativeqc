@@ -34,6 +34,7 @@ extern "C" void xc_density_materialize_for_test(cudaStream_t, const double*, std
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
 extern "C" void xc_potential_qualification_for_test(bool library, bool unavailable);
 extern "C" void xc_potential_indexed_qualification_for_test(bool library);
+extern "C" void xc_potential_indexed_gemm_for_test(bool library);
 
 namespace {
 using namespace generativeqc::dft;

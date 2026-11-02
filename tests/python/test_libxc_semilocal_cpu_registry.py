@@ -5,9 +5,10 @@ import copy
 import pytest
 from generativeqc_compiler.common import paths
 from generativeqc_compiler.xc import automatic_semilocal, libxc_bulk
+from generativeqc_compiler.xc._generated_semilocal_compositions import COMPOSITIONS
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
-from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, UnsupportedXC
+from generativeqc_compiler.xc.spec import POINTWISE_BULK_COMPONENTS, UnsupportedXC
 
 from tools import generate_libxc_semilocal_cpu_registry as registry
 
@@ -22,7 +23,7 @@ def test_registry_is_default_allow_for_structurally_supported_components() -> No
     assert "GGA_C_AM05" in names
     assert "GGA_X_AK13" in names
     assert len(codes) == len(entries)
-    assert all(name in AUTO_BULK_COMPONENTS for name in names)
+    assert names == set(POINTWISE_BULK_COMPONENTS) | set(COMPOSITIONS)
 
 
 def test_generated_gga_point_program_uses_generic_work_boundary() -> None:
@@ -92,10 +93,12 @@ def test_registry_captures_catalog_and_sources_once_per_call(
 def test_registry_observes_catalog_override_on_the_next_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Isolate atomic catalog corruption from composition dependency validation.
+    monkeypatch.setattr(automatic_semilocal, "COMPOSITIONS", {})
     catalog = copy.deepcopy(libxc_bulk.read_catalog())
     name = "LDA_C_VWN_4"
     record = next(row for row in catalog["registrations"] if row["name"] == name)
-    monkeypatch.setattr(automatic_semilocal, "AUTO_BULK_COMPONENTS", (name,))
+    monkeypatch.setattr(automatic_semilocal, "POINTWISE_BULK_COMPONENTS", (name,))
     monkeypatch.setattr(libxc_bulk, "read_catalog", lambda: catalog)
     first = registry.registry_entries()
     assert first[0].libxc_id == record["id"]
@@ -110,11 +113,13 @@ def test_registry_observes_catalog_override_on_the_next_call(
 def test_registry_rejects_out_of_range_catalog_ids(
     monkeypatch: pytest.MonkeyPatch, invalid_id: int
 ) -> None:
+    # Isolate atomic catalog corruption from composition dependency validation.
+    monkeypatch.setattr(automatic_semilocal, "COMPOSITIONS", {})
     catalog = copy.deepcopy(libxc_bulk.read_catalog())
     name = "LDA_C_VWN_4"
     record = next(row for row in catalog["registrations"] if row["name"] == name)
     record["id"] = invalid_id
-    monkeypatch.setattr(automatic_semilocal, "AUTO_BULK_COMPONENTS", (name,))
+    monkeypatch.setattr(automatic_semilocal, "POINTWISE_BULK_COMPONENTS", (name,))
     monkeypatch.setattr(libxc_bulk, "read_catalog", lambda: catalog)
     with pytest.raises(UnsupportedXC, match="outside the encoded range"):
         registry.registry_entries()
@@ -123,12 +128,14 @@ def test_registry_rejects_out_of_range_catalog_ids(
 def test_registry_rejects_duplicate_catalog_codes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Isolate atomic catalog corruption from composition dependency validation.
+    monkeypatch.setattr(automatic_semilocal, "COMPOSITIONS", {})
     catalog = copy.deepcopy(libxc_bulk.read_catalog())
     names = ("LDA_C_VWN_4", "GGA_X_APBE")
     for record in catalog["registrations"]:
         if record["name"] in names:
             record["id"] = 63
-    monkeypatch.setattr(automatic_semilocal, "AUTO_BULK_COMPONENTS", names)
+    monkeypatch.setattr(automatic_semilocal, "POINTWISE_BULK_COMPONENTS", names)
     monkeypatch.setattr(libxc_bulk, "read_catalog", lambda: catalog)
     with pytest.raises(ValueError, match="duplicate automatic Libxc functional code"):
         registry.registry_entries()
@@ -138,6 +145,8 @@ def test_registry_rejects_duplicate_catalog_codes(
 def test_registry_preserves_unavailable_registration_refusal(
     monkeypatch: pytest.MonkeyPatch, state: str
 ) -> None:
+    # Isolate atomic catalog corruption from composition dependency validation.
+    monkeypatch.setattr(automatic_semilocal, "COMPOSITIONS", {})
     catalog = copy.deepcopy(libxc_bulk.read_catalog())
     name = "LDA_C_VWN_4"
     record = next(row for row in catalog["registrations"] if row["name"] == name)
@@ -146,7 +155,7 @@ def test_registry_preserves_unavailable_registration_refusal(
     else:
         record["graph_status"] = "blocked"
         record["reason"] = "test unavailable registration"
-    monkeypatch.setattr(automatic_semilocal, "AUTO_BULK_COMPONENTS", (name,))
+    monkeypatch.setattr(automatic_semilocal, "POINTWISE_BULK_COMPONENTS", (name,))
     monkeypatch.setattr(libxc_bulk, "read_catalog", lambda: catalog)
     with pytest.raises(MapleImportError, match="unknown bulk|not claimable"):
         registry.registry_entries()
@@ -155,7 +164,25 @@ def test_registry_preserves_unavailable_registration_refusal(
 def test_registry_keeps_unsupported_ingredient_filter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(automatic_semilocal, "COMPOSITIONS", {})
     monkeypatch.setattr(
-        automatic_semilocal, "AUTO_BULK_COMPONENTS", ("LDA_C_VWN_4", "MGGA_X_JK")
+        automatic_semilocal, "POINTWISE_BULK_COMPONENTS", ("LDA_C_VWN_4", "MGGA_X_JK")
     )
     assert tuple(row.name for row in registry.registry_entries()) == ("LDA_C_VWN_4",)
+
+
+@pytest.mark.parametrize("violation", ("missing-component", "duplicate-code"))
+def test_composition_registry_preserves_dependency_and_code_integrity(
+    monkeypatch: pytest.MonkeyPatch, violation: str
+) -> None:
+    records = copy.deepcopy(COMPOSITIONS)
+    record = next(iter(records.values()))
+    if violation == "missing-component":
+        record["components"] = (("UNAVAILABLE_COMPONENT", "1"),)
+        error, message = UnsupportedXC, "stale composed Libxc registration"
+    else:
+        record["code"] = automatic_semilocal.automatic_functional_code("GGA_X_APBE")
+        error, message = ValueError, "duplicate composed Libxc functional code"
+    monkeypatch.setattr(automatic_semilocal, "COMPOSITIONS", records)
+    with pytest.raises(error, match=message):
+        registry.registry_entries()

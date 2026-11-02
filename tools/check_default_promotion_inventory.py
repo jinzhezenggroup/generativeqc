@@ -111,6 +111,29 @@ def _discover_scf_options(root: Path) -> dict[str, str]:
     return {f"scf-option:{name}": relative.as_posix() for name in names}
 
 
+def _discover_ks_tile_policy(root: Path) -> dict[str, str]:
+    """Register the public tile choice without pinning its implementation."""
+    relative = Path("python/generativeqc/ks.py")
+    tree = ast.parse(_read(root / relative), filename=str(relative))
+    controls = {}
+    names = {
+        "tile_points": "dft-policy:ks-scf-tile-points",
+        "force_tile_points": "dft-policy:ks-force-tile-points",
+    }
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == "KsOptions":
+            for field in node.body:
+                if (
+                    isinstance(field, ast.AnnAssign)
+                    and isinstance(field.target, ast.Name)
+                    and field.target.id in names
+                ):
+                    controls[names[field.target.id]] = relative.as_posix()
+    if set(controls) != set(names.values()):
+        raise ValueError("public KS tile policies are missing")
+    return controls
+
+
 def _discover_runtime_controls(root: Path) -> dict[str, str]:
     relative = Path("python/generativeqc/resources_hf.py")
     tree = ast.parse(_read(root / relative), filename=str(relative))
@@ -730,6 +753,7 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     )
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_WARM_FACTOR(?:_AUDIT)?)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_COLD_FACTOR)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_OCCUPIED_XC)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_KS_FAST_ANCHOR_DELTA)"', source))
     names.extend(
@@ -806,6 +830,16 @@ def _discover_prepared_df_controls(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_nonlocal_force_reuse(root: Path) -> dict[str, str]:
+    """Register native force reuse; executed numerical/work gates own admission."""
+    relative = Path("src/dft/cuda_stationary_controller.cpp")
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
+    return {
+        f"dft-policy:{name}": relative.as_posix()
+        for name in re.findall(r'"(GENERATIVEQC_VV10_COMPONENT_REUSE)"', source)
+    }
+
+
 def _discover_response_host_controls(root: Path) -> dict[str, str]:
     """Track resource controls without prescribing admission implementation."""
     relative = Path("src/hf/rhf_frame_response.cu")
@@ -820,9 +854,11 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
         _discover_scf_options(root),
+        _discover_ks_tile_policy(root),
         _discover_public_precision(root),
         _discover_runtime_controls(root),
         _discover_prepared_df_controls(root),
+        _discover_nonlocal_force_reuse(root),
         _discover_ks_phase_values(root),
         _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),

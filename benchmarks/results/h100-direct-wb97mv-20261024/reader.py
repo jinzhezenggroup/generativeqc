@@ -131,7 +131,11 @@ def safe_path(name: str) -> str:
 class Evidence:
     def __init__(self, document: dict) -> None:
         require(
-            document.get("schema") == "generativeqc.h100-direct-content-objects.v1",
+            document.get("schema")
+            in (
+                "generativeqc.h100-direct-content-objects.v1",
+                "generativeqc.h100-direct-content-objects.v2",
+            ),
             "unknown evidence schema",
         )
         self.document = document
@@ -139,7 +143,26 @@ class Evidence:
         total = 0
         for digest, encoded in document["objects"].items():
             require(type(digest) is str and len(digest) == 64, "invalid object key")
-            raw = base64.b64decode(encoded, validate=True)
+            # Text objects retain their original UTF-8 bytes without base64
+            # obscuring repetition from the outer compressor. Binary objects
+            # remain base64; both representations authenticate the same SHA.
+            if document["schema"].endswith(".v2"):
+                require(
+                    type(encoded) is dict and len(encoded) == 1,
+                    "invalid object encoding",
+                )
+                encoding, value = next(iter(encoded.items()))
+                require(
+                    encoding in ("utf8", "base64") and type(value) is str,
+                    "invalid object encoding",
+                )
+                raw = (
+                    value.encode("utf-8")
+                    if encoding == "utf8"
+                    else base64.b64decode(value, validate=True)
+                )
+            else:
+                raw = base64.b64decode(encoded, validate=True)
             require(sha(raw) == digest, "object SHA mismatch")
             total += len(raw)
             require(total <= MAX_ENVELOPE, "decoded object limit")

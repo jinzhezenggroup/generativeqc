@@ -70,7 +70,7 @@ def _assert_host_preflight_commands(step: str) -> None:
     )
     assert required <= set(targets[:end])
     run = runs[0]
-    assert _option_values(run, ("--test-dir",)) == ["build/cuda-release-sm120"]
+    assert _option_values(run, ("--test-dir",)) == ["build/cuda-release"]
     assert "--output-on-failure" in run
     selection = _option_values(run, ("-R", "--tests-regex"))
     assert len(selection) == 1
@@ -273,16 +273,18 @@ def test_resources_generate_the_native_cmake_source_without_rebuilding_library()
         production.split("        run: >-\n", 1)[1].strip()
         == resources.split("        run: >-\n", 1)[1].strip()
     )
+    assert "-DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120" in production
+    assert "-DGENERATIVEQC_AOT_PROFILE=sm_120" in production
     generation = _step(
         "cuda-resources", "Generate exact native grid source and prerequisite headers"
     )
-    assert "cmake --build --preset cuda-release-sm120" in generation
+    assert "cmake --build --preset cuda-release" in generation
     assert "--target generated/generated_grid_policy.cu --parallel 2" in generation
     assert "generativeqc_cuda_runtime_tests" not in _job("cuda-resources")
     validation = _step("cuda-resources", "Compile native grid/XC region resources")
-    assert "--generated-dir build/cuda-release-sm120/generated" in validation
+    assert "--generated-dir build/cuda-release/generated" in validation
     assert (
-        "--cmake-source build/cuda-release-sm120/generated/generated_grid_policy.cu"
+        "--cmake-source build/cuda-release/generated/generated_grid_policy.cu"
         in validation
     )
     assert "--functional PBE --npoint 4096 --tile-points 256 --nao 96 --spins 2" in (

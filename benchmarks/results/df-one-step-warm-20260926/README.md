@@ -84,11 +84,16 @@ protocol and raw-reference hashes before validating each native endpoint.
 [summary.json](summary.json) retains cold/warm/moved/moved-warm medians, iteration
 and reference build-count sets, common native identity, and hashes of three files:
 
-- [samples.json](samples.json): all native scalar observations in named columns;
+- [samples.json.gz](samples.json.gz): all native scalar observations in named columns;
   reconstruct each row with `dict(zip(table["columns"], row, strict=True))`.
 - [references.json.gz](references.json.gz): all independent original/moved force arrays,
   protocols, identities, raw hashes and reference timing/work samples.
 - [work.json.gz](work.json.gz): all grouped DF diagnostic counters, including controls.
+
+The native scalar collection and independent references use lossless gzip.
+For native samples, decoding restores all 54,150 original bytes (SHA-256
+`478edc74c0c8d3fd78641353d1772954de3d95a7b1b50c0891275a34873e86b4`).
+The existing renderer continues to emit plain JSON for fresh runs.
 
 The independent reference collection is stored as lossless gzip. Its stored
 size/hash and decoded size/hash are recorded in the matching `summary.json` part.
