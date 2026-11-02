@@ -58,7 +58,8 @@ template <unsigned P, unsigned A>
 __global__ void raw_tile(DfMdView pairs, DfMdView auxiliary, const Component* pair_components,
                          std::size_t pair_components_count, const Component* aux_components,
                          std::size_t aux_components_count, std::size_t pair_begin,
-                         std::size_t aux_begin, std::size_t aux_count, double* output) {
+                         std::size_t aux_begin, std::size_t aux_count, double omega,
+                         double* output) {
   const auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
   if (index >= pair_components_count * aux_components_count) return;
   const auto pc = pair_components[index / aux_components_count];
@@ -73,7 +74,7 @@ __global__ void raw_tile(DfMdView pairs, DfMdView auxiliary, const Component* pa
       const double sum = pair.exponent + aux.exponent;
       const double rho = pair.exponent * (aux.exponent / sum);
       double radial[df_md_count(P + A)];
-      df_md_radial<P + A>(rho, pair.product, aux.product, radial);
+      df_md_radial<P + A>(rho, pair.product, aux.product, radial, 1.0, omega);
       double product = 0;
       for (unsigned h = 0; h < df_md_count(P); ++h)
         if (e[h] != 0) product += e[h] * df_md_pair_potential<P, A>(radial, f, h);
@@ -86,6 +87,7 @@ __global__ void raw_tile(DfMdView pairs, DfMdView auxiliary, const Component* pa
 
 struct CudaDfMdRaw {
   int device{-1};
+  double range_omega{};
   cudaStream_t preparation{};
   DfMdView pair{}, auxiliary{};
   Components pairs, auxiliaries;
@@ -152,13 +154,18 @@ struct CudaDfMdRaw {
 };
 
 generativeqc_status create_cuda_df_md_raw(int device, const core::System& orbital,
-                                          const core::System& auxiliary, std::size_t device_budget,
+                                          const core::System& auxiliary, double range_omega,
+                                          std::size_t device_budget,
                                           std::size_t host_budget, CudaDfMdRaw** owner,
                                           CudaDfMdResources& resources, std::string& detail) {
   resources = {};
   detail.clear();
   if (!owner) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   *owner = nullptr;
+  if (!std::isfinite(range_omega) || range_omega < 0.0) {
+    detail = "raw Hermite range parameter must be finite and nonnegative";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   const auto fail = [&](cudaError_t error) {
     detail = std::string("DF raw Hermite CUDA operation failed: ") + cudaGetErrorString(error);
     return error == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
@@ -193,6 +200,7 @@ generativeqc_status create_cuda_df_md_raw(int device, const core::System& orbita
     // pageable source storage is destroyed.
     auto candidate = std::make_unique<CudaDfMdRaw>();
     candidate->device = device;
+    candidate->range_omega = range_omega;
     candidate->pairs = components(pairs);
     candidate->auxiliaries = components(auxiliaries);
     const auto component_capacity =
@@ -254,7 +262,7 @@ cudaError_t launch(const CudaDfMdRaw& owner, cudaStream_t stream, std::size_t pb
   if ((total + 127) / 128 > std::numeric_limits<int>::max()) return cudaErrorInvalidValue;
   raw_tile<P, A><<<(total + 127) / 128, 128, 0, stream>>>(
       owner.pair, owner.auxiliary, owner.pairs.device + p, pc, owner.auxiliaries.device + a, ac, pb,
-      ab, na, output);
+      ab, na, owner.range_omega, output);
   return cudaPeekAtLastError();
 }
 }  // namespace

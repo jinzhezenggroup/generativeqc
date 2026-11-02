@@ -65,9 +65,13 @@ PreparedCudaOccupiedFockBinding prepared_cuda_occupied_fock_binding(
   const auto execution = prepared_cuda_fock_binding(plan);
   const auto& strategy = plan.strategy();
   const auto& spec = strategy.spec;
+  const bool full_range =
+      spec.coulomb.present && fitted_full_range(spec.coulomb) && fitted_full_range(spec.exchange);
+  const bool fitted_range = !spec.coulomb.present &&
+                            spec.exchange.approximation == FockApproximation::DensityFitted &&
+                            spec.exchange.op == FockOperator::LongRange && spec.exchange.omega > 0;
   if (!execution || strategy.backend != FockBackend::Cuda || spec.derivative_order != 0 ||
-      !spec.coulomb.present || !spec.exchange.present || !fitted_full_range(spec.coulomb) ||
-      !fitted_full_range(spec.exchange) || !plan.cuda_fitted_source())
+      !spec.exchange.present || (!full_range && !fitted_range) || !plan.cuda_fitted_source())
     return {};
   return {execution.device_id, execution.stream, execution.source_identity, execution.nbf,
           spec.spin == FockSpin::Unrestricted};
@@ -486,6 +490,7 @@ generativeqc_status enqueue_prepared_cuda_occupied_fock(
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   const bool unrestricted = binding.unrestricted;
+  const bool with_coulomb = plan.strategy().spec.coulomb.present;
   const bool valid_factors =
       occupied.alpha_rank <= binding.nbf &&
       (!occupied.alpha_rank || occupied.alpha_coefficients != nullptr) &&
@@ -493,8 +498,8 @@ generativeqc_status enqueue_prepared_cuda_occupied_fock(
                           (!occupied.beta_rank || occupied.beta_coefficients != nullptr)
                     : occupied.beta_rank == 0 && occupied.beta_coefficients == nullptr);
   const bool valid_buffers = matrix_elements == binding.nbf * binding.nbf && density != nullptr &&
-                             coulomb != nullptr && alpha_exchange != nullptr &&
-                             numerical_error != nullptr &&
+                             (with_coulomb ? coulomb != nullptr : coulomb == nullptr) &&
+                             alpha_exchange != nullptr && numerical_error != nullptr &&
                              (unrestricted ? beta != nullptr && beta_exchange != nullptr
                                            : beta == nullptr && beta_exchange == nullptr);
   if (!valid_factors || !valid_buffers) {
@@ -509,17 +514,21 @@ generativeqc_status enqueue_prepared_cuda_occupied_fock(
     return cuda_execution::source_cuda_status(reset);
   }
 
-  const JkTermSelection coulomb_only{true, false};
-  auto status =
-      unrestricted
-          ? execute_cuda_density_fitting_uhf_jk_device(fitted, density, beta, coulomb, nullptr,
-                                                       nullptr, detail, coulomb_only,
-                                                       FockMatrixLayout::RowMajor)
-          : execute_cuda_density_fitting_rhf_jk_device(fitted, density, coulomb, nullptr, detail,
-                                                       coulomb_only, FockMatrixLayout::RowMajor);
-  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  if (with_coulomb) {
+    const JkTermSelection coulomb_only{true, false};
+    const auto status =
+        unrestricted
+            ? execute_cuda_density_fitting_uhf_jk_device(fitted, density, beta, coulomb, nullptr,
+                                                         nullptr, detail, coulomb_only,
+                                                         FockMatrixLayout::RowMajor)
+            : execute_cuda_density_fitting_rhf_jk_device(fitted, density, coulomb, nullptr, detail,
+                                                         coulomb_only, FockMatrixLayout::RowMajor);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  }
 
-  status =
+  // The range owner carries its own transformed factors and metric. Occupied
+  // contraction changes only the factorization of D, never the radial operator.
+  auto status =
       cuda_df::build_occupied_exchange(*fitted, 0, occupied.alpha_coefficients, occupied.alpha_rank,
                                        true, unrestricted ? 1.0 : 2.0, alpha_exchange, detail);
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;

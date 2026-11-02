@@ -134,7 +134,10 @@ static __device__ __constant__ const signed char kMdEngineKetPhases[70] = {{{sig
 
 
 def emit_md_radial_function(
-    maximum_order: int = MAXIMUM_RADIAL_ORDER, name: str = "md_engine_radial"
+    maximum_order: int = MAXIMUM_RADIAL_ORDER,
+    name: str = "md_engine_radial",
+    *,
+    range_separated: bool = False,
 ) -> str:
     """Emit shared compact Coulomb roots through the caller's qualified order.
 
@@ -166,6 +169,26 @@ def emit_md_radial_function(
         .replace("@MAXIMUM_ORDER@", str(maximum_order))
         .replace("@ORDER_MESSAGE@", message)
     )
+    if range_separated:
+        # The erf substitution changes only the Boys seed scale and exponent;
+        # every Cartesian response still uses this same radial recurrence.
+        # Keep the direct owner's generated signature and arithmetic unchanged.
+        prefix = prefix.replace(
+            "double prefactor = 1.0)",
+            "double prefactor = 1.0, double omega = 0.0)",
+        ).replace(
+            "  double seeds[Order + 1];",
+            """  // omega=0 denotes Coulomb, matching the physical DF source contract.
+  // For erf(omega*r)/r, t=s*u with s=omega/hypot(omega,sqrt(rho)).
+  // Thus R_n uses rho*s^2 and its common prefactor acquires s.
+  // hypot avoids overflowing omega^2 for the Coulomb-limit parameter.
+  if (omega > 0.0) {
+    const double scale = omega / hypot(omega, sqrt(rho));
+    rho *= scale * scale;
+    prefactor *= scale;
+  }
+  double seeds[Order + 1];""",
+        )
     return prefix + stages + "\n}\n\n"
 
 

@@ -423,6 +423,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // VV10 potential. Every accepted endpoint still uses the unmodified full
   // target operator, consecutive physical energy checks and original budget.
   bool nonlocal_outer_active{}, nonlocal_frozen_stage{}, pending_nonlocal_frozen{};
+  // Retain an immutable nonlocal AO potential during each frozen inner solve,
+  // borrowing a separate grid or using optional shared-grid storage. Its
+  // generation stays at the last full target; publishing an
+  // inner density as that generation would falsely claim fresh physical work.
+  std::uint64_t nonlocal_anchor_generation{};
+  void* nonlocal_anchor_arena{};
+  double* nonlocal_anchor_potential{};
+  int* nonlocal_anchor_error{};
   double nonlocal_inner_residual_tolerance{1e-9};
   unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
   double exchange_coefficient{}, range_exchange_coefficient{};
@@ -564,14 +572,20 @@ struct CudaKsPlan::Impl : KsStateStorage {
       return;
     const auto& strategy = provider.strategy();
     const auto& source_strategy = has_range_correction ? *range_correction : strategy;
+    // Residency changes storage for exact ERIs; it cannot replace a fitted
+    // radial operator. A fitted primary may have either kind of independent
+    // LR provider, so the provider's existence alone does not admit this cache.
+    if (has_range_correction &&
+        source_strategy.spec.exchange.approximation != scf::FockApproximation::Exact)
+      return;
     // A strict range cache belongs to the independent Direct correction even
     // when the full-range primary is fitted. Automatic selection still passes
     // the cold-reuse, angular, grid and complete-capacity gates below. Its
     // omitted buckets use the ordinary exact provider; primary DF stays intact.
-    const bool fitted_range_source = has_range_correction && range_provider && !mixed_source;
+    const bool separate_direct_range = has_range_correction && range_provider && !mixed_source;
     // Public ledgers have no reserved quartic allowance yet. A forced request
     // must not bypass their complete resource plan or alter precision/ranges.
-    if (((fitted_coulomb || fitted_exchange) && !fitted_range_source) || incremental_direct_jk ||
+    if (((fitted_coulomb || fitted_exchange) && !separate_direct_range) || incremental_direct_jk ||
         (precision_schedule.any_lower_precision() && !strict_refinement &&
          !experimental_mixed_point && !mixed_source) ||
         runtime::active_device_resource_ledger ||
@@ -585,7 +599,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       maximum_angular = std::max(maximum_angular, shell.angular_momentum);
     // The fitted composition qualifies generated SPD consumers only. Higher
     // angular sources require their own primary-provider census/consumer proof.
-    if ((fitted_coulomb || fitted_exchange) && fitted_range_source && maximum_angular > 2) return;
+    if ((fitted_coulomb || fitted_exchange) && separate_direct_range && maximum_angular > 2) return;
     // Only hybrid endpoints qualify the smaller reuse threshold. Pure J keeps
     // its incumbent admission rather than inheriting an unmeasured cost model.
     const auto auto_policy = has_exchange ? DirectJkSourceAutoPolicy::screened_hybrid_cold
@@ -701,7 +715,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     required = sum(required, resource.retained_host_numeric_bytes);
     required = sum(required, provider.cpu_observation_capacity());
     required = sum(required, provider.diagnostic().direct.host_preparation_bytes);
-    if (fitted_range_source) {
+    if (separate_direct_range) {
       // Device bytes already include both prepared providers. Their separate
       // host observations/preparation must also precede optional admission.
       required = sum(required, range_provider->cpu_observation_capacity());
@@ -731,7 +745,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                    : "cuda_ks_resident_values_prepare",
               source_cold_phase, generic_fock, phase_source_screening, buckets.ceiling, false,
               auto_policy, buckets.mask, spins,
-              (automatic_range || fitted_range_source ||
+              (automatic_range || separate_direct_range ||
                (has_exchange && (host.ceiling || disk.ceiling) && !mixed_source)) &&
                   !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
               has_exchange && !mixed_source ? host.ceiling : 0, host.mask, host_tile.ceiling,
@@ -2291,6 +2305,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       }
       prepare_initial_state();
       prepare_fast_anchor_storage();
+      prepare_nonlocal_anchor_storage(optional_device_capacity());
     } catch (...) {
       cleanup();
       throw;
@@ -2316,6 +2331,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     matrix_products.reset();
     matrix_provider_allowance.reset();
     if (fast_anchor_arena) runtime::resource_cuda_free(fast_anchor_arena);
+    if (nonlocal_anchor_arena) runtime::resource_cuda_free(nonlocal_anchor_arena);
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
     if (xc_arena) runtime::resource_cuda_free(xc_arena);
     if (nonlocal_xc_arena) runtime::resource_cuda_free(nonlocal_xc_arena);
@@ -2323,6 +2339,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     nonlocal_arena = xc_arena = arena = nullptr;
     nonlocal_xc_arena = nullptr;
     fast_anchor_arena = nullptr;
+    nonlocal_anchor_arena = nullptr;
     cudaSetDevice(previous);
   }
   ~Impl() { cleanup(); }
@@ -2513,6 +2530,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     nonlocal_seed_stage = nonlocal_initialization && (!outer_requested || native_cold_seed);
     nonlocal_inner_residual_tolerance = 1e-9;
     nonlocal_frozen_stage = pending_nonlocal_frozen = false;
+    nonlocal_anchor_generation = 0;
     nonlocal_inner_iterations = nonlocal_exact_epoch_iterations = 0;
     nonlocal_seed_iterations = nonlocal_exact_iterations = 0;
     pending_nonlocal_seed = false;
@@ -3216,7 +3234,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void enqueue_range_correction(const double* alpha_density, const double* beta_density,
                                 std::string& detail, bool use_source = true,
-                                bool mixed_exchange = false, bool collect_work = true) {
+                                bool mixed_exchange = false, bool collect_work = true,
+                                const scf::PreparedCudaOccupiedFockInput* occupied = nullptr) {
     if (!has_range_correction || !range_correction)
       throw std::logic_error("CUDA KS range correction is unavailable");
     pending_mixed_range_resident = false;
@@ -3253,10 +3272,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
       range_input_ready.record(stream);
       check(cudaStreamWaitEvent(correction_stream, range_input_ready.get(), 0));
       submitted = true;
-      const auto status = scf::enqueue_prepared_cuda_exchange_correction(
-          *range_provider, *range_correction, alpha_density, beta_density, matrix, range_exchange,
-          spins == 2 ? range_exchange + matrix : nullptr, range_jk_error, detail, mixed_exchange,
-          mixed_exchange ? mixed_coulomb_work_counter() + 1 : nullptr);
+      const bool use_occupied =
+          occupied && !mixed_exchange && scf::prepared_cuda_occupied_fock_binding(*range_provider);
+      runtime::cuda_trace::trace_counter("range_occupied_k", use_occupied);
+      const auto status =
+          use_occupied ? scf::enqueue_prepared_cuda_occupied_fock(
+                             *range_provider, alpha_density, beta_density, matrix, *occupied,
+                             nullptr, range_exchange,
+                             spins == 2 ? range_exchange + matrix : nullptr, range_jk_error, detail)
+                       : scf::enqueue_prepared_cuda_exchange_correction(
+                             *range_provider, *range_correction, alpha_density, beta_density,
+                             matrix, range_exchange, spins == 2 ? range_exchange + matrix : nullptr,
+                             range_jk_error, detail, mixed_exchange,
+                             mixed_exchange ? mixed_coulomb_work_counter() + 1 : nullptr);
       observe_value_dispatch(status, false, 1, collect_work, correction_stream);
       if (status != GENERATIVEQC_STATUS_SUCCESS) {
         (void)cudaStreamSynchronize(correction_stream);
@@ -3363,6 +3391,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // in opt-in diagnostics. Disabled tracing adds no events or fences.
       auto& nonlocal_source = nonlocal_xc ? *nonlocal_xc : *xc;
       if (nonlocal_xc) xc->enqueue(density, elements, next_generation, phase);
+      if (nonlocal_frozen_stage && nonlocal_anchor_generation &&
+          (nonlocal_xc || nonlocal_anchor_arena)) {
+        // The independent plan is not overwritten by semilocal evaluation.
+        // Reuse V_nlc[D_anchor] and its provisional energy/error together;
+        // frozen steps cannot pass the target convergence or force gates.
+        // Shared-grid owners require a separate optional matrix. Missing
+        // storage retains the ordinary feature/assembly path below.
+        if (!nonlocal_xc) xc->enqueue(density, elements, next_generation, phase);
+        const auto anchor = nonlocal_xc ? nonlocal_xc->view(nonlocal_anchor_generation)
+                                        : CudaXcView{nonlocal_anchor_generation,
+                                                     n,
+                                                     spins,
+                                                     nonlocal_anchor_potential,
+                                                     nonlocal_energy,
+                                                     nonlocal_anchor_error,
+                                                     stream};
+        merge_grid_views(xc->view(next_generation), anchor);
+        runtime::cuda_trace::trace_counter("nonlocal_frozen_ao_reuses", 1);
+        return xc->view(next_generation);
+      }
+      nonlocal_anchor_generation = 0;
       runtime::cuda_trace::trace_call("semilocal_density_features", stream, [&] {
         nonlocal_source.enqueue_density_features(
             density, elements, next_generation, nonlocal_raw_density, nonlocal_raw_gradient, phase);
@@ -3393,11 +3442,28 @@ struct CudaKsPlan::Impl : KsStateStorage {
           quadrature.points,
           phase == generativeqc::runtime::PrecisionPhase::Admitted && pending_mixed_nonlocal);
       pair_trace.finish();
+      const bool retain_nonlocal_matrix =
+          !nonlocal_xc && nonlocal_outer_active && nonlocal_anchor_arena;
       runtime::cuda_trace::trace_call("nonlocal_ao_potential", stream, [&] {
-        nonlocal_source.enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
-                                                   nonlocal_effective_gradient, nonlocal_vrho,
-                                                   nonlocal_vsigma, nonlocal_energy);
+        if (retain_nonlocal_matrix)
+          check(cudaMemsetAsync(nonlocal_anchor_potential, 0, elements * sizeof(double), stream));
+        nonlocal_source.enqueue_nonlocal_potential(
+            next_generation, nonlocal_effective_weights, nonlocal_effective_gradient, nonlocal_vrho,
+            nonlocal_vsigma, nonlocal_energy,
+            retain_nonlocal_matrix ? nonlocal_anchor_potential : nullptr);
+        if (retain_nonlocal_matrix) {
+          const auto current = xc->view(next_generation);
+          check(cudaMemcpyAsync(nonlocal_anchor_error, current.error, sizeof(int),
+                                cudaMemcpyDeviceToDevice, stream));
+          // The existing assembly produced the isolated FP64 contribution.
+          // Energy/status already belong to current; merge only its matrix.
+          launch_add_matrix_kernel(static_cast<unsigned>((elements + 127) / 128), 128, 0, stream,
+                                   elements, nonlocal_anchor_potential,
+                                   const_cast<double*>(current.potential));
+          check(cudaGetLastError());
+        }
       });
+      if (nonlocal_xc || retain_nonlocal_matrix) nonlocal_anchor_generation = next_generation;
       merge_nonlocal_grid(next_generation);
       return xc->view(next_generation);
     }
@@ -3462,6 +3528,42 @@ struct CudaKsPlan::Impl : KsStateStorage {
                           cudaMemcpyHostToDevice, stream));
     movement.xc_host_h2d_bytes += bytes + sizeof(host_xc_totals) + sizeof(host_xc_error);
     return {next_generation, n, spins, tmp1, staged_xc_totals, staged_xc_error, stream};
+  }
+
+  /** Optional frozen AO storage must not displace a mandatory resource promise.
+   * Pair keys and final rho/grad-rho exports retain independent storage; an
+   * allocation miss keeps the original per-inner-step assembly. */
+  void prepare_nonlocal_anchor_storage(std::size_t available_bytes) {
+    if (!device_nonlocal || nonlocal_xc || spins != 1 ||
+        nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10)
+      return;
+    const auto bytes = product(sum(elements, 1), sizeof(double));
+    if (bytes > available_bytes) return;
+    runtime::DeviceUnpromisedCapacityScope optional_scope;
+    bool host_oom = false;
+    const auto status = runtime::resource_cuda_malloc(&nonlocal_anchor_arena, bytes, &host_oom);
+    if (status == cudaErrorMemoryAllocation && !host_oom) {
+      const auto pending = cudaGetLastError();
+      if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
+      return;
+    }
+    check(status);
+    nonlocal_anchor_potential = static_cast<double*>(nonlocal_anchor_arena);
+    nonlocal_anchor_error = reinterpret_cast<int*>(nonlocal_anchor_potential + elements);
+    resource.state_device_bytes = sum(resource.state_device_bytes, bytes);
+  }
+
+  /** Called only after draining the producer and revoking active SCF work. */
+  std::size_t retire_nonlocal_anchor_storage() {
+    if (!nonlocal_anchor_arena) return 0;
+    const auto bytes = product(sum(elements, 1), sizeof(double));
+    check(runtime::resource_cuda_free(nonlocal_anchor_arena));
+    nonlocal_anchor_arena = nullptr;
+    nonlocal_anchor_potential = nullptr;
+    nonlocal_anchor_error = nullptr;
+    nonlocal_anchor_generation = 0;
+    resource.state_device_bytes -= bytes;
+    return bytes;
   }
 
   /** Allocate only after mandatory preparation. Refusing this optional lease
@@ -3804,9 +3906,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
         else
           ++movement.fitted_dense_exchange_builds;
       }
-      if (has_range_correction && !fused_rsh_values)
+      if (has_range_correction && !fused_rsh_values) {
+        // Both independent radial owners may borrow this density's proved C.
+        // The range-stream event below orders its read before the next proposal
+        // overwrites tmp1. Export/rebase callers without that proof stay dense.
+        const scf::PreparedCudaOccupiedFockInput occupied{
+            tmp1, spins == 2 ? tmp1 + matrix : nullptr, occupations[0],
+            spins == 2 ? occupations[1] : 0};
         enqueue_range_correction(jk_density, spins == 2 ? jk_density + matrix : nullptr, detail,
-                                 true, pending_mixed_range_exchange);
+                                 true, pending_mixed_range_exchange, true,
+                                 use_occupied_fitted ? &occupied : nullptr);
+      }
       finalize_incremental_jk_components();
       jk_trace.finish();
       mixed_precision_executed = mixed_precision_executed || pending_mixed_coulomb ||
@@ -5425,14 +5535,18 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
     check(cudaMemGetInfo(&free_before, &total));
     free_after = free_before;
     if (additional_device_bytes > free_before &&
-        (impl_->fast_anchor_arena || impl_->phase_source)) {
+        (impl_->fast_anchor_arena || impl_->nonlocal_anchor_arena || impl_->phase_source)) {
       // The final-state token excludes active/pending SCF work. Drain its
       // producer before freeing optional cold-SCF storage. Downstream D/W/XC
       // leases borrow neither the anchor nor the independently owned ERIs.
       check(cudaStreamSynchronize(impl_->stream));
       ++impl_->movement.synchronizations;
+      if (impl_->nonlocal_anchor_arena) {
+        retired = impl_->retire_nonlocal_anchor_storage();
+        check(cudaMemGetInfo(&free_after, &total));
+      }
       if (impl_->fast_anchor_arena) {
-        retired = impl_->retire_fast_anchor_storage();
+        retired += impl_->retire_fast_anchor_storage();
         check(cudaMemGetInfo(&free_after, &total));
       }
       if (additional_device_bytes > free_after && impl_->phase_source) {

@@ -365,10 +365,6 @@ generativeqc_status try_prepare_cuda_df_md_raw_source(CudaDensityFittingIntegral
     detail = "raw Hermite preparation requires a fresh integral source";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  // Prepared Hermite raw tiles implement the full-range operator. An LR source
-  // must keep its omega-aware generated values with the matching LR metric,
-  // even when packed storage and spare capacity would admit the faster owner.
-  if (state.batch.df_range_omega > 0.0) return GENERATIVEQC_STATUS_SUCCESS;
   if (state.batch_size != 1 || !state.automatic_value_mapping || state.value_math ||
       !additional_device_budget || !additional_host_budget)
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -386,7 +382,8 @@ generativeqc_status try_prepare_cuda_df_md_raw_source(CudaDensityFittingIntegral
   const auto selected = cudaSetDevice(state.device_id);
   if (selected != cudaSuccess) return source_cuda_status(selected);
   CudaDfMdResources resources;
-  auto status = create_cuda_df_md_raw(state.device_id, orbital, auxiliary, device_cap, host_cap,
+  auto status = create_cuda_df_md_raw(state.device_id, orbital, auxiliary,
+                                      state.batch.df_range_omega, device_cap, host_cap,
                                       &state.raw_hermite, resources, detail);
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
     detail.clear();  // Transactional refusal retains the existing source.

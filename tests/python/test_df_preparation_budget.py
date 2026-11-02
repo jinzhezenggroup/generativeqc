@@ -577,6 +577,18 @@ int main() {
         1,768,3712,160,constrained.value_bytes,100ULL<<20,0,false);
     if (constrained_values.value_storage.rank_capacity == 160) return 39;
   } catch (const DensityFittingBudgetError&) {}
+  // A second radial owner can retain B while complete occupied U does not fit.
+  // It must keep physical integrals resident and bound the projection fallback.
+  const auto second_budget = resolve_df_budget(
+      {768,3616,96,1,0,true},{18ULL<<30,32ULL<<30,true},0);
+  const auto second = resolve_method_owned_df_resident_budget(
+      second_budget,768,3616,160,100ULL<<20);
+  const auto second_values = plan_packed_density_fitting_tiles(
+      1,768,3616,160,second.value_bytes,100ULL<<20,0,false);
+  if (!second_values.stores_full_three_center || second_values.value_storage.rank_capacity ||
+      second_values.peak_workspace_bytes > second.value_bytes ||
+      second.total_bytes > second.observed_free_bytes-second.reserved_headroom_bytes ||
+      second.response_bytes == 0) return 44;
   // Promotion may spend fractional headroom beyond the base policy. The
   // native packed-plan ceiling must cover that increase for both occupied U
   // and rank-zero J, across rebuild resource envelopes and source sizes.

@@ -284,15 +284,20 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
   // This method owns an integer restricted determinant. Fixed-density Fock
   // callers do not acquire this promise from the same dimensions or system.
   const auto& spec = strategy.spec;
-  // A range-separated composition may still reserve the ordinary full-range
-  // fitted primary. Its independent long-range correction neither consumes
-  // nor mutates this occupied projection, so range_exchange is not itself a veto.
+  // Each radial owner reserves its own B/U storage against remaining capacity.
+  // Both consume the method's determinant, but never borrow each other's metric
+  // or transformed integrals. Arbitrary-density callers retain bounded panels.
+  const bool full_range = spec.coulomb.present &&
+                          spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+                          spec.exchange.op == scf::FockOperator::FullRange;
+  const bool fitted_range = !spec.coulomb.present &&
+                            spec.exchange.op == scf::FockOperator::LongRange &&
+                            spec.exchange.omega > 0.0;
   if (execution_plan.spin_channels != 1 || strategy.backend != scf::FockBackend::Cuda ||
       spec.spin != scf::FockSpin::Restricted || spec.derivative_order != 0 ||
-      !spec.coulomb.present || !spec.exchange.present ||
-      spec.coulomb.approximation != scf::FockApproximation::DensityFitted ||
+      !spec.exchange.present ||
       spec.exchange.approximation != scf::FockApproximation::DensityFitted ||
-      spec.exchange.op != scf::FockOperator::FullRange)
+      (!full_range && !fitted_range))
     return {};
   const auto [alpha, beta] = scf::initial_guess::spin_occupations(system);
   if (system.electron_count <= 0 || !alpha || alpha != beta || system.multiplicity != 1 ||
@@ -2865,7 +2870,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
           fock_backend == scf::FockBackend::Cuda && !execution_plan_.density_fitted_range_exchange
               ? 1U
               : 0U,
-          execution_plan_.density_fitted_range_exchange ? 1U : 0U);
+          execution_plan_.density_fitted_range_exchange ? 1U : 0U,
+          ks_fitted_projection_reservation(system_, execution_plan_, *range_strategy_));
     }
   }
 
