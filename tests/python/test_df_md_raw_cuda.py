@@ -33,7 +33,10 @@ def raw_probe(tmp_path_factory: Any, required_native_cxx: NativeCxx) -> Path:
     library = Path(os.environ["GENERATIVEQC_LIBRARY"]).absolute()
     compiler = replace(
         required_native_cxx,
-        compiler=str(Path(os.environ["CUDA_PATH"]) / "bin/nvcc"),
+        # Conda may expose nvcc through a target-directory symlink. Resolve the
+        # executable so its tool lookup and compiler-cache dependency scan use
+        # the real toolkit layout; pass the public target headers explicitly.
+        compiler=str((Path(os.environ["CUDA_PATH"]) / "bin/nvcc").resolve()),
     )
     return compiler.build_executable(
         [ROOT / "tests/native/df_md_raw_probe.cu", ROOT / "src/scf/cuda/df_md_raw.cu"],
@@ -43,6 +46,7 @@ def raw_probe(tmp_path_factory: Any, required_native_cxx: NativeCxx) -> Path:
             "-O2",
             "-arch=" + os.environ.get("GENERATIVEQC_TEST_CUDA_ARCH", "sm_120"),
             "-I" + str(folder),
+            "-I" + str(Path(os.environ["CUDA_PATH"]) / "include"),
             "-I" + str(ROOT / "src"),
             "-I" + str(ROOT / "include"),
         ),

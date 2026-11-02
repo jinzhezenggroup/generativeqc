@@ -639,6 +639,26 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true,
                     GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
                 !projection,
             "same-rank provider reuse revived the previous final projection lease");
+    // U was overwritten by another solver, but C belongs to this KS arena.
+    // Its independent lease must still generate the same accepted density.
+    dft::CudaKsResidentOccupiedFactorBinding factor;
+    require(
+        plan.resident_final_occupied_factor(token, factor, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+            factor,
+        "provider scratch reuse revoked the method-owned occupied factor");
+    std::vector<double> retained(coefficients.size());
+    require(cudaMemcpyAsync(retained.data(), factor.coefficients, retained.size() * sizeof(double),
+                            cudaMemcpyDeviceToHost,
+                            reinterpret_cast<cudaStream_t>(factor.stream)) == cudaSuccess &&
+                cudaStreamSynchronize(reinterpret_cast<cudaStream_t>(factor.stream)) == cudaSuccess,
+            "could not observe the occupied factor after provider reuse");
+    require(retained == coefficients, "provider reuse changed the method-owned occupied factor");
+    auto stale = token;
+    ++stale.identity.determinant.solve_epoch;
+    require(plan.resident_final_occupied_factor(stale, factor, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                !factor,
+            "stale final token revived an occupied factor lease");
   } else {
     require(projection_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
                 movement.fitted_final_projection_leases == 0,
@@ -859,8 +879,8 @@ void occupied_fitted_range_matrices(bool restricted, bool reserve = false) {
   const scf::PreparedFockPlan cpu(
       system, &system, scf::resolve_fock_build(spec, scf::FockBackend::Cpu, 1e-12, 1e-10));
   const scf::PreparedFockPlan gpu(
-      system, &system, scf::resolve_fock_build(spec, scf::FockBackend::Cuda, 1e-12, 1e-10), 0,
-      0, 0, 1, scf::FockOccupiedProjectionReservation{reserve ? 1U : 0U});
+      system, &system, scf::resolve_fock_build(spec, scf::FockBackend::Cuda, 1e-12, 1e-10), 0, 0, 0,
+      1, scf::FockOccupiedProjectionReservation{reserve ? 1U : 0U});
   const auto binding = scf::prepared_cuda_occupied_fock_binding(gpu);
   require(static_cast<bool>(binding), "fitted LR owner lacks occupied execution");
   const auto n = binding.nbf, matrix = n * n;

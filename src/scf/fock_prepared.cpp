@@ -792,7 +792,8 @@ FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components_wi
 generativeqc_status PreparedFockPlan::consume_fitted_energy_derivatives(
     int device, void* stream, const double* alpha, const double* beta, const double* total,
     const CudaDerivativeSourceConsumer& consume, std::string& detail, bool range_correction,
-    const CudaDfBorrowedFittedProjection* projection, bool combine_full_range) const {
+    const CudaDfBorrowedFittedProjection* projection, bool combine_full_range,
+    const CudaDfBorrowedOccupiedFactor* factor) const {
   if (!impl_->cuda_df || !impl_->fitted || !impl_->retained_fitted_derivative_order) {
     detail = "prepared provider has no retained CUDA DF derivative source";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -803,7 +804,10 @@ generativeqc_status PreparedFockPlan::consume_fitted_energy_derivatives(
   if (!alpha || !total || (unrestricted && !beta) || !consume || !data.df_gradient_orbital ||
       !data.df_gradient_auxiliary ||
       (projection &&
-       (!*projection || unrestricted || !spec.exchange.present || range_correction))) {
+       (!*projection || unrestricted || !spec.exchange.present || range_correction)) ||
+      (factor &&
+       (!*factor || unrestricted || !range_correction || spec.coulomb.present ||
+        !spec.exchange.present || factor->device_id != device || factor->nbf != data.raw.nbf))) {
     detail = "incomplete native DF stationary density/source lease";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -820,7 +824,7 @@ generativeqc_status PreparedFockPlan::consume_fitted_energy_derivatives(
         impl_->cuda_df.get(), 0, *data.df_gradient_orbital, *data.df_gradient_auxiliary,
         data.raw.three_center, data.raw.metric, terms, data.df_gradient_mapping,
         data.df_gradient_budget, 0, unused, detail, nullptr, nullptr, occupied, nullptr, nullptr,
-        &request);
+        &request, factor);
   };
   // U aliases the provider's mutable response scratch. Exchange must consume
   // its authenticated lease before even a pure-J call revokes or overwrites it.

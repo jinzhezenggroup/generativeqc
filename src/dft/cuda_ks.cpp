@@ -387,7 +387,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::uint64_t warm_density_generation{}, warm_factor_generation{}, warm_factor_epoch{},
       warm_factor_owner{};
   std::size_t warm_factor_rank{};
-  bool pending_fitted_occupied{}, final_fitted_projection_ready{};
+  bool pending_fitted_occupied{}, final_fitted_projection_ready{}, final_occupied_factor_ready{};
   std::uint64_t pending_fitted_projection_scratch_generation{};
   std::uint64_t final_fitted_projection_scratch_generation{};
   runtime::ExecutionPrecisionSchedule precision_schedule{};
@@ -918,15 +918,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   void retain_final_fitted_projection() {
-    final_fitted_projection_ready = false;
+    final_fitted_projection_ready = final_occupied_factor_ready = false;
     if (!pending_fitted_occupied || spins != 1 || !warm_orbitals_ready || !occupations[0]) return;
-    const auto projection =
-        scf::prepared_cuda_occupied_projection_binding(provider, occupations[0]);
-    if (!projection || projection.device_id != device || projection.stream != stream ||
-        projection.source_identity != occupied_fock_binding.source_identity ||
-        projection.scratch_generation != pending_fitted_projection_scratch_generation ||
-        projection.nbf != n)
-      return;
     // The candidate preserves the original AO factor that generated this D.
     // Keep the incumbent orthonormal-frame handoff unchanged otherwise. The
     // representation tag, not the current environment, selects the conversion.
@@ -935,6 +928,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
                             cudaMemcpyDeviceToDevice, stream));
     else
       multiply_spin(1, x, false, false, warm_orbitals, true, final_enabled, proposal);
+    final_occupied_factor_ready = true;
+    const auto projection =
+        scf::prepared_cuda_occupied_projection_binding(provider, occupations[0]);
+    if (!projection || projection.device_id != device || projection.stream != stream ||
+        projection.source_identity != occupied_fock_binding.source_identity ||
+        projection.scratch_generation != pending_fitted_projection_scratch_generation ||
+        projection.nbf != n)
+      return;
     final_fitted_projection_scratch_generation = projection.scratch_generation;
     final_fitted_projection_ready = true;
     ++movement.fitted_final_projection_leases;
@@ -2414,7 +2415,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (diis_work_readback) *diis_work_readback = {};
     output.dft_diagnostic.coulomb_exchange_work = {};
     final_state_ready = final_frame_ready = final_stationary_weights_ready = false;
-    final_fitted_projection_ready = false;
+    final_fitted_projection_ready = final_occupied_factor_ready = false;
     final_generation = 0;
     cold_fitted_factor_ready = occupied_fitted_factor_ready = false;
     pending_fitted_occupied = false;
@@ -2997,7 +2998,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       retire_phase_source(false);
       occupied_fitted_factor_ready = false;
       pending_fitted_occupied = false;
-      final_fitted_projection_ready = false;
+      final_fitted_projection_ready = final_occupied_factor_ready = false;
       invalidate_warm_orbitals();
       throw;
     }
@@ -3061,7 +3062,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         output.dft_diagnostic.coulomb_exchange_work.complete = false;
         occupied_fitted_factor_ready = false;
         pending_fitted_occupied = false;
-        final_fitted_projection_ready = false;
+        final_fitted_projection_ready = final_occupied_factor_ready = false;
         invalidate_warm_orbitals();
       }
       return active;
@@ -3078,7 +3079,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (auditing_phase) clear_warm_state();
       occupied_fitted_factor_ready = false;
       pending_fitted_occupied = false;
-      final_fitted_projection_ready = false;
+      final_fitted_projection_ready = final_occupied_factor_ready = false;
       invalidate_warm_orbitals();
       throw;
     }
@@ -4152,7 +4153,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = false;
       occupied_fitted_factor_ready = false;
       pending_fitted_occupied = false;
-      final_fitted_projection_ready = false;
+      final_fitted_projection_ready = final_occupied_factor_ready = false;
       return false;
     }
     // A stationary physical state can still alternate integer occupations.
@@ -4414,7 +4415,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         output.precision_work.returned_solve_epoch = solve_epoch;
         output.precision_work.returned_state_generation = final_generation;
       } else {
-        final_fitted_projection_ready = false;
+        final_fitted_projection_ready = final_occupied_factor_ready = false;
       }
       pending_fitted_occupied = false;
     } catch (...) {
@@ -4424,7 +4425,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       output.converged = false;
       occupied_fitted_factor_ready = false;
       pending_fitted_occupied = false;
-      final_fitted_projection_ready = false;
+      final_fitted_projection_ready = final_occupied_factor_ready = false;
       throw;
     }
     pending_incremental_delta = false;
@@ -5022,7 +5023,7 @@ void CudaKsPlan::clear_warm_start() noexcept { impl_->clear_warm_state(); }
 void CudaKsPlan::invalidate_final_state() noexcept {
   impl_->final_state_ready = impl_->final_frame_ready = impl_->final_stationary_weights_ready =
       false;
-  impl_->final_fitted_projection_ready = false;
+  impl_->final_fitted_projection_ready = impl_->final_occupied_factor_ready = false;
   impl_->final_generation = 0;
 }
 generativeqc_status CudaKsPlan::final_state_token(CudaKsFinalStateToken& token,
@@ -5057,6 +5058,36 @@ generativeqc_status CudaKsPlan::resident_final_density(const CudaKsFinalStateTok
                impl_->spins == 2 ? impl_->density + impl_->matrix : nullptr,
                impl_->matrix,
                impl_->spins,
+               reinterpret_cast<void*>(impl_->stream),
+               impl_->owner,
+               impl_->solve_epoch,
+               impl_->final_generation};
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
+generativeqc_status CudaKsPlan::resident_final_occupied_factor(
+    const CudaKsFinalStateToken& expected, CudaKsResidentOccupiedFactorBinding& binding,
+    std::string& detail) const {
+  binding = {};
+  detail.clear();
+  try {
+    const auto current = impl_->token();
+    if (expected.version != 1 || expected != current)
+      throw std::invalid_argument("CUDA KS occupied-factor token is stale");
+    if (!impl_->final_occupied_factor_ready) {
+      detail = "CUDA KS final density has no authenticated occupied factor";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    binding = {impl_->device,
+               impl_->proposal,
+               impl_->n,
+               impl_->occupations[0],
                reinterpret_cast<void*>(impl_->stream),
                impl_->owner,
                impl_->solve_epoch,

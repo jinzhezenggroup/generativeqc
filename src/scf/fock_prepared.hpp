@@ -178,12 +178,14 @@ class PreparedFockPlan {
    * provider scratch. Allocation failure retains the bounded response.
    * A total-gradient consumer may request combined full-range RKS J/K: the
    * existing adjoint algebra adds their weights before integral contraction.
-   * Other spin/range contracts retain separate source publication. */
+   * Other spin/range contracts retain separate source publication. A separate
+   * exact occupied factor may serve restricted LR response with this provider's
+   * own radial metric; it never lends another operator's fitted projection. */
   generativeqc_status consume_fitted_energy_derivatives(
       int device, void* stream, const double* alpha, const double* beta, const double* total,
       const CudaDerivativeSourceConsumer& consume, std::string& detail,
       bool range_correction = false, const CudaDfBorrowedFittedProjection* projection = nullptr,
-      bool combine_full_range = false) const;
+      bool combine_full_range = false, const CudaDfBorrowedOccupiedFactor* factor = nullptr) const;
   /** Execute a first derivative retained alongside a value-only prepared model.
    * The underlying provider is revalidated at derivative_order=1, preserving the
    * exact scientific approximation while keeping the SCF identity value-only. */
