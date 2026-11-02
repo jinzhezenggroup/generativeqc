@@ -574,7 +574,10 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
                               scf::ScfOptions& options,
                               const NativeKsExecutionPlan& execution_plan) {
   dft::GridSpec grid = dft::default_grid_spec();
-  if (!descriptor.ks_options) return grid;
+  if (!descriptor.ks_options) {
+    options.automatic_xc_tile_points = true;
+    return grid;
+  }
   // Explicit legacy descriptors must not inherit the default's Bragg radii.
   if (descriptor.ks_options->grid_version != 4) grid = dft::GridSpec{};
   const auto& input = *descriptor.ks_options;
@@ -585,9 +588,10 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
       std::string_view(input.scf_domain) != expected_scf_domain(execution_plan))
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "unsupported KS tail/spin domain policy");
-  if (!input.tile_points || input.tile_points > static_cast<std::uint64_t>(INT_MAX))
+  if (input.tile_points > static_cast<std::uint64_t>(INT_MAX))
     throw std::invalid_argument("invalid KS XC tile points");
-  options.xc_tile_points = input.tile_points;
+  options.automatic_xc_tile_points = input.tile_points == 0;
+  options.xc_tile_points = input.tile_points ? input.tile_points : 256;
   if (input.force_tile_points > 4096)
     throw std::invalid_argument("invalid KS stationary force tile points");
   options.xc_force_tile_points = input.force_tile_points;

@@ -1,0 +1,24 @@
+{
+  "id": "ks.automatic-scf-tiles",
+  "classification": "guarded-promotion-candidate",
+  "controls": [
+    "dft-policy:ks-scf-tile-points",
+    "dft-policy:ks-force-tile-points"
+  ],
+  "owner_issues": [
+    2929
+  ],
+  "sources": [
+    "python/generativeqc/ks.py",
+    "src/dft/ks_tile_policy.hpp",
+    "src/methods/dft_method.cpp"
+  ],
+  "rationale": "Unspecified public SCF and stationary-force tiles resolve independently from hardware capability, fitted restricted strict-FP64 gradient-dependent work and grid size. Eligible full-rate FP64 SCF owners use 1024 (nonlocal 512); eligible all-electron through-d native force owners on compute capability 8 or newer use 1024 for 48\u2013128 atoms. Explicit sizes, scientific controls and bounded 256-point fallbacks remain authoritative. Complete default-path qualification is required before promotion.",
+  "revisit_condition": "Requalify complete cold/warm/moved and larger endpoints with independent observables before extending eligibility or weakening resource admission. Preserve explicit SCF inheritance, force overrides, conservative promised capacity and at most one resource-failure retry. Product names are not scheduling capabilities.",
+  "evidence": [
+    "docs/user/ks_options.md",
+    "tests/python/test_ks_tile_policy.py",
+    "tests/python/test_ks_options.py",
+    "benchmarks/results/automatic-ks-tiles-20261102/README.md"
+  ]
+}

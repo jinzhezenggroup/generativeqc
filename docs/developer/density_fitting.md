@@ -184,6 +184,8 @@ the compiler assigns four lanes to each primitive product partition and eight
 auxiliary source terms to the warp; every lane reaches the final output sum,
 including ragged source tails. Raw source tiles have only one auxiliary source
 per output and use one thread per output with contiguous auxiliary writes.
+The two-center auxiliary metric is also a raw consumer: its automatic launch
+uses this scalar mapping, without the transformed output's auxiliary reduction.
 The compiler resolves these schedules separately and the native source freezes
 both mappings at creation. The bulk compatibility builder retains its own
 one-thread-per-output schedule. The original transformed-source
@@ -196,11 +198,15 @@ diagnostic after cold endpoint regressions and do not change the default.
 `GENERATIVEQC_DF_VALUE_MAPPING=auto|auxiliary|component|primitive` compares contiguous
 auxiliary writes, contiguous AO-pair work, and one primitive-reduction warp per
 output. `auto` (also the unset default) selects the consumer-specific compiler
-schedule; explicit mappings override both consumers for reproducible comparison.
+schedule; explicit mappings override raw values, metric construction and
+transformed values for reproducible comparison.
 Global component selection remains rejected after its transformed-source
 endpoint regression. The raw/transformed distinction and remaining qualification
 gates are recorded in the
 [raw source schedule note](../../.agents/notes/implemented/performance/2026-09-23-df-raw-source-schedule.md).
+Metric construction follows the same distinction; its numerical and endpoint
+evidence is described in the
+[metric scheduling note](../../.agents/notes/implemented/performance/2026-11-01-raw-metric-value-schedule.md).
 These source choices are frozen at source creation. Coordinate derivatives
 instantiate the shared generated center policy; weighted HF derivatives use
 their independently generated four-lane schedule. The mappings share scientific

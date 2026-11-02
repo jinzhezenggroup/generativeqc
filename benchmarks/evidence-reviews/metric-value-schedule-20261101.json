@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "metric-value-schedule-20261101",
+  "owner": "Portable raw DF metric scheduling qualification",
+  "reason": "Exact FP64 endpoint energies, forces, timings and independent gates for all seven README methods on two GPUs, including every conditioning owner and the complete resource-unqualified timeout owner. Retains pilot, diagnostic and recovery evidence; storage classification does not waive scientific or allocation gates.",
+  "review_document": "benchmarks/results/metric-value-schedule-20261101/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/metric-value-schedule-20261101/fp64.xz",
+      "family": "metric-value-schedule-20261101",
+      "classification": "required-compact-accepted-evidence",
+      "role": "original-complete-and-resource-excluded-endpoints-with-independent-numerical-gates",
+      "bytes": 337888,
+      "sha256": "25f1811380b90340b8673b7eea93ed449c7669f4a68a54cbcde68e8e31e1a5ea"
+    }
+  ]
+}

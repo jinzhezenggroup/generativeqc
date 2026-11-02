@@ -25,6 +25,7 @@
 #include "dft/dispersion/gcp_cuda.hpp"
 #endif
 #include "dft/grid.hpp"
+#include "dft/ks_tile_policy.hpp"
 #include "dft/mixed_rsh_df_sources.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
@@ -633,10 +634,80 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const auto domain = metadata.molecular_nonlocal_domain
                               ? dft::nlc::Vv10DensityDomain::MolecularV1
                               : dft::nlc::Vv10DensityDomain::StrictPositive;
-      cuda_ = std::make_unique<dft::CudaKsPlan>(
-          fock_, basis_, grid_, options_, ks_xc_functional_code(execution_plan_),
-          options_.xc_tile_points, range, nonlocal_.get(), domain, dft::CudaXcPreparationBudget{},
-          range_correction_.get());
+      if (options_.automatic_xc_tile_points) {
+        // Resolve the two consumers independently. Explicit SCF tiles retain
+        // force inheritance; an explicit force tile always wins over this policy.
+        const bool automatic_force = !options_.xc_force_tile_points;
+        if (automatic_force) options_.xc_force_tile_points = 256;
+        const bool fitted_rks_fp64 =
+            execution_plan_.spin_channels == 1 && metadata.requires_gradient &&
+            options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA &&
+            options_.precision_mode == GENERATIVEQC_PRECISION_FP64 &&
+            options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+        // Public numeric promises quote the conservative 256-point owner.
+        // Do not change its work/storage shape after admission. Reserve ample
+        // observed headroom for ordinary unpromised preparation as well.
+        const bool unconstrained = !capacity_ && !runtime::active_device_resource_ledger &&
+                                   !options_.reference_memory_budget_bytes;
+        if (fitted_rks_fp64 && unconstrained && basis_.nao >= 512 &&
+            grid_.point_count() >= (1U << 19)) {
+          cudaDeviceProp properties{};
+          auto status = cudaGetDeviceProperties(&properties, device);
+          if (status == cudaErrorNotSupported || status == cudaErrorInvalidValue) {
+            const auto pending = cudaGetLastError();
+            if (pending != cudaSuccess && pending != status)
+              throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(pending));
+          } else {
+            if (status != cudaSuccess)
+              throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(status));
+            std::size_t available{}, total{};
+            status = cudaMemGetInfo(&available, &total);
+            if (status != cudaSuccess)
+              throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(status));
+            options_.xc_tile_points = dft::automatic_ks_scf_tile(
+                0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
+                execution_plan_.nonlocal_correlation, properties.major,
+                properties.singleToDoublePrecisionPerfRatio);
+            const bool strict_force = std::all_of(options_.application_precision_budget.begin(),
+                                                  options_.application_precision_budget.end(),
+                                                  [](double value) { return value == 0; });
+            if (automatic_force && strict_force && admitted_cuda_stationary_binding()) {
+              std::size_t maximum_angular{};
+              for (const auto& shell : system_.shells)
+                maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
+              const bool all_electron =
+                  system_.ecp_terms.empty() &&
+                  std::none_of(system_.atoms.begin(), system_.atoms.end(),
+                               [](const auto& atom) { return atom.ecp_core != 0; });
+              options_.xc_force_tile_points = dft::automatic_ks_force_tile(
+                  fitted_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
+                  basis_.natom, basis_.nao, grid_.point_count(), properties.major);
+              automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
+            }
+          }
+        }
+      }
+      const auto prepare_cuda = [&] {
+        return std::make_unique<dft::CudaKsPlan>(
+            fock_, basis_, grid_, options_, ks_xc_functional_code(execution_plan_),
+            options_.xc_tile_points, range, nonlocal_.get(), domain, dft::CudaXcPreparationBudget{},
+            range_correction_.get());
+      };
+      try {
+        cuda_ = prepare_cuda();
+      } catch (const std::bad_alloc&) {
+        if (!options_.automatic_xc_tile_points || options_.xc_tile_points <= 256) throw;
+        // The free-memory observation is advisory: another owner can allocate
+        // before us. CudaKsPlan drains/releases its partial construction before
+        // this one bounded retry. Either host or device storage exhaustion may
+        // use the smaller owner; explicit requests and non-allocation failures
+        // propagate, and failure of the conservative retry also propagates.
+        const auto pending = cudaGetLastError();
+        if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation)
+          throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(pending));
+        options_.xc_tile_points = 256;
+        cuda_ = prepare_cuda();
+      }
     }
 #endif
     if (execution_plan_.d4_correction || execution_plan_.dispersion.kind == 3) prepare_d4(device);
@@ -2068,6 +2139,40 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const dft::CudaKsFinalStateToken& expected, std::size_t maximum_device_bytes,
       std::vector<double>& output, dft::CudaStationaryResources& resources, std::string& detail,
       scf::DirectForcePrecisionRequest* precision = nullptr) {
+    auto status = native_cuda_stationary_gradient_once(expected, maximum_device_bytes, output,
+                                                       resources, detail, precision);
+    if (status != GENERATIVEQC_STATUS_OUT_OF_MEMORY || !retire_automatic_force_tile())
+      return status;
+    // Only optional automatic storage may shrink. Drain the failed controller
+    // before retrying the whole force at the same authenticated density token;
+    // consumed projection leases are re-queried, never reused from the failure.
+    output.clear();
+    resources = {};
+    return native_cuda_stationary_gradient_once(expected, maximum_device_bytes, output, resources,
+                                                detail, precision);
+  }
+
+  /** One-way, bounded retreat from an automatically enlarged force owner. */
+  bool retire_automatic_force_tile() {
+#if GENERATIVEQC_HAS_CUDA
+    if (!automatic_force_tile_enlarged_) return false;
+    const auto pending = cudaGetLastError();
+    if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation)
+      throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(pending));
+    stationary_controller_.reset();
+    last_native_force_token_.reset();
+    options_.xc_force_tile_points = 256;
+    automatic_force_tile_enlarged_ = false;
+    return true;
+#else
+    return false;
+#endif
+  }
+
+  generativeqc_status native_cuda_stationary_gradient_once(
+      const dft::CudaKsFinalStateToken& expected, std::size_t maximum_device_bytes,
+      std::vector<double>& output, dft::CudaStationaryResources& resources, std::string& detail,
+      scf::DirectForcePrecisionRequest* precision = nullptr) {
     if (has_energy_only_df_capacity_promise()) {
       output.clear();
       resources = {};
@@ -2321,8 +2426,19 @@ class KsPreparedState final : public KsSingleOwnerPort {
   generativeqc_status native_cuda_stationary_limit(std::size_t maximum_device_bytes,
                                                    std::string& detail) {
     dft::CudaStationaryCapacity capacity;
-    const auto status = native_cuda_stationary_capacity(capacity, detail);
+    auto status = native_cuda_stationary_capacity(capacity, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    bool retained_exceeds_allowance = false;
+#if GENERATIVEQC_HAS_CUDA
+    retained_exceeds_allowance =
+        stationary_controller_ &&
+        stationary_controller_->resources().device_upper_bytes > maximum_device_bytes;
+#endif
+    if ((maximum_device_bytes < capacity.minimum_device_bytes || retained_exceeds_allowance) &&
+        retire_automatic_force_tile()) {
+      status = native_cuda_stationary_capacity(capacity, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    }
     if (maximum_device_bytes < capacity.minimum_device_bytes) {
       detail = "native CUDA stationary allowance is below the complete consumer minimum";
       return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
@@ -2899,6 +3015,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<dft::CudaKsPlan> cuda_;
   std::unique_ptr<dft::CudaStationaryController> stationary_controller_;
+  // Private prepared-owner state: explicit force bounds can never enter retry.
+  bool automatic_force_tile_enlarged_{};
   std::optional<dft::CudaKsFinalStateToken> last_native_force_token_;
 #endif
 };

@@ -28,7 +28,7 @@ def test_df_energy_promise_rejects_force_before_work(tmp_path: Path) -> None:
     direct_ports = []
     for signature, sentinel in [
         ("  generativeqc_status prepared_integral_gradient(", "work"),
-        ("  generativeqc_status native_cuda_stationary_gradient(", "resources"),
+        ("  generativeqc_status native_cuda_stationary_gradient_once(", "resources"),
         ("  generativeqc_status density_fitted_integral_gradient(", "work"),
         ("  generativeqc_status mixed_rsh_df_integral_gradient(", "work"),
         ("  generativeqc_status cuda_integral_gradient(", "work"),
@@ -49,6 +49,12 @@ def test_df_energy_promise_rejects_force_before_work(tmp_path: Path) -> None:
             + prefix
             + " ++port_allocations; ++port_source_work; return 0; }"
         )
+    # The public stationary entry now delegates to a bounded-retry wrapper. Compile
+    # that exact wrapper too: an admission rejection must never retire a tile or
+    # enter its second attempt.
+    stationary_wrapper = method(
+        "  generativeqc_status native_cuda_stationary_gradient("
+    )
     memory_port = method("  generativeqc_status cuda_prepare_force_memory(")
     assert memory_port.index(
         "has_energy_only_df_capacity_promise()"
@@ -81,6 +87,10 @@ def test_df_energy_promise_rejects_force_before_work(tmp_path: Path) -> None:
     #include <string>
     #include <vector>
     using generativeqc_property_flags=unsigned;
+    using generativeqc_status=int;
+    constexpr int GENERATIVEQC_STATUS_OUT_OF_MEMORY=6;
+    namespace dft {struct CudaKsFinalStateToken {}; using CudaStationaryResources=unsigned;}
+    namespace scf {struct DirectForcePrecisionRequest {}; }
     constexpr unsigned GENERATIVEQC_PROPERTY_FORCES=2, ENERGY=1;
     constexpr int GENERATIVEQC_BACKEND_CUDA=1, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=5;
     namespace scf { enum class FockApproximation {Exact,DensityFitted}; }
@@ -103,6 +113,17 @@ def test_df_energy_promise_rejects_force_before_work(tmp_path: Path) -> None:
      }
     """
         + "\n".join(direct_ports)
+        + r"""
+     unsigned retire_attempts=0;
+     bool retire_automatic_force_tile(){++retire_attempts;return true;}
+     generativeqc_status native_cuda_stationary_gradient_once(
+       const dft::CudaKsFinalStateToken&,std::size_t,std::vector<double>& output,
+       dft::CudaStationaryResources& resources,std::string& detail,
+       scf::DirectForcePrecisionRequest*) {
+       return native_cuda_stationary_gradient_once(output,resources,detail);
+     }
+    """
+        + stationary_wrapper
         + props
         + r"""
     };
@@ -127,7 +148,7 @@ def test_df_energy_promise_rejects_force_before_work(tmp_path: Path) -> None:
      assert(!promised.supports_native_gga_force());
      for(auto* p:{&ordinary,&direct,&cpu})assert(p->supported_properties()==(ENERGY|GENERATIVEQC_PROPERTY_FORCES));
      // Call owner ports directly, bypassing batch execution/capability metadata.
-     for (auto port : {&State::prepared_integral_gradient, &State::native_cuda_stationary_gradient, &State::density_fitted_integral_gradient, &State::mixed_rsh_df_integral_gradient, &State::cuda_integral_gradient}) {
+     for (auto port : {&State::prepared_integral_gradient, &State::density_fitted_integral_gradient, &State::mixed_rsh_df_integral_gradient, &State::cuda_integral_gradient}) {
        std::vector<double> out{42};unsigned receipt=7;std::string detail;
        assert((promised.*port)(out,receipt,detail)==GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
        assert(out.empty()&&receipt==0&&detail.find("energy-only")!=std::string::npos);
@@ -135,7 +156,17 @@ def test_df_energy_promise_rejects_force_before_work(tmp_path: Path) -> None:
        for (auto* accepted : {&ordinary,&direct,&cpu})
          assert((accepted->*port)(out,receipt,detail)==0);
      }
-     for(auto* accepted:{&ordinary,&direct,&cpu})assert(accepted->port_source_work==5);
+     // Exercise the actual outer entry, including its short-circuit retry policy.
+     for(auto* state:{&promised,&ordinary,&direct,&cpu}) {
+       std::vector<double> out{42};unsigned receipt=7;std::string detail;
+       const auto status=state->native_cuda_stationary_gradient({},1024,out,receipt,detail);
+       if(state==&promised) {
+         assert(status==GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+         assert(out.empty()&&receipt==0&&detail.find("energy-only")!=std::string::npos);
+         assert(state->port_allocations==0&&state->port_source_work==0);
+       } else assert(status==0&&state->port_source_work==5);
+       assert(state->retire_attempts==0);
+     }
      Batch b{{{&promised,promised.supported_properties()}}};
      b.execute(false);assert(b.allocations==1&&b.source_work==1);
      try {b.execute(true);assert(false);}catch(const MethodError&e){assert(e.status==GENERATIVEQC_STATUS_NOT_IMPLEMENTED);assert(std::string(e.what()).find("energy-only")!=std::string::npos);}

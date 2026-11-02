@@ -7,8 +7,8 @@
   "files": [
     {
       "path": "benchmarks/results/h100-direct-wb97mv-20261024/terminal-evidence.json.xz",
-      "bytes": 943896,
-      "sha256": "23c4014d2456e159b04cd9666d1af57476ef56fa2f8361bbc3b201d702e623a2",
+      "bytes": 580440,
+      "sha256": "7b11180809ab45d366690bf74df13925bc674c69a3287c118b0cd80b32fa3a3e",
       "family": "h100-direct-wb97mv-20261024",
       "classification": "required-compact-accepted-evidence",
       "role": "Storage classification only: exact immutable HOST/terminal history including FAIL/NOT_RUN; original E/F/source/control bytes; not whole2732, purehardware or parent acceptance"

@@ -14,6 +14,7 @@ import math
 import statistics
 from pathlib import Path
 
+from benchmarks._exact_fp64_evidence import load as load_exact_evidence
 from benchmarks._retention import raw_output_path
 from benchmarks.readme_defaults import ARMS, MEASUREMENT_ARMS, METHODS, SCHEMA, SIZES
 
@@ -358,6 +359,20 @@ def load_records(paths: list[Path], *, schema: str = SCHEMA) -> list[dict]:
             else path.read_bytes()
         )
         value = json.loads(data)
+        if (
+            isinstance(value, dict)
+            and value.get("schema") == "generativeqc.exact-fp64-evidence.v3"
+        ):
+            bundle, texts = load_exact_evidence(path.parent)
+            value = [json.loads(texts[name]) for name in bundle["records"]]
+            # Authenticate the complete original list, including its ordering
+            # and failed/partial populations, after exact FP64 reconstruction.
+            original = json.dumps(value, separators=(",", ":")).encode()
+            if (
+                hashlib.sha256(original).hexdigest()
+                != bundle["original_container_sha256"]
+            ):
+                raise ValueError("historical receipt container checksum")
         if isinstance(value, list):
             records.extend(value)
         elif value.get("schema") in (
