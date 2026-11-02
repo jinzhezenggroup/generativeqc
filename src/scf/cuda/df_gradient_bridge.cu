@@ -2238,6 +2238,22 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                                packed_raw->data, values);
               check(cudaGetLastError());
               runtime::cuda_trace::trace_counter("raw_packed_unpacked_elements", n * n);
+            } else if (spectral_occupied && source) {
+              // The output panel is dead while C^T*A*C is assembled. Borrow
+              // its first slice for packed physical A, enabling the existing
+              // prepared Hermite source without adding a second raw owner.
+              // Expand into the disjoint raw AO slice before projecting C.
+              auto* packed = workspace + spectral_fixed;
+              const auto status = generate_cuda_density_fitting_packed_raw_tile(
+                  source, source_index, 0, n * (n + 1) / 2, p, 1,
+                  stream_handle, packed, detail);
+              if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+              if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+              cuda_df::launch_unpack_df_values(arena.stream, n, 1, 0, n, 0, 1, true,
+                                               packed, values);
+              check(cudaGetLastError());
+              arena.stats.recomputed_value_bytes += n * (n + 1) / 2 * sizeof(double);
+              runtime::cuda_trace::trace_counter("response_spectral_packed_raw_slices", 1);
             } else if (source) {
               const auto status = generate_cuda_density_fitting_raw_tile(
                   source, source_index, 0, n * n, p, 1, -1, stream_handle, values, detail);

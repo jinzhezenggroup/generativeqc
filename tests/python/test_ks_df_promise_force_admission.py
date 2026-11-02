@@ -1,16 +1,18 @@
 """Host-only admission regression; no GPU arithmetic is simulated."""
 
-import shutil
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 
-def test_df_energy_promise_rejects_force_before_work(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler unavailable")
+def test_df_energy_promise_rejects_force_before_work(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
     ROOT = tmp_path
     s = (Path(__file__).resolve().parents[2] / "src/methods/dft_method.cpp").read_text()
 
@@ -28,16 +30,17 @@ def test_df_energy_promise_rejects_force_before_work(tmp_path: Path) -> None:
     direct_ports = []
     for signature, sentinel in [
         ("  generativeqc_status prepared_integral_gradient(", "work"),
-        ("  generativeqc_status native_cuda_stationary_gradient(", "resources"),
+        ("  generativeqc_status native_cuda_stationary_gradient_once(", "resources"),
         ("  generativeqc_status density_fitted_integral_gradient(", "work"),
         ("  generativeqc_status mixed_rsh_df_integral_gradient(", "work"),
         ("  generativeqc_status cuda_integral_gradient(", "work"),
     ]:
         actual = method(signature)
-        prefix = actual[
-            actual.index(" {\n") + 2 : actual.index("    runtime::DeviceCapacityScope")
-        ]
-        assert "has_energy_only_df_capacity_promise()" in prefix
+        # Compile the admission block itself. Native force dispatch can defer
+        # its capacity scope to the controller without weakening this refusal.
+        check = actual.index("if (has_energy_only_df_capacity_promise()) {")
+        end_guard = actual.index("\n    }", check) + len("\n    }")
+        prefix = actual[actual.index(" {\n") + 2 : end_guard]
         # Compile exact entry checks; the unexecuted remainder is a work sentinel.
         name = signature.split("(")[0].split()[-1]
         direct_ports.append(
@@ -127,7 +130,7 @@ def test_df_energy_promise_rejects_force_before_work(tmp_path: Path) -> None:
      assert(!promised.supports_native_gga_force());
      for(auto* p:{&ordinary,&direct,&cpu})assert(p->supported_properties()==(ENERGY|GENERATIVEQC_PROPERTY_FORCES));
      // Call owner ports directly, bypassing batch execution/capability metadata.
-     for (auto port : {&State::prepared_integral_gradient, &State::native_cuda_stationary_gradient, &State::density_fitted_integral_gradient, &State::mixed_rsh_df_integral_gradient, &State::cuda_integral_gradient}) {
+     for (auto port : {&State::prepared_integral_gradient, &State::native_cuda_stationary_gradient_once, &State::density_fitted_integral_gradient, &State::mixed_rsh_df_integral_gradient, &State::cuda_integral_gradient}) {
        std::vector<double> out{42};unsigned receipt=7;std::string detail;
        assert((promised.*port)(out,receipt,detail)==GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
        assert(out.empty()&&receipt==0&&detail.find("energy-only")!=std::string::npos);
@@ -156,17 +159,14 @@ def test_df_energy_promise_rejects_force_before_work(tmp_path: Path) -> None:
     """
     )
     (ROOT / "probe.cpp").write_text(cpp)
-    subprocess.run(
-        [
-            compiler,
+    required_native_cxx.build_executable(
+        [ROOT / "probe.cpp"],
+        ROOT / "probe",
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
-            str(ROOT / "probe.cpp"),
-            "-o",
-            str(ROOT / "probe"),
-        ],
-        check=True,
+        ),
     )
     subprocess.run([str(ROOT / "probe")], check=True)
