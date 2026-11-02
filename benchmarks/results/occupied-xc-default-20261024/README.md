@@ -124,3 +124,5 @@ records the fallback/lifetime policy. The
 [rejected follow-ups](../../../.agents/notes/rejected/2026-10-24-direct-dft-cold-followups.md)
 retain the losing AO-chunk schedule and an older candidate; none of their
 measurements is pooled into this promotion.
+
+Historical capsule storage now uses `historical-snapshot.json`. The default CPU reader authenticates the exact original bytes from local Git commit `cd2b4514be0a38c4920934481b1f02d157a694b4`; automatic network access is disabled. A checkout must contain that object (or restore the unchanged file). Every earlier result and limitation is preserved; this storage change does not qualify a newer runtime.

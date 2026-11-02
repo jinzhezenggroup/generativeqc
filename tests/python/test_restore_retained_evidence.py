@@ -159,6 +159,49 @@ def test_explicit_output_remains_supported(historical: typing.Any) -> None:
     assert target.read_bytes() == payload
 
 
+def test_evidence_byte_reader_keeps_local_and_historical_bytes(
+    historical: typing.Any,
+) -> None:
+    root, name, payload, manifest, _ = historical
+    path = root / name
+    assert module.read_evidence_bytes(path, manifest=manifest) == payload
+    assert not path.exists() and not (root / ".artifacts").exists()
+    path.write_bytes(payload)
+    assert module.read_evidence_bytes(path, manifest=manifest) == payload
+    path.write_bytes(payload + b"corrupt")
+    with pytest.raises(ValueError, match="checksum"):
+        module.read_evidence_bytes(path, manifest=manifest)
+
+
+def test_evidence_byte_reader_limits_history_to_explicit_inventory(
+    historical: typing.Any, monkeypatch: typing.Any
+) -> None:
+    root, _, _, manifest, _ = historical
+
+    def no_history(_: typing.Any) -> typing.NoReturn:
+        raise AssertionError("unlisted file attempted historical recovery")
+
+    monkeypatch.setattr(module, "_read", no_history)
+    current = root / "current.txt"
+    current.write_bytes(b"current reference")
+    assert (
+        module.read_evidence_bytes(current, manifest=manifest) == b"current reference"
+    )
+    with pytest.raises(FileNotFoundError):
+        module.read_evidence_bytes(root / "missing.txt", manifest=manifest)
+
+
+def test_evidence_byte_reader_refuses_unavailable_object(
+    historical: typing.Any,
+) -> None:
+    root, name, _, manifest, audit = historical
+    audit["source_revision"] = "a" * 40
+    manifest.write_text(json.dumps(audit))
+    with pytest.raises(ValueError, match="historical object unavailable"):
+        module.read_evidence_bytes(root / name, manifest=manifest)
+    assert not (root / ".artifacts").exists()
+
+
 @pytest.fixture
 def snapshot(historical: typing.Any) -> typing.Any:
     root, name, payload, manifest, audit = historical

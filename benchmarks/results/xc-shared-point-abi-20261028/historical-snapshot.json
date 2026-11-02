@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "file_count": 1,
+  "total_bytes": 569584,
+  "purpose": "Exact existing historical evidence bytes read from local Git only; every observation,source,gate,failed/noisy/unfavorable outcome retained. No later-source qualification transfer.",
+  "files": [
+    {
+      "path": "benchmarks/results/xc-shared-point-abi-20261028/receipts.json.xz",
+      "bytes": 569584,
+      "sha256": "16ac276a05ca1ea9b4dfb7f6abbead9c9940b57ef8499e1ec81fb52638294f25",
+      "git_blob_sha1": "cb9c50999a2248708a1b3f363972663fbbb8b2eb",
+      "git_mode": "100644"
+    }
+  ]
+}

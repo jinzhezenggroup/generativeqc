@@ -5,6 +5,7 @@ import hashlib
 import json
 import lzma
 import runpy
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,32 @@ def test_actual_scientific_replay_needs_no_history_fetch(
     def unavailable(*args: object, **kwargs: object) -> None:
         raise AssertionError("ordinary scientific replay must remain offline")
 
-    monkeypatch.setattr("subprocess.run", unavailable)
+    run = subprocess.run
+    snapshot = json.loads((BUNDLE / "historical-terminal-snapshot.json").read_text())
+    expected_command = [
+        "git",
+        "-C",
+        str(BUNDLE),
+        "show",
+        snapshot["source_revision"] + ":" + snapshot["files"][0]["path"],
+    ]
+
+    def offline_git(*args: object, **kwargs: object) -> subprocess.CompletedProcess:
+        assert args == (expected_command,)
+        assert kwargs.get("shell", False) is False
+        assert kwargs.get("executable") is None
+        environment = kwargs.get("env")
+        assert isinstance(environment, dict)
+        assert environment["GIT_NO_LAZY_FETCH"] == "1"
+        assert environment["GIT_ALLOW_PROTOCOL"] == ""
+        assert environment["GIT_TERMINAL_PROMPT"] == "0"
+        return run(*args, **kwargs)
+
+    # Current science can use an authenticated local Git object. Network APIs,
+    # fetch-capable Git transports and unrelated child programs remain blocked.
+    monkeypatch.setattr("subprocess.run", offline_git)
+    monkeypatch.setattr("socket.socket.connect", unavailable)
+    monkeypatch.setattr("urllib.request.urlopen", unavailable)
     result = READER["report"](BUNDLE)
     assert result["actual_complete_EF_returns"] == 98
     assert result["formal_EF_returns"] == 72
@@ -28,6 +54,24 @@ def test_actual_scientific_replay_needs_no_history_fetch(
     assert result["formal_independent_processes"] == 18
     assert result["host_history"]["verification"] == "NOT_RUN_HISTORICAL_AUDIT"
     assert result["qualified_speedup"] is None
+
+
+@pytest.mark.parametrize("failure", ["missing", "corrupt"])
+def test_historical_terminal_recovery_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    sandbox = tmp_path / "reader.py"
+    sandbox.write_bytes((BUNDLE / "reader.py").read_bytes())
+    recovery = runpy.run_path(str(sandbox))["artifact_bytes"]
+
+    def git_result(*args: object, **kwargs: object) -> bytes:
+        if failure == "missing":
+            raise subprocess.CalledProcessError(128, "git", stderr=b"missing object")
+        return b"damaged historical capsule"
+
+    monkeypatch.setattr("subprocess.check_output", git_result)
+    with pytest.raises((RuntimeError, ValueError)):
+        recovery(tmp_path, "terminal-evidence.json.xz")
 
 
 def host_fixture(tmp_path: Path) -> tuple[Path, Path]:

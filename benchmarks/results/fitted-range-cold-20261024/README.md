@@ -183,3 +183,5 @@ checks therefore retain their original scope. Original full-manifest digests
 remain recorded identities, not claims that this checkout reconstructs their
 complete text or recomputes their SHA-256. Numerical records, force/energy gates,
 paired populations and original failure records are unchanged.
+
+Historical capsule storage now uses `historical-snapshot.json`. The default CPU reader authenticates the exact original bytes from local Git commit `cd2b4514be0a38c4920934481b1f02d157a694b4`; automatic network access is disabled. A checkout must contain that object (or restore the unchanged file). Every earlier result and limitation is preserved; this storage change does not qualify a newer runtime.

@@ -17,6 +17,7 @@ import os
 from pathlib import Path, PurePosixPath
 from statistics import median
 import struct
+import subprocess
 
 MAX_ENVELOPE = 64 << 20
 XZ_MEMORY = 96 << 20
@@ -264,6 +265,29 @@ class Evidence:
         )
 
 
+def artifact_bytes(root: Path, name: str) -> bytes:
+    """Read current files or the one byte-pinned historical terminal capsule."""
+    path = root / name
+    if path.is_file():
+        return path.read_bytes()
+    if name != "terminal-evidence.json.xz" or root.resolve() != Path(__file__).resolve().parent:
+        raise FileNotFoundError(path)
+    revision = "cd2b4514be0a38c4920934481b1f02d157a694b4"
+    historical = "benchmarks/results/h100-direct-wb97mv-20261024/terminal-evidence.json.xz"
+    try:
+        data = subprocess.check_output(
+            ["git", "-C", str(root), "show", revision + ":" + historical],
+            stderr=subprocess.PIPE, timeout=30,
+            env={**os.environ, "GIT_NO_LAZY_FETCH": "1", "GIT_ALLOW_PROTOCOL": "",
+                 "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"Historical evidence unavailable; explicitly fetch {revision}") from error
+    require(len(data) == 580440 and sha(data) == "7b11180809ab45d366690bf74df13925bc674c69a3287c118b0cd80b32fa3a3e",
+            "historical terminal capsule differs")
+    return data
+
+
 def load(root: Path) -> Evidence:
     artifacts = json_bytes((root / "artifacts.json").read_bytes())
     require(
@@ -277,11 +301,11 @@ def load(root: Path) -> Evidence:
             row["path"] not in seen and type(row["bytes"]) is int, "artifact inventory"
         )
         seen.add(row["path"])
-        raw = (root / row["path"]).read_bytes()
+        raw = artifact_bytes(root, row["path"])
         require(
             len(raw) == row["bytes"] and sha(raw) == row["sha256"], "artifact binding"
         )
-    return Evidence(decode_xz((root / "terminal-evidence.json.xz").read_bytes()))
+    return Evidence(decode_xz(artifact_bytes(root, "terminal-evidence.json.xz")))
 
 
 def host_history(root: Path, *, reference_root: Path | None = None) -> dict:

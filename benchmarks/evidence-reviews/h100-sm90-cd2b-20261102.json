@@ -1,0 +1,41 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-sm90-cd2b-20261102",
+  "owner": "H100 current-source build and DF/screening stage",
+  "reason": "Exact terminal build metadata,DF44 and66 single-process screening originals with full public EF,comparison operands,traces and source/producer/platform bindings. Retain original scope WARN and all controls. No final three-pair or broad production acceptance. Private binary libraries remain hash-bound remote. CPU replay and corruption controls validate this packet.",
+  "review_document": "benchmarks/results/h100-sm90-cd2b-20261102/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-20261102/production-build-v1-metadata.tar.xz",
+      "bytes": 305620,
+      "sha256": "7094d35e3550f8fa718d06246b32e4f22403b0427f7261c2b6442b9feeb80130",
+      "family": "h100-sm90-cd2b-20261102",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound stage evidence and original provisional review. Build metadata/DF44/one-process screening only; not final majority or later-source requalification."
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-20261102/df-molecular-v1-completed.tar.xz",
+      "bytes": 450284,
+      "sha256": "e825d613530aa72486f6f7037ac1cd5d08c7bd773b78b499e7f6c9065cee558c",
+      "family": "h100-sm90-cd2b-20261102",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound stage evidence and original provisional review. Build metadata/DF44/one-process screening only; not final majority or later-source requalification."
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-20261102/screening-v1-completed.tar.xz",
+      "bytes": 415028,
+      "sha256": "555cec1d0b368db8e063909ac22c05681a5a5be65881b9aeeecc5d440c9d5689",
+      "family": "h100-sm90-cd2b-20261102",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound stage evidence and original provisional review. Build metadata/DF44/one-process screening only; not final majority or later-source requalification."
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-20261102/audit/EXPERIMENT_AUDIT.json",
+      "bytes": 194099,
+      "sha256": "0e3967ce5d3258b8145eb6136131126b8f0b4f7e45768c3bb6f73ab853ea2190",
+      "family": "h100-sm90-cd2b-20261102",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound stage evidence and original provisional review. Build metadata/DF44/one-process screening only; not final majority or later-source requalification."
+    }
+  ]
+}
