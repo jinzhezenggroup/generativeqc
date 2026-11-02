@@ -179,6 +179,40 @@ def _read(entry: dict) -> bytes:
     return data
 
 
+def read_evidence_bytes(path: Path, *, manifest: Path) -> bytes:
+    """Read a current file or its exact authenticated, offline historical blob.
+
+    Only entries in the explicit snapshot can fall back to Git. Other current
+    files retain ordinary file-read behavior, so a reader can share this loader
+    with references that remain in its checkout.
+    """
+    path = Path(os.path.abspath(path))
+    relative = path.relative_to(ROOT.absolute()).as_posix()
+    _safe_path(relative)
+    entries = [entry for entry in _records(manifest) if entry["path"] == relative]
+    if not entries:
+        return path.read_bytes()
+    entry = entries[0]
+    if path.is_symlink():
+        raise ValueError("historical evidence must be a regular file")
+    if not path.exists():
+        return _read(entry)
+    if not path.is_file():
+        raise ValueError("historical evidence must be a regular file")
+    data = path.read_bytes()
+    if len(data) != entry["bytes"]:
+        raise ValueError("historical evidence checksum/size mismatch")
+    if "sha256" in entry and hashlib.sha256(data).hexdigest() != entry["sha256"]:
+        raise ValueError("historical evidence checksum/size mismatch")
+    if "git_blob_sha1" in entry:
+        actual = hashlib.sha1(
+            f"blob {len(data)}\0".encode() + data, usedforsecurity=False
+        )
+        if actual.hexdigest() != entry["git_blob_sha1"]:
+            raise ValueError("historical evidence checksum/size mismatch")
+    return data
+
+
 def _target(output: Path | None, default: Path) -> Path:
     target = Path(output) if output is not None else default
     if output is None and not target.resolve().is_relative_to(

@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "file_count": 1,
+  "total_bytes": 580440,
+  "purpose": "Exact historical H100 WB97M-V terminal capsule; all unfavorable/failed/NOT_RUN/scientific results and source identities preserved. No later-source qualification transfer. Default reader obtains this local Git object,not network.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/terminal-evidence.json.xz",
+      "bytes": 580440,
+      "sha256": "7b11180809ab45d366690bf74df13925bc674c69a3287c118b0cd80b32fa3a3e",
+      "git_blob_sha1": "e20201a4c15e557f726c4e8316bfbcc14c53d1ac",
+      "git_mode": "100644"
+    }
+  ]
+}

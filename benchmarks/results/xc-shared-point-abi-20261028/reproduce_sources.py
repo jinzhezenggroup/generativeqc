@@ -2,7 +2,7 @@
 
 This opt-in historical audit requires the published ancestor locally. It never
 fetches history or modifies the current checkout. Numerical reduction is separate
-and remains usable without Git history or source generation dependencies.
+and uses the exact capsule from local Git or a verified restored current file.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import io
+import importlib.util
 import json
 import lzma
 import os
@@ -67,8 +68,12 @@ def main() -> None:
         default="accepted",
     )
     args = parser.parse_args()
-    with lzma.open(Path(__file__).with_name("receipts.json.xz"), "rt") as stream:
-        records = json.load(stream)
+    root = Path(__file__).resolve().parent
+    spec = importlib.util.spec_from_file_location("retained_evidence", root.parents[2] / "tools/restore_retained_evidence.py")
+    retention = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(retention)
+    raw = retention.read_evidence_bytes(root / "receipts.json.xz", manifest=root / "historical-snapshot.json")
+    records = json.loads(lzma.decompress(raw))
     old, new = records["structural_discovery"], records["paired_batch"]
     reconstruction = records["source_reconstruction"]
     overlay = dict(old["publication_sources"])
