@@ -22,8 +22,10 @@ namespace generativeqc {
  * v4 encodes level 0..9 in radial_points and requires zero angular fields;
  * earlier versions use radial_points, angular_polar and angular_azimuth as counts;
  * partition_iterations sets Becke partition smoothing; coincident_tolerance sets the
- * coincident-center threshold; tile_points bounds SCF grid tiles. force_tile_points
- * bounds CUDA stationary-force tiles independently; zero inherits tile_points.
+ * coincident-center threshold; a positive tile_points bounds SCF grid tiles,
+ * while zero requests native automatic selection. force_tile_points bounds CUDA
+ * stationary-force tiles independently; zero inherits an explicit SCF tile or
+ * selects the force schedule independently with automatic SCF tiling.
  * @lifetime Owns only scalar values; copying preserves the complete descriptor.
  * @errors Construction does not validate the grid; native preparation validates it.
  * @units coincident_tolerance is in Bohr; point/iteration counts and version are dimensionless.
@@ -35,7 +37,7 @@ struct KsGrid {
   std::uint32_t angular_azimuth{0};
   std::uint32_t partition_iterations{3};
   double coincident_tolerance{1.0e-12};
-  std::uint64_t tile_points{256};
+  std::uint64_t tile_points{0};
   std::uint64_t force_tile_points{0};
 };
 

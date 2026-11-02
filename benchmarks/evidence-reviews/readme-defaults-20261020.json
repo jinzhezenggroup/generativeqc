@@ -2,16 +2,16 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "readme-defaults-20261020",
   "owner": "README default-grid complete endpoint measurements",
-  "reason": "All 256 stock-configuration receipts retain actual E/F arrays, cold/warm samples, Fast audit/fallback work, all 64 unsupported DF populations and the partial reference warm failure. No scientific qualification is inferred; large logs stay ignored and limits are unchanged.",
+  "reason": "All 256 stock-configuration receipts retain actual E/F arrays, cold/warm samples, Fast audit/fallback work, all 64 unsupported DF populations and the partial reference warm failure. No scientific qualification is inferred; large logs stay ignored and limits are unchanged. Lossless exact-FP64 storage preserves the original container SHA and every population; no outcomes are removed.",
   "review_document": "benchmarks/results/readme-defaults-20261020/README.md",
   "files": [
     {
-      "path": "benchmarks/results/readme-defaults-20261020/receipts.json.xz",
+      "path": "benchmarks/results/readme-defaults-20261020/fp64.xz",
       "family": "readme-defaults-20261020",
-      "bytes": 594836,
-      "sha256": "226813e5e07af11387926a1ec1dd9f5dbfa1054be54cbe78faa692a6d03327bb",
+      "bytes": 384352,
+      "sha256": "16c59f8b372ff6729f26d9826cdb1d280e7507d4763eb98867853193f6bd337b",
       "classification": "required-compact-accepted-evidence",
-      "role": "complete default-latency receipts including failures; numerical accuracy remains unqualified"
+      "role": "exact FP64 words for every original population, including failures"
     }
   ]
 }

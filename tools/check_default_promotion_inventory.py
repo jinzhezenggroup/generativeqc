@@ -111,6 +111,29 @@ def _discover_scf_options(root: Path) -> dict[str, str]:
     return {f"scf-option:{name}": relative.as_posix() for name in names}
 
 
+def _discover_ks_tile_policy(root: Path) -> dict[str, str]:
+    """Register the public tile choice without pinning its implementation."""
+    relative = Path("python/generativeqc/ks.py")
+    tree = ast.parse(_read(root / relative), filename=str(relative))
+    controls = {}
+    names = {
+        "tile_points": "dft-policy:ks-scf-tile-points",
+        "force_tile_points": "dft-policy:ks-force-tile-points",
+    }
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == "KsOptions":
+            for field in node.body:
+                if (
+                    isinstance(field, ast.AnnAssign)
+                    and isinstance(field.target, ast.Name)
+                    and field.target.id in names
+                ):
+                    controls[names[field.target.id]] = relative.as_posix()
+    if set(controls) != set(names.values()):
+        raise ValueError("public KS tile policies are missing")
+    return controls
+
+
 def _discover_runtime_controls(root: Path) -> dict[str, str]:
     relative = Path("python/generativeqc/resources_hf.py")
     tree = ast.parse(_read(root / relative), filename=str(relative))
@@ -831,6 +854,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
         _discover_scf_options(root),
+        _discover_ks_tile_policy(root),
         _discover_public_precision(root),
         _discover_runtime_controls(root),
         _discover_prepared_df_controls(root),

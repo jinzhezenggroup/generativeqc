@@ -63,7 +63,7 @@ struct NamedKsInputs {
       ks.radial_points = 3;
       ks.partition_iterations = 3;
       ks.coincident_tolerance = 1e-12;
-      ks.tile_points = 256;
+      ks.tile_points = 0;
       ks.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
       ks.nonlocal_maximum_bytes = 256ull * 1024 * 1024;
     }

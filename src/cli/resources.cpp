@@ -152,6 +152,15 @@ Bytes ks_grid_points(std::span<const generativeqc_atom> atoms, const RunOptions&
   return points;
 }
 
+/** Offline inventories use the bounded baseline for automatic tiles: no live
+ * device capacity is available to admit optional enlargement. Explicit sizes
+ * still describe the caller's requested CUDA owner. */
+Bytes ks_inventory_tile_points(const RunOptions& options) {
+  return options.backend == GENERATIVEQC_BACKEND_CUDA && options.grid.tile_points
+             ? options.grid.tile_points
+             : 256;
+}
+
 scf::KsHostResourceShape ks_host_shape(const Topology& shape,
                                        std::span<const generativeqc_atom> atom_values, Bytes spins,
                                        const RunOptions& options, Bytes ecp_terms,
@@ -167,7 +176,7 @@ scf::KsHostResourceShape ks_host_shape(const Topology& shape,
           ks_grid_points(atom_values, options),
           options.grid.radial_points,
           options.grid.angular_polar,
-          options.backend == GENERATIVEQC_BACKEND_CUDA ? options.grid.tile_points : 256,
+          ks_inventory_tile_points(options),
           options.diis_history,
           options.max_iterations.value_or(100),
           pbe,
@@ -529,8 +538,8 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     Bytes quadrature = 0, matrix_provider = 0;
     if (generativeqc_resource_ks_cuda_v1(orbital.nbf, atoms.size(), orbital.shells,
                                          orbital.primitives, points, options.diis_history, spins,
-                                         pbe ? 1 : 0, options.grid.tile_points, capacities.data(),
-                                         capacities.size()) ||
+                                         pbe ? 1 : 0, ks_inventory_tile_points(options),
+                                         capacities.data(), capacities.size()) ||
         generativeqc_resource_quadrature_cuda_v1(atoms.size(), points, &quadrature) ||
         generativeqc_resource_ks_matrix_provider_cuda_v1(orbital.nbf, &matrix_provider)) {
       plan["diagnostic"] =

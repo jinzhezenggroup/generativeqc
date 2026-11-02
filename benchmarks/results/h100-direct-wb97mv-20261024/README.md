@@ -154,6 +154,7 @@ witnesses. Run this optional audit explicitly:
 ```console
 python tools/restore_retained_evidence.py --all --manifest benchmarks/results/h100-direct-wb97mv-20261024/historical-host-snapshot.json --output .artifacts/wb97-host-history
 python benchmarks/results/h100-direct-wb97mv-20261024/reader.py --host-history-root .artifacts/wb97-host-history/benchmarks/results/h100-direct-wb97mv-20261024
+GQC_H100_HOST_HISTORY_ROOT="$PWD/.artifacts/wb97-host-history/benchmarks/results/h100-direct-wb97mv-20261024" python -m unittest discover -s benchmarks/results/h100-direct-wb97mv-20261024 -p test_reader.py
 ```
 
 Shallow clones may need an explicit fetch of the pinned published commit first.
@@ -173,3 +174,8 @@ production path is modified by this reader.
 Publication, independent latest-head approval, required CI and normal protected
 merge remain separate delivery gates. This family does not close #2724 or any
 broader method qualification merely because these bounded formal gates pass.
+
+The byte-object container uses schema v2: UTF-8 objects are stored as text and
+other objects as base64. The reader authenticates the same original SHA-256
+bytes and preserves all 840 objects, failures and numerical populations. This
+lossless storage change does not rerun or reinterpret the historical campaign.

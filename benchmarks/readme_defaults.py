@@ -261,9 +261,40 @@ def native_settings(calculator: Any, result: Any) -> dict:
         if ks is not None
         else None,
         "force_grid_response": True if ks is not None else None,
-        "scf_tile_points": ks.tile_points if ks is not None else None,
+        "scf_tile_points": getattr(result.ks_diagnostic, "tile_points", None),
+        "requested_scf_tile_points": ks.tile_points if ks is not None else None,
         "force_tile_points": ks.force_tile_points if ks is not None else None,
     }
+
+
+def native_force_tile(owner: Any) -> int | None:
+    """Read the prepared native force schedule after timing, including fallback.
+
+    Generated or non-DFT owners need not expose this native capacity contract.
+    Never infer an automatic schedule from the user's optional request.
+    """
+    import ctypes
+
+    from generativeqc import _native
+
+    library = getattr(owner, "_library", None)
+    batch = getattr(owner, "_batch", None)
+    if library is None or batch is None:
+        return None
+    query = library.generativeqc_ks_batch_stationary_cuda_capacity_v1
+    query.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    values = (ctypes.c_uint64 * 9)()
+    status = query(batch, 0, values, len(values))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    return int(values[6])
 
 
 def run_native(args: Any, atoms: Any, record: dict, retain: Any) -> None:
@@ -327,7 +358,12 @@ def run_native(args: Any, atoms: Any, record: dict, retain: Any) -> None:
                     "energy_change": item.energy_change,
                     "density_rms": item.density_rms,
                     "physical_residual_rms": item.physical_residual_rms,
-                    "settings": native_settings(candidate, item),
+                    "settings": {
+                        **native_settings(candidate, item),
+                        "resolved_force_tile_points": native_force_tile(owner)
+                        if args.method != "hf"
+                        else None,
+                    },
                     "precision": item.precision,
                     "precision_validation": validation.to_dict()
                     if validation
