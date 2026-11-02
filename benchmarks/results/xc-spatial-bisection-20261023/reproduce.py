@@ -7,11 +7,13 @@ if sys.flags.optimize:
 import copy, hashlib, json, lzma
 from pathlib import Path
 from statistics import median
+from tools.restore_retained_evidence import read_evidence_bytes
 from benchmarks.readme_defaults_qualification import qualify, _comparison
 from benchmarks.readme_defaults_report import load_records
 root=Path(__file__).resolve().parent; which='stage12'
 def read(p):
- return json.loads(lzma.decompress(p.read_bytes()) if p.suffix=='.xz' else p.read_bytes())
+ raw=read_evidence_bytes(p,manifest=root/'historical-snapshot.json')
+ return json.loads(lzma.decompress(raw) if p.suffix=='.xz' else raw)
 def stats(b,a):
  bm,am=median(b),median(a); bd=median(abs(v-bm) for v in b); ad=median(abs(v-am) for v in a)
  floor=max(.02,2*(bd/bm+ad/am)); gain=1-am/bm
