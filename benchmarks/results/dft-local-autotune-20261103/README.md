@@ -5,17 +5,17 @@ references, observed native allocation receipts, semantic work diagnostics and
 the Slurm/runtime replay transcript. It is an XZ-compressed JSON document, not
 an executable profile or a release artifact. No native binaries are published.
 
-The source base is `cd2b4514b`; each report records the exact dirty native source
-inventory used for qualification. Slurm job 1441 ran on n4, RTX 5090/SM120,
+The source commit is `8077ec1ce` (based on master `cd2b4514b`); each report records
+the exact native source inventory used for qualification. Slurm job 1442 ran on n4, RTX 5090/SM120,
 CUDA 12.9.86, normal Release with fast compilation disabled. The local build
 uses GCC 12 and ccache. The independent remote reference is PySCF 2.14.0.
 
 | Workload | Batch | Final tile | Last accepted paired edge, ms | Speedup / lower 95% |
 | --- | ---: | ---: | --- | --- |
-| H2, PBE-RKS/sto-3g | 1 | 512 | 256 → 512: 36.490 → 31.344 | 1.164 / 1.164 |
-| Water, PBE-RKS/def2-svp | 1 | 2048 | 1024 → 2048: 66.352 → 63.560 | 1.044 / 1.022 |
-| Water, PBE0-RKS/def2-svp | 1 | 1024 | 512 → 1024: 103.277 → 98.632 | 1.047 / 1.010 |
-| Water dimer, PBE-RKS/sto-3g | 2 | 2048 | 1024 → 2048: 148.385 → 134.001 | 1.107 / 1.089 |
+| H2, PBE-RKS/sto-3g | 1 | 512 | 256 → 512: 36.487 → 31.375 | 1.163 / 1.162 |
+| Water, PBE-RKS/def2-svp | 1 | 2048 | 1024 → 2048: 65.543 → 63.570 | 1.031 / 1.012 |
+| Water, PBE0-RKS/def2-svp | 1 | 1024 | 512 → 1024: 102.681 → 97.744 | 1.050 / 1.044 |
+| Water dimer, PBE-RKS/sto-3g | 2 | 2048 | 1024 → 2048: 147.598 → 134.155 | 1.100 / 1.090 |
 
 These are frozen-density warm **complete energy and analytic-force** replays,
 excluding preparation, cold convergence and warmup. Every edge uses five

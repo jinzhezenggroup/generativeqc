@@ -124,7 +124,7 @@ profile index. Local evidence is retained under
 the focused CPU suite passes 150 tests, with GPU and optional-NVCC cases skipped
 locally and the six GPU cases qualified separately through Slurm.
 
-The final source-matched qualification (Slurm job 1441) also tunes water with
+The final source-matched qualification (Slurm job 1442) also tunes water with
 PBE/PBE0 and def2-svp, plus a batch of two water dimers with PBE/sto-3g. It
 retains every paired sample and reference in
 `benchmarks/results/dft-local-autotune-20261103/xc-receipts.json.xz`.
@@ -132,3 +132,6 @@ The companion README describes the exact last-accepted paired edges rather
 than multiplying separately measured improvements into an aggregate claim.
 Final H2 activation revalidates the endpoint context as well as explicit-tile
 and resource-budget fallback behavior. All caches remain qualification-local.
+The final CPU suite passes 152 tests (7 optional cases skipped); the final
+six real-worker cases and four public CLI searches all pass with commit
+`8077ec1ce`'s exact native input inventory.
