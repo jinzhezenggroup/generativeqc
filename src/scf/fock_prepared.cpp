@@ -244,8 +244,8 @@ struct PreparedFockPlan::Impl {
          strategy.spec.derivative_order != 0 || !strategy.spec.exchange.present ||
          strategy.spec.exchange.approximation != FockApproximation::DensityFitted ||
          (strategy.spec.exchange.op != FockOperator::FullRange &&
-          strategy.spec.exchange.op != FockOperator::LongRange) || system.electron_count <= 0 ||
-         system.electron_count % 2 || system.multiplicity != 1 ||
+          strategy.spec.exchange.op != FockOperator::LongRange) ||
+         system.electron_count <= 0 || system.electron_count % 2 || system.multiplicity != 1 ||
          reserved_rank != static_cast<std::size_t>(system.electron_count / 2) ||
          reserved_rank > molecule::ao_count(system)))
       throw std::invalid_argument(
@@ -489,17 +489,28 @@ struct PreparedFockPlan::Impl {
       const auto metadata_bytes = cuda_density_fitting_integral_source_device_bytes(source.get());
       auto tiles = plan_values(nbf, naux, metadata_bytes);
 #if GENERATIVEQC_HAS_CUDA
-      // Keep the selected B/U owners and panel sizes unchanged. Prepared E
-      // uses only the already unspent value allowance; a refusal falls back
-      // before any value generation or SCF state can borrow this source.
+      // Keep B/U and panel geometry unchanged. Minimum-resident promotion may
+      // leave only a few bytes unused even when live fractional headroom can
+      // hold E. Offer the existing shape-bounded ceiling, preserve the response
+      // allowance, and charge only an actually retained source-byte increase.
+      const auto optional_ceiling =
+          diagnostic.variant.df_pair_storage_request == DfPairStorageRequest::Automatic
+              ? method_owned_df_optional_value_capacity(resolved, nbf, naux, reserved_rank,
+                                                        metadata_bytes, coulomb_only_packing)
+              : plan_budget;
       if (tiles.stores_full_three_center && df_packed_pairs(tiles.value_storage.pairs) &&
-          plan_budget > tiles.peak_workspace_bytes) {
-        const auto remaining = plan_budget - tiles.peak_workspace_bytes;
+          optional_ceiling > tiles.peak_workspace_bytes) {
+        const auto remaining = optional_ceiling - tiles.peak_workspace_bytes;
         checked(try_prepare_cuda_df_md_raw_source(source.get(), system, *auxiliary, remaining,
                                                   remaining, detail),
                 detail);
         tiles.peak_workspace_bytes +=
             cuda_density_fitting_integral_source_device_bytes(source.get()) - metadata_bytes;
+        if (tiles.peak_workspace_bytes > plan_budget) {
+          plan_budget = tiles.peak_workspace_bytes;
+          resolved.value_bytes = plan_budget;
+          resolved.total_bytes = add_size(plan_budget, resolved.response_bytes);
+        }
         diagnostic.fitted_source = cuda_density_fitting_integral_source_diagnostic(source.get());
       }
       if (coulomb_only_packing && diagnostic.variant.df_md_coulomb_requested &&
@@ -842,6 +853,31 @@ generativeqc_status PreparedFockPlan::consume_fitted_energy_derivatives(
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   }
   return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+std::vector<double> PreparedFockPlan::retained_exchange_derivative_with_occupied_factor(
+    const std::vector<double>& density, const CudaDfBorrowedOccupiedFactor& factor) const {
+  auto spec = strategy().spec;
+  if (!impl_->cuda_df || !impl_->fitted || !impl_->retained_fitted_derivative_order || !factor ||
+      spec.spin != FockSpin::Restricted || spec.coulomb.present || !spec.exchange.present ||
+      spec.exchange.approximation != FockApproximation::DensityFitted)
+    throw std::invalid_argument("occupied response requires a retained restricted DF exchange");
+  spec.derivative_order = 1;
+  const auto resolved = resolve_fock_build(spec, FockBackend::Cuda, strategy().screening_tolerance,
+                                           strategy().metric_relative_threshold);
+  const auto& data = *impl_->fitted;
+  CudaFockProviderView provider(impl_->cuda_df.get(), data);
+  provider.validate(resolved);
+  provider.validate_density(density, {}, true);
+  const DensityFittingDensityResponse term{density, 0.0, -0.5 * spec.exchange.coefficient};
+  std::vector<double> result;
+  std::string detail;
+  checked(execute_cuda_density_fitting_generated_force_response(
+              impl_->cuda_df.get(), 0, impl_->orbital, *impl_->auxiliary, data.raw.three_center,
+              data.raw.metric, {&term, 1}, data.df_gradient_mapping, data.df_gradient_budget, 0,
+              result, detail, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &factor),
+          detail);
+  return result;
 }
 
 std::vector<double> PreparedFockPlan::retained_energy_derivative(

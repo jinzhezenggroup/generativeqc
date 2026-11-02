@@ -189,6 +189,12 @@ class PreparedFockPlan {
    * exact scientific approximation while keeping the SCF identity value-only. */
   std::vector<double> retained_energy_derivative(const std::vector<double>& density,
                                                  const std::vector<double>& beta = {}) const;
+  /** Restricted fitted exchange response using another method-owned exact C.
+   * The radial source and metric always belong to this provider. No fitted U
+   * from a different operator is reusable. The caller authenticates the final
+   * density token and keeps C alive through this synchronous response. */
+  std::vector<double> retained_exchange_derivative_with_occupied_factor(
+      const std::vector<double>& density, const CudaDfBorrowedOccupiedFactor& factor) const;
   /** Exact comparison of immutable source inputs and execution controls.
    * Convergence thresholds, DIIS history and warm density are deliberately
    * excluded: they do not alter the prepared mathematical operator. */

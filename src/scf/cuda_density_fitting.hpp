@@ -88,6 +88,20 @@ struct CudaDfBorrowedFittedProjection {
   }
 };
 
+/** Token-validated restricted density factor D=2*C*C^T. Unlike a fitted-U
+ * lease this may cross radial providers: only C is borrowed, while each provider
+ * keeps its own raw integrals, metric and cutoff. The synchronous consumer orders
+ * its stream after the producer and drains before returning the factor lease. */
+struct CudaDfBorrowedOccupiedFactor {
+  int device_id{-1};
+  const double* coefficients{};
+  std::size_t nbf{}, rank{};
+  void* stream{};
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && coefficients && nbf && rank && rank <= nbf && stream;
+  }
+};
+
 /** Method-owned, token-validated borrow of the exact restricted final
  * density for one Coulomb response term. The density remains owned by the CUDA
  * KS plan and is already ordered on the same prepared Fock stream. The DF
@@ -131,7 +145,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     const CudaDfBorrowedFittedProjection* borrowed_fitted_projection = nullptr,
     const CudaDfBorrowedResponseDensity* borrowed_response_density = nullptr,
     const CudaDfGradientPrecisionRequest* application_precision = nullptr,
-    const CudaDfResidentForceRequest* resident_force = nullptr);
+    const CudaDfResidentForceRequest* resident_force = nullptr,
+    const CudaDfBorrowedOccupiedFactor* borrowed_factor = nullptr);
 
 /**
  * Prepare a device-resident source for bounded DF tile generation.

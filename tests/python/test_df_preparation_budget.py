@@ -589,6 +589,23 @@ int main() {
       second_values.peak_workspace_bytes > second.value_bytes ||
       second.total_bytes > second.observed_free_bytes-second.reserved_headroom_bytes ||
       second.response_bytes == 0) return 44;
+  // Optional Hermite metadata can use only the existing deterministic ceiling
+  // and live headroom, with the selected response allowance left untouched.
+  const auto extra = method_owned_df_optional_value_capacity(
+      occupied_rebuild,768,3712,160,100ULL<<20);
+  if (extra < occupied_rebuild.value_bytes || extra + occupied_rebuild.response_bytes >
+      method_owned_df_resident_capacity(768,3712,160,100ULL<<20) ||
+      extra + occupied_rebuild.response_bytes > occupied_rebuild.observed_free_bytes -
+          occupied_rebuild.reserved_headroom_bytes) return 45;
+  for (unsigned control=0; control<4; ++control) {
+    auto fixed = occupied_rebuild;
+    if (control==0) fixed.requested_bytes = fixed.total_bytes;
+    if (control==1) fixed.response_override_bytes = fixed.response_bytes;
+    if (control==2) fixed.live_resource = false;
+    if (control==3) fixed.observed_free_bytes = fixed.reserved_headroom_bytes;
+    if (method_owned_df_optional_value_capacity(fixed,768,3712,160,100ULL<<20) !=
+        fixed.value_bytes) return 46;
+  }
   // Promotion may spend fractional headroom beyond the base policy. The
   // native packed-plan ceiling must cover that increase for both occupied U
   // and rank-zero J, across rebuild resource envelopes and source sizes.

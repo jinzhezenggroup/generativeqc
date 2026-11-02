@@ -257,7 +257,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     const CudaDfBorrowedFittedProjection* borrowed_fitted_projection,
     const CudaDfBorrowedResponseDensity* borrowed_response_density,
     const CudaDfGradientPrecisionRequest* application_precision,
-    const CudaDfResidentForceRequest* resident_force) {
+    const CudaDfResidentForceRequest* resident_force,
+    const CudaDfBorrowedOccupiedFactor* borrowed_factor) {
   if (resources) *resources = {};
   if (!plan || system >= plan->batch_size || molecule::ao_count(orbital) != plan->nbf ||
       molecule::ao_count(auxiliary) != plan->naux) {
@@ -280,6 +281,21 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
        (terms.size() == 2 && !resident_force->densities[1]))) {
     detail = "native DF force requires a matching resident source, stream and density lease";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  if (borrowed_factor) {
+    if (!*borrowed_factor || borrowed_factor->device_id != plan->device_id ||
+        borrowed_factor->nbf != plan->nbf || plan->batch_size != 1 || system != 0 ||
+        !plan->integral_source || terms.size() != 1 || terms[0].coulomb_coefficient != 0.0 ||
+        terms[0].exchange_coefficient == 0.0 || borrowed_fitted_projection || resident_force) {
+      detail = "occupied factor does not match one restricted source-backed exchange response";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    // A different radial provider has a different stream. The synchronous
+    // producer drain establishes its immutable C lifetime without changing the
+    // scheduler's device visibility or borrowing that provider's mutable U.
+    const auto error =
+        cudaStreamSynchronize(reinterpret_cast<cudaStream_t>(borrowed_factor->stream));
+    if (error != cudaSuccess) return cuda_failure(error, "order occupied response factor", detail);
   }
   const bool select_borrowed_density = borrowed_response_density && !host_weights;
   if (select_borrowed_density) {
@@ -444,7 +460,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
   }
   bool fitted_occupied_requested =
       explicit_fitted_occupied || borrowed_fitted_occupied || automatic_fitted_occupied;
-  if (borrowed_fitted_occupied) borrow = false;
+  if (borrowed_fitted_occupied || borrowed_factor) borrow = false;
   CudaDfResponseBuffers buffers;
   CudaDfPackedRawTensorView packed_raw;
   const char* raw_reuse_control = std::getenv("GENERATIVEQC_DF_RAW_REUSE");
@@ -676,6 +692,18 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       // the second metric root. Preserve the validated view only on that path;
       // legacy source-occupied response continues to read physical raw A.
       if (streamed_factors.owner_identity && !fitted_occupied_requested) whitened = {};
+    }
+    if (borrowed_factor && space != "dense" && !host_weights && storage != "jk-scratch") {
+      // C is operator-independent; A and every metric direction stay local.
+      // A truncated metric requires raw C^T*A*C, including discarded modes.
+      streamed_factors = {};
+      streamed_factors.factors[0] = {borrowed_factor->coefficients, borrowed_factor->rank, 2.0};
+      streamed_factors.nbf = plan->nbf;
+      streamed_factors.naux = plan->naux;
+      streamed_factors.owner_identity = plan->factor_basis_identity;
+      fitted_occupied_requested = metric.full_rank && whitened.data && whitened.packed_pairs;
+      if (!fitted_occupied_requested) whitened = {};
+      runtime::cuda_trace::trace_counter("response_borrowed_radial_occupied_factor", 1);
     }
     if (fitted_occupied_requested &&
         (!streamed_factors.owner_identity || !whitened.data || !metric.full_rank)) {

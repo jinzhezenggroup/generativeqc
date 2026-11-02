@@ -82,3 +82,37 @@ The paired radial owners acquire a shared lifetime-aware scratch allocator, or
 a source-driven streamed contraction can avoid repeated raw integral work under
 caps too small to retain either B. Such changes must retain independent radial
 identity and explicit resource refusal.
+
+## Truncated LR response follow-up
+
+The first complete A100 fitted attempt (`224548`, source
+`9d0be57afa5ba55df766eb0320e47706e886b64aef8558ce7a6e7774729f8e16`)
+converged in 28 Fock builds but failed in LR force response. The metric was
+rank-truncated; its dense inverse-root adjoint demanded a complete
+`Naux * Nao^2` tensor, larger than the retained response allowance. Thus this
+attempt has no complete endpoint timing, despite a converged SCF.
+
+The restricted response now borrows only the authenticated KS factor
+`D = 2 C C^T` across radial providers. It forms raw `P_Q = C^T A_Q C` and
+`Z = P M^(-1/2)`, and differentiates Z with the existing inverse-root Frechet
+map. Raw P remains live until its metric seed is complete. This preserves
+retained/discarded subspace motion, which cannot be recovered from fitted B
+alone. Only bounded derivative output panels scale with `Nao^2`; the two
+retained tensors scale with `Naux * Nocc^2`. Full-rank response keeps its
+existing factor-first path, and unsupported factors keep the original route.
+The response synchronizes the factor's producer before using another radial
+provider's stream and drains before returning the borrowed lifetime.
+
+Minimum B/U admission also left insufficient spare bytes for optional Hermite
+E on A100. Its optional source now receives a ceiling bounded by the existing
+shape-only resident capacity and observed free memory minus absolute headroom,
+while preserving the selected response allowance. Only an actual successful
+source allocation can increase the charged value allowance; explicit caps and
+probe-failure budgets cannot grow. B/U geometry is not replanned.
+
+A standalone candidate response object passed 201 independent 5090 adjoint
+cases in Slurm job 15252, including 12 truncated-metric cases with positive and
+negative exchange coefficients, ragged panels, and rotating retained/discarded
+subspaces. The reference contracts full AO densities independently; a
+finite-difference eigenvector rotation separately checks subspace motion.
+This is numerical kernel evidence, not complete endpoint qualification.
