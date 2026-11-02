@@ -1,5 +1,25 @@
 # Public force AO policy: complete endpoints and kernel attribution
 
+The original publication is retained byte-for-byte in existing merged Git at
+`195bdc95cbd2b255d37a338bdca1244b7a15f467`. The
+[recovery manifest](historical.manifest.json) authenticates all 63 original files,
+including negative comparisons, complete vectors, original scripts and profiling
+CSVs. Both original and restored offline verifiers produced identical reports
+before duplicate checkout payloads were removed. Historical results below retain
+their original source scope; this does not renew production qualification.
+
+Restore the bundle locally before running its verifier:
+
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/pbe0-public-force-policy-20261005/historical.manifest.json \
+  --output .artifacts/force-policy-history
+```
+
+A shallow clone may need to fetch the exact recorded revision first. Restoration
+neither fetches nor executes historical code. Payload-relative paths below refer
+to the restored bundle. The original protocol and unfavorable results follow.
+
 These are two complete, source-pinned 48/96-atom exact-direct PBE0/def2-SVP
 campaigns and separate intrusive warm profiles. No production default changes
 in this publication. The current force-map candidate improves both measured
@@ -117,7 +137,7 @@ further derivative work reduction without presuming a per-class bottleneck.
 Run offline from the repository root:
 
 ```bash
-PYTHONPATH=python:. python benchmarks/results/pbe0-public-force-policy-20261005/verify.py
+PYTHONPATH=python:. python .artifacts/force-policy-history/benchmarks/results/pbe0-public-force-policy-20261005/verify.py
 ```
 
 The verifier authenticates stored bytes, checks every record and route, and

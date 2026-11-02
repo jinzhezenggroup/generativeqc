@@ -343,18 +343,23 @@ def test_complete_ri_jk_vv10_energy_and_force(
             warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
             with pytest.raises(ValueError, match="stale"):
                 _ = snapshot.range_density_fitted
-        work = (
-            batch._stationary_cuda_execution.last_work
-            if device == "cuda"
-            else cpu_work[-1]
-        )
         if device == "cpu":
+            work = cpu_work[-1]
             assert work["stationary_integral_derivative_route"] == "prepared-full-ri-jk"
             assert work["integral_quartet_passes"] == 0
             assert work["range_exchange_primitive_records"] == 0
-        assert not work["native_integral_resources"][
-            "additional_device_peak_includes_lazy_lr"
-        ]
+            resources = work["native_integral_resources"]
+        else:
+            # The complete CUDA endpoint now owns force execution in native
+            # code. Query its live radial owners, not an unused Python runner.
+            with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+                components, resources = (
+                    snapshot.mixed_density_fitted_integral_derivatives(
+                        len(atoms), 256 << 20
+                    )
+                )
+                assert np.isfinite(components).all()
+        assert not resources["additional_device_peak_includes_lazy_lr"]
         moved = list(atoms)
         moved[1] = (
             atoms[1][0],
