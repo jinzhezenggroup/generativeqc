@@ -428,9 +428,17 @@ def test_cpu_mixed_dense_limit_rejects_before_snapshot_export(
         (2, "spherical", "def2-tzvp"),
     ),
 )
-@pytest.mark.parametrize("device", ("cpu", "cuda"))
+@pytest.mark.parametrize(
+    "device,force_route",
+    (("cpu", "reference"), ("cuda", "native"), ("cuda", "compatibility")),
+)
 def test_complete_mixed_df_forces_against_independent_energies(
-    spin: int, representation: str, basis_name: str, device: str
+    spin: int,
+    representation: str,
+    basis_name: str,
+    device: str,
+    force_route: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an allocated native CUDA library/device")
@@ -466,6 +474,15 @@ def test_complete_mixed_df_forces_against_independent_energies(
     with calc.prepare_batch(
         [atoms], multiplicities=[spin + 1], warm_start=True
     ) as batch:
+        # Keep the native endpoint and retained Python consumer in separate
+        # owners: an explicit compatibility call may consume a final-state lease.
+        compatibility = device == "cuda" and force_route == "compatibility"
+        if compatibility:
+            monkeypatch.setattr(
+                batch, "_native_dft_force_eligible", lambda index=None: False
+            )
+        elif device == "cuda":
+            assert batch._native_dft_force_eligible(0)
         cpu_work = []
         if device == "cpu":
             original_consumer = batch._public_dft_cpu_force
@@ -481,14 +498,16 @@ def test_complete_mixed_df_forces_against_independent_energies(
             batch._stationary_cuda_execution.last_work[
                 "native_integral_additional_device_reserve_bytes"
             ]
-            if device == "cuda"
+            if compatibility
             else None
         )
         warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
         work = (
             batch._stationary_cuda_execution.last_work
-            if device == "cuda"
+            if compatibility
             else cpu_work[-1]
+            if device == "cpu"
+            else {}
         )
         assert cold.converged and warm.converged
         assert (
@@ -498,7 +517,7 @@ def test_complete_mixed_df_forces_against_independent_energies(
         )
         assert warm.energy == pytest.approx(cold.energy, abs=2e-10)
         np.testing.assert_allclose(warm.forces, cold.forces, atol=2e-8, rtol=0)
-        if device == "cuda":
+        if compatibility:
             assert work["prepared_execution_reused"]
             assert cold_reserve > 0
             assert (
@@ -510,7 +529,7 @@ def test_complete_mixed_df_forces_against_independent_energies(
             ]
             assert work["nonlocal_feature_d2h_bytes"] == 0
             assert work["nonlocal_seed_h2d_bytes"] == 0
-        else:
+        elif device == "cpu":
             assert (
                 work["stationary_integral_derivative_route"]
                 == "prepared-mixed-density-fitted"

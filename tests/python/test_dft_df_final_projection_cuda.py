@@ -164,12 +164,12 @@ def test_projection_scratch_preserves_warm_and_moved_geometry(
     tmp_path: Path,
     budget_mib: int,
 ) -> None:
-    """Exercise borrowed/owned scratch and compare all calls to bounded response.
+    """Check final-projection leases across cold, warm and moved public calls.
 
-    The 24-MiB public cap admits final U but cannot hold the preferred independent
-    response panel. Trace completion proves the recycled interval was actually
-    used; the 64-MiB control keeps independent scratch. A smaller explicit grid
-    bounds this resource/lifetime test, without making a grid-accuracy claim.
+    Both public caps must preserve complete results and one-shot projection
+    consumption. A cap does not promise recycled scratch: compact workspaces can
+    leave a wider owned response panel, which the controller must retain. The
+    small explicit grid bounds this lifetime test without a grid-accuracy claim.
     """
     from benchmarks.readme_hf_scaling import scaling_cases
 
@@ -179,9 +179,11 @@ def test_projection_scratch_preserves_warm_and_moved_geometry(
     populations = []
     monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed-single")
     for policy in ("off", "auto"):
-        trace = tmp_path / f"{budget_mib}-{policy}.jsonl"
         monkeypatch.setenv("GENERATIVEQC_DF_FINAL_PROJECTION", policy)
-        monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
+        monkeypatch.setenv(
+            "GENERATIVEQC_DF_TRACE",
+            str(tmp_path / f"{budget_mib}-{policy}-prepare.jsonl"),
+        )
         calculator = Calculator(
             method="pbe0-rks",
             basis="def2-svp",
@@ -198,26 +200,45 @@ def test_projection_scratch_preserves_warm_and_moved_geometry(
             density_tolerance=1e-10,
         )
         with calculator.prepare_batch([atoms], warm_start=True) as batch:
+            monkeypatch.setenv(
+                "GENERATIVEQC_DF_TRACE",
+                str(tmp_path / f"{budget_mib}-{policy}-cold.jsonl"),
+            )
             cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+            monkeypatch.setenv(
+                "GENERATIVEQC_DF_TRACE",
+                str(tmp_path / f"{budget_mib}-{policy}-warm.jsonl"),
+            )
             warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+            monkeypatch.setenv(
+                "GENERATIVEQC_DF_TRACE",
+                str(tmp_path / f"{budget_mib}-{policy}-moved.jsonl"),
+            )
             changed = batch.execute(
                 coordinates=[moved], strict=True, properties=("energy", "forces")
             ).items[0]
         populations.append((cold, warm, changed))
-        recycled = [
-            row
-            for row in read_trace(trace)
-            if row["operation"] == "force_response"
-            and row["counters"].get(
-                "response_recycled_final_projection_scratch_bytes", 0
-            )
-            and row["counters"].get("atom_coordinates") == 3 * len(atoms)
-        ]
-        if policy == "auto" and budget_mib == 24:
-            # A one-step warm solve need not publish a new projection.
-            assert 2 <= len(recycled) <= 3
-        else:
-            assert not recycled
+        for stage in ("cold", "warm", "moved"):
+            trace = tmp_path / f"{budget_mib}-{policy}-{stage}.jsonl"
+            responses = [
+                row for row in read_trace(trace) if row["operation"] == "force_response"
+            ]
+            completed = [
+                row
+                for row in responses
+                if row["counters"].get("atom_coordinates") == 3 * len(atoms)
+            ]
+            assert completed, "the public call did not complete DF force response"
+            assert all(row["valid"] and row["cuda_error"] == 0 for row in completed)
+            # A warm one-step solve may have no new U. Cold and moved owners
+            # must complete reuse; an earlier failed attempt is not a hit.
+            if policy == "off":
+                expected_hit = False
+            elif stage == "warm":
+                expected_hit = None
+            else:
+                expected_hit = True
+            _assert_projection_reuse(responses, expected_hit, 3 * len(atoms))
     for baseline, candidate in zip(*populations, strict=True):
         assert candidate.energy == pytest.approx(baseline.energy, abs=1e-9, rel=0)
         np.testing.assert_allclose(candidate.forces, baseline.forces, atol=3e-8, rtol=0)
