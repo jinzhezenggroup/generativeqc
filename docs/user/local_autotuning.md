@@ -21,7 +21,7 @@ and diagnostics require the allocated visible GPU; accepted binaries can replay
 without CUDA compiler tools. See [native CLI ownership](native_cli.md).
 
 XYZ coordinates default to Angstrom and are converted to Bohr. Use `--units
-bohr` for a Bohr XYZ file. Charge, multiplicity, RHF/UHF method, Cartesian or
+bohr` for a Bohr XYZ file. Charge, multiplicity, HF/KS method, Cartesian or
 spherical representation, and batch size are explicit options. The command uses
 logical CUDA device 0 within the allocated visibility by default. Use
 `--device-id N` to select another visible ordinal. Device probing, candidate
@@ -107,6 +107,70 @@ errors, noisy timings, and slower endpoints preserve the working configuration.
 Only complete accepted bundles are activated through an atomic index update.
 Unfinished staging directories are never read by runtime selection.
 
+## Tune a DFT workload
+
+The same frontend accepts `lda-rks`, `pbe-rks`, `pbe0-rks`, `b3lyp-rks`,
+`r2scan-rks`, and their `-uks` counterparts. DFT searches the point tile of the
+existing native **device-fused XC** implementation, not HF shell-class kernels.
+The HF-specific profiling flags are never passed to KS batches. This is an
+execution-schedule search: the functional, Treutler grid, screening, FP64
+precision, charge, spin and analytic-force implementation remain fixed.
+It does not yet tune DFT J/K algorithms, generated kernel variants, independent
+force tiles, or density fitting, and never promotes a CPU/host-XC path.
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:30:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
+  generativeqc-tune --quick water.xyz --method pbe-rks --basis def2-svp \
+  --grid-level 3 --xc-tiles 128 256 512 1024 --repeats 6
+```
+
+`--grid-level` selects the scientific quadrature **before** the search; it is
+never optimized for speed. The default is level 3. Without `--xc-tiles`, quick
+mode tries 128/256/512/1024 points, while full mode adds 64/1536/2048/4096.
+Duplicate tiles and the actual incumbent tile are removed; `--max-candidates`
+and the shared wall-clock budget bound the remaining search. DFT uses neither
+`--coverage` nor `--max-classes`, which belong to HF shell-class selection.
+The baseline keeps native automatic tiling unless an exact local winner is
+already active. Use `--retune` to reconsider such a winner.
+Autotuned winners additionally match the full basis data, representation, batch
+size, MethodIR and SCF controls. A grid-only match cannot reuse endpoint timing
+from a different AO or solver workload. Explicit initial guesses and fitted
+calculations retain native policy rather than consuming direct-auto evidence.
+The search fixes `max_iterations=100`, `diis_history=8`, energy tolerance
+`1e-12`, density tolerance `1e-10`, and screening tolerance `1e-14`; runtime
+selection requires those same controls. Explicit SCF tiles also prescribe the
+inherited force bound under native policy; the search does not vary an
+independent `force_tile_points` parameter.
+An explicitly host-unfused incumbent is left unchanged rather than timed as if
+it were device-fused; this resident-only search does not replace host-XC winners.
+
+DFT requires at least five paired repeats. Fresh processes alternate baseline
+and candidate complete energy-plus-force replays, excluding initialization,
+cold convergence and warmup. Native KS diagnostics retain the resolved tile,
+grid points, Fock builds and available J/K work census. Every candidate replay
+must have a measured native memory ledger within its admitted capacity, with
+no rejected allocation. These runtime-only candidates reuse the same compiled
+library: their source binding is the verified native source inventory, and the
+bundle hashes the exact library. No new PTXAS/occupancy evidence is claimed.
+
+A separate, untimed CPU PySCF/libxc solve supplies independent energies and
+analytic forces with molecular-grid response. The oracle bounds are `1e-5`
+Hartree/atom for energy, `1e-4` Hartree/Bohr maximum force error and `3e-5`
+Hartree/Bohr force RMS error, matching existing native KS qualification floors.
+Every paired sample must additionally pass the much tighter schedule-parity,
+translation, identical-iteration and statistically significant 1.02x endpoint
+improvement gates. The reference is a tuning dependency only, never a runtime
+production dependency.
+
+A successful DFT search retains the incumbent native library, accepted HF
+kernels and unrelated DFT workload winners when extending the bundle. With
+`--portable-baseline`, a proposal must also beat the actual unmasked incumbent
+before activation. Missing diagnostics, reference failure, insufficient memory,
+timeout, noise or no improvement leave the active profile unchanged.
+
+## DFT Profile Acceptance
+
 DFT grid/XC schedule tuning reuses the same bundle and activation index. Its
 optional `dft_schedules` winners have a separate scientific workload identity
 (architecture, functional/ingredients and jet outputs, grid/screening model,
@@ -132,6 +196,9 @@ when every batch item has an exact workload match and all matched items select
 the same resolved schedule, including its point tile. A changed geometry or
 mixed batch with any miss keeps the portable default. `GENERATIVEQC_PROFILE=off`
 continues to provide the tuning/A-B bypass.
+Explicit `KsOptions.tile_points` overrides are never replaced by local DFT
+profiles. Calculators with an explicit `ResourceBudget` retain their bounded
+native/user tile policy rather than enlarging it from a local schedule winner.
 
 Real-device component qualification has exercised this boundary on an NVIDIA
 GeForce RTX 4090 with CUDA 12.9.86. At revision `cc3fc40d`, a complete native
