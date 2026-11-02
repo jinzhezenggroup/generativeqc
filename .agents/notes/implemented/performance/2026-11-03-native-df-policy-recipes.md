@@ -66,6 +66,17 @@ independent full-rank RHF/UHF references, and exact recipe replay. Opt-in Slurm
 tests check all proposed schedules against independent E/F. Timing evidence
 retains all samples, including refused/noisy candidates; no best-repeat claims.
 
+Source-matched Slurm jobs 1448/1449 qualify the RHF policy suite. Water with
+STO-3G orbital/def2-SVP auxiliary tables selects packed values: fresh complete
+E/F holdout 13.386 to 12.665 ms (1.057x; lower 95% 1.055x), followed by actual
+recipe replay. A water dimer correctly refuses a 1 MiB DF workspace hint;
+8 MiB admits all six candidates numerically but none wins the performance
+gate. Both topologies retain full metric rank and three observed Fock builds.
+No streamed-path, large-topology or KS/DF acceleration is inferred.
+Raw positive and negative receipts live in
+`benchmarks/results/dft-local-autotune-20261103/df-receipts.json.xz`; see `DF.md`
+for source identities, complete timing scope and reproduction.
+
 ## Revisit when
 
 Independent rank-deficient metric/derivative semantics, complete native UHF
