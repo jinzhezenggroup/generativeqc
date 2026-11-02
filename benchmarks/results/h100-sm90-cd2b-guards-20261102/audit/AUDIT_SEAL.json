@@ -1,0 +1,34 @@
+{
+  "schema": "generativeqc.audit-seal.v1",
+  "generated_at": "2026-11-02T18:17:05.648796+00:00",
+  "artifacts": {
+    "EXPERIMENT_AUDIT.md": {
+      "bytes": 15150,
+      "sha256": "ef12f62ff3f0674ad01eaf7bbe9b8e15e29690a1b229370ddbfd60f6ff9c7f31"
+    },
+    "EXPERIMENT_AUDIT.json": {
+      "bytes": 115632,
+      "sha256": "12af37b4dc29f38a64558a32e81f8d1fbb613ed872a88278c79fe036df54b4fb"
+    },
+    "deterministic-test-log.json": {
+      "bytes": 18239,
+      "sha256": "fa2c6554b5d16e168c55f229f9bb331db04cd8305569151ac41d714c6e220e18"
+    },
+    "artifact-manifest.json": {
+      "bytes": 3489406,
+      "sha256": "a714b6d4a8de9a18b4517596df5f09e077199c8793523bad98ea86046693161b"
+    },
+    "preservation.json": {
+      "bytes": 1003,
+      "sha256": "edc9b5dc42d7f58a115eab6d203677ae066a9d87486015501746e0148c263970"
+    },
+    "review-trace.json": {
+      "bytes": 1121,
+      "sha256": "3b613a17618e38081825fe35f1a9646ae0ad955b01783bef108881a573f1babb"
+    }
+  },
+  "all_558_current_primary_and_delta_inputs_preserved": true,
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
+  "actual_returned_model_effort": "unverified"
+}
