@@ -79,3 +79,16 @@ does not revive that expression rewrite or assume its predicted performance.
 - [H100 production tracker #2889](https://github.com/jinzhezenggroup/generativeqc/issues/2889)
 - [Portable DF and unit-sum receiver #2888](https://github.com/jinzhezenggroup/generativeqc/pull/2888)
 - `docs/maintainer/performance_engineering.md`
+
+## A100 substitution acceptance, 2026-11-02
+
+The owner authorized A100 in place of H100. Scientific source
+`5aa7bf5569c69f173232442e9cf7ba52be80fcb3381b618a8254215e0ae62ffc` now passes
+combined/separate native controls, complete unfiltered memcheck, independent
+RSH stencil replay, and public Direct cold/warm/moved, UKS, minimum-budget and
+failure-recovery tests. The source-bound capsule is
+`benchmarks/results/a100-native-stages-20261102`. Its clean PBE0 endpoints retain
+the unfavorable 96-atom Direct comparison; this is a qualified incremental
+stage, not completion of the majority target. Independent review remains a
+merge condition. The historical pending-SM90 language above describes the
+original proposal, not a requirement to duplicate the authorized A100 run.

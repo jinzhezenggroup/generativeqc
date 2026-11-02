@@ -1,0 +1,33 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "a100-native-stages-20261102",
+  "owner": "A100 incremental native RSH/Direct acceptance for PRs 2902 and 2900",
+  "reason": "Exact source-bound independent vectors, full corrected resource streams, original failures and complete endpoint populations. Storage review does not certify independent review or merge gates. No numerical rounding or budget increase.",
+  "review_document": "benchmarks/results/a100-native-stages-20261102/README.md",
+  "files": [
+    {
+      "bytes": 221264,
+      "classification": "required-compact-accepted-evidence",
+      "family": "a100-native-stages-20261102",
+      "path": "benchmarks/results/a100-native-stages-20261102/failed-molecular/receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "5e9c464b361dd78e99bffa3aed3d30f792c07d15a8eaf4cbb2fdddebb1efa0b4"
+    },
+    {
+      "bytes": 868556,
+      "classification": "required-compact-accepted-evidence",
+      "family": "a100-native-stages-20261102",
+      "path": "benchmarks/results/a100-native-stages-20261102/molecular/receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "4258272718f942b829e0653f46d89a1702a5feeed8b44e51928e344372c5ee9f"
+    },
+    {
+      "bytes": 178504,
+      "classification": "required-compact-accepted-evidence",
+      "family": "a100-native-stages-20261102",
+      "path": "benchmarks/results/a100-native-stages-20261102/native/receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "f7f846981311ffdf8f05ccef2925a796482427e2a2190db556075246253623c1"
+    }
+  ]
+}

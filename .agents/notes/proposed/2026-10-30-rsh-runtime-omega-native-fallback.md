@@ -63,3 +63,18 @@ The choice favors independently qualified results with the existing bounded
 owner. Do not claim custom-omega acceleration from default-omega timings.
 Revisit shell admission only after the actual device failure is isolated and
 the independent source, molecular, lifetime and resource gates pass.
+
+## A100 substitution acceptance, 2026-11-02
+
+The task owner explicitly authorized A100 instead of H100 for this incremental
+merge. Separate current-source production and fixture builds now pass native
+composition/binding controls and complete unfiltered memcheck (224781/224782).
+Current-source molecular controls pass 145 tests with one skip per branch;
+public Direct controls separately pass 29 production and three injected-fault
+cases per branch. The complete PBE0 cold/warm population and all six fresh
+dense-reference corroborations pass their original full-vector gates.
+
+The replay capsule under `benchmarks/results/a100-native-stages-20261102` keeps
+actual source identities, original failures and runtime compatibility details.
+This updates the device evidence above; independent review and the final broad
+performance objective remain separate. No historical H100 result is relabelled.
