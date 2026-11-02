@@ -1028,10 +1028,14 @@ generativeqc_status execute_cuda_df_hf_gradient(
            view.full_rank == device_metric->full_rank &&
            view.owner_identity == device_metric->owner_identity;
   };
+  const bool spectral_occupied = occupied && device_metric && !device_metric->full_rank &&
+                                 terms.size() == 1 && terms[0].coulomb_coefficient == 0.0 &&
+                                 terms[0].exchange_coefficient != 0.0 &&
+                                 occupied->factors[0].rank && !whitened;
   if (occupied) {
-    if (!device_metric || !device_metric->full_rank || !occupied->owner_identity ||
-        occupied->owner_identity != device_metric->owner_identity || occupied->nbf != n ||
-        occupied->naux != a || !source || borrowed || packed_raw ||
+    if (!device_metric || (!device_metric->full_rank && !spectral_occupied) ||
+        !occupied->owner_identity || occupied->owner_identity != device_metric->owner_identity ||
+        occupied->nbf != n || occupied->naux != a || !source || borrowed || packed_raw ||
         (whitened && !whitened->packed_pairs) || terms.size() > occupied->factors.size()) {
       detail = "streamed occupied DF factors differ from the full-rank metric owner";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -1509,11 +1513,17 @@ generativeqc_status execute_cuda_df_hf_gradient(
           n, a, terms.size(), compact_fitted_metric_workspace,
           whitened && whitened->spectral_basis && !whitened->factor_response_root);
       if (!occupied_layout.elements) throw std::bad_alloc();
+      const auto spectral_fixed =
+          spectral_occupied ? df_spectral_occupied_workspace(n, a, occupied->factors[0].rank, 0)
+                            : 0;
+      if (spectral_occupied && !spectral_fixed) throw std::bad_alloc();
       const long double fixed_elements =
-          (compact_fitted_metric_workspace
-               ? static_cast<long double>(occupied_layout.elements) + 1.0L * terms.size() * n * n
-               : fixed_response_elements) +
-          (whitened_response ? 1.0L * a * n * n : 0.0L);
+          spectral_occupied ? static_cast<long double>(spectral_fixed) + n * n
+                            : (compact_fitted_metric_workspace
+                                   ? static_cast<long double>(occupied_layout.elements) +
+                                         1.0L * terms.size() * n * n
+                                   : fixed_response_elements) +
+                                  (whitened_response ? 1.0L * a * n * n : 0.0L);
       // The prepared allowance is a ceiling, not a reservation of physical
       // memory. Other retained consumers (notably a nonlocal XC force owner)
       // may grow after the cold call. Replan the bounded auxiliary tile from
@@ -1604,7 +1614,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                         !raw_coulomb && panel_capacity / 2 < a &&
                                         panel_capacity > a;
       const auto capacity =
-          owned_occupied
+          spectral_occupied ? std::min<std::size_t>(64, panel_capacity)
+          : owned_occupied
               ? std::min(occupied_tile,
                          (recycle_projection ? occupied->recyclable_final_projection_elements
                                              : factor_capacity - occupied_retained) /
@@ -1640,6 +1651,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
         }
       }
       const auto workspace_size = [&](std::size_t block) {
+        if (spectral_occupied)
+          return df_spectral_occupied_workspace(n, a, occupied->factors[0].rank, block);
         return (compact_fitted_metric_workspace
                     ? occupied_layout.elements
                     : cuda_df_response_workspace_elements(
@@ -2391,7 +2404,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
           owned_occupied ? &owned_buffers : nullptr,
           coulomb_policy != "panels" ? whitened : nullptr, raw_coulomb, raw_coulomb_reader,
           raw_charge_reader, raw_derivative_consumer, compact_fitted_metric_workspace,
-          raw_metric_consumer));
+          raw_metric_consumer, spectral_occupied ? &occupied->factors[0] : nullptr));
       if (gradient_copies > 1) {
         runtime::cuda_trace::TraceRegion reduction("gradient_probe_shard_reduction", arena.stream);
         // Each column is already a complete contracted atom gradient, not an

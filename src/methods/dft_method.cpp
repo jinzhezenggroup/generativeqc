@@ -1750,6 +1750,25 @@ class KsPreparedState final : public KsSingleOwnerPort {
         detail = "full RI-K response must not consume a Direct LR correction";
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
+      // Acquire C before primary response consumes its one-shot U. C remains
+      // KS-owned and token-valid; the LR response uses its own A/M, never U.
+      std::optional<scf::CudaDfBorrowedOccupiedFactor> range_factor;
+#if GENERATIVEQC_HAS_CUDA
+      if (cuda_ && expected.identity.model.spins == 1) {
+        dft::CudaKsResidentFittedProjectionBinding lease;
+        std::string lease_detail;
+        const auto lease_status =
+            cuda_->resident_final_fitted_projection(expected, lease, lease_detail);
+        if (lease_status == GENERATIVEQC_STATUS_SUCCESS && lease)
+          range_factor.emplace(scf::CudaDfBorrowedOccupiedFactor{
+              lease.device_id, lease.occupied_coefficients, lease.nbf, lease.rank, lease.stream});
+        else if (lease_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                 lease_status != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
+          detail = lease_detail;
+          return lease_status;
+        }
+      }
+#endif
       std::vector<double> fitted_four;
       auto status =
           density_fitted_integral_gradient(expected, *cached_density, *cached_weighted_density,
@@ -1758,7 +1777,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const auto& alpha = cached_density->at(0);
       const scf::reference::Matrix beta =
           cached_density->size() == 2 ? cached_density->at(1) : scf::reference::Matrix{};
-      const auto fitted_lr = range_correction_->retained_energy_derivative(alpha, beta);
+      const auto fitted_lr =
+          range_factor ? range_correction_->retained_exchange_derivative_with_occupied_factor(
+                             alpha, *range_factor)
+                       : range_correction_->retained_energy_derivative(alpha, beta);
       status = dft::compose_mixed_rsh_df_integral_sources(
           fitted_four, fitted_lr, nc, full_coefficient, c.exchange.coefficient, output, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;

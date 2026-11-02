@@ -34,7 +34,8 @@ its own `erf(omega*r)/r` three-center integrals and auxiliary metric, with the
 same auxiliary basis and relative rank cutoff as the full-range owner. It does
 not reuse Coulomb-whitened factors for a different radial operator. CUDA orders
 the independent provider streams with device events, without a successful-path
-host fence.
+host fence during SCF. A cross-provider occupied-factor force response orders
+the producer before entering its synchronous derivative consumer.
 
 With complete RI-J/K selected, FP64 CPU and CUDA analytic-force implementations
 differentiate both fitted operators, including auxiliary-center and metric
@@ -72,6 +73,12 @@ representation fits, the source remains streamed. Explicit memory caps and
 force-response capacity remain binding. Optional prepared Hermite transforms
 accelerate packed Coulomb and erf integrals with the same radial recurrence.
 An exact four-center residency request never replaces a fitted LR operator.
+For a restricted final state with an authenticated occupied factor, a
+rank-truncated LR metric uses raw occupied-space projections for force response.
+The complete inverse-root derivative retains motion between kept and discarded
+metric directions. The response does not reconstruct raw integrals from fitted
+values or relax the configured cutoff. Its projected storage and bounded AO
+output panels remain charged to the LR response allowance.
 
 **VV10 itself is not an RI-J/K integral.** Its nonlocal correlation remains the
 existing self-consistent grid-pair evaluation; complete DF-J/K does not replace
