@@ -157,6 +157,7 @@ struct Owner {
   bool strict_refinement{}, phase_source_cold = true, stabilize_occupations = true;
   bool final_closure = true, is_active{}, occupied_fitted_factor_ready = true;
   bool pending_fitted_occupied = true, final_fitted_projection_ready = true;
+  bool final_occupied_factor_ready = true;
   bool nonlocal_seed_stage{}, nonlocal_frozen_stage{}, nonlocal_outer_active = true;
   std::uint64_t nonlocal_anchor_generation=999;
   double anchor_data{};
@@ -252,7 +253,8 @@ int main(int argc, char** argv) {
   require(!strict.retry() && strict.is_failed && !strict.is_active && !strict.retries,
           "strict failure was silently retried");
   require(!strict.occupied_fitted_factor_ready && !strict.pending_fitted_occupied &&
-              !strict.final_fitted_projection_ready, "failed strict state remained reusable");
+              !strict.final_fitted_projection_ready && !strict.final_occupied_factor_ready,
+              "failed strict state remained reusable");
  } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
 """
