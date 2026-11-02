@@ -20,7 +20,7 @@ class ReaderTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.document = reader.decode_xz(
-            (ROOT / "terminal-evidence.json.xz").read_bytes()
+            reader.artifact_bytes(ROOT, "terminal-evidence.json.xz")
         )
         cls.evidence = reader.load(ROOT)
 
