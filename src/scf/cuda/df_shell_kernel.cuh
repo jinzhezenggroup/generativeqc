@@ -281,7 +281,8 @@ __device__ __forceinline__ void contract_shell_task(
           if (lane == 0) {
             if constexpr (Rys) {
               scalar::prepare_geometry_rys<Math::nroots>(alpha, center_a, beta, center_b, gamma,
-                                                         center_c, A + B + C, geometry);
+                                                         center_c, A + B + C, geometry, nullptr,
+                                                         first.range_omega);
             } else if (work) {
               scalar::BoysWork observed;
               scalar::prepare_geometry(alpha, center_a, beta, center_b, gamma, center_c, A + B + C,
