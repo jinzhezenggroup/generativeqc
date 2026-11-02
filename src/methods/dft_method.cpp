@@ -1465,6 +1465,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     if (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
+      // Mixed CUDA response must select its owner before any primary response
+      // runs: the primary consumes the final one-shot fitted projection. The
+      // mixed owner first borrows its canonical C for the separate LR metric.
+      // Computing primary rows and then declining this route loses that lease
+      // and repeats the primary work in the fallback adapter.
+      if (backend_ == GENERATIVEQC_BACKEND_CUDA && execution_plan_.range_exchange)
+        return mixed_rsh_df_integral_gradient(expected, output, maximum_bytes, work, detail,
+                                              &density, &weighted_density);
       const auto fitted_status = density_fitted_integral_gradient(
           expected, density, weighted_density, output, maximum_bytes, work, detail,
           execution_plan_.range_exchange);
@@ -1759,11 +1767,15 @@ class KsPreparedState final : public KsSingleOwnerPort {
         std::string lease_detail;
         const auto lease_status =
             cuda_->resident_final_fitted_projection(expected, lease, lease_detail);
-        if (lease_status == GENERATIVEQC_STATUS_SUCCESS && lease)
+        if (lease_status == GENERATIVEQC_STATUS_SUCCESS) {
+          if (!lease) {
+            detail = "CUDA KS returned an invalid occupied factor lease for LR response";
+            return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+          }
           range_factor.emplace(scf::CudaDfBorrowedOccupiedFactor{
               lease.device_id, lease.occupied_coefficients, lease.nbf, lease.rank, lease.stream});
-        else if (lease_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
-                 lease_status != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
+        } else if (lease_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                   lease_status != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
           detail = lease_detail;
           return lease_status;
         }

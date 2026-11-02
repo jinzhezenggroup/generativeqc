@@ -116,3 +116,22 @@ negative exchange coefficients, ragged panels, and rotating retained/discarded
 subspaces. The reference contracts full AO densities independently; a
 finite-difference eigenvector rotation separately checks subspace motion.
 This is numerical kernel evidence, not complete endpoint qualification.
+
+The subsequent A100 job 224584 still failed its complete force endpoint. Its
+spectral source identity was
+`0bcd749cbc2a0e19d45ad6918529c67c9b8d04eb52513f9ae1c9e5edce8a8760`.
+Optional Hermite admission reduced LR resident setup from about 14.74 s to
+1.24 s, but the compact response was never selected. The generic prepared
+integral entry computed primary DF rows before declining mixed CUDA routing.
+That consumed the one-shot projection before the mixed owner could borrow C;
+the fallback then repeated primary response and refused the dense LR tensor.
+
+Mixed CUDA prepared integrals now route to the mixed owner before any primary
+response. This preserves the same canonical C lease across radial providers
+and avoids the duplicate response. The spectral raw reader also borrows the
+not-yet-live output panel for a packed source slice, enabling existing prepared
+Hermite generation. It expands into a disjoint AO slice before projecting C;
+there is no extra allocation or changed integral recurrence. The output panel
+becomes live only after raw occupied products and the metric seed are complete.
+The failed original run remains evidence; this follow-up needs a new complete
+endpoint qualification before any default promotion or speed claim.
