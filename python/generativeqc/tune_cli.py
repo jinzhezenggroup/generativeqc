@@ -27,6 +27,11 @@ def parser() -> argparse.ArgumentParser:
     )
     root.add_argument("input", type=Path, help="representative XYZ workload")
     root.add_argument("--basis", default="def2-svp")
+    root.add_argument(
+        "--component",
+        choices=("xc", "jk"),
+        help="DFT XC tile search (default for KS), or isolated native J/K policy recipes",
+    )
     from ._dft_autotune import DFT_FUNCTIONALS
 
     root.add_argument(
@@ -87,6 +92,14 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser()
     args = arguments.parse_args(argv)
     is_dft = args.method not in ("rhf", "uhf")
+    if args.component is not None and not is_dft:
+        arguments.error("--component requires a DFT method")
+    if args.component == "jk" and (
+        args.xc_tiles is not None or args.portable_baseline or args.export
+    ):
+        arguments.error(
+            "J/K recipes do not use --xc-tiles, --portable-baseline or --export"
+        )
     if not 0 <= args.grid_level <= 9:
         arguments.error("--grid-level must be in [0,9]")
     if not is_dft and (args.xc_tiles is not None or args.grid_level != 3):
@@ -137,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
                     "report": report["directory"] + "/report.json",
                     "failure": report.get("failure"),
                     "reason": report.get("reason"),
+                    "qualified_recipe": report.get("qualified_recipe"),
                 },
                 indent=2,
             )

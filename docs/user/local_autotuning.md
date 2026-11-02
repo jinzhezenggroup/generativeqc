@@ -115,8 +115,8 @@ existing native **device-fused XC** implementation, not HF shell-class kernels.
 The HF-specific profiling flags are never passed to KS batches. This is an
 execution-schedule search: the functional, Treutler grid, screening, FP64
 precision, charge, spin and analytic-force implementation remain fixed.
-It does not yet tune DFT J/K algorithms, generated kernel variants, independent
-force tiles, or density fitting, and never promotes a CPU/host-XC path.
+The XC search does not tune DFT J/K algorithms, generated kernel variants,
+independent force tiles, or density fitting, and never promotes a CPU/host-XC path.
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
@@ -168,6 +168,51 @@ kernels and unrelated DFT workload winners when extending the bundle. With
 `--portable-baseline`, a proposal must also beat the actual unmasked incumbent
 before activation. Missing diagnostics, reference failure, insufficient memory,
 timeout, noise or no improvement leave the active profile unchanged.
+
+## Tune native DFT J/K policies
+
+`--component jk` searches existing native full-range Coulomb and hybrid-exchange
+lowerings and task schedules. It preserves MethodIR exchange coefficients,
+spin, quadrature, FP64, screening and analytic derivatives. Semilocal workloads
+do not propose absent exchange work. This is not generated-kernel autotuning or
+a change to exact versus fitted integrals.
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:30:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
+  python -m generativeqc.tune_cli water.xyz --method pbe0-rks \
+  --basis def2-svp --component jk --repeats 5 --max-candidates 6
+```
+
+Each trial uses an isolated child environment and complete warm E+F replay.
+Only allowlisted native execution knobs are changed; ambient GenerativeQC
+debug/experimental controls are excluded without modifying the parent or Slurm
+device visibility. The search compares observed grid/Fock/J/K work and resolved
+XC schedules, checks every sample against the independent oracle and native
+allocation ledger, then requalifies a selected winner against the original
+incumbent using fresh holdout pairs. Native capability and capacity fallbacks
+remain authoritative; requested lowerings are not claims of kernel coverage.
+
+An accepted search returns `qualified_recipe`, **not** an installed global
+profile. Native environment controls are process-scoped: applying them around
+arbitrary concurrent Calculator calls would be unsafe and could transfer
+performance evidence to a different workload. Explicitly replay the recorded
+geometry/basis/batch/model with:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:10:00 python -m generativeqc.execution_tune \
+  /path/to/jk-run/recipe.json /path/to/replay.json
+```
+
+Replay rechecks native-library bytes, device/source identity, the exact workload
+and policy, and all raw holdout numerical/performance/resource/work gates. It
+needs no compiler or CPU reference solve; the independent reference is retained
+in the adjacent report. No winner, failed holdout, timeout or missing diagnostics
+publishes a recipe or changes the active profile index. `--xc-tiles`,
+`--portable-baseline` and `--export` belong to other search contracts and are
+rejected for J/K recipes. All timing claims exclude preparation/cold convergence
+and warmup; they are not cold-start throughput claims.
 
 ## DFT Profile Acceptance
 
