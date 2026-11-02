@@ -1,5 +1,24 @@
 # Pre-AO native CSR force portfolio qualification
 
+The historical payloads are retained byte-for-byte in existing merged Git at
+`8804b2382fbcfda1dc3daf1e0c4a9dc44c72e887`. The
+[recovery manifest](historical.manifest.json) authenticates all 86 original
+files, including the original README, unfavorable comparisons and source patches.
+Recovery was verified before removing duplicate checkout payloads. This storage
+change does not renew historical production qualification or alter any result.
+Restore locally before running the verification commands below:
+
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/preao-force-portfolio-20261006/historical.manifest.json \
+  --output .artifacts/preao-portfolio-history
+```
+
+If a shallow clone lacks the recorded revision, fetch that exact revision first.
+The recovery command does not fetch or execute historical code.
+All payload-relative paths in the historical description refer to the restored
+bundle. Its original protocol and negative comparisons follow unchanged.
+
 This bundle qualifies the new **force-domain default dispatch** on one frozen
 merged candidate source/binary. `public/` contains five interleaved AB/BA
 campaigns for 3, 24 and 48 atoms, independent references and separate intrusive
@@ -77,10 +96,10 @@ From the repository root with its Python source available:
 
 ```bash
 PYTHONPATH=python:. python -m benchmarks.verify_preao_portfolio \
-  benchmarks/results/preao-force-portfolio-20261006/public --atoms 3 24 48 \
+  .artifacts/preao-portfolio-history/benchmarks/results/preao-force-portfolio-20261006/public --atoms 3 24 48 \
   --output .artifacts/preao/reproduced-portfolio.json
 PYTHONPATH=python:. python -m benchmarks.verify_preao_force \
-  benchmarks/results/preao-force-portfolio-20261006/mechanism --atoms 48 96 \
+  .artifacts/preao-portfolio-history/benchmarks/results/preao-force-portfolio-20261006/mechanism --atoms 48 96 \
   --output .artifacts/preao/reproduced-mechanism.json
 ```
 

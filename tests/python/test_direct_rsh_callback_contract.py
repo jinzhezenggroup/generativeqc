@@ -1,4 +1,4 @@
-"""Execute the resident RSH adapter's capture and typed callback boundaries."""
+"""Execute isolated LR capture and typed callback boundaries on its shell owner."""
 
 import subprocess
 from pathlib import Path
@@ -73,6 +73,10 @@ struct CudaDirectJkPlan {
   int device_id{};
   cudaStream_t stream{reinterpret_cast<void*>(1)};
 };
+template<class... Args>
+generativeqc_status consume_cuda_direct_rsh_energy_derivatives_device(Args&&...) {
+  throw std::logic_error("isolated LR unexpectedly used the general RSH owner");
+}
 namespace cuda_execution {
 cudaError_t consume_generated_rsh_energy_derivatives(
     GeneratedExchangePlan&, bool, const double*, const double*, double, double, double, double,
@@ -102,7 +106,7 @@ int main(int argc, char** argv) {
     if (scenario == 7) throw std::invalid_argument("bad source");
   };
   const auto status = consume_cuda_direct_shell_rsh_energy_derivatives_device(
-      &plan, FockSpin::Restricted, 1.0, 0.2, 1.0, 0.3, &density, nullptr, 1, consumer, detail);
+      &plan, FockSpin::Restricted, 0.0, 0.0, 1.0, 0.3, &density, nullptr, 1, consumer, detail);
   if (scenario >= 1 && scenario <= 3) {
     assert(status == (scenario == 3 ? GENERATIVEQC_STATUS_CUDA_ERROR
                                     : GENERATIVEQC_STATUS_INVALID_ARGUMENT));

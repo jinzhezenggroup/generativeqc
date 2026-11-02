@@ -36,8 +36,8 @@ def test_cuda_packed_lr_values_preserve_the_radial_operator(
     fitted operator; the auxiliary mapping also exercises the generic fallback.
     """
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated CUDA device")
-    assert os.environ.get("SLURM_JOB_ID")
+        pytest.skip("requires an explicitly scheduled CUDA device")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     from benchmarks.df_component_ledger import read_trace
 
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
@@ -106,9 +106,9 @@ def test_range_exchange_selection_is_frozen_for_all_endpoints(
 ) -> None:
     """Opt-in LR fitting cannot change with properties, replay or geometry."""
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated CUDA device")
+        pytest.skip("requires an explicitly scheduled CUDA device")
     if device == "cuda":
-        assert os.environ.get("SLURM_JOB_ID")
+        assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     if selector is None:
         monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
     else:
@@ -203,9 +203,9 @@ def test_practical_lr_auxiliary_stationary_force_and_replay(
 ) -> None:
     """Ill-conditioned retained LR modes must not amplify warm-density roundoff."""
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated CUDA device")
+        pytest.skip("requires an explicitly scheduled CUDA device")
     if device == "cuda":
-        assert os.environ.get("SLURM_JOB_ID")
+        assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
         if materialized:
             pytest.skip("materialized derivative storage is a CPU diagnostic")
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
@@ -288,9 +288,9 @@ def test_complete_ri_jk_vv10_energy_and_force(
 ) -> None:
     """The oracle fits its own omega metric, including displaced auxiliary centers."""
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated CUDA device")
+        pytest.skip("requires an explicitly scheduled CUDA device")
     if device == "cuda":
-        assert os.environ.get("SLURM_JOB_ID")
+        assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
     if spin:
@@ -343,18 +343,23 @@ def test_complete_ri_jk_vv10_energy_and_force(
             warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
             with pytest.raises(ValueError, match="stale"):
                 _ = snapshot.range_density_fitted
-        work = (
-            batch._stationary_cuda_execution.last_work
-            if device == "cuda"
-            else cpu_work[-1]
-        )
         if device == "cpu":
+            work = cpu_work[-1]
             assert work["stationary_integral_derivative_route"] == "prepared-full-ri-jk"
             assert work["integral_quartet_passes"] == 0
             assert work["range_exchange_primitive_records"] == 0
-        assert not work["native_integral_resources"][
-            "additional_device_peak_includes_lazy_lr"
-        ]
+            resources = work["native_integral_resources"]
+        else:
+            # The complete CUDA endpoint now owns force execution in native
+            # code. Query its live radial owners, not an unused Python runner.
+            with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+                components, resources = (
+                    snapshot.mixed_density_fitted_integral_derivatives(
+                        len(atoms), 256 << 20
+                    )
+                )
+                assert np.isfinite(components).all()
+        assert not resources["additional_device_peak_includes_lazy_lr"]
         moved = list(atoms)
         moved[1] = (
             atoms[1][0],
