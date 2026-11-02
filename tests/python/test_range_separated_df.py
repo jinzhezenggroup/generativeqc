@@ -36,8 +36,8 @@ def test_cuda_packed_lr_values_preserve_the_radial_operator(
     fitted operator; the auxiliary mapping also exercises the generic fallback.
     """
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated CUDA device")
-    assert os.environ.get("SLURM_JOB_ID")
+        pytest.skip("requires an explicitly scheduled CUDA device")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     from benchmarks.df_component_ledger import read_trace
 
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
@@ -106,9 +106,9 @@ def test_range_exchange_selection_is_frozen_for_all_endpoints(
 ) -> None:
     """Opt-in LR fitting cannot change with properties, replay or geometry."""
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated CUDA device")
+        pytest.skip("requires an explicitly scheduled CUDA device")
     if device == "cuda":
-        assert os.environ.get("SLURM_JOB_ID")
+        assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     if selector is None:
         monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
     else:
@@ -203,9 +203,9 @@ def test_practical_lr_auxiliary_stationary_force_and_replay(
 ) -> None:
     """Ill-conditioned retained LR modes must not amplify warm-density roundoff."""
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated CUDA device")
+        pytest.skip("requires an explicitly scheduled CUDA device")
     if device == "cuda":
-        assert os.environ.get("SLURM_JOB_ID")
+        assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
         if materialized:
             pytest.skip("materialized derivative storage is a CPU diagnostic")
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
@@ -288,9 +288,9 @@ def test_complete_ri_jk_vv10_energy_and_force(
 ) -> None:
     """The oracle fits its own omega metric, including displaced auxiliary centers."""
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated CUDA device")
+        pytest.skip("requires an explicitly scheduled CUDA device")
     if device == "cuda":
-        assert os.environ.get("SLURM_JOB_ID")
+        assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
     if spin:

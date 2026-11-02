@@ -435,7 +435,9 @@ def test_complete_mixed_df_forces_against_independent_energies(
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an allocated native CUDA library/device")
     if device == "cuda":
-        assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+        assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID"), (
+            "real GPU tests require a Slurm or LSF allocation"
+        )
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
     if spin:
         atoms.append(("H", (1.8, -0.1, -0.3)))
