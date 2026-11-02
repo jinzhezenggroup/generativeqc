@@ -628,6 +628,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
           "CUDA range-separated KS requires compatible primary and Direct LR providers");
 #endif
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
+    // Mandatory dispersion owners precede optional CUDA XC/nonlocal caches.
+    // Without a shared capacity ledger, allocating the frozen-potential anchor
+    // first could consume memory required by the requested physical method.
+    if (execution_plan_.d4_correction || execution_plan_.dispersion.kind == 3) prepare_d4(device);
+    if (execution_plan_.dispersion.kind == 1 || execution_plan_.dispersion.kind == 2)
+      prepare_d3(device);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
       const auto& metadata = dft::semilocal_family_metadata(execution_plan_.semilocal_family);
@@ -715,9 +721,6 @@ class KsPreparedState final : public KsSingleOwnerPort {
       }
     }
 #endif
-    if (execution_plan_.d4_correction || execution_plan_.dispersion.kind == 3) prepare_d4(device);
-    if (execution_plan_.dispersion.kind == 1 || execution_plan_.dispersion.kind == 2)
-      prepare_d3(device);
     runtime::sample_cpu_capacity(host_numeric_capacity());
   }
 

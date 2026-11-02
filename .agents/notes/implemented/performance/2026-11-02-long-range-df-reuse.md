@@ -153,3 +153,21 @@ same factor to the LR owner's existing bounded spectral adjoint. The native
 consumer validates the complete lease before any source publication and retains
 typed errors and stream draining. Independent native tests overwrite U through
 a second KS owner and verify that C remains byte-identical and stale tokens fail.
+
+## Review follow-up: optional source and allocation admission
+
+The borrowed occupied factor and packed-raw residency are mutually exclusive
+inputs to the response bridge. Selecting the factor now clears only the
+call-local packed view, preserving the plan's immutable raw tensor for fallback.
+Scalar algebra, serial dots and upload/scatter diagnostics retain their original
+panel consumer because the spectral factor path does not implement those
+controls. If automatic factor admission fails with an allocation error, one
+bounded retry drops the optional lease; pending or runtime CUDA errors still
+propagate. Explicit source choices are not silently rewritten.
+
+Mandatory D3/D4 owners are prepared before optional CUDA XC/nonlocal caches.
+This ordering protects the requested physical method even without a global
+capacity ledger. Optional frozen-potential storage must never starve mandatory
+correction storage. Compiled failure-injection controls cover these distinctions;
+new production artifacts retain a separate scientific identity and require their
+own device qualification. Earlier timings are not relabelled onto the fix.

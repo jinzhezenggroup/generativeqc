@@ -366,6 +366,18 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const bool explicit_fitted_occupied = occupied_source == "fitted";
+  // A borrowed factor is an optional acceleration. Scalar/dot and attribution
+  // controls need the ordinary panel response; the spectral occupied algebra
+  // does not implement those diagnostics. Preserve their original consumer.
+  const char* factor_algebra = std::getenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA");
+  const char* factor_dot = std::getenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT");
+  const char* factor_upload = std::getenv("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE");
+  const char* factor_scatter = std::getenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE");
+  const bool select_borrowed_factor =
+      borrowed_factor && space != "dense" && !host_weights && storage != "jk-scratch" &&
+      (!factor_algebra || std::string_view(factor_algebra) == "blas") &&
+      (!factor_dot || std::string_view(factor_dot) != "1") && (!factor_upload || !*factor_upload) &&
+      (!factor_scatter || !*factor_scatter);
   // The producer can retain complete dense/packed-two projections as well.
   // This consumer borrows only single-B; unsupported storage keeps its exact
   // ordinary response instead of turning an optional lease into an error.
@@ -460,7 +472,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
   }
   bool fitted_occupied_requested =
       explicit_fitted_occupied || borrowed_fitted_occupied || automatic_fitted_occupied;
-  if (borrowed_fitted_occupied || borrowed_factor) borrow = false;
+  if (borrowed_fitted_occupied || select_borrowed_factor) borrow = false;
   CudaDfResponseBuffers buffers;
   CudaDfPackedRawTensorView packed_raw;
   const char* raw_reuse_control = std::getenv("GENERATIVEQC_DF_RAW_REUSE");
@@ -693,7 +705,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       // legacy source-occupied response continues to read physical raw A.
       if (streamed_factors.owner_identity && !fitted_occupied_requested) whitened = {};
     }
-    if (borrowed_factor && space != "dense" && !host_weights && storage != "jk-scratch") {
+    if (select_borrowed_factor) {
       // C is operator-independent; A and every metric direction stay local.
       // A truncated metric requires raw C^T*A*C, including discarded modes.
       streamed_factors = {};
@@ -701,6 +713,10 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       streamed_factors.nbf = plan->nbf;
       streamed_factors.naux = plan->naux;
       streamed_factors.owner_identity = plan->factor_basis_identity;
+      // The bridge accepts either the occupied source or packed raw residency.
+      // Retire only this call's view: a bounded retry may still use the plan's
+      // immutable packed tensor after dropping the optional factor.
+      packed_raw = {};
       fitted_occupied_requested = metric.full_rank && whitened.data && whitened.packed_pairs;
       if (!fitted_occupied_requested) whitened = {};
       runtime::cuda_trace::trace_counter("response_borrowed_radial_occupied_factor", 1);
@@ -805,8 +821,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
           borrowed_response_density, nullptr, resident_force);
     }
     if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
-        (borrowed_fitted_occupied || automatic_fitted_occupied) && space == "auto" &&
-        occupied_source == "auto") {
+        (borrowed_fitted_occupied || automatic_fitted_occupied || select_borrowed_factor) &&
+        space == "auto" && occupied_source == "auto") {
       // The optional all-Q occupied factors may exceed an allowance that still
       // fits ordinary bounded panels. The failed bridge has drained/freed its
       // arena. Withhold final-state authorization on retry as well as the lease:

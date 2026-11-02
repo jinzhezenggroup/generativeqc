@@ -593,7 +593,7 @@ int main() {
   // and live headroom, with the selected response allowance left untouched.
   const auto extra = method_owned_df_optional_value_capacity(
       occupied_rebuild,768,3712,160,100ULL<<20);
-  if (extra < occupied_rebuild.value_bytes || extra + occupied_rebuild.response_bytes >
+  if (extra <= occupied_rebuild.value_bytes || extra + occupied_rebuild.response_bytes >
       method_owned_df_resident_capacity(768,3712,160,100ULL<<20) ||
       extra + occupied_rebuild.response_bytes > occupied_rebuild.observed_free_bytes -
           occupied_rebuild.reserved_headroom_bytes) return 45;

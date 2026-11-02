@@ -9,7 +9,7 @@ its own production-build endpoints.
 
 The final A100 diagnostic (LSF 224641, scientific source
 `f72dc560b8fc9330c78665dbc3242c2ea1169fd5ac713020256984b313e5484f`)
-completes 96-atom WB97M-V/def2-SVP with the README JKFIT auxiliary basis and
+completes 96-atom WB97M-V/def2-SVP with the def2-SVP-JKFIT auxiliary basis and
 explicit fitted long-range exchange. Native cold SCF takes 28 Fock builds;
 GPU4PySCF takes 10 iterations. Warm calls use each engine's own frozen cold
 state and take one iteration. Energy differences are below 8.4e-10 Eh/atom;
@@ -18,6 +18,13 @@ are approximately 137.0 s native and 29.2 s reference: this source is still
 slower. Its long-range generic derivative accounts for about 127 s of the
 first force response. These inclusive intrusive intervals are not additive
 independent endpoint components.
+
+The [frozen H/O auxiliary input](auxiliary.json) comes from PySCF 2.14.0
+`df.addons.make_auxmol(def2-SVP molecule, None)`, which selects
+`def2-svp-jkfit` for both elements. Its original table SHA256 is
+`b5c6f6dafcf126bdc4eff3f68322a0996468ffef38e5baeb63745302f1f977e5`;
+the exported JSON SHA256 is
+`ab6c7c8889bfffd843ef8f0b3a50d2d60dce41f426c5cad1702e8845f1bfee71`.
 
 Earlier converged-SCF attempts 224548/224584 and Slurm 15254 did not return a
 complete force endpoint and cannot supply timing samples. Their failures led

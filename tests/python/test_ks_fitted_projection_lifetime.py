@@ -184,7 +184,7 @@ int main(int argc, char** argv) {
     return 0;
   }
   owner.retain_final_fitted_projection();
-  assert(owner.final_fitted_projection_ready && launches == 1);
+  assert(owner.final_fitted_projection_ready && owner.final_occupied_factor_ready && launches == 1);
   const auto token=owner.token();
   CudaKsPlan plan{&owner};
   CudaKsResidentFittedProjectionBinding binding;

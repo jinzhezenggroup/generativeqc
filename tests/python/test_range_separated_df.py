@@ -139,9 +139,22 @@ def _practical_auxiliary() -> Any:
     )
 
 
-@pytest.mark.parametrize("mapping", ("auto", "auxiliary"))
+@pytest.mark.parametrize(
+    "mapping,storage,diagnostic",
+    (
+        ("auto", "packed-single", None),
+        ("auxiliary", "packed-single", None),
+        ("auto", "packed", None),
+        ("auto", "packed", "scalar"),
+        ("auto", "packed", "serial"),
+    ),
+)
 def test_cuda_packed_lr_values_preserve_the_radial_operator(
-    mapping: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    mapping: str,
+    storage: str,
+    diagnostic: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Prepared full-range raw values must not replace the separate LR source.
 
@@ -156,8 +169,14 @@ def test_cuda_packed_lr_values_preserve_the_radial_operator(
     from benchmarks.df_component_ledger import read_trace
 
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
-    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed-single")
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", storage)
     monkeypatch.setenv("GENERATIVEQC_DF_VALUE_MAPPING", mapping)
+    # Packed raw values and a borrowed occupied factor are alternative bridge
+    # inputs. Diagnostic consumers must retain their supported panel algebra.
+    if diagnostic == "scalar":
+        monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA", "scalar")
+    elif diagnostic == "serial":
+        monkeypatch.setenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT", "1")
     trace = tmp_path / "packed-lr.jsonl"
     monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
     atoms = [
@@ -205,7 +224,8 @@ def test_cuda_packed_lr_values_preserve_the_radial_operator(
     prepared = sum(
         record["counters"].get("raw_hermite_values", 0) for record in read_trace(trace)
     )
-    assert (prepared > 0) == (mapping == "auto")
+    if storage == "packed-single":
+        assert (prepared > 0) == (mapping == "auto")
 
 
 @pytest.mark.parametrize("device", ("cpu", "cuda"))
