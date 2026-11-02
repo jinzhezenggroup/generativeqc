@@ -123,6 +123,58 @@ __device__ __forceinline__ double direct_force_density_product(
   return scale * density[offset + first] * density[offset + second];
 }
 
+/** Bound only the reordered arithmetic, never the admitted scientific work.
+ * The retained permutation consumer handles subnormal/extreme factors, so
+ * regrouping cannot create a new overflow/underflow path for those inputs.
+ */
+__device__ __forceinline__ bool direct_force_orbit_factor(double value) {
+  const double magnitude = ::fabs(value);
+  return value == 0.0 || (magnitude >= 0x1p-128 && magnitude <= 0x1p128);
+}
+
+/** Collapse a restricted, exactly symmetric density's eight ERI permutations.
+ * This is the same orbit identity used by generated exact-class HF workers:
+ * one Coulomb product and two exchange products, with canonical stabilizers.
+ * Symmetry is checked on every used matrix pair; arbitrary density/response
+ * inputs retain the original consumer. Inactive sources never load or test
+ * their unused density products. Seeded and unrestricted callers bypass this
+ * helper, preserving their existing contraction and accumulation order.
+ */
+__device__ __forceinline__ bool direct_force_restricted_orbit_coefficient(
+    std::size_t n, std::size_t offset, const double* density,
+    std::size_t i, std::size_t j, std::size_t k, std::size_t l,
+    double coulomb_coefficient, double exchange_coefficient, double& coefficient) {
+  if (i < j || k < l || !direct_force_orbit_factor(coulomb_coefficient) ||
+      !direct_force_orbit_factor(exchange_coefficient)) return false;
+  double orbit_scale = i == j ? 0.5 : 1.0;
+  if (k == l) orbit_scale *= 0.5;
+  if (i == k && j == l) orbit_scale *= 0.5;
+  const double* physical = density + offset;
+  double coulomb = 0.0, exchange = 0.0;
+  if (coulomb_coefficient != 0.0) {
+    const double ij = physical[matrix_index(i, j, n)];
+    const double kl = physical[matrix_index(k, l, n)];
+    if (ij != physical[matrix_index(j, i, n)] || kl != physical[matrix_index(l, k, n)] ||
+        !direct_force_orbit_factor(ij) || !direct_force_orbit_factor(kl)) return false;
+    const double scale = (4.0 * orbit_scale) * coulomb_coefficient;
+    coulomb = scale * ij * kl;
+  }
+  if (exchange_coefficient != 0.0) {
+    const double ik = physical[matrix_index(i, k, n)];
+    const double jl = physical[matrix_index(j, l, n)];
+    const double il = physical[matrix_index(i, l, n)];
+    const double jk = physical[matrix_index(j, k, n)];
+    if (ik != physical[matrix_index(k, i, n)] || jl != physical[matrix_index(l, j, n)] ||
+        il != physical[matrix_index(l, i, n)] || jk != physical[matrix_index(k, j, n)] ||
+        !direct_force_orbit_factor(ik) || !direct_force_orbit_factor(jl) ||
+        !direct_force_orbit_factor(il) || !direct_force_orbit_factor(jk)) return false;
+    const double scale = (2.0 * orbit_scale) * exchange_coefficient;
+    exchange = scale * ik * jl + scale * il * jk;
+  }
+  coefficient = coulomb + exchange;
+  return true;
+}
+
 template <bool Unrestricted>
 __device__ __forceinline__ double direct_force_density_coefficient_scaled(
     std::size_t n, std::size_t physical_offset, std::size_t spin_offset,
@@ -132,6 +184,11 @@ __device__ __forceinline__ double direct_force_density_coefficient_scaled(
     const double* seed = nullptr) {
   const std::size_t matrix_size = n * n;
   double coefficient = 0.0;
+  if constexpr (!Unrestricted) {
+    if (seed == nullptr && direct_force_restricted_orbit_coefficient(
+            n, physical_offset, density, i, j, k, l,
+            coulomb_coefficient, exchange_coefficient, coefficient)) return coefficient;
+  }
   for (unsigned permutation = 0; permutation < 8; ++permutation) {
     if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) {
       continue;
