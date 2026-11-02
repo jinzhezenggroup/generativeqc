@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import lzma
 import statistics
@@ -60,8 +61,11 @@ def main() -> None:
     archive = (
         Path(__file__).parent.parent / "xc-shared-point-abi-20261028/receipts.json.xz"
     )
-    with lzma.open(archive, "rt") as stream:
-        data = json.load(stream)["structural_discovery"]
+    spec = importlib.util.spec_from_file_location("retained_evidence", Path(__file__).resolve().parents[3] / "tools/restore_retained_evidence.py")
+    retention = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(retention)
+    raw = retention.read_evidence_bytes(archive, manifest=archive.parent / "historical-snapshot.json")
+    data = json.loads(lzma.decompress(raw))["structural_discovery"]
     restore_events(data)
     for arm in ("literal", "smart"):
         hashes = set(data["generated"][arm].values())

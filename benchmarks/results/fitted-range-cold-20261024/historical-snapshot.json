@@ -1,0 +1,23 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "file_count": 2,
+  "total_bytes": 1222868,
+  "purpose": "Exact existing historical evidence bytes read from local Git only; every observation,source,gate,failed/noisy/unfavorable outcome retained. No later-source qualification transfer.",
+  "files": [
+    {
+      "path": "benchmarks/results/fitted-range-cold-20261024/integration.json.xz",
+      "bytes": 717272,
+      "sha256": "ab0d814cb3d118e1116c8b5ed5e49d3979eaefb0a59390070db40061d164703e",
+      "git_blob_sha1": "543293c269d5143f5396353b2c5c8a33e2ff7bce",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/fitted-range-cold-20261024/provenance.json.xz",
+      "bytes": 505596,
+      "sha256": "6a7ce2954fe9074b7d4f578ec6bc97407acca4bd5037b653257c3235abc3b310",
+      "git_blob_sha1": "57a16d3be612edfe66bd62c0329c0d63d34f7b64",
+      "git_mode": "100644"
+    }
+  ]
+}

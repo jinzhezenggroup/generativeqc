@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tools import restore_retained_evidence as retention
+
 ROOT = Path(__file__).resolve().parents[2]
 XC = ROOT / "benchmarks/results/xc-bounded-cross-20261024/provenance.json.xz"
 FAMILIES = ("df-charge-partitions-20261024", "fitted-range-cold-20261024")
@@ -20,7 +22,13 @@ def test_changed_source_identity_rejected(
 ) -> None:
     directory = ROOT / "benchmarks/results" / family
     target = directory / "provenance.json.xz"
-    provenance = json.loads(lzma.decompress(target.read_bytes()))
+    snapshot = directory / "historical-snapshot.json"
+    raw = (
+        retention.read_evidence_bytes(target, manifest=snapshot)
+        if snapshot.exists()
+        else target.read_bytes()
+    )
+    provenance = json.loads(lzma.decompress(raw))
     previous = json.loads(lzma.decompress(XC.read_bytes()))
     base = previous["source_identities"]["guarded"]
     name = (
@@ -57,5 +65,13 @@ def test_changed_source_identity_rejected(
             altered if path == target else altered_xc if path == XC else original(path)
         ),
     )
+    original_retained = retention.read_evidence_bytes
+
+    def mutated_evidence(path: Path, *, manifest: Path) -> bytes:
+        # Inject after byte authentication to exercise the consumer's source
+        # identity checks independently of the archive transport checksum.
+        return altered if path == target else original_retained(path, manifest=manifest)
+
+    monkeypatch.setattr(retention, "read_evidence_bytes", mutated_evidence)
     with pytest.raises(AssertionError):
         runpy.run_path(str(directory / "reproduce.py"))

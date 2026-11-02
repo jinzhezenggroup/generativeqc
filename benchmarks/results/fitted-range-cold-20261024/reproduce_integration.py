@@ -11,6 +11,7 @@ import lzma
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+from tools.restore_retained_evidence import read_evidence_bytes
 from benchmarks import readme_defaults_report as reader
 from benchmarks.readme_defaults_qualification import _comparison, qualify
 
@@ -20,7 +21,7 @@ if not __debug__:
 
 
 def unpack(path):
-    return json.loads(lzma.decompress(path.read_bytes()))
+    return json.loads(lzma.decompress(read_evidence_bytes(path, manifest=ROOT / "historical-snapshot.json")))
 
 
 def digest(raw):

@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "file_count": 1,
+  "total_bytes": 501368,
+  "purpose": "Exact existing historical evidence bytes read from local Git only; every observation,source,gate,failed/noisy/unfavorable outcome retained. No later-source qualification transfer.",
+  "files": [
+    {
+      "path": "benchmarks/results/xc-spatial-bisection-20261023/receipts.json.xz",
+      "bytes": 501368,
+      "sha256": "b9a165ea339ae5a3cfe7af3836a6ec6651b7c1eabd2d6ce68454c4dec6983750",
+      "git_blob_sha1": "479185f676cd0d27579faebb8c9ee09f9feb2463",
+      "git_mode": "100644"
+    }
+  ]
+}
