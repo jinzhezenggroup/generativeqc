@@ -16,6 +16,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+import typing
 import zipfile
 from pathlib import Path
 
@@ -318,6 +319,13 @@ def _validate_dft_schedule_winners(
         if winner.get("gates") != {name: "pass" for name in gate_names}:
             raise ValueError("DFT candidate did not pass all local promotion gates")
         row = accepted_rows.get((workload_hash, schedule_hash), {})
+        context = winner.get("selection_context")
+        if context is not None and (
+            not isinstance(context, str)
+            or len(context) != 64
+            or row.get("selection_context") != context
+        ):
+            raise ValueError("DFT endpoint selection context differs from its evidence")
         endpoint = row.get("endpoint", {})
         numerical = row.get("numerical", {})
         resources = row.get("resources", {})
@@ -546,7 +554,44 @@ def select_library(base: ctypes.CDLL, device_id: int = 0) -> tuple[ctypes.CDLL, 
         return base, diagnostics
 
 
-def select_dft_schedule(diagnostics: dict, workload: dict) -> dict | None:
+def dft_selection_context(
+    *,
+    basis: typing.Any,
+    representation: str,
+    batch: int,
+    method_identity: str,
+    controls: tuple,
+) -> str:
+    """Bind endpoint-qualified tiles to the actual AO and solver workload.
+
+    The grid/XC scientific identity alone deliberately excludes AO basis and
+    batching. Those inputs still affect complete-endpoint profitability.
+    """
+    from dataclasses import asdict
+
+    from ._model_resolution import snapshot_basis
+    from .basis import BasisSet
+
+    resolved = snapshot_basis(basis, representation)
+    basis_identity = (
+        resolved.identity
+        if isinstance(resolved, BasisSet)
+        else [asdict(shell) for shell in resolved]
+    )
+    return canonical_hash(
+        {
+            "basis": basis_identity,
+            "representation": representation,
+            "batch": batch,
+            "method_ir": method_identity,
+            "controls": controls,
+        }
+    )
+
+
+def select_dft_schedule(
+    diagnostics: dict, workload: dict, *, selection_context: str | None = None
+) -> dict | None:
     """Select one strictly compatible DFT schedule from the already selected bundle."""
 
     if diagnostics.get("source") != "local":
@@ -556,6 +601,7 @@ def select_dft_schedule(diagnostics: dict, workload: dict) -> dict | None:
         winner
         for winner in diagnostics.get("dft_schedules", [])
         if winner.get("workload_hash") == workload_hash
+        and winner.get("selection_context") in (None, selection_context)
     ]
     if len(matches) > 1:
         raise ValueError("local profile contains duplicate DFT workload winners")

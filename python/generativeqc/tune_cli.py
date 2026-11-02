@@ -27,7 +27,23 @@ def parser() -> argparse.ArgumentParser:
     )
     root.add_argument("input", type=Path, help="representative XYZ workload")
     root.add_argument("--basis", default="def2-svp")
-    root.add_argument("--method", choices=("rhf", "uhf"), default="rhf")
+    from ._dft_autotune import DFT_FUNCTIONALS
+
+    root.add_argument(
+        "--method", choices=("rhf", "uhf", *DFT_FUNCTIONALS), default="rhf"
+    )
+    root.add_argument(
+        "--grid-level",
+        type=int,
+        default=3,
+        help="DFT Treutler grid level (0..9; fixed during tuning)",
+    )
+    root.add_argument(
+        "--xc-tiles",
+        type=int,
+        nargs="+",
+        help="DFT device-resident XC point-tile candidates (1..4096)",
+    )
     root.add_argument("--charge", type=int, default=0)
     root.add_argument("--multiplicity", type=int, default=1)
     root.add_argument("--units", choices=("angstrom", "bohr"), default="angstrom")
@@ -70,6 +86,17 @@ def main(argv: list[str] | None = None) -> int:
     """Run the original evidence-gated tuner, without importing runtime CLI code."""
     arguments = parser()
     args = arguments.parse_args(argv)
+    is_dft = args.method not in ("rhf", "uhf")
+    if not 0 <= args.grid_level <= 9:
+        arguments.error("--grid-level must be in [0,9]")
+    if not is_dft and (args.xc_tiles is not None or args.grid_level != 3):
+        arguments.error("--xc-tiles and --grid-level require a DFT method")
+    if args.xc_tiles is not None and any(
+        not 1 <= tile <= 4096 for tile in args.xc_tiles
+    ):
+        arguments.error("--xc-tiles must contain integers in [1,4096]")
+    if is_dft and args.repeats < 5:
+        arguments.error("DFT tuning requires at least five paired repeats")
     if not 0 <= args.device_id <= 2**31 - 1:
         arguments.error("--device-id must be a nonnegative int32 CUDA-visible ordinal")
     args.coverage = (

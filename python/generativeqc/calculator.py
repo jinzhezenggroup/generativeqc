@@ -2610,7 +2610,11 @@ class Calculator:
         charges: typing.Any = None,
         multiplicities: typing.Any = None,
     ) -> typing.Any:
-        """Resolve and ABI-check one batch-local DFT09 profile selection."""
+        """Resolve an exact DFT profile without overriding resource promises.
+
+        Explicit budgets retain the user's bounded native schedule: a profile
+        was qualified under its own capacity and cannot enlarge that promise.
+        """
 
         from .ks import ProfiledKsSelection
 
@@ -2618,6 +2622,9 @@ class Calculator:
             self._ks_options is None
             or self._device_name != "cuda"
             or self._precision_mode != _native.PRECISION_FP64
+            or self._resource_budget is not None
+            or self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+            or not self._automatic_initial_guess
         ):
             return ProfiledKsSelection(self._ks_options)
         count = len(systems)
@@ -2630,6 +2637,7 @@ class Calculator:
         if len(charges) != count or len(multiplicities) != count:
             raise ValueError("charges and multiplicities must match the batch size")
         from .ks import native_ks_options, profiled_ks_selection
+        from .profiles import dft_selection_context
 
         selection = profiled_ks_selection(
             self._ks_options,
@@ -2637,6 +2645,21 @@ class Calculator:
             systems,
             charges=charges,
             multiplicities=multiplicities,
+            selection_context=dft_selection_context(
+                basis=self._basis,
+                representation="spherical"
+                if self._basis_representation == _native.BASIS_SPHERICAL
+                else "cartesian",
+                batch=count,
+                method_identity=self._ks_options.method_ir.identity,
+                controls=(
+                    self._max_iterations,
+                    self._diis_history,
+                    self._energy_tolerance,
+                    self._density_tolerance,
+                    self._screening_tolerance,
+                ),
+            ),
         )
         if selection.options is not None:
             if self._ks_options_version != 1:
