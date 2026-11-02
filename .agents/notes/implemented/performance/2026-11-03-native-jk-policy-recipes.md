@@ -50,6 +50,15 @@ tests exercise every candidate for semilocal RKS, hybrid RKS and hybrid UKS
 against independent analytic forces. No synthetic fixture is installed as a
 production profile. GPU endpoint measurements are retained separately.
 
+Final source-matched Slurm job 1443 selects a J-lowering policy for water's
+PBE-RKS, PBE0-RKS and PBE0-UKS complete warm endpoints; fresh incumbent holdout
+speedups are 1.159x, 1.103x and 1.115x. All three accepted recipes actually
+replay with raw-evidence validation. K candidates are measured but do not
+supersede the J winner. Preserve all raw candidate/holdout observations in
+`benchmarks/results/dft-local-autotune-20261103/jk-receipts.json.xz`; the
+companion `JK.md` records scope and reproducer rather than transferring these
+measurements to arbitrary production workloads.
+
 ## Revisit when
 
 Native per-owner execution-policy descriptors and resolved-plan diagnostics can
