@@ -11,7 +11,6 @@ from typing import Any
 import numpy as np
 import pytest
 from generativeqc import Calculator, KsOptions, ResourceBudget, _native
-from generativeqc_compiler.common.resources import CpuResourceObservation
 from generativeqc_compiler.method import resolve_method
 from test_dft_complete_cpu import (
     ATOMS,
@@ -287,10 +286,13 @@ def test_public_cuda_failure_preserves_caller_output_and_warm_state(
         hook.argtypes, hook.restype = [], None
         hook()
         forbid_python_force(batch, monkeypatch)
-        with CpuResourceObservation(calc._library, ledger=ledger):
-            status = calc._library.generativeqc_batch_execute(
-                batch._batch, None, 0, output, 1
-            )
+        # A prepared batch binds its public device-resource owner internally.
+        # Its handle is not a private allocation-ledger pointer; wrapping it in
+        # CpuResourceObservation would pass the wrong opaque type to the ABI.
+        assert batch._resource_prepare is not None
+        status = calc._library.generativeqc_batch_execute(
+            batch._batch, None, 0, output, 1
+        )
         assert status == _native.STATUS_SUCCESS
         assert output[0].status == expected_status
         assert output[0].energy == 992.0 and list(forces) == [991.0] * 6
