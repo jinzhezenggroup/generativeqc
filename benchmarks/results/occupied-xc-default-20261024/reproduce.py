@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
+from tools.restore_retained_evidence import read_evidence_bytes
 from benchmarks.readme_defaults_qualification import qualify
 
 ROOT = Path(__file__).resolve().parent
@@ -307,7 +308,7 @@ def reproduce(data: dict) -> dict:
 def main() -> None:
     """Authenticate the bundle, then recompute every reported observable gate."""
     manifest = json.loads((ROOT / "manifest.json").read_text())
-    raw = (ROOT / "receipts.json.xz").read_bytes()
+    raw = read_evidence_bytes(ROOT / "receipts.json.xz", manifest=ROOT / "historical-snapshot.json")
     require(
         hashlib.sha256(raw).hexdigest() == manifest["receipts_sha256"],
         "invalid retained evidence",

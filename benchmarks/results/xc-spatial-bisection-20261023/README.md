@@ -45,3 +45,5 @@ compacted with exact-byte restoration to stay within unchanged storage caps.
 ```bash
 PYTHONPATH=python:. python benchmarks/results/xc-spatial-bisection-20261023/reproduce.py
 ```
+
+Historical capsule storage now uses `historical-snapshot.json`. The default CPU reader authenticates the exact original bytes from local Git commit `cd2b4514be0a38c4920934481b1f02d157a694b4`; automatic network access is disabled. A checkout must contain that object (or restore the unchanged file). Every earlier result and limitation is preserved; this storage change does not qualify a newer runtime.

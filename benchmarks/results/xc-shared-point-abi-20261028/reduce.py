@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import lzma
 import statistics
@@ -10,6 +11,10 @@ from collections import defaultdict
 from pathlib import Path
 
 from defusedxml import ElementTree as ET
+
+_spec = importlib.util.spec_from_file_location("retained_evidence", Path(__file__).resolve().parents[3] / "tools/restore_retained_evidence.py")
+_retention = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_retention)
 
 TARGETS = {"GGA_XC_TH_FCO", "GGA_XC_TH_FCFO", "GGA_X_BKL1", "GGA_X_BKL2"}
 
@@ -69,11 +74,12 @@ def points(payload: dict) -> dict:
 
 def main() -> None:
     """Verify source/binary bindings, scientific gates and semantic work ledgers."""
-    with lzma.open(Path(__file__).with_name("receipts.json.xz"), "rt") as stream:
-        data = json.load(stream)["paired_batch"]
+    root = Path(__file__).resolve().parent
+    raw = _retention.read_evidence_bytes(root / "receipts.json.xz", manifest=root / "historical-snapshot.json")
+    data = json.loads(lzma.decompress(raw))["paired_batch"]
     restore_events(data)
-    # Generated code and disassembly are transient products. Source reproduction
-    # is an opt-in audit; the normal reducer needs no compiler or Git history.
+    # The normal reducer checks the retained scientific data. Capsule recovery
+    # needs the local snapshot object; source regeneration remains opt-in.
     sizes = {}
     kernels = {}
     for name, package in data["packages"].items():
