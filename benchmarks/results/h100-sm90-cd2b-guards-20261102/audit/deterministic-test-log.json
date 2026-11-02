@@ -1,0 +1,519 @@
+{
+  "python": "3.12.14",
+  "numpy": "2.5.4",
+  "interpreter": "/Users/xshengrui/.cache/uv/environments-v2/t-bdff61f911da107f/bin/python3.12",
+  "only_CPU": true,
+  "cwd_for_positive": "own audit tmp directory, unrelated to repository cwd",
+  "positive_wrapper_sha256": "3bad9245731663b7d611c4c2ca8d6c008cfb467e27bb67bed8ec488a8f7f3513",
+  "positive_stdout_exact_original": true,
+  "eight_receiver_proofs_exact_original": true,
+  "reader_invocations": 14,
+  "delivery_controls": [
+    {
+      "test": "unaltered_manifest_23_bound_files",
+      "expected": "accepted",
+      "actual": "accepted",
+      "passed": true,
+      "detail": 23
+    },
+    {
+      "test": "missing_part",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Support cohort bytes differ: nsys-v1-analysis.tar.xz.part01"
+    },
+    {
+      "test": "changed_part",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Support cohort bytes differ: nsys-v1-analysis.tar.xz.part00"
+    },
+    {
+      "test": "changed_exact_reader",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Support cohort bytes differ: readers/replay-uks-fit-v1.py"
+    },
+    {
+      "test": "dropped_binding",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Support cohort must bind all mandatory artifacts and readers"
+    },
+    {
+      "test": "duplicate_binding",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Support cohort must bind all mandatory artifacts and readers"
+    },
+    {
+      "test": "absolute_file_path",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Support cohort must bind all mandatory artifacts and readers"
+    },
+    {
+      "test": "traversal_file_path",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Support cohort must bind all mandatory artifacts and readers"
+    },
+    {
+      "test": "missing_phase",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Fixed support cohort/source/status inventory differs"
+    },
+    {
+      "test": "changed_expected_status",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Fixed support cohort/source/status inventory differs"
+    },
+    {
+      "test": "reordered_nsys_parts",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Nsight archive part inventory differs"
+    },
+    {
+      "test": "linked_exact_reader",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Support cohort bytes differ: readers/replay-uks-fit-v1.py"
+    },
+    {
+      "test": "linked_reader_directory_current_contract",
+      "expected": "accepted",
+      "actual": "accepted",
+      "passed": true,
+      "detail": 23
+    },
+    {
+      "test": "nsys_parts_equal_original_full_archive",
+      "expected": "accepted",
+      "actual": "accepted",
+      "passed": true,
+      "detail": {
+        "bytes": 1440220,
+        "sha256": "6e957e8d9a3787a12a8e307ef835194634ac45460cc0c212edc6fcf233c2c1c8",
+        "identity": true
+      }
+    },
+    {
+      "test": "original_terminal_archive_member_inventory",
+      "expected": "accepted",
+      "actual": "accepted",
+      "passed": true,
+      "detail": 27
+    },
+    {
+      "test": "archive_missing",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Duplicate or missing archive member"
+    },
+    {
+      "test": "archive_duplicate",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Duplicate or missing archive member"
+    },
+    {
+      "test": "archive_bytes",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Recovered bytes differ"
+    },
+    {
+      "test": "archive_traversal",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Unsafe or existing extraction target"
+    },
+    {
+      "test": "archive_absolute",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Unsafe or existing extraction target"
+    },
+    {
+      "test": "archive_symlink",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Unsafe or existing extraction target"
+    },
+    {
+      "test": "archive_prefix",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Unsafe or existing extraction target"
+    },
+    {
+      "test": "python311_early_refusal",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "RuntimeError: Replay requires unoptimized Python 3.12 or later"
+    }
+  ],
+  "deep_nsys_controls": [
+    {
+      "test": "nsys_duplicate",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Nsight member inventory differs"
+    },
+    {
+      "test": "nsys_traversal",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Unsafe Nsight member"
+    },
+    {
+      "test": "nsys_symlink",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Unsafe Nsight member"
+    },
+    {
+      "test": "nsys_member_bytes",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Nsight member bytes differ"
+    },
+    {
+      "test": "nsys_full_archive_identity",
+      "expected": "refused",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Nsight archive differs"
+    }
+  ],
+  "optimized_python_control": {
+    "test": "actual_optimized_python_refusal",
+    "returncode": 1,
+    "passed": true,
+    "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/public-delivery-v2/h100_production_cohort.py\", line 271, in replay\n    raise RuntimeError(\"Replay requires unoptimized Python 3.12 or later\")\nRuntimeError: Replay requires unoptimized Python 3.12 or later\n"
+  },
+  "science_negatives": [
+    {
+      "reader": "cohort-replay-v1.py",
+      "test": "missing_force_row",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "cohort-replay-v1.py",
+      "test": "missing_force_component",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "cohort-replay-v1.py",
+      "test": "nan_energy",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "cohort-replay-v1.py",
+      "test": "nan_force_component",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "cohort-replay-v1.py",
+      "test": "outside_energy_gate",
+      "result": "NUMERICALLY_FAILS_UNCHANGED_GATE",
+      "errors": {
+        "energy_abs_per_atom_hartree": 1.100000000064938e-05,
+        "force_max_abs_hartree_per_bohr": 0.0,
+        "force_rms_hartree_per_bohr": 0.0
+      }
+    },
+    {
+      "reader": "cohort-replay-v1.py",
+      "test": "outside_force_gate",
+      "result": "NUMERICALLY_FAILS_UNCHANGED_GATE",
+      "errors": {
+        "energy_abs_per_atom_hartree": 0.0,
+        "force_max_abs_hartree_per_bohr": 0.0011000000000000003,
+        "force_rms_hartree_per_bohr": 0.0003666666666666668
+      }
+    },
+    {
+      "reader": "replay-standard-guards-v2.py",
+      "test": "missing_force_row",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "replay-standard-guards-v2.py",
+      "test": "missing_force_component",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "replay-standard-guards-v2.py",
+      "test": "nan_energy",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "replay-standard-guards-v2.py",
+      "test": "nan_force_component",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "replay-standard-guards-v2.py",
+      "test": "outside_energy_gate",
+      "result": "NUMERICALLY_FAILS_UNCHANGED_GATE",
+      "errors": {
+        "energy_abs_per_atom_hartree": 1.100000000064938e-05,
+        "force_max_abs_hartree_per_bohr": 0.0,
+        "force_rms_hartree_per_bohr": 0.0
+      }
+    },
+    {
+      "reader": "replay-standard-guards-v2.py",
+      "test": "outside_force_gate",
+      "result": "NUMERICALLY_FAILS_UNCHANGED_GATE",
+      "errors": {
+        "energy_abs_per_atom_hartree": 0.0,
+        "force_max_abs_hartree_per_bohr": 0.0011000000000000003,
+        "force_rms_hartree_per_bohr": 0.0003666666666666668
+      }
+    },
+    {
+      "reader": "replay-reference-six-v6.py",
+      "test": "missing_force_row",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "replay-reference-six-v6.py",
+      "test": "missing_force_component",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "replay-reference-six-v6.py",
+      "test": "nan_energy",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "replay-reference-six-v6.py",
+      "test": "nan_force_component",
+      "result": "REJECTED",
+      "exception": "ValueError"
+    },
+    {
+      "reader": "replay-reference-six-v6.py",
+      "test": "outside_energy_gate",
+      "result": "NUMERICALLY_FAILS_UNCHANGED_GATE",
+      "errors": {
+        "energy_abs_per_atom_hartree": 1.100000000064938e-05,
+        "force_max_abs_hartree_per_bohr": 0.0,
+        "force_rms_hartree_per_bohr": 0.0
+      }
+    },
+    {
+      "reader": "replay-reference-six-v6.py",
+      "test": "outside_force_gate",
+      "result": "NUMERICALLY_FAILS_UNCHANGED_GATE",
+      "errors": {
+        "energy_abs_per_atom_hartree": 0.0,
+        "force_max_abs_hartree_per_bohr": 0.0011000000000000003,
+        "force_rms_hartree_per_bohr": 0.0003666666666666668
+      }
+    }
+  ],
+  "support_reader_source_identity": {
+    "budget-capacity-replay-v1.py": {
+      "packet_sha256": "eb8e867992f54a95a10bfec927fffbe4b5665b64b1d8f76888dc2994ac614634",
+      "original_sha256": "eb8e867992f54a95a10bfec927fffbe4b5665b64b1d8f76888dc2994ac614634",
+      "exact_original": true
+    },
+    "replay-nsys-v2.py": {
+      "packet_sha256": "41291beff01cc415f022fc2a9896a493ac081701ead657af341b4d1accf7f160",
+      "original_sha256": "41291beff01cc415f022fc2a9896a493ac081701ead657af341b4d1accf7f160",
+      "exact_original": true
+    },
+    "replay-uks-fit-v1.py": {
+      "packet_sha256": "792f2426c65aa6b5b732af488c2f1ad90c2c70e7d1b0355580e36a062c5153e4",
+      "original_sha256": "792f2426c65aa6b5b732af488c2f1ad90c2c70e7d1b0355580e36a062c5153e4",
+      "exact_original": true
+    },
+    "unpack-cohort-v2.py": {
+      "packet_sha256": "46fe6fd001614757a820dc5bb6dbd748562e29718d036cc7d2244df9dbbad8ae",
+      "original_sha256": "46fe6fd001614757a820dc5bb6dbd748562e29718d036cc7d2244df9dbbad8ae",
+      "exact_original": true
+    },
+    "replay-reference-six-v6.py": {
+      "packet_sha256": "0b6f98ce9a1f5e59e4e202a74e8fc32f667fba463ee26a7bff77d33c72b4e8f4",
+      "original_sha256": "0b6f98ce9a1f5e59e4e202a74e8fc32f667fba463ee26a7bff77d33c72b4e8f4",
+      "exact_original": true
+    },
+    "replay-standard-guards-v2.py": {
+      "packet_sha256": "d2e8ead17efacf9bdac49e4f9648d042a459966cbacbf6df25f76712dcd8eb13",
+      "original_sha256": "d2e8ead17efacf9bdac49e4f9648d042a459966cbacbf6df25f76712dcd8eb13",
+      "exact_original": true
+    },
+    "replay-native-v2.py": {
+      "packet_sha256": "a90bbfe92f5f62c502551fa2777de8ed7f5d009c821dfb88cf758a400dffc4d7",
+      "original_sha256": "a90bbfe92f5f62c502551fa2777de8ed7f5d009c821dfb88cf758a400dffc4d7",
+      "exact_original": true
+    },
+    "cohort-replay-v1.py": {
+      "packet_sha256": "468ab33ae2e868c3e1cbf8df292b14b94238d97b3e41d9d1f5322c13452edb06",
+      "original_sha256": "468ab33ae2e868c3e1cbf8df292b14b94238d97b3e41d9d1f5322c13452edb06",
+      "exact_original": true
+    }
+  },
+  "independent_base_arithmetic": {
+    "screening_full_EF": 264,
+    "screening_independent_dense_gate_all_pass": true,
+    "screening_cross_comparisons": 528,
+    "cross_gate_all_pass": true,
+    "primary_count": 30,
+    "ratios_gt_1_05": 21,
+    "geomean": 1.265755834772816,
+    "expected_geomean": 1.265755834772816,
+    "geomean_exact": true,
+    "df_force_comparisons_pass": 295,
+    "df_scalar_comparisons_pass": 259,
+    "df_complete_EF": 299,
+    "evaluation_type": "independent scientific implementations plus explicitly classified native controls; not dataset GT",
+    "final_three_pair_acceptance": false
+  },
+  "no_remote_no_GPU_no_native_no_SCF": true,
+  "repository_mutations": "none; candidate itself creates disposable native snapshot .git metadata only under this audit tmp directory",
+  "scripts": [
+    "run_public.py",
+    "traced_replay.py",
+    "delivery_controls.py",
+    "nsys_deep_controls.py",
+    "base_arithmetic.py",
+    "raw-science/independent_arithmetic.py",
+    "raw-science/reference_provenance.py",
+    "raw-science/science_negatives.py"
+  ],
+  "copy_admission_controls": [
+    {
+      "test": "copy_exact_refuses_replacing_existing_original",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Conflicting original: /Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/public-delivery-v2/experiment-audit-sol-v1/copy-admission-controls/existing"
+    },
+    {
+      "test": "mutated_precomputed_proof_not_substituted_for_recomputed_failure",
+      "actual": "refused",
+      "passed": true,
+      "detail": "ValueError: Recomputed admission differs: standard-guards-v1-local-replay.json"
+    }
+  ],
+  "installed_wrapper_stdout_exact_original": true,
+  "installed_wrapper_stderr_bytes": 0,
+  "repository_pytest": {
+    "status": "PASS",
+    "tests": 9,
+    "elapsed_seconds": 8.23,
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "pytest": "8.4.2",
+    "cache_provider": false,
+    "plugin_autoload": false,
+    "conftest": false,
+    "stdout_sha256": "e4e881e0899fb5f93d154a09c8102da85752ceb4a864c9601406778dc791b875",
+    "stderr_bytes": 0,
+    "setup_attempts": [
+      "NumPy-only interpreter lacked pytest before collection",
+      "Executor supplied uv temporary interpreter was already removed before invocation"
+    ],
+    "existing_cached_pytest_package_path": "/Users/xshengrui/.cache/uv/archive-v0/aqJVe-ndfI6iN-Dm/lib/python3.12/site-packages",
+    "no_install_or_environment_mutation": true
+  },
+  "repository_delta_review": {
+    "wrapper_nonimport_unannotated_AST_equal": false,
+    "test_nonimport_unannotated_AST_equal": true,
+    "all_25_public_files_byte_equal": true,
+    "packet_file_count": 25,
+    "packet_files": {
+      "nsys-v1-analysis-download.json": true,
+      "native-qualification-v1-download-manifest.json": true,
+      "nsys-cpu-tool-observation-v1.json": true,
+      "nsys-v1-analysis.tar.xz.part00": true,
+      "cohort.json": true,
+      "nsys-v1-analysis.tar.xz.part01": true,
+      "README.md": true,
+      "uks-fit-v1-download-manifest.json": true,
+      "standard-guards-v1-download-manifest.json": true,
+      "observe-nsys-cpu-tools-v1.py": true,
+      "nsys-tool-identity-v1.json": true,
+      "native-qualification-v1-completed.tar.xz": true,
+      "reference-six-v5-download-manifest.json": true,
+      "reference-six-v5-completed.tar.xz": true,
+      "standard-guards-v1-completed.tar.xz": true,
+      "nsys-terminal-status-v1.json": true,
+      "uks-fit-v1-completed.tar.xz": true,
+      "readers/budget-capacity-replay-v1.py": true,
+      "readers/replay-nsys-v2.py": true,
+      "readers/replay-uks-fit-v1.py": true,
+      "readers/unpack-cohort-v2.py": true,
+      "readers/replay-reference-six-v6.py": true,
+      "readers/replay-standard-guards-v2.py": true,
+      "readers/replay-native-v2.py": true,
+      "readers/cohort-replay-v1.py": true
+    },
+    "policy_top_level_limits_changed": [],
+    "benchmark_results_max_bytes": 83886080,
+    "per_file_review_size_bytes": 1048576,
+    "change_review_max_bytes": 2097152,
+    "new_exception_count": 6,
+    "new_exception_hashes_match": {
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/native-qualification-v1-completed.tar.xz": true,
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part00": true,
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part01": true,
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/reference-six-v5-completed.tar.xz": true,
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/standard-guards-v1-completed.tar.xz": true,
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/uks-fit-v1-completed.tar.xz": true
+    },
+    "new_review_change_true": [
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part00",
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part01"
+    ],
+    "new_retention_review_rows_match": {
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part00": true,
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part01": true,
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/reference-six-v5-completed.tar.xz": true,
+      "benchmarks/results/h100-sm90-cd2b-guards-20261102/standard-guards-v1-completed.tar.xz": true
+    },
+    "all_packet_files_within_1MiB": true,
+    "wrapper_semantics_equal_after_explicit_default_and_short_circuit_normalization": true,
+    "wrapper_delta_explanation": "Import reorder/type annotations, explicit subprocess.run(check=False) default, and equivalent nested-if short-circuit conjunction only."
+  }
+}
