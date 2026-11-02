@@ -402,8 +402,9 @@ class DensityCapture:
             "hartree_fock",
             "density_functional",
         ):
-            raise NotImplementedError(
-                "electronic properties currently require HF or KS, not correlated or xTB densities"
+            raise ValueError(
+                "method does not support properties: electronic properties require HF or KS, "
+                "not correlated or xTB densities"
             )
         if calculator._resource_budget is not None:
             raise NotImplementedError(

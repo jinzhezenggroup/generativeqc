@@ -344,7 +344,7 @@ def test_unrequested_fields_and_unsupported_domains(tmp_path: Path) -> None:
         with pytest.raises(ValueError):
             density.write_cube(tmp_path / "invalid.cube", origin=(0, 0, 0), **arguments)
     assert not (tmp_path / "invalid.cube").exists()
-    with pytest.raises(NotImplementedError, match="correlated"):
+    with pytest.raises(ValueError, match="correlated"):
         Calculator(method="mp2").singlepoint(WATER, properties=("energy", "density"))
 
 
