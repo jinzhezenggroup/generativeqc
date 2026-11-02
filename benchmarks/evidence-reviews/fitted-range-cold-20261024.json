@@ -2,24 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "fitted-range-cold-20261024",
   "owner": "bounded fitted-primary exact range cold endpoint qualification",
-  "reason": "Lossless original receipts retain every pilot, five alternating GPU4 pairs, moved work tree, failed larger endpoint and independently qualified capacity-fix bridge separately; exact source/binary provenance and independent references remain reconstructible without changing storage caps. The separate 66-call current-parent bridge retains its legacy-control mismatch explicitly and does not claim default performance.",
+  "reason": "Lossless original receipts retain every pilot, five alternating GPU4 pairs, moved work tree, failed larger endpoint and independently qualified capacity-fix bridge separately; exact source/binary provenance and independent references remain reconstructible without changing storage caps. The separate 66-call current-parent bridge retains its legacy-control mismatch explicitly and does not claim default performance. Exact large capsules now use authenticated local Git snapshot recovery through the default CPU reader; historical bytes, all failures and numeric outputs are preserved. No network, external publication or limit increase.",
   "review_document": "benchmarks/results/fitted-range-cold-20261024/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/fitted-range-cold-20261024/provenance.json.xz",
-      "family": "fitted-range-cold-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "source-reconstruction-work-and-validation-receipts-including-larger-failure",
-      "bytes": 505596,
-      "sha256": "6a7ce2954fe9074b7d4f578ec6bc97407acca4bd5037b653257c3235abc3b310"
-    },
-    {
-      "path": "benchmarks/results/fitted-range-cold-20261024/integration.json.xz",
-      "family": "fitted-range-cold-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "current-parent-complete-observables-and-source-build-test-receipts",
-      "bytes": 717272,
-      "sha256": "ab0d814cb3d118e1116c8b5ed5e49d3979eaefb0a59390070db40061d164703e"
-    }
-  ]
+  "files": []
 }

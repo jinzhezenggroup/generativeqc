@@ -152,12 +152,6 @@
       "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
       "sha256": "dc43b83c39e799a1f26885eda13553e3b9283d210e8292691923dba679fe5173"
     },
-    "benchmarks/results/h100-direct-wb97mv-20261024/terminal-evidence.json.xz": {
-      "owner": "H100 Direct WB97M-V historical evidence storage",
-      "reason": "Storage-only UTF-8/base64 representation of the same 840 SHA-authenticated historical byte objects. Exact recovery and all 11 historical reader tests pass. This exception covers duplicate review cost of this exact lossless re-encoding only; no new GPU qualification or change to individual/aggregate storage caps. See the 2026-11-02 exact historical evidence storage Agent Note.",
-      "sha256": "7b11180809ab45d366690bf74df13925bc674c69a3287c118b0cd80b32fa3a3e",
-      "review_change": true
-    },
     "benchmarks/results/issue206-direct-force-state/integration-e4f2f67/00-configure.log.gz": {
       "owner": "issue206-direct-force-state/integration-e4f2f67",
       "reason": "Hash-bound provenance for this previously blocked production acceptance: records the complete Release/default-AOT build, frozen-source completion marker and exact-base rebuild, distinguishing these measured binaries from earlier incomplete/dev/stale builds. Compact gzip only; excludes compiler objects and binaries.",
@@ -418,6 +412,26 @@
       "owner": "shared-force-parameter-integration-20261028",
       "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
       "sha256": "f01d46eae43399c45c32e34e3e14c7cec1e455fe1b961a56b18d09cdc74b2941"
+    },
+    "benchmarks/results/h100-sm90-cd2b-20261102/production-build-v1-metadata.tar.xz": {
+      "owner": "H100 current-source stage cd2b 20261102",
+      "reason": "Exact terminal build metadata and16 AOT manifests for frozen sourcecd2b; libraries remain hash-bound remote,not bundled. No molecular or runtime qualification from metadata alone.",
+      "sha256": "7094d35e3550f8fa718d06246b32e4f22403b0427f7261c2b6442b9feeb80130"
+    },
+    "benchmarks/results/h100-sm90-cd2b-20261102/df-molecular-v1-completed.tar.xz": {
+      "owner": "H100 current-source stage cd2b 20261102",
+      "reason": "Exact original44-node DF observations,299 full public EF outputs, comparison operands,traces,source and producer/status bindings. Retains all outputs without claiming direct CPU comparison for every output.",
+      "sha256": "e825d613530aa72486f6f7037ac1cd5d08c7bd773b78b499e7f6c9065cee558c"
+    },
+    "benchmarks/results/h100-sm90-cd2b-20261102/screening-v1-completed.tar.xz": {
+      "owner": "H100 current-source stage cd2b 20261102",
+      "reason": "Exact66 fixed-policy screening attempts and264 full EF outputs including preexcluded controls and complete30-input denominator. One-process exploratory results only,not final3pairs.",
+      "sha256": "555cec1d0b368db8e063909ac22c05681a5a5be65881b9aeeecc5d440c9d5689"
+    },
+    "benchmarks/results/h100-sm90-cd2b-20261102/audit/EXPERIMENT_AUDIT.json": {
+      "owner": "H100 current-source stage cd2b 20261102",
+      "reason": "Original same-family provisional review of actual build/DF44/screen66,including scope WARN and unchanged original input seal. Not every private audit input is published in this stage packet.",
+      "sha256": "0e3967ce5d3258b8145eb6136131126b8f0b4f7e45768c3bb6f73ab853ea2190"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

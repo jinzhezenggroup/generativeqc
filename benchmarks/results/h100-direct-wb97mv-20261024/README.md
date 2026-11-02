@@ -15,6 +15,15 @@ causality, a generally fastest engine, production promotion, or parent completio
 
 ## Reproduce without a solver
 
+The exact historical terminal capsule now lives in the already-merged Git object
+at `cd2b4514be0a38c4920934481b1f02d157a694b4`, to retain the unchanged 80 MiB
+evidence budget for current measurements. Default replay reads that one object
+locally and verifies its original 580,440-byte/SHA256 binding. It performs no
+network request or archived-code execution. A shallow/export-only copy must
+explicitly obtain the frozen commit first; all 98 returns, unfavorable timings
+and failed/NOT_RUN outcomes remain unchanged. `historical-terminal-snapshot.json`
+also supports explicit restoration with `tools/restore_retained_evidence.py`.
+
 From this directory, use standard Python (no NumPy, CUDA, SDK or network):
 
 ```console

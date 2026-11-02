@@ -1,0 +1,79 @@
+{
+  "schema": "generativeqc.h100-current-cohort.v1",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "source_tree": "c76f5bd3cfa62416255c5d6914cf701d34e10a8d",
+  "reference_source_revision": "15ab66a68a061355fda833a93e88484dbfee6360",
+  "scope": "Frozen source current-cohort build metadata,44 DF nodes and66 single-process screening attempts. No final three-pair majority or production qualification claim.",
+  "files": [
+    {
+      "path": "audit/EXPERIMENT_AUDIT.json",
+      "bytes": 194099,
+      "sha256": "0e3967ce5d3258b8145eb6136131126b8f0b4f7e45768c3bb6f73ab853ea2190"
+    },
+    {
+      "path": "audit/EXPERIMENT_AUDIT.md",
+      "bytes": 16886,
+      "sha256": "9b49dc1d6dc49c482a2ecd8194d6c4dc55b4047022f5d66724d4a2facd2632d0"
+    },
+    {
+      "path": "audit/artifact-manifest.json",
+      "bytes": 8678,
+      "sha256": "7b3ba05a2d0cd952239d4bb3e8fd8a4557ef09f93aa17542846cf21b761b49d0"
+    },
+    {
+      "path": "audit/preservation.json",
+      "bytes": 298,
+      "sha256": "d7743390ce635f147dbafc81523b6e8aab9c783df50d3b72eca5da8c5a9e40ce"
+    },
+    {
+      "path": "df-molecular-v1-completed.tar.xz",
+      "bytes": 450284,
+      "sha256": "e825d613530aa72486f6f7037ac1cd5d08c7bd773b78b499e7f6c9065cee558c"
+    },
+    {
+      "path": "df-molecular-v1-download-manifest.json",
+      "bytes": 66852,
+      "sha256": "e7dd2525e82bc484c0ca69056e3553be70f66811620091f224abb99d70169844"
+    },
+    {
+      "path": "production-build-v1-download-manifest.json",
+      "bytes": 8138,
+      "sha256": "56f8a0e6fb5b470557c64af31736675a910ee56c4ba7852502a0f2eb7b9bc9d4"
+    },
+    {
+      "path": "production-build-v1-metadata.tar.xz",
+      "bytes": 305620,
+      "sha256": "7094d35e3550f8fa718d06246b32e4f22403b0427f7261c2b6442b9feeb80130"
+    },
+    {
+      "path": "readers/replay_build.py",
+      "bytes": 9915,
+      "sha256": "1b8678f1ff9112fe3a9bb2307b2bd84779a587079588a3593f1f5ad6e12c127a"
+    },
+    {
+      "path": "readers/replay_df.py",
+      "bytes": 15142,
+      "sha256": "3091923049c64a0e567e90f370355fce96deab18d0c59a4006b1ef703c2dc9f8"
+    },
+    {
+      "path": "readers/replay_screening.py",
+      "bytes": 21906,
+      "sha256": "bf38f7f816dea4cdeccd5afc2ea30a177f3104d13905a70669e61937f3fe7c27"
+    },
+    {
+      "path": "readers/unpack_terminal.py",
+      "bytes": 2634,
+      "sha256": "0eb7f74580a531d700275b733083415e917f0ed43a2f67df85582d61442ce0cb"
+    },
+    {
+      "path": "screening-v1-completed.tar.xz",
+      "bytes": 415028,
+      "sha256": "555cec1d0b368db8e063909ac22c05681a5a5be65881b9aeeecc5d440c9d5689"
+    },
+    {
+      "path": "screening-v1-download-manifest.json",
+      "bytes": 62841,
+      "sha256": "79ed7c0b10a5fde05e7bdaf7875c0791e0695167d863434b991600c1b97c8a82"
+    }
+  ]
+}

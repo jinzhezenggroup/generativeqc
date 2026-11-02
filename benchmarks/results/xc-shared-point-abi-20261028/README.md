@@ -118,7 +118,9 @@ for the rejected alternatives and proof obligations.
 
 The reducer checks recorded source/object/library bindings and reports every
 population, including failed timing gates. It uses Python and the project's
-`defusedxml` test dependency; it does not require Git history or generate sources:
+`defusedxml` test dependency. It reads the authenticated capsule from the local
+`cd2b4514b` snapshot object or a verified restored current file. Source generation
+is a separate opt-in audit:
 
 ```bash
 python benchmarks/results/xc-shared-point-abi-20261028/reduce.py
@@ -147,3 +149,5 @@ a sorted table with integer offsets. Both historical reducers restore and
 authenticate every original population before analysis; their complete outputs
 remain byte-identical to the pre-compaction reports. No observation, failure,
 source reconstruction input or numerical gate was removed.
+
+Historical capsule storage now uses `historical-snapshot.json`. The default CPU reader authenticates the exact original bytes from local Git commit `cd2b4514be0a38c4920934481b1f02d157a694b4`; automatic network access is disabled. A checkout must contain that object (or restore the unchanged file). Every earlier result and limitation is preserved; this storage change does not qualify a newer runtime.
