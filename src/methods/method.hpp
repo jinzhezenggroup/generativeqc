@@ -68,6 +68,9 @@ struct DispersionResult {
 struct Result {
   double energy{};
   std::vector<double> forces;
+  /** Detached HF AO density, moved from the completed solve without a replay.
+   * KS state remains owned by its token-checked final-state exporter. */
+  std::vector<double> density;
   Convergence convergence;
   generativeqc_backend executed_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
   /** Owner-observed physical Fock evaluations; zero means unavailable. CUDA

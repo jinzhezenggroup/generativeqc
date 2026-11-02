@@ -83,7 +83,7 @@ def test_energy_only_output_selection_omits_forces(
 
 
 @pytest.mark.parametrize(
-    "properties", [(), ("forces",), ("energy", "dipole"), "energy"]
+    "properties", [(), ("forces",), ("energy", "unknown-property"), "energy"]
 )
 def test_singlepoint_rejects_invalid_output_selection(
     properties: typing.Any,
