@@ -1,0 +1,161 @@
+"""Replay complete endpoint gates offline; incomplete campaigns never qualify."""
+
+import argparse
+import json
+import math
+import statistics
+from pathlib import Path
+
+
+WORKLOADS = ("precision-rhf", "precision-pbe0", "cbs-standard")
+
+
+def require(condition, message):
+    """Keep scientific gates active even when Python runs with optimization."""
+    if not condition:
+        raise ValueError(message)
+
+
+def finite_tree(value):
+    """Reject overflowed JSON numbers as well as literal NaN and Infinity."""
+    if isinstance(value, float):
+        require(math.isfinite(value), "non-finite receipt value")
+    elif isinstance(value, dict):
+        for item in value.values():
+            finite_tree(item)
+    elif isinstance(value, list):
+        for item in value:
+            finite_tree(item)
+
+
+def read_json(path):
+    value = json.loads(path.read_text())
+    finite_tree(value)
+    return value
+
+
+def force_error(actual, expected):
+    require(isinstance(actual, list) and isinstance(expected, list), "invalid force array")
+    require(len(actual) == len(expected) == 2, "force atom-count mismatch")
+    differences = []
+    for row, target in zip(actual, expected, strict=True):
+        require(isinstance(row, list) and isinstance(target, list), "invalid force row")
+        require(len(row) == len(target) == 3, "force coordinate-count mismatch")
+        require(all(type(value) in (int, float) for value in (*row, *target)), "invalid force coordinate")
+        differences.extend(abs(value - reference) for value, reference in zip(row, target, strict=True))
+    return max(differences)
+
+
+def validate_sample(sample):
+    finite_tree(sample)
+    seconds = sample["seconds"]
+    require(type(seconds) in (int, float) and seconds > 0, "non-positive endpoint time")
+    require(sample["executed_backend"] == "cpu_reference", "unexpected execution backend")
+    require(type(sample["energy"]) in (int, float), "invalid energy")
+    force_error(sample["forces"], sample["forces"])
+    require(isinstance(sample["semantic_work"], dict), "missing semantic work")
+
+
+def compare_samples(samples, workload):
+    """Compare complete observables/work, including uncancelled CBS components."""
+    reference = samples[0]
+    maximum_energy_error = 0.0
+    maximum_force_error = 0.0
+    maximum_component_energy_error = 0.0
+    maximum_component_force_error = 0.0
+    for sample in samples:
+        validate_sample(sample)
+        require(sample["semantic_work"] == reference["semantic_work"], "semantic work differs")
+        maximum_energy_error = max(maximum_energy_error, abs(sample["energy"] - reference["energy"]))
+        maximum_force_error = max(maximum_force_error, force_error(sample["forces"], reference["forces"]))
+        if workload == "cbs-standard":
+            components = sample["raw"]["components"]
+            targets = reference["raw"]["components"]
+            require(len(components) == len(targets) > 0, "CBS component-count mismatch")
+            for component, target in zip(components, targets, strict=True):
+                maximum_component_energy_error = max(maximum_component_energy_error, abs(component["energy"] - target["energy"]))
+                maximum_component_force_error = max(maximum_component_force_error, force_error(component["forces"], target["forces"]))
+    errors = {"energy_max_abs": maximum_energy_error, "force_max_abs": maximum_force_error}
+    if workload == "cbs-standard":
+        errors.update(component_energy_max_abs=maximum_component_energy_error,
+                      component_force_max_abs=maximum_component_force_error)
+    require(all(value <= 1e-12 for value in errors.values()), "observable non-regression gate failed")
+    return errors
+
+
+def audit_campaign(root, *, journals):
+    results = []
+    missing_blocks = []
+    partial_journals = []
+    for workload in WORKLOADS:
+        for order in ("ABBA", "BAAB"):
+            records = []
+            for index, variant in enumerate(order):
+                stem = f"{workload}-{order}-{index}-{variant}"
+                path = root / f"{stem}.json"
+                if not path.is_file():
+                    missing_blocks.append(path.name)
+                    journal_path = root / f"{stem}.jsonl"
+                    if journals and journal_path.is_file():
+                        lines = journal_path.read_text().splitlines(keepends=True)
+                        incomplete_tail_bytes = 0
+                        if lines and not lines[-1].endswith("\n"):
+                            incomplete_tail_bytes = len(lines.pop().encode())
+                        partial = [json.loads(line) for line in lines]
+                        require(len(partial) <= 25, "partial journal has too many publications")
+                        for publication, sample in enumerate(partial):
+                            require(sample["index"] == publication, "partial journal index mismatch")
+                            validate_sample(sample)
+                        partial_journals.append({"file": journal_path.name, "publications": len(partial),
+                                                 "incomplete_tail_bytes": incomplete_tail_bytes, "qualified": False})
+                    continue
+                record = read_json(path)
+                require(record["workload"] == workload, "workload identity mismatch")
+                require(len(record["warmups"]) == 3 and len(record["samples"]) == 21, "sample-count gate failed")
+                samples = [record["first_call"], *record["warmups"], *record["samples"]]
+                if journals:
+                    journal = [json.loads(line) for line in (root / f"{stem}.jsonl").read_text().splitlines()]
+                    require(len(journal) == 25, "journal publication-count mismatch")
+                    for publication, (sample, retained) in enumerate(zip(samples, journal, strict=True)):
+                        require(retained == {"index": publication, **sample}, "journal/raw publication mismatch")
+                records.append((variant, record, samples))
+            if len(records) != 4:
+                continue
+            errors = compare_samples([sample for _, _, samples in records for sample in samples], workload)
+            medians = {
+                variant: statistics.median(sample["seconds"] for selected, record, _ in records if selected == variant for sample in record["samples"])
+                for variant in "AB"
+            }
+            ratio = medians["B"] / medians["A"]
+            results.append({"workload": workload, "order": order, "publications": 100,
+                            "medians": medians, "ratio": ratio, "errors": errors,
+                            "performance_passed": ratio <= 1.05, "science_work_passed": True})
+    complete = not missing_blocks
+    return {"complete": complete, "qualified": complete and all(result["performance_passed"] for result in results),
+            "results": results, "missing_blocks": missing_blocks, "partial_journals": partial_journals}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("root", type=Path)
+    arguments = parser.parse_args()
+    protocol = read_json(arguments.root / "protocol.json")
+    require(protocol["protocol_revision"] == 2, "unsupported protocol revision")
+    require(protocol["ratio_gate"] == 1.05, "changed performance gate")
+    require(protocol["samples_per_block"] == 21 and protocol["warmups_per_block"] == 3, "changed sample protocol")
+    require(protocol["actual_native_source_identity"] == protocol["expected_native_source_identity"], "native source mismatch")
+    report = {"schema": "generativeqc.required-native-policy-replay.v1",
+              "measured_candidate": protocol["candidate"], "baseline": protocol["baseline"],
+              "current_protocol": audit_campaign(arguments.root, journals=True)}
+    previous = arguments.root / "failed-protocol-v1"
+    if previous.is_dir():
+        report["previous_protocol"] = audit_campaign(previous, journals=False)
+        report["previous_protocol"]["limitation"] = "600-second CBS timeout; no CBS publication journal exists, so incomplete CBS counts/values cannot be reconstructed."
+    print(json.dumps(report, indent=2, allow_nan=False))
+    if report["current_protocol"]["qualified"]:
+        return 0
+    return 2 if not report["current_protocol"]["complete"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

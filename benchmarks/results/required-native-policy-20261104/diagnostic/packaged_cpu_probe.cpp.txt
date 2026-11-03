@@ -1,0 +1,38 @@
+#include <array>
+#include <atomic>
+#include <cstdint>
+#include <cstdio>
+#include <span>
+
+#include "integrals/s_integrals.hpp"
+
+namespace {
+std::atomic<std::uint64_t> shell_calls{0};
+std::atomic<std::uint64_t> primitive_evaluations{0};
+}
+
+namespace generativeqc::integrals {
+
+/** Diagnostic interposition only: use the existing generated owner unchanged.
+ * This is not a production implementation or a qualification timing sample. */
+std::array<double, 12> contract_weighted_eri_shell_derivative(
+    const core::System& system, const std::array<std::size_t, 4>& shells,
+    std::span<const double> weights) {
+  const std::array<std::span<const double>, 1> channels{weights};
+  std::uint64_t evaluations = 0;
+  const auto result = contract_weighted_eri_shell_derivatives(
+      system, shells, channels, &evaluations, WeightedEriDerivativeExecution::PackagedCpu);
+  if (shell_calls.fetch_add(1) == 0)
+    std::fputs("DIAGNOSTIC ONLY: existing packaged CPU derivative owner selected\n", stderr);
+  primitive_evaluations.fetch_add(evaluations);
+  return result.front();
+}
+
+}
+
+/** Copy actual successful native work; no estimate from iterations or time. */
+extern "C" void generativeqc_diagnostic_packaged_counts(std::uint64_t* shells,
+                                                        std::uint64_t* primitives) {
+  *shells = shell_calls.load();
+  *primitives = primitive_evaluations.load();
+}

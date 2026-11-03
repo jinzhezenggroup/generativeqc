@@ -1,0 +1,116 @@
+{
+  "attachments": [
+    {
+      "path": "samples.json.gz",
+      "sha256": "a3151ea861757f6560d975be8ce61dc4e47e639ba6b1f5935a0e4e7f23dbd710"
+    }
+  ],
+  "backend_selected": "cpu_reference",
+  "block_errors": {},
+  "compilation": {
+    "reason": "not measured",
+    "seconds": null
+  },
+  "device": {
+    "cpu_model": "AMD EPYC 7K62 48-Core Processor",
+    "exclusive_node": false,
+    "hostname": "node3",
+    "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35"
+  },
+  "hardware": {
+    "host": "node3",
+    "reason": null,
+    "status": "pass"
+  },
+  "hash_reasons": {
+    "equation": "No native scientific equations changed; source-scoped policy retirement only.",
+    "ir": "No scientific IR changes or new qualification domain."
+  },
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "schedule": "e0886cbf2dc6f2bc7d9cbc060e50b0addedf8add3e9aeb22ca6fde0695ce1856",
+    "source": "096ac7f0734ae4efe341897a937b0b120d8674a2dd3a7313ce2f8af2063759e7"
+  },
+  "inputs_hash": "5f9ef71c941bce132e80d0a5aa6deca9632d60510b6e744ea759f3ec2c4c9bc5",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "performance": {
+    "reason": "Four completed Precision comparisons pass; full three-workload qualification is incomplete.",
+    "status": "not-run"
+  },
+  "residuals": {},
+  "revision": "93361973fecdb82c66226c3f155ba7f1e8f532c9",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "complete": false,
+    "device": "cpu",
+    "protocol": {
+      "actual_native_source_identity": "096ac7f0734ae4efe341897a937b0b120d8674a2dd3a7313ce2f8af2063759e7",
+      "affinity_cpu": 47,
+      "baseline": "1622554d9ca1d7d4b7ca07b82a059b4e5174b51a",
+      "candidate": "93361973fecdb82c66226c3f155ba7f1e8f532c9",
+      "candidate_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expected_native_source_identity": "096ac7f0734ae4efe341897a937b0b120d8674a2dd3a7313ce2f8af2063759e7",
+      "native_library_sha256": "58f778ad3e920366b39955be664273129a5e2c6d29d45706b56ab41597a777f3",
+      "prior_protocol": "failed-protocol-v1 retained: 600-second block timeout; incomplete CBS publications were not durably emitted, so their count and values are unavailable, never reconstructed",
+      "protocol_repair": "3600-second finite block ceiling and per-publication journals; frozen science/work/1.05 gates and sample counts unchanged. Candidate source and native library are immutable local snapshots.",
+      "protocol_revision": 2,
+      "ratio_gate": 1.05,
+      "results": [],
+      "samples_per_block": 21,
+      "source_gate": "Actual native source query equals the full current input inventory before timing",
+      "warmups_per_block": 3
+    },
+    "real_gpu_execution": false
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "not exposed by executor",
+  "stages": {
+    "compilation": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "endpoint": {
+      "reason": "CBS block timed out; no durable CBS publication; eight CBS blocks missing.",
+      "status": "fail"
+    },
+    "numerical": {
+      "reason": "Full campaign incomplete. Completed Precision E/F/work parity does not qualify CBS.",
+      "status": "not-run"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "source": {
+      "dirty": false,
+      "reason": null,
+      "revision": "93361973fecdb82c66226c3f155ba7f1e8f532c9",
+      "status": "pass"
+    }
+  },
+  "subject": "Required-native-policy retirement: incomplete CPU endpoints",
+  "tier": "cpu",
+  "timings": [],
+  "toolchain": {
+    "cmake": "cmake version 4.2.1",
+    "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+    "compiler_cache": "sccache 0.16.0",
+    "ninja": "1.13.0.git.kitware.jobserver-pipe-1",
+    "numpy": "2.5.1",
+    "pyscf": "2.14.0",
+    "pytest": "9.0.2",
+    "python": "3.13.9",
+    "scipy": "1.18.0",
+    "scipy-openblas32": "0.3.34.0.0"
+  }
+}

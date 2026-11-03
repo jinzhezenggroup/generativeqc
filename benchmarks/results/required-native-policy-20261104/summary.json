@@ -1,0 +1,201 @@
+{
+  "complete": false,
+  "failed_blocks": [
+    {
+      "block": "cbs-standard-ABBA-0-A",
+      "driver_sha256": "d27cbcb8480506e0a4349b7de102687e647d2fa2a358cc8718aab23727d777a9",
+      "durable_cbs_publications": 0,
+      "limit_seconds": 600,
+      "protocol": 1,
+      "type": "subprocess.TimeoutExpired"
+    },
+    {
+      "block": "cbs-standard-ABBA-0-A",
+      "driver_sha256": "5a95aeb78b0db6fb7d8f60526b43e5307ad1c8237993dc45401f826ed30c92c4",
+      "durable_cbs_publications": 0,
+      "limit_seconds": 3600,
+      "protocol": 2,
+      "type": "subprocess.TimeoutExpired"
+    }
+  ],
+  "latest_fixture_validation": {
+    "log_sha256": "1f70cd934ad32b60f30e10dbe04cf16c3233ca3b2a012f0b47ed3d6276f67653",
+    "outcome": "711 passed, 313 skipped in 19.66s",
+    "passed": 711,
+    "revision": "212bf32b8e7dc22df398b9739825a2e73081c796",
+    "scope": "26 precision-consumer modules; not molecular/GPU qualification",
+    "skipped": 313,
+    "source": "all-precision-consumers-reconciled.log"
+  },
+  "qualified": false,
+  "real_gpu_execution": false,
+  "receipt_replay": {
+    "baseline": "1622554d9ca1d7d4b7ca07b82a059b4e5174b51a",
+    "current_protocol": {
+      "complete": false,
+      "missing_blocks": [
+        "cbs-standard-ABBA-0-A.json",
+        "cbs-standard-ABBA-1-B.json",
+        "cbs-standard-ABBA-2-B.json",
+        "cbs-standard-ABBA-3-A.json",
+        "cbs-standard-BAAB-0-B.json",
+        "cbs-standard-BAAB-1-A.json",
+        "cbs-standard-BAAB-2-A.json",
+        "cbs-standard-BAAB-3-B.json"
+      ],
+      "partial_journals": [],
+      "qualified": false,
+      "results": [
+        {
+          "errors": {
+            "energy_max_abs": 0.0,
+            "force_max_abs": 0.0
+          },
+          "medians": {
+            "A": 0.006824582815170288,
+            "B": 0.00681654317304492
+          },
+          "order": "ABBA",
+          "performance_passed": true,
+          "publications": 100,
+          "ratio": 0.9988219584488744,
+          "science_work_passed": true,
+          "workload": "precision-rhf"
+        },
+        {
+          "errors": {
+            "energy_max_abs": 0.0,
+            "force_max_abs": 0.0
+          },
+          "medians": {
+            "A": 0.006804960779845715,
+            "B": 0.006823084782809019
+          },
+          "order": "BAAB",
+          "performance_passed": true,
+          "publications": 100,
+          "ratio": 1.0026633515680181,
+          "science_work_passed": true,
+          "workload": "precision-rhf"
+        },
+        {
+          "errors": {
+            "energy_max_abs": 0.0,
+            "force_max_abs": 0.0
+          },
+          "medians": {
+            "A": 0.03738271910697222,
+            "B": 0.03744933241978288
+          },
+          "order": "ABBA",
+          "performance_passed": true,
+          "publications": 100,
+          "ratio": 1.0017819279710511,
+          "science_work_passed": true,
+          "workload": "precision-pbe0"
+        },
+        {
+          "errors": {
+            "energy_max_abs": 0.0,
+            "force_max_abs": 0.0
+          },
+          "medians": {
+            "A": 0.03736837860196829,
+            "B": 0.03747738804668188
+          },
+          "order": "BAAB",
+          "performance_passed": true,
+          "publications": 100,
+          "ratio": 1.002917157468209,
+          "science_work_passed": true,
+          "workload": "precision-pbe0"
+        }
+      ]
+    },
+    "measured_candidate": "93361973fecdb82c66226c3f155ba7f1e8f532c9",
+    "previous_protocol": {
+      "complete": false,
+      "limitation": "600-second CBS timeout; no CBS publication journal exists, so incomplete CBS counts/values cannot be reconstructed.",
+      "missing_blocks": [
+        "cbs-standard-ABBA-0-A.json",
+        "cbs-standard-ABBA-1-B.json",
+        "cbs-standard-ABBA-2-B.json",
+        "cbs-standard-ABBA-3-A.json",
+        "cbs-standard-BAAB-0-B.json",
+        "cbs-standard-BAAB-1-A.json",
+        "cbs-standard-BAAB-2-A.json",
+        "cbs-standard-BAAB-3-B.json"
+      ],
+      "partial_journals": [],
+      "qualified": false,
+      "results": [
+        {
+          "errors": {
+            "energy_max_abs": 0.0,
+            "force_max_abs": 0.0
+          },
+          "medians": {
+            "A": 0.00673638517037034,
+            "B": 0.0067331138998270035
+          },
+          "order": "ABBA",
+          "performance_passed": true,
+          "publications": 100,
+          "ratio": 0.9995143878414605,
+          "science_work_passed": true,
+          "workload": "precision-rhf"
+        },
+        {
+          "errors": {
+            "energy_max_abs": 0.0,
+            "force_max_abs": 0.0
+          },
+          "medians": {
+            "A": 0.006743789184838533,
+            "B": 0.006728449836373329
+          },
+          "order": "BAAB",
+          "performance_passed": true,
+          "publications": 100,
+          "ratio": 0.9977254110345427,
+          "science_work_passed": true,
+          "workload": "precision-rhf"
+        },
+        {
+          "errors": {
+            "energy_max_abs": 0.0,
+            "force_max_abs": 0.0
+          },
+          "medians": {
+            "A": 0.037444937974214554,
+            "B": 0.03687118273228407
+          },
+          "order": "ABBA",
+          "performance_passed": true,
+          "publications": 100,
+          "ratio": 0.9846773616683359,
+          "science_work_passed": true,
+          "workload": "precision-pbe0"
+        },
+        {
+          "errors": {
+            "energy_max_abs": 0.0,
+            "force_max_abs": 0.0
+          },
+          "medians": {
+            "A": 0.03741424437612295,
+            "B": 0.03681756975129247
+          },
+          "order": "BAAB",
+          "performance_passed": true,
+          "publications": 100,
+          "ratio": 0.9840522069928193,
+          "science_work_passed": true,
+          "workload": "precision-pbe0"
+        }
+      ]
+    },
+    "schema": "generativeqc.required-native-policy-replay.v1"
+  },
+  "schema": "generativeqc.required-native-policy-negative.v1"
+}
