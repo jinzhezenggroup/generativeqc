@@ -211,31 +211,25 @@ the [complete endpoint and accuracy qualification](../maintainer/performance_eng
 ## SCF and force tile policies
 
 `KsOptions.tile_points=None` (the default) selects SCF AO/grid/XC panels during
-native preparation. Large device-fused, density-fitted, strict-FP64 RKS workloads
-with gradient-dependent XC use 1024 points on devices with FP64 matrix acceleration
-and full-rate FP64 throughput; nonlocal correlation uses 512. Eligibility requires
-at least 512 AOs, 524288 grid points and 1 GiB of free device memory. CPU, small,
-unrestricted, mixed-precision, low-FP64-throughput and unknown devices retain 256.
+native preparation. Ordinary CUDA semilocal XC, including direct/global-hybrid
+and unrestricted calculations, uses **1024 points** without a local profile,
+minimum system size or GPU FP64-throughput restriction. CPU retains 256.
 Numeric capacity promises, active resource ledgers and reference-memory budgets
 also retain 256. An automatically enlarged owner that cannot allocate storage
 retries preparation once at 256; other failures propagate. A positive integer
 always preserves the explicit SCF request.
 
-Full-range Direct strict-FP64 RKS with gradient-dependent XC on A100 devices
-(SM80, FP32/FP64 throughput ratio two) also uses 1024 SCF and force points inside
-the same size/headroom gates.
-This Direct policy requires zero application arithmetic budgets and is limited
-to 48–128 all-electron atoms and shells through d;
-range-separated/nonlocal methods, other GPU families and larger geometries keep
-their existing automatic schedules. Explicit controls and resource promises
-retain their existing priority, and the same bounded allocation retries apply.
-The [A100 Direct tiling decision](../../.agents/notes/implemented/performance/2026-11-03-a100-direct-automatic-tiles.md)
-records the qualification scope and retained alternatives.
+Nonlocal CUDA calculations retain their separate policy: large device-fused,
+density-fitted, strict-FP64 RKS with gradient-dependent XC uses 512 SCF points on
+full-rate FP64 matrix devices, requiring at least 512 AOs, 524288 grid points
+and 1 GiB free device memory. Other nonlocal owners retain 256.
 
 `force_tile_points` independently bounds CUDA stationary-force batches (1..4096
 points). When omitted, an explicit SCF tile is inherited. With automatic SCF,
-large qualified strict-FP64, gradient-dependent RKS owners independently use 1024
-force points on compute capability 8 or newer. This requires the same AO/grid
+ordinary CUDA semilocal XC also defaults to 1024 force points, so a bare call
+uses the same two-consumer schedule as an explicit 1024-point SCF tile.
+Nonlocal large fitted strict-FP64, gradient-dependent RKS owners independently
+use 1024 force points on compute capability 8 or newer. This requires the same AO/grid
 size and free-memory thresholds, all-electron basis shells through d, 48–128
 atoms, native stationary admission and no resource promise. Other owners use
 256. An automatic force owner that exceeds an allowance or cannot allocate
@@ -243,7 +237,7 @@ storage drains its controller and retries once at 256 with the same final-state
 token. Explicit bounds never silently shrink. CPU execution uses the SCF tile.
 Neither control changes quadrature, precision or screening thresholds.
 
-For an independently qualified larger-tile workload, request the size explicitly:
+An explicit force tile can still differ from the SCF tile:
 
 ```python
 options = KsOptions(
