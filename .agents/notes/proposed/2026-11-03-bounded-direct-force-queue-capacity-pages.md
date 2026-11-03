@@ -1,6 +1,6 @@
 # Decision: fill the bounded Direct force queue before draining
 
-Status: proposed; frozen-image qualification and current-PR integration in progress
+Status: proposed; frozen-image gates pass, integrated GPU qualification not run
 Date: 2026-11-03
 
 ## Problem
@@ -69,19 +69,73 @@ equal SCF semantic work and complete per-class force-work comparisons:
 | r2SCAN-3c | 9.991481 → 8.421843 | 13.568381 → 12.492154 |
 | PBE | 2.955876 → 2.539775 | 5.038417 → 4.763908 |
 
-These are screening results, not the full six-method qualification. Candidate
+These initial screens are distinct from the completed six-method population
+below. Candidate
 Libcint Cartesian/spherical RKS/UKS source-channel checks pass six cases on each
 GPU. Host tests compile the production pager over widths 32/64/128/256 and CTA
 widths 128/256 against an independent multisystem pair-inventory oracle, with
 empty/repeated/sparse rows and diagonal/tail pages. The class-permutation test
 now covers every occupancy through the actual 256-descriptor capacity.
 
-While this frozen experiment runs, the PR branch advances to `9cd4adc09`,
+### Completed frozen-image results
+
+LSF 225154 and Slurm 15771 each complete 144 clean energy/analytic-force calls
+over six methods, with three cold and nine warm samples per image/method. The
+following medians are for the `2c766...` baseline and `4f83...` candidate only:
+
+| Method | A100 warm baseline → candidate (s) | Reduction | RTX 5090 warm baseline → candidate (s) | Reduction |
+| --- | ---: | ---: | ---: | ---: |
+| PBE0 | 5.172590 → 4.246796 | 17.90% | 6.920947 → 6.315903 | 8.74% |
+| r2SCAN-3c | 9.995568 → 8.448573 | 15.48% | 13.619451 → 12.526923 | 8.02% |
+| PBE | 2.961491 → 2.553223 | 13.79% | 5.054768 → 4.772995 | 5.57% |
+| B3LYP | 5.167591 → 4.282498 | 17.13% | 7.131732 → 6.533244 | 8.39% |
+| r2SCAN | 3.247854 → 2.832588 | 12.79% | 6.117236 → 5.830058 | 4.69% |
+| M06-2x | 5.360115 → 4.519760 | 15.68% | 7.545625 → 6.946665 | 7.94% |
+
+Both cold and warm timing gates pass for every method on both GPUs. All matched
+phase, independent-reference and semantic-work gates pass. Independent reference
+receipts remain oracle observations with their original producer identities,
+not newly measured cross-engine performance comparisons. The force-work auditor
+checks complete per-class work and non-page traversal fields separately from
+the intentional page-count change. Host contracts previously pass 105 tests;
+the scoped pre-commit checks pass for the frozen implementation.
+
+A100 observable/control auditing covers 54 owners, 27 matched pairs and two
+moved/repeated/restored geometry pairs, including 48-/129-atom and explicit
+32-GiB resource controls. RTX 5090 main auditing covers 48 owners and 24 matched
+pairs. Both images on both GPUs pass six independent Libcint channel cases.
+Both 5090 images pass unfiltered memcheck/racecheck with zero findings. Fresh
+A100 unfiltered controls reproduce exactly five identical `cuCtxGetLimit` /
+`CUDA_ERROR_INVALID_VALUE` / result-1 API reports per image and no other reports;
+only that verified API tuple is excluded for the passing scoped probes. No
+memory, race or kernel exclusion is used. All safety probes record positive
+spatial work and equal admitted class work.
+
+### Integration boundary and explicit stop
+
+Before integration, PR #2952 advances to `9cd4adc09` and is subsequently merged,
 including the resident restricted J/K coalescence change from #2900. That changes
 the actual native total-gradient consumer. The `2c766...` / `4f83...` receipts
 remain measurements of their original images; they must not be relabelled as
-qualification of the newly integrated PR source. Promotion requires a fresh
-source-matched baseline/candidate comparison after integration.
+qualification of the integrated follow-up.
+
+The follow-up is rebased onto master `8c6c6208bb1d68c96e62ed2d15ee561fcc784081`.
+Its native source identity remains
+`420857aa802962182dbc96cceec82d73dafd5f12b4e9facbdd7e53e4e890dc94`.
+Normal SM120 Release baseline/candidate packaging succeeds with native identities
+`0c58960b68c71342f95bb4fe6f6a701e945957c0ac6c3eb0362bf4b71d65c25b` and
+`420857aa802962182dbc96cceec82d73dafd5f12b4e9facbdd7e53e4e890dc94`, respectively.
+Those are compile/package receipts, not GPU endpoint qualification. No integrated
+A100 build or integrated GPU measurement is claimed.
+
+On 2026-11-03 the user explicitly requests stopping repeated measurements and
+wrapping up. No further test/benchmark run is started. The remaining 5090
+supplementary controls (Slurm 15773) and A100 profiler (LSF 225163) are cancelled.
+The 5090 supplementary archive is partial, not a passing size/resource control;
+the cancelled A100 collection is not a profile result. A100 225154 has already
+completed successfully, and the existing receipts are retained and audited
+without rerunning GPU work. The follow-up remains draft rather than relaxing
+the source-matched promotion requirements or claiming integrated non-regression.
 
 ### Page counts are not scientific work counts
 
@@ -139,7 +193,7 @@ read-only operation. New controls omit that historical comparison entirely.
   qualification.
 - The old 192-atom baseline nonconvergence is not evidence of a passing larger
   endpoint. No SCF/accuracy gate or scientific setting is loosened here.
-- A 14–18% A100 screening gain is meaningful but is not a claim of closing the
+- A 13–18% A100 complete warm-endpoint gain is meaningful but is not a claim of closing the
   entire Direct engine gap. Remaining targets require the actual clean native
   endpoint's phase/kernel evidence, not another unsupported tuning assumption.
 
@@ -158,5 +212,12 @@ preserving scheduler-assigned visibility. No GPU work runs on maintenance node3.
 - RTX 5090 screen 15767: `4dbccd7029918edfef687568dc0a5c3d10af8301bf1dcb59c12a9fe762973a91`.
 - Disposable objcopy reproduction 225155:
   `e5206a75790f4ea7639e886d748168b5f658426c6688fe474b6173f8e067b28c`.
+- A100 full endpoints 225154: `4ea56cbc3bcdde69ec958ff30989411f57626d9b6a91cce5d9044fbacaf26e3e`.
+- A100 controls 225154: `888803c6a5122bc1c8c4c513146c4a50b358c5bd722c29e8284c07ecfbc8edd0`.
+- A100 safety 225154: `5c975578782afeab96a1f55f90bdb98002a983cd5b489ac8df825c23b4b6b509`.
+- RTX 5090 full endpoints/safety, `finish-15771.tar.gz`:
+  `b419864e82dba76c808c384dc3a041f8bf4f932b00b26b16b660c0c36d2e3639`.
+- Partial cancelled RTX 5090 controls, `finish-controls-15773.tar.gz`:
+  `2b37a23881cdb78dc86279bd3e4d4deb3658d8905b826f43907db42d774ecd43`.
 
 Historical context: [portable class grouping](../implemented/performance/2026-11-03-portable-direct-force-class-grouping.md).
