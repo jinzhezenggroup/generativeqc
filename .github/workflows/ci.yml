@@ -718,6 +718,10 @@ jobs:
       - name: Install native CLI dependencies
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
+        with:
+          # CUDA setup has already refreshed APT and installed CUDA packages.
+          # A second index update can race a changing NVIDIA mirror snapshot.
+          apt-index-refreshed: 'true'
       - name: Restore stationary AOT semantic sources
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
@@ -1034,6 +1038,10 @@ jobs:
       - name: Install native CLI dependencies
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
+        with:
+          # CUDA setup has already refreshed APT and installed CUDA packages.
+          # A second index update can race a changing NVIDIA mirror snapshot.
+          apt-index-refreshed: 'true'
       - name: Configure native grid source generation
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
@@ -1279,6 +1287,10 @@ jobs:
       - name: Install native CLI dependencies
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
+        with:
+          # CUDA setup has already refreshed APT and installed CUDA packages.
+          # A second index update can race a changing NVIDIA mirror snapshot.
+          apt-index-refreshed: 'true'
       - name: Configure direct J/K AOT release context
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
@@ -1613,7 +1625,9 @@ jobs:
               --native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"
             )
           fi
-          .venv/bin/python -m pytest "${collection_targets[@]}" -v \
+          # Keep failing node IDs, slowest-case timings, and full JUnit artifacts,
+          # without emitting one log line for each of ~20k core tests.
+          .venv/bin/python -m pytest "${collection_targets[@]}" -q \
             -o faulthandler_timeout=0 \
             -p tools.pytest_safe_diagnostics --diagnostic-timeout=900 \
             --diagnostics-dir="$PWD/.artifacts/python-diagnostics" \

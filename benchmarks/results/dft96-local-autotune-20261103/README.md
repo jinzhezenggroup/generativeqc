@@ -127,6 +127,11 @@ pass **91** tests, with the 10 opt-in GPU cases skipped in that CPU invocation.
 
 ## DF boundary and reproduction
 
+This is the historical boundary at the source identity recorded above. The
+later explicitly budgeted RHF DF96 admission/qualification is documented
+separately in `../df96-local-autotune-20261103/README.md`; it does not relabel
+these earlier refusals or this campaign's direct-DFT timing as a DF result.
+
 The positive result is direct PBE0-RKS, **not DF96**. The native DF admission
 inventory still requires <=16 orbital and <=128 auxiliary AOs. This experiment
 does not remove that restriction or claim large fitted-RHF / composed KS-DF
