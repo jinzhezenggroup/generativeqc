@@ -203,7 +203,7 @@
       }
     },
     {
-      "candidate_id": "a724c388c7c2f994e3c2b5921ecc64a3f94735e04beead9147462e1a92f3bd40",
+      "candidate_id": "b96dc89ce6094fae0c22060c1012b8081112c035e9a8cd603d74832d7b7f766b",
       "consumers": [
         {
           "path": "src/posthf/ump2_force.cpp",
@@ -213,26 +213,30 @@
       "disposition": "retained-pending-evidence",
       "evidence_gaps": [
         "Compare compact-support and producer/consumer-fused schedules with full alpha-alpha, beta-beta and alpha-beta force parity before replacing this representation.",
-        "Retirement/profitability needs source-matched complete-endpoint time, semantic work counts and simultaneous peak storage; current plans and numerical gates do not establish a performance win."
+        "Retirement/profitability needs source-matched complete-endpoint time, semantic work counts and simultaneous peak storage; current plans and numerical gates do not establish a performance win.",
+        "For fitted execution compare the dense AO-rank-four seed and shell stages with a fused DF pullback, including separate-reference groups, CUDA ownership and complete endpoint parity/work/peak storage."
       ],
       "label": "UMP2 spin-frame second shell transform",
-      "lifetime": "One (channel,si,sj) scope; reused across sk/sl until sj scope ends",
+      "lifetime": "One (group,channel,si,sj) scope; reused across sk/sl until sj scope ends",
       "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (UMP2 staging introduced by #1823)",
       "producer": {
         "path": "src/posthf/ump2_force.cpp",
         "symbol": "derivative: first -> second"
       },
-      "reason": "Retain this explicit spin-frame stage for the initial complete native CPU analytic-force endpoint. Alpha/beta coefficients stay in their own slots. Later shell consumers reuse the stage or consume its borrowed local span synchronously. Independent total-force/FD, spin-permutation and resource/failure gates qualify correctness and admission, not required storage or profitability. Bounded memory does not bound semantic work. See .agents/notes/implemented/numerics/2026-10-19-native-ump2-analytic-forces.md.",
+      "reason": "Retain the spin-frame shell stages pending fusion evidence. In #2944, each separate-reference group independently stages its Fock or correlation weights; alpha/beta coefficients stay in their own slots. Second and third stages retain their shell-loop reuse. Conventional CPU consumes local synchronously; conventional CUDA converts its borrowed span into owned primitive records and drains them with finish, or consumes it synchronously in the bounded one-shell fallback. Fitted correlation accumulates local into a retained dense AO-rank-four seed, then calls the DF nuclear pullback. The new function signature and outer group loop change the source-bound candidate identities. This review does not establish required storage or a speedup.",
       "residency": "Host std::vector<double>, di*dj*N^2 elements; only one spin channel is staged at a time",
-      "resource_owner": "unrestricted_force_cpu admits provider/reference, ijab weights, rank-two state, O(N^3) blocks, GMRES, VJP and simultaneous shell staging before work. The staging sum is 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes using maximum shell extent d; four rank-two pullback planes and the 8 MiB derivative scratch allowance are charged separately. This numeric-payload bound excludes allocator/object and stack overhead and is not measured RSS.",
+      "resource_owner": "unrestricted_force_cpu admits provider/reference, correlation weights, rank-two state, O(N^3) blocks, response and simultaneous shell staging before initial_weights. Staging charges 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes; the fitted route additionally charges an 8*N^4-byte host seed. CUDA uses the selected bounded derivative backend; fitted source and pullback capacities retain their separate admission. Numeric capacity excludes allocator/object/stack overhead and is not measured RSS.",
       "source_bindings": {
         "src/posthf/capacity.hpp": "d0111d0b24f14aef79024ec52a1a7ff9a1f962ff97966ff12c0e553ee8cfe93e",
-        "src/posthf/ump2_force.cpp": "5da0c7f86e2659fbd351a9c532412312854ec05c498d97dd6be97cfa0515f04b",
-        "src/posthf/ump2_force.hpp": "dfbad8aeb603d9a0f253be9597faed38085cb046713a553c8e90e909f133b62f"
+        "src/posthf/cuda_derivative.cpp": "3b7eda15d228119b5da075f628f0c88134547404cf56c0a5e23750098f9a1275",
+        "src/posthf/df_interaction_source.cpp": "b0d8453614bd44ad01d93c72e233abb55d73b46f87f2a7964bd3dd06b48a9c07",
+        "src/posthf/df_interaction_source.hpp": "f6464ddddbf9dded845f09553f235fbd3041163a40a5401463ac1a039d604b79",
+        "src/posthf/ump2_force.cpp": "322422728f47f05e404833a157dcff861512cb805385d88cbca9249d2baa0997",
+        "src/posthf/ump2_force.hpp": "160b1e3a15ab2b507e451209a48766a41c76b6adf5aa0ef929a34afe56f3c24a"
       }
     },
     {
-      "candidate_id": "010e58c5742cff07847a0030a3ebaa550eb6726aaec4f3abc61e760180244939",
+      "candidate_id": "bca09d332604cd41bc57a04103a9a9caf5e3483c0a20fac1e41e342d8f8277c9",
       "consumers": [
         {
           "path": "src/posthf/ump2_force.cpp",
@@ -242,53 +246,73 @@
       "disposition": "retained-pending-evidence",
       "evidence_gaps": [
         "Compare compact-support and producer/consumer-fused schedules with full alpha-alpha, beta-beta and alpha-beta force parity before replacing this representation.",
-        "Retirement/profitability needs source-matched complete-endpoint time, semantic work counts and simultaneous peak storage; current plans and numerical gates do not establish a performance win."
+        "Retirement/profitability needs source-matched complete-endpoint time, semantic work counts and simultaneous peak storage; current plans and numerical gates do not establish a performance win.",
+        "For fitted execution compare the dense AO-rank-four seed and shell stages with a fused DF pullback, including separate-reference groups, CUDA ownership and complete endpoint parity/work/peak storage."
       ],
       "label": "UMP2 spin-frame third shell transform",
-      "lifetime": "One (channel,si,sj,sk) scope; reused across sl until sk scope ends",
+      "lifetime": "One (group,channel,si,sj,sk) scope; reused across sl until sk scope ends",
       "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (UMP2 staging introduced by #1823)",
       "producer": {
         "path": "src/posthf/ump2_force.cpp",
         "symbol": "derivative: second -> third"
       },
-      "reason": "Retain this explicit spin-frame stage for the initial complete native CPU analytic-force endpoint. Alpha/beta coefficients stay in their own slots. Later shell consumers reuse the stage or consume its borrowed local span synchronously. Independent total-force/FD, spin-permutation and resource/failure gates qualify correctness and admission, not required storage or profitability. Bounded memory does not bound semantic work. See .agents/notes/implemented/numerics/2026-10-19-native-ump2-analytic-forces.md.",
+      "reason": "Retain the spin-frame shell stages pending fusion evidence. In #2944, each separate-reference group independently stages its Fock or correlation weights; alpha/beta coefficients stay in their own slots. Second and third stages retain their shell-loop reuse. Conventional CPU consumes local synchronously; conventional CUDA converts its borrowed span into owned primitive records and drains them with finish, or consumes it synchronously in the bounded one-shell fallback. Fitted correlation accumulates local into a retained dense AO-rank-four seed, then calls the DF nuclear pullback. The new function signature and outer group loop change the source-bound candidate identities. This review does not establish required storage or a speedup.",
       "residency": "Host std::vector<double>, di*dj*dk*N elements; only one spin channel is staged at a time",
-      "resource_owner": "unrestricted_force_cpu admits provider/reference, ijab weights, rank-two state, O(N^3) blocks, GMRES, VJP and simultaneous shell staging before work. The staging sum is 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes using maximum shell extent d; four rank-two pullback planes and the 8 MiB derivative scratch allowance are charged separately. This numeric-payload bound excludes allocator/object and stack overhead and is not measured RSS.",
+      "resource_owner": "unrestricted_force_cpu admits provider/reference, correlation weights, rank-two state, O(N^3) blocks, response and simultaneous shell staging before initial_weights. Staging charges 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes; the fitted route additionally charges an 8*N^4-byte host seed. CUDA uses the selected bounded derivative backend; fitted source and pullback capacities retain their separate admission. Numeric capacity excludes allocator/object/stack overhead and is not measured RSS.",
       "source_bindings": {
         "src/posthf/capacity.hpp": "d0111d0b24f14aef79024ec52a1a7ff9a1f962ff97966ff12c0e553ee8cfe93e",
-        "src/posthf/ump2_force.cpp": "5da0c7f86e2659fbd351a9c532412312854ec05c498d97dd6be97cfa0515f04b",
-        "src/posthf/ump2_force.hpp": "dfbad8aeb603d9a0f253be9597faed38085cb046713a553c8e90e909f133b62f"
+        "src/posthf/cuda_derivative.cpp": "3b7eda15d228119b5da075f628f0c88134547404cf56c0a5e23750098f9a1275",
+        "src/posthf/df_interaction_source.cpp": "b0d8453614bd44ad01d93c72e233abb55d73b46f87f2a7964bd3dd06b48a9c07",
+        "src/posthf/df_interaction_source.hpp": "f6464ddddbf9dded845f09553f235fbd3041163a40a5401463ac1a039d604b79",
+        "src/posthf/ump2_force.cpp": "322422728f47f05e404833a157dcff861512cb805385d88cbca9249d2baa0997",
+        "src/posthf/ump2_force.hpp": "160b1e3a15ab2b507e451209a48766a41c76b6adf5aa0ef929a34afe56f3c24a"
       }
     },
     {
-      "candidate_id": "86d89608b2201da9e33d9896b655533a99b053b154cadfa12ac028b4921ac476",
+      "candidate_id": "be1edcabc2c8127db1b05e751736afeedd41a3c91cb77cb06642137931f8c864",
       "consumers": [
         {
           "path": "src/integrals/s_integrals.cpp",
           "symbol": "contract_weighted_eri_shell_derivative / contract_weighted_eri_shell_derivatives"
+        },
+        {
+          "path": "src/posthf/cuda_derivative.cpp",
+          "symbol": "CudaEriDerivativeBatch::append / finish"
+        },
+        {
+          "path": "src/posthf/df_interaction_source.cpp",
+          "symbol": "DensityFittedInteractionSource::nuclear_derivative"
+        },
+        {
+          "path": "src/posthf/ump2_force.cpp",
+          "symbol": "derivative: local -> fitted_seed"
         }
       ],
       "disposition": "retained-pending-evidence",
       "evidence_gaps": [
         "Compare compact-support and producer/consumer-fused schedules with full alpha-alpha, beta-beta and alpha-beta force parity before replacing this representation.",
-        "Retirement/profitability needs source-matched complete-endpoint time, semantic work counts and simultaneous peak storage; current plans and numerical gates do not establish a performance win."
+        "Retirement/profitability needs source-matched complete-endpoint time, semantic work counts and simultaneous peak storage; current plans and numerical gates do not establish a performance win.",
+        "For fitted execution compare the dense AO-rank-four seed and shell stages with a fused DF pullback, including separate-reference groups, CUDA ownership and complete endpoint parity/work/peak storage."
       ],
       "label": "UMP2 spin-frame local shell transform",
-      "lifetime": "One (channel,si,sj,sk,sl) scope; consumed synchronously by the borrowed-span CPU derivative sink",
+      "lifetime": "One (group,channel,si,sj,sk,sl) scope; CPU consumes the borrowed span synchronously, CUDA copies primitive records or completes its bounded one-shell fallback before return, or fitted execution accumulates into the retained seed.",
       "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (UMP2 staging introduced by #1823)",
       "producer": {
         "path": "src/posthf/ump2_force.cpp",
         "symbol": "derivative: third -> local"
       },
-      "reason": "Retain this explicit spin-frame stage for the initial complete native CPU analytic-force endpoint. Alpha/beta coefficients stay in their own slots. Later shell consumers reuse the stage or consume its borrowed local span synchronously. Independent total-force/FD, spin-permutation and resource/failure gates qualify correctness and admission, not required storage or profitability. Bounded memory does not bound semantic work. See .agents/notes/implemented/numerics/2026-10-19-native-ump2-analytic-forces.md. Range-DF integration review (2026-10-23): these file digests also cover separate operator-matched DF entry points; the two ERI shell derivative consumers, UMP2 producer and capacity owner are unchanged from bbd41a427. The same retained-pending-evidence disposition and endpoint/work/storage gaps remain. R1 force integration review (2026-10-25, 685478ca1 against #2782 df2ded411): changes to s_integrals.cpp only extend the separate one-electron derivative contraction with checked residual ECP derivatives. The ERI shell derivative wrapper and shared channel consumer are byte-identical, and all other bound producer/consumer files are unchanged. Borrowed shell-weight lifetime, synchronous CPU consumption and the retained materialization disposition and evidence gaps remain unchanged. This review supplies no new MP2/UMP2 numerical or profitability evidence.",
+      "reason": "Retain the spin-frame shell stages pending fusion evidence. In #2944, each separate-reference group independently stages its Fock or correlation weights; alpha/beta coefficients stay in their own slots. Second and third stages retain their shell-loop reuse. Conventional CPU consumes local synchronously; conventional CUDA converts its borrowed span into owned primitive records and drains them with finish, or consumes it synchronously in the bounded one-shell fallback. Fitted correlation accumulates local into a retained dense AO-rank-four seed, then calls the DF nuclear pullback. The new function signature and outer group loop change the source-bound candidate identities. This review does not establish required storage or a speedup.",
       "residency": "Host std::vector<double>, di*dj*dk*dl elements; only one spin channel is staged at a time",
-      "resource_owner": "unrestricted_force_cpu admits provider/reference, ijab weights, rank-two state, O(N^3) blocks, GMRES, VJP and simultaneous shell staging before work. The staging sum is 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes using maximum shell extent d; four rank-two pullback planes and the 8 MiB derivative scratch allowance are charged separately. This numeric-payload bound excludes allocator/object and stack overhead and is not measured RSS.",
+      "resource_owner": "unrestricted_force_cpu admits provider/reference, correlation weights, rank-two state, O(N^3) blocks, response and simultaneous shell staging before initial_weights. Staging charges 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes; the fitted route additionally charges an 8*N^4-byte host seed. CUDA uses the selected bounded derivative backend; fitted source and pullback capacities retain their separate admission. Numeric capacity excludes allocator/object/stack overhead and is not measured RSS.",
       "source_bindings": {
         "src/integrals/s_integrals.cpp": "568556c3b852f4a21fc5791907635aa028d89cefcfe5ea6e993706a1b52adfdd",
         "src/integrals/s_integrals.hpp": "d4b79e899491ad83f12637a415ae3026ff7c439212c93ca6af161fbcf89836f0",
         "src/posthf/capacity.hpp": "d0111d0b24f14aef79024ec52a1a7ff9a1f962ff97966ff12c0e553ee8cfe93e",
-        "src/posthf/ump2_force.cpp": "5da0c7f86e2659fbd351a9c532412312854ec05c498d97dd6be97cfa0515f04b",
-        "src/posthf/ump2_force.hpp": "dfbad8aeb603d9a0f253be9597faed38085cb046713a553c8e90e909f133b62f"
+        "src/posthf/cuda_derivative.cpp": "3b7eda15d228119b5da075f628f0c88134547404cf56c0a5e23750098f9a1275",
+        "src/posthf/df_interaction_source.cpp": "b0d8453614bd44ad01d93c72e233abb55d73b46f87f2a7964bd3dd06b48a9c07",
+        "src/posthf/df_interaction_source.hpp": "f6464ddddbf9dded845f09553f235fbd3041163a40a5401463ac1a039d604b79",
+        "src/posthf/ump2_force.cpp": "322422728f47f05e404833a157dcff861512cb805385d88cbca9249d2baa0997",
+        "src/posthf/ump2_force.hpp": "160b1e3a15ab2b507e451209a48766a41c76b6adf5aa0ef929a34afe56f3c24a"
       }
     }
   ],

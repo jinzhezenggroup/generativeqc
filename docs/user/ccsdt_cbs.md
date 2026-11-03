@@ -82,7 +82,7 @@ convergence transport. Explicit tighter tolerances are preserved.
 `reason="unrestricted_strict_convergence"` for this path rather than claiming
 relaxed native execution.
 
-The model is UHF(limit) + UMP2-correlation(limit) + [UCCSD(T)-UMP2](small),
+The model is `UHF(limit) + UMP2-correlation(limit) + [UCCSD(T)-UMP2](small)`,
 with the same geometry-independent weights as the restricted workflow.
 Each basis group shares one converged physical UHF reference and selected
 interaction owner. Fitted correlation retains a conventional reference by

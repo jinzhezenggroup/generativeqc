@@ -219,7 +219,8 @@ void complete_same_space_weights(const hf::UnrestrictedPhysicalReference& ref, W
 }
 
 // Rectangular per-shell pullback. Each spin frame acts on its own slots;
-// no molecular AO-rank-four cotangent or coordinate derivative tensor exists.
+// Conventional derivatives avoid a molecular AO-rank-four cotangent. The fitted
+// route retains a budgeted AO-rank-four seed for the DF nuclear pullback.
 Matrix derivative(const hf::UnrestrictedPhysicalReference& ref, const core::System& system,
                   const Weights& w, const SpinMatrices& overlap, bool cuda, int device,
                   std::size_t budget, const posthf::DensityFittedInteractionSource* fitted,
