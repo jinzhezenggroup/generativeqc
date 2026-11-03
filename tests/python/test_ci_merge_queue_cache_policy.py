@@ -418,15 +418,21 @@ def test_pr_master_trusted_snapshot_fallback_is_cache_miss_only() -> None:
     assert _field(discard, "continue-on-error") == "true"
     assert _field(activate, "timeout-minutes") == "1"
     assert _field(discard, "timeout-minutes") == "1"
-    for download_outcome, active_outcome in itertools.product(
+    for download_outcome, active_outcome, scope_case in itertools.product(
         ("", "skipped", "success", "failure", "cancelled"),
         ("", "skipped", "success", "failure", "cancelled"),
+        SCOPE_CASES,
     ):
+        selector_outcome, scope, active = scope_case
         context = {
             "steps.nonqueue_cuda_ccache_download.outcome": download_outcome,
             "steps.nonqueue_cuda_ccache_activate.outcome": active_outcome,
+            "steps.prose_scope.outcome": selector_outcome,
+            "steps.prose_scope.outputs.scope": scope,
         }
-        assert _condition(activate, context) == (download_outcome == "success")
+        assert _condition(activate, context) == (active and download_outcome == "success")
         assert _condition(discard, context) == (
-            download_outcome not in ("", "skipped") and active_outcome != "success"
+            active
+            and download_outcome not in ("", "skipped")
+            and active_outcome != "success"
         )

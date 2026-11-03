@@ -681,7 +681,7 @@ jobs:
           run-id: ${{ steps.trusted_cuda_ccache.outputs.run_id }}
       - name: Activate verified trusted CUDA ccache after ordinary cache miss
         id: nonqueue_cuda_ccache_activate
-        if: steps.nonqueue_cuda_ccache_download.outcome == 'success'
+        if: steps.nonqueue_cuda_ccache_download.outcome == 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 1
         env:
@@ -691,7 +691,7 @@ jobs:
           test -d "$TRUSTED_CUDA_CCACHE_MISS_DIR"
           printf 'CCACHE_DIR=%s\n' "$TRUSTED_CUDA_CCACHE_MISS_DIR" >> "$GITHUB_ENV"
       - name: Discard incomplete trusted CUDA ccache miss download
-        if: steps.nonqueue_cuda_ccache_download.outcome != '' && steps.nonqueue_cuda_ccache_download.outcome != 'skipped' && steps.nonqueue_cuda_ccache_activate.outcome != 'success'
+        if: steps.nonqueue_cuda_ccache_download.outcome != '' && steps.nonqueue_cuda_ccache_download.outcome != 'skipped' && steps.nonqueue_cuda_ccache_activate.outcome != 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 1
         env:
