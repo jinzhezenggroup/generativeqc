@@ -1,5 +1,13 @@
 # Source-bound A100 acceptance for PRs 2902 and 2900
 
+The exact 868,556-byte molecular receipt stream is retained in existing merged
+Git history through `molecular/historical-snapshot.json`. The CPU reader verifies
+its original SHA-256, size and Git blob identity before decoding; it performs no
+network fetch and produces the same report in normal and optimized Python.
+Keep commit `8c6c6208bb1d68c96e62ed2d15ee561fcc784081` available locally, or restore
+the unchanged stream with `tools/restore_retained_evidence.py` and that manifest.
+The FP64 plane, original checksums, failures and scientific gates remain intact.
+
 The task owner authorized A100 in place of H100 for these incremental stages.
 This evidence belongs to the measured scientific sources below; it does not
 qualify an arbitrary later source or the separate all-functional performance
