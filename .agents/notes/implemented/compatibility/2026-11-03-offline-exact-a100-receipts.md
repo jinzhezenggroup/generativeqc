@@ -36,3 +36,11 @@ before removal. Normal CPU reports must remain byte-identical for all four
 families, as must optimized A100 replay. The host/disk readers intentionally
 require assertions and are not qualified under `-O`. This is storage migration,
 not new performance evidence, and does not raise the 80 MiB aggregate limit.
+
+Complete packets copied outside the checkout retain plain-file replay, even
+when they also contain snapshot metadata. Only repository-owned paths are Git
+object identities; external paths must not be passed to historical lookup.
+The complete external-family regression replays every scientific gate and
+compares its report with canonical offline recovery. Thin external packets
+must have their missing streams restored before copying, rather than guessing
+a repository identity from an arbitrary temporary directory name.
