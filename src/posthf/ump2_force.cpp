@@ -424,7 +424,9 @@ ConventionalForceResult unrestricted_force_cpu(
   // Caller-owned four-leg output; generated capacities include adapter scratch.
   peak = add(peak, mul(4, sizeof(double)));
   // The native weighted derivative consumer has bounded recurrence scratch.
-  peak = add(peak, posthf::source_scratch_bytes);
+  const auto derivative_capacity = cuda ? posthf::one_electron_response_capacity(source.orbital())
+                                        : posthf::source_scratch_bytes;
+  peak = add(peak, derivative_capacity);
   if (peak > budget)
     throw std::length_error("complete UMP2 force endpoint exceeds numeric memory budget");
   auto w = initial_weights(ref, provider, threshold, cuda, device);
@@ -486,14 +488,13 @@ ConventionalForceResult unrestricted_force_cpu(
   if (!std::isfinite(residual) || residual > 1e-7)
     throw std::runtime_error("UMP2 relaxed Lagrangian is not stationary");
   ConventionalForceResult result;
-  result.forces =
-      derivative(ref, source.orbital(), w, overlap, cuda, device, posthf::source_scratch_bytes,
-                 fitted, independent_reference != nullptr, backend);
+  result.forces = derivative(ref, source.orbital(), w, overlap, cuda, device, derivative_capacity,
+                             fitted, independent_reference != nullptr, backend);
   result.response = std::move(solved);
   result.stationarity_residual = residual;
   result.planned_endpoint_peak_bytes = peak;
   result.derivative_workspace_bytes =
-      add(posthf::source_scratch_bytes,
+      add(derivative_capacity,
           mul(add(coordinate_elements, add(staging_elements, mul(4, n2))), sizeof(double)));
   result.weighted_eri_shell_tiles =
       mul(3, mul(mul(source.orbital().shells.size(), source.orbital().shells.size()),

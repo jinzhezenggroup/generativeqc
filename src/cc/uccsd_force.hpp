@@ -18,11 +18,14 @@ namespace generativeqc::cc {
 
 /** Complete, checked admission for native unrestricted analytic response.
  * Dense raw-MO weights are resource-bounded rather than AO-count-bounded.
- * This is a conservative numeric payload peak, not an allocation measurement. */
+ * This is a conservative numeric payload peak, not an allocation measurement.
+ * A zero derivative capacity retains the conventional recurrence reservation;
+ * CUDA owners supply their complete system-dependent staging reservation. */
 std::size_t unrestricted_force_capacity(std::size_t nbf, std::size_t alpha, std::size_t beta,
                                         const SolverOptions& options, bool triples,
                                         std::size_t reference_capacity,
-                                        bool separate_reference = false);
+                                        bool separate_reference = false,
+                                        std::size_t derivative_capacity = 0);
 
 struct UnrestrictedForce {
   std::vector<double> forces;

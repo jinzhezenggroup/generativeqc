@@ -470,7 +470,8 @@ std::vector<double> derivative(const hf::UnrestrictedPhysicalReference& referenc
 
 std::size_t unrestricted_force_capacity(std::size_t nbf, std::size_t alpha, std::size_t beta,
                                         const SolverOptions& options, bool triples,
-                                        std::size_t reference_capacity, bool separate_reference) {
+                                        std::size_t reference_capacity, bool separate_reference,
+                                        std::size_t derivative_capacity) {
   const auto primal = unrestricted_capacity(nbf, alpha, beta, options, triples, reference_capacity);
   Runtime runtime(nbf, alpha, beta);
   const std::string suffix = separate_reference ? "_separate" : "";
@@ -501,7 +502,8 @@ std::size_t unrestricted_force_capacity(std::size_t nbf, std::size_t alpha, std:
   const auto orbital_dimension = add(mul(alpha, nbf - alpha), mul(beta, nbf - beta));
   response::GmresOptions controls;
   controls.absolute_tolerance = 1e-11;
-  auto peak = add(primal, add(mul(count, sizeof(double)), posthf::source_scratch_bytes));
+  auto peak = add(primal, add(mul(count, sizeof(double)),
+                              std::max(derivative_capacity, posthf::source_scratch_bytes)));
   if (dimension) peak = add(peak, response::prepare_gmres(dimension, controls).workspace_bytes);
   if (orbital_dimension)
     peak = add(peak, response::prepare_gmres(orbital_dimension, controls).workspace_bytes);
@@ -520,10 +522,12 @@ UnrestrictedForce unrestricted_force(
     const integrals::ElectronInteractionSource* independent_reference,
     const integrals::CorrelationIntegralBackend& backend) {
   const std::string suffix = independent_reference ? "_separate" : "";
+  const auto derivative_capacity = cuda ? posthf::one_electron_response_capacity(source.orbital())
+                                        : posthf::source_scratch_bytes;
   UnrestrictedForce result;
-  result.numeric_capacity_bytes =
-      unrestricted_force_capacity(reference.nbf, reference.nocc[0], reference.nocc[1], options,
-                                  triples, reference_capacity, independent_reference != nullptr);
+  result.numeric_capacity_bytes = unrestricted_force_capacity(
+      reference.nbf, reference.nocc[0], reference.nocc[1], options, triples, reference_capacity,
+      independent_reference != nullptr, derivative_capacity);
   mp2::validate_unrestricted_energy_input(reference, source, options.denominator_threshold);
   if (!parent.converged || reference.commutator_residual > 1e-8 ||
       std::max(parent.replay_singles_residual, parent.replay_doubles_residual) >
@@ -660,8 +664,8 @@ UnrestrictedForce unrestricted_force(
   if (!std::isfinite(result.stationarity_residual) || result.stationarity_residual > 1e-7)
     throw std::runtime_error("fresh unrestricted full orbital stationarity failed");
   result.forces =
-      derivative(reference, source.orbital(), weights, cuda, device, posthf::source_scratch_bytes,
-                 fitted, independent_reference != nullptr, backend);
+      derivative(reference, source.orbital(), weights, cuda, device, derivative_capacity, fitted,
+                 independent_reference != nullptr, backend);
   return result;
 }
 

@@ -40,8 +40,10 @@ struct UnrestrictedFitting {
     return posthf::checked_add(result, fitted);
   }
 
-  scf::FockBuildSpec reference_spec() const {
+  /** Energy-only references do not reserve derivative-only Fock resources. */
+  scf::FockBuildSpec reference_spec(bool compute_forces) const {
     auto spec = scf::make_hf_fock_spec(scf::FockSpin::Unrestricted);
+    spec.derivative_order = compute_forces ? 1 : 0;
     if (full_reference) {
       spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
       spec.exchange.approximation = scf::FockApproximation::DensityFitted;

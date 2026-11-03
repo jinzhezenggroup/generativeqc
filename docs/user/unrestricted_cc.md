@@ -42,11 +42,11 @@ layout changes are needed. See the [native C++ guide](native_cpp.md).
 
 ## Current admission and failure behavior
 
-This native owner requires real FP64, unscreened
-conventional or explicitly fitted integrals and s/p/d shells, including supplied
+This native owner requires real FP64 and s/p/d shells, including supplied
 Cartesian or real-spherical bases. Each spin retains its own occupied and
 virtual dimensions and all five amplitude blocks remain independent. A singlet
 still runs through UHF/UCCSD rather than selecting a restricted CC owner.
+Conventional integral paths must be unscreened; the fitted modes are described below.
 There is no fixed AO-count cutoff; admission uses checked dimensions and the
 complete storage/work limits described below, before starting the reference.
 

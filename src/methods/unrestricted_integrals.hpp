@@ -33,6 +33,7 @@ inline integrals::CorrelationIntegralBackend unrestricted_integral_backend() {
             device, system, overlap, hcore, hcore,
             scf::cuda_policy::one_electron_derivative_mapping_requested(), budget, gradient,
             detail);
+        if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::length_error(detail);
         if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
         return gradient;
       }};
