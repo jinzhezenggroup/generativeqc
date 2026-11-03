@@ -151,7 +151,7 @@ int main() {
     std::cout << generativeqc::dft::automatic_ks_scf_tile(
         requested, qualified, unconstrained, nao, points, false, major, ratio) << ' ';
     std::cout << generativeqc::dft::automatic_ks_force_tile(
-        qualified, unconstrained, all_electron, 2, atoms, nao, points, major) << '\\n';
+        qualified, unconstrained, all_electron, 2, atoms, nao, points, major) << '\n';
   }
 }
 """
