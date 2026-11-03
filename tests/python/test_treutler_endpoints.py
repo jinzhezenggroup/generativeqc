@@ -142,7 +142,7 @@ def require_endpoint(device: str) -> None:
         ("pbe-rks", "PBE"),
         ("pbe0-rks", "PBE0"),
         ("r2scan-rks", "r2SCAN"),
-        ("wb97m-v-rks", "WB97M_V"),
+        pytest.param("wb97m-v-rks", "WB97M_V", marks=pytest.mark.ci_nightly),
     ],
 )
 def test_default_grid_energy_and_analytic_forces(

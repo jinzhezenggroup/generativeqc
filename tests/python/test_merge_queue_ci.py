@@ -51,10 +51,17 @@ def test_merge_group_concurrency_preserves_running_same_ref_runs() -> None:
         concurrency = source.split("concurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
         assert "github.event_name == 'merge_group'" in concurrency
         assert "&& github.ref" in concurrency
-        assert "cancel-in-progress: false" in concurrency
+        # CI cancels only superseded PRs; merge-group verification stays live.
+        if filename == "ci.yml":
+            assert (
+                "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+                in concurrency
+            )
+        else:
+            assert "cancel-in-progress: false" in concurrency
 
 
-def test_pr_concurrency_preserves_running_and_replaces_only_pending_runs() -> None:
+def test_pr_concurrency_cancels_superseded_ci_but_preserves_other_workflows() -> None:
     for filename in (
         "ci.yml",
         "cumetal-cuda.yml",
@@ -65,7 +72,15 @@ def test_pr_concurrency_preserves_running_and_replaces_only_pending_runs() -> No
         source = (WORKFLOWS / filename).read_text(encoding="utf-8")
         concurrency = source.split("concurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
         assert "github.event.pull_request.number" in concurrency
-        assert "cancel-in-progress: false" in concurrency
+        # The expensive primary CI prioritizes fresh commits; the independent
+        # wheel/lint/CuMetal workflows keep their existing in-flight policy.
+        if filename == "ci.yml":
+            assert (
+                "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+                in concurrency
+            )
+        else:
+            assert "cancel-in-progress: false" in concurrency
 
 
 def test_ci_aggregate_accepts_only_explicitly_confirmed_orphans() -> None:

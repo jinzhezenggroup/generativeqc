@@ -148,7 +148,9 @@ def test_cached_low_ownership_precedes_quartet_screening(
     probe = tmp_path / "admission.cpp"
     probe.write_text(ADMISSION_PREFIX + admission + ADMISSION_DRIVER)
     executable = native_cxx.build_executable(
-        [probe], tmp_path / "admission", compile_args=["-std=c++20"]
+        [probe],
+        tmp_path / "admission",
+        compile_args=["-std=c++20", f"-I{ROOT / 'src'}"],
     )
     subprocess.run([executable], check=True, timeout=30)
 
@@ -274,6 +276,8 @@ ADMISSION_PREFIX = r"""
 #include <initializer_list>
 #include <cassert>
 #include <cstdint>
+#include "scf/cuda/direct_force_queue_order.hpp"
+using namespace generativeqc::scf::cuda_execution;
 struct ActiveShellQuartetTile { unsigned first_pair, second_pair, tile; };
 struct Counters { unsigned enumerated{}, generated_owned{}, admitted{}, shell_screened{}, angular_rejected{}; };
 Counters counts;
@@ -302,13 +306,18 @@ void admit(unsigned shell_class, bool overflow) {
   const void *enabled_mask_pointer=nullptr, *profile=nullptr;
   const unsigned enabled_mask=0;
   double screening_tolerance=1e-14, exchange_coefficient=0;
-  ActiveShellQuartetTile queue[1]{};
-  unsigned queue_count=0;
+  std::uint32_t class_offsets[kDirectSpdForceQueueClasses]{};
+  unsigned queued_class=kDirectSpdForceQueueClasses;
+  ActiveShellQuartetTile queued_task{};
 """
 
 ADMISSION_DRIVER = r"""
+  const auto queue_count=direct_force_class_queue_offsets(class_offsets);
   assert(queue_count == publications);
-  if(queue_count) assert(queue[0].first_pair==1 && queue[0].second_pair==0);
+  if(queue_count) {
+    assert(queued_class==shell_class);
+    assert(queued_task.first_pair==1 && queued_task.second_pair==0);
+  } else assert(queued_class==kDirectSpdForceQueueClasses);
 }
 template<unsigned Partition> void exercise() {
   for(unsigned order=0;order<=12;++order)
