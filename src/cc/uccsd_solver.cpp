@@ -350,6 +350,28 @@ std::size_t unrestricted_capacity(std::size_t nbf, std::size_t alpha, std::size_
   return capacity;
 }
 
+std::size_t unrestricted_cuda_solver_provider_capacity(
+    const hf::UnrestrictedPhysicalReference& reference,
+    const posthf::NativeBlockProvider& provider) {
+  const auto sizes = populations(reference);
+  std::size_t peak = 0;
+  for (const auto& spec : graph::kFeeds) {
+    if (!std::string(spec.name).starts_with('g')) continue;
+    const auto shape = feed_shape(spec, sizes);
+    if (!elements(shape)) continue;
+    Shape spins{};
+    for (unsigned axis = 0; axis < 4; ++axis) spins[axis] = spec.axes[axis] % 2;
+    const auto admit = [&](const std::array<unsigned, 4>& axes) {
+      Shape request{};
+      for (unsigned axis = 0; axis < 4; ++axis) request[axis] = shape[axes[axis]];
+      peak = std::max(peak, provider.batch_bytes(request, 1, true));
+    };
+    if (spins[0] == spins[2] && spins[1] == spins[3]) admit({0, 2, 1, 3});
+    if (spins[0] == spins[3] && spins[1] == spins[2]) admit({0, 3, 1, 2});
+  }
+  return peak;
+}
+
 UnrestrictedSolve solve_unrestricted(const hf::UnrestrictedPhysicalReference& reference,
                                      const integrals::ElectronInteractionSource& source,
                                      const SolverOptions& options, bool triples,
@@ -369,8 +391,7 @@ UnrestrictedSolve solve_unrestricted(const hf::UnrestrictedPhysicalReference& re
     executor =
         make_unrestricted_cuda_executor(reference.nbf, reference.nocc[0], reference.nocc[1], device,
                                         options.max_bytes - result.numeric_capacity_bytes, false);
-    auto provider_peak =
-        provider.batch_bytes({reference.nbf, reference.nbf, reference.nbf, reference.nbf}, 1, true);
+    const auto provider_peak = unrestricted_cuda_solver_provider_capacity(reference, provider);
     result.numeric_capacity_bytes =
         posthf::checked_add(result.numeric_capacity_bytes,
                             posthf::checked_add(executor->numeric_capacity_bytes(), provider_peak));

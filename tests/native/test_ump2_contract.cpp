@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "api/handles.hpp"
+#include "cc/uccsd_solver.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "methods/ump2_method.hpp"
 #include "methods/unrestricted_df.hpp"
@@ -195,6 +196,16 @@ void cuda_channel_admission() {
     }
     require(dense_rejected,
             "synthetic budget does not distinguish active channels from a dense molecular block");
+  }
+  for (const auto occupations : std::array<std::array<std::size_t, 2>, 2>{{{32, 32}, {31, 33}}}) {
+    reference.nocc = occupations;
+    generativeqc::posthf::NativeBlockProvider provider(source, reference, 1ULL << 30, 8,
+                                                       generativeqc::posthf::AOTileDomain::Basis);
+    const auto maximum = std::max(occupations[0], occupations[1]);
+    const auto expected = provider.batch_bytes({maximum, maximum, maximum, maximum}, 1, true);
+    require(generativeqc::cc::unrestricted_cuda_solver_provider_capacity(reference, provider) ==
+                expected,
+            "CUDA UCCSD admission charges an unexecuted full molecular MO block");
   }
   require(source.reads == 0, "shape-only CUDA admission read AO integrals");
 }
@@ -403,6 +414,21 @@ void force_contract() {
   auto solved = generativeqc::scf::run_prepared_fock_strategy(plan, options);
   require(solved.converged && solved.unrestricted_reference, "force UHF did not converge");
   auto ref = *solved.unrestricted_reference;
+  const auto hf_force =
+      generativeqc::methods::detail::unrestricted_reference_force_cpu(ref, plan, 256ULL << 20);
+  require(generativeqc::methods::detail::unrestricted_reference_force_cpu(ref, plan, 256ULL << 20,
+                                                                          32ULL << 20) == hf_force,
+          "reserving a live fitted source changes the UHF component force");
+  for (const auto retained : {256ULL << 20, 257ULL << 20}) {
+    bool refused = false;
+    try {
+      (void)generativeqc::methods::detail::unrestricted_reference_force_cpu(ref, plan, 256ULL << 20,
+                                                                            retained);
+    } catch (const std::length_error&) {
+      refused = true;
+    }
+    require(refused, "UHF component ignores retained fitted source or underflows its budget");
+  }
   CountingSource source(system);
   const auto evaluate = [&](const auto& state, std::size_t budget) {
     auto problem = generativeqc::methods::detail::unrestricted_response_problem(state, plan);

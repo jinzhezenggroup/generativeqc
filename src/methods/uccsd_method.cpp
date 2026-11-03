@@ -127,6 +127,14 @@ class UccsdPrepared final : public PreparedCalculation {
         retained_reference_capacity =
             posthf::checked_add(retained_reference_capacity, fitted->numeric_capacity_bytes());
       }
+      // CUDA provider batches already own the complete retained fitted source.
+      auto charged_reference_capacity = retained_reference_capacity;
+      if (cuda_ && fitted) {
+        const auto retained_source = fitted->retained_numeric_bytes();
+        if (retained_source > charged_reference_capacity)
+          throw std::logic_error("unrestricted fitted source accounting underflow");
+        charged_reference_capacity -= retained_source;
+      }
       const integrals::ElectronInteractionSource& source =
           fitted ? static_cast<const integrals::ElectronInteractionSource&>(*fitted)
                  : reference_source;
@@ -149,7 +157,8 @@ class UccsdPrepared final : public PreparedCalculation {
           result.hf_component->forces =
               cuda_ || fitting_.full_reference
                   ? std::move(reference_result.forces)
-                  : unrestricted_reference_force_cpu(reference, reference_plan, options_.max_bytes);
+                  : unrestricted_reference_force_cpu(reference, reference_plan, options_.max_bytes,
+                                                     fitted ? retained_reference_capacity : 0);
       }
       if (components & kMp2Component) {
         if (retained_reference_capacity >= options_.max_bytes)
@@ -207,7 +216,7 @@ class UccsdPrepared final : public PreparedCalculation {
         std::copy_n(mp2::generated::kUmp2InventoryHash, 64, diagnostic.equation_hash);
       }
       const auto solved =
-          cc::solve_unrestricted(reference, source, options_, triples, retained_reference_capacity,
+          cc::solve_unrestricted(reference, source, options_, triples, charged_reference_capacity,
                                  compute_forces, cuda_, device_);
       if (!solved.converged)
         throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED,
@@ -234,7 +243,7 @@ class UccsdPrepared final : public PreparedCalculation {
       diagnostic.numeric_capacity_bytes = solved.numeric_capacity_bytes;
       if (compute_forces) {
         auto force = cc::unrestricted_force(
-            reference, source, solved, options_, triples, retained_reference_capacity,
+            reference, source, solved, options_, triples, charged_reference_capacity,
             orbital_problem ? &*orbital_problem : nullptr, cuda_, device_,
             fitted ? &*fitted : nullptr, independent_reference, unrestricted_integral_backend());
         result.forces = std::move(force.forces);
