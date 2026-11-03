@@ -34,10 +34,13 @@ JK_CONTROLS = {
 
 def validate_policy(component: str, policy: dict) -> None:
     """Accept only audited execution controls, never precision or screening."""
-    if component != "jk" or not isinstance(policy, dict):
+    from ._df_autotune import DF_CONTROLS
+
+    controls = {"jk": JK_CONTROLS, "df": DF_CONTROLS}.get(component)
+    if controls is None or not isinstance(policy, dict):
         raise ValueError("unsupported execution component or policy")
     if any(
-        key not in JK_CONTROLS or value not in JK_CONTROLS[key]
+        key not in controls or value not in controls[key]
         for key, value in policy.items()
     ):
         raise ValueError("unsupported native execution policy")
@@ -45,6 +48,10 @@ def validate_policy(component: str, policy: dict) -> None:
 
 def candidate_policies(component: str, *, hybrid: bool, full: bool) -> list[dict]:
     """Search existing bounded native lowerings without changing the Hamiltonian."""
+    if component == "df":
+        from ._df_autotune import candidate_policies as df_policies
+
+        return df_policies(full=full)
     policies = [
         {"GENERATIVEQC_MD_J_ENGINE": "incumbent"},
         {
@@ -89,16 +96,17 @@ def execute(workload: dict, component: str, policy: dict) -> dict:
 
     validate_policy(component, policy)
     sample = execute_workload(workload)
-    work = [row.get("coulomb_exchange_work") for row in sample["dft_work"]]
-    if not work or any(not row or row.get("complete") is not True for row in work):
-        raise ValueError(
-            "J/K tuning requires complete native Coulomb/exchange work observations"
-        )
+    if component == "jk":
+        work = [row.get("coulomb_exchange_work") for row in sample["dft_work"]]
+        if not work or any(not row or row.get("complete") is not True for row in work):
+            raise ValueError(
+                "J/K tuning requires complete native Coulomb/exchange work observations"
+            )
     schedule = {"component": component, "environment": policy}
     sample.update(
         scientific_identity=canonical_hash(workload),
         scientific_workload=copy.deepcopy(workload),
-        native_xc_schedule=sample["schedule"],
+        native_xc_schedule=sample.get("schedule"),
         schedule=schedule,
         schedule_identity=canonical_hash(schedule),
     )
@@ -179,6 +187,26 @@ def gates(endpoint: dict, reference: dict) -> dict:
     from ._dft_autotune import numerical_gate, resource_gate
 
     samples = endpoint["baseline"] + endpoint["candidate"]
+    if reference.get("reference_family") == "df-hf":
+        from ._df_autotune import numerical_gate, work_gate
+
+        observed_work = work_gate(samples, reference)
+    else:
+        observed_work = jk_work_gate(samples)
+    return {
+        "endpoint": endpoint,
+        "numerical": numerical_gate(samples, reference),
+        "resources": resource_gate(
+            endpoint["candidate"],
+            schedule_hash=endpoint["candidate_schedule_hash"],
+            source_hash=endpoint["candidate_source_hash"],
+        ),
+        "work": observed_work,
+    }
+
+
+def jk_work_gate(samples: list[dict]) -> dict:
+    """Keep observed Coulomb/exchange and XC work identical across J/K trials."""
     work = [
         [
             (item["grid_points"], item["fock_builds"], item["coulomb_exchange_work"])
@@ -192,19 +220,8 @@ def gates(endpoint: dict, reference: dict) -> dict:
         for sample in samples
     )
     return {
-        "endpoint": endpoint,
-        "numerical": numerical_gate(
-            endpoint["baseline"] + endpoint["candidate"], reference
-        ),
-        "resources": resource_gate(
-            endpoint["candidate"],
-            schedule_hash=endpoint["candidate_schedule_hash"],
-            source_hash=endpoint["candidate_source_hash"],
-        ),
-        "work": {
-            "passed": same_work and same_xc,
-            "scope": "observed grid/Fock/J/K census and resolved XC policy are unchanged",
-        },
+        "passed": same_work and same_xc,
+        "scope": "observed grid/Fock/J/K census and resolved XC policy are unchanged",
     }
 
 
@@ -223,15 +240,20 @@ def run(args: Any, *, base_library: Any, probe: dict, tools: dict, target: Any) 
     from .ks import GridSpec, KsOptions, resolve_ks_options
     from .profiles import cache_root, compatibility_identity, select_library
 
-    if args.method not in DFT_FUNCTIONALS or args.repeats < 5:
+    fitted = args.component == "df"
+    if args.repeats < 5 or args.method not in (("rhf",) if fitted else DFT_FUNCTIONALS):
         raise ValueError(
-            "J/K policy tuning requires a supported KS method and five pairs"
+            "native policy tuning requires a supported method and five pairs"
         )
-    options = resolve_ks_options(
-        args.method, KsOptions(grid=GridSpec.treutler(args.grid_level))
+    options = (
+        None
+        if fitted
+        else resolve_ks_options(
+            args.method, KsOptions(grid=GridSpec.treutler(args.grid_level))
+        )
     )
     workload = {
-        "kind": "dft",
+        "kind": "df-hf" if fitted else "dft",
         "atoms": read_xyz(args.input, units=args.units),
         "basis": args.basis,
         "method": args.method,
@@ -244,6 +266,14 @@ def run(args: Any, *, base_library: Any, probe: dict, tools: dict, target: Any) 
         "architecture": target.architecture,
         "source_identity": probe["source_identity"],
     }
+    if fitted:
+        from ._df_autotune import numerical_gate
+
+        workload.update(
+            auxiliary_basis=args.auxiliary_basis or args.basis,
+            metric_relative_threshold=1e-10,
+            df_memory_bytes=args.df_memory_mib << 20,
+        )
     root = cache_root()
     root.mkdir(parents=True, exist_ok=True)
     directory = Path(
@@ -298,7 +328,7 @@ def run(args: Any, *, base_library: Any, probe: dict, tools: dict, target: Any) 
         report["baseline"] = baseline
         if not numerical_gate([baseline], reference)["passed"]:
             raise ValueError("incumbent failed the independent energy/force gate")
-        hybrid = bool(options.execution_plan.exchange)
+        hybrid = fitted or bool(options.execution_plan.exchange)
         best_policy, best = {}, None
         for index, policy in enumerate(
             candidate_policies(args.component, hybrid=hybrid, full=args.full)[

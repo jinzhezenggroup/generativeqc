@@ -579,7 +579,7 @@ def run(args: typing.Any) -> dict:
         ptxas_version=tools["ptxas"],
         generator_abi=int(abi_profile["generator_abi"]),
     )
-    if getattr(args, "component", None) == "jk":
+    if getattr(args, "component", None) in ("jk", "df"):
         from .execution_tune import run as run_execution
 
         return run_execution(
