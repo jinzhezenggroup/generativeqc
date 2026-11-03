@@ -51,37 +51,37 @@ def test_merge_group_concurrency_preserves_running_same_ref_runs() -> None:
         concurrency = source.split("concurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
         assert "github.event_name == 'merge_group'" in concurrency
         assert "&& github.ref" in concurrency
-        # CI cancels only superseded PRs; merge-group verification stays live.
-        if filename == "ci.yml":
-            assert (
-                "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
-                in concurrency
-            )
-        else:
-            assert "cancel-in-progress: false" in concurrency
+        # Both workflows only cancel superseded PR revisions, never running
+        # merge-group qualification for an existing synthetic queue ref.
+        assert (
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+            in concurrency
+        )
 
 
-def test_pr_concurrency_cancels_superseded_ci_but_preserves_other_workflows() -> None:
-    for filename in (
-        "ci.yml",
-        "cumetal-cuda.yml",
-        "pre-commit.yml",
-        "pr-overlap.yml",
-        "wheels.yml",
-    ):
+def test_pr_concurrency_cancels_only_superseded_nonrelease_checks() -> None:
+    # The wheel build intentionally finishes its in-flight package/cache work.
+    # All other PR-scoped checks may preempt stale heads while their merge
+    # groups and master cache producers retain their protected run identities.
+    expected = {
+        "ci.yml": "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+        "cumetal-cuda.yml": (
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+        ),
+        "docs.yml": "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+        "array-api.yml": (
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+        ),
+        "pre-commit.yml": "cancel-in-progress: true",
+        "pr-overlap.yml": "cancel-in-progress: true",
+        "work-audit.yml": "cancel-in-progress: true",
+        "wheels.yml": "cancel-in-progress: false",
+    }
+    for filename, policy in expected.items():
         source = (WORKFLOWS / filename).read_text(encoding="utf-8")
-        concurrency = source.split("concurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
+        concurrency = source.split("concurrency:\\n", 1)[1].split("\\njobs:\\n", 1)[0]
         assert "github.event.pull_request.number" in concurrency
-        # The expensive primary CI prioritizes fresh commits; the independent
-        # wheel/lint/CuMetal workflows keep their existing in-flight policy.
-        if filename == "ci.yml":
-            assert (
-                "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
-                in concurrency
-            )
-        else:
-            assert "cancel-in-progress: false" in concurrency
-
+        assert policy in concurrency
 
 def test_ci_aggregate_accepts_only_explicitly_confirmed_orphans() -> None:
     source = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
