@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from generativeqc import profiles
 from generativeqc.autotune import endpoint_gate, rank_hotspots, read_xyz
-from generativeqc.ks import profiled_ks_options, resolve_ks_options
+from generativeqc.ks import KsOptions, profiled_ks_options, resolve_ks_options
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.dft.xc_schedule import (
     HOST_UNFUSED,
@@ -461,6 +461,33 @@ def test_native_batch_profile_applies_only_exact_common_grid_xc_winner(
         multiplicities=[1, 1],
     )
     assert mixed_batch is options
+
+    explicit = resolve_ks_options("pbe-rks", KsOptions(tile_points=64))
+    assert (
+        profiled_ks_options(
+            explicit, diagnostics, [atoms], charges=[0], multiplicities=[1]
+        )
+        is explicit
+    )
+
+
+def test_explicit_resource_budget_retains_bounded_native_dft_schedule() -> None:
+    from types import SimpleNamespace
+
+    from generativeqc import Calculator, ResourceBudget, _native
+
+    options = resolve_ks_options("pbe-rks")
+    calculator = SimpleNamespace(
+        _ks_options=options,
+        _device_name="cuda",
+        _precision_mode=_native.PRECISION_FP64,
+        _resource_budget=ResourceBudget(device_bytes=4096),
+    )
+    selection = Calculator._effective_ks_selection(
+        calculator, [[("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]]
+    )
+    assert selection.options is options
+    assert not selection.exact_profile_match
 
 
 def test_hotspots_are_measured_bounded_and_ignore_absent_f_work() -> None:
