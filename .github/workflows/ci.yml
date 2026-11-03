@@ -641,14 +641,36 @@ jobs:
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
-      # The shared cache can be evicted while a verified master snapshot is
-      # still available. Only ordinary PR/master consumers use this fallback:
-      # merge groups retain their independent, earlier verified restore path.
+      # A PR may otherwise recompile hundreds of generated CUDA objects on
+      # every push. Keep a small immutable miss delta per PR; ccache still
+      # checks source, flags, toolchain and generated contents at every lookup.
+      # PR objects never seed master or merge-group caches.
+      - name: Prepare isolated PR fast CUDA compiler delta
+        id: pr_fast_ccache
+        if: github.event_name == 'pull_request' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 tools/ci_pr_fast_ccache.py prepare
+      - name: Restore only this PR fast CUDA compiler delta
+        id: pr_fast_ccache_restore
+        if: github.event_name == 'pull_request' && steps.pr_fast_ccache.outputs.key != ''
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pr_fast_ccache.outputs.path }}
+          key: ${{ steps.pr_fast_ccache.outputs.key }}
+      # Only after both the shared cache and the optional PR-specific compiler
+      # delta miss, restore the trusted master snapshot (up to 5 GB). Do not
+      # pay that transport cost for PRs already benefiting from their delta.
+      # Merge groups retain their independent earlier verified restore path.
       - name: Restore trusted master CUDA ccache after ordinary cache miss
         id: nonqueue_cuda_ccache_download
-        if: (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && steps.cuda_ccache.outputs.cache-matched-key == '' && steps.trusted_cuda_ccache.outputs.run_id != '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && steps.cuda_ccache.outputs.cache-matched-key == '' && (github.event_name != 'pull_request' || steps.pr_fast_ccache_restore.outputs.cache-matched-key == '') && steps.trusted_cuda_ccache.outputs.run_id != '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: 4
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: cuda-ccache-master-12.9-sm120-v3
@@ -682,27 +704,6 @@ jobs:
             exit 1
           fi
           rm -rf -- "$expected"
-      # A PR may otherwise recompile hundreds of generated CUDA objects on
-      # every push. Keep a small immutable miss delta per PR; ccache still
-      # checks source, flags, toolchain and generated contents at every lookup.
-      # PR objects never seed master or merge-group caches.
-      - name: Prepare isolated PR fast CUDA compiler delta
-        id: pr_fast_ccache
-        if: github.event_name == 'pull_request' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        continue-on-error: true
-        timeout-minutes: 1
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: python3 tools/ci_pr_fast_ccache.py prepare
-      - name: Restore only this PR fast CUDA compiler delta
-        id: pr_fast_ccache_restore
-        if: github.event_name == 'pull_request' && steps.pr_fast_ccache.outputs.key != ''
-        continue-on-error: true
-        timeout-minutes: 2
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.pr_fast_ccache.outputs.path }}
-          key: ${{ steps.pr_fast_ccache.outputs.key }}
       - name: Reset ccache statistics
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --zero-stats
