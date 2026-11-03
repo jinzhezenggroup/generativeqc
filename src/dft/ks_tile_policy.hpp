@@ -1,30 +1,29 @@
 #pragma once
 
 #include <cstddef>
-#include <string_view>
 
 #include "runtime/cuda_fp64_matrix_policy.hpp"
 
 namespace generativeqc::dft {
 
-/** Admit only the measured A100 full-range Direct RKS geometry domain.
- * Device throughput alone is insufficient evidence for a new Direct default.
- * The enclosing owner additionally authenticates shape, precision, native
- * execution and unpromised memory headroom before either tile may grow.
+/** Admit the A100-class SM80 FP64 capability domain, not a GPU model name.
+ * The exact architecture/throughput gate stays narrower than generic FP64
+ * acceleration: other GPU generations need independent endpoint qualification.
+ * The enclosing owner additionally checks shape, precision, native execution
+ * and unpromised memory headroom before either tile may grow.
  */
 constexpr bool automatic_direct_ks_tiles_eligible(bool full_range_rks_fp64, bool strict_budget,
                                                   bool all_electron, std::size_t maximum_angular,
-                                                  std::size_t atoms, std::string_view device_name,
-                                                  int compute_major, int compute_minor,
-                                                  int fp32_fp64_ratio) noexcept {
+                                                  std::size_t atoms, int compute_major,
+                                                  int compute_minor, int fp32_fp64_ratio) noexcept {
   return full_range_rks_fp64 && strict_budget && all_electron && maximum_angular <= 2 &&
-         atoms >= 48 && atoms <= 128 && device_name.find("A100") != std::string_view::npos &&
-         compute_major == 8 && compute_minor == 0 && fp32_fp64_ratio == 2;
+         atoms >= 48 && atoms <= 128 && compute_major == 8 && compute_minor == 0 &&
+         fp32_fp64_ratio == 2;
 }
 
 /** Resolve the public automatic SCF tile without changing an explicit request.
  * The larger tiles amortize launch and mapped FP64 contraction overhead for
- * qualified fitted or A100 Direct RKS grids. Nonlocal work has a different optimum.
+ * qualified fitted or SM80 full-rate-FP64 Direct RKS grids. Nonlocal work has a different optimum.
  * CPU, small, mixed, unrestricted, constrained, and unknown device domains
  * retain 256. Force tiling is independently resolved by the enclosing owner.
  */
