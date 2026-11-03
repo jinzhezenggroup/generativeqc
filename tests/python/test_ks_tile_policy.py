@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 def test_automatic_tile_preserves_overrides_and_resource_fallbacks(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """Only large fitted strict-FP64 RKS on full-rate FP64 devices may grow."""
+    """CUDA XC defaults to 1024 without a profile, shape or FP64-device gate."""
     unit = tmp_path / "tiles.cpp"
     unit.write_text(
         r"""
@@ -44,15 +44,15 @@ int main() {
     for tile in (1, 31, 256, 512, 4096):
         cases.append(((tile, 0, 0, 1, 1, 0, 0, 0), tile))
     for index, value, expected in (
-        (1, 0, 256),
+        (1, 0, 1024),
         (2, 0, 256),
-        (3, 511, 256),
-        (4, (1 << 19) - 1, 256),
+        (3, 511, 1024),
+        (4, (1 << 19) - 1, 1024),
         (5, 1, 512),
-        (6, 7, 256),
-        (6, 0, 256),
-        (7, 0, 256),
-        (7, 64, 256),
+        (6, 7, 1024),
+        (6, 0, 1024),
+        (7, 0, 1024),
+        (7, 64, 1024),
     ):
         row = list(eligible)
         row[index] = value
@@ -60,7 +60,11 @@ int main() {
     cases.extend(
         [
             ((0, 1, 1, 512, 1 << 19, 0, 9, 2), 1024),
+            ((0, 0, 1, 1, 1, 0, 12, 64), 1024),
+            ((0, 0, 0, 768, 1 << 20, 0, 12, 64), 256),
             ((0, 1, 1, 768, 1 << 20, 1, 12, 64), 256),
+            ((0, 0, 1, 768, 1 << 20, 1, 8, 2), 256),
+            ((0, 1, 1, 511, 1 << 20, 1, 8, 2), 256),
         ]
     )
     result = subprocess.run(
@@ -133,23 +137,22 @@ int main() {
     assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]
 
 
-def test_direct_prefers_1024_with_workload_and_resource_fallbacks(
+def test_direct_scf_tiles_are_independent_of_gpu_generation(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """Direct defaults need no device profile and preserve their bounded envelope."""
+    """Direct semilocal defaults need no device profile, size or FP64 capability."""
     unit = tmp_path / "direct_tiles.cpp"
     unit.write_text(
         r"""
 #include <iostream>
 #include "dft/ks_tile_policy.hpp"
 int main() {
-  std::size_t requested, angular, atoms, nao, points;
-  bool full_range_rks_fp64, strict_budget, unconstrained, all_electron;
-  while (std::cin >> requested >> full_range_rks_fp64 >> strict_budget >> unconstrained
-                 >> all_electron >> angular >> atoms >> nao >> points)
-    std::cout << generativeqc::dft::automatic_direct_ks_tile(
-        requested, full_range_rks_fp64, strict_budget, unconstrained, all_electron,
-        angular, atoms, nao, points) << '\n';
+  bool unconstrained;
+  std::size_t requested, nao, points;
+  int major, ratio;
+  while (std::cin >> requested >> unconstrained >> nao >> points >> major >> ratio)
+    std::cout << generativeqc::dft::automatic_ks_scf_tile(
+        requested, false, unconstrained, nao, points, false, major, ratio) << '\n';
 }
 """
     )
@@ -161,27 +164,13 @@ int main() {
             "-I" + str(Path(__file__).resolve().parents[2] / "src"),
         ),
     )
-    eligible = (0, 1, 1, 1, 1, 2, 96, 768, 1 << 20)
-    cases = [(eligible, 1024)]
-    for index, value in (
-        (1, 0),
-        (2, 0),
-        (3, 0),
-        (4, 0),
-        (5, 3),
-        (6, 47),
-        (6, 129),
-        (7, 511),
-        (8, (1 << 19) - 1),
-    ):
-        row = list(eligible)
-        row[index] = value
-        cases.append((tuple(row), 256))
-    for atoms in (48, 128):
-        for angular in (0, 1, 2):
-            cases.append(((0, 1, 1, 1, 1, angular, atoms, 512, 1 << 19), 1024))
-    for tile in (1, 31, 256, 512, 1024, 4096):
-        cases.append(((tile, 0, 0, 0, 0, 3, 1, 1, 1), tile))
+    cases: list[tuple[tuple[int, ...], int]] = []
+    for major, ratio in ((0, 0), (6, 64), (7, 2), (8, 2), (8, 64), (9, 2), (12, 64)):
+        for nao, points in ((1, 1), (511, (1 << 19) - 1), (768, 1 << 20)):
+            cases.append(((0, 1, nao, points, major, ratio), 1024))
+            cases.append(((0, 0, nao, points, major, ratio), 256))
+        for requested in (1, 31, 256, 512, 1024, 4096):
+            cases.append(((requested, 0, 1, 1, major, ratio), requested))
     inputs = "".join(" ".join(map(str, row)) + "\n" for row, _ in cases)
     result = subprocess.run(
         [str(executable)],

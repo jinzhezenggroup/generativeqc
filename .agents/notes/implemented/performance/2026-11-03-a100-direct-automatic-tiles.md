@@ -7,9 +7,11 @@ Date: 2026-11-03
 
 The [portable Direct tile decision](2026-11-04-portable-direct-ks-tiles.md)
 supersedes both the original hardware allowlist and the earlier draft fallback
-policy recorded below. It prefers 1024 within the existing Direct workload and
-resource envelope on every supported CUDA device, without requiring a local
-profile. Historical measurements and their original qualification remain intact.
+policy recorded below. Together with the broader default delivered in #2949,
+ordinary CUDA semilocal owners prefer 1024 on every supported CUDA device,
+without a local profile or a minimum system-size gate. Resource promises and
+bounded allocation retries remain authoritative. Historical measurements and
+their original qualification remain intact.
 
 ## Earlier draft: native architecture-independent fallback
 

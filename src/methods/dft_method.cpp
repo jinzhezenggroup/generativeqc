@@ -656,21 +656,24 @@ class KsPreparedState final : public KsSingleOwnerPort {
             options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
         const bool fitted_rks_fp64 =
             fused_rks_fp64 && options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA;
-        const bool direct_rks_fp64 =
-            fused_rks_fp64 && options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
-            !range_strategy_ && !execution_plan_.nonlocal_correlation;
         // Public numeric promises quote the conservative 256-point owner.
         // Do not change its work/storage shape after admission. Reserve ample
         // observed headroom for ordinary unpromised preparation as well.
         const bool unconstrained = !capacity_ && !runtime::active_device_resource_ledger &&
                                    !options_.reference_memory_budget_bytes;
-        if ((fitted_rks_fp64 || direct_rks_fp64) && unconstrained && basis_.nao >= 512 &&
-            grid_.point_count() >= (1U << 19)) {
+        if (unconstrained && !execution_plan_.nonlocal_correlation) {
+          options_.xc_tile_points = dft::automatic_ks_scf_tile(0, fitted_rks_fp64, true, basis_.nao,
+                                                               grid_.point_count(), false, 0, 0);
+          // Match the qualified explicit tile in both consumers, not just SCF.
+          // Automatic allocation failures retain the bounded 256-point retries.
+          if (automatic_force) {
+            options_.xc_force_tile_points = options_.xc_tile_points;
+            automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
+          }
+        } else if (fitted_rks_fp64 && unconstrained && basis_.nao >= 512 &&
+                   grid_.point_count() >= (1U << 19)) {
           cudaDeviceProp properties{};
-          // Only fitted scheduling depends on FP64 matrix hardware. Direct
-          // batching must not depend on device names or capability availability.
-          auto status =
-              fitted_rks_fp64 ? cudaGetDeviceProperties(&properties, device) : cudaSuccess;
+          auto status = cudaGetDeviceProperties(&properties, device);
           if (status == cudaErrorNotSupported || status == cudaErrorInvalidValue) {
             const auto pending = cudaGetLastError();
             if (pending != cudaSuccess && pending != status)
@@ -693,22 +696,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
                 std::all_of(options_.application_precision_budget.begin(),
                             options_.application_precision_budget.end(),
                             [](double value) { return value == 0; });
-            const auto direct_tile = dft::automatic_direct_ks_tile(
-                0, direct_rks_fp64, strict_precision_budget, available >= (1ULL << 30),
-                all_electron, maximum_angular, basis_.natom, basis_.nao, grid_.point_count());
-            options_.xc_tile_points =
-                fitted_rks_fp64 ? dft::automatic_ks_scf_tile(
-                                      0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao,
-                                      grid_.point_count(), execution_plan_.nonlocal_correlation,
-                                      properties.major, properties.singleToDoublePrecisionPerfRatio)
-                                : direct_tile;
+            options_.xc_tile_points = dft::automatic_ks_scf_tile(
+                0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
+                execution_plan_.nonlocal_correlation, properties.major,
+                properties.singleToDoublePrecisionPerfRatio);
             if (automatic_force && strict_precision_budget && admitted_cuda_stationary_binding()) {
-              options_.xc_force_tile_points =
-                  fitted_rks_fp64 ? dft::automatic_ks_force_tile(
-                                        fitted_rks_fp64, available >= (1ULL << 30), all_electron,
-                                        maximum_angular, basis_.natom, basis_.nao,
-                                        grid_.point_count(), properties.major)
-                                  : direct_tile;
+              options_.xc_force_tile_points = dft::automatic_ks_force_tile(
+                  fitted_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
+                  basis_.natom, basis_.nao, grid_.point_count(), properties.major);
               automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
             }
           }

@@ -1,6 +1,6 @@
 {
   "id": "ks.automatic-scf-tiles",
-  "classification": "guarded-promotion-candidate",
+  "classification": "already-default",
   "controls": [
     "dft-policy:ks-scf-tile-points",
     "dft-policy:ks-force-tile-points"
@@ -13,14 +13,19 @@
     "src/dft/ks_tile_policy.hpp",
     "src/methods/dft_method.cpp"
   ],
-  "rationale": "Unspecified public SCF and stationary-force tiles resolve independently. Fitted restricted strict-FP64 gradient-dependent owners retain their hardware capability policy: eligible full-rate FP64 SCF owners use 1024 (nonlocal 512), and eligible all-electron through-d force owners on compute capability 8 or newer use 1024 for 48\u2013128 atoms. Full-range device-fused strict-FP64 Direct RKS with zero application arithmetic budgets prefers 1024 on every supported CUDA device within the existing all-electron through-d, 48\u2013128-atom, AO/grid-size and free-memory envelope, without a device profile or hardware allowlist. Explicit sizes, scientific controls, resource promises and bounded 256-point fallbacks remain authoritative. Historical endpoint evidence does not qualify new-source/device performance claims.",
-  "revisit_condition": "Requalify complete cold/warm/moved and larger endpoints with independent observables before extending eligibility or weakening resource admission. Preserve explicit SCF inheritance, force overrides, conservative promised capacity and at most one resource-failure retry. Product names are not scheduling capabilities.",
+  "rationale": "Ordinary automatic CUDA semilocal XC uses 1024 SCF and force points without a profile, shape gate or FP64-throughput restriction, applying the 96-atom complete cold/warm winner directly. CPU, numeric resource promises and nonlocal CUDA retain their separate existing schedules. Explicit sizes, scientific controls and bounded 256-point allocation-failure fallbacks remain authoritative. Historical endpoint gains do not imply a universal workload speedup.",
+  "revisit_condition": "Use complete endpoint and independent-observable evidence to investigate default-path regressions. Preserve explicit SCF inheritance, force overrides, conservative promised capacity and bounded resource-failure retries; do not infer universal performance from the retained 96-atom campaign.",
   "evidence": [
     "docs/user/ks_options.md",
     "tests/python/test_ks_tile_policy.py",
     "tests/python/test_ks_options.py",
     "tests/python/test_force_tile_options.py",
-    ".agents/notes/implemented/performance/2026-11-04-portable-direct-ks-tiles.md",
-    "benchmarks/results/automatic-ks-tiles-20261102/README.md"
+    "tests/python/test_ks_diagnostics.py",
+    "benchmarks/results/automatic-ks-tiles-20261102/README.md",
+    "benchmarks/results/dft96-local-autotune-20261103/README.md",
+    "benchmarks/results/dft96-cold-autotune-20261103/README.md",
+    "benchmarks/results/default-cuda-xc-1024-20261103/README.md",
+    ".agents/notes/implemented/performance/2026-11-03-default-cuda-xc-1024.md",
+    ".agents/notes/implemented/performance/2026-11-04-portable-direct-ks-tiles.md"
   ]
 }

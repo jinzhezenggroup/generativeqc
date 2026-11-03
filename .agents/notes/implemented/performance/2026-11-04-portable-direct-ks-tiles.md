@@ -10,23 +10,26 @@ then required exact local profiles before enlarging any native Direct tile.
 Neither choice follows from a portable cost model: hardware identity does not
 establish the best batch size, but missing exact-workload evidence does not
 establish that 256 is the better default either. The user approved preferring
-1024 across GPU models while preserving resource and workload boundaries.
+1024 across GPU models with bounded resource fallbacks. During integration,
+master merged #2949, which already applies the broader portable CUDA semilocal
+default. Preserve that implementation rather than restoring older workload gates.
 
 ## Decision
 
-Automatic native Direct SCF and force owners prefer 1024 on every supported CUDA
-device within the existing full-range, device-fused, gradient-dependent,
-strict-FP64 RKS envelope. Preserve zero application arithmetic budgets,
-all-electron shells through d, 48–128 atoms, at least 512 AOs and 524288 grid
-points, at least 1 GiB free device memory, and absence of numeric capacity
-promises, active resource ledgers or reference-memory budgets. Force admission
-still requires a native stationary binding. Direct tiling does not query device
-names, compute capability or FP32/FP64 throughput; fitted scheduling is unchanged.
+Keep #2949's automatic native CUDA semilocal SCF and force preference of 1024,
+including Direct/global-hybrid and unrestricted owners, without a device-name,
+generation, FP64-throughput, minimum-size or local-profile gate. Remove the
+obsolete SM80 Direct predicate and its unreachable caller: full-range Direct
+owners already enter the ordinary semilocal branch before the fitted nonlocal
+capability branch. Do not add an alternative helper or retain a compatibility
+alias for a predicate that no longer owns any execution choice.
 
 Explicit SCF/force bounds and their inheritance remain authoritative. Automatic
 SCF preparation and force-controller allocation failures retain the existing
 single drained retry at 256; non-allocation failures and a second failure still
-propagate. Unsupported workload/resource domains retain 256. Local DFT profiles
+propagate. CPU and numeric resource promises retain 256; nonlocal CUDA keeps its
+independent fitted capability, size, free-memory and stationary-admission policy.
+Local DFT profiles
 remain optional and exact-identity checked, not a prerequisite for the default.
 No implicit cold-start benchmark, kernel, grid, precision or screening change is
 introduced.
@@ -48,11 +51,13 @@ and tile-proportional scratch can outweigh launch amortization. This is why the
 decision is a default preference with bounded fallbacks, not an all-workload
 performance claim or permission to bypass resource admission.
 
-Native host probes cover preference, exact boundary admission, explicit overrides
-and conservative resource/workload fallbacks without a CUDA device. Existing
-fitted capability-policy and public SCF/force transport tests remain independent.
-No new GPU endpoint performance or numerical qualification is claimed here;
-fresh exact-head CI and representative real-device endpoints remain the evidence
+Native host probes cover unknown, older, SM80, Hopper and consumer-GPU capability
+values, small and large Direct shapes, explicit overrides and promised-resource
+fallbacks without a CUDA device. Existing nonlocal fitted capability-policy and
+public SCF/force transport tests remain independent. The separately retained
+[default-path qualification](../../../../benchmarks/results/default-cuda-xc-1024-20261103/README.md)
+belongs to #2949's measured source, not a new GPU run of this integration. Fresh
+exact-head CI and representative real-device endpoints remain the evidence
 needed for new-source/device performance claims.
 
 ## Revisit when

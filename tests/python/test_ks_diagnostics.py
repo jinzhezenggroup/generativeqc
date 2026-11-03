@@ -106,10 +106,13 @@ def test_physical_components_and_history_match_independent_state(
     assert diagnostic.occupations == ((2, 1) if unrestricted else (1, 1))
     assert diagnostic.electrons == pytest.approx(diagnostic.occupations, abs=1e-10)
     assert diagnostic.grid_points == len(grid.weights)
-    # This small direct H3 workload retains 256 for automatic selection; an
-    # explicit override must be reported exactly, not the unresolved None.
+    # Report the resolved backend default, not the unresolved automatic request.
+    # CUDA may retry its 1024-point default at 256 after allocation refusal.
     assert calculator.ks_options.tile_points == tile_points
-    assert diagnostic.tile_points == (256 if tile_points is None else tile_points)
+    default_tiles = (1024, 256) if device == "cuda" else (256,)
+    assert diagnostic.tile_points in (
+        default_tiles if tile_points is None else (tile_points,)
+    )
     assert diagnostic.ao_order == int(method.startswith("pbe"))
     assert diagnostic.scf_domain == calculator.ks_options.scf_domain
     components = diagnostic.components
@@ -146,6 +149,44 @@ def test_physical_components_and_history_match_independent_state(
     json.dumps(diagnostic.to_payload(), allow_nan=False)
     with pytest.raises(FrozenInstanceError):
         diagnostic.grid_points = 0
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
+    reason="requires an explicitly Slurm-allocated GPU",
+)
+@pytest.mark.parametrize("budgeted", (False, True))
+@pytest.mark.parametrize("force_tile_points", (None, 37))
+def test_cuda_default_complete_endpoint_respects_budget_and_force_override(
+    budgeted: bool, force_tile_points: int | None
+) -> None:
+    """Ordinary defaults match explicit 1024; promised owners remain at 256."""
+    from generativeqc_compiler.common.resources import ResourceBudget
+
+    expected_tile = 256 if budgeted else 1024
+    arguments = {
+        "method": "pbe-rks",
+        "device": "cuda",
+        "initial_guess": None,
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+    }
+    automatic = Calculator(
+        **arguments,
+        ks_options=KsOptions(force_tile_points=force_tile_points),
+        resource_budget=ResourceBudget() if budgeted else None,
+    ).singlepoint(H3, charge=1, properties=("energy", "forces"))
+    explicit = Calculator(
+        **arguments,
+        ks_options=KsOptions(
+            tile_points=expected_tile, force_tile_points=force_tile_points
+        ),
+    ).singlepoint(H3, charge=1, properties=("energy", "forces"))
+    assert automatic.converged and explicit.converged
+    assert automatic.ks_diagnostic.tile_points == expected_tile
+    assert explicit.ks_diagnostic.tile_points == expected_tile
+    assert automatic.energy == pytest.approx(explicit.energy, abs=1e-9)
+    np.testing.assert_allclose(automatic.forces, explicit.forces, atol=1e-8, rtol=0)
 
 
 def test_batch_snapshot_history_abi_invalidation(device: typing.Any) -> None:

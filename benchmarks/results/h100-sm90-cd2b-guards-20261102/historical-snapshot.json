@@ -1,0 +1,23 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "4c7354958468810dc83eb409c493ae49d810e613",
+  "file_count": 2,
+  "total_bytes": 1440220,
+  "purpose": "Exact three SQLite capture analysis archive parts from existing merged Git history. All12 intrusive E/F and original trace bytes remain independently replayable; no clean timing votes or external backup.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "397a7290392a15e022437763b97e2e6d1196d7ab9f9ef242197f6bf672900f14",
+      "git_blob_sha1": "29a6d1f171a87e9779f0e694237664ee1a24e8af",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part01",
+      "bytes": 653788,
+      "sha256": "ec42bee043b2730b18c8f00d79bd41fe1d5a0c3186e7d96e1079c84c33d8f220",
+      "git_blob_sha1": "81c7c72b3dde1f18901917ffe86d0aa71d95bdb3",
+      "git_mode": "100644"
+    }
+  ]
+}
