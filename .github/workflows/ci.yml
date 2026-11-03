@@ -413,10 +413,10 @@ jobs:
     permissions:
       contents: read
       actions: read
-    # Keep the prerequisite (10m) and full runtime build (45m) independently
-    # bounded, with 10m for setup, required probes and diagnostic cleanup.
-    # The outer cap must not truncate a build still within its phase budget.
-    timeout-minutes: 65
+    # Cold CUDA builds with no restored compiler objects can exceed 45 minutes.
+    # Bound the prerequisite (10m) and runtime (60m) independently and reserve
+    # 10m for setup, probes and cleanup; do not skip build/CTest qualification.
+    timeout-minutes: 80
     env:
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
@@ -452,6 +452,10 @@ jobs:
           fi
           printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
           printf 'README-only CI scope: %s\n' "$scope"
+      - name: Reclaim hosted CUDA build disk space
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 5
+        run: bash tools/ci_cuda_disk_space.sh
       - name: Add NVIDIA CUDA repository
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
@@ -498,10 +502,12 @@ jobs:
       # GitHub scopes actions/cache entries created by merge_group to the
       # temporary gh-readonly-queue ref, so they cannot seed later queue runs.
       # Publish a bounded snapshot from trusted master pushes and consume it
-      # cross-run here; keep actions/cache as a fallback for rollout/reruns.
+      # on merge groups or after PR/master cache misses; retain native cache
+      # restore and strict object validation on every event.
+      # PRs may consume verified master objects but never publish a master seed.
       - name: Locate trusted master CUDA ccache snapshot
         id: trusted_cuda_ccache
-        if: (github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: (github.event_name == 'pull_request' || github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -587,7 +593,7 @@ jobs:
           echo "publish=${publish}" >> "$GITHUB_OUTPUT"
       - name: Restore trusted master CUDA ccache snapshot
         id: trusted_cuda_ccache_download
-        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache.outputs.run_id != '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: (github.event_name == 'merge_group' || github.event_name == 'pull_request') && steps.trusted_cuda_ccache.outputs.run_id != '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         # The downloader's inactivity timeout does not bound a slow transfer.
         # Leave the required compile budget available and try actions/cache next.
@@ -604,7 +610,7 @@ jobs:
           run-id: ${{ steps.trusted_cuda_ccache.outputs.run_id }}
       - name: Activate verified trusted CUDA ccache snapshot
         id: trusted_cuda_ccache_activate
-        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache_download.outcome == 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: (github.event_name == 'merge_group' || github.event_name == 'pull_request') && steps.trusted_cuda_ccache_download.outcome == 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 1
         env:
@@ -615,7 +621,7 @@ jobs:
           # Select the completed cache without copying several GB a second time.
           printf 'CCACHE_DIR=%s\n' "$TRUSTED_CUDA_CCACHE_DIR" >> "$GITHUB_ENV"
       - name: Discard incomplete trusted CUDA cache download
-        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache_download.outcome != '' && steps.trusted_cuda_ccache_download.outcome != 'skipped' && steps.trusted_cuda_ccache_activate.outcome != 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: (github.event_name == 'merge_group' || github.event_name == 'pull_request') && steps.trusted_cuda_ccache_download.outcome != '' && steps.trusted_cuda_ccache_download.outcome != 'skipped' && steps.trusted_cuda_ccache_activate.outcome != 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 1
         env:
@@ -631,7 +637,7 @@ jobs:
           rm -rf -- "$expected"
       - name: Restore shared Linux CUDA ccache
         id: cuda_ccache
-        if: (github.event_name != 'merge_group' || steps.trusted_cuda_ccache_activate.outcome != 'success') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: ((github.event_name != 'merge_group' && github.event_name != 'pull_request') || steps.trusted_cuda_ccache_activate.outcome != 'success') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
@@ -661,6 +667,48 @@ jobs:
         with:
           path: ${{ steps.pr_fast_ccache.outputs.path }}
           key: ${{ steps.pr_fast_ccache.outputs.key }}
+      # Only after both the shared cache and the optional PR-specific compiler
+      # delta miss, restore the trusted master snapshot (up to 5 GB). Do not
+      # pay that transport cost for PRs already benefiting from their delta.
+      # Merge groups retain their independent earlier verified restore path.
+      - name: Restore trusted master CUDA ccache after ordinary cache miss
+        id: nonqueue_cuda_ccache_download
+        if: (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && steps.cuda_ccache.outputs.cache-matched-key == '' && (github.event_name != 'pull_request' || steps.pr_fast_ccache_restore.outputs.cache-matched-key == '') && steps.trusted_cuda_ccache.outputs.run_id != '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: cuda-ccache-master-12.9-sm120-v3
+          path: ${{ runner.temp }}/trusted-cuda-ccache-miss-${{ github.run_id }}-${{ github.run_attempt }}
+          digest-mismatch: error
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.trusted_cuda_ccache.outputs.run_id }}
+      - name: Activate verified trusted CUDA ccache after ordinary cache miss
+        id: nonqueue_cuda_ccache_activate
+        if: steps.nonqueue_cuda_ccache_download.outcome == 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          TRUSTED_CUDA_CCACHE_MISS_DIR: ${{ runner.temp }}/trusted-cuda-ccache-miss-${{ github.run_id }}-${{ github.run_attempt }}
+        shell: bash
+        run: |
+          test -d "$TRUSTED_CUDA_CCACHE_MISS_DIR"
+          printf 'CCACHE_DIR=%s\n' "$TRUSTED_CUDA_CCACHE_MISS_DIR" >> "$GITHUB_ENV"
+      - name: Discard incomplete trusted CUDA ccache miss download
+        if: steps.nonqueue_cuda_ccache_download.outcome != '' && steps.nonqueue_cuda_ccache_download.outcome != 'skipped' && steps.nonqueue_cuda_ccache_activate.outcome != 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          TRUSTED_CUDA_CCACHE_MISS_DIR: ${{ runner.temp }}/trusted-cuda-ccache-miss-${{ github.run_id }}-${{ github.run_attempt }}
+        shell: bash
+        run: |
+          expected="${RUNNER_TEMP:?}/trusted-cuda-ccache-miss-${GITHUB_RUN_ID:?}-${GITHUB_RUN_ATTEMPT:?}"
+          if [[ "${TRUSTED_CUDA_CCACHE_MISS_DIR:-}" != "$expected" || "${CCACHE_DIR:-}" == "$expected" ]]; then
+            echo "::warning::Refusing to remove an unexpected or selected cache path."
+            exit 1
+          fi
+          rm -rf -- "$expected"
       - name: Reset ccache statistics
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --zero-stats
@@ -692,7 +740,7 @@ jobs:
       - name: Compile production CUDA and runtime CTest
         id: cuda_runtime_build
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        timeout-minutes: 45
+        timeout-minutes: 60
         # This target links the full generativeqc shared library. Native GFN2 CUDA is
         # therefore compiled, device-linked, and consumed through the public
         # method adapter as part of this existing integration gate.
@@ -704,16 +752,19 @@ jobs:
         env:
           CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || github.event_name == 'pull_request' && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && (steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' || steps.pr_fast_ccache_restore.outputs.cache-matched-key == '') && format('file://{0}{1}', steps.pr_fast_ccache.outputs.path, steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' && ' read-only' || '') || '' }}
           CCACHE_NORESHARE: "true"
-      - name: Bound successful PR fast CUDA compiler misses
+      # Incomplete cold builds still contain validated, source-keyed ccache objects.
+      # Persist a bounded PR-private delta after failure so retries make progress;
+      # this never qualifies the failed build or seeds master/merge queues.
+      - name: Bound completed PR fast CUDA compiler misses
         id: pr_fast_ccache_bound
-        if: always() && github.event_name == 'pull_request' && steps.cuda_runtime_build.outcome == 'success' && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && steps.pr_fast_ccache_restore.outputs.cache-hit != 'true' && steps.pr_fast_ccache_restore.outputs.cache-matched-key == ''
+        if: always() && github.event_name == 'pull_request' && (steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure') && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && steps.pr_fast_ccache_restore.outputs.cache-hit != 'true' && steps.pr_fast_ccache_restore.outputs.cache-matched-key == ''
         continue-on-error: true
         timeout-minutes: 1
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: python3 tools/ci_pr_fast_ccache.py bound
       - name: Save this PR fast CUDA compiler delta once
-        if: always() && github.event_name == 'pull_request' && steps.cuda_runtime_build.outcome == 'success' && steps.pr_fast_ccache_bound.outputs.available == 'true'
+        if: always() && github.event_name == 'pull_request' && (steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure') && steps.pr_fast_ccache_bound.outputs.available == 'true'
         continue-on-error: true
         timeout-minutes: 2
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -721,6 +772,7 @@ jobs:
           path: ${{ steps.pr_fast_ccache.outputs.path }}
           key: ${{ steps.pr_fast_ccache.outputs.key }}
       - name: Compile opted-in AO radial kernels with release resources
+        id: ao_radial_compile
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         # Default native emission intentionally omits this experimental schedule.
         # Exercise its exact six kernel resource records without running a GPU.
@@ -783,7 +835,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Preserve opted-in AO radial resource reports
-        if: ${{ always() && github.event_name != 'push' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose') }}
+        # A skipped producer has no reports to upload; retain failures after
+        # the actual resource probe runs, including partial diagnostic output.
+        if: ${{ always() && github.event_name != 'push' && (steps.ao_radial_compile.outcome == 'success' || steps.ao_radial_compile.outcome == 'failure') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ao-radial-release-compile
@@ -921,6 +975,10 @@ jobs:
           fi
           printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
           printf 'README-only CI scope: %s\n' "$scope"
+      - name: Reclaim hosted CUDA build disk space
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 5
+        run: bash tools/ci_cuda_disk_space.sh
       - name: Add NVIDIA CUDA repository
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
@@ -1158,6 +1216,10 @@ jobs:
           fi
           printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
           printf 'README-only CI scope: %s\n' "$scope"
+      - name: Reclaim hosted CUDA build disk space
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 5
+        run: bash tools/ci_cuda_disk_space.sh
       - name: Add NVIDIA CUDA repository
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
@@ -1996,6 +2058,10 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "release=$release" >> "$GITHUB_OUTPUT"
+      - name: Reclaim hosted CUDA build disk space
+        if: steps.cli_scope.outputs.tier != 'skip'
+        timeout-minutes: 5
+        run: bash tools/ci_cuda_disk_space.sh
       - name: Add NVIDIA CUDA repository
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
