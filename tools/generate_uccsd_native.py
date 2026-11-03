@@ -18,18 +18,32 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT / "python"))
 
 from generativeqc_compiler.cc.uccsd_equations import build_program
+from generativeqc_compiler.cc.uccsd_hamiltonian import (
+    build_hamiltonian_cotangent_program,
+    build_lagrangian_programs,
+    build_raw_hamiltonian,
+)
 from generativeqc_compiler.cc.uccsd_layout import UCCSDLayout
+from generativeqc_compiler.cc.uccsd_response import RESIDUALS
 from generativeqc_compiler.cc.uccsd_triples import CHANNELS, build_tile_program
+from generativeqc_compiler.cc.uccsd_triples_fock import (
+    build_axis_moment_program,
+    build_tile_resolvent_program,
+)
 from generativeqc_compiler.common.evidence import canonical_hash
-from generativeqc_compiler.tensor import Program, prepare_for_backend
+from generativeqc_compiler.mp2.equations import unrestricted_energy_program
+from generativeqc_compiler.tensor import Program, prepare_for_backend, transpose_program
+from generativeqc_compiler.tensor.scaled_arithmetic import emit_scaled_bilinear
 
 from tools.generate_rccsd_native import (
     _cpu_function,
+    _cuda_program,
     _dim,
     _execution_nodes,
     _label_dims,
     _required_function,
     _scaled_bilinear_cpp,
+    _size,
 )
 
 DIMENSIONS = ("oa", "ob", "va", "vb")
@@ -125,7 +139,7 @@ def cpu_header() -> str:
             "struct TriplesOutput { const double* triples_energy; };"
             if channel == CHANNELS[0]
             else "",
-            f"struct Binding_{channel} {{ const char* source; const char* labels; std::array<unsigned,4> axes; unsigned rank; const double* Inputs_{channel}::* field; }};",
+            f"struct Binding_{channel} {{ const char* name; const char* source; const char* labels; std::array<unsigned,4> axes; unsigned rank; const double* Inputs_{channel}::* field; }};",
             f"inline constexpr std::array<Binding_{channel},{len(tile.operands)}> kBindings_{channel}{{{{",
         ]
         for operand in tile.operands:
@@ -133,7 +147,7 @@ def cpu_header() -> str:
                 str(axis) for axis in [*operand.axes, *([0] * (4 - len(operand.axes)))]
             )
             lines.append(
-                f'{{"{operand.source}","{operand.labels}",{{{padded}}},{len(operand.axes)},&Inputs_{channel}::{operand.name}}},'
+                f'{{"{operand.name}","{operand.source}","{operand.labels}",{{{padded}}},{len(operand.axes)},&Inputs_{channel}::{operand.name}}},'
             )
         lines += [
             "}};",
@@ -159,13 +173,248 @@ def cpu_header() -> str:
     return "\n".join(lines)
 
 
+def response_programs() -> dict[str, Program]:
+    """Shared analytic Lambda, normal-ordering and complete triples response.
+
+    Full same-space Fock moments replace the diagonal epsilon chain. They are
+    essential at degenerate occupied/virtual eigenvalues and are not optional
+    corrections to the ordinary denominator derivative.
+    """
+    layout = UCCSDLayout(3, 3, 3, 3)
+    primal = build_program(3, 3, 3, 3)
+    hamiltonian = build_raw_hamiltonian(layout)
+    physical = build_lagrangian_programs(layout, hamiltonian)
+    programs = {
+        "cc": primal,
+        "lambda": transpose_program(
+            primal,
+            ("correlation_energy", *RESIDUALS),
+            inputs=("t1a", "t1b", "t2aa", "t2ab", "t2bb"),
+        ).program,
+        "raw": hamiltonian.primal,
+        "physical": physical.weights,
+        "correction": build_hamiltonian_cotangent_program(layout, hamiltonian),
+    }
+    separate = build_raw_hamiltonian(layout, separate_fock=True)
+    programs.update(
+        raw_separate=separate.primal,
+        physical_separate=build_lagrangian_programs(layout, separate).weights,
+        correction_separate=build_hamiltonian_cotangent_program(layout, separate),
+    )
+    for channel in CHANNELS:
+        tile = build_tile_resolvent_program(layout, channel, (1,) * 6)
+        programs[f"vectors_{channel}"] = tile.program
+        programs[f"bars_{channel}"] = transpose_program(
+            tile.program,
+            ("triples_energy",),
+            inputs=tuple(
+                operand.name
+                for operand in tile.operands
+                if not operand.source.startswith("eps_")
+            ),
+        ).program
+        for axis in range(6):
+            programs[f"moment_{channel}_{axis}"] = build_axis_moment_program(
+                layout, channel, (1,) * 6, (1,) * 6, axis
+            )
+    for channel in ("alpha_alpha", "beta_beta", "alpha_beta"):
+        mp2 = unrestricted_energy_program(
+            (3, 3, 3, 3), channel=channel, differentiable=True
+        )
+        programs[f"mp2_{channel}"] = mp2
+        programs[f"mp2_bars_{channel}"] = transpose_program(mp2, ("energy",)).program
+    return programs
+
+
+def response_header() -> str:
+    """Emit bounded runtime-shape programs without a Python execution owner."""
+    dimensions = (*DIMENSIONS, "na", "nb", "tile_extent")
+    parameters = ",".join(f"std::size_t {name}" for name in dimensions)
+    arguments = ",".join(dimensions)
+    lines = [
+        "// Generated by tools/generate_uccsd_native.py; do not edit.",
+        "#pragma once",
+        '#include "generated_uccsd_cpu.hpp"',
+        "#include <map>",
+        "#include <string>",
+        "#include <vector>",
+        "namespace generativeqc::cc::ucc_generated {",
+        "using ResponseFeeds=std::map<std::string,std::vector<double>>;",
+        "using ResponseViews=std::map<std::string,const double*>;",
+        "using ResponseSizes=std::map<std::string,std::size_t>;",
+    ]
+    programs = {name: _prepared(value) for name, value in response_programs().items()}
+    for name, program in programs.items():
+        outputs = tuple(program.outputs)
+        inputs = {
+            node.attrs["name"]: node.spec
+            for node in program.live_nodes
+            if node.op == "input"
+        }
+        lines += [
+            f"struct ResponseOutputs_{name}{{",
+            *(f"const double* {output};" for output in outputs),
+            "};",
+            _required_function(
+                program, f"response_required_{name}", dimension_names=dimensions
+            ),
+            _work(program, f"response_work_{name}", dimensions=dimensions),
+            _cpu_function(
+                program,
+                f"response_evaluate_{name}",
+                f"ResponseOutputs_{name}",
+                signature="const ResponseFeeds& inputs",
+                output_fields=outputs,
+                dimension_names=dimensions,
+                input_overrides={key: f'inputs.at("{key}").data()' for key in inputs},
+            ),
+        ]
+        for kind, specs in (
+            ("inputs", inputs),
+            ("outputs", {key: node.spec for key, node in program.outputs.items()}),
+        ):
+            entries = ",".join(
+                f'{{"{key}",{_size(spec)}}}' for key, spec in specs.items()
+            )
+            lines.append(
+                f"inline ResponseSizes response_{kind}_{name}({parameters}){{return {{{entries}}};}}"
+            )
+    for kind in ("required", "work", "inputs", "outputs"):
+        result = "std::size_t" if kind in ("required", "work") else "ResponseSizes"
+        lines += [
+            f"inline {result} response_{kind}(const std::string& program,{parameters}){{",
+            *(
+                f'if(program=="{name}")return response_{kind}_{name}({arguments});'
+                for name in programs
+            ),
+            'throw std::invalid_argument("unknown unrestricted response program");}',
+        ]
+    lines.append(
+        f"inline ResponseViews response_evaluate(const std::string& program,{parameters},"
+        "const ResponseFeeds& inputs,double* arena,std::size_t capacity){"
+    )
+    for name, program in programs.items():
+        entries = ",".join(f'{{"{key}",out.{key}}}' for key in program.outputs)
+        lines.append(
+            f'if(program=="{name}"){{auto out=response_evaluate_{name}({arguments},inputs,arena,capacity);return {{{entries}}};}}'
+        )
+    lines += [
+        'throw std::invalid_argument("unknown unrestricted response program");}',
+        "}  // namespace generativeqc::cc::ucc_generated",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def cuda_source() -> str:
+    """Emit independent-spin CUDA graphs and their bounded synchronous owner."""
+    dimensions = (*DIMENSIONS, "na", "nb", "tile_extent")
+    programs = {name: _prepared(value) for name, value in response_programs().items()}
+    lines = [
+        "// Generated by tools/generate_uccsd_native.py; do not edit.",
+        '#include "generated_uccsd_response.hpp"',
+        '#include "cc/uccsd_executor.hpp"',
+        '#include "tensor/cuda_runtime.cuh"',
+        "namespace generativeqc::cc::ucc_generated {",
+        "using generativeqc_tensor::finite;",
+        emit_scaled_bilinear("triples_"),
+        "struct UccCudaState {",
+        *(f"std::size_t {name}{{}};" for name in dimensions),
+        "double* arena{}; int* error{}; cudaStream_t stream{};",
+        "std::map<std::string,const double*> inputs;",
+        "};",
+    ]
+    for name, program in programs.items():
+        names = {
+            node.attrs["name"] for node in program.live_nodes if node.op == "input"
+        }
+        lines.append(
+            _cuda_program(
+                program,
+                f"ucc_{name}",
+                f"ResponseOutputs_{name}",
+                input_overrides={key: f's.inputs.at("{key}")' for key in names},
+                arena_field="arena",
+                state_type="UccCudaState",
+                output_fields=tuple(program.outputs),
+                dimension_names=dimensions,
+            )
+        )
+    lines += [
+        "static ResponseViews run_cuda(const std::string& program,UccCudaState& state){",
+    ]
+    for name, program in programs.items():
+        entries = ",".join(f'{{"{key}",out.{key}}}' for key in program.outputs)
+        lines.append(
+            f'if(program=="{name}"){{auto out=run_ucc_{name}(state);return {{{entries}}};}}'
+        )
+    lines += [
+        'throw std::invalid_argument("unknown unrestricted CUDA program");}',
+        "}  // namespace generativeqc::cc::ucc_generated",
+        "namespace generativeqc::cc { namespace {",
+        "class CudaExecutor final : public UnrestrictedCudaExecutor {",
+        "public:",
+        "CudaExecutor(std::size_t n,std::size_t alpha,std::size_t beta,int device,std::size_t budget,bool response,bool mp2):device_(device){",
+        "state_.oa=alpha;state_.ob=beta;state_.va=n-alpha;state_.vb=n-beta;state_.na=n;state_.nb=n;state_.tile_extent=1;",
+        "std::size_t arena=0,inputs=0,outputs=0;",
+        "for(const auto& program:programs(response,mp2)){",
+        "arena=std::max(arena,ucc_generated::response_required(program,alpha,beta,n-alpha,n-beta,n,n,1));",
+        "std::size_t current=0;for(const auto& item:ucc_generated::response_inputs(program,alpha,beta,n-alpha,n-beta,n,n,1))current=ucc_generated::checked_add(current,item.second);inputs=std::max(inputs,current);",
+        "current=0;for(const auto& item:ucc_generated::response_outputs(program,alpha,beta,n-alpha,n-beta,n,n,1))current=ucc_generated::checked_add(current,item.second);outputs=std::max(outputs,current);}",
+        "const auto elements=ucc_generated::checked_add(arena,inputs);",
+        "capacity_=ucc_generated::checked_add(ucc_generated::checked_product({ucc_generated::checked_add(elements,outputs),sizeof(double)}),sizeof(int));",
+        'if(capacity_>budget)throw std::length_error("native unrestricted CUDA executor exceeds numeric memory budget");',
+        "stream_.create(device);state_.stream=stream_.get();storage_.allocate(device,std::max<std::size_t>(1,elements),state_.stream);error_.allocate(device,1,state_.stream);state_.arena=storage_.get()+inputs;state_.error=error_.get();input_capacity_=inputs;",
+        "}",
+        "std::size_t numeric_capacity_bytes()const noexcept override{return capacity_;}",
+        "UnrestrictedFeeds evaluate(const std::string& program,const UnrestrictedFeeds& inputs) override {",
+        "runtime::CudaDeviceScope guard(device_);",
+        "const auto expected=ucc_generated::response_inputs(program,state_.oa,state_.ob,state_.va,state_.vb,state_.na,state_.nb,1);",
+        "const auto counts=ucc_generated::response_outputs(program,state_.oa,state_.ob,state_.va,state_.vb,state_.na,state_.nb,1);",
+        "std::size_t cursor=0;for(const auto& [name,count]:expected){const auto& values=inputs.at(name);",
+        'if(values.size()!=count||!std::all_of(values.begin(),values.end(),[](double value){return std::isfinite(value);}))throw std::invalid_argument("invalid unrestricted CUDA input");',
+        "cursor=ucc_generated::checked_add(cursor,count);}",
+        'if(cursor>input_capacity_)throw std::length_error("unrestricted CUDA input capacity exceeded");',
+        "UnrestrictedFeeds result;for(const auto& [name,count]:counts)result[name].resize(count);",
+        "int error=0;try{cursor=0;state_.inputs.clear();for(const auto& [name,count]:expected){auto* target=storage_.get()+cursor;state_.inputs[name]=target;if(count)generativeqc_tensor::cuda_check(cudaMemcpyAsync(target,inputs.at(name).data(),count*sizeof(double),cudaMemcpyHostToDevice,state_.stream));cursor+=count;}",
+        "auto views=ucc_generated::run_cuda(program,state_);",
+        "for(const auto& [name,count]:counts)if(count)generativeqc_tensor::cuda_check(cudaMemcpyAsync(result.at(name).data(),views.at(name),count*sizeof(double),cudaMemcpyDeviceToHost,state_.stream));",
+        "generativeqc_tensor::cuda_check(cudaMemcpyAsync(&error,state_.error,sizeof(int),cudaMemcpyDeviceToHost,state_.stream));generativeqc_tensor::cuda_check(cudaStreamSynchronize(state_.stream));",
+        'if(error)throw std::runtime_error("nonfinite or singular unrestricted CUDA graph node "+std::to_string(error));',
+        "}catch(...){cudaStreamSynchronize(state_.stream);throw;}return result;}",
+        "private:",
+        'static std::vector<std::string> programs(bool response,bool mp2){if(mp2)return {"mp2_alpha_alpha","mp2_beta_beta","mp2_alpha_beta","mp2_bars_alpha_alpha","mp2_bars_beta_beta","mp2_bars_alpha_beta"};std::vector<std::string> result{"cc","vectors_aaa","vectors_aab","vectors_abb","vectors_bbb"};if(response){',
+        *(
+            f'result.push_back("{name}");'
+            for name in programs
+            if name != "cc" and not name.startswith("vectors_")
+        ),
+        "}return result;}",
+        "int device_;std::size_t capacity_{},input_capacity_{};ucc_generated::UccCudaState state_;runtime::OwnedCudaStream stream_;runtime::OwnedCudaBuffer<double> storage_;runtime::OwnedCudaBuffer<int> error_;",
+        "}; }",
+        "std::unique_ptr<UnrestrictedCudaExecutor> make_unrestricted_cuda_executor(std::size_t n,std::size_t alpha,std::size_t beta,int device,std::size_t budget,bool response,bool mp2){return std::make_unique<CudaExecutor>(n,alpha,beta,device,budget,response,mp2);}",
+        "}  // namespace generativeqc::cc",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def main() -> None:
     """Write deterministic source for the native CMake owner."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cpu-header", type=Path, required=True)
+    parser.add_argument("--cpu-header", type=Path)
+    parser.add_argument("--response-header", type=Path)
+    parser.add_argument("--cuda-source", type=Path)
     arguments = parser.parse_args()
-    arguments.cpu_header.parent.mkdir(parents=True, exist_ok=True)
-    arguments.cpu_header.write_text(cpu_header())
+    if arguments.cpu_header is not None:
+        arguments.cpu_header.parent.mkdir(parents=True, exist_ok=True)
+        arguments.cpu_header.write_text(cpu_header())
+    if arguments.response_header is not None:
+        arguments.response_header.parent.mkdir(parents=True, exist_ok=True)
+        arguments.response_header.write_text(response_header())
+    if arguments.cuda_source is not None:
+        arguments.cuda_source.parent.mkdir(parents=True, exist_ok=True)
+        arguments.cuda_source.write_text(cuda_source())
 
 
 if __name__ == "__main__":

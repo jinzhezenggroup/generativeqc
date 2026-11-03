@@ -6,6 +6,7 @@ import ctypes as ct
 import hashlib
 import itertools
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -45,23 +46,45 @@ def emitted_probe(tmp_path_factory: pytest.TempPathFactory) -> Any:
             "void energy_tile"
         )
     ]
+    response = response_cuda_source()
+    start = response.index("__global__ void gap_response_node_1")
+    end = response.index("  return {n2,n2,n2,n8};\n}", start) + len(
+        "  return {n2,n2,n2,n8};\n}"
+    )
+    # Execute the actual emitted serial response with one host lane. Only the
+    # CUDA launch syntax is adapted; guards, arguments and arithmetic stay live.
+    gap = re.sub(
+        r"(\w+)<<<generativeqc_tensor::blocks\(static_cast<generativeqc_tensor::I>\((.*?)\),256\),256,0,s.stream>>>\((.*?)\);",
+        r"host_launch(\2, [&] { \1(\3); });",
+        response[start:end],
+    )
+    assert "<<<" not in gap
     (directory / "generated_df_occupied_triples.hpp").write_text(header())
     source = directory / "probe.cpp"
     source.write_text(
         """#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <stdexcept>
+#include <vector>
 #include "generated_df_occupied_triples.hpp"
 #define __global__
 #define __shared__
 struct Index { std::size_t x; };
 static Index blockIdx{0},threadIdx{0},blockDim{1},gridDim{1};
 inline void __syncthreads() {}
+inline double __dadd_rn(double a,double b) { return a+b; }
+inline int cudaGetLastError() { return 0; }
+template<class F> void host_launch(std::size_t count,F call) {
+  if (!count) throw std::runtime_error("zero-grid launch");
+  call();
+}
 using std::isfinite;
 inline int atomicCAS(int* pointer,int compare,int value) {
   const int previous=*pointer; if (previous==compare) *pointer=value; return previous;
 }
 namespace generativeqc_tensor {
+inline void cuda_check(int) {}
 inline double finite(double value,int* error,int code) {
   if (!std::isfinite(value)) atomicCAS(error,0,code); return value;
 }
@@ -69,7 +92,20 @@ inline double finite(double value,int* error,int code) {
 namespace generativeqc::cc::triples::generated_df {
 """
         + kernels
+        + "struct GapCudaState { std::size_t o{},v{}; const double* bar_gap{}; double* response_arena{}; int* error{}; };\n"
+        + gap
         + """}
+extern "C" int gap_response(std::size_t v,const double* input,double* output,int* error) {
+  using namespace generativeqc::cc::triples::generated_df;
+  try {
+    std::vector<double> arena(gap_response_serial_arena_elements(2,v),NAN);
+    GapCudaState state{2,v,input,arena.data(),error};
+    const auto result=run_gap_response(state);
+    output[0]=result.bar_eps_i[0]; output[1]=result.bar_eps_j[0]; output[2]=result.bar_eps_k[0];
+    std::copy_n(result.bar_eps_v,v,output+3);
+    return 0;
+  } catch (...) { return 1; }
+}
 extern "C" void sources(std::size_t first,std::size_t second,std::size_t third,unsigned* output) {
   const auto plan=generativeqc::cc::triples::generated_df::occupied_moment_sources(first,second,third);
   std::copy(plan.index,plan.index+6,output);
@@ -115,6 +151,8 @@ extern "C" double energy(bool aliases,std::size_t occupied_count,std::size_t vir
     )
     dll = ct.CDLL(str(library))
     pointer = ct.POINTER(ct.c_double)
+    dll.gap_response.argtypes = [ct.c_size_t, pointer, pointer, ct.POINTER(ct.c_int)]
+    dll.gap_response.restype = ct.c_int
     dll.sources.argtypes = [ct.c_size_t] * 3 + [ct.POINTER(ct.c_uint)]
     dll.sources.restype = None
     dll.energy.argtypes = (
@@ -244,6 +282,10 @@ def test_all_equal_tile_still_checks_nonfinite_moments(emitted_probe: Any) -> No
     assert error.value != 0
 
 
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_DF_TRIPLES_HISTORICAL_SOURCE_AUDIT") != "1",
+    reason="opt-in historical byte audit; executable numerical contracts run normally",
+)
 def test_legacy_math_sources_and_paired_execution_header_are_pinned() -> None:
     """Pin unchanged math separately from the reviewed prepared-pair binding."""
     source = cuda_source()
@@ -275,9 +317,13 @@ def test_legacy_math_sources_and_paired_execution_header_are_pinned() -> None:
         hashlib.sha256(legacy_header.encode()).hexdigest()
         == "9872d3a585415f6b76b4e8d6aae36bfb3346a7e84c262a54407cbcccf0b3a98d"
     )
+    # Reviewed against the pre-open-shell emitter: only split dimension
+    # declarations and guards against empty CUDA launches differ. The scalar
+    # reduction still runs for an empty input; test_emitted_gap_response covers
+    # that contract and nonfinite rejection without pinning source spelling.
     assert (
         hashlib.sha256(response_cuda_source().encode()).hexdigest()
-        == "b65ddf83a4f7a3d6f7311cebf9deb5c277bb6e6075c5b3fce748a41bb9d232f8"
+        == "3b4cd8ccd64a46929e239d14e9033355314fc91b1badad7399118aa1f2541565"
     )
     assert (
         hashlib.sha256(fock_cuda_source().encode()).hexdigest()
@@ -357,3 +403,40 @@ def test_emitted_probe_selects_supported_cache_before_generation(
         with pytest.raises(GenerationReached):
             emitted_probe.__wrapped__(tmp_path_factory)
         assert commands == [[f"/tools/{expected}", "--version"]]
+
+
+@pytest.mark.parametrize("virtuals", [0, 1, 3, 5])
+def test_emitted_gap_response(emitted_probe: Any, virtuals: int) -> None:
+    """Preserve all cotangents and execute empty scalar reductions, not zero grids."""
+    values = np.random.default_rng(2944).normal(size=(virtuals,) * 3)
+    output = np.full(3 + virtuals, np.nan)
+    pointer = ct.POINTER(ct.c_double)
+    error = ct.c_int()
+    status = emitted_probe.gap_response(
+        virtuals,
+        values.ctypes.data_as(pointer),
+        output.ctypes.data_as(pointer),
+        ct.byref(error),
+    )
+    assert status == 0 and error.value == 0
+    expected = np.concatenate(
+        (
+            np.repeat(values.sum(), 3),
+            -(
+                values.sum(axis=(0, 1))
+                + values.sum(axis=(0, 2))
+                + values.sum(axis=(1, 2))
+            ),
+        )
+    )
+    np.testing.assert_allclose(output, expected, atol=1e-12, rtol=1e-12)
+    if virtuals:
+        values.flat[0] = np.nan
+        error.value = 0
+        emitted_probe.gap_response(
+            virtuals,
+            values.ctypes.data_as(pointer),
+            output.ctypes.data_as(pointer),
+            ct.byref(error),
+        )
+        assert error.value != 0

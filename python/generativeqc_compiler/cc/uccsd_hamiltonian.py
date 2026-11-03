@@ -50,7 +50,7 @@ class UCCSDHamiltonianPrograms:
 
 
 def build_raw_hamiltonian(
-    layout: UCCSDLayout, *, max_elements: int = 1_000_000
+    layout: UCCSDLayout, *, max_elements: int = 1_000_000, separate_fock: bool = False
 ) -> UCCSDHamiltonianPrograms:
     """Rotate raw spin matrices, build normal ordering, and bind every CC input.
 
@@ -129,6 +129,22 @@ def build_raw_hamiltonian(
         ):
             transformed = einsum(equation, rotations[spin], transformed)
         rotated_g[pair] = transformed
+    reference_g = rotated_g
+    reference_inputs = ()
+    if separate_fock:
+        reference_inputs = tuple(f"reference_g_{pair}" for pair in raw_g)
+        reference_g = {}
+        for pair, raw_value in raw_g.items():
+            value = input_tensor(f"reference_g_{pair}", raw_value.spec)
+            owners = pair[0] * 2 + pair[1] * 2
+            transformed = einsum("up,uvwx->pvwx", rotations[owners[0]], value)
+            for equation, spin in zip(
+                ("vq,pvwx->pqwx", "wr,pqwx->pqrx", "xs,pqrx->pqrs"),
+                owners[1:],
+                strict=True,
+            ):
+                transformed = einsum(equation, rotations[spin], transformed)
+            reference_g[pair] = transformed
     densities = {
         spin: constant(
             tuple(
@@ -141,21 +157,26 @@ def build_raw_hamiltonian(
         for spin in "ab"
     }
 
-    def coulomb(first: str, second: str) -> Node:
+    def coulomb(first: str, second: str, *, reference: bool = False) -> Node:
+        integrals = reference_g if reference else rotated_g
         if first + second == "ba":
-            return transpose(rotated_g["ab"], (2, 3, 0, 1))
-        return rotated_g[first + second]
+            return transpose(integrals["ab"], (2, 3, 0, 1))
+        return integrals[first + second]
 
     fock = {
         spin: add(
             rotated_h[spin],
             *(
-                einsum("pqrs,rs->pq", coulomb(spin, source), densities[source])
+                einsum(
+                    "pqrs,rs->pq",
+                    coulomb(spin, source, reference=True),
+                    densities[source],
+                )
                 for source in "ab"
             ),
             einsum(
                 "prqs,rs->pq",
-                rotated_g[spin * 2],
+                reference_g[spin * 2],
                 densities[spin],
                 coefficient=-1,
             ),
@@ -218,7 +239,7 @@ def build_raw_hamiltonian(
     pullback = transpose_program(
         primal,
         (*names, "reference_electronic_energy"),
-        inputs=("h_a", "h_b", "g_aa", "g_ab", "g_bb", "rotation_a", "rotation_b"),
+        inputs=(*RAW_INPUTS, *reference_inputs),
         max_elements=max_elements,
     )
     orbital_jvp = linearize(
@@ -299,7 +320,7 @@ def build_lagrangian_programs(
             "fov_aa",
             "fov_bb",
         ),
-        inputs=RAW_INPUTS,
+        inputs=hamiltonian.pullback.input_names,
         max_elements=max_elements,
     )
     weights = _physical_weights(layout, pullback)
@@ -324,7 +345,10 @@ def _physical_weights(layout: UCCSDLayout, pullback: VJPProgram) -> Program:
     """Share full-frame metric and UHF sign conventions across both pullbacks."""
     outputs = {
         name: pullback.program.outputs[f"bar_{name}"]
-        for name in RAW_INPUTS
+        for name in (
+            *RAW_INPUTS,
+            *(name for name in pullback.input_names if name not in RAW_INPUTS),
+        )
         if not name.startswith("rotation")
     }
     occupied = {"a": layout.oa, "b": layout.ob}

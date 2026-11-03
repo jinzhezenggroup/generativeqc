@@ -50,8 +50,8 @@ class ResolvedModel:
     belongs to the fitted model: changing it changes the operator. Screening and
     iteration/arithmetic settings belong to the numerical experiment instead.
     DF's effective rank is recorded in evidence because it can vary by geometry.
-    UMP2, UCCSD and UCCSD(T) keep unrestricted spin populations but admit
-    conventional integrals only. Canonical RCCSD and RCCSD(T) are restricted to the current unfrozen,
+    UMP2, UCCSD and UCCSD(T) keep unrestricted spin populations and distinguish
+    fitted correlation from fitted reference operators. Canonical RCCSD and RCCSD(T) are restricted to the current unfrozen,
     conventional, closed-shell contract. These identities support portable HF
     checkpoints; they do not enable target-accuracy or progressive execution.
     DFT requires additional functional identities before this schema can represent it.
@@ -69,6 +69,7 @@ class ResolvedModel:
     auxiliary_basis_hash: str | None = None
     metric_relative_threshold: float | None = None
     schema_version: int = SCHEMA_VERSION
+    reference_approximation: str | None = None
 
     def __post_init__(self) -> None:
         """Validate model identity, spin populations, and conventional/fitted metadata."""
@@ -112,13 +113,6 @@ class ResolvedModel:
             raise ValueError(
                 "RHF and restricted canonical correlated models require a closed-shell singlet"
             )
-        if self.method == "ump2" and self.approximation != "conventional":
-            raise ValueError("UMP2 model requires conventional integrals")
-        if (
-            self.method in ("uccsd", "uccsd(t)")
-            and self.approximation != "conventional"
-        ):
-            raise ValueError("unrestricted CC model requires conventional integrals")
         if (
             self.method in ("rccsd", "rccsd(t)")
             and self.approximation != "conventional"
@@ -140,15 +134,28 @@ class ResolvedModel:
             object.__setattr__(self, "metric_relative_threshold", threshold)
         else:
             raise ValueError("unsupported approximation identity")
+        if self.reference_approximation is not None and (
+            self.method not in ("ump2", "uccsd", "uccsd(t)")
+            or self.approximation != "density_fitting"
+            or self.reference_approximation not in ("conventional", "density_fitting")
+        ):
+            raise ValueError("invalid unrestricted reference approximation")
+
+    def _payload(self) -> dict:
+        """Preserve legacy identities when the new reference choice is absent."""
+        payload = asdict(self)
+        if self.reference_approximation is None:
+            payload.pop("reference_approximation")
+        return payload
 
     @property
     def identity(self) -> str:
         """Reuse the canonical JSON hash used by profiles and reference snapshots."""
-        return canonical_hash(asdict(self))
+        return canonical_hash(self._payload())
 
     def to_dict(self) -> dict:
         """Return a detached, portable record with its scientific identity."""
-        return {**asdict(self), "identity": self.identity}
+        return {**self._payload(), "identity": self.identity}
 
     @classmethod
     def from_dict(cls, record: dict) -> ResolvedModel:

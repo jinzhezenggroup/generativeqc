@@ -39,6 +39,17 @@ inline std::size_t source_capacity(const core::System& system) {
 }
 inline constexpr std::size_t source_scratch_bytes = 8U << 20;
 
+/** Bound CUDA one-electron response staging in addition to recurrence scratch.
+ * Four AO matrix planes cover the aliased kinetic/attraction weights and pair
+ * inventories; two source copies bound simultaneous packed host/device metadata.
+ * The reservation depends on the admitted system, not unused endpoint headroom. */
+inline std::size_t one_electron_response_capacity(const core::System& system) {
+  const auto basis_count = molecule::ao_count(system);
+  const auto matrix_bytes = checked_mul(4 * sizeof(double), checked_mul(basis_count, basis_count));
+  return checked_add(source_scratch_bytes,
+                     checked_add(matrix_bytes, checked_mul(2, source_capacity(system))));
+}
+
 inline std::size_t rhf_reference_capacity(const core::System& system, unsigned diis_history,
                                           bool include_dense_eri = false) {
   const auto n = molecule::ao_count(system);

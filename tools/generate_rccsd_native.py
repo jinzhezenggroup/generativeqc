@@ -223,13 +223,27 @@ def _dim(index: Index) -> str:
     ):
         if index.start != 0 or index.stop != index.space.size:
             raise ValueError(f"unsupported unrestricted index slice: {index}")
-        if index.space.name.startswith("tile_"):
+        if index.space.name.startswith(("tile_", "moment_")):
             if index.space.size != 1:
                 raise ValueError("native unrestricted triples require singleton tiles")
             return "tile_extent"
         return ("o" if index.space.kind == "occupied" else "v") + (
             "a" if index.space.spin == "alpha" else "b"
         )
+    if index.space.kind == "orbital" and index.space.spin in ("alpha", "beta"):
+        spin = "a" if index.space.spin == "alpha" else "b"
+        bounds = (index.start, index.stop)
+        if index.space.size != 6:
+            raise ValueError(
+                "native unrestricted full frames use the 3/3 representative"
+            )
+        if bounds == (0, 3):
+            return f"o{spin}"
+        if bounds == (3, 6):
+            return f"v{spin}"
+        if bounds == (0, 6):
+            return f"n{spin}"
+        raise ValueError(f"unsupported unrestricted full-frame slice: {index}")
     if index.space.kind in ("occupied", "virtual"):
         return "o" if _kind(index) == "occupied" else "v"
     if index.space.kind == "batch":
@@ -430,9 +444,16 @@ def _flat_coords(coords: list[str], spec: TensorSpec) -> str:
     return expression
 
 
-def _runtime_bound(value: int) -> str:
+def _runtime_bound(value: int, index: Index | None = None) -> str:
     if value == 0:
         return "0"
+    if index is not None and index.space.spin in ("alpha", "beta"):
+        spin = "a" if index.space.spin == "alpha" else "b"
+        if value == 3:
+            return f"o{spin}"
+        if value == 6:
+            return f"n{spin}"
+        raise ValueError(f"unsupported unrestricted runtime slice boundary {value}")
     if value == REPRESENTATIVE[0]:
         return "o"
     if value == REPRESENTATIVE_ORBITALS:
@@ -596,13 +617,48 @@ def _arena_plan(
     )
 
 
+def _runtime_constant(node: typing.Any) -> str:
+    """Lower only proved shape-polymorphic constant families.
+
+    UHF occupations are unit projectors, not literal representative-size
+    matrices. Refuse other nonuniform constants rather than extrapolating an
+    arbitrary small tensor to a different physical orbital population.
+    """
+    values = tuple(node.attrs["values"])
+    if values and len(set(values)) == 1:
+        return _fraction(values[0])
+    if len(node.spec.indices) == 2 and node.spec.shape[0] == node.spec.shape[1]:
+        count = node.spec.shape[0]
+        dimension = _dim(node.spec.indices[0])
+        diagonal = tuple(
+            (int(row == col), 1) for row in range(count) for col in range(count)
+        )
+        if values == diagonal:
+            return f"(flat/{dimension}==flat%{dimension}?1.0:0.0)"
+        index = node.spec.indices[0]
+        if index.space.kind == "orbital" and index.space.spin in ("alpha", "beta"):
+            occupied = tuple(
+                (int(row == col and row < 3), 1)
+                for row in range(count)
+                for col in range(count)
+            )
+            if count == 6 and values == occupied:
+                spin = "a" if index.space.spin == "alpha" else "b"
+                return f"(flat/{dimension}==flat%{dimension}&&flat/{dimension}<o{spin}?1.0:0.0)"
+    raise ValueError("constant has no qualified runtime-shape lowering")
+
+
 def _cpu_node(
     node: typing.Any, number: int, names: dict[int, str], *, storage: str
 ) -> list[str]:
     out = names[number]
     size = _size(node.spec)
     lines = [f"  double* {out}={storage};"]
-    if node.op == "add":
+    if node.op == "constant":
+        lines.append(
+            f"for(std::size_t flat=0;flat<{size};++flat){out}[flat]={_runtime_constant(node)};"
+        )
+    elif node.op == "add":
         terms = []
         for source, coefficient in zip(
             node.inputs, node.attrs["coefficients"], strict=True
@@ -614,6 +670,12 @@ def _cpu_node(
             '    if(!std::isfinite(value)) throw std::runtime_error("nonfinite RCCSD add");',
             f"    {out}[i]=value;",
             "  }",
+        ]
+    elif node.op == "reshape":
+        source = node.inputs[0]
+        lines += [
+            f'if({_size(source.spec)}!={size}) throw std::invalid_argument("runtime reshape size mismatch");',
+            f"if({size})std::copy_n({names[source._emit_index]},{size},{out});",
         ]
     elif node.op == "multiply":
         a, b = (names[x._emit_index] for x in node.inputs)
@@ -806,7 +868,9 @@ def _cpu_node(
         for axis in reversed(range(rank)):
             dim = _dim(node.spec.indices[axis])
             lines += [f"    const std::size_t c{axis}=rem%{dim};", f"    rem/={dim};"]
-            coords[axis] = f"(c{axis}+{_runtime_bound(ranges[axis][0])})"
+            coords[axis] = (
+                f"(c{axis}+{_runtime_bound(ranges[axis][0], source.spec.indices[axis])})"
+            )
         source_index = _flat_coords(coords, source.spec)
         lines += [
             f"    const double value={names[source._emit_index]}[{source_index}];",
@@ -820,7 +884,7 @@ def _cpu_node(
         positions = tuple(node.attrs["positions"])
         if not positions or positions != tuple(range(positions[0], positions[-1] + 1)):
             raise ValueError("runtime RCCSD scatter requires contiguous positions")
-        offset = _runtime_bound(positions[0])
+        offset = _runtime_bound(positions[0], node.spec.indices[axis])
         source_size = _size(source.spec)
         lines.append(f"  std::fill_n({out},{size},0.0);")
         lines += [
@@ -1612,13 +1676,14 @@ def _cuda_kernel(
     *,
     batch_dim: bool = False,
     parallel_scalar_reductions: bool = False,
+    dimension_names: tuple[str, ...] = ("o", "v"),
 ) -> str:
     size = _device_size(node.spec)
     arguments = [
         f"const {'std::int64_t' if source.spec.dtype == 'int64' else 'double'}* a{i}"
         for i, source in enumerate(node.inputs)
     ]
-    arguments += ["double* out", "std::size_t o", "std::size_t v"]
+    arguments += ["double* out", *(f"std::size_t {name}" for name in dimension_names)]
     if _canonical_d2_consumer(node):
         arguments += ["const double* canonical_eps", "double canonical_level_shift"]
     if batch_dim:
@@ -1647,7 +1712,11 @@ def _cuda_kernel(
         f"  const std::size_t count={size};",
         "  for(std::size_t flat=std::size_t(blockIdx.x)*blockDim.x+threadIdx.x;flat<count;flat+=std::size_t(blockDim.x)*gridDim.x){",
     ]
-    if node.op == "add":
+    if node.op == "constant":
+        lines.append(f"out[flat]={_runtime_constant(node)};")
+    elif node.op == "reshape":
+        lines.append("out[flat]=a0[flat];")
+    elif node.op == "add":
         terms = [
             f"{_fraction(c)}*a{i}[flat]"
             for i, c in enumerate(node.attrs["coefficients"])
@@ -1815,7 +1884,9 @@ def _cuda_kernel(
                 f"    const std::size_t c{axis}=rem%{dim};",
                 f"    rem/={dim};",
             ]
-            coords[axis] = f"(c{axis}+{_runtime_bound(ranges[axis][0])})"
+            coords[axis] = (
+                f"(c{axis}+{_runtime_bound(ranges[axis][0], source.spec.indices[axis])})"
+            )
         source_index = _flat_coords(coords, source.spec)
         lines += [
             f"    const double value=a0[{source_index}];",
@@ -1827,7 +1898,7 @@ def _cuda_kernel(
         positions = tuple(node.attrs["positions"])
         if not positions or positions != tuple(range(positions[0], positions[-1] + 1)):
             raise ValueError("runtime RCCSD CUDA scatter requires contiguous positions")
-        offset = _runtime_bound(positions[0])
+        offset = _runtime_bound(positions[0], node.spec.indices[axis])
         source_dim = _dim(source.spec.indices[axis])
         rank = len(node.spec.indices)
         if rank:
@@ -2011,6 +2082,7 @@ def _cuda_program(
     reuse_phase: typing.Literal["prepare", "dynamic"] | None = None,
     reuse_storage_nodes: tuple[typing.Any, ...] | None = None,
     retained_arena_field: str | None = None,
+    dimension_names: tuple[str, ...] = ("o", "v"),
 ) -> str:
     dtypes = {node.spec.dtype for node in program.live_nodes} - {"int64"}
     if len(dtypes) != 1 or not dtypes <= {"float32", "float64"}:
@@ -2077,6 +2149,7 @@ def _cuda_program(
                     names,
                     batch_dim=batch_dim,
                     parallel_scalar_reductions=parallel_scalar_reductions,
+                    dimension_names=dimension_names,
                 )
             )
     uses_complete_orbital = any(
@@ -2100,7 +2173,7 @@ def _cuda_program(
             )
         )
         + ";",
-        "  const auto o=s.o,v=s.v;",
+        *(f"  const auto {name}=s.{name};" for name in dimension_names),
         *([_occupied_pair_declaration(checked=True)] if uses_occupied_pairs else []),
         *(["  const auto q=s.q;"] if batch_dim else []),
         *(["  const std::size_t n=checked_add(o,v);"] if uses_complete_orbital else []),
@@ -2190,8 +2263,7 @@ def _cuda_program(
             [
                 *sources,
                 names[number],
-                "s.o",
-                "s.v",
+                *(f"s.{name}" for name in dimension_names),
                 *(
                     ["s.canonical_eps", "s.canonical_level_shift"]
                     if _canonical_d2_consumer(node)
@@ -2202,7 +2274,7 @@ def _cuda_program(
             ]
         )
         lines += [
-            f"  {kernel_name}_node_{number}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
+            f"  if({count}) {kernel_name}_node_{number}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
         ]
     if prepared_contractions:
         # Build descriptors once per owner and batch/tail shape, never in run().

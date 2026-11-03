@@ -21,6 +21,31 @@ from test_uccsd_response import _physical_residual
 from tools.generativeqc_cc.native_tensor_cpu import NativeCCTensorExecutor
 
 
+def test_separate_fitted_interaction_does_not_replace_reference_fock() -> None:
+    """Exact-reference DF binds independent tensors in the identical spin frame."""
+    from generativeqc_compiler.tensor import execute
+
+    layout = UCCSDLayout(1, 1, 1, 1)
+    inputs = _inputs(layout)
+    exact = execute(build_raw_hamiltonian(layout).primal, inputs).outputs
+    fitted_inputs = {
+        **inputs,
+        **{f"reference_{name}": inputs[name] for name in ("g_aa", "g_ab", "g_bb")},
+    }
+    for name in ("g_aa", "g_ab", "g_bb"):
+        fitted_inputs[name] = 0.7 * inputs[name]
+    separate = execute(
+        build_raw_hamiltonian(layout, separate_fock=True).primal, fitted_inputs
+    ).outputs
+    for name, value in exact.items():
+        expected = (
+            value
+            if name.startswith("f") or name == "reference_electronic_energy"
+            else 0.7 * value
+        )
+        np.testing.assert_allclose(separate[name], expected, atol=1e-13, rtol=0)
+
+
 def test_shared_shell_transform_uses_explicit_admission_beyond_oracle_frontier() -> (
     None
 ):
