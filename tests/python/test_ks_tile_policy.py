@@ -187,8 +187,5 @@ int main() {
         check=True,
         timeout=15,
     )
-    actual = [
-        tuple(map(int, line.split()))
-        for line in result.stdout.splitlines()
-    ]
+    actual = [tuple(map(int, line.split())) for line in result.stdout.splitlines()]
     assert actual == [expected for _, expected in cases]
