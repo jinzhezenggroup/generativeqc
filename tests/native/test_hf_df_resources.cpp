@@ -74,6 +74,42 @@ void check_composition() {
   }
 }
 
+void check_budgeted_large_rhf() {
+  const Item water96{96, 768, 800, 384, 640, 768, 800, 384, 640, 160, 160, 1, 1};
+  for (const auto storage : {Storage::Automatic, Storage::Dense, Storage::SymmetricLower}) {
+    const Bytes budget = storage == Storage::SymmetricLower ? Bytes{16} << 30 : Bytes{2} << 30;
+    const auto fleet = cuda_df_fleet_resources(std::span(&water96, 1), 8, budget, storage, false);
+    require(fleet.size() == 1 && fleet.front().sub_budget == budget,
+            "large RHF must preserve the explicit source budget");
+    const auto& bucket = fleet.front().buckets.front();
+    require(bucket.values[1] == 768 && bucket.values[2] == 768 && bucket.values[25] == 1,
+            "large RHF topology was changed by resource admission");
+    require(bucket.energy_tiles[4] <= budget && bucket.force_tiles[4] <= budget / 2,
+            "large RHF energy and force tiles exceed their separate budgets");
+    require(bucket.values[20] >= (1u << 20) + 128u * 768u * 768u,
+            "large RHF omits the bounded ordinary AO provider workspace");
+  }
+  const auto refused = [](Item item, Bytes budget) {
+    try {
+      static_cast<void>(
+          cuda_df_fleet_resources(std::span(&item, 1), 8, budget, Storage::Automatic, false));
+    } catch (const generativeqc::scf::CudaDfResourceUnsupported&) {
+      return true;
+    }
+    return false;
+  };
+  require(refused(water96, 0), "unbudgeted large DF was silently admitted");
+  auto unsupported = water96;
+  unsupported.spins = 2;
+  require(refused(unsupported, 512u << 20), "large UHF was silently admitted");
+  unsupported = water96;
+  unsupported.nbf = 769;
+  require(refused(unsupported, 512u << 20), "unqualified orbital dimension was admitted");
+  unsupported = water96;
+  unsupported.naux = 769;
+  require(refused(unsupported, 512u << 20), "unqualified auxiliary dimension was admitted");
+}
+
 void check_wire() {
   const std::array<Bytes, 13> item{2, 2, 2, 2, 6, 2, 2, 2, 6, 1, 1, 1, 1};
   std::array<char, 512> error{};
@@ -165,6 +201,7 @@ void check_additional_wire_boundaries() {
 
 int main() {
   check_composition();
+  check_budgeted_large_rhf();
   check_wire();
   check_additional_wire_boundaries();
 }
