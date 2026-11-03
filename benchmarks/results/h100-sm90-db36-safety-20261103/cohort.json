@@ -1,0 +1,263 @@
+{
+  "schema": "generativeqc.h100-db36-safety.v1",
+  "source_revision": "db3657f08d983791c45b7d949cb9028fe0055e3f",
+  "source_tree": "681cefe8bd066a3fb973ab38e0ef856280625ed1",
+  "core_sha256": "472bd0f9bceaa7917f7137c2cb543f0ebfc6c0b728ed024aeacc81b92c8c83a4",
+  "reference_source_revision": "15ab66a68a061355fda833a93e88484dbfee6360",
+  "receiver_adaptation": "None: exact original receivers run in isolated source-view paths.",
+  "packets": [
+    {
+      "cohort": "production-build-v1",
+      "archive": {
+        "path": "production-build-v1-metadata.tar.xz",
+        "bytes": 307828,
+        "sha256": "03f63b636e01219168f0826849a6cf1e341335a13df1cc2ceeb8752f3764b8d2"
+      },
+      "manifest": {
+        "path": "production-build-v1-download-manifest.json.xz",
+        "bytes": 2564,
+        "sha256": "2ae9b66290b8fe10a8583b649041563d1962237b806069a6eb72aead4cef2686",
+        "decoded_name": "production-build-v1-download-manifest.json",
+        "decoded_bytes": 8535,
+        "decoded_sha256": "81cbe6d879a88ada9cfb92d9ddb2616f4235cd04234ab06e62508f9a8604e843"
+      }
+    },
+    {
+      "cohort": "native-qualification-v1",
+      "archive": {
+        "path": "native-qualification-v1-completed.tar.xz",
+        "bytes": 106576,
+        "sha256": "f7b1bb851757198d5fee203c61950cc58eec1e55706603237528701f4e0074c3"
+      },
+      "manifest": {
+        "path": "native-qualification-v1-download-manifest.json.xz",
+        "bytes": 2120,
+        "sha256": "44d1beaa4437e17d7e2c45ee43d83da87ee738d08c6f036d2335a8cf35be48b4",
+        "decoded_name": "native-qualification-v1-download-manifest.json",
+        "decoded_bytes": 6810,
+        "decoded_sha256": "c64ff827c64e97a2948a650ad956aa3e743491ea6b0a2c7fa3a24a3908f37d59"
+      }
+    },
+    {
+      "cohort": "public-direct-v1",
+      "archive": {
+        "path": "public-direct-v1-completed.tar.xz",
+        "bytes": 245832,
+        "sha256": "ac7718ef6db5cb84c27e2bf84cd9207fbb47b51602a929ec3a69efc7007b9a85"
+      },
+      "manifest": {
+        "path": "public-direct-v1-download-manifest.json.xz",
+        "bytes": 1812,
+        "sha256": "26543af9872a1424d4f1dd28dd7bc8631918261d6bb5b4acbeac3a6a6ea542e5",
+        "decoded_name": "public-direct-v1-download-manifest.json",
+        "decoded_bytes": 4848,
+        "decoded_sha256": "8516eede8be98f007455c9e62d81da313543cdbccd61c4e9fdafa9b529bfab83"
+      }
+    },
+    {
+      "cohort": "spatial-v1",
+      "archive": {
+        "path": "spatial-v1-completed.tar.xz",
+        "bytes": 275336,
+        "sha256": "e08d2879457e43185700a39419b4aeb3465a9182de80d1b8c965110708dd2e4f"
+      },
+      "manifest": {
+        "path": "spatial-v1-download-manifest.json.xz",
+        "bytes": 2672,
+        "sha256": "8b44ef5608eb37fadc0c09e36deafb1236bf5c3ba376f5c997ee8cec9f926d32",
+        "decoded_name": "spatial-v1-download-manifest.json",
+        "decoded_bytes": 9366,
+        "decoded_sha256": "712547dc76c912c9ecf1404ca0ad4ba424dfaa976f7ee3de317b793a38099fbb"
+      }
+    },
+    {
+      "cohort": "spatial-racecheck-v2",
+      "archive": {
+        "path": "spatial-racecheck-v2-completed.tar.xz",
+        "bytes": 212504,
+        "sha256": "392f9847ec551f5c6a9d676b4f32970188cc7f00b06fdf39eb764ce3db400974"
+      },
+      "manifest": {
+        "path": "spatial-racecheck-v2-download-manifest.json.xz",
+        "bytes": 2440,
+        "sha256": "9c3245f69eb06b018b7d9b61cf82a14c6dc26e73df0995a28cdbeef53bc3b9d5",
+        "decoded_name": "spatial-racecheck-v2-download-manifest.json",
+        "decoded_bytes": 7097,
+        "decoded_sha256": "50d2ad23f920e2c8af9aa54cc9defd89ec2fb775fe42d2fd8520d7b69a23b87b"
+      }
+    }
+  ],
+  "proofs": {
+    "production-build-v1-local-replay.json": {
+      "sha256": "c7b64c3a905b0ff5ae619c924d57bc3747011617e3354014e8c94be06ae1e66e",
+      "status": "PASS_RECEIVER_SM90_PRODUCTION33_BUILD_METADATA_ONLY"
+    },
+    "native-qualification-v1-local-replay-v3.json": {
+      "sha256": "340407704cae08546b9d5a8d2b79e065344a62e85063105b811762251249dcb5",
+      "status": "PASS_CURRENT_SOURCE_NATIVE_FOUR_UNFILTERED_MEMCHECK"
+    },
+    "native-rsh-stencils-v1-local-replay.json": {
+      "sha256": "39c03c801ab7ab27cf52191e62beddfae78bc873f1fb589089d1214bb2c716e1",
+      "status": "PASS_CURRENT_SOURCE_INDEPENDENT_RSH_STENCIL_REPLAY"
+    },
+    "public-direct-v1-local-replay-v3.json": {
+      "sha256": "8b33848b395bdc59e51791bf4c4191216de7dfa7ccd4661b525ad9239f8cd1fc",
+      "status": "PASS_CURRENT_SOURCE_AFFECTED_PUBLIC_DIRECT_EF_AND_FAULT_TESTS"
+    },
+    "spatial-v1-components-local-replay-v1.json": {
+      "sha256": "b03079459fff8a93f52b01264737571fd871f443df25238d2b934a2361e7f842",
+      "status": "PASS_CURRENT_SOURCE_NORMAL6_AND_UNFILTERED_MEMCHECK6_COMPONENTS_ONLY"
+    },
+    "spatial-racecheck-v2-local-replay-v1.json": {
+      "sha256": "a12d4c729e8580557b5ce1342f84bf80a2feee1043144fbeb7656684c5295e82",
+      "status": "PASS_CURRENT_SOURCE_UNFILTERED_RACECHECK6_AND_POSITIVE_WORK"
+    },
+    "spatial-composite-v1-local-replay.json": {
+      "sha256": "59050500d174a691a4d6fbb6b21aef1edff64162b989aa97c7339c35767974a8",
+      "status": "PASS_CURRENT_SOURCE_GROUPED_DIRECT_SIX_ALL_MODES_AND_POSITIVE_WORK"
+    }
+  },
+  "integration_review": {
+    "path": "actual-integration-audit.json.xz",
+    "decoded_bytes": 91558,
+    "decoded_sha256": "f5ef16a143ad99a3c654b65b45d2295eaeb4c62f16038033afdd40a39a06e0a9",
+    "scope": "Completed actual nine-gate review; this public stage independently replays seven safety proofs. The profile and two source7013 inputs are separate delivery stages, not public completeness claims here.",
+    "review_independence": "same-family",
+    "acceptance_status": "provisional",
+    "reported_model": null,
+    "reported_effort": null
+  },
+  "original_failed_spatial_race_accepted_cases": 0,
+  "complete_EF": 36,
+  "spatial_energy_only_SCF": 18,
+  "spatial_source_exports": 54,
+  "clean_timing_votes": 0,
+  "majority_accepted": false,
+  "files": [
+    {
+      "path": "readers/recover-build-v2.py",
+      "bytes": 10154,
+      "sha256": "3390c59b81a538596e3af8c795d68cd138bc38cd7865ac4f3447c3f461a8926b"
+    },
+    {
+      "path": "readers/unpack-native-v2.py",
+      "bytes": 2206,
+      "sha256": "ee4d7f3a3e811bec3efd69d82e63d0a2a88e79bc282c94a5aa843de5964f9cdf"
+    },
+    {
+      "path": "readers/replay-native-v3.py",
+      "bytes": 8600,
+      "sha256": "7a021a1ca3a05d86e0f554d4e8548853a186274508410e7d844552a85349b512"
+    },
+    {
+      "path": "readers/replay-native-rsh-stencils-v2.py",
+      "bytes": 2218,
+      "sha256": "1b6cc5e79259e57ec60addb721ea549cfd9354f0c62c1ed02c4a8aba0127b433"
+    },
+    {
+      "path": "readers/unpack-public-direct-v2.py",
+      "bytes": 2220,
+      "sha256": "fd0c7fedb24d3a3a0e63ed99c29d93b609f52af27770991cfc53e5126ff829af"
+    },
+    {
+      "path": "readers/replay-public-direct-v3.py",
+      "bytes": 13539,
+      "sha256": "eabd63f29111a41262ce939e973a417a1466213a3545585687a7c6a15bc7ea53"
+    },
+    {
+      "path": "readers/unpack-spatial-v2.py",
+      "bytes": 2196,
+      "sha256": "a527d73ad87383344ccaaef06f93eb3a5dd9786a4ef8e6ef62665afd82d96cf4"
+    },
+    {
+      "path": "readers/replay-spatial-components-v2.py",
+      "bytes": 6514,
+      "sha256": "e500a05909cf4d78bf007fea583ffb1ab98be884aceec864e741a77cd6367305"
+    },
+    {
+      "path": "readers/unpack-spatial-racecheck-v1.py",
+      "bytes": 2226,
+      "sha256": "216fac0b2719483fa91d1b4d3a9a7e357529b56f0b50419aa0ff26ce46b4ec64"
+    },
+    {
+      "path": "readers/replay-spatial-racecheck-v3.py",
+      "bytes": 14068,
+      "sha256": "7a74e4b13b4a89745d6db76851e2f615041a7dd8e0dd67c5a1832784c89a1041"
+    },
+    {
+      "path": "readers/validate-spatial-components-v1.py",
+      "bytes": 6382,
+      "sha256": "48fb6d9978e8c511532911f6e7c5206731534268e0a01f7c022a939bf3f5df4d"
+    },
+    {
+      "path": "readers/validate-spatial-racecheck-v1.py",
+      "bytes": 13948,
+      "sha256": "f93df5ca7cce1156bb47eb60dd1ae90c3829b4f023a0afa689d78d23acaa1f6a"
+    },
+    {
+      "path": "readers/replay-spatial-composite-v1.py",
+      "bytes": 4282,
+      "sha256": "a3d9ce6795c140f54b2ad3f5a0eae2e1deed53bfbce18e06910d4b55bae3ec48"
+    },
+    {
+      "path": "production-build-v1-metadata.tar.xz",
+      "bytes": 307828,
+      "sha256": "03f63b636e01219168f0826849a6cf1e341335a13df1cc2ceeb8752f3764b8d2"
+    },
+    {
+      "path": "production-build-v1-download-manifest.json.xz",
+      "bytes": 2564,
+      "sha256": "2ae9b66290b8fe10a8583b649041563d1962237b806069a6eb72aead4cef2686"
+    },
+    {
+      "path": "native-qualification-v1-completed.tar.xz",
+      "bytes": 106576,
+      "sha256": "f7b1bb851757198d5fee203c61950cc58eec1e55706603237528701f4e0074c3"
+    },
+    {
+      "path": "native-qualification-v1-download-manifest.json.xz",
+      "bytes": 2120,
+      "sha256": "44d1beaa4437e17d7e2c45ee43d83da87ee738d08c6f036d2335a8cf35be48b4"
+    },
+    {
+      "path": "public-direct-v1-completed.tar.xz",
+      "bytes": 245832,
+      "sha256": "ac7718ef6db5cb84c27e2bf84cd9207fbb47b51602a929ec3a69efc7007b9a85"
+    },
+    {
+      "path": "public-direct-v1-download-manifest.json.xz",
+      "bytes": 1812,
+      "sha256": "26543af9872a1424d4f1dd28dd7bc8631918261d6bb5b4acbeac3a6a6ea542e5"
+    },
+    {
+      "path": "spatial-v1-completed.tar.xz",
+      "bytes": 275336,
+      "sha256": "e08d2879457e43185700a39419b4aeb3465a9182de80d1b8c965110708dd2e4f"
+    },
+    {
+      "path": "spatial-v1-download-manifest.json.xz",
+      "bytes": 2672,
+      "sha256": "8b44ef5608eb37fadc0c09e36deafb1236bf5c3ba376f5c997ee8cec9f926d32"
+    },
+    {
+      "path": "spatial-racecheck-v2-completed.tar.xz",
+      "bytes": 212504,
+      "sha256": "392f9847ec551f5c6a9d676b4f32970188cc7f00b06fdf39eb764ce3db400974"
+    },
+    {
+      "path": "spatial-racecheck-v2-download-manifest.json.xz",
+      "bytes": 2440,
+      "sha256": "9c3245f69eb06b018b7d9b61cf82a14c6dc26e73df0995a28cdbeef53bc3b9d5"
+    },
+    {
+      "path": "actual-integration-audit.json.xz",
+      "bytes": 17688,
+      "sha256": "774a31d38216c436be4e0cb5244072ed83e8302b39fa012d7c75767fa3db2ce6"
+    },
+    {
+      "path": "readers/replay-spatial-v2.py",
+      "bytes": 11674,
+      "sha256": "51ecfefd0bf0dd353e9a70018085e9ed92a664f6ef268c0ac8079f5a3959587b"
+    }
+  ]
+}
