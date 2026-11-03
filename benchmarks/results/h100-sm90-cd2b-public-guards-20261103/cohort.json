@@ -1,0 +1,133 @@
+{
+  "schema": "generativeqc.h100-public-guards.v1",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "source_tree": "c76f5bd3cfa62416255c5d6914cf701d34e10a8d",
+  "files": [
+    {
+      "path": "facade-correction-contract-v1.json",
+      "bytes": 4385,
+      "sha256": "31fc7038abd4706f62120e2fc56019d67cc4af2d4e52d514991d9751604dfcff"
+    },
+    {
+      "path": "facade-correction-result-audit-sol-v1/audit-report.json",
+      "bytes": 105375,
+      "sha256": "051a370c0ece1ab8b1ebc743adbfa7ab6a77276cb43e0c3164f2688315908798"
+    },
+    {
+      "path": "facade-guards-v1-completed.tar.xz",
+      "bytes": 284704,
+      "sha256": "ff80506f497cc8a8156fbe2a69e45e36db6f878fcd9b193def1e5912d8ac923e"
+    },
+    {
+      "path": "facade-guards-v1-download-manifest.json",
+      "bytes": 26491,
+      "sha256": "8cfe1122125d37f4ce7564d527df9879c0facc5857dc615b5a6d882ec717feb7"
+    },
+    {
+      "path": "facade-scope-audit-sol-v1/audit-report.json",
+      "bytes": 17319,
+      "sha256": "988ff7981ca15a688ed07dc4b1b3012869daad7623542581f1d5a5ba12f2123d"
+    },
+    {
+      "path": "notebook-public-guards-v1-completed.tar.xz",
+      "bytes": 172280,
+      "sha256": "85dc9af1c10e6396fde0db9b1bb5b7b3f7caa8017824b3deab052bc9ff054394"
+    },
+    {
+      "path": "notebook-public-guards-v1-download-manifest.json",
+      "bytes": 21066,
+      "sha256": "40b4a3ef97acba34c8d6aa8dd61dd3b6f3eaa74cdd0d2d5f15a177da1be6ad64"
+    },
+    {
+      "path": "original-final-protocol-v1.json",
+      "bytes": 12199,
+      "sha256": "2391b71fb49660f682f1b60056b2892d5516f01871d7479319f0be2cf925fdaa"
+    },
+    {
+      "path": "public-budget-v5-completed.tar.xz",
+      "bytes": 125956,
+      "sha256": "925f052fc548f7947bfe78c09176ecee51886b9ce54f85489dc0f3e690aa3b4b"
+    },
+    {
+      "path": "public-budget-v5-download-manifest.json",
+      "bytes": 12999,
+      "sha256": "368f7056c6b91d7fc30472d1581f751c71dbeb0b77101c5b0f033a2faedb3861"
+    },
+    {
+      "path": "public-budget-v7-completed.tar.xz",
+      "bytes": 129748,
+      "sha256": "d29accf0501fb3f3418387fc4d608ef948be46c1d8d9ef85af061bf378a52db1"
+    },
+    {
+      "path": "public-budget-v7-download-manifest.json",
+      "bytes": 12998,
+      "sha256": "1723af44a4a0d1504e18c996e1403cd1062d0a0ceb238557c09287e4956802b0"
+    },
+    {
+      "path": "public-budget-v9-completed.tar.xz",
+      "bytes": 131680,
+      "sha256": "bdaa53bcc2e5fd2c1e21a0cc75aad0aa45294192e67495798cf3be569008c8a2"
+    },
+    {
+      "path": "public-budget-v9-download-manifest.json",
+      "bytes": 12989,
+      "sha256": "695b72e89940283eb8c46a01c0cf1b04756dbe1427903ac4824fbbda0869f487"
+    },
+    {
+      "path": "readers/cohort-replay-atomic-v1.py",
+      "bytes": 7544,
+      "sha256": "c3a845760f36066ac3027f188bb8ce7de90e0ea4301029a9e868de60eca402a4"
+    },
+    {
+      "path": "readers/facade-correction-reference-replay-v1.py",
+      "bytes": 9044,
+      "sha256": "4596a218dd3ad49f27af35bee16e8fa92b2bb5aa3e4755fe514dd40b2f4f9377"
+    },
+    {
+      "path": "readers/replay-facade-correction-v2.py",
+      "bytes": 23614,
+      "sha256": "5cd71e0741c238522286949d95577b105b9b105846e225367b53cc006ca63bd6"
+    },
+    {
+      "path": "readers/replay-facade-guards-v5.py",
+      "bytes": 28502,
+      "sha256": "c2c2532cf24ce188190b4b5daf5eefb6630cad5ee2762e2b780011bd56f616f6"
+    },
+    {
+      "path": "readers/replay-public-budget-v5.py",
+      "bytes": 11996,
+      "sha256": "00f5df5025d5e62ceae739938d8f933ae75ca0370a2a0111bd313cbde55b7824"
+    },
+    {
+      "path": "readers/replay-public-budget-v7.py",
+      "bytes": 14666,
+      "sha256": "342b1ab37f9a0cbddc398cb70a5532121b6740225b5a1f7648f7e6010465c3bd"
+    },
+    {
+      "path": "readers/replay-public-budget-v9.py",
+      "bytes": 15560,
+      "sha256": "73805ab1b4e95fc90c99a1db06697cb19d765d8cec2679374524a3f317f14ed9"
+    },
+    {
+      "path": "readers/unpack-notebook-guards-v1.py",
+      "bytes": 2766,
+      "sha256": "fa49376b774e8681147ca5c7b407570e927f85e7e70cf8e8d422fb97388d0cbf"
+    }
+  ],
+  "expected_statuses": {
+    "public-budget-v9": "PASS_SMALL_DIRECT_PUBLIC_BUDGET_12_EF_6_CONTROLS_AND_FIVE_TYPED_PLANNING_REFUSALS",
+    "facade-guards-v1": "FACADE_GUARDS_FAILED_OR_INCOMPLETE_ALL_ORIGINALS_RETAINED",
+    "facade-correction-v2": "PASS_CORRECTED_PUBLIC_API_AND_EXPLICIT_SINGLETON_FALLBACK_142_EF_84_CLOSED_8_DIRECTIONS_4_REFUSALS"
+  },
+  "expected_proof_sha256": {
+    "public-budget-v9": "8f57393acf7c43010bf476aadfc3fced7b1f101ab223ad5167bd3789cbd26cb0",
+    "facade-guards-v1": "72119b12c9eb8d18091800946132035e1286a1094db5fe820c372134fa75291a",
+    "facade-correction-v2": "6b5d1939f5bcf10e8ceeb4c4863ed53e6799394ffbb95efc5b801930af414762"
+  },
+  "failed_budget_attempts": [
+    "public-budget-v5",
+    "public-budget-v7"
+  ],
+  "clean_timing_votes": 0,
+  "final_three_pair_acceptance": false
+}

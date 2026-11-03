@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_force_queue_order.hpp",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Host/device exclusive-prefix offsets for an already admitted bounded s/p/d force packet. Partitions disjoint class spans without changing admission, screening, integral recurrences, derivative weights or task multiplicity.",
+  "regions": []
+}

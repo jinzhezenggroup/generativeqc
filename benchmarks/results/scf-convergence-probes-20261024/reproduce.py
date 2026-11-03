@@ -12,9 +12,12 @@ import json
 import lzma
 import math
 import statistics
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parents[2]))
+from tools.restore_retained_evidence import read_evidence_bytes  # noqa: E402
 GATES = {"energy_per_atom": 2.5e-6, "force_max": 2.5e-5, "force_rms": 7.5e-6}
 GROUPS = ("pilot", "prototypes", "handoff", "midpoint", "confirm")
 
@@ -33,7 +36,9 @@ def digest(value: bytes) -> str:
 def load_packet() -> dict:
     """Validate the archive and every exact retained file before interpretation."""
     manifest = json.loads((ROOT / "manifest.json").read_text())
-    archive = (ROOT / "evidence.json.xz").read_bytes()
+    archive = read_evidence_bytes(
+        ROOT / "evidence.json.xz", manifest=ROOT / "historical-snapshot.json"
+    )
     require(digest(archive) == manifest["archive_sha256"], "archive hash mismatch")
     require(len(archive) == manifest["archive_bytes"], "archive size mismatch")
     packet = json.loads(lzma.decompress(archive))

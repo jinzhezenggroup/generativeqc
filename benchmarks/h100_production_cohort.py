@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -277,7 +278,9 @@ def verify_consumed_proofs(task: Path) -> None:
                 raise ValueError("Recomputed admission differs: " + str(relative))
 
 
-def replay() -> list[dict]:
+def replay(
+    *, extension: Callable[[Path, Path, Path], list[dict]] | None = None
+) -> list[dict]:
     if sys.version_info < (3, 12) or sys.flags.optimize:
         raise RuntimeError("Replay requires unoptimized Python 3.12 or later")
     publication = checked_publication()
@@ -419,6 +422,8 @@ def replay() -> list[dict]:
             )
             if result["status"] != publication["expected_statuses"][cohort]:
                 raise ValueError("Receiver returned a different phase status")
+        if extension is not None:
+            outputs.extend(extension(task, native, reference))
         return outputs
 
 
