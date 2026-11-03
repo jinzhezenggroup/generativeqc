@@ -17,6 +17,29 @@ from .profiles import atomic_json
 
 def execute_workload(workload: dict, *, profile: bool = False) -> dict:
     """Freeze a converged density, then measure one complete energy/force replay."""
+    is_dft = workload.get("kind") == "dft"
+    is_df = workload.get("kind") == "df-hf"
+    options = {}
+    if is_dft:
+        from generativeqc_compiler.common.resources import ResourceBudget
+
+        from .ks import GridSpec, KsOptions
+
+        options["ks_options"] = KsOptions(
+            grid=GridSpec.treutler(workload["grid_level"]),
+            tile_points=workload.get("tile_points"),
+        )
+        options["resource_budget"] = ResourceBudget()
+    elif is_df:
+        from generativeqc_compiler.common.resources import ResourceBudget
+
+        options.update(
+            resource_budget=ResourceBudget(),
+            density_fitting="cuda",
+            auxiliary_basis=workload["auxiliary_basis"],
+            density_fitting_relative_threshold=workload["metric_relative_threshold"],
+            density_fitting_memory_budget_bytes=workload["df_memory_bytes"],
+        )
     calculator = Calculator(
         method=workload["method"],
         basis=workload["basis"],
@@ -27,6 +50,7 @@ def execute_workload(workload: dict, *, profile: bool = False) -> dict:
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
         screening_tolerance=1e-14,
+        **options,
     )
     systems = [workload["atoms"] for _ in range(workload["batch"])]
     with calculator.prepare_batch(
@@ -34,16 +58,25 @@ def execute_workload(workload: dict, *, profile: bool = False) -> dict:
         charges=[workload["charge"]] * len(systems),
         multiplicities=[workload["multiplicity"]] * len(systems),
         warm_start=True,
-        shell_class_profiling=profile,
+        shell_class_profiling=profile and not (is_dft or is_df),
     ) as prepared:
-        cold = prepared.execute(strict=True)
+        cold = prepared.execute(properties=("energy", "forces"), strict=True)
         prepared.set_warm_start_updates(False)
-        prepared.execute(strict=True)
+        prepared.execute(properties=("energy", "forces"), strict=True)
         started = time.perf_counter()
-        result = prepared.execute(strict=True)
+        result = prepared.execute(properties=("energy", "forces"), strict=True)
         elapsed = time.perf_counter() - started
         work, profiling_reason = [], None
-        if profile:
+        dft_record = {}
+        if is_dft:
+            from ._dft_autotune import execution_record
+
+            dft_record = execution_record(workload, calculator, prepared, result)
+        elif is_df:
+            from ._df_autotune import execution_record
+
+            dft_record = execution_record(workload, prepared, result)
+        elif profile:
             try:
                 work = [asdict(row) for row in prepared.last_shell_class_profile()]
             except NotImplementedError:
@@ -62,6 +95,7 @@ def execute_workload(workload: dict, *, profile: bool = False) -> dict:
         "work": work,
         "profiling_reason": profiling_reason,
         "profile": calculator.profile_diagnostics,
+        **dft_record,
     }
 
 
@@ -69,11 +103,22 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
-    parser.add_argument("--profile", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--profile", action="store_true")
+    mode.add_argument("--reference", action="store_true")
     args = parser.parse_args()
+    workload = json.loads(args.input.read_text())
+    if args.reference:
+        if workload.get("kind") == "df-hf":
+            from ._df_autotune import reference_workload
+        else:
+            from ._dft_autotune import reference_workload
+
+        atomic_json(args.output, reference_workload(workload))
+        return
     atomic_json(
         args.output,
-        execute_workload(json.loads(args.input.read_text()), profile=args.profile),
+        execute_workload(workload, profile=args.profile),
     )
 
 

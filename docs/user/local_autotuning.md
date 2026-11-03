@@ -21,7 +21,7 @@ and diagnostics require the allocated visible GPU; accepted binaries can replay
 without CUDA compiler tools. See [native CLI ownership](native_cli.md).
 
 XYZ coordinates default to Angstrom and are converted to Bohr. Use `--units
-bohr` for a Bohr XYZ file. Charge, multiplicity, RHF/UHF method, Cartesian or
+bohr` for a Bohr XYZ file. Charge, multiplicity, HF/KS method, Cartesian or
 spherical representation, and batch size are explicit options. The command uses
 logical CUDA device 0 within the allocated visibility by default. Use
 `--device-id N` to select another visible ordinal. Device probing, candidate
@@ -107,6 +107,156 @@ errors, noisy timings, and slower endpoints preserve the working configuration.
 Only complete accepted bundles are activated through an atomic index update.
 Unfinished staging directories are never read by runtime selection.
 
+## Tune a DFT workload
+
+The same frontend accepts `lda-rks`, `pbe-rks`, `pbe0-rks`, `b3lyp-rks`,
+`r2scan-rks`, and their `-uks` counterparts. DFT searches the point tile of the
+existing native **device-fused XC** implementation, not HF shell-class kernels.
+The HF-specific profiling flags are never passed to KS batches. This is an
+execution-schedule search: the functional, Treutler grid, screening, FP64
+precision, charge, spin and analytic-force implementation remain fixed.
+The XC search does not tune DFT J/K algorithms, generated kernel variants,
+independent force tiles, or density fitting, and never promotes a CPU/host-XC path.
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:30:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
+  generativeqc-tune --quick water.xyz --method pbe-rks --basis def2-svp \
+  --grid-level 3 --xc-tiles 128 256 512 1024 --repeats 6
+```
+
+`--grid-level` selects the scientific quadrature **before** the search; it is
+never optimized for speed. The default is level 3. Without `--xc-tiles`, quick
+mode tries 128/256/512/1024 points, while full mode adds 64/1536/2048/4096.
+Duplicate tiles and the actual incumbent tile are removed; `--max-candidates`
+and the shared wall-clock budget bound the remaining search. DFT uses neither
+`--coverage` nor `--max-classes`, which belong to HF shell-class selection.
+The baseline keeps native automatic tiling unless an exact local winner is
+already active. Use `--retune` to reconsider such a winner.
+Autotuned winners additionally match the full basis data, representation, batch
+size, MethodIR and SCF controls. A grid-only match cannot reuse endpoint timing
+from a different AO or solver workload. Explicit initial guesses and fitted
+calculations retain native policy rather than consuming direct-auto evidence.
+The search fixes `max_iterations=100`, `diis_history=8`, energy tolerance
+`1e-12`, density tolerance `1e-10`, and screening tolerance `1e-14`; runtime
+selection requires those same controls. Explicit SCF tiles also prescribe the
+inherited force bound under native policy; the search does not vary an
+independent `force_tile_points` parameter.
+An explicitly host-unfused incumbent is left unchanged rather than timed as if
+it were device-fused; this resident-only search does not replace host-XC winners.
+
+DFT requires at least five paired repeats. Fresh processes alternate baseline
+and candidate complete energy-plus-force replays, excluding initialization,
+cold convergence and warmup. Native KS diagnostics retain the resolved tile,
+grid points, Fock builds and available J/K work census. Every candidate replay
+must have a measured native memory ledger within its admitted capacity, with
+no rejected allocation. These runtime-only candidates reuse the same compiled
+library: their source binding is the verified native source inventory, and the
+bundle hashes the exact library. No new PTXAS/occupancy evidence is claimed.
+
+A separate, untimed CPU PySCF/libxc solve supplies independent energies and
+analytic forces with molecular-grid response. The oracle bounds are `1e-5`
+Hartree/atom for energy, `1e-4` Hartree/Bohr maximum force error and `3e-5`
+Hartree/Bohr force RMS error, matching existing native KS qualification floors.
+Every paired sample must additionally pass the much tighter schedule-parity,
+translation, identical-iteration and statistically significant 1.02x endpoint
+improvement gates. The reference is a tuning dependency only, never a runtime
+production dependency.
+
+A successful DFT search retains the incumbent native library, accepted HF
+kernels and unrelated DFT workload winners when extending the bundle. With
+`--portable-baseline`, a proposal must also beat the actual unmasked incumbent
+before activation. Missing diagnostics, reference failure, insufficient memory,
+timeout, noise or no improvement leave the active profile unchanged.
+
+## Tune native DFT J/K policies
+
+`--component jk` searches existing native full-range Coulomb and hybrid-exchange
+lowerings and task schedules. It preserves MethodIR exchange coefficients,
+spin, quadrature, FP64, screening and analytic derivatives. Semilocal workloads
+do not propose absent exchange work. This is not generated-kernel autotuning or
+a change to exact versus fitted integrals.
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:30:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
+  python -m generativeqc.tune_cli water.xyz --method pbe0-rks \
+  --basis def2-svp --component jk --repeats 5 --max-candidates 6
+```
+
+Each trial uses an isolated child environment and complete warm E+F replay.
+Only allowlisted native execution knobs are changed; ambient GenerativeQC
+debug/experimental controls are excluded without modifying the parent or Slurm
+device visibility. The search compares observed grid/Fock/J/K work and resolved
+XC schedules, checks every sample against the independent oracle and native
+allocation ledger, then requalifies a selected winner against the original
+incumbent using fresh holdout pairs. Native capability and capacity fallbacks
+remain authoritative; requested lowerings are not claims of kernel coverage.
+
+An accepted search returns `qualified_recipe`, **not** an installed global
+profile. Native environment controls are process-scoped: applying them around
+arbitrary concurrent Calculator calls would be unsafe and could transfer
+performance evidence to a different workload. Explicitly replay the recorded
+geometry/basis/batch/model with:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:10:00 python -m generativeqc.execution_tune \
+  /path/to/jk-run/recipe.json /path/to/replay.json
+```
+
+Replay rechecks native-library bytes, device/source identity, the exact workload
+and policy, and all raw holdout numerical/performance/resource/work gates. It
+needs no compiler or CPU reference solve; the independent reference is retained
+in the adjacent report. No winner, failed holdout, timeout or missing diagnostics
+publishes a recipe or changes the active profile index. `--xc-tiles`,
+`--portable-baseline` and `--export` belong to other search contracts and are
+rejected for J/K recipes. All timing claims exclude preparation/cold convergence
+and warmup; they are not cold-start throughput claims.
+
+## Tune density-fitting execution
+
+`--component df --method rhf` searches native FP64 density-fitting
+storage/contraction/derivative mappings under a **fixed** auxiliary basis,
+metric threshold and memory hint. It does not switch direct and fitted
+Hamiltonians, tune the metric cutoff, or enable single-precision storage.
+This initial domain is full-rank RHF with the existing small native eigensolver,
+at most 16 orbital and 128 auxiliary AOs. Larger topologies and composed KS/DF
+resource admission are not qualified and are refused rather than run without
+the complete allocation gate.
+UHF also remains refused until its native DF owner publishes complete observed
+Fock work; an iteration-derived estimate is not a substitute for that census.
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:30:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
+  python -m generativeqc.tune_cli water.xyz --method rhf --component df \
+  --basis sto-3g --auxiliary-basis def2-svp --representation spherical \
+  --df-memory-mib 20 --repeats 5 --max-candidates 6
+```
+
+The auxiliary basis defaults to the orbital basis, **not** an implicit JK-fit
+table. The fixed relative metric threshold is `1e-10`. The memory hint defaults
+to 64 MiB and feeds the existing native phase-aware DF planner; it is not a
+total-process-memory promise. The composed ResourceBudget and observed ledger
+gate the complete endpoint, including forces. Resident/streamed and packed/dense
+fallbacks remain native decisions under that hint.
+
+An untimed independent PySCF/libcint fitted-HF oracle includes auxiliary-basis
+response in analytic forces and rebuilds integrals from the exact immutable
+Gaussian input tables, not potentially differently rounded named-basis aliases.
+Near-singular/truncated metrics are refused until
+matching pseudoinverse/derivative semantics have independent qualification.
+Every candidate retains the same independently verified full metric rank and
+observed Fock work. Absolute energy error must be at most `1e-9` Hartree,
+maximum force error `1e-8` and force RMS error `3e-9` Hartree/Bohr; the looser
+XC-grid discretization floors do not apply. All other recipe/holdout/replay
+requirements are shared with J/K tuning. Replay uses
+`python -m generativeqc.execution_tune recipe.json replay.json` under Slurm and
+never performs a production CPU reference solve or changes the global profile.
+
+## DFT Profile Acceptance
+
 DFT grid/XC schedule tuning reuses the same bundle and activation index. Its
 optional `dft_schedules` winners have a separate scientific workload identity
 (architecture, functional/ingredients and jet outputs, grid/screening model,
@@ -132,6 +282,9 @@ when every batch item has an exact workload match and all matched items select
 the same resolved schedule, including its point tile. A changed geometry or
 mixed batch with any miss keeps the portable default. `GENERATIVEQC_PROFILE=off`
 continues to provide the tuning/A-B bypass.
+Explicit `KsOptions.tile_points` overrides are never replaced by local DFT
+profiles. Calculators with an explicit `ResourceBudget` retain their bounded
+native/user tile policy rather than enlarging it from a local schedule winner.
 
 Real-device component qualification has exercised this boundary on an NVIDIA
 GeForce RTX 4090 with CUDA 12.9.86. At revision `cc3fc40d`, a complete native

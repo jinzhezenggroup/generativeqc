@@ -1,0 +1,258 @@
+{
+  "status": "COMPLETE_TERMINAL_NSIGHT_ANALYSIS_ARCHIVE_LARGE_ORIGINALS_RETAINED_REMOTE",
+  "cohort": "nsys-v1",
+  "archive": {
+    "name": "nsys-v1-analysis.tar.xz",
+    "bytes": 1440220,
+    "sha256": "6e957e8d9a3787a12a8e307ef835194634ac45460cc0c212edc6fcf233c2c1c8"
+  },
+  "campaign_sha256": "7702d0ebbbfbba0afd1c9dec02f31166c16cbf5f013d2edad8f25e12856f46da",
+  "conversion_sha256": "836d56610c5005268e708d1a38e2d978808fb90cc59a40d852c30329eb168723",
+  "campaign_status": "THREE_INTRUSIVE_CAPTURE_ATTEMPTS_RECEIVER_ANALYSIS_PENDING",
+  "conversion_status": "PASS_CPU_CONVERSION_AND_3_ACTUAL_TIMELINES_ORIGINALS_PRESERVED",
+  "files": {
+    "nsys-v1/campaign.json": {
+      "bytes": 10746,
+      "sha256": "7702d0ebbbfbba0afd1c9dec02f31166c16cbf5f013d2edad8f25e12856f46da"
+    },
+    "nsys-v1/conversion.json": {
+      "bytes": 11536,
+      "sha256": "836d56610c5005268e708d1a38e2d978808fb90cc59a40d852c30329eb168723"
+    },
+    "nsys-v1/converted/hf-96-df.export.stderr": {
+      "bytes": 8101,
+      "sha256": "199f5380c922f7d7ff6b8230a202dbb9287efdd0c39d661f15c339d84c152a68"
+    },
+    "nsys-v1/converted/hf-96-df.export.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "nsys-v1/converted/hf-96-df.import.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "nsys-v1/converted/hf-96-df.import.stdout": {
+      "bytes": 1063,
+      "sha256": "e72832424c878669daabdb897ee8b0488df5fdcf3607c4e47c692c565508509a"
+    },
+    "nsys-v1/converted/hf-96-df.reduce.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "nsys-v1/converted/hf-96-df.reduce.stdout": {
+      "bytes": 65,
+      "sha256": "d98bc93d7eb25965b39c16cafcc77caaf7bc214027b1ecd7da9de1220c253942"
+    },
+    "nsys-v1/converted/hf-96-df.sqlite": {
+      "bytes": 2408448,
+      "sha256": "ac5f58676de28a28aff93db9fc8a502d10f8dbb1557c6f5022a89371369adde6"
+    },
+    "nsys-v1/converted/hf-96-df.timeline.json": {
+      "bytes": 124081,
+      "sha256": "6fb4faccc136a4fef6faa214e4c25842d898a6e31c36fb31fefe4a2e7a44ce2c"
+    },
+    "nsys-v1/converted/pbe0-96-df.export.stderr": {
+      "bytes": 8101,
+      "sha256": "2801e0578920b8b6685d42ff7a64b5814d41550e61c7bc729b4ea11f6860adbc"
+    },
+    "nsys-v1/converted/pbe0-96-df.export.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "nsys-v1/converted/pbe0-96-df.import.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "nsys-v1/converted/pbe0-96-df.import.stdout": {
+      "bytes": 1146,
+      "sha256": "7fbf093588f0229cc83a9c8dc1631b29784af285662ddc19d072a8d08c4f2667"
+    },
+    "nsys-v1/converted/pbe0-96-df.reduce.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "nsys-v1/converted/pbe0-96-df.reduce.stdout": {
+      "bytes": 65,
+      "sha256": "d98bc93d7eb25965b39c16cafcc77caaf7bc214027b1ecd7da9de1220c253942"
+    },
+    "nsys-v1/converted/pbe0-96-df.sqlite": {
+      "bytes": 4751360,
+      "sha256": "a8d9119ac95e5e4082cb9f1006f684f5d6d5a1f0f95d58d95834f0ee59f880f7"
+    },
+    "nsys-v1/converted/pbe0-96-df.timeline.json": {
+      "bytes": 388359,
+      "sha256": "747ca786a20e064e47e9b35bb1a5e6bf4d46846651b919eb265569d16ba82409"
+    },
+    "nsys-v1/converted/pbe0-96-direct.export.stderr": {
+      "bytes": 8101,
+      "sha256": "175893134455f955fdd7bb65a4e07aa9972558f76986969dee8a316e05d363ed"
+    },
+    "nsys-v1/converted/pbe0-96-direct.export.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "nsys-v1/converted/pbe0-96-direct.import.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "nsys-v1/converted/pbe0-96-direct.import.stdout": {
+      "bytes": 1393,
+      "sha256": "c25e2f37170e26654f38b67c07ebc1be1ef34758fa26134744447559ee5ed0cc"
+    },
+    "nsys-v1/converted/pbe0-96-direct.reduce.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "nsys-v1/converted/pbe0-96-direct.reduce.stdout": {
+      "bytes": 65,
+      "sha256": "d98bc93d7eb25965b39c16cafcc77caaf7bc214027b1ecd7da9de1220c253942"
+    },
+    "nsys-v1/converted/pbe0-96-direct.sqlite": {
+      "bytes": 3870720,
+      "sha256": "fedc9c3f0b86fc8ea2a2499aae18c9830d8c391697f65c5c7f441a0cb6bf88ee"
+    },
+    "nsys-v1/converted/pbe0-96-direct.timeline.json": {
+      "bytes": 363195,
+      "sha256": "57708105e2c5803a4c05165535027b46a03e7f2eb7dc3ccd5fe0898e5c4c0b31"
+    },
+    "nsys-v1/hf-96-df.json": {
+      "bytes": 78748,
+      "sha256": "72917a656b7efae641f397faf129a6b4f534e592fd55a807b6fee65de7c863c5"
+    },
+    "nsys-v1/hf-96-df.plan.json": {
+      "bytes": 17128,
+      "sha256": "1608a932f16086005bcca6d8329b4caff6abc620fb5f108eab7afc2e1cdc6c5c"
+    },
+    "nsys-v1/hf-96-df.qualification.json": {
+      "bytes": 5836,
+      "sha256": "01ef5c78fa76e8c4746a63a5f3b0d5d575a383c8205c5fcbf4ffd7df74530b9d"
+    },
+    "nsys-v1/hf-96-df.stderr": {
+      "bytes": 442,
+      "sha256": "2d1f5e24c30eef668e6360152b98758ad1bbd195950b00bbdb7211dbaee0a0c6"
+    },
+    "nsys-v1/hf-96-df.stdout": {
+      "bytes": 616,
+      "sha256": "854e06c82054a4056e4bcdb2d8fd34baff07ce126f255f094d0713254216c1ab"
+    },
+    "nsys-v1/pbe0-96-df.json": {
+      "bytes": 138460,
+      "sha256": "0590a43fcfb5cfbad596247569937d564edddefe0ec99ea3930a074657483bc0"
+    },
+    "nsys-v1/pbe0-96-df.plan.json": {
+      "bytes": 18411,
+      "sha256": "e2d5e51e3de06f28de4fd11251f105a3ab9bb2a3f5157a8550c1cdec47fa66f3"
+    },
+    "nsys-v1/pbe0-96-df.qualification.json": {
+      "bytes": 6284,
+      "sha256": "3890e98e84ecee40236216755fbba2c3e03d0247dea293e653a22f6c8c46608e"
+    },
+    "nsys-v1/pbe0-96-df.stderr": {
+      "bytes": 442,
+      "sha256": "2d1f5e24c30eef668e6360152b98758ad1bbd195950b00bbdb7211dbaee0a0c6"
+    },
+    "nsys-v1/pbe0-96-df.stdout": {
+      "bytes": 616,
+      "sha256": "d36c8e36920150e05cb498b83e158110f28421848b9d30672bbac55237182810"
+    },
+    "nsys-v1/pbe0-96-direct.json": {
+      "bytes": 138559,
+      "sha256": "112b8e1ec09210c7719cb95381fe88f10ce22868c3d9fdfb2d55f9164e8df749"
+    },
+    "nsys-v1/pbe0-96-direct.plan.json": {
+      "bytes": 18415,
+      "sha256": "d9722c9ff124d12735ce53a14fe11a1783236aac46e56e18ad165fdfdd141db5"
+    },
+    "nsys-v1/pbe0-96-direct.qualification.json": {
+      "bytes": 6287,
+      "sha256": "6459637061ff907dc62b555f8beb6d3a0d61b0a837c6aa4b50cec7c6e8fb1096"
+    },
+    "nsys-v1/pbe0-96-direct.stderr": {
+      "bytes": 442,
+      "sha256": "2d1f5e24c30eef668e6360152b98758ad1bbd195950b00bbdb7211dbaee0a0c6"
+    },
+    "nsys-v1/pbe0-96-direct.stdout": {
+      "bytes": 618,
+      "sha256": "94f0071aca769931d48a9b844e6f25cc29951689f1f3837fb2e942d1b84f5816"
+    },
+    "nsys-v1-executed-producers/run-nsys.py": {
+      "bytes": 10567,
+      "sha256": "444ae92b66a3ff09bd55bd7558b8e5b313e70f6524e0ac71e8d4c450db3a906d"
+    },
+    "nsys-v1-executed-producers/run-nsys-job.sh": {
+      "bytes": 611,
+      "sha256": "97f6f35dc3a15031c70e821d9a6453f8adf59bb7a7c0ba12115a05acbf07df43"
+    },
+    "nsys-v1-executed-producers/nsys-endpoint.py": {
+      "bytes": 13281,
+      "sha256": "d9ae72af514e95215da59af8d3f765b58f44c65f84a7fbe91959bcb2b7f91c11"
+    },
+    "nsys-v1-executed-producers/run-screening-v3.py": {
+      "bytes": 14734,
+      "sha256": "b23194e91979ea5e6ecc476d7e1cacf657e6dda4db625fe9e67e0331b2d4101c"
+    },
+    "nsys-v1-executed-producers/screening-protocol-v3.json": {
+      "bytes": 14759,
+      "sha256": "87265d70a8cddde529437ab51aa72898d4bf6702a4d99410132f28fdbcdad2f6"
+    },
+    "nsys-v1-executed-producers/pilot.py": {
+      "bytes": 9725,
+      "sha256": "5ecd9d5778afbee70f095dfd53c30e1f19ec6b8c002b20627f9b90ee9e683568"
+    },
+    "nsys-v1-executed-producers/nsys-tool-identity-v1.json": {
+      "bytes": 303,
+      "sha256": "201d09ac73afdc8e66b696cb86528fc401c7596adb770bc1ca12ce19a1a23a69"
+    },
+    "nsys-v1-executed-producers/nsys-offline-v1.py": {
+      "bytes": 5708,
+      "sha256": "45ca69e0447dbb182bd2441c2b11eb03add7495964afa1dc758ec4f040196b2f"
+    },
+    "nsys-v1-executed-producers/nsys-timeline-v1.py": {
+      "bytes": 8427,
+      "sha256": "c54e49f09d35c8cc8eab09703c605d3e8f48c2dcdfb30bca7b435f23b9f1c101"
+    }
+  },
+  "large_remote_originals": {
+    "nsys-v1/converted/hf-96-df.import-work.qdstrm": {
+      "bytes": 1968278867,
+      "sha256": "4e3cc88a0b3e838db94acc47fd0439113a50d7aed75b2ba039c83af89d476aeb"
+    },
+    "nsys-v1/converted/hf-96-df.work.nsys-rep": {
+      "bytes": 598914,
+      "sha256": "8ec5dfd8e23191ae7854a20a616fcabe3e8cbb2ac88c7a3ad106e0f8b381a7f0"
+    },
+    "nsys-v1/converted/pbe0-96-df.import-work.qdstrm": {
+      "bytes": 1969432704,
+      "sha256": "5271124520b9207a885b5fd4208c1855a898b826105124933b8ff8867eb5a8dd"
+    },
+    "nsys-v1/converted/pbe0-96-df.work.nsys-rep": {
+      "bytes": 1811103,
+      "sha256": "8c3062d900eb81504b564039b6c2d770d8f785faef63c4d23c8bd074324c64f7"
+    },
+    "nsys-v1/converted/pbe0-96-direct.import-work.qdstrm": {
+      "bytes": 1969137718,
+      "sha256": "49af7c0e078470c9ef37887160633fe19f3f271b35fa7a78124f12cfa946fa18"
+    },
+    "nsys-v1/converted/pbe0-96-direct.work.nsys-rep": {
+      "bytes": 1506109,
+      "sha256": "dd7ba609a4a1cb6630971681641f84f4b6b834f16c6a1a9868a20b26dc4e1724"
+    },
+    "nsys-v1/hf-96-df.capture.qdstrm": {
+      "bytes": 1968278837,
+      "sha256": "5f135bffda4fdc4c76093bd743bc3f566b6916220a8fc900a77aed84ac4cba50"
+    },
+    "nsys-v1/pbe0-96-df.capture.qdstrm": {
+      "bytes": 1969432674,
+      "sha256": "ac5211df8305dc0d4c9ff3fd61b2313a1fccea6f65f2d95eb318febe2b4f5463"
+    },
+    "nsys-v1/pbe0-96-direct.capture.qdstrm": {
+      "bytes": 1969137688,
+      "sha256": "0385314447f7b6749b7a3e192be9976016f46e41d9694fd639ae9384b071b394"
+    }
+  },
+  "archiver": {
+    "name": "pack-nsys-analysis-v1.py",
+    "sha256": "5bbbb26064482c801bae9810904636681b80d4fb6efe96074779d1e922419be5"
+  },
+  "scope": "Every terminal small receipt/log/plan and any actual SQLite/timeline, with executed producers and admissions. QDSTRM and NSYS-REP large originals stay immutable on the existing remote task volume and are not downloaded. Partial/failed captures and conversion failures are retained, never manufactured into valid timelines or clean timings."
+}

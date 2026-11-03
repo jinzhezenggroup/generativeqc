@@ -432,6 +432,26 @@
       "owner": "H100 current-source stage cd2b 20261102",
       "reason": "Original same-family provisional review of actual build/DF44/screen66,including scope WARN and unchanged original input seal. Not every private audit input is published in this stage packet.",
       "sha256": "0e3967ce5d3258b8145eb6136131126b8f0b4f7e45768c3bb6f73ab853ea2190"
+    },
+    "benchmarks/results/h100-sm90-cd2b-guards-20261102/native-qualification-v1-completed.tar.xz": {
+      "owner": "H100 frozen-cd2b supporting qualification",
+      "reason": "Exact completed source-bound compressed observations, full E/F vectors, producer and platform bindings; original failed/unfavorable results retained. CPU-only receiver recomputes accepted and failed outcomes; no final-majority or later-source qualification.",
+      "sha256": "f57c575df7f708b6c175a2cbc490ca680fca6fd0bc65e629f9416403fcfb791c"
+    },
+    "benchmarks/results/h100-sm90-cd2b-guards-20261102/reference-six-v5-completed.tar.xz": {
+      "owner": "H100 frozen-cd2b supporting qualification",
+      "reason": "Exact completed source-bound compressed observations, full E/F vectors, producer and platform bindings; original failed/unfavorable results retained. CPU-only receiver recomputes accepted and failed outcomes; no final-majority or later-source qualification.",
+      "sha256": "de4e8473cd247f59fa9a3e7b27ddffa9645471dfedd0877437967113058f3678"
+    },
+    "benchmarks/results/h100-sm90-cd2b-guards-20261102/standard-guards-v1-completed.tar.xz": {
+      "owner": "H100 frozen-cd2b supporting qualification",
+      "reason": "Exact completed source-bound compressed observations, full E/F vectors, producer and platform bindings; original failed/unfavorable results retained. CPU-only receiver recomputes accepted and failed outcomes; no final-majority or later-source qualification.",
+      "sha256": "bde51c8931560635d38a16f0027fab08e85ebc9a3d063c8b5265e022c4114564"
+    },
+    "benchmarks/results/h100-sm90-cd2b-guards-20261102/uks-fit-v1-completed.tar.xz": {
+      "owner": "H100 frozen-cd2b supporting qualification",
+      "reason": "Exact completed source-bound compressed observations, full E/F vectors, producer and platform bindings; original failed/unfavorable results retained. CPU-only receiver recomputes accepted and failed outcomes; no final-majority or later-source qualification.",
+      "sha256": "e32a78dbf630340fe8442b8c3553a2c4fe2f7830cffa17a6a7c1a47ee731af43"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

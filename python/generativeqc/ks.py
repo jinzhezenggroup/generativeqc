@@ -1131,12 +1131,14 @@ def profiled_ks_selection(
     *,
     charges: typing.Any,
     multiplicities: typing.Any,
+    selection_context: str | None = None,
 ) -> ProfiledKsSelection:
     """Resolve one exact local DFT09 winner and retain qualification provenance."""
 
     if (
         options is None
         or options.xc_schedule != "device_fused"
+        or options.tile_points is not None
         or diagnostics.get("source") != "local"
     ):
         return ProfiledKsSelection(options)
@@ -1178,7 +1180,9 @@ def profiled_ks_selection(
             observable="potential",
             density_route="density_matrix",
         )
-        payload = select_dft_schedule(diagnostics, workload.to_payload())
+        payload = select_dft_schedule(
+            diagnostics, workload.to_payload(), selection_context=selection_context
+        )
         if payload is None:
             return ProfiledKsSelection(options)
         schedule = grid_xc_schedule(payload)

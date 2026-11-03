@@ -77,3 +77,64 @@ def test_module_help_has_no_native_or_gpu_dependency() -> None:
         timeout=30,
     )
     assert result.stdout.startswith("usage: generativeqc-tune")
+
+
+@pytest.mark.parametrize(
+    "method", ("lda-rks", "pbe-rks", "pbe-uks", "pbe0-rks", "b3lyp-uks", "r2scan-rks")
+)
+def test_dft_tuner_preserves_scientific_and_execution_controls(
+    method: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from generativeqc import autotune
+
+    calls = []
+
+    def fake_run(args: object) -> dict:
+        calls.append(args)
+        return {"installed": None, "directory": "/tmp/dft-fixture"}
+
+    monkeypatch.setattr(autotune, "run", fake_run)
+    assert (
+        tune_cli.main(
+            [
+                "water.xyz",
+                "--method",
+                method,
+                "--grid-level",
+                "2",
+                "--batch",
+                "4",
+                "--xc-tiles",
+                "128",
+                "512",
+                "--device-id",
+                "2",
+                "--repeats",
+                "5",
+            ]
+        )
+        == 0
+    )
+    assert calls[0].method == method
+    assert calls[0].grid_level == 2
+    assert calls[0].xc_tiles == [128, 512]
+    assert calls[0].batch == 4 and calls[0].device_id == 2
+    assert calls[0].repeats == 5
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    (
+        ["--method", "pbe-rks", "--repeats", "4"],
+        ["--method", "pbe-rks", "--grid-level", "10"],
+        ["--method", "pbe-rks", "--xc-tiles", "0"],
+        ["--method", "pbe-rks", "--xc-tiles", "4097"],
+        ["--method", "rhf", "--xc-tiles", "128"],
+        ["--method", "uhf", "--grid-level", "2"],
+    ),
+)
+def test_invalid_dft_controls_fail_before_tuning(arguments: list[str]) -> None:
+    with pytest.raises(SystemExit) as error:
+        tune_cli.main(["water.xyz", *arguments])
+    assert error.value.code == 2
