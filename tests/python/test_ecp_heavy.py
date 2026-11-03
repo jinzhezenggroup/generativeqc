@@ -296,6 +296,14 @@ def test_heavy_resource_boundary_replay(
     ) as batch:
         initial = batch.execute(strict=True).items[0]
         assert initial.converged
+        # Keep one non-rigid rebuild before restoration, without replaying a
+        # multi-step finite-difference matrix for every heavy element.
+        moved_xyz = mol.atom_coords().copy()
+        moved_xyz[1, 2] += 0.02
+        moved = batch.execute(coordinates=[moved_xyz], strict=True).items[0]
+        assert moved.converged
+        assert np.isfinite(moved.energy) and np.isfinite(moved.forces).all()
+        assert not np.allclose(moved.forces, initial.forces, atol=2e-8, rtol=0)
         restored = batch.execute(coordinates=[mol.atom_coords()], strict=True).items[0]
         np.testing.assert_allclose(restored.energy, initial.energy, atol=2e-10, rtol=0)
         np.testing.assert_allclose(restored.forces, initial.forces, atol=2e-8, rtol=0)
