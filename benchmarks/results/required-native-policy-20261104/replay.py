@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import gzip
+import argparse
 import hashlib
 import json
+import lzma
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,25 @@ def verify_publication(root: Path) -> None:
             hashlib.sha256(content).hexdigest() != member["sha256"]
         ):
             raise ValueError(f"publication member changed: {member['path']}")
+
+
+def frozen_sources(root: Path) -> dict[str, bytes]:
+    """Restore lossless source text without making frozen bytes formatter inputs."""
+    with lzma.open(root / "frozen-sources.json.xz", "rt") as stream:
+        archive = json.load(stream)
+    if archive["schema"] != "generativeqc.frozen-source-text.v1":
+        raise ValueError("unsupported frozen source container")
+    sources = {}
+    for entry in archive["files"]:
+        name = entry["path"]
+        path = Path(name)
+        if path.is_absolute() or ".." in path.parts or name in sources:
+            raise ValueError("unsafe or duplicate frozen source path")
+        content = entry["content"].encode()
+        if hashlib.sha256(content).hexdigest() != entry["sha256"]:
+            raise ValueError(f"frozen source bytes changed: {name}")
+        sources[name] = content
+    return sources
 
 
 def restore_records(destination: Path, records: list[dict]) -> None:
@@ -52,9 +72,20 @@ def restore_records(destination: Path, records: list[dict]) -> None:
 
 def main() -> int:
     """Keep an incomplete campaign incomplete, including its original failure."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--extract-sources", type=Path)
+    arguments = parser.parse_args()
     root = Path(__file__).resolve().parent
     verify_publication(root)
-    with gzip.open(root / "samples.json.gz", "rt") as stream:
+    sources = frozen_sources(root)
+    if arguments.extract_sources is not None:
+        arguments.extract_sources.mkdir(parents=True, exist_ok=False)
+        for name, content in sources.items():
+            destination = arguments.extract_sources / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(content)
+        return 0
+    with lzma.open(root / "samples.json.xz", "rt") as stream:
         samples = json.load(stream)
     if samples["schema"] != "generativeqc.required-native-policy-receipts.v1":
         raise ValueError("unsupported receipt container")
@@ -62,10 +93,12 @@ def main() -> int:
         restored = Path(temporary)
         previous = restored / "failed-protocol-v1"
         previous.mkdir()
+        auditor = restored / "audit_receipts.py"
+        auditor.write_bytes(sources["audit_receipts.py.txt"])
         restore_records(restored, samples["protocol_v2"])
         restore_records(previous, samples["protocol_v1"])
         replay = subprocess.run(
-            [sys.executable, str(root / "audit_receipts.py.txt"), str(restored)],
+            [sys.executable, str(auditor), str(restored)],
             capture_output=True,
             text=True,
             check=False,

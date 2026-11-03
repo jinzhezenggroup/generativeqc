@@ -1,8 +1,8 @@
 {
   "attachments": [
     {
-      "path": "samples.json.gz",
-      "sha256": "a3151ea861757f6560d975be8ce61dc4e47e639ba6b1f5935a0e4e7f23dbd710"
+      "path": "samples.json.xz",
+      "sha256": "ef80dbb8765917a8be72a86c6f54cbe2eab0571310e877796e89f3a4ece83f9e"
     }
   ],
   "backend_selected": "cpu_reference",

@@ -58,7 +58,7 @@ def test_publication_envelope_does_not_promote_partial_results() -> None:
 
 @pytest.mark.parametrize(
     "member",
-    ["samples.json.gz", "summary.json", "audit_receipts.py.txt", "replay.py"],
+    ["samples.json.xz", "summary.json", "frozen-sources.json.xz", "replay.py"],
 )
 def test_changed_packet_member_fails_before_replay(tmp_path: Path, member: str) -> None:
     packet = tmp_path / "packet"
@@ -69,3 +69,30 @@ def test_changed_packet_member_fails_before_replay(tmp_path: Path, member: str) 
     assert replay.returncode == 1
     assert "publication member changed" in replay.stderr
     assert replay.stdout == ""
+
+
+def test_frozen_source_extraction_preserves_bytes_and_never_overwrites(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "sources"
+    command = [
+        sys.executable,
+        "-I",
+        str(PACKET / "replay.py"),
+        "--extract-sources",
+        str(destination),
+    ]
+    extracted = subprocess.run(
+        command, capture_output=True, text=True, check=False, timeout=60
+    )
+    assert extracted.returncode == 0, extracted.stderr
+    assert (destination / "audit_receipts.py.txt").is_file()
+    assert (destination / "frozen-v2/compare.py.txt").is_file()
+    assert (destination / "diagnostic/packaged_cpu_probe.cpp.txt").is_file()
+    previous = (destination / "audit_receipts.py.txt").read_bytes()
+    repeated = subprocess.run(
+        command, capture_output=True, text=True, check=False, timeout=60
+    )
+    assert repeated.returncode == 1
+    assert "FileExistsError" in repeated.stderr
+    assert (destination / "audit_receipts.py.txt").read_bytes() == previous

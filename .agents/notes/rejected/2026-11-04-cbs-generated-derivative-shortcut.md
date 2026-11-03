@@ -84,3 +84,13 @@ an easier molecule/basis to turn the campaign green.
 - `src/posthf/mp2_force_workspace.hpp`: explicit live-block workspace admission.
 - `src/posthf/mp2_derivative_cpu.cpp`: current reference derivative consumer.
 - `src/integrals/s_integrals.hpp`: existing generated derivative execution owner.
+
+## Later diagnostic, not a production change
+
+Additional same-day probes isolated repeated AO generation after a force-only
+tile change. A diagnostic resident source plus the earlier derivative probe
+completed one unchanged physical endpoint and passed its component/composite
+oracle checks. This does not qualify or promote the derivative-only shortcut or
+repair the failed campaign. The separately proposed bounded source/lifetime
+direction is recorded in
+`.agents/notes/proposed/2026-11-04-cpu-mp2-force-source-residency.md`.

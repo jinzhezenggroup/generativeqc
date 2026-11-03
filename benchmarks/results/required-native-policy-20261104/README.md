@@ -44,10 +44,14 @@ The replay restores checksum-bound JSON records and v2 publication journals
 into a temporary directory, then invokes the retained independent auditor.
 It does not load a native library, execute molecular work, or launch a benchmark.
 `summary.json` records its observed result; `publication.json` authenticates the
-selected packet. `samples.json.gz` contains complete records, not just medians.
-Original scripts for both protocols are preserved under `frozen-v1/` and
-`frozen-v2/`; they are historical drivers, not safe resume commands. Frozen
-sources use a `.txt` suffix so formatters cannot silently change measured bytes.
+selected packet. `samples.json.xz` contains complete records, not just medians.
+Original scripts for both protocols and diagnostic sources are preserved
+byte-for-byte in `frozen-sources.json.xz`. Extract them into a new directory with
+`python replay.py --extract-sources /path/to/new-directory`; extraction never
+overwrites an existing directory. Their original `frozen-v1/`, `frozen-v2/` and
+`diagnostic/` paths use `.txt` suffixes to protect measured bytes from formatters.
+These are historical drivers, not safe resume commands. XZ compression is a
+lossless storage repair; no sample, journal, source or failed protocol is removed.
 
 To repeat native work, reconstruct the two exact Git archives and a source-matched
 CPU Release library using the build settings in `provenance.json`, a freshly
@@ -60,7 +64,7 @@ and publication journal. A larger timeout alone does not establish feasibility.
 
 ## Diagnostic boundary
 
-`diagnosis.json` contains bounded observations, **not qualification timings**.
+`diagnosis.json.xz` contains bounded observations, **not qualification timings**.
 An unmodified baseline GDB sample reached the reference weighted ERI derivative
 inside native MP2 forces. A diagnostic-only interposer delegated the same
 weights to the existing packaged CPU derivative owner; its 600-second endpoint
@@ -72,7 +76,7 @@ source values and 2,065,244,160 transform FMAs. Those are **one invocation's**
 counters, not complete endpoint counts or an extrapolated operation census.
 The generated derivative probe has not proved a scientific/performance gate and
 is not production behavior. Exact diagnostic driver/interposer sources are
-retained under `diagnostic/`; no compiled interposer or library is published.
+retained in the source container; no compiled interposer or library is published.
 Full transient logs remain in the ignored original artifact directory.
 
 See `.agents/notes/rejected/2026-11-04-cbs-generated-derivative-shortcut.md`

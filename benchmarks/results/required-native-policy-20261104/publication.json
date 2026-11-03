@@ -7,64 +7,28 @@
   },
   "files": [
     {
-      "bytes": 4417,
+      "bytes": 4749,
       "path": "README.md",
       "role": "reproduction",
-      "sha256": "29da6faa7af28696d05904f145293b245ac6d861525dc09b0d356ae6ff705d2a"
+      "sha256": "67dbee41f4fff2c4cb87a2f13eb53bfab0b5710ce9da16a74095e2ca499681bd"
     },
     {
-      "bytes": 8421,
-      "path": "audit_receipts.py.txt",
-      "role": "reproduction",
-      "sha256": "00257f3b28193f0b6a9f48f29e054ed4e782f076427def4113e9d046ad8263b2"
-    },
-    {
-      "bytes": 32492,
-      "path": "diagnosis.json",
+      "bytes": 3484,
+      "path": "diagnosis.json.xz",
       "role": "summary",
-      "sha256": "2166485d896e4db8e6eb9408df42400961aa14de07153b4bda064eac3c891d60"
-    },
-    {
-      "bytes": 3040,
-      "path": "diagnostic/diagnose_cbs.py.txt",
-      "role": "reproduction",
-      "sha256": "57b94668b8e6c34cf6f64f375e6bd94a1c97d1c50f6e591ead173b6408a40cc2"
-    },
-    {
-      "bytes": 1398,
-      "path": "diagnostic/packaged_cpu_probe.cpp.txt",
-      "role": "reproduction",
-      "sha256": "00d1f567923ed60068acb4e6c4e037358865a977d22c93186b8d55b888506110"
+      "sha256": "92581057b9b4010a9bbcb2f3e997551fef82bf76856656aaa9e366652e9a8761"
     },
     {
       "bytes": 4112,
       "path": "evidence.json",
       "role": "evidence",
-      "sha256": "cf6ee41349c0a64f62bcaf0c03cc65e3292eac8432cae1f8b225d1899915cfe0"
+      "sha256": "6e0fb40d7d9c27833c856a3754c85be97d927707c85f0adf9bdb15518778d8c3"
     },
     {
-      "bytes": 4622,
-      "path": "frozen-v1/compare.py.txt",
+      "bytes": 7240,
+      "path": "frozen-sources.json.xz",
       "role": "reproduction",
-      "sha256": "eea9a8066737a1fb0a777b484c6a8379176934b41d3be697a5260250ef1afb46"
-    },
-    {
-      "bytes": 4269,
-      "path": "frozen-v1/probe.py.txt",
-      "role": "reproduction",
-      "sha256": "0dc6df3400bbc0109ff52de29e9df7b907743e02cd37b3bf7a907138bea5491d"
-    },
-    {
-      "bytes": 5737,
-      "path": "frozen-v2/compare.py.txt",
-      "role": "reproduction",
-      "sha256": "e0886cbf2dc6f2bc7d9cbc060e50b0addedf8add3e9aeb22ca6fde0695ce1856"
-    },
-    {
-      "bytes": 4470,
-      "path": "frozen-v2/probe.py.txt",
-      "role": "reproduction",
-      "sha256": "f5a8036ed04eab33e348f034c0510205dd6e4db97e60cf91ba034bee6c115249"
+      "sha256": "083c9131ecc9beb89f23894fd3f162da9f7a000874d2b5c2c33a2ccebc44e12f"
     },
     {
       "bytes": 3544,
@@ -73,16 +37,16 @@
       "sha256": "3b5d49d651aa0a960881399187afb9b6ae53df01d31da249d60270cb2b645cd8"
     },
     {
-      "bytes": 3412,
+      "bytes": 4905,
       "path": "replay.py",
       "role": "reproduction",
-      "sha256": "b757b1d3be653240f113ce825ff7e85cf39d9f08c05733e2bb3f368b261f1a13"
+      "sha256": "6a7e82f5ebe65d13ae71302f645219a153352e90f062369aa3f2e850459e5479"
     },
     {
-      "bytes": 93290,
-      "path": "samples.json.gz",
+      "bytes": 38288,
+      "path": "samples.json.xz",
       "role": "samples",
-      "sha256": "a3151ea861757f6560d975be8ce61dc4e47e639ba6b1f5935a0e4e7f23dbd710"
+      "sha256": "ef80dbb8765917a8be72a86c6f54cbe2eab0571310e877796e89f3a4ece83f9e"
     },
     {
       "bytes": 6021,
