@@ -1,4 +1,6 @@
 #pragma once
+#include <stdexcept>
+
 #include "hf/reference.hpp"
 #include "molecule/nuclear_gradient.hpp"
 #include "response/unrestricted.hpp"
@@ -7,10 +9,14 @@
 
 namespace generativeqc::methods::detail {
 /** Variational UHF force on the same physical reference, without a new SCF
- * solve. Both spins carry unit occupations and their own energy-weighted D. */
+ * solve. Both spins carry unit occupations and their own energy-weighted D.
+ * Reserve unrelated live endpoint storage before derivative allocation. */
 inline std::vector<double> unrestricted_reference_force_cpu(
     const hf::UnrestrictedPhysicalReference& reference, const scf::PreparedFockPlan& provider,
-    std::size_t budget) {
+    std::size_t budget, std::size_t retained_numeric_bytes = 0) {
+  if (retained_numeric_bytes >= budget)
+    throw std::length_error("UHF component retained source exceeds endpoint budget");
+  budget -= retained_numeric_bytes;
   const auto n = reference.nbf;
   std::array<std::vector<double>, 2> weighted{std::vector<double>(n * n),
                                               std::vector<double>(n * n)};

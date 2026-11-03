@@ -169,7 +169,11 @@ class Ump2Prepared final : public PreparedCalculation, public ReferenceSeededCal
           result.hf_component->forces =
               cuda_ || fitting_.full_reference
                   ? std::move(hf.forces)
-                  : unrestricted_reference_force_cpu(reference, reference_plan, phase_budget);
+                  : unrestricted_reference_force_cpu(
+                        reference, reference_plan, phase_budget,
+                        fitted ? posthf::checked_add(external_capacity,
+                                                     fitted->retained_numeric_bytes())
+                               : 0);
       }
       generativeqc_correlation_diagnostic diagnostic{};
       diagnostic.struct_size = sizeof(diagnostic);

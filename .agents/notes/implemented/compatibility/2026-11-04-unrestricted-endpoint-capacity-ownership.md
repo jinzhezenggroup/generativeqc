@@ -26,6 +26,14 @@ fitting selectors were intended to forbid explicit CPU-reference contexts.
   This does not remove the fitted source's retained AO-rank-four tensor or
   change its algorithmic work; that source payload remains charged.
 - Report the maximum complete grouped endpoint, including an MP2 companion.
+- Apply the same fitted-source credit to CUDA UCCSD solve/response admission,
+  while keeping CPU reported storage unchanged. Plan solver provider peaks over
+  the actual spin-allowed direct/exchange request shapes, not a full molecular
+  MO block; response still charges its genuinely executed full-AO requests.
+- Reserve the still-live fitted source before a separately evaluated CPU UHF
+  force component, in both UMP2 and grouped CC consumers. Reject exhausted
+  budgets before allocating derivative work; sequential execution does not make
+  the retained source disappear.
 - Preserve the explicitly requested native CPU-reference fitted domains.
   Unlike restricted DF owners, unrestricted owners intentionally interpret
   the shared fitting selectors as operator policy and choose execution from

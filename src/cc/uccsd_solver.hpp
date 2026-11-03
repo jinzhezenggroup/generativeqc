@@ -39,6 +39,12 @@ std::size_t unrestricted_capacity(std::size_t nbf, std::size_t alpha, std::size_
                                   const SolverOptions& options, bool triples,
                                   std::size_t reference_capacity);
 
+/** Shape-only peak of the solver's executed direct/exchange MO requests.
+ * Includes provider-owned source storage, but no unrequested full-MO output. */
+std::size_t unrestricted_cuda_solver_provider_capacity(
+    const hf::UnrestrictedPhysicalReference& reference,
+    const posthf::NativeBlockProvider& provider);
+
 /** Solve/replay CCSD and optionally replay all four standard (T) channels.
  * All scientific contractions are build-time-generated shared TensorIR; this
  * owner supplies unshifted physical UHF Fock/integrals and packed host DIIS.
