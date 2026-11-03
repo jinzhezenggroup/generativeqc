@@ -149,7 +149,7 @@ int main() {
   while (std::cin >> direct >> strict_budget >> all_electron >> angular >> atoms
                  >> major >> minor >> ratio)
     std::cout << generativeqc::dft::automatic_direct_ks_tiles_eligible(
-        direct, strict_budget, all_electron, angular, atoms, major, minor, ratio) << '\\n';
+        direct, strict_budget, all_electron, angular, atoms, major, minor, ratio) << '\n';
 }
 """
     )
@@ -194,7 +194,7 @@ int main() {
             ((1, 1, 1, 2, 96, 8, 6, 64), False),
         ]
     )
-    inputs = "".join(" ".join(map(str, row)) + "\\n" for row, _ in cases)
+    inputs = "".join(" ".join(map(str, row)) + "\n" for row, _ in cases)
     result = subprocess.run(
         [str(executable)],
         input=inputs,
