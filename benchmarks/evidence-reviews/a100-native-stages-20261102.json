@@ -2,25 +2,12 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "a100-native-stages-20261102",
   "owner": "A100 incremental native RSH/Direct acceptance for PRs 2902 and 2900",
-  "reason": "Exact source-bound independent vectors, full corrected resource streams, original failures and complete endpoint populations. The molecular receipt stream is authenticated from existing local Git through the explicit snapshot; every original byte and gate remains. Storage review does not certify independent review or merge gates. No numerical rounding or budget increase.",
+  "reason": "Exact source-bound independent vectors, full corrected resource streams, original failures and complete endpoint populations. The molecular receipt stream is authenticated from existing local Git through the explicit snapshot; every original byte and gate remains. Storage review does not certify independent review or merge gates. No numerical rounding or budget increase. Exact compressed bytes remain authenticated and available through explicit historical snapshots at an already-merged source revision; the checkout budget and all scientific gates are unchanged.",
   "review_document": "benchmarks/results/a100-native-stages-20261102/README.md",
-  "historical_snapshot": "benchmarks/results/a100-native-stages-20261102/molecular/historical-snapshot.json",
-  "files": [
-    {
-      "bytes": 221264,
-      "classification": "required-compact-accepted-evidence",
-      "family": "a100-native-stages-20261102",
-      "path": "benchmarks/results/a100-native-stages-20261102/failed-molecular/receipts.json.xz",
-      "role": "decision-or-audit-record",
-      "sha256": "5e9c464b361dd78e99bffa3aed3d30f792c07d15a8eaf4cbb2fdddebb1efa0b4"
-    },
-    {
-      "bytes": 178504,
-      "classification": "required-compact-accepted-evidence",
-      "family": "a100-native-stages-20261102",
-      "path": "benchmarks/results/a100-native-stages-20261102/native/receipts.json.xz",
-      "role": "decision-or-audit-record",
-      "sha256": "f7f846981311ffdf8f05ccef2925a796482427e2a2190db556075246253623c1"
-    }
+  "files": [],
+  "historical_snapshots": [
+    "benchmarks/results/a100-native-stages-20261102/failed-molecular/historical-snapshot.json",
+    "benchmarks/results/a100-native-stages-20261102/molecular/historical-snapshot.json",
+    "benchmarks/results/a100-native-stages-20261102/native/historical-snapshot.json"
   ]
 }

@@ -19,3 +19,20 @@ must remain byte-identical to that baseline after recovery. This changes storage
 only: the original source identities, complete vectors, native/molecular failure
 records, independent RSH stencils and acceptance gates are not requalified or
 relabeled as current-source GPU evidence.
+
+## Composed merge-queue retention
+
+The H100 final cohort and long-range WB97M-V integration share one historical
+Nsight deletion, so their storage savings cannot be counted twice. Their combined
+checkout plus the pending DFT96/DF96 descendants needs additional headroom.
+Extend the same explicit per-part A100 recovery to failed-molecular and native
+receipts. The existing offline host-LR, host-full and disk-ERI readers already
+accept explicit snapshots; retain their original compressed packets through
+that path too. All seven packets total 1,999,824 bytes, now authenticated at
+already-merged revision `8c6c6208bb1d68c96e62ed2d15ee561fcc784081`.
+
+Each original Git blob, size and SHA-256 is checked against the present packet
+before removal. Normal CPU reports must remain byte-identical for all four
+families, as must optimized A100 replay. The host/disk readers intentionally
+require assertions and are not qualified under `-O`. This is storage migration,
+not new performance evidence, and does not raise the 80 MiB aggregate limit.
