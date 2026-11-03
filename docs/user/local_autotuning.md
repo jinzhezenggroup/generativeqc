@@ -252,16 +252,32 @@ publishes a recipe or changes the active profile index. `--xc-tiles`,
 rejected for J/K recipes. All timing claims exclude preparation/cold convergence
 and warmup; they are not cold-start throughput claims.
 
+Resident-session benchmark receipts are not installed profile bundles and are
+not discovered automatically by Calculator. Apply their execution controls
+explicitly, or use the normal qualified profile-installation workflow. An
+installed XC winner still requires an exact scientific/source/device match and
+never overrides an explicit `KsOptions.tile_points` choice. Native J/K and DF
+recipes remain isolated replays, not global environment/default changes.
+
 ## Tune density-fitting execution
 
 `--component df --method rhf` searches native FP64 density-fitting
 storage/contraction/derivative mappings under a **fixed** auxiliary basis,
 metric threshold and memory hint. It does not switch direct and fitted
 Hamiltonians, tune the metric cutoff, or enable single-precision storage.
-This initial domain is full-rank RHF with the existing small native eigensolver,
-at most 16 orbital and 128 auxiliary AOs. Larger topologies and composed KS/DF
-resource admission are not qualified and are refused rather than run without
-the complete allocation gate.
+The domain is full-rank RHF: either at most 16 orbital and 128 auxiliary AOs,
+or explicitly budgeted generated-source execution with at most 768 orbital
+and 768 auxiliary AOs. The larger route retains bounded ordinary AO/metric
+eigensolver workspaces, separately budgeted response tiles and singleton retry
+storage. It does not depend on Direct-HF's small-eigensolver inventory.
+Larger dimensions, unbudgeted large resident execution and composed KS/DF
+resource admission remain refused rather than run without the allocation gate.
+This extension applies to Calculator and the Python tuning/replay frontend;
+the Python-free native CLI retains its separate small-DF preflight limits.
+The memory hint is still checked by the native phase planners: a dimension
+within this envelope does not imply that a small hint is feasible. In particular,
+large force execution receives half of that hint and must also fit its fixed
+metric, DIIS and source reservations. Insufficient budgets fail before execution.
 UHF also remains refused until its native DF owner publishes complete observed
 Fock work; an iteration-derived estimate is not a substitute for that census.
 

@@ -270,8 +270,12 @@ def cuda_df_candidates(
             if (
                 restricted not in (0, 1)
                 or not row["batch"]
-                or not 0 < row["nbf"] <= 16
-                or not 0 < row["naux"] <= 128
+                or not 0 < row["nbf"] <= 768
+                or not 0 < row["naux"] <= 768
+                or (
+                    (row["nbf"] > 16 or row["naux"] > 128)
+                    and (not requested_budget or not restricted)
+                )
             ):
                 raise ValueError("native CUDA DF fleet returned invalid bucket")
             if not restricted:

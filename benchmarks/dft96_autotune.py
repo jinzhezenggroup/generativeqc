@@ -132,7 +132,14 @@ class Resident:
     """Own one isolated worker with finite control and teardown timeouts."""
 
     def __init__(
-        self, library: Path, plan: Path, configuration: dict, directory: Path
+        self,
+        library: Path,
+        plan: Path,
+        configuration: dict,
+        directory: Path,
+        *,
+        worker_module: str = "benchmarks.dft96_autotune",
+        worker_component: str = "jk",
     ) -> None:
         from generativeqc.execution_tune import worker_environment
 
@@ -145,14 +152,16 @@ class Resident:
             [
                 sys.executable,
                 "-m",
-                "benchmarks.dft96_autotune",
+                worker_module,
                 str(plan),
                 "--worker-fd",
                 str(child.fileno()),
                 "--configuration",
                 json.dumps(configuration),
             ],
-            env=worker_environment(library, "jk", configuration["environment"]),
+            env=worker_environment(
+                library, worker_component, configuration["environment"]
+            ),
             pass_fds=(child.fileno(),),
             stdout=self.log,
             stderr=subprocess.STDOUT,
@@ -160,7 +169,8 @@ class Resident:
         )
         child.close()
         try:
-            self.identity = self.receive()["identity"]
+            self.ready = self.receive()
+            self.identity = self.ready["identity"]
         except BaseException:
             self.close()
             raise
@@ -192,9 +202,16 @@ class Resident:
                         self.process.kill()
                         self.process.wait(timeout=15)
         finally:
-            self.stream.close()
-            self.socket.close()
-            self.log.close()
+            try:
+                self.stream.close()
+            except OSError:
+                # A rejected worker can exit before queued control data flushes.
+                # Preserve its admission error and still retire every owner.
+                pass
+            try:
+                self.socket.close()
+            finally:
+                self.log.close()
 
     def __enter__(self) -> Self:
         return self

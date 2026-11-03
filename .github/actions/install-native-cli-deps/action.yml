@@ -1,9 +1,20 @@
 name: Native CLI dependencies
 description: Install the native JSON, hashing and safe ZIP development libraries
+inputs:
+  apt-index-refreshed:
+    description: Set true only after a successful apt-get update in this same job
+    required: false
+    default: 'false'
 runs:
   using: composite
   steps:
-    - shell: bash
-      run: |
-        sudo apt-get update -o Acquire::Retries=3
-        sudo apt-get install --yes nlohmann-json3-dev libssl-dev libarchive-dev
+    # Ordinary CPU/Python users still refresh APT. CUDA jobs already did this
+    # while registering NVIDIA's repository, so do not hit a changing mirror
+    # a second time merely to install the native CLI libraries.
+    - name: Refresh APT indices when required
+      if: inputs.apt-index-refreshed != 'true'
+      shell: bash
+      run: sudo apt-get update -o Acquire::Retries=3
+    - name: Install native CLI libraries
+      shell: bash
+      run: sudo apt-get install --yes nlohmann-json3-dev libssl-dev libarchive-dev

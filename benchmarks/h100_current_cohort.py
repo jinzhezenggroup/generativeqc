@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -19,6 +20,12 @@ DIRECTORY = ROOT / "benchmarks/results/h100-sm90-cd2b-20261102"
 SOURCE = "cd2b4514be0a38c4920934481b1f02d157a694b4"
 TREE = "c76f5bd3cfa62416255c5d6914cf701d34e10a8d"
 REFERENCE = "15ab66a68a061355fda833a93e88484dbfee6360"
+HISTORICAL_FILES = {
+    "production-build-v1-metadata.tar.xz",
+    "df-molecular-v1-completed.tar.xz",
+    "screening-v1-completed.tar.xz",
+    "audit/EXPERIMENT_AUDIT.json",
+}
 REQUIRED_FILES = {
     "production-build-v1-metadata.tar.xz",
     "production-build-v1-download-manifest.json",
@@ -47,6 +54,32 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def artifact_bytes(directory: Path, name: str) -> bytes:
+    """Read a current member or its explicitly retained local Git original."""
+    relative = Path(name)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError("Unsafe publication member")
+    path = directory / relative
+    if path.is_symlink():
+        raise ValueError(f"Missing or linked publication member: {name}")
+    if path.is_file():
+        return path.read_bytes()
+    if path.exists() or name not in HISTORICAL_FILES:
+        raise ValueError(f"Missing or linked publication member: {name}")
+    spec = importlib.util.spec_from_file_location(
+        "_h100_baseline_history", ROOT / "tools/restore_retained_evidence.py"
+    )
+    history = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(history)
+    original = ROOT / "benchmarks/results/h100-sm90-cd2b-20261102" / relative
+    try:
+        return history.read_evidence_bytes(
+            original, manifest=directory / "historical-snapshot.json"
+        )
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise ValueError(f"Missing historical publication member: {name}") from error
+
+
 def checked_publication(directory: Path) -> dict:
     publication = json.loads((directory / "cohort.json").read_text())
     if (
@@ -65,10 +98,11 @@ def checked_publication(directory: Path) -> dict:
         relative = Path(name)
         if relative.is_absolute() or ".." in relative.parts:
             raise ValueError("Unsafe publication member")
-        path = directory / relative
-        if path.is_symlink() or not path.is_file():
-            raise ValueError(f"Missing or linked publication member: {name}")
-        if path.stat().st_size != binding["bytes"] or digest(path) != binding["sha256"]:
+        data = artifact_bytes(directory, name)
+        if (
+            len(data) != binding["bytes"]
+            or hashlib.sha256(data).hexdigest() != binding["sha256"]
+        ):
             raise ValueError(f"Publication bytes differ: {name}")
     return publication
 
@@ -144,7 +178,8 @@ def replay(directory: Path = DIRECTORY) -> dict:
         for entry in publication["files"]:
             name = entry["path"]
             if Path(name).parent == Path("."):
-                shutil.copyfile(directory / name, workspace / name)
+                with (workspace / name).open("xb") as stream:
+                    stream.write(artifact_bytes(directory, name))
         readers = directory / "readers"
         build_manifest = json.loads(
             (workspace / "production-build-v1-download-manifest.json").read_text()
