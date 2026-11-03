@@ -430,7 +430,9 @@ def test_pr_master_trusted_snapshot_fallback_is_cache_miss_only() -> None:
             "steps.prose_scope.outcome": selector_outcome,
             "steps.prose_scope.outputs.scope": scope,
         }
-        assert _condition(activate, context) == (active and download_outcome == "success")
+        assert _condition(activate, context) == (
+            active and download_outcome == "success"
+        )
         assert _condition(discard, context) == (
             active
             and download_outcome not in ("", "skipped")
