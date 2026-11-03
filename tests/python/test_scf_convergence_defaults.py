@@ -19,7 +19,7 @@ from tools.generativeqc_validation.native_registry_stub import install_registry_
 
 
 @pytest.fixture
-def library(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+def library(monkeypatch: pytest.MonkeyPatch, policy_library: Any) -> SimpleNamespace:
     """Resolve real model identities without allocating a CUDA context."""
 
     def available(method: int, pointer: object) -> int:
@@ -30,6 +30,9 @@ def library(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         generativeqc_ks_options_version=lambda: 1,
         generativeqc_standard_scf_convergence_version_v1=lambda: 1,
         generativeqc_method_available=available,
+        generativeqc_precision_admission_query_v1=(
+            policy_library.generativeqc_precision_admission_query_v1
+        ),
     )
     install_registry_stub(native, frozenset({"energy"}))
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: native)
