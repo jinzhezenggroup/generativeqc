@@ -505,6 +505,7 @@ def _assert_cuda_ci_ao_gate(workflow: str) -> None:
     step = cuda.split(marker, 1)[1].split("      - name: ", 1)[0]
     assert "python3-pytest" in cuda
     assert_full_coverage_step(step)
+    assert "id: ao_radial_compile" in step
     assert "continue-on-error:" not in step
     assert 'test -x "$CUDACXX"' in step
     assert 'exec ccache "$CUDACXX" "$@"' in step
@@ -540,7 +541,7 @@ def _assert_cuda_ci_ao_gate(workflow: str) -> None:
                     },
                 ) == (
                     event == "pull_request"
-                    and outcome == "success"
+                    and outcome in {"success", "failure"}
                     and available == "true"
                 )
     assert cuda.index(
@@ -574,13 +575,19 @@ def _assert_cuda_ci_ao_gate(workflow: str) -> None:
     artifact = cuda.split(
         "      - name: Preserve opted-in AO radial resource reports\n", 1
     )[1].split("      - name: ", 1)[0]
-    # Reports survive failed PR/merge-queue builds. Master push runs maintain
-    # the trusted compiler cache and deliberately omit diagnostic artifacts.
+    # Reports survive a failed AO resource probe, but cannot be uploaded when
+    # an earlier build failure prevents that probe from running at all.
     for event in ("pull_request", "merge_group", "push"):
-        assert selected(
-            artifact,
-            {"github.event_name": event, "success()": False, "failure()": True},
-        ) == (event != "push")
+        for outcome in ("success", "failure", "cancelled", "skipped", ""):
+            assert selected(
+                artifact,
+                {
+                    "github.event_name": event,
+                    "steps.ao_radial_compile.outcome": outcome,
+                    "success()": False,
+                    "failure()": True,
+                },
+            ) == (event != "push" and outcome in {"success", "failure"})
     assert "build/ao-radial-compile" in artifact
     assert "name: ao-radial-release-compile" in artifact
     script = textwrap.dedent(step.split("        run: |\n", 1)[1])
@@ -629,7 +636,7 @@ def test_cuda_ci_compiles_opted_in_ao_and_retains_ptxas() -> None:
             "key: shared-master-cache",
         ),
         (
-            "always() && github.event_name == 'pull_request' && steps.cuda_runtime_build.outcome == 'success'",
+            "always() && github.event_name == 'pull_request' && (steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure')",
             "always()",
         ),
     ],
