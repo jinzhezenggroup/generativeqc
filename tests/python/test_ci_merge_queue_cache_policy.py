@@ -370,13 +370,16 @@ def test_pr_master_trusted_snapshot_fallback_is_cache_miss_only() -> None:
     discard = _step(discard_name)
     assert "github.event_name == 'pull_request'" in _field(discovery, "if")
     assert WORKFLOW.index(FALLBACK) < WORKFLOW.index(download_name)
+    assert WORKFLOW.index(
+        "Restore only this PR fast CUDA compiler delta"
+    ) < WORKFLOW.index(download_name)
     assert WORKFLOW.index(download_name) < WORKFLOW.index(activate_name)
     assert WORKFLOW.index(activate_name) < WORKFLOW.index(discard_name)
     assert WORKFLOW.index(discard_name) < WORKFLOW.index(
         "Reset ccache statistics", WORKFLOW.index(discard_name)
     )
     assert _field(download, "continue-on-error") == "true"
-    assert 0 < int(_field(download, "timeout-minutes")) <= 3
+    assert 0 < int(_field(download, "timeout-minutes")) <= 4
     assert _field(download, "digest-mismatch") == "error"
     assert _field(download, "repository") == "${{ github.repository }}"
     assert (
@@ -386,9 +389,10 @@ def test_pr_master_trusted_snapshot_fallback_is_cache_miss_only() -> None:
     assert stage == _field(activate, "TRUSTED_CUDA_CCACHE_MISS_DIR")
     assert stage == _field(discard, "TRUSTED_CUDA_CCACHE_MISS_DIR")
     assert stage != _field(_step(DOWNLOAD), "path")
-    for event, matched, source_id, scope_case in itertools.product(
+    for event, matched, pr_matched, source_id, scope_case in itertools.product(
         ("pull_request", "push", "merge_group", "workflow_dispatch"),
         ("", "matched-cache-key"),
+        ("", "pr-cache-key"),
         ("", "12345"),
         SCOPE_CASES,
     ):
@@ -397,6 +401,7 @@ def test_pr_master_trusted_snapshot_fallback_is_cache_miss_only() -> None:
             "github.event_name": event,
             "github.ref": "refs/heads/master",
             "steps.cuda_ccache.outputs.cache-matched-key": matched,
+            "steps.pr_fast_ccache_restore.outputs.cache-matched-key": pr_matched,
             "steps.trusted_cuda_ccache.outputs.run_id": source_id,
             "steps.prose_scope.outcome": selector_outcome,
             "steps.prose_scope.outputs.scope": scope,
@@ -405,6 +410,7 @@ def test_pr_master_trusted_snapshot_fallback_is_cache_miss_only() -> None:
             active
             and event in ("pull_request", "push")
             and not matched
+            and (event != "pull_request" or not pr_matched)
             and bool(source_id)
         )
         assert _condition(download, context) == expected
