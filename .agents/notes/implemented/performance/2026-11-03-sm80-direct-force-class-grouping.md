@@ -2,8 +2,8 @@
 
 Status: implemented
 
-The architecture-specific policy is being superseded by the
-[portable packet-grouping revision](../../proposed/2026-11-03-portable-direct-force-class-grouping.md).
+The architecture-specific policy is superseded by the
+[portable packet-grouping revision](2026-11-03-portable-direct-force-class-grouping.md).
 This note retains the original version's measurements; they do not qualify the
 portable version's changed SM120 kernel.
 Date: 2026-11-03
