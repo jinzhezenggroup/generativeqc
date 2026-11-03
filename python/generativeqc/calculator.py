@@ -1459,8 +1459,29 @@ class Calculator:
 
     @property
     def capabilities(self) -> MethodCapabilities:
-        """Report capabilities for the selected backend/basis execution context."""
+        """Report capabilities for the selected backend/basis execution context.
+
+        Additional single-point electronic analyses are listed separately by
+        ``supported_electronic_properties``; they are not native output flags.
+        """
         return self._capabilities
+
+    @property
+    def supported_electronic_properties(self) -> frozenset[str]:
+        """List opt-in single-point analyses available in this native library.
+
+        Actual admission additionally requires all-electron HF/KS inputs and
+        no explicit resource budget. Analysis follows the calculator's CPU/CUDA
+        device; these selectors are not native batch output flags.
+        """
+        if self._capabilities.family in (
+            "hartree_fock",
+            "density_functional",
+        ) and hasattr(self._library, "generativeqc_calculation_execute_density_v1"):
+            from ._electronic_properties import PROPERTY_NAMES
+
+            return PROPERTY_NAMES
+        return frozenset()
 
     @property
     def second_order_capabilities(self) -> frozenset[str]:
@@ -3136,7 +3157,15 @@ class Calculator:
         multiplicity: int = 1,
         properties: Iterable[str] | None = None,
     ) -> Result:
-        """Compute energy and optional analytic forces for one system.
+        """Compute energy, optional analytic forces and mean-field electronic properties.
+
+        All-electron HF/KS accepts opt-in ``dipole`` (xyz e*Bohr about the
+        coordinate origin), ``charges`` (Mulliken and Lowdin, in electron-charge
+        units), and ``density`` (detached total/spin AO matrices, point
+        sampling and Cube export). These FP64 analyses and sampling follow
+        the selected CPU/CUDA backend; no second SCF is performed. They
+        are not yet admitted with resource budgets, ECPs, correlated methods
+        or xTB. Density sampling supports basis functions through f.
 
         Energy and convergence diagnostics are always returned. Select
         ``properties=("energy",)`` to omit analytic-force evaluation; the
@@ -3245,13 +3274,20 @@ class Calculator:
         supported_properties = self._capabilities.supported_properties
         if not requested_properties or "energy" not in requested_properties:
             raise ValueError("properties must include 'energy'")
-        unknown_properties = requested_properties - {"energy", "forces"}
+        from ._electronic_properties import PROPERTY_NAMES, DensityCapture
+
+        electronic_properties = requested_properties & PROPERTY_NAMES
+        unknown_properties = (
+            requested_properties - {"energy", "forces"} - PROPERTY_NAMES
+        )
         if unknown_properties:
             names = ", ".join(sorted(repr(name) for name in unknown_properties))
             raise ValueError(
                 f"method {self._method_name!r} does not support properties: {names}"
             )
-        unsupported_properties = requested_properties - supported_properties
+        unsupported_properties = (
+            requested_properties - supported_properties - PROPERTY_NAMES
+        )
         # DFT forces are admitted by the prepared context after the actual
         # basis, operators and linked derivative providers are known.
         if unsupported_properties and not (
@@ -3266,6 +3302,13 @@ class Calculator:
         native_atoms = tuple(Atom.from_value(atom) for atom in atoms)
         if not native_atoms:
             raise ValueError("at least one atom is required")
+        density_capture = (
+            DensityCapture(
+                self, native_atoms, charge, multiplicity, requested_properties
+            )
+            if electronic_properties
+            else None
+        )
         self._preflight_hf_basis(native_atoms, compute_forces=compute_forces)
         resource_plan = None
         if self._resource_budget is not None and self._dispersion_method_ir is None:
@@ -3297,8 +3340,13 @@ class Calculator:
                 resource_plan=resource_plan,
             ) as batch:
                 item = batch.execute(
-                    strict=True, properties=requested_properties
+                    strict=True, properties=requested_properties - PROPERTY_NAMES
                 ).items[0]
+                electronic_outputs = (
+                    density_capture.from_batch(batch)
+                    if density_capture is not None
+                    else {}
+                )
                 return Result(
                     energy=item.energy,
                     forces=item.forces,
@@ -3316,6 +3364,7 @@ class Calculator:
                     initial_guess=item.initial_guess,
                     ks_transport_diagnostic=batch.ks_transport_diagnostics[0],
                     dispersion=item.dispersion,
+                    **electronic_outputs,
                 )
         effective_ks_options = self._effective_ks_options(
             (native_atoms,),
@@ -3477,6 +3526,8 @@ class Calculator:
             }
 
             def execute() -> int:
+                if density_capture is not None:
+                    return density_capture.execute(calculation, result_descriptor)
                 if not component_methods:
                     return self._library.generativeqc_calculation_execute(
                         calculation, ctypes.byref(result_descriptor)
@@ -3565,6 +3616,11 @@ class Calculator:
                     self._library, calculation
                 )
             native_result = Result(
+                **(
+                    density_capture.analyze(context, system)
+                    if density_capture is not None
+                    else {}
+                ),
                 energy=result_descriptor.energy,
                 forces=forces,
                 converged=bool(result_descriptor.converged),

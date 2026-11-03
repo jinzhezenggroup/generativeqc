@@ -172,6 +172,10 @@ std::vector<double> contract_weighted_one_electron_derivative(
 void cross_overlap(const core::System& target, const core::System& source,
                    std::span<double> output);
 
+/** Axis-major public-AO position matrices, using the existing overlap kernel.
+ * Raising a polynomial power must retain the original AO normalization. */
+void position_integrals(const core::System& system, std::span<double> output);
+
 /**
  * Evaluate normalized two- and three-center density-fitting integrals.
  *
