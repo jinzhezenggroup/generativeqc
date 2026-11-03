@@ -169,3 +169,45 @@ def test_cleanup_skips_spacious_hosts_and_bounds_optional_deletion(
         ]
         if cleanup_status in (124, 137):
             assert "::warning::" in result.stdout
+
+
+# Keep these APT workflow contracts in an existing test module: creating a new
+# test_*.py file would shift the selector's modulo-three core-file ownership
+# and perturb the very Python CI timings this patch is meant to improve.
+NATIVE_APT_ACTION = ROOT / ".github/actions/install-native-cli-deps/action.yml"
+
+
+def test_native_cli_dependency_action_preserves_default_apt_refresh() -> None:
+    action = NATIVE_APT_ACTION.read_text(encoding="utf-8")
+    assert "apt-index-refreshed:" in action
+    assert "default: 'false'" in action
+    assert "if: inputs.apt-index-refreshed != 'true'" in action
+    assert "sudo apt-get update -o Acquire::Retries=3" in action
+    assert (
+        "sudo apt-get install --yes nlohmann-json3-dev libssl-dev libarchive-dev"
+        in action
+    )
+    assert action.index("- name: Refresh APT indices when required") < action.index(
+        "- name: Install native CLI libraries"
+    )
+
+
+@pytest.mark.parametrize("owner", ("master-cpu-cache", "cpu", "python"))
+def test_cpu_and_python_installers_still_refresh_apt(owner: str) -> None:
+    native = steps(owner)["Install native CLI dependencies"]
+    assert "uses: ./.github/actions/install-native-cli-deps" in native
+    assert "apt-index-refreshed:" not in native
+
+
+@pytest.mark.parametrize("owner", ("cuda-compile", "cuda-resources", "cuda-direct-aot"))
+def test_cuda_installers_reuse_successfully_refreshed_apt_index(owner: str) -> None:
+    section = job(owner)
+    native = steps(owner)["Install native CLI dependencies"]
+    assert "uses: ./.github/actions/install-native-cli-deps" in native
+    assert "apt-index-refreshed: 'true'" in native
+    repo_step = section.index("- name: Add NVIDIA CUDA repository")
+    cuda_step = section.index("- name: Install CUDA 12.9 build dependencies")
+    native_step = section.index("- name: Install native CLI dependencies")
+    assert repo_step < cuda_step < native_step
+    assert "sudo apt-get update" in section[repo_step:cuda_step]
+    assert "sudo apt-get install --yes" in section[cuda_step:native_step]
