@@ -10,7 +10,7 @@ fi
 # link time. Remove only unrelated hosted toolchains, never sources or caches.
 workspace=${GITHUB_WORKSPACE:-.}
 df -h "$workspace"
-available_bytes=$(df -B1 --output=avail -- "$workspace" | tail -n 1 | tr -d '[:space:]')
+available_bytes=$(df -B1 --output=avail -- "$workspace" | tail -n 1 | tr -d '[:space:]') || available_bytes=""
 # This is a cleanup heuristic, not a disk reservation or permission to skip builds.
 if [[ "$available_bytes" =~ ^[0-9]+$ ]] && ((available_bytes >= 64 * 1024 * 1024 * 1024)); then
   echo "Skipping optional toolchain cleanup: at least 64 GiB is already available."
