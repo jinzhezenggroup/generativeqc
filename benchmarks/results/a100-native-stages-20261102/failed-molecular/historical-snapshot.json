@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "8c6c6208bb1d68c96e62ed2d15ee561fcc784081",
+  "file_count": 1,
+  "total_bytes": 221264,
+  "purpose": "Exact original receipts recovered offline from already-merged Git history. All independent observables, source identities, failures, work counts and acceptance gates remain unchanged; no external publication or new measurement.",
+  "files": [
+    {
+      "path": "benchmarks/results/a100-native-stages-20261102/failed-molecular/receipts.json.xz",
+      "bytes": 221264,
+      "sha256": "5e9c464b361dd78e99bffa3aed3d30f792c07d15a8eaf4cbb2fdddebb1efa0b4",
+      "git_blob_sha1": "3dafb6e23efb8207757922fc887a8c29ed025e8e",
+      "git_mode": "100644"
+    }
+  ]
+}

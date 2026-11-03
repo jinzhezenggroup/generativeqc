@@ -224,6 +224,16 @@ int main(int argc, char** argv) {
     auto rsh=execution;
     rsh.range_exchange=true;
     assert(ks_fitted_projection_reservation(system,rsh,strategy) == reserved);
+    auto correction=strategy;
+    correction.spec.coulomb.present=false;
+    correction.spec.exchange.op=FockOperator::LongRange;
+    correction.spec.exchange.omega=.3;
+    assert(ks_fitted_projection_reservation(system,rsh,correction) == reserved);
+    // A separate LR owner may reserve capacity, never the primary's factors.
+    const Capture range_owner(system,nullptr,correction,0,1U<<30,0,1,reserved);
+    assert(range_owner.impl_->projection_reservation == reserved);
+    correction.spec.exchange.approximation=FockApproximation::Exact;
+    assert(!ks_fitted_projection_reservation(system,rsh,correction).restricted_rank);
     for (int kind=0; kind<5; ++kind) {
       auto e=execution;
       auto s=strategy;

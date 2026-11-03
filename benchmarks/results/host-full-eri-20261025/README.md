@@ -77,3 +77,10 @@ The compressed packet retains raw endpoint receipts, archive/build bindings,
 all completed source-action counters, selected preparation/retirement events,
 executed scripts, compiler-cache statistics and JUnit/sanitizer results. Raw
 large journals, source archives and binaries remain in ignored artifacts.
+
+The original compressed packets are retained byte-for-byte in the already-merged
+Git revision identified by `historical-snapshot.json`. The CPU reproduction
+command above uses the existing public offline snapshot reader, checking the
+original size, SHA-256 and Git blob before all scientific gates. Keep Git history
+available: missing or corrupt history fails explicitly. No external archive,
+new GPU measurement, numerical rounding or evidence-budget increase is involved.

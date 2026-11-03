@@ -1800,6 +1800,83 @@ static cudaError_t contract_occupied_response(
   return cudaSuccess;
 }
 
+/** Stable truncated exchange in the exact density-generating occupied basis.
+ * P_Q=C^T A_Q C, Z=P M^{-1/2}, E=-cK*w^2 ||Z||^2. Differentiate
+ * Z before its metric contraction: bar_X=-2*cK*w^2 P^T Z, followed by
+ * the same inverse-root Frechet map as the dense response. Raw P is retained
+ * until bar_X is complete, so discarded/retained subspace motion is included.
+ * This is not the unstable raw Gram followed by a pseudoinverse derivative.
+ * C is constant here; orbital stationarity/Pulay response belongs to KS.
+ */
+static cudaError_t contract_spectral_occupied_exchange(
+    std::size_t n, std::size_t a, double coefficient, CudaDfOccupiedResponseFactor factor,
+    CudaDfMetricView metric, std::size_t tile, double* workspace, cudaStream_t stream,
+    cublasHandle_t blas, const std::function<void(std::size_t, double*)>& read_values,
+    const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>&
+        consume) {
+  const auto rank = factor.rank, rr = rank * rank, aa = a * a, nn = n * n;
+  if (!tile || !factor.coefficients || !read_values ||
+      !df_spectral_occupied_workspace(n, a, rank, tile))
+    return cudaErrorInvalidValue;
+  auto* bar_root = workspace;
+  auto* metric_temporary = bar_root + aa;
+  auto* transformed = metric_temporary + aa;
+  auto* raw_projected = workspace + 4 * aa;
+  auto* fitted = raw_projected + a * rr;
+  auto* raw = fitted + a * rr;
+  auto* half = raw + nn;
+  auto* weights = half + n * rank;
+  const auto ni = static_cast<int>(n), ai = static_cast<int>(a);
+  const auto ri = static_cast<int>(rank), rri = static_cast<int>(rr);
+  const double one = 1.0, zero = 0.0;
+  const double scale = -2.0 * coefficient * factor.density_scale * factor.density_scale;
+  const auto checked = [](cublasStatus_t status) {
+    if (status != CUBLAS_STATUS_SUCCESS) throw CudaDfResponseBlasFailure{status};
+  };
+  for (std::size_t q = 0; q < a; ++q) {
+    read_values(q, raw);
+    checked(generativeqc_tensor::submit_column_gemm(
+        {blas, false, false, ni, ri, ni, &one, raw, ni, factor.coefficients, ni, &zero, half, ni}));
+    checked(generativeqc_tensor::submit_column_gemm({blas, true, false, ri, ri, ni, &one,
+                                                     factor.coefficients, ni, half, ni, &zero,
+                                                     raw_projected + q * rr, ri}));
+  }
+  checked(generativeqc_tensor::submit_column_gemm({blas, false, false, rri, ai, ai, &one,
+                                                   raw_projected, rri, metric.inverse_square_root,
+                                                   ai, &zero, fitted, rri}));
+  checked(generativeqc_tensor::submit_column_gemm({blas, true, false, ai, ai, rri, &scale,
+                                                   raw_projected, rri, fitted, rri, &zero, bar_root,
+                                                   ai}));
+  // Raw P is dead only after its metric seed. Reuse that interval for bar_P.
+  checked(generativeqc_tensor::submit_column_gemm({blas, false, true, rri, ai, ai, &scale, fitted,
+                                                   rri, metric.inverse_square_root, ai, &zero,
+                                                   raw_projected, rri}));
+  tensor::launch_symmetric_inverse_sqrt_vjp(a, metric.eigenvectors, metric.eigenvalues,
+                                            metric.relative_threshold, bar_root, metric_temporary,
+                                            transformed, bar_root, stream);
+  auto error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
+  consume(1, {}, aa, bar_root);
+  for (std::size_t begin = 0; begin < a; begin += tile) {
+    const auto count = std::min(tile, a - begin);
+    for (std::size_t q = 0; q < count; ++q) {
+      checked(generativeqc_tensor::submit_column_gemm(
+          {blas, false, false, ni, ri, ri, &one, factor.coefficients, ni,
+           raw_projected + (begin + q) * rr, ri, &zero, half, ni}));
+      checked(generativeqc_tensor::submit_column_gemm({blas, false, true, ni, ni, ri, &one, half,
+                                                       ni, factor.coefficients, ni, &zero,
+                                                       weights + q * nn, ni}));
+    }
+    consume(0, {begin, nn, 1, a}, count * nn, weights);
+    runtime::cuda_trace::trace_counter("response_auxiliary_blocks", 1);
+  }
+  runtime::cuda_trace::trace_counter("response_spectral_occupied_rank", rank);
+  runtime::cuda_trace::trace_counter("response_spectral_raw_slices", a);
+  runtime::cuda_trace::trace_counter("response_spectral_projected_elements", 2 * a * rr);
+  runtime::cuda_trace::trace_counter("response_spectral_complete_ao_tensors", 0);
+  return cudaGetLastError();
+}
+
 cudaError_t contract_cuda_df_response_weights(
     std::size_t n, std::size_t a, std::span<const DensityFittingDensityResponse> terms,
     const double* densities, CudaDfMetricView metric, std::size_t tile, double* workspace,
@@ -1815,7 +1892,18 @@ cudaError_t contract_cuda_df_response_weights(
     const std::function<void(const double*, double*)>& read_raw_charge,
     const std::function<void(const double*, const double*, double)>& consume_raw_derivative,
     bool compact_fitted_metric_workspace,
-    const std::function<void(const double*, double)>& consume_raw_metric_derivative) {
+    const std::function<void(const double*, double)>& consume_raw_metric_derivative,
+    const CudaDfOccupiedResponseFactor* spectral_occupied) {
+  if (spectral_occupied) {
+    if (metric.full_rank || terms.size() != 1 || terms[0].coulomb_coefficient != 0.0 ||
+        !terms[0].exchange_coefficient || borrowed || streamed_occupied || read_fitted ||
+        packed_pairs || single_fitted_tensor || compact_fitted_metric_workspace || !blas_products ||
+        serial_metric_dot || !std::isfinite(spectral_occupied->density_scale))
+      return cudaErrorInvalidValue;
+    return contract_spectral_occupied_exchange(n, a, terms[0].exchange_coefficient,
+                                               *spectral_occupied, metric, tile, workspace, stream,
+                                               blas, read_values, consume);
+  }
   if (compact_fitted_metric_workspace &&
       (!streamed_occupied || !streamed_occupied->fitted_occupied_source || !metric.full_rank ||
        borrowed || packed_pairs || single_fitted_tensor))

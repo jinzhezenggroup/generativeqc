@@ -128,3 +128,10 @@ Git. This storage choice does not change numerical or device gates.
 Historical pre-AO and public-force-policy payloads are independently recoverable
 from their existing Git snapshots. No Release, tag, external backup or evidence
 budget increase was used.
+
+The original `receipts.json.xz` for each of `molecular`, `failed-molecular`
+and `native` is now retained in the already-merged Git revision named by that
+part's `historical-snapshot.json`. The CPU report reads those exact bytes offline
+through the public snapshot reader and authenticates every stream and original
+text checksum. Keep Git history available when replaying; missing history fails
+explicitly rather than skipping a gate. No GPU rerun is required for recovery.

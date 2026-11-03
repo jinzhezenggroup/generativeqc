@@ -357,6 +357,14 @@ class DensityFittingBudgetError : public std::invalid_argument {
                                                             std::size_t restricted_rank,
                                                             std::size_t source_device_bytes);
 
+/** Optional immutable source preparation may borrow fractional live headroom,
+ * bounded by the existing shape-only resident ceiling and unchanged response
+ * allowance. Explicit caps/response overrides and missing probes cannot grow.
+ * This is an admission ceiling; charge only the successfully retained bytes. */
+[[nodiscard]] std::size_t method_owned_df_optional_value_capacity(
+    const DfResolvedBudget& budget, std::size_t nbf, std::size_t naux, std::size_t restricted_rank,
+    std::size_t source_device_bytes, bool allow_zero_rank_coulomb = false);
+
 /** Additional lazy SCF DIIS capacity, conservatively covering joined-spin UHF.
  * Add this to fixed_device_bytes before choosing K panels, and to native
  * plan diagnostics when the SCF owner requests a history. Includes overlap,

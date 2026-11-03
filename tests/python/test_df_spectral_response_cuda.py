@@ -174,3 +174,102 @@ def test_rotated_metric_physical_adjoints(
     # well as a small absolute floor, rather than the cancelled metric entry.
     scale = np.einsum("pij,ijq->pq", abs(expected_a), abs(fitted)) / 2
     assert np.all(abs(bar_m - expected_m) <= 2e-6 + 3e-9 * scale)
+
+
+@pytest.mark.parametrize("tile", (1, 3, 11))
+@pytest.mark.parametrize("coefficient", (0.25, -0.13))
+@pytest.mark.parametrize("condition", (1e2, 1e6))
+def test_truncated_occupied_exchange_preserves_subspace_motion(
+    spectral_probe: Any, tile: int, coefficient: float, condition: float
+) -> None:
+    """Compare to full-AO spectral adjoints, including retained/discarded mixing.
+
+    Raw A has independent components in discarded metric directions. Reusing
+    fitted B as raw A, dropping subspace motion, or transposing C fails this
+    oracle. The probe allocates only the declared occupied workspace.
+    """
+    n, a, rank = 4, 11, 2
+    rng = np.random.default_rng(2940)
+    q = np.linalg.qr(rng.normal(size=(a, a)))[0]
+    values = np.r_[np.geomspace(1e-15, 1e-14, 3), np.geomspace(1 / condition, 1, 8)]
+    kept = values > 1e-12
+    inverse_values = np.where(kept, 1 / values, 0.0)
+    root = (q * np.sqrt(inverse_values)) @ q.T
+    raw = rng.normal(size=(a, n, n))
+    raw = (raw + raw.transpose(0, 2, 1)) / 2
+    c = rng.normal(size=(n, rank))
+    density = 2 * c @ c.T
+    arrays = tuple(
+        np.ascontiguousarray(x)
+        for x in (
+            raw,
+            density,
+            c.T,
+            np.zeros(1),
+            np.array([coefficient]),
+            q.T,
+            values,
+            root.T,
+        )
+    )
+    bar_a, bar_m = np.full_like(raw, np.nan), np.full((a, a), np.nan)
+    dp = ct.POINTER(ct.c_double)
+    error = ct.create_string_buffer(1024)
+    status = spectral_probe(
+        n,
+        a,
+        1,
+        tile,
+        rank,
+        3,
+        False,
+        False,
+        *(x.ctypes.data_as(dp) for x in arrays),
+        None,
+        bar_a.ctypes.data_as(dp),
+        bar_m.ctypes.data_as(dp),
+        error,
+        len(error),
+    )
+    assert status == 0, error.value.decode()
+    # This oracle contracts the full density in AO space, never native C^T*A*C.
+    ld = np.longdouble
+    d, tensor, rotation = density.astype(ld), raw.astype(ld), q.astype(ld)
+    inverse = (rotation * inverse_values.astype(ld)) @ rotation.T
+    weighted = np.einsum("ij,pjk,kl->pil", d, tensor, d)
+    expected_a = -2 * coefficient * np.einsum("pq,qij->pij", inverse, weighted)
+    gram = np.einsum("pij,qji->pq", weighted, tensor)
+    eigen = values.astype(ld)
+    f = inverse_values.astype(ld)
+    divided = np.empty((a, a), dtype=ld)
+    for i in range(a):
+        for j in range(a):
+            divided[i, j] = (
+                -(f[i] ** 2) if i == j else (f[i] - f[j]) / (eigen[i] - eigen[j])
+            )
+    expected_m = (
+        rotation
+        @ ((rotation.T @ (-coefficient * gram) @ rotation) * divided)
+        @ rotation.T
+    )
+    np.testing.assert_allclose(bar_a, expected_a, rtol=2e-10, atol=2e-7)
+    np.testing.assert_allclose(bar_m, expected_m, rtol=3e-9, atol=2e-4)
+    if condition == 1e2 and tile == 3:
+        # Move eigenvectors at fixed rank; a frozen retained projector gives
+        # the wrong derivative even though it reproduces the forward energy.
+        direction = rng.normal(size=(a, a))
+        direction -= direction.T
+        from scipy.linalg import expm
+
+        def energy(t: float) -> float:
+            moved = expm(t * direction) @ q
+            metric_inverse = (moved * inverse_values) @ moved.T
+            return float(-coefficient * np.sum(gram * metric_inverse))
+
+        h = 2e-5
+        observed = (energy(-2 * h) - 8 * energy(-h) + 8 * energy(h) - energy(2 * h)) / (
+            12 * h
+        )
+        metric = (q * values) @ q.T
+        dm = direction @ metric - metric @ direction
+        np.testing.assert_allclose(np.sum(bar_m * dm), observed, rtol=2e-8, atol=2e-6)

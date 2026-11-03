@@ -639,6 +639,26 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true,
                     GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
                 !projection,
             "same-rank provider reuse revived the previous final projection lease");
+    // U was overwritten by another solver, but C belongs to this KS arena.
+    // Its independent lease must still generate the same accepted density.
+    dft::CudaKsResidentOccupiedFactorBinding factor;
+    require(
+        plan.resident_final_occupied_factor(token, factor, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+            factor,
+        "provider scratch reuse revoked the method-owned occupied factor");
+    std::vector<double> retained(coefficients.size());
+    require(cudaMemcpyAsync(retained.data(), factor.coefficients, retained.size() * sizeof(double),
+                            cudaMemcpyDeviceToHost,
+                            reinterpret_cast<cudaStream_t>(factor.stream)) == cudaSuccess &&
+                cudaStreamSynchronize(reinterpret_cast<cudaStream_t>(factor.stream)) == cudaSuccess,
+            "could not observe the occupied factor after provider reuse");
+    require(retained == coefficients, "provider reuse changed the method-owned occupied factor");
+    auto stale = token;
+    ++stale.identity.determinant.solve_epoch;
+    require(plan.resident_final_occupied_factor(stale, factor, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                !factor,
+            "stale final token revived an occupied factor lease");
   } else {
     require(projection_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
                 movement.fitted_final_projection_leases == 0,
@@ -849,7 +869,81 @@ void run_range_exchange_case(bool restricted) {
           "changed-geometry CUDA range-separated warm seed changed the physical endpoint");
 }
 
+void occupied_fitted_range_matrices(bool restricted, bool reserve = false) {
+  // Compare the exchange-only facade with dense GPU and independent CPU DF.
+  // These noncanonical factors isolate the algebra from SCF convergence.
+  const auto system = hydrogens(restricted ? 2U : 3U, restricted);
+  const auto spec = scf::make_rsh_correction_fock_spec(
+      restricted ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted, .15, 1.0, .3,
+      scf::FockApproximation::DensityFitted);
+  const scf::PreparedFockPlan cpu(
+      system, &system, scf::resolve_fock_build(spec, scf::FockBackend::Cpu, 1e-12, 1e-10));
+  const scf::PreparedFockPlan gpu(
+      system, &system, scf::resolve_fock_build(spec, scf::FockBackend::Cuda, 1e-12, 1e-10), 0, 0, 0,
+      1, scf::FockOccupiedProjectionReservation{reserve ? 1U : 0U});
+  const auto binding = scf::prepared_cuda_occupied_fock_binding(gpu);
+  require(static_cast<bool>(binding), "fitted LR owner lacks occupied execution");
+  const auto n = binding.nbf, matrix = n * n;
+  std::vector<double> coefficients(2 * n), density(matrix), beta(restricted ? 0 : matrix);
+  for (std::size_t i = 0; i < n; ++i) {
+    coefficients[i] = .2 + .03 * i;
+    coefficients[n + i] = -.1 + .02 * i;
+  }
+  for (std::size_t i = 0; i < n; ++i)
+    for (std::size_t j = 0; j < n; ++j) {
+      density[i * n + j] = (restricted ? 2.0 : 1.0) * coefficients[i] * coefficients[j];
+      if (!restricted) beta[i * n + j] = coefficients[n + i] * coefficients[n + j];
+    }
+  const auto dense = gpu.build(density, beta), reference = cpu.build(density, beta);
+  runtime::OwnedCudaBuffer<double> input(binding.device_id, 2 * matrix + 2 * n, binding.stream);
+  runtime::OwnedCudaBuffer<double> output(binding.device_id, 2 * matrix, binding.stream);
+  runtime::OwnedCudaBuffer<int> error(binding.device_id, 1, binding.stream);
+  require(cudaMemcpyAsync(input.get(), density.data(), matrix * sizeof(double),
+                          cudaMemcpyHostToDevice, binding.stream) == cudaSuccess &&
+              cudaMemcpyAsync(input.get() + 2 * matrix, coefficients.data(), 2 * n * sizeof(double),
+                              cudaMemcpyHostToDevice, binding.stream) == cudaSuccess,
+          "could not upload occupied LR fixture");
+  if (!restricted)
+    require(cudaMemcpyAsync(input.get() + matrix, beta.data(), matrix * sizeof(double),
+                            cudaMemcpyHostToDevice, binding.stream) == cudaSuccess,
+            "could not upload occupied LR beta density");
+  const scf::PreparedCudaOccupiedFockInput occupied{
+      input.get() + 2 * matrix, restricted ? nullptr : input.get() + 2 * matrix + n, 1,
+      restricted ? 0U : 1U};
+  std::string detail;
+  // A stray Coulomb output must not silently turn this into a different model.
+  require(scf::enqueue_prepared_cuda_occupied_fock(
+              gpu, input.get(), restricted ? nullptr : input.get() + matrix, matrix, occupied,
+              output.get(), output.get(), restricted ? nullptr : output.get() + matrix, error.get(),
+              detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "exchange-only occupied LR accepted a Coulomb output");
+  require(scf::enqueue_prepared_cuda_occupied_fock(
+              gpu, input.get(), restricted ? nullptr : input.get() + matrix, matrix, occupied,
+              nullptr, output.get(), restricted ? nullptr : output.get() + matrix, error.get(),
+              detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  std::vector<double> actual((restricted ? 1 : 2) * matrix);
+  int numerical_error = -1;
+  require(cudaMemcpyAsync(actual.data(), output.get(), actual.size() * sizeof(double),
+                          cudaMemcpyDeviceToHost, binding.stream) == cudaSuccess &&
+              cudaMemcpyAsync(&numerical_error, error.get(), sizeof(int), cudaMemcpyDeviceToHost,
+                              binding.stream) == cudaSuccess &&
+              cudaStreamSynchronize(binding.stream) == cudaSuccess && numerical_error == 0,
+          "could not read occupied LR matrices");
+  for (std::size_t spin = 0; spin < (restricted ? 1U : 2U); ++spin)
+    for (std::size_t i = 0; i < matrix; ++i) {
+      const auto oracle = spin ? reference.exchange_beta[i] : reference.exchange_alpha[i];
+      const auto dense_value = spin ? dense.exchange_beta[i] : dense.exchange_alpha[i];
+      require(std::isfinite(actual[spin * matrix + i]) &&
+                  std::abs(actual[spin * matrix + i] - oracle) < 2e-11 &&
+                  std::abs(actual[spin * matrix + i] - dense_value) < 2e-11,
+              "occupied LR exchange differs from dense GPU or independent CPU DF");
+    }
+}
+
 void run_density_fitted_range_exchange_case(bool restricted) {
+  occupied_fitted_range_matrices(restricted);
+  if (restricted) occupied_fitted_range_matrices(true, true);
   const auto system = hydrogens(restricted ? 2U : 3U, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};

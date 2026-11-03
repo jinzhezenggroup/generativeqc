@@ -114,6 +114,29 @@ def artifact(name: str) -> Path:
     return DIRECTORY / ("readers/" + name if name in READERS else name)
 
 
+def artifact_bytes(name: str) -> bytes:
+    """Read exact current bytes or only the two declared local-Git archive parts."""
+    path = artifact(name)
+    if path.is_symlink():
+        raise ValueError("Support cohort bytes differ: " + name)
+    if path.exists():
+        return path.read_bytes()
+    if name not in {"nsys-v1-analysis.tar.xz.part00", "nsys-v1-analysis.tar.xz.part01"}:
+        raise ValueError("Support cohort bytes differ: " + name)
+    spec = importlib.util.spec_from_file_location(
+        "_h100_history", REPO / "tools/restore_retained_evidence.py"
+    )
+    history = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(history)
+    manifest = DIRECTORY / "historical.manifest.json"
+    entries = history._records(manifest)
+    relative = "benchmarks/results/h100-sm90-cd2b-guards-20261102/" + name
+    matches = [entry for entry in entries if entry["path"] == relative]
+    if len(matches) != 1:
+        raise ValueError("Support cohort bytes differ: " + name)
+    return history._read(matches[0])
+
+
 def checked_publication() -> dict:
     publication = json.loads((DIRECTORY / "cohort.json").read_text())
     if (
@@ -132,13 +155,12 @@ def checked_publication() -> dict:
     for entry in entries:
         relative = Path(entry["path"])
         path = DIRECTORY / relative
+        if relative.is_absolute() or ".." in relative.parts or path.is_symlink():
+            raise ValueError("Support cohort bytes differ: " + entry["path"])
+        data = artifact_bytes(entry["path"])
         if (
-            relative.is_absolute()
-            or ".." in relative.parts
-            or path.is_symlink()
-            or not path.is_file()
-            or path.stat().st_size != entry["bytes"]
-            or sha(path) != entry["sha256"]
+            len(data) != entry["bytes"]
+            or hashlib.sha256(data).hexdigest() != entry["sha256"]
         ):
             raise ValueError("Support cohort bytes differ: " + entry["path"])
     parts = publication.get("nsys_archive_parts", [])
@@ -346,7 +368,7 @@ def replay(
                 archive = task / m["archive"]["name"]
                 with archive.open("xb") as output:
                     for part in publication["nsys_archive_parts"]:
-                        output.write(artifact(part["path"]).read_bytes())
+                        output.write(artifact_bytes(part["path"]))
                 if (
                     archive.stat().st_size != m["archive"]["bytes"]
                     or sha(archive) != m["archive"]["sha256"]
