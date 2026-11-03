@@ -475,8 +475,14 @@ def test_fast_cuda_compiler_delta_does_not_weaken_required_build() -> None:
         assert "read-only" in remote
         assert "CCACHE_REMOTE_ONLY" not in step
         assert "CCACHE_SLOPPINESS" not in step
-    assert "(steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure')" in field(bound, "if")
-    assert "(steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure')" in field(save, "if")
+    assert (
+        "(steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure')"
+        in field(bound, "if")
+    )
+    assert (
+        "(steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure')"
+        in field(save, "if")
+    )
     assert "steps.pr_fast_ccache_restore.outputs.cache-hit != 'true'" in field(
         bound, "if"
     )
@@ -530,7 +536,13 @@ def test_fast_cuda_remote_and_publication_follow_exact_pr_cache_state() -> None:
                             == expected
                         )
                     publish = allowed and hit != "true" and matched == ""
-                    for build_outcome in ("success", "failure", "cancelled", "skipped", ""):
+                    for build_outcome in (
+                        "success",
+                        "failure",
+                        "cancelled",
+                        "skipped",
+                        "",
+                    ):
                         context["steps.cuda_runtime_build.outcome"] = build_outcome
                         assert bool(expression(field(bound, "if"), context)) == (
                             publish and build_outcome in {"success", "failure"}

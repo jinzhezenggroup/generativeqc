@@ -168,7 +168,10 @@ def test_cold_budget_keeps_qualification_and_failure_diagnostics() -> None:
         ("path: ${{ steps.pr_fast_ccache.outputs.path }}", "path: ~/.cache/ccache"),
         ("key: ${{ steps.pr_fast_ccache.outputs.key }}", "key: shared-cuda-cache"),
         ("steps.pr_fast_ccache_bound.outputs.available == 'true'", "true"),
-        ("(steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure')", "true"),
+        (
+            "(steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure')",
+            "true",
+        ),
     ],
 )
 def test_budget_diagnostic_and_gate_controls_reject_regressions(
