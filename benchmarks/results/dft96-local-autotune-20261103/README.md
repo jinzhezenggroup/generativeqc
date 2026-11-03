@@ -2,6 +2,11 @@
 
 ## Result and scope
 
+Follow-up: [1024-point CUDA defaults](../default-cuda-xc-1024-20261103/README.md)
+apply the measured tile to ordinary semilocal-XC calls without a profile. The
+original campaign, source identity, gates and retained samples remain historical
+evidence rather than a new-source performance claim.
+
 Separate complete fresh-process cold-start measurements are retained in
 `../dft96-cold-autotune-20261103/README.md`; they do not change the warm timing
 boundary or historical classification of the observations in this report.

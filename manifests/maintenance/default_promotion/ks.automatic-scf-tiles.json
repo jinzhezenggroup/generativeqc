@@ -1,6 +1,6 @@
 {
   "id": "ks.automatic-scf-tiles",
-  "classification": "guarded-promotion-candidate",
+  "classification": "already-default",
   "controls": [
     "dft-policy:ks-scf-tile-points",
     "dft-policy:ks-force-tile-points"
@@ -13,12 +13,17 @@
     "src/dft/ks_tile_policy.hpp",
     "src/methods/dft_method.cpp"
   ],
-  "rationale": "Unspecified public SCF and stationary-force tiles resolve independently from hardware capability, fitted restricted strict-FP64 gradient-dependent work and grid size. Eligible full-rate FP64 SCF owners use 1024 (nonlocal 512); eligible all-electron through-d native force owners on compute capability 8 or newer use 1024 for 48\u2013128 atoms. Explicit sizes, scientific controls and bounded 256-point fallbacks remain authoritative. Complete default-path qualification is required before promotion.",
-  "revisit_condition": "Requalify complete cold/warm/moved and larger endpoints with independent observables before extending eligibility or weakening resource admission. Preserve explicit SCF inheritance, force overrides, conservative promised capacity and at most one resource-failure retry. Product names are not scheduling capabilities.",
+  "rationale": "Ordinary automatic CUDA semilocal XC uses 1024 SCF and force points without a profile, shape gate or FP64-throughput restriction, applying the 96-atom complete cold/warm winner directly. CPU, numeric resource promises and nonlocal CUDA retain their separate existing schedules. Explicit sizes, scientific controls and bounded 256-point allocation-failure fallbacks remain authoritative. Historical endpoint gains do not imply a universal workload speedup.",
+  "revisit_condition": "Use complete endpoint and independent-observable evidence to investigate default-path regressions. Preserve explicit SCF inheritance, force overrides, conservative promised capacity and bounded resource-failure retries; do not infer universal performance from the retained 96-atom campaign.",
   "evidence": [
     "docs/user/ks_options.md",
     "tests/python/test_ks_tile_policy.py",
     "tests/python/test_ks_options.py",
-    "benchmarks/results/automatic-ks-tiles-20261102/README.md"
+    "tests/python/test_ks_diagnostics.py",
+    "benchmarks/results/automatic-ks-tiles-20261102/README.md",
+    "benchmarks/results/dft96-local-autotune-20261103/README.md",
+    "benchmarks/results/dft96-cold-autotune-20261103/README.md",
+    "benchmarks/results/default-cuda-xc-1024-20261103/README.md",
+    ".agents/notes/implemented/performance/2026-11-03-default-cuda-xc-1024.md"
   ]
 }

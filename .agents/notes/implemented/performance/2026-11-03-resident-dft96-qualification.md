@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-11-03
 
+The benchmark-only application decision below is superseded by
+[promoting the CUDA default to 1024](2026-11-03-default-cuda-xc-1024.md).
+Its original source-matched observations and qualification boundaries remain
+historical evidence; they are not measurements of the later default change.
+
 ## Problem
 
 The first 96-atom water-cluster PBE0/def2-SVP pilot takes more than two minutes

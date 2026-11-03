@@ -6,17 +6,18 @@
 
 namespace generativeqc::dft {
 
-/** Resolve the public automatic SCF tile without changing an explicit request.
- * The larger tiles amortize launch and mapped FP64 contraction overhead for
- * large fitted RKS grids. Nonlocal work has a different measured optimum.
- * CPU, small, mixed, unrestricted, constrained, and unknown device domains
- * retain 256. Force tiling is independently resolved by the enclosing owner.
+/** Resolve the public automatic CUDA SCF tile without changing an explicit request.
+ * Semilocal XC defaults to 1024 points, including direct/hybrid and consumer-GPU
+ * execution. Numeric resource promises retain their quoted 256-point owner.
+ * Nonlocal work retains its separately measured fitted/full-rate-FP64 policy;
+ * CPU callers do not consult this CUDA policy.
  */
 constexpr std::size_t automatic_ks_scf_tile(std::size_t requested, bool fitted_rks_fp64,
                                             bool unconstrained, std::size_t nao, std::size_t points,
                                             bool nonlocal, int compute_major,
                                             int fp32_fp64_ratio) noexcept {
   if (requested) return requested;
+  if (unconstrained && !nonlocal) return 1024;
   if (!fitted_rks_fp64 || !unconstrained || nao < 512 || points < (1U << 19) ||
       !runtime::cuda_fp64_matrix_acceleration_supported(compute_major, fp32_fp64_ratio))
     return 256;

@@ -168,8 +168,11 @@ class KsOptions:
     never authorize sharing points or weights.
 
     tile_points=None requests native automatic SCF tiling; a positive integer
-    fixes the tile exactly. CPU and constrained execution retain 256 points.
-    When both tiles are omitted, native force tiling is selected independently.
+    fixes the tile exactly. Ordinary CUDA semilocal-XC execution defaults to
+    1024 points for both SCF and forces, with bounded allocation-failure retries.
+    CPU and resource-constrained execution retain 256 points; nonlocal CUDA
+    execution retains its separate native policy. An explicit force tile wins
+    independently of the automatic SCF choice.
 
     force_tile_points optionally bounds CUDA stationary-force batches independently
     of the SCF tile (1..4096 points). None preserves the existing force policy.

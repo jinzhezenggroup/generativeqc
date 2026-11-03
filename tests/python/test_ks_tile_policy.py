@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 def test_automatic_tile_preserves_overrides_and_resource_fallbacks(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """Only large fitted strict-FP64 RKS on full-rate FP64 devices may grow."""
+    """CUDA XC defaults to 1024 without a profile, shape or FP64-device gate."""
     unit = tmp_path / "tiles.cpp"
     unit.write_text(
         r"""
@@ -44,15 +44,15 @@ int main() {
     for tile in (1, 31, 256, 512, 4096):
         cases.append(((tile, 0, 0, 1, 1, 0, 0, 0), tile))
     for index, value, expected in (
-        (1, 0, 256),
+        (1, 0, 1024),
         (2, 0, 256),
-        (3, 511, 256),
-        (4, (1 << 19) - 1, 256),
+        (3, 511, 1024),
+        (4, (1 << 19) - 1, 1024),
         (5, 1, 512),
-        (6, 7, 256),
-        (6, 0, 256),
-        (7, 0, 256),
-        (7, 64, 256),
+        (6, 7, 1024),
+        (6, 0, 1024),
+        (7, 0, 1024),
+        (7, 64, 1024),
     ):
         row = list(eligible)
         row[index] = value
@@ -60,7 +60,11 @@ int main() {
     cases.extend(
         [
             ((0, 1, 1, 512, 1 << 19, 0, 9, 2), 1024),
+            ((0, 0, 1, 1, 1, 0, 12, 64), 1024),
+            ((0, 0, 0, 768, 1 << 20, 0, 12, 64), 256),
             ((0, 1, 1, 768, 1 << 20, 1, 12, 64), 256),
+            ((0, 0, 1, 768, 1 << 20, 1, 8, 2), 256),
+            ((0, 1, 1, 511, 1 << 20, 1, 8, 2), 256),
         ]
     )
     result = subprocess.run(
