@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 from collections import Counter
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -269,6 +270,19 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
         "test_df_lambda_frontier.py",
     ):
         assert f"tests/python/{filename}" in targets
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("shard", SHARDS)
+def test_expensive_full_oracles_run_in_nightly_not_routine_ci(
+    event: str, shard: str
+) -> None:
+    # Check the sourced production selector, not a mocked list of exclusions.
+    _, _, arguments = _selection(event, shard)
+    marker_filters = list(pairwise(arguments)).count(("-m", "not ci_nightly"))
+    assert marker_filters == (0 if event in {"schedule", "workflow_dispatch"} else 1)
 
 
 @pytest.mark.parametrize("event", ("schedule", "workflow_dispatch"))

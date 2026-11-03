@@ -180,6 +180,11 @@ branch = true
 relative_files = true
 source = ["python/generativeqc"]
 
+[tool.pytest.ini_options]
+markers = [
+  "ci_nightly: exhaustive multi-minute scientific oracle reserved for scheduled/manual CI",
+]
+
 [tool.ruff]
 extend-exclude = ["upstream", "cmake/3rdparty/implib", "benchmarks/results"]
 
