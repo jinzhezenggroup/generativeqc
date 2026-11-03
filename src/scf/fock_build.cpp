@@ -283,7 +283,7 @@ void require_fock_provider_executable(FockApproximation approximation, FockBacke
   const auto& provider = fock_provider_registration(approximation, backend);
   if (!runtime::provider_executable(provider))
     throw generativeqc::Error(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                             runtime::provider_diagnostic(provider, "Fock preparation"));
+                              runtime::provider_diagnostic(provider, "Fock preparation"));
 }
 
 FockCosxSpec make_cosx_v1_spec(std::size_t radial_points, std::size_t angular_polar,
