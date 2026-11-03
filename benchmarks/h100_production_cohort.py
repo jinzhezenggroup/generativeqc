@@ -120,7 +120,7 @@ def artifact(name: str) -> Path:
 def artifact_bytes(name: str) -> bytes:
     """Recover only the explicitly retained trace parts from local Git history."""
     path = artifact(name)
-    if path.is_symlink():
+    if path.is_symlink() or (path.exists() and not path.is_file()):
         raise ValueError("Support cohort bytes differ: " + name)
     if path.is_file():
         return path.read_bytes()
@@ -131,10 +131,11 @@ def artifact_bytes(name: str) -> bytes:
         raise ValueError("Support cohort bytes differ: " + name)
     try:
         return read_evidence_bytes(
-            path, manifest=DIRECTORY / "historical-snapshot.json"
+            REPO / "benchmarks/results/h100-sm90-cd2b-guards-20261102" / name,
+            manifest=DIRECTORY / "historical-snapshot.json",
         )
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        raise ValueError("Support cohort bytes differ: " + name) from error
+        raise ValueError(f"Support cohort bytes differ: {name}: {error}") from error
 
 
 def checked_publication() -> dict:
@@ -155,12 +156,11 @@ def checked_publication() -> dict:
     for entry in entries:
         relative = Path(entry["path"])
         path = DIRECTORY / relative
-        if relative.is_absolute() or ".." in relative.parts:
+        if relative.is_absolute() or ".." in relative.parts or path.is_symlink():
             raise ValueError("Support cohort bytes differ: " + entry["path"])
         data = artifact_bytes(entry["path"])
         if (
-            path.is_symlink()
-            or len(data) != entry["bytes"]
+            len(data) != entry["bytes"]
             or hashlib.sha256(data).hexdigest() != entry["sha256"]
         ):
             raise ValueError("Support cohort bytes differ: " + entry["path"])

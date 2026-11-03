@@ -284,15 +284,20 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
   // This method owns an integer restricted determinant. Fixed-density Fock
   // callers do not acquire this promise from the same dimensions or system.
   const auto& spec = strategy.spec;
-  // A range-separated composition may still reserve the ordinary full-range
-  // fitted primary. Its independent long-range correction neither consumes
-  // nor mutates this occupied projection, so range_exchange is not itself a veto.
+  // Each radial owner reserves its own B/U storage against remaining capacity.
+  // Both consume the method's determinant, but never borrow each other's metric
+  // or transformed integrals. Arbitrary-density callers retain bounded panels.
+  const bool full_range = spec.coulomb.present &&
+                          spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+                          spec.exchange.op == scf::FockOperator::FullRange;
+  const bool fitted_range = !spec.coulomb.present &&
+                            spec.exchange.op == scf::FockOperator::LongRange &&
+                            spec.exchange.omega > 0.0;
   if (execution_plan.spin_channels != 1 || strategy.backend != scf::FockBackend::Cuda ||
       spec.spin != scf::FockSpin::Restricted || spec.derivative_order != 0 ||
-      !spec.coulomb.present || !spec.exchange.present ||
-      spec.coulomb.approximation != scf::FockApproximation::DensityFitted ||
+      !spec.exchange.present ||
       spec.exchange.approximation != scf::FockApproximation::DensityFitted ||
-      spec.exchange.op != scf::FockOperator::FullRange)
+      (!full_range && !fitted_range))
     return {};
   const auto [alpha, beta] = scf::initial_guess::spin_occupations(system);
   if (system.electron_count <= 0 || !alpha || alpha != beta || system.multiplicity != 1 ||
@@ -623,6 +628,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
           "CUDA range-separated KS requires compatible primary and Direct LR providers");
 #endif
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
+    // Mandatory dispersion owners precede optional CUDA XC/nonlocal caches.
+    // Without a shared capacity ledger, allocating the frozen-potential anchor
+    // first could consume memory required by the requested physical method.
+    if (execution_plan_.d4_correction || execution_plan_.dispersion.kind == 3) prepare_d4(device);
+    if (execution_plan_.dispersion.kind == 1 || execution_plan_.dispersion.kind == 2)
+      prepare_d3(device);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
       const auto& metadata = dft::semilocal_family_metadata(execution_plan_.semilocal_family);
@@ -721,9 +732,6 @@ class KsPreparedState final : public KsSingleOwnerPort {
       }
     }
 #endif
-    if (execution_plan_.d4_correction || execution_plan_.dispersion.kind == 3) prepare_d4(device);
-    if (execution_plan_.dispersion.kind == 1 || execution_plan_.dispersion.kind == 2)
-      prepare_d3(device);
     runtime::sample_cpu_capacity(host_numeric_capacity());
   }
 
@@ -1471,6 +1479,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     if (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
+      // Mixed CUDA response must select its owner before any primary response
+      // runs: the primary consumes the final one-shot fitted projection. The
+      // mixed owner first borrows its canonical C for the separate LR metric.
+      // Computing primary rows and then declining this route loses that lease
+      // and repeats the primary work in the fallback adapter.
+      if (backend_ == GENERATIVEQC_BACKEND_CUDA && execution_plan_.range_exchange)
+        return mixed_rsh_df_integral_gradient(expected, output, maximum_bytes, work, detail,
+                                              &density, &weighted_density);
       const auto fitted_status = density_fitted_integral_gradient(
           expected, density, weighted_density, output, maximum_bytes, work, detail,
           execution_plan_.range_exchange);
@@ -1756,6 +1772,29 @@ class KsPreparedState final : public KsSingleOwnerPort {
         detail = "full RI-K response must not consume a Direct LR correction";
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
+      // C remains KS-owned and token-valid even after primary response consumes
+      // its one-shot U. The LR response uses its own radial A/M, never U.
+      std::optional<scf::CudaDfBorrowedOccupiedFactor> range_factor;
+#if GENERATIVEQC_HAS_CUDA
+      if (cuda_ && expected.identity.model.spins == 1) {
+        dft::CudaKsResidentOccupiedFactorBinding lease;
+        std::string lease_detail;
+        const auto lease_status =
+            cuda_->resident_final_occupied_factor(expected, lease, lease_detail);
+        if (lease_status == GENERATIVEQC_STATUS_SUCCESS) {
+          if (!lease) {
+            detail = "CUDA KS returned an invalid occupied factor lease for LR response";
+            return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+          }
+          range_factor.emplace(scf::CudaDfBorrowedOccupiedFactor{
+              lease.device_id, lease.coefficients, lease.nbf, lease.rank, lease.stream});
+        } else if (lease_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                   lease_status != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
+          detail = lease_detail;
+          return lease_status;
+        }
+      }
+#endif
       std::vector<double> fitted_four;
       auto status =
           density_fitted_integral_gradient(expected, *cached_density, *cached_weighted_density,
@@ -1764,7 +1803,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const auto& alpha = cached_density->at(0);
       const scf::reference::Matrix beta =
           cached_density->size() == 2 ? cached_density->at(1) : scf::reference::Matrix{};
-      const auto fitted_lr = range_correction_->retained_energy_derivative(alpha, beta);
+      const auto fitted_lr =
+          range_factor ? range_correction_->retained_exchange_derivative_with_occupied_factor(
+                             alpha, *range_factor)
+                       : range_correction_->retained_energy_derivative(alpha, beta);
       status = dft::compose_mixed_rsh_df_integral_sources(
           fitted_four, fitted_lr, nc, full_coefficient, c.exchange.coefficient, output, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
@@ -2256,6 +2298,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
         status = cuda_->resident_final_nonlocal_features(expected, features, detail);
         if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       }
+      dft::CudaKsResidentOccupiedFactorBinding factor;
+      if (execution_plan_.density_fitted_range_exchange && density.spins == 1) {
+        status = cuda_->resident_final_occupied_factor(expected, factor, detail);
+        if (status != GENERATIVEQC_STATUS_SUCCESS && status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+          return status;
+      }
       dft::CudaKsResidentFittedProjectionBinding projection;
       if (density.spins == 1 && fock_.strategy().spec.exchange.present &&
           fock_.strategy().spec.exchange.approximation == scf::FockApproximation::DensityFitted) {
@@ -2278,7 +2326,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
           range_strategy_ ? &*range_strategy_ : nullptr, nonlocal_ ? &features : nullptr,
           range_derivative_correction_ ? range_derivative_correction_.get()
                                        : range_correction_.get(),
-          projection ? &projection : nullptr);
+          projection ? &projection : nullptr, factor ? &factor : nullptr);
       if (status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE && precision &&
           (precision->mixed_geometry || precision->mixed_grid)) {
         // Failed geometry never publishes a partial result. Reset every source
@@ -2291,7 +2339,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
             density, weights, fock_, current, output, detail, qualified_spatial_force_default(),
             nullptr, range_strategy_ ? &*range_strategy_ : nullptr, nonlocal_ ? &features : nullptr,
             range_derivative_correction_ ? range_derivative_correction_.get()
-                                         : range_correction_.get());
+                                         : range_correction_.get(),
+            nullptr, factor ? &factor : nullptr);
       }
       if (status == GENERATIVEQC_STATUS_SUCCESS) {
         resources = stationary_controller_->resources();
@@ -2876,7 +2925,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
           fock_backend == scf::FockBackend::Cuda && !execution_plan_.density_fitted_range_exchange
               ? 1U
               : 0U,
-          execution_plan_.density_fitted_range_exchange ? 1U : 0U);
+          execution_plan_.density_fitted_range_exchange ? 1U : 0U,
+          ks_fitted_projection_reservation(system_, execution_plan_, *range_strategy_));
     }
   }
 

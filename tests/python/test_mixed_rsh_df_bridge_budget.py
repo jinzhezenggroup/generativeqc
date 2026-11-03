@@ -354,6 +354,12 @@ struct ResolvedFockBuild {
   double metric_relative_threshold = 1e-10;
   bool operator==(const ResolvedFockBuild&) const = default;
 };
+struct CudaDfBorrowedOccupiedFactor {
+  int device_id;
+  const double* coefficients;
+  std::size_t nbf, rank;
+  void* stream;
+};
 struct PreparedFockPlan {
   ResolvedFockBuild model;
   std::size_t budget = 0;
@@ -372,6 +378,13 @@ struct PreparedFockPlan {
   Diagnostic diagnostic() const { return {2, budget ? budget : 100}; }
   reference::Matrix retained_energy_derivative(const reference::Matrix&,
                                                const reference::Matrix&) const {
+    return {2, 2, 2};
+  }
+  reference::Matrix retained_exchange_derivative_with_occupied_factor(
+      const reference::Matrix&, const CudaDfBorrowedOccupiedFactor& factor) const {
+    if (!factor.coefficients || factor.nbf != 2 || factor.rank != 1)
+      throw std::runtime_error("LR response lost its canonical occupied factor");
+    trace.push_back("fitted-lr-factor");
     return {2, 2, 2};
   }
 };
@@ -420,7 +433,21 @@ struct CudaKsResidentDensityBinding {
   const double* beta = nullptr;
   explicit operator bool() const { return true; }
 };
+struct CudaKsResidentOccupiedFactorBinding {
+  int device_id = 0;
+  const double* coefficients = nullptr;
+  std::size_t nbf = 2, rank = 1;
+  void* stream = (void*)1;
+  explicit operator bool() const { return coefficients != nullptr; }
+};
 struct MockCuda {
+  bool projection_available = true;
+  generativeqc_status resident_final_occupied_factor(
+      const CudaKsFinalStateToken&, CudaKsResidentOccupiedFactorBinding& binding, std::string&) {
+    if (!projection_available) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    binding.coefficients = (double*)1;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
   generativeqc_status resident_final_density(const CudaKsFinalStateToken& t,
                                              CudaKsResidentDensityBinding& b, std::string&) {
     trace.push_back("resident");
@@ -490,6 +517,8 @@ class Harness {
       std::array<std::uint64_t, 9>& work, std::string&, bool,
       std::optional<std::size_t> device_budget = std::nullopt) {
     trace.push_back("df");
+    // Primary response consumes U, but the separately borrowed C stays live.
+    cuda_->projection_available = false;
     seen_host = budget;
     seen_device = device_budget.value_or(budget);
     out.assign(12, 1);
@@ -526,6 +555,8 @@ int main() {
         token, out, 5000, work, detail, &dw, &dw);
     require(result == GENERATIVEQC_STATUS_SUCCESS && out.size() == 15 && constructed == 0,
             "full RI-K did not differentiate its retained fitted owner");
+    require(std::find(trace.begin(), trace.end(), "fitted-lr-factor") != trace.end(),
+            "full RI-K failed to acquire C before primary projection consumption");
   }
   {
     Harness owner;
