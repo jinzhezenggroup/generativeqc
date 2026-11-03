@@ -13,6 +13,10 @@ establish that 256 is the better default either. The user approved preferring
 1024 across GPU models with bounded resource fallbacks. During integration,
 master merged #2949, which already applies the broader portable CUDA semilocal
 default. Preserve that implementation rather than restoring older workload gates.
+The [earlier conservative composition](../../proposed/2026-11-04-direct-tile-default-composition.md)
+is superseded: the user's explicit instruction also closes that design hold and
+authorizes making #2948 Ready for review. Preserve concurrent CI cleanup and
+portable evidence-reader fixes independently of that obsolete policy decision.
 
 ## Decision
 
