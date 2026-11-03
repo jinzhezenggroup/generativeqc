@@ -23,6 +23,57 @@ REFERENCE = {
 }
 
 
+@pytest.mark.parametrize("entrypoint", ["cli", "api"])
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_retained_output_rejected_before_plan_or_native_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    entrypoint: str,
+    destination_kind: str,
+) -> None:
+    """Neither entry point may overwrite reviewed reports or worker logs."""
+    import sys
+
+    from benchmarks import _retention, df96_autotune
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    originals = [retained / "report.json", retained / "worker.log"]
+    for original in originals:
+        original.write_text("preserved reviewed evidence")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+    missing_plan = tmp_path / "must-not-read-plan.json"
+    if entrypoint == "api":
+        with pytest.raises(ValueError, match="raw benchmark output"):
+            df96_autotune.run(missing_plan, destination, repeats=5, policies=[{}])
+    else:
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "df96_autotune",
+                str(missing_plan),
+                "--output",
+                str(destination),
+                "--policy",
+                "{}",
+            ],
+        )
+        with pytest.raises(SystemExit) as error:
+            df96_autotune.main()
+        assert error.value.code == 2
+    assert all(
+        original.read_text() == "preserved reviewed evidence" for original in originals
+    )
+    assert not (tmp_path / ".artifacts").exists()
+
+
 class Samples:
     """Return detached, explicitly nonphysical observations for one test owner."""
 

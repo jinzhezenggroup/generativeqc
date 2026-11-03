@@ -18,6 +18,7 @@ from pathlib import Path
 
 from generativeqc.profiles import atomic_json, canonical_hash, file_hash
 
+from benchmarks._retention import raw_output_path
 from benchmarks.dft96_autotune import Resident, reference_gate
 
 
@@ -141,6 +142,7 @@ def compare(
 
 def run(plan_path: Path, output: Path, *, repeats: int, policies: list[dict]) -> dict:
     """Search against defaults, then requalify the winner on two fresh owners."""
+    output = raw_output_path(output)
     from generativeqc.autotune import source_identity
     from generativeqc.execution_tune import validate_policy
 
@@ -243,7 +245,7 @@ def run(plan_path: Path, output: Path, *, repeats: int, policies: list[dict]) ->
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("plan", type=Path)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=raw_output_path)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--policy", type=json.loads, action="append")
     parser.add_argument("--worker-fd", type=int)

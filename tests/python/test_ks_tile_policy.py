@@ -135,3 +135,83 @@ int main() {
         timeout=15,
     )
     assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]
+
+
+def test_direct_tiles_require_the_qualified_a100_domain(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Do not export A100 Direct measurements to other targets or geometry domains."""
+    unit = tmp_path / "direct_tiles.cpp"
+    unit.write_text(
+        r"""
+#include <iomanip>
+#include <iostream>
+#include <string>
+#include "dft/ks_tile_policy.hpp"
+int main() {
+  bool direct, strict_budget, all_electron;
+  std::size_t angular, atoms;
+  std::string device;
+  int major, minor, ratio;
+  while (std::cin >> direct >> strict_budget >> all_electron >> angular >> atoms >> std::quoted(device)
+                 >> major >> minor >> ratio)
+    std::cout << generativeqc::dft::automatic_direct_ks_tiles_eligible(
+        direct, strict_budget, all_electron, angular, atoms, device, major, minor, ratio) << '\n';
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [unit],
+        tmp_path / "direct_tiles",
+        compile_args=(
+            "-std=c++20",
+            "-I" + str(Path(__file__).resolve().parents[2] / "src"),
+        ),
+    )
+    eligible = (1, 1, 1, 2, 96, "NVIDIA A100-PCIE-40GB", 8, 0, 2)
+    cases = [(eligible, True)]
+    for index, value in (
+        (0, 0),
+        (1, 0),
+        (2, 0),
+        (3, 3),
+        (4, 47),
+        (4, 129),
+        (5, "NVIDIA A30"),
+        (5, "NVIDIA H100"),
+        (5, "NVIDIA GeForce RTX 5090"),
+        (5, "unknown"),
+        (6, 7),
+        (6, 9),
+        (7, 6),
+        (8, 0),
+        (8, 64),
+    ):
+        row = list(eligible)
+        row[index] = value
+        cases.append((tuple(row), False))
+    for atoms in (48, 128):
+        row = list(eligible)
+        row[4] = atoms
+        row[5] = "NVIDIA A100-SXM4-80GB"
+        cases.append((tuple(row), True))
+    for atoms in (48, 96, 128):
+        cases.append(((1, 1, 1, 2, atoms, "NVIDIA GeForce RTX 5090", 12, 0, 64), False))
+    inputs = "".join(
+        " ".join(
+            f'"{value}"' if isinstance(value, str) else str(value) for value in row
+        )
+        + "\n"
+        for row, _ in cases
+    )
+    result = subprocess.run(
+        [str(executable)],
+        input=inputs,
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=15,
+    )
+    assert list(map(int, result.stdout.split())) == [
+        int(expected) for _, expected in cases
+    ]
