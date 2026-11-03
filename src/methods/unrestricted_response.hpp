@@ -43,9 +43,8 @@ inline response::SpinResponseProblem unrestricted_response_problem(
         ref.source_charge != provider.system().charge ||
         ref.source_electrons != provider.system().electron_count ||
         ref.source_multiplicity != provider.system().multiplicity ||
-        provider.strategy().spec != expected ||
-        provider.strategy().screening_tolerance != 0 || !std::isfinite(ref.commutator_residual) ||
-        ref.commutator_residual > 1e-8)
+        provider.strategy().spec != expected || provider.strategy().screening_tolerance != 0 ||
+        !std::isfinite(ref.commutator_residual) || ref.commutator_residual > 1e-8)
       throw std::invalid_argument("stale or nonstationary unrestricted response owner");
   };
   return response::spin_orbital_problem(
