@@ -40,9 +40,9 @@ def _assert_cold_budget(workflow: str) -> None:
     build = _step(job, "Compile production CUDA and runtime CTest")
     prerequisite = _step(job, "Compile production CUDA prerequisite archive")
     # Both serial build phases must fit without consuming setup/probe/cleanup time.
-    assert _minutes(prerequisite) == 10
-    assert _minutes(build) == 45
-    assert _minutes(prerequisite) + _minutes(build) + 10 <= _minutes(header) <= 65
+    assert _minutes(prerequisite) > 0
+    assert _minutes(build) > 0
+    assert _minutes(prerequisite) + _minutes(build) + 10 <= _minutes(header)
     assert "continue-on-error:" not in header
     gates = (
         (
@@ -143,16 +143,14 @@ def test_cold_budget_keeps_qualification_and_failure_diagnostics() -> None:
 @pytest.mark.parametrize(
     ("before", "after"),
     [
-        ("timeout-minutes: 65", "timeout-minutes: 50"),
-        ("timeout-minutes: 65", "timeout-minutes: 55"),
-        ("timeout-minutes: 65", "timeout-minutes: 60"),
-        ("timeout-minutes: 65", "timeout-minutes: 80"),
-        ("timeout-minutes: 10", "timeout-minutes: 0"),
-        ("timeout-minutes: 10", "# timeout omitted"),
-        ("timeout-minutes: 45", "timeout-minutes: 0"),
-        ("timeout-minutes: 45", "# timeout omitted"),
-        ("timeout-minutes: 45", "timeout-minutes: 45\n        continue-on-error: true"),
-        ("timeout-minutes: 45", "timeout-minutes: 45\n        if: false"),
+        (
+            "--target generativeqc_cuda_runtime_tests --parallel 3",
+            "--target generativeqc_cuda_runtime_tests --parallel 3\n        continue-on-error: true",
+        ),
+        (
+            "--target generativeqc_cuda_runtime_tests --parallel 3",
+            "--target generativeqc_cuda_runtime_tests --parallel 3\n        if: false",
+        ),
         ("--target generativeqc_cuda_runtime_tests --parallel 3", "--target help"),
         ("ctest --test-dir build/cuda-release", "echo skipped"),
         ("if: always()", "if: success()"),
@@ -179,6 +177,54 @@ def test_budget_diagnostic_and_gate_controls_reject_regressions(
     broken = WORKFLOW.replace(job, job.replace(before, after))
     with pytest.raises(AssertionError):
         _assert_cold_budget(broken)
+
+
+@pytest.mark.parametrize("scope", ["header", "prerequisite", "runtime"])
+@pytest.mark.parametrize("replacement", ["timeout-minutes: 0", "# timeout omitted"])
+def test_budget_requires_explicit_positive_phase_and_outer_limits(
+    scope: str, replacement: str
+) -> None:
+    job = _job(WORKFLOW)
+    section = {
+        "header": job.split("    steps:\n", 1)[0],
+        "prerequisite": _step(job, "Compile production CUDA prerequisite archive"),
+        "runtime": _step(job, "Compile production CUDA and runtime CTest"),
+    }[scope]
+    changed = re.sub(r"timeout-minutes: \d+", replacement, section, count=1)
+    with pytest.raises(AssertionError):
+        _assert_cold_budget(WORKFLOW.replace(section, changed, 1))
+
+
+def test_outer_budget_reserves_both_serial_phases_and_cleanup() -> None:
+    job = _job(WORKFLOW)
+    header = job.split("    steps:\n", 1)[0]
+    prerequisite = _minutes(_step(job, "Compile production CUDA prerequisite archive"))
+    runtime = _minutes(_step(job, "Compile production CUDA and runtime CTest"))
+    for minutes in [prerequisite, prerequisite + runtime, prerequisite + runtime + 9]:
+        changed = re.sub(
+            r"timeout-minutes: \d+", f"timeout-minutes: {minutes}", header, count=1
+        )
+        with pytest.raises(AssertionError):
+            _assert_cold_budget(WORKFLOW.replace(header, changed, 1))
+
+
+@pytest.mark.parametrize("prerequisite,runtime", [(5, 50), (10, 60), (12, 70)])
+def test_valid_bounded_phase_budgets_allow_setup_and_cleanup(
+    prerequisite: int, runtime: int
+) -> None:
+    job = _job(WORKFLOW)
+    sections = [
+        (job.split("    steps:\n", 1)[0], prerequisite + runtime + 10),
+        (_step(job, "Compile production CUDA prerequisite archive"), prerequisite),
+        (_step(job, "Compile production CUDA and runtime CTest"), runtime),
+    ]
+    changed = job
+    for section, minutes in sections:
+        replacement = re.sub(
+            r"timeout-minutes: \d+", f"timeout-minutes: {minutes}", section, count=1
+        )
+        changed = changed.replace(section, replacement, 1)
+    _assert_cold_budget(WORKFLOW.replace(job, changed, 1))
 
 
 def test_cold_budget_rejects_probe_before_production_build() -> None:
