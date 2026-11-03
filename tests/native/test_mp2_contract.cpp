@@ -16,6 +16,7 @@
 #include "posthf/mp2_derivative_common.hpp"
 #include "posthf/mp2_energy.hpp"
 #include "posthf/mp2_force.hpp"
+#include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
 #include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
@@ -355,6 +356,48 @@ void provider_and_reference() {
   require(generativeqc::posthf::rhf_reference_capacity(ecp, 8) >=
               generativeqc::posthf::rhf_reference_capacity(system, 8) + ecp_workspace,
           "correlated reference admission omitted checked ECP staging");
+}
+
+/** Shape-only CUDA refusal must reserve ECP grids before a device call.
+ * This gate is also executable in CPU builds and performs no SCF/source work. */
+void cuda_reference_ecp_budget_admission() {
+  class Source final : public generativeqc::integrals::ElectronInteractionSource {
+   public:
+    generativeqc::core::System system;
+    const generativeqc::core::System& orbital() const override { return system; }
+    std::size_t nbf() const override { return 2; }
+    std::size_t naux() const override { return 0; }
+    std::size_t retained_numeric_bytes() const override { return 1024; }
+    bool supports(Operator) const noexcept override { return true; }
+    void read(Operator, const std::array<std::size_t, 4>&, const std::array<std::size_t, 4>&,
+              double*, std::size_t) const override {
+      throw std::logic_error("ECP budget refusal evaluated the interaction source");
+    }
+  } source;
+  source.system.atoms = {{12, {0, 0, 0}, 10}};
+  source.system.shells = {{0, 0, {{0.8, 1.0}}}, {0, 0, {{0.4, 1.0}}}};
+  source.system.ecp_terms = {{0, -1, 2, 0.5, 0.2}};
+  generativeqc::hf::PhysicalReference reference;
+  reference.nbf = 2;
+  reference.nocc = 1;
+  reference.orbital_energies = {-0.5, 0.3};
+  const auto retained =
+      source.retained_numeric_bytes() + reference.orbital_energies.capacity() * sizeof(double);
+  generativeqc::response::GmresPlan response;
+  response.dimension = 1;
+  const auto base = generativeqc::mp2::conventional_gradient_plan(2, 1, retained, response, 1, 3,
+                                                                  3 * sizeof(double), 256ULL << 20);
+  const auto workspace = generativeqc::integrals::ecp_workspace_capacity(source.system);
+  for (const auto budget :
+       {base.peak_bytes, base.peak_bytes + workspace - 1, base.peak_bytes + workspace}) {
+    bool refused = false;
+    try {
+      (void)generativeqc::mp2::reference_force(reference, source, budget, true, 0);
+    } catch (const std::length_error&) {
+      refused = true;
+    }
+    require(refused, "CUDA HF companion omitted ECP staging or accepted zero backend staging");
+  }
 }
 
 void conventional_energy_batch_fallback_matches() {
@@ -844,6 +887,7 @@ int main() {
   try {
     generated_equations();
     provider_and_reference();
+    cuda_reference_ecp_budget_admission();
     provider_cross_shell_tiles();
     conventional_energy_reuses_ao_scans();
     conventional_energy_batch_fallback_matches();

@@ -433,6 +433,67 @@ def test_ecp_hamiltonian_uses_native_numeric_parameters(
     assert fake_native and all(event["closed"] for event in fake_native)
 
 
+@pytest.mark.parametrize("role", ("high", "correction"))
+@pytest.mark.parametrize("change", ("channels", "primitives", "duplicate"))
+def test_ecp_hamiltonian_term_order_and_multiplicity(
+    ecp_model_bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    role: str,
+    change: str,
+) -> None:
+    """Term order is irrelevant, but repeated terms remain part of the operator."""
+    low, high = ecp_model_bases
+    potentials = [
+        {
+            "ecp_type": "scalar_ecp",
+            "angular_momentum": [channel],
+            "r_exponents": [2, 2],
+            "gaussian_exponents": ["0.5", "0.8"],
+            "coefficients": [["0.2", "0.3"]],
+        }
+        for channel in (0, 1)
+    ]
+
+    def with_potentials(item: CBSBasis, records: list[dict]) -> CBSBasis:
+        element = item.basis.by_element[11]
+        return CBSBasis(
+            replace(
+                item.basis,
+                elements=(replace(element, ecp_data=json.dumps(records)),),
+            ),
+            item.cardinal,
+        )
+
+    low, high = (with_potentials(item, potentials) for item in (low, high))
+    if change == "channels":
+        potentials.reverse()
+    elif change == "primitives":
+        for potential in potentials:
+            potential["r_exponents"].reverse()
+            potential["gaussian_exponents"].reverse()
+            potential["coefficients"][0].reverse()
+    else:
+        potential = potentials[0]
+        potential["r_exponents"].append(potential["r_exponents"][0])
+        potential["gaussian_exponents"].append(potential["gaussian_exponents"][0])
+        potential["coefficients"][0].append(potential["coefficients"][0][0])
+    changed = with_potentials(high, potentials)
+    workflow = (
+        CCSDTCBSCalculator((low, changed))
+        if role == "high"
+        else CCSDTCBSCalculator((low, high), correction_basis=changed.basis)
+    )
+    atoms = (("Na", (0, 0, 0)), ("Na", (0, 0, 3)))
+    if change == "duplicate":
+        with pytest.raises(ValueError, match="same ECP Hamiltonian"):
+            workflow.singlepoint(atoms)
+        assert not fake_native
+    else:
+        result = workflow.singlepoint(atoms)
+        assert result.converged
+        assert fake_native and all(event["closed"] for event in fake_native)
+
+
 @pytest.mark.parametrize("change", ("potential", "core", "all-electron"))
 @pytest.mark.parametrize("role", ("high", "correction"))
 def test_cbs_rejects_inconsistent_ecp_hamiltonians(

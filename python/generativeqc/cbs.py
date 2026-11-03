@@ -531,7 +531,7 @@ class CCSDTCBSCalculator:
                             for atom in geometry
                         ),
                         tuple(cores),
-                        tuple(residual_terms),
+                        tuple(sorted(residual_terms)),
                     )
                 )
             if any(identity != hamiltonians[0] for identity in hamiltonians[1:]):
