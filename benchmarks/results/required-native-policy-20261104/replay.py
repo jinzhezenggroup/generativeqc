@@ -109,7 +109,8 @@ def main() -> int:
             sys.stdout.write(replay.stdout)
             return replay.returncode
         report = json.loads(replay.stdout)
-        expected = json.loads((root / "summary.json").read_text())["receipt_replay"]
+        with lzma.open(root / "summary.json.xz", "rt") as stream:
+            expected = json.load(stream)["receipt_replay"]
         if report != expected or replay.returncode != 2:
             raise ValueError("retained incomplete qualification result changed")
         print(json.dumps(report, indent=2, allow_nan=False))

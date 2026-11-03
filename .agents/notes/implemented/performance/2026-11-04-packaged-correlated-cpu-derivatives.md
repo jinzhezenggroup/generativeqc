@@ -85,6 +85,23 @@ replay propagates without publishing; scientific errors preserve the resident
 owner and are not retried. The boundary implementations are stand-ins: this is
 host lifecycle qualification, not real molecular allocation-failure evidence.
 
+A second observation on clean committed source
+`f8c78a3700cb8eca6b49128842546990613d9c7d` returns in 41.736168964765966 seconds
+with the same native identity, binary and numerical errors. Its compact packet
+at `benchmarks/results/packaged-correlated-cpu-20261104/` retains both journal
+records, exact original driver, environment/build provenance, audited diagnostic
+summary and offline replay of all twelve independent E/F block gates. Acceptance
+is numerical-only; performance/production qualification and whole-endpoint
+work/allocation measurements remain absent. The first dirty observation and the
+earlier failed campaign are not relabeled or replaced.
+
+The prospective GitHub test merge exceeded the aggregate evidence budget when
+the new packet was stored as loose JSON/source. Retain its journal, exact driver,
+provenance and diagnostic summary in one lossless sample container. Also compress
+the earlier packet's evidence/provenance/summary records byte-for-byte; keep its
+raw samples, frozen sources, scientific result and exit-2 replay unchanged.
+Check the actual test-merge inventory, not only this branch's smaller checkout.
+
 ## Revisit when
 
 Additional compiled components or derivative orders become available, or a

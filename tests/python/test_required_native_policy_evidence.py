@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from tools.generativeqc_validation.publication import validate_publication
+from tools.generativeqc_validation.record import load_publication_record
 
 PACKET = (
     Path(__file__).resolve().parents[2]
@@ -50,7 +51,7 @@ def test_publication_envelope_does_not_promote_partial_results() -> None:
     }
     validate_publication(manifest, files)
     assert manifest["decision"]["status"] == "inconclusive"
-    evidence = json.loads(files["evidence.json"])
+    evidence = load_publication_record(PACKET)
     assert evidence["stages"]["endpoint"]["status"] == "fail"
     assert evidence["performance"]["status"] == "not-run"
     assert evidence["settings"]["real_gpu_execution"] is False
@@ -58,7 +59,7 @@ def test_publication_envelope_does_not_promote_partial_results() -> None:
 
 @pytest.mark.parametrize(
     "member",
-    ["samples.json.xz", "summary.json", "frozen-sources.json.xz", "replay.py"],
+    ["samples.json.xz", "summary.json.xz", "frozen-sources.json.xz", "replay.py"],
 )
 def test_changed_packet_member_fails_before_replay(tmp_path: Path, member: str) -> None:
     packet = tmp_path / "packet"

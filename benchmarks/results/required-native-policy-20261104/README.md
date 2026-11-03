@@ -40,10 +40,13 @@ python replay.py
 ```
 
 Exit **2** is the expected incomplete result, not a passing qualification.
+The evidence, provenance and summary records use lossless `.json.xz` storage;
+their decompressed bytes, original sample/source containers and incomplete
+decision are unchanged. This storage repair also fits the tested merge budget.
 The replay restores checksum-bound JSON records and v2 publication journals
 into a temporary directory, then invokes the retained independent auditor.
 It does not load a native library, execute molecular work, or launch a benchmark.
-`summary.json` records its observed result; `publication.json` authenticates the
+`summary.json.xz` records its observed result; `publication.json` authenticates the
 selected packet. `samples.json.xz` contains complete records, not just medians.
 Original scripts for both protocols and diagnostic sources are preserved
 byte-for-byte in `frozen-sources.json.xz`. Extract them into a new directory with
@@ -54,7 +57,7 @@ These are historical drivers, not safe resume commands. XZ compression is a
 lossless storage repair; no sample, journal, source or failed protocol is removed.
 
 To repeat native work, reconstruct the two exact Git archives and a source-matched
-CPU Release library using the build settings in `provenance.json`, a freshly
+CPU Release library using the build settings in `provenance.json.xz`, a freshly
 verified compiler cache, and retained before/after cache statistics. Populate a
 fresh `.artifacts/required-native-policy-20261104/` tree following the frozen
 driver's paths; never overwrite an existing campaign. A rebuilt binary may have
