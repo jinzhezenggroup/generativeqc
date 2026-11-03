@@ -1,0 +1,9 @@
+{
+  "audit_inputs_hashed_before": 831,
+  "same_after": 831,
+  "changed": [],
+  "original_scientific_input_tables_rechecked_against_frozen_pre_execution_hashes": 18,
+  "original_replay_outputs_unchanged": true,
+  "no_gpu_or_remote_calls": true,
+  "no_production_or_original_evidence_writes": true
+}

@@ -1,0 +1,179 @@
+{
+  "status": "COMPLETE_TERMINAL_PRODUCTION_BUILD_METADATA_ARCHIVE",
+  "archive": "production-build-v1-metadata.tar.xz",
+  "bytes": 305620,
+  "sha256": "7094d35e3550f8fa718d06246b32e4f22403b0427f7261c2b6442b9feeb80130",
+  "build_receipt_sha256": "67ba3327447651bb566a003636e9e40cb06dc29cf382b2a6f9a5e33ec4b0ef64",
+  "recorded_provenance_errors": [],
+  "build_status": "PASS_SM90_PRODUCTION33_ARTIFACT_BUILD_ONLY_NOT_SCIENTIFIC_ACCEPTANCE",
+  "platform_status": "SUCCEEDED",
+  "platform_status_sha256": "453dbfb35ac567670dc96888424d8ca18ec235beaff80fdda0a72c79da93e225",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "files": {
+    "production-build-v1/aot-audit.json": {
+      "bytes": 17524,
+      "sha256": "0cbb8acf7586204a6a20748664efbb2fefb151ef2915616518c661471a0fca6c"
+    },
+    "production-build-v1/aot-audit.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "production-build-v1/aot-audit.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "production-build-v1/build-receipt.json": {
+      "bytes": 10488,
+      "sha256": "67ba3327447651bb566a003636e9e40cb06dc29cf382b2a6f9a5e33ec4b0ef64"
+    },
+    "production-build-v1/build.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "production-build-v1/build.stdout": {
+      "bytes": 1738928,
+      "sha256": "cf902668c5b55600e6d54ac9e315ea72319b8cf8fd6f4abb900d162461f866a6"
+    },
+    "production-build-v1/compiler-commands.txt": {
+      "bytes": 2086855,
+      "sha256": "b5d0ff18e4e4dff22d71a4c2feea75f48445ea4b1a5fe06184a0be76a15db1e8"
+    },
+    "production-build-v1/compiler-version.txt": {
+      "bytes": 248,
+      "sha256": "098728266bdc9b02d3893a91a5ad49adfd460a212707690ce5317609ad290061"
+    },
+    "production-build-v1/configure.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "production-build-v1/configure.stdout": {
+      "bytes": 2155,
+      "sha256": "d8a687b9214806ce42208b5c25871c358bdef19b7fd12daafaf5abc030c60a0e"
+    },
+    "production-build-v1/nvcc-version.txt": {
+      "bytes": 208,
+      "sha256": "77d7ef23109cd2437a8b9cf5efbc4e89996b816276077edb86143ee04f6d5269"
+    },
+    "production-build-v1/production-exports.txt": {
+      "bytes": 3202905,
+      "sha256": "40286f846cc31337e6160d2257b53b2b55dc4225bfdc2da4edf3750d90379cc4"
+    },
+    "production-build-v1/production-ldd.txt": {
+      "bytes": 2043,
+      "sha256": "9c54772c80504711edb8997a341b0265c05898998e66db99c060f788087fe6eb"
+    },
+    "production-build-v1/sccache-after.txt": {
+      "bytes": 2163,
+      "sha256": "88d2246e098b1c08f96a21b0f69fec4ab29a00de891d9453fce5c219ad420055"
+    },
+    "production-build-v1/sccache-before.txt": {
+      "bytes": 1357,
+      "sha256": "c6790b411df0818fa6f60247c33c9f7e4558af26b71875f8094797240c874738"
+    },
+    "production-build-v1-archival-admissions/observed-platform-status.json": {
+      "bytes": 377,
+      "sha256": "453dbfb35ac567670dc96888424d8ca18ec235beaff80fdda0a72c79da93e225"
+    },
+    "production-build-v1-executed-producers/build-production.py": {
+      "bytes": 9343,
+      "sha256": "e3cd9a4f3c5976b78f8748320556df23e7d9b7ba9e69c90f305d7f36ca820a77"
+    },
+    "production-build-v1-executed-producers/build-production-job.sh": {
+      "bytes": 731,
+      "sha256": "9acd71bb30b57832a24e11245c079562f52077e2bf38dc38478dfb06bc112840"
+    },
+    "production-build-v1-available-inputs/build-production.py": {
+      "bytes": 9343,
+      "sha256": "e3cd9a4f3c5976b78f8748320556df23e7d9b7ba9e69c90f305d7f36ca820a77"
+    },
+    "production-build-v1-available-inputs/build-production-job.sh": {
+      "bytes": 731,
+      "sha256": "9acd71bb30b57832a24e11245c079562f52077e2bf38dc38478dfb06bc112840"
+    },
+    "production-build-v1-available-inputs/source-staging-v1.json": {
+      "bytes": 773,
+      "sha256": "73566a03f3b024e4c4d5b7c71f5fe096799ea467e60976d41b3212dfbe3712ec"
+    },
+    "production-build-v1-available-inputs/preparation-v1.json": {
+      "bytes": 1087,
+      "sha256": "54188a23f5ac4c255b7d194481633249548544750a2881f85ceff987c81aedc6"
+    },
+    "production-build-v1-archival-producers/archive-build-v3.py": {
+      "bytes": 4303,
+      "sha256": "836d396000959be2714310cc6302edaea69c133feab2f0e03e4d23aba637fbe1"
+    },
+    "production-build-v1/configured-build/CMakeCache.txt": {
+      "bytes": 50465,
+      "sha256": "03a813f2966328cf093eb91e6b9da47124ad1b1bcd9fba0f7750553dca84bd94"
+    },
+    "production-build-v1/configured-build/build.ninja": {
+      "bytes": 5343849,
+      "sha256": "09054f1a140f77cfc10b7aa62d76beb97b08041725c4d6d9d51757072314b1bb"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_pbe_rks.json": {
+      "bytes": 1443,
+      "sha256": "db735ea51837a839682adcb1df6e861db0e43ec1981b06a3ba6d0c91a42343fe"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_pbe_rks_spd.json": {
+      "bytes": 3208,
+      "sha256": "9e6171ac8fbf54a0fb7807f77aa42cb26476031fd90b7efff3373a39f3e943a3"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_pbe0_rks.json": {
+      "bytes": 1534,
+      "sha256": "5f0765f5f4182b949cfc596bfcd2e094612d16b41f77c98ed3835b4ec1ca4994"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_pbe0_rks_spd.json": {
+      "bytes": 3299,
+      "sha256": "89ca27d723dd6af047ca8a35b416782b90d59da1b2d374f84d9dfef0b16bbb04"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_b3lyp_rks.json": {
+      "bytes": 1535,
+      "sha256": "8dc72bca55d2925c00fb07999ccead0286a2bc53a45fca5236ffaab5494f4d1e"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_b3lyp_rks_spd.json": {
+      "bytes": 3300,
+      "sha256": "ab1b221db00f296ea0ae9b8201893e53a12fc5fbaf41f589f90e2a1fd62eacf5"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_r2scan_rks.json": {
+      "bytes": 1446,
+      "sha256": "258fdb11ef2571e33a6244262999f05cd2f9b17b76bd54347d96c1b4f2da1f38"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_r2scan_rks_spd.json": {
+      "bytes": 3211,
+      "sha256": "340dd7fbb2fc447597501841606424f19607622a107e8bc7e420b146c7625fa4"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_m06_2x_rks.json": {
+      "bytes": 1541,
+      "sha256": "0aed66c6d9445b9b49226158127e85488c4bc62790492fbce4037265a004b924"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_m06_2x_rks_spd.json": {
+      "bytes": 3306,
+      "sha256": "979912778f40496d3ef55f02db9266cf33def6b2a9273c125d5c7d699b26686d"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_wb97mv_rks.json": {
+      "bytes": 1446,
+      "sha256": "3d1cc76b7906663c2d8215f73157477520818165e2a54bc650334747d7863889"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_wb97mv_rks_spd.json": {
+      "bytes": 3211,
+      "sha256": "9eff274bf9763b9ebe9e0f52be36f2e50133252ef46421c7d11b658c9fa7f1c5"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_pbe_uks.json": {
+      "bytes": 1441,
+      "sha256": "4d1b8a8e3854990acd8f95e96fb22bbf5540adededfbcc10c53cd4ef515edf65"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_pbe_uks_spd.json": {
+      "bytes": 3206,
+      "sha256": "f76907bcea724d266ef59e86954e655168ae463660f845dcbec89cc0e5a961c0"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_pbe0_uks.json": {
+      "bytes": 1532,
+      "sha256": "41e92295ac9017c64a9b9822b038531998295d4394cf07946fb5ee06a399e5fd"
+    },
+    "production-build-v1/aot-manifests/generativeqc_stationary_pbe0_uks_spd.json": {
+      "bytes": 3297,
+      "sha256": "f699fba2bff251f39f777c6a714c7462c4fdd480e10c1bdd5e715cc8ae138e39"
+    }
+  },
+  "scope": "Terminal build commands/logs/cache statistics/configuration/AOT manifests only. Libraries remain immutable on shared storage with hashes. No molecular, sanitizer, memory/lifetime or performance acceptance."
+}

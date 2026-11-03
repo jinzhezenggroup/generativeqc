@@ -1,0 +1,34 @@
+{
+  "primary": {
+    "count": 529,
+    "unchanged": 529,
+    "changed": []
+  },
+  "installed_delta": {
+    "count": 29,
+    "unchanged": 29,
+    "changed": []
+  },
+  "initial_only_notified_change": {
+    "checked": 528,
+    "changed": [
+      "h100-production-20261102/cohort-cd2b/public-delivery-v2/h100_production_cohort.py"
+    ],
+    "details": {
+      "h100-production-20261102/cohort-cd2b/public-delivery-v2/h100_production_cohort.py": {
+        "before": {
+          "bytes": 16104,
+          "sha256": "ae728810ae7d88ed8912c241920b7d64e44bf787ef32530894cb20d25ed38685"
+        },
+        "after": {
+          "bytes": 16240,
+          "sha256": "3bad9245731663b7d611c4c2ca8d6c008cfb467e27bb67bed8ec488a8f7f3513"
+        }
+      }
+    },
+    "intentional_notified_executor_update": [
+      "h100-production-20261102/cohort-cd2b/public-delivery-v2/h100_production_cohort.py"
+    ]
+  },
+  "supplemental_historical_scope": "post-read inventory only; not substituted for primary before/after seal"
+}
