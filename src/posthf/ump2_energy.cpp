@@ -72,6 +72,34 @@ double validate_unrestricted_energy_input(const hf::UnrestrictedPhysicalReferenc
   return checked_denominators(reference, threshold);
 }
 
+std::size_t unrestricted_cuda_energy_host_capacity(
+    const hf::UnrestrictedPhysicalReference& reference,
+    const posthf::NativeBlockProvider& provider) {
+  const auto basis_count = reference.nbf;
+  if (reference.nocc[0] > basis_count || reference.nocc[1] > basis_count)
+    throw std::invalid_argument("UMP2 occupied count exceeds the orbital frame");
+  auto peak = provider.batch_bytes({1, 1, 1, 1}, 1, true);
+  for (const auto& channel : kChannels) {
+    const auto left = channel[0], right = channel[1];
+    const auto occupied_left = reference.nocc[left], occupied_right = reference.nocc[right];
+    const auto virtual_left = basis_count - occupied_left;
+    const auto virtual_right = basis_count - occupied_right;
+    if (!occupied_left || !occupied_right || !virtual_left || !virtual_right) continue;
+    const std::array<std::size_t, 4> extents{occupied_left, virtual_left, occupied_right,
+                                             virtual_right};
+    auto elements = std::size_t{1};
+    for (const auto extent : extents) elements = posthf::checked_mul(elements, extent);
+    // g and, for equal spins, x coexist with four orbital-energy feeds and
+    // the returned scalar. The transformed block is already in batch_bytes.
+    const auto feeds =
+        posthf::checked_add(posthf::checked_mul(left == right ? 2 : 1, elements),
+                            posthf::checked_add(posthf::checked_mul(2, basis_count), 1));
+    peak = std::max(peak, posthf::checked_add(provider.batch_bytes(extents, 1, true),
+                                              posthf::checked_mul(sizeof(double), feeds)));
+  }
+  return peak;
+}
+
 UnrestrictedEnergy conventional_unrestricted_energy(
     const hf::UnrestrictedPhysicalReference& owned,
     const integrals::ElectronInteractionSource& source, std::size_t budget, double threshold,
@@ -98,11 +126,7 @@ UnrestrictedEnergy conventional_unrestricted_energy(
 
   if (cuda) {
 #if GENERATIVEQC_HAS_CUDA
-    const auto provider_peak = provider.batch_bytes({n, n, n, n}, 1, true);
-    const auto square = posthf::checked_mul(n, n);
-    const auto host_buffers =
-        posthf::checked_mul(16 * sizeof(double), posthf::checked_mul(square, square));
-    auto peak = posthf::checked_add(provider_peak, host_buffers);
+    const auto peak = unrestricted_cuda_energy_host_capacity(owned, provider);
     if (peak >= budget) throw std::length_error("UMP2 CUDA host/provider capacity exceeds budget");
     auto executor = cc::make_unrestricted_cuda_executor(n, owned.nocc[0], owned.nocc[1], device,
                                                         budget - peak, false, true);

@@ -1,0 +1,41 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-sm90-db36-safety-20261103",
+  "owner": "H100 frozen DB36 safety delivery",
+  "reason": "Original build/native/public and complete/failed grouped-Direct evidence with seven byte-exact CPU safety proofs. Capacity is recovered from four exact CD2B payloads in already merged Git, with unchanged limits and no external backup. No final-majority claim.",
+  "review_document": "benchmarks/results/h100-sm90-db36-safety-20261103/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-metadata.tar.xz",
+      "bytes": 307828,
+      "sha256": "03f63b636e01219168f0826849a6cf1e341335a13df1cc2ceeb8752f3764b8d2",
+      "family": "h100-sm90-db36-safety-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact frozen-source safety observations. spatial-v1 preserves the FAILED original and zero accepted partial race; separate unfiltered race6 and complete normal/mem components retain full operands/work/process/source witnesses. Build metadata alone supplies no science, and every record supplies zero final timing votes."
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-db36-safety-20261103/public-direct-v1-completed.tar.xz",
+      "bytes": 245832,
+      "sha256": "ac7718ef6db5cb84c27e2bf84cd9207fbb47b51602a929ec3a69efc7007b9a85",
+      "family": "h100-sm90-db36-safety-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact frozen-source safety observations. spatial-v1 preserves the FAILED original and zero accepted partial race; separate unfiltered race6 and complete normal/mem components retain full operands/work/process/source witnesses. Build metadata alone supplies no science, and every record supplies zero final timing votes."
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-db36-safety-20261103/spatial-v1-completed.tar.xz",
+      "bytes": 275336,
+      "sha256": "e08d2879457e43185700a39419b4aeb3465a9182de80d1b8c965110708dd2e4f",
+      "family": "h100-sm90-db36-safety-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact frozen-source safety observations. spatial-v1 preserves the FAILED original and zero accepted partial race; separate unfiltered race6 and complete normal/mem components retain full operands/work/process/source witnesses. Build metadata alone supplies no science, and every record supplies zero final timing votes."
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-db36-safety-20261103/spatial-racecheck-v2-completed.tar.xz",
+      "bytes": 212504,
+      "sha256": "392f9847ec551f5c6a9d676b4f32970188cc7f00b06fdf39eb764ce3db400974",
+      "family": "h100-sm90-db36-safety-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact frozen-source safety observations. spatial-v1 preserves the FAILED original and zero accepted partial race; separate unfiltered race6 and complete normal/mem components retain full operands/work/process/source witnesses. Build metadata alone supplies no science, and every record supplies zero final timing votes."
+    }
+  ]
+}

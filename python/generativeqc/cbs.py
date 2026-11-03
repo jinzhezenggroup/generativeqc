@@ -7,7 +7,6 @@ reference packages and numerical differentiation are not production consumers.
 
 from __future__ import annotations
 
-import json
 import math
 import threading
 import time
@@ -21,6 +20,7 @@ from ._api_types import Atom, Result
 from ._model_resolution import snapshot_basis
 from .basis import BasisSet
 from .calculator import Calculator
+from .ecp import resolve_ecp
 from .elements import checked_integer, electron_state
 
 if typing.TYPE_CHECKING:
@@ -521,16 +521,17 @@ class CCSDTCBSCalculator:
                 )
                 record.shells_for(geometry)
                 # Extrapolate basis error, never a change in the ionic operator.
-                # Ignore unused element records and serialized JSON whitespace.
+                # Compare the typed residual terms handed to the native owner,
+                # not JSON whitespace or decimal-number spellings.
+                cores, residual_terms = resolve_ecp(record, geometry)
                 hamiltonians.append(
-                    tuple(
-                        (
-                            element.nuclear_charge,
-                            element.ecp_core_electrons,
-                            json.loads(element.ecp_data) if element.ecp_data else None,
-                        )
-                        for atom in geometry
-                        for element in (record.by_element[atom.atomic_number],)
+                    (
+                        tuple(
+                            record.by_element[atom.atomic_number].nuclear_charge
+                            for atom in geometry
+                        ),
+                        tuple(cores),
+                        tuple(residual_terms),
                     )
                 )
             if any(identity != hamiltonians[0] for identity in hamiltonians[1:]):

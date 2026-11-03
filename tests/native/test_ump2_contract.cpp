@@ -98,6 +98,15 @@ void one_electron_response_admission() {
           "large response fixture does not exceed the old fixed scratch allowance");
   require(generativeqc::posthf::one_electron_response_capacity(system) > two_weights,
           "one-electron response admission omits the two device weight matrices");
+  auto ecp_system = h2();
+  const auto ordinary = generativeqc::posthf::one_electron_response_capacity(ecp_system);
+  ecp_system.ecp_terms.reserve(32);
+  ecp_system.ecp_terms.push_back({0, -1, 2, 0.5, 0.2});
+  const auto ecp_workspace = generativeqc::integrals::ecp_workspace_capacity(ecp_system);
+  const auto metadata = 2 * sizeof(generativeqc::core::EcpTerm) * ecp_system.ecp_terms.capacity();
+  require(ecp_workspace > 0 && generativeqc::posthf::one_electron_response_capacity(ecp_system) ==
+                                   ordinary + metadata + ecp_workspace,
+          "one-electron response admission omits ECP quadrature or retained metadata");
 }
 
 // Query a synthetic topology only: no AO tensor or physical endpoint is evaluated.
@@ -150,6 +159,54 @@ class CountingSource final : public generativeqc::integrals::ElectronInteraction
  private:
   generativeqc::posthf::RawSource raw_;
 };
+
+void cuda_channel_admission() {
+  auto system = h2();
+  system.shells.resize(64, system.shells.front());
+  generativeqc::hf::UnrestrictedPhysicalReference reference;
+  reference.nbf = 64;
+  reference.overlap.resize(64 * 64);
+  reference.hcore.resize(64 * 64);
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    reference.coefficients[spin].resize(64 * 64);
+    reference.fock[spin].resize(64 * 64);
+    reference.density[spin].resize(64 * 64);
+    reference.orbital_energies[spin].resize(64);
+  }
+  reference.source_identity.emplace(system);
+  reference.source_charge = system.charge;
+  reference.source_electrons = system.electron_count;
+  reference.source_multiplicity = system.multiplicity;
+  CountingSource source(system);
+  for (const auto occupations :
+       std::array<std::array<std::size_t, 2>, 3>{{{1, 1}, {1, 0}, {2, 1}}}) {
+    reference.nocc = occupations;
+    generativeqc::posthf::NativeBlockProvider provider(source, reference, 1ULL << 30, 8,
+                                                       generativeqc::posthf::AOTileDomain::Basis);
+    auto expected = provider.batch_bytes({1, 1, 1, 1}, 1, true);
+    for (const auto spins : std::array<std::array<unsigned, 2>, 3>{{{0, 0}, {1, 1}, {0, 1}}}) {
+      const auto occupied_left = occupations[spins[0]], occupied_right = occupations[spins[1]];
+      if (!occupied_left || !occupied_right) continue;
+      const std::array<std::size_t, 4> shape{occupied_left, 64 - occupied_left, occupied_right,
+                                             64 - occupied_right};
+      const auto count = shape[0] * shape[1] * shape[2] * shape[3];
+      const auto feeds = (spins[0] == spins[1] ? 2 : 1) * count + 2 * 64 + 1;
+      expected = std::max(expected, provider.batch_bytes(shape, 1, true) + sizeof(double) * feeds);
+    }
+    const auto actual =
+        generativeqc::mp2::unrestricted_cuda_energy_host_capacity(reference, provider);
+    require(actual == expected, "CUDA UMP2 admission does not match active channel payloads");
+    bool dense_rejected = false;
+    try {
+      (void)provider.batch_bytes({64, 64, 64, 64}, 1, true);
+    } catch (const std::length_error&) {
+      dense_rejected = true;
+    }
+    require(dense_rejected,
+            "synthetic budget does not distinguish active channels from a dense molecular block");
+  }
+  require(source.reads == 0, "shape-only CUDA admission read AO integrals");
+}
 
 void native_equations() {
   constexpr double g = 0.7, x = 0.2, ei = -1.1, ej = -0.8, ea = 0.3, eb = 0.5;
@@ -655,6 +712,7 @@ int main() {
     energy_only_reference_admission();
     one_electron_response_admission();
     full_fitted_reference_admission();
+    cuda_channel_admission();
     unsupported_requests();
     source_and_slots();
     force_contract();

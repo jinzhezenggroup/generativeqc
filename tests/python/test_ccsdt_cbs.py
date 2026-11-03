@@ -403,6 +403,36 @@ def test_ecp_hamiltonian_ignores_serialization_whitespace(
     assert all(event["closed"] for event in fake_native)
 
 
+@pytest.mark.parametrize("role", ("high", "correction"))
+@pytest.mark.parametrize(
+    "exponent,coefficient", (("0.50", "0.200"), ("5e-1", "2e-1"), (0.5, 0.2))
+)
+def test_ecp_hamiltonian_uses_native_numeric_parameters(
+    ecp_model_bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    role: str,
+    exponent: str | float,
+    coefficient: str | float,
+) -> None:
+    """Equivalent BSE number encodings cannot change the native Hamiltonian."""
+    low, high = ecp_model_bases
+    element = high.basis.by_element[11]
+    potentials = json.loads(element.ecp_data)
+    potentials[0]["gaussian_exponents"][0] = exponent
+    potentials[0]["coefficients"][0][0] = coefficient
+    changed = replace(
+        high.basis, elements=(replace(element, ecp_data=json.dumps(potentials)),)
+    )
+    workflow = (
+        CCSDTCBSCalculator((low, CBSBasis(changed, 3)))
+        if role == "high"
+        else CCSDTCBSCalculator((low, high), correction_basis=changed)
+    )
+    result = workflow.singlepoint((("Na", (0, 0, 0)), ("Na", (0, 0, 3))))
+    assert result.converged
+    assert fake_native and all(event["closed"] for event in fake_native)
+
+
 @pytest.mark.parametrize("change", ("potential", "core", "all-electron"))
 @pytest.mark.parametrize("role", ("high", "correction"))
 def test_cbs_rejects_inconsistent_ecp_hamiltonians(
@@ -505,13 +535,18 @@ def test_open_shell_composes_unrestricted_native_groups(
     assert result.convergence["lambda_arithmetic"] == "not_requested"
 
 
+@pytest.mark.parametrize("preconvergence", ("auto", "fp64", "mixed"))
 def test_open_shell_df_uses_unrestricted_grouped_endpoints(
     bases: tuple[CBSBasis, CBSBasis],
     fake_native: list[dict],
+    preconvergence: str,
 ) -> None:
     """DF changes only the selected operator, never the spin or grouping policy."""
     result = CCSDTCBSCalculator(
-        bases, device="cuda", auxiliary_bases=("sto-3g", "def2-svp")
+        bases,
+        device="cuda",
+        auxiliary_bases=("sto-3g", "def2-svp"),
+        preconvergence=preconvergence,
     ).singlepoint(ATOMS, charge=1, multiplicity=2)
     assert result.converged
     assert {event["method"] for event in fake_native} == {"uccsd(t)", "ump2"}
@@ -519,6 +554,13 @@ def test_open_shell_df_uses_unrestricted_grouped_endpoints(
         event["options"]["density_fitting"] == "correlation_cuda"
         for event in fake_native
     )
+    assert all(
+        "_correlation_preconvergence" not in event["options"] for event in fake_native
+    )
+    assert result.convergence["preconvergence"] == preconvergence
+    assert result.convergence["preconvergence_selection"] == "fp64"
+    assert result.convergence["arithmetic_request"] == "fp64"
+    assert result.convergence["arithmetic"] == "fp64"
 
 
 def test_open_shell_invalid_electron_state_rejects_before_native(

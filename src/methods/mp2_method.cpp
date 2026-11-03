@@ -609,7 +609,7 @@ generativeqc_status validate_mp2_system(generativeqc_method, const core::System&
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2) {
-    detail = "MP2 supports real closed-shell all-electron RHF only";
+    detail = "MP2 supports real closed-shell RHF only";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (static_cast<std::size_t>(system.electron_count / 2) >= molecule::ao_count(system)) {

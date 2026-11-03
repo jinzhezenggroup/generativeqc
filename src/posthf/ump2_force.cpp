@@ -423,7 +423,9 @@ ConventionalForceResult unrestricted_force_cpu(
   }
   // Caller-owned four-leg output; generated capacities include adapter scratch.
   peak = add(peak, mul(4, sizeof(double)));
-  // The native weighted derivative consumer has bounded recurrence scratch.
+  // These stages execute sequentially. CUDA ERI batching is capped at
+  // source_scratch_bytes, already included in the one-electron reservation;
+  // neither consumer borrows unadmitted endpoint headroom.
   const auto derivative_capacity = cuda ? posthf::one_electron_response_capacity(source.orbital())
                                         : posthf::source_scratch_bytes;
   peak = add(peak, derivative_capacity);

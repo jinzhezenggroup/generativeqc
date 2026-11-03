@@ -52,7 +52,7 @@ def test_publication_rejects_provenance_gaps(tmp_path: Path, corruption: str) ->
             stream.write("\n# unbound reader change\n")
     else:
         archive = tmp_path / "screening-v1-completed.tar.xz"
-        data = bytearray(archive.read_bytes())
+        data = bytearray(reader.artifact_bytes(tmp_path, archive.name))
         data[len(data) // 2] ^= 1
         archive.write_bytes(data)
     path.write_text(json.dumps(publication))
