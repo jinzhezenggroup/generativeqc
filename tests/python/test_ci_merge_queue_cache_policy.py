@@ -357,3 +357,68 @@ def test_discard_shell_refuses_unexpected_or_selected_cache_paths(
     assert result.returncode != 0
     for directory in (staging, normal):
         assert (directory / "keep").read_bytes() == b"must survive refused cleanup"
+
+
+def test_pr_master_trusted_snapshot_fallback_is_cache_miss_only() -> None:
+    """Never prefer a large artifact to a usable native cache or a queue snapshot."""
+    discovery = _step("Locate trusted master CUDA ccache snapshot")
+    download_name = "Restore trusted master CUDA ccache after ordinary cache miss"
+    activate_name = "Activate verified trusted CUDA ccache after ordinary cache miss"
+    discard_name = "Discard incomplete trusted CUDA ccache miss download"
+    download = _step(download_name)
+    activate = _step(activate_name)
+    discard = _step(discard_name)
+    assert "github.event_name == 'pull_request'" in _field(discovery, "if")
+    assert WORKFLOW.index(FALLBACK) < WORKFLOW.index(download_name)
+    assert WORKFLOW.index(download_name) < WORKFLOW.index(activate_name)
+    assert WORKFLOW.index(activate_name) < WORKFLOW.index(discard_name)
+    assert WORKFLOW.index(discard_name) < WORKFLOW.index(
+        "Reset ccache statistics", WORKFLOW.index(discard_name)
+    )
+    assert _field(download, "continue-on-error") == "true"
+    assert 0 < int(_field(download, "timeout-minutes")) <= 3
+    assert _field(download, "digest-mismatch") == "error"
+    assert _field(download, "repository") == "${{ github.repository }}"
+    assert _field(download, "run-id") == "${{ steps.trusted_cuda_ccache.outputs.run_id }}"
+    stage = _field(download, "path")
+    assert stage == _field(activate, "TRUSTED_CUDA_CCACHE_MISS_DIR")
+    assert stage == _field(discard, "TRUSTED_CUDA_CCACHE_MISS_DIR")
+    assert stage != _field(_step(DOWNLOAD), "path")
+    for event, matched, source_id, scope_case in itertools.product(
+        ("pull_request", "push", "merge_group", "workflow_dispatch"),
+        ("", "matched-cache-key"),
+        ("", "12345"),
+        SCOPE_CASES,
+    ):
+        selector_outcome, scope, active = scope_case
+        context = {
+            "github.event_name": event,
+            "github.ref": "refs/heads/master",
+            "steps.cuda_ccache.outputs.cache-matched-key": matched,
+            "steps.trusted_cuda_ccache.outputs.run_id": source_id,
+            "steps.prose_scope.outcome": selector_outcome,
+            "steps.prose_scope.outputs.scope": scope,
+        }
+        expected = (
+            active
+            and event in ("pull_request", "push")
+            and not matched
+            and bool(source_id)
+        )
+        assert _condition(download, context) == expected
+    assert _field(activate, "continue-on-error") == "true"
+    assert _field(discard, "continue-on-error") == "true"
+    assert _field(activate, "timeout-minutes") == "1"
+    assert _field(discard, "timeout-minutes") == "1"
+    for download_outcome, active_outcome in itertools.product(
+        ("", "skipped", "success", "failure", "cancelled"),
+        ("", "skipped", "success", "failure", "cancelled"),
+    ):
+        context = {
+            "steps.nonqueue_cuda_ccache_download.outcome": download_outcome,
+            "steps.nonqueue_cuda_ccache_activate.outcome": active_outcome,
+        }
+        assert _condition(activate, context) == (download_outcome == "success")
+        assert _condition(discard, context) == (
+            download_outcome not in ("", "skipped") and active_outcome != "success"
+        )
