@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "8c6c6208bb1d68c96e62ed2d15ee561fcc784081",
+  "file_count": 1,
+  "total_bytes": 176688,
+  "purpose": "Exact original receipts recovered offline from already-merged Git history. All independent observables, source identities, failures, work counts and acceptance gates remain unchanged; no external publication or new measurement.",
+  "files": [
+    {
+      "path": "benchmarks/results/host-full-eri-20261025/measurements.json.xz",
+      "bytes": 176688,
+      "sha256": "f61ea564bb095f92ccea4828ab472ade77dd3d1961f0f2099eec0a238d331434",
+      "git_blob_sha1": "9985daf92517da79dc0cd5b38cb18002d9fc8ce5",
+      "git_mode": "100644"
+    }
+  ]
+}
