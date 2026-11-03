@@ -440,10 +440,10 @@ void unsupported_requests() {
   try {
     (void)generativeqc::methods::detail::prepare_ump2_calculation(capabilities, context, h2(),
                                                                   descriptor);
-  } catch (const generativeqc::methods::MethodError& error) {
-    rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  } catch (const std::invalid_argument&) {
+    rejected = true;
   }
-  require(rejected, "native UMP2 silently ignored a DF memory request");
+  require(rejected, "native UMP2 silently ignored a DF budget without density fitting");
 
   descriptor = ump2_descriptor();
   generativeqc_system auxiliary{};
