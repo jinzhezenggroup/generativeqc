@@ -48,7 +48,7 @@ extern "C" int df_spectral_response_probe(std::size_t n, std::size_t a, std::siz
   using namespace generativeqc;
   try {
     if (!n || !a || !terms || !tile || tile > a || n > 16 || a > 64 || terms > 3 || !rank ||
-        rank > n || mode > 2 || (mode == 2 && terms != 1))
+        rank > n || mode > 3 || (mode >= 2 && terms != 1))
       throw std::invalid_argument("invalid spectral response probe shape");
     Storage owner;
     check(cudaStreamCreateWithFlags(&owner.stream, cudaStreamNonBlocking));
@@ -62,10 +62,10 @@ extern "C" int df_spectral_response_probe(std::size_t n, std::size_t a, std::siz
                                        owner.allocate(a * a, eigenvectors),
                                        owner.allocate(a, eigenvalues),
                                        1e-12,
-                                       true,
+                                       mode != 3,
                                        1};
     const scf::CudaDfWhitenedTensorView fitted{
-        owner.allocate(pairs * a, forward),
+        owner.allocate((mode == 3 ? matrix : pairs) * a, forward),
         n,
         a,
         pairs,
@@ -81,10 +81,12 @@ extern "C" int df_spectral_response_probe(std::size_t n, std::size_t a, std::siz
     // access to a removed metric interval rather than hiding it in spare space.
     const auto fixed =
         scf::df_occupied_response_workspace(n, a, terms, compact, spectral && !explicit_root);
-    auto* workspace = owner.allocate(
-        compact ? fixed.elements : scf::cuda_df_response_workspace_elements(n, a, terms, tile));
+    auto* workspace =
+        owner.allocate(mode == 3 ? scf::df_spectral_occupied_workspace(n, a, rank, tile)
+                       : compact ? fixed.elements
+                                 : scf::cuda_df_response_workspace_elements(n, a, terms, tile));
     scf::CudaDfResponseBuffers occupied;
-    if (mode) {
+    if (mode && mode != 3) {
       occupied.occupied_response = true;
       occupied.fitted_occupied_source = &fitted;
       occupied.staging_elements = terms * a * rank * rank;
@@ -103,11 +105,14 @@ extern "C" int df_spectral_response_probe(std::size_t n, std::size_t a, std::siz
         occupied.final_fitted_occupied_projection = projection;
       }
     }
+    const scf::CudaDfOccupiedResponseFactor spectral_factor{device_coefficients, rank, 2.0};
     const auto status = scf::contract_cuda_df_response_weights(
         n, a, response, device_density, metric, tile, workspace, owner.stream, owner.blas, false,
         true,
-        [](std::size_t, double*) {
-          throw std::runtime_error("retained response reread raw values");
+        [&](std::size_t q, double* output) {
+          if (mode != 3) throw std::runtime_error("retained response reread raw values");
+          check(cudaMemcpyAsync(output, fitted.data + q * matrix, matrix * sizeof(double),
+                                cudaMemcpyDeviceToDevice, owner.stream));
         },
         [&](unsigned kind, runtime::StridedRange range, std::size_t count, const double* weights) {
           if (kind == 0) {
@@ -121,8 +126,9 @@ extern "C" int df_spectral_response_probe(std::size_t n, std::size_t a, std::siz
                                   owner.stream));
           }
         },
-        nullptr, {}, false, {}, 256, {}, false, mode ? &occupied : nullptr,
-        mode ? nullptr : &fitted, false, {}, {}, {}, compact);
+        nullptr, {}, false, {}, 256, {}, false, mode && mode != 3 ? &occupied : nullptr,
+        mode ? nullptr : &fitted, false, {}, {}, {}, compact, {},
+        mode == 3 ? &spectral_factor : nullptr);
     check(cudaStreamSynchronize(owner.stream));
     return static_cast<int>(status);
   } catch (const std::exception& error) {

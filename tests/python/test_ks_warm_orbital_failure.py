@@ -115,6 +115,8 @@ struct Owner {
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
   bool occupied_xc_frame_ready = false;
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
+  // The occupied frame has a lifetime independent of the fitted projection.
+  bool final_occupied_factor_ready = false;
   bool pending_incremental_delta = true;
   bool warm_factor_storage = false;
   scf::PreparedCudaOccupiedFockBinding warm_factor_binding{}, occupied_fock_binding{};
@@ -286,6 +288,7 @@ int main(int argc, char** argv) {
   } else if (failed) {
     assert(owner.is_failed && !owner.is_active && !owner.is_pending);
     assert(!owner.output.converged && !owner.final_state_ready);
+    assert(!owner.final_occupied_factor_ready);
     assert(!owner.phase_source);
     if (scenario == "handoff-source") {
       assert(owner.resource.provider_device_bytes == 256);

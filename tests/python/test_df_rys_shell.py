@@ -2,8 +2,6 @@
 
 import ctypes
 import math
-import shutil
-import subprocess
 import typing
 
 import numpy as np
@@ -26,11 +24,8 @@ from tools.generativeqc_validation.df_derivatives import make_df_derivative_fixt
 
 
 @pytest.fixture(scope="module")
-def shell_evaluator(tmp_path_factory: typing.Any) -> typing.Any:
+def shell_evaluator(tmp_path_factory: typing.Any, native_cxx: typing.Any) -> typing.Any:
     """Compile the emitted primitive arithmetic; no native runtime or GPU probe."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     directory = tmp_path_factory.mktemp("df_rys_shell")
     (directory / "cuda_runtime.h").write_text("")
     for name, emit in (
@@ -50,19 +45,19 @@ def shell_evaluator(tmp_path_factory: typing.Any) -> typing.Any:
 #include "generated_df_rys_shell.cuh"
 using namespace generativeqc::scf;
 template<unsigned A,unsigned B,unsigned C>
-void evaluate(bool rys,unsigned item,const double* e,const double* r,double* out) {
+void evaluate(bool rys,unsigned item,double omega,const double* e,const double* r,double* out) {
   generated_df_derivatives::Geometry g;
   const generated_df_derivatives::Vec3 a{r[0],r[1],r[2]}, b{r[3],r[4],r[5]}, c{r[6],r[7],r[8]};
   double independent[6]{};
   if(rys) {
     using Math=generated_df_shell::RysShell<A,B,C>;
-    generated_df_derivatives::prepare_geometry_rys<Math::nroots>(e[0],a,e[1],b,e[2],c,A+B+C,g);
+    generated_df_derivatives::prepare_geometry_rys<Math::nroots>(e[0],a,e[1],b,e[2],c,A+B+C,g,nullptr,omega);
     double cache[3*Math::axis_size];
     for(unsigned lane=0;lane<32;++lane) Math::prepare(g,cache,lane,32);
     Math::accumulate(item,e[0],e[1],g,cache,1.0,independent);
   } else {
     using Math=generated_df_shell::Shell<A,B,C>;
-    generated_df_derivatives::prepare_geometry(e[0],a,e[1],b,e[2],c,A+B+C,g);
+    generated_df_derivatives::prepare_geometry(e[0],a,e[1],b,e[2],c,A+B+C,g,nullptr,omega);
     double cache[3*Math::axis_size];
     for(unsigned lane=0;lane<3;++lane) Math::prepare(g,cache,lane,3);
     Math::accumulate(item,e[0],e[1],g,cache,1.0,independent);
@@ -71,7 +66,7 @@ void evaluate(bool rys,unsigned item,const double* e,const double* r,double* out
   for(unsigned center=0;center<3;++center)
     for(unsigned axis=0;axis<3;++axis) out[3*center+axis]=value.gradient[center][axis];
 }
-extern "C" void probe(unsigned cls,bool rys,unsigned item,const double* e,const double* r,double* out) {
+extern "C" void probe(unsigned cls,bool rys,unsigned item,double omega,const double* e,const double* r,double* out) {
   switch(cls) {
 __SHELL_CASES__
   }
@@ -79,29 +74,17 @@ __SHELL_CASES__
 """.replace(
             "__SHELL_CASES__",
             "\n".join(
-                f"    case {100 * a + 10 * b + c}: return evaluate<{a},{b},{c}>(rys,item,e,r,out);"
+                f"    case {100 * a + 10 * b + c}: return evaluate<{a},{b},{c}>(rys,item,omega,e,r,out);"
                 for a, b, c in RYS_SHELL_CLASSES
             ),
         )
     )
     output = directory / "probe.so"
-    subprocess.run(
-        [
-            compiler,
-            "-O2",
-            "-std=c++20",
-            "-shared",
-            "-fPIC",
-            str(source),
-            "-I",
-            str(directory),
-            "-o",
-            str(output),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=240,
+    native_cxx.build_shared(
+        [source],
+        output,
+        compile_args=("-O2", "-std=c++20", "-I", str(directory)),
+        compile_timeout=240,
     )
     library = ctypes.CDLL(str(output))
     double = ctypes.POINTER(ctypes.c_double)
@@ -109,6 +92,7 @@ __SHELL_CASES__
         ctypes.c_uint,
         ctypes.c_bool,
         ctypes.c_uint,
+        ctypes.c_double,
         double,
         double,
         double,
@@ -121,6 +105,7 @@ __SHELL_CASES__
         angular: typing.Any = ((0, 0, 0),) * 3,
         *,
         rys: typing.Any = True,
+        omega: float = 0.0,
     ) -> typing.Any:
         exponents = np.ascontiguousarray(exponents, dtype=np.float64)
         centers = np.ascontiguousarray(centers, dtype=np.float64)
@@ -138,6 +123,7 @@ __SHELL_CASES__
             int(100 * degrees[0] + 10 * degrees[1] + degrees[2]),
             rys,
             int(item),
+            omega,
             exponents.ctypes.data_as(double),
             centers.ctypes.data_as(double),
             out.ctypes.data_as(double),
@@ -145,6 +131,35 @@ __SHELL_CASES__
         return out
 
     return evaluate
+
+
+@pytest.mark.parametrize("angular", RYS_SHELL_CLASSES)
+@pytest.mark.parametrize("omega", (1e-3, 0.3, 1.2, 1e3))
+def test_long_range_rys_independent_derivatives(
+    shell_evaluator: typing.Any, angular: typing.Any, omega: float
+) -> None:
+    """Independent libcint forces include moving auxiliary and spherical axes.
+
+    Range scaling changes both quadrature argument and geometry. Mixed angular
+    components and contracted primitives detect an omitted or doubled theta;
+    the wide omega range also approaches both radial-operator limits.
+    """
+    pytest.importorskip("pyscf")
+    fixture = make_df_derivative_fixture(
+        angular, primitive_lengths=(2, 1, 2), omega=omega
+    )
+    output = np.array(
+        [
+            shell_evaluator(r["exponents"], r["centers"], r["angular"], omega=omega)
+            for r in fixture.records
+        ]
+    )
+    output *= fixture.records["weight"][:, None, None]
+    actual = fixture.contract(output)
+    np.testing.assert_allclose(actual, fixture.reference, atol=8e-11, rtol=8e-11)
+    np.testing.assert_allclose(
+        fixture.spherical(actual), fixture.spherical_reference, atol=8e-11, rtol=8e-11
+    )
 
 
 @pytest.mark.parametrize("angular", RYS_SHELL_CLASSES)

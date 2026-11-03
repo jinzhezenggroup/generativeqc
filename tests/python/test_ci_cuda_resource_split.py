@@ -137,6 +137,38 @@ def test_all_cuda_jobs_remain_required_with_the_same_source_and_finite_budgets()
 
 
 @pytest.mark.parametrize(
+    "job,name",
+    [
+        ("cuda-resources", "Configure native grid source generation"),
+        ("cuda-direct-aot", "Configure direct J/K AOT release context"),
+    ],
+)
+def test_resource_configuration_omits_only_unconsumed_runtime_targets(
+    job: str, name: str
+) -> None:
+    """Resource probes retain production sources without discovering unrelated AOT."""
+    configure = _step(job, name)
+    for option in (
+        "BUILD_TESTS",
+        "BUILD_CLI",
+        "ENABLE_STATIONARY_FORCE_AOT",
+        "ENABLE_NATIVE_STATIONARY_CUDA",
+        "ENABLE_STATIONARY_CPU_FORCE_AOT",
+    ):
+        assert f"-DGENERATIVEQC_{option}=OFF" in configure
+    assert "-DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120" in configure
+    assert "-DGENERATIVEQC_AOT_PROFILE=sm_120" in configure
+    assert "-DGENERATIVEQC_COMPILER_CACHE=ccache" in configure
+    for consumer in (
+        _step("cuda-compile", "Configure production CUDA compile check"),
+        _step(
+            "native-cli-artifact", "Build monolithic C++ CUDA CLI (release or fast PR)"
+        ),
+    ):
+        assert "-DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=OFF" not in consumer
+
+
+@pytest.mark.parametrize(
     "job,name,command",
     [
         (
@@ -269,10 +301,20 @@ def test_resources_generate_the_native_cmake_source_without_rebuilding_library()
 ):
     production = _step("cuda-compile", "Configure production CUDA compile check")
     resources = _step("cuda-resources", "Configure native grid source generation")
-    assert (
-        production.split("        run: >-\n", 1)[1].strip()
-        == resources.split("        run: >-\n", 1)[1].strip()
+    production_argv = shlex.split(production.split("        run: >-\n", 1)[1])
+    resource_argv = shlex.split(resources.split("        run: >-\n", 1)[1])
+    source_options = (
+        "BUILD_TESTS",
+        "BUILD_CLI",
+        "ENABLE_STATIONARY_FORCE_AOT",
+        "ENABLE_NATIVE_STATIONARY_CUDA",
+        "ENABLE_STATIONARY_CPU_FORCE_AOT",
+        "STATIONARY_AOT_SOURCE_CACHE",
     )
+    prefixes = tuple(f"-DGENERATIVEQC_{option}=" for option in source_options)
+    assert [arg for arg in production_argv if not arg.startswith(prefixes)] == [
+        arg for arg in resource_argv if not arg.startswith(prefixes)
+    ]
     assert "-DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120" in production
     assert "-DGENERATIVEQC_AOT_PROFILE=sm_120" in production
     generation = _step(

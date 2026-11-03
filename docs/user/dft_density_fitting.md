@@ -14,6 +14,11 @@ owner. This does not extend orbital-g or higher-derivative support.
 The generated shell derivative consumer includes auxiliary g, reusing its
 primitive geometry across shell components. Generic and bounded panel paths
 remain available; mixed shell arithmetic remains limited to auxiliary s/p/d/f.
+For explicitly fitted LR, `GENERATIVEQC_DF_WEIGHTED_EXECUTION=shell` selects
+the strict FP64 shell response candidate. It shares the generated omega-aware
+radial algebra and disables Coulomb-only screening. Automatic LR response
+continues to use the generic derivative; this selector changes execution rather
+than the fitted Hamiltonian.
 
 Restricted FP64 all-electron H-Ar DF calculations use native Modified Hückel
 under `initial_guess="auto"`, on CPU and CUDA. Exact atomic preparation changes
@@ -34,7 +39,8 @@ its own `erf(omega*r)/r` three-center integrals and auxiliary metric, with the
 same auxiliary basis and relative rank cutoff as the full-range owner. It does
 not reuse Coulomb-whitened factors for a different radial operator. CUDA orders
 the independent provider streams with device events, without a successful-path
-host fence.
+host fence during SCF. A cross-provider occupied-factor force response orders
+the producer before entering its synchronous derivative consumer.
 
 With complete RI-J/K selected, FP64 CPU and CUDA analytic-force implementations
 differentiate both fitted operators, including auxiliary-center and metric
@@ -57,10 +63,27 @@ Hamiltonian. For an explicit `df` request, missing LR fitting capability or
 insufficient memory is an error, not permission to silently switch Hamiltonians.
 Native snapshots authenticate the actual LR approximation, so derivatives never
 infer it from the current environment.
-Range-fitted orbital and auxiliary shells currently require s/p/d/f coverage.
+Range-fitted orbital shells support s/p/d/f and auxiliary shells support
+s/p/d/f/g. The generated g adapter uses the same omega-dependent value and
+center-response algebra; unsupported higher angular momenta fail at admission.
 For complete RI-J/K on CUDA, an explicit `density_fitting_memory_budget_bytes`
 is split between the two prepared radial owners; zero retains each owner's
 automatic admission.
+
+Both radial owners can consume the SCF's proved occupied coefficients for RI-K.
+Each reserves its own integral and projection storage against the live memory
+envelope. When complete occupied projection storage does not fit, a resident
+packed integral tensor can still feed bounded projection panels; if neither
+representation fits, the source remains streamed. Explicit memory caps and
+force-response capacity remain binding. Optional prepared Hermite transforms
+accelerate packed Coulomb and erf integrals with the same radial recurrence.
+An exact four-center residency request never replaces a fitted LR operator.
+For a restricted final state with an authenticated occupied factor, a
+rank-truncated LR metric uses raw occupied-space projections for force response.
+The complete inverse-root derivative retains motion between kept and discarded
+metric directions. The response does not reconstruct raw integrals from fitted
+values or relax the configured cutoff. Its projected storage and bounded AO
+output panels remain charged to the LR response allowance.
 
 **VV10 itself is not an RI-J/K integral.** Its nonlocal correlation remains the
 existing self-consistent grid-pair evaluation; complete DF-J/K does not replace
@@ -284,6 +307,10 @@ Raw contracted Cartesian/spherical s/p/d/f values and center derivatives are
 compared with libcint over multiple omega values in `test_df_derivatives.py`.
 CUDA implementations require separate real-device qualification; CPU evidence
 and successful compilation are not substitutes for that execution.
+`test_df_long_range_policy.py` covers auxiliary g values and center derivatives
+against libcint. `test_df_md_raw_cuda.py` independently qualifies Coulomb and
+erf packed values, mixed basis representations, dirty graph replay and
+transactional resource refusal.
 
 See the [ownership note](../../.agents/notes/implemented/architecture/2026-09-22-public-df-ks-provider.md)
 for the retained boundaries.

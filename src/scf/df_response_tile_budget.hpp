@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <initializer_list>
 #include <limits>
 
 namespace generativeqc::scf {
@@ -31,6 +32,25 @@ inline DfOccupiedResponseWorkspace df_occupied_response_workspace(
   if (terms > (maximum - charges) / a / 2) return {};
   const auto potentials = charges + terms * a;
   return {matrices, matrices == 1 ? 0 : a * a, ao, charges, potentials, potentials + terms * a};
+}
+
+/** Stable spectral exchange response after exact C^T*A*C projection.
+ * Retain raw and whitened occupied matrices so discarded metric directions
+ * survive the inverse-root adjoint. Only output panels scale with Nao^2.
+ * Zero rejects invalid shapes/overflow before any allocation or launch. */
+inline std::size_t df_spectral_occupied_workspace(std::size_t n, std::size_t a, std::size_t rank,
+                                                  std::size_t tile) noexcept {
+  const auto maximum = std::numeric_limits<std::size_t>::max();
+  if (!n || !a || !rank || rank > n || tile > a || a > maximum / a / 4 || n > maximum / n ||
+      rank > maximum / rank / a / 2)
+    return 0;
+  std::size_t count = 4 * a * a;
+  for (const auto extra : {2 * a * rank * rank, n * n, n * rank}) {
+    if (extra > maximum - count) return 0;
+    count += extra;
+  }
+  if (tile > (maximum - count) / (n * n)) return 0;
+  return count + tile * n * n;
 }
 
 /** Recycle an authenticated dead projection only under response pressure.

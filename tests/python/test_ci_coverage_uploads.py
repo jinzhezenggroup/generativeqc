@@ -95,7 +95,7 @@ def test_coverage_oidc_job_only_consumes_artifacts_with_pinned_actions() -> None
     job = _job()
     assert _field(job, "needs") == "[cpu, python]"
     assert _field(job, "if") == (
-        "${{ github.event_name != 'merge_group' && github.event_name != 'push' "
+        "${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') "
         "&& !cancelled() && needs.cpu.result == 'success' "
         "&& needs.python.result == 'success' }}"
     )

@@ -36,7 +36,7 @@ void select_schedule(unsigned variant) {
 using df_benchmark::Storage;
 
 void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false,
-              bool request_mixed = false) {
+              bool request_mixed = false, double omega = 0) {
   require(!request_mixed || many_signatures, "mixed fallback fixture requires an s-only bra");
   core::System orbital;
   orbital.atoms = {{2, {.1, -.2, -.7}}, {1, {.3, .1, .8}}, {1, {-.5, .4, .2}}};
@@ -55,6 +55,8 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false,
       spherical_x ? GENERATIVEQC_BASIS_SPHERICAL : GENERATIVEQC_BASIS_CARTESIAN;
   auxiliary.shells = {
       {2, 3, {{.8, 1}}}, {0, 0, {{1.1, .8}, {2.1, -.2}}}, {2, 2, {{.9, 1}}}, {1, 1, {{1.2, 1}}}};
+  // The independent CPU LR oracle covers orbital and auxiliary f.
+  // Molecular libcint finite differences separately cover auxiliary g.
   if (many_signatures) {
     // More than 24 same-class signatures must flush multiple bounded packets.
     // The independent full-domain oracle detects dropped/reused packet tails.
@@ -72,7 +74,7 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false,
   for (auto* system : {&orbital, &auxiliary})
     require(molecule::validate_and_normalize(*system, detail) == GENERATIVEQC_STATUS_SUCCESS,
             detail.c_str());
-  const auto raw = integrals::build_density_fitting_integrals(orbital, auxiliary);
+  const auto raw = integrals::build_density_fitting_integrals(orbital, auxiliary, true, omega);
   const auto n = raw.nbf, a = raw.naux, packed_size = n * (n + 1) / 2;
   std::vector<double> dense(a * n * n), packed(a * packed_size), expected(9);
   for (std::size_t p = 0; p < a; ++p)
@@ -87,7 +89,8 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false,
           expected[c] += w * raw.three_center_derivative[c * n * n * a + k];
       }
   Storage storage;
-  const auto o = storage.basis(orbital), x = storage.basis(auxiliary);
+  auto o = storage.basis(orbital), x = storage.basis(auxiliary);
+  o.range_omega = x.range_omega = omega;
   std::vector<double> positions;
   for (const auto& atom : orbital.atoms)
     positions.insert(positions.end(), atom.position.begin(), atom.position.end());
@@ -284,9 +287,17 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false,
 }
 }  // namespace
 
-int main() {
-  if (!std::getenv("SLURM_JOB_ID")) return 77;
+int main(int argc, char** argv) {
+  if (!std::getenv("SLURM_JOB_ID") && !std::getenv("LSB_JOBID")) return 77;
   try {
+    if (argc == 2 && std::string(argv[1]) == "--range") {
+      for (double omega : {0.03, 0.3, 3.0})
+        for (bool spherical_o : {false, true})
+          for (bool spherical_x : {false, true})
+            exercise(spherical_o, spherical_x, false, false, omega);
+      std::cout << "Independent LR f shell, group, packet and tail controls passed\n";
+      return 0;
+    }
     for (const char* policy : {"legacy", "auto"}) {
       require(setenv("GENERATIVEQC_DF_SHELL_POLICY", policy, 1) == 0,
               "cannot select the test policy");

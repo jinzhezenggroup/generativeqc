@@ -438,18 +438,6 @@
       "reason": "Exact completed source-bound compressed observations, full E/F vectors, producer and platform bindings; original failed/unfavorable results retained. CPU-only receiver recomputes accepted and failed outcomes; no final-majority or later-source qualification.",
       "sha256": "f57c575df7f708b6c175a2cbc490ca680fca6fd0bc65e629f9416403fcfb791c"
     },
-    "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part00": {
-      "owner": "H100 frozen-cd2b supporting qualification",
-      "reason": "Authenticated part of exact 1,440,220-byte Nsight analysis archive retaining all3actual SQLite databases for independent CPU timeline reduction. Compression and two-part storage preserve whole-archive SHA; no raw remote trace, timing vote or summary-only substitution.",
-      "sha256": "397a7290392a15e022437763b97e2e6d1196d7ab9f9ef242197f6bf672900f14",
-      "review_change": true
-    },
-    "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part01": {
-      "owner": "H100 frozen-cd2b supporting qualification",
-      "reason": "Authenticated part of exact 1,440,220-byte Nsight analysis archive retaining all3actual SQLite databases for independent CPU timeline reduction. Compression and two-part storage preserve whole-archive SHA; no raw remote trace, timing vote or summary-only substitution.",
-      "sha256": "ec42bee043b2730b18c8f00d79bd41fe1d5a0c3186e7d96e1079c84c33d8f220",
-      "review_change": true
-    },
     "benchmarks/results/h100-sm90-cd2b-guards-20261102/reference-six-v5-completed.tar.xz": {
       "owner": "H100 frozen-cd2b supporting qualification",
       "reason": "Exact completed source-bound compressed observations, full E/F vectors, producer and platform bindings; original failed/unfavorable results retained. CPU-only receiver recomputes accepted and failed outcomes; no final-majority or later-source qualification.",

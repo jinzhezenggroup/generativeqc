@@ -178,17 +178,25 @@ class PreparedFockPlan {
    * provider scratch. Allocation failure retains the bounded response.
    * A total-gradient consumer may request combined full-range RKS J/K: the
    * existing adjoint algebra adds their weights before integral contraction.
-   * Other spin/range contracts retain separate source publication. */
+   * Other spin/range contracts retain separate source publication. A separate
+   * exact occupied factor may serve restricted LR response with this provider's
+   * own radial metric; it never lends another operator's fitted projection. */
   generativeqc_status consume_fitted_energy_derivatives(
       int device, void* stream, const double* alpha, const double* beta, const double* total,
       const CudaDerivativeSourceConsumer& consume, std::string& detail,
       bool range_correction = false, const CudaDfBorrowedFittedProjection* projection = nullptr,
-      bool combine_full_range = false) const;
+      bool combine_full_range = false, const CudaDfBorrowedOccupiedFactor* factor = nullptr) const;
   /** Execute a first derivative retained alongside a value-only prepared model.
    * The underlying provider is revalidated at derivative_order=1, preserving the
    * exact scientific approximation while keeping the SCF identity value-only. */
   std::vector<double> retained_energy_derivative(const std::vector<double>& density,
                                                  const std::vector<double>& beta = {}) const;
+  /** Restricted fitted exchange response using another method-owned exact C.
+   * The radial source and metric always belong to this provider. No fitted U
+   * from a different operator is reusable. The caller authenticates the final
+   * density token and keeps C alive through this synchronous response. */
+  std::vector<double> retained_exchange_derivative_with_occupied_factor(
+      const std::vector<double>& density, const CudaDfBorrowedOccupiedFactor& factor) const;
   /** Exact comparison of immutable source inputs and execution controls.
    * Convergence thresholds, DIIS history and warm density are deliberately
    * excluded: they do not alter the prepared mathematical operator. */

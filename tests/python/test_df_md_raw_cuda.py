@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_TEST_DF_MD_RAW") != "1"
-    or not os.environ.get("SLURM_JOB_ID"),
-    reason="requires explicit raw Hermite qualification in a finite Slurm GPU job",
+    or not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")),
+    reason="requires explicit raw Hermite qualification in a finite GPU allocation",
 )
 
 
@@ -33,7 +33,10 @@ def raw_probe(tmp_path_factory: Any, required_native_cxx: NativeCxx) -> Path:
     library = Path(os.environ["GENERATIVEQC_LIBRARY"]).absolute()
     compiler = replace(
         required_native_cxx,
-        compiler=str(Path(os.environ["CUDA_PATH"]) / "bin/nvcc"),
+        # Conda may expose nvcc through a target-directory symlink. Resolve the
+        # executable so its tool lookup and compiler-cache dependency scan use
+        # the real toolkit layout; pass the public target headers explicitly.
+        compiler=str((Path(os.environ["CUDA_PATH"]) / "bin/nvcc").resolve()),
     )
     return compiler.build_executable(
         [ROOT / "tests/native/df_md_raw_probe.cu", ROOT / "src/scf/cuda/df_md_raw.cu"],
@@ -43,6 +46,7 @@ def raw_probe(tmp_path_factory: Any, required_native_cxx: NativeCxx) -> Path:
             "-O2",
             "-arch=" + os.environ.get("GENERATIVEQC_TEST_CUDA_ARCH", "sm_120"),
             "-I" + str(folder),
+            "-I" + str(Path(os.environ["CUDA_PATH"]) / "include"),
             "-I" + str(ROOT / "src"),
             "-I" + str(ROOT / "include"),
         ),
@@ -62,6 +66,7 @@ def evaluate(
     scale: float = 1.0,
     translation: float = 0.0,
     lengths: tuple[int, int, int] = (2, 3, 2),
+    omega: float = 0.0,
 ) -> float:
     """Use independently normalized libcint, including mixed public bases."""
     from pyscf import lib
@@ -91,13 +96,13 @@ def evaluate(
                 f"{shell['atom_index']} {shell['angular_momentum']} {len(shell['primitives'])}"
             )
             rows.extend(" ".join(map(str, p)) for p in shell["primitives"])
-    raw = reference_df_matrices(*bases)[0]
+    raw = reference_df_matrices(*bases, omega=omega)[0]
     expected = raw[np.tril_indices(raw.shape[0])].ravel()
     text = "\n".join(rows) + "\n"
     (folder / "input.txt").write_text(text)
     output = folder / "raw.bin"
     run = subprocess.run(
-        [str(probe), str(output)],
+        [str(probe), str(output), str(omega)],
         input=text,
         text=True,
         capture_output=True,
@@ -118,16 +123,19 @@ def evaluate(
 
 @pytest.mark.parametrize("angular", tuple(product(range(4), range(4), range(5))))
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+@pytest.mark.parametrize("omega", (0.0, 0.3))
 def test_raw_all_angular_classes(
     raw_probe: Path,
     tmp_path: Path,
     angular: tuple[int, int, int],
     representation: str,
+    omega: float,
     record_property: Any,
 ) -> None:
     """Signed primitives, self pairs, full/tail panels and dirty graph replays."""
     record_property(
-        "max_abs_error", evaluate(raw_probe, tmp_path, angular, (representation,) * 2)
+        "max_abs_error",
+        evaluate(raw_probe, tmp_path, angular, (representation,) * 2, omega=omega),
     )
 
 
@@ -143,6 +151,7 @@ def test_raw_all_angular_classes(
         ("asymmetric", 1.0, 0.003, (8, 7, 6)),
     ),
 )
+@pytest.mark.parametrize("omega", (0.0, 1e-3, 0.3, 1.2, 1e3))
 def test_mixed_representations_and_geometry(
     raw_probe: Path,
     tmp_path: Path,
@@ -151,6 +160,7 @@ def test_mixed_representations_and_geometry(
     scale: float,
     translation: float,
     lengths: tuple[int, int, int],
+    omega: float,
 ) -> None:
     """Fresh physical owners cover tight/diffuse and long signed contractions."""
     evaluate(
@@ -162,4 +172,5 @@ def test_mixed_representations_and_geometry(
         scale=scale,
         translation=translation,
         lengths=lengths,
+        omega=omega,
     )
