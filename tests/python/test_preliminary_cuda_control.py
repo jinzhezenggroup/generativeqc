@@ -29,6 +29,7 @@ def between(text: str, begin: str, end: str) -> str:
 HARNESS = r"""
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -140,6 +141,7 @@ struct CudaKsPlan {
     bool is_active{}, is_failed{}, warm_ready{}, warm_updates{true};
     bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
     bool final_fitted_projection_ready{};
+    bool final_occupied_factor_ready{};
     unsigned final_generation{};
     void clear_warm_state() { warm_ready = false; }
   };
@@ -366,6 +368,7 @@ int main(int argc, char** argv) {
   }
   // Every public execution must revoke an old final result before admission.
   cuda.impl_->final_state_ready = true;
+  cuda.impl_->final_occupied_factor_ready = true;
   owner.warm_enabled_ = route != "no-reuse";
   owner.warm_updates_ = route != "frozen";
   plan.preparation_skipped = route == "preparation-skipped";
@@ -386,6 +389,7 @@ int main(int argc, char** argv) {
   };
   execute();
   const bool revoked_after_first = !cuda.impl_->final_state_ready;
+  assert(!cuda.impl_->final_occupied_factor_ready);
   if (route == "recover") {
     initial_status = status;
     scenario = "success";

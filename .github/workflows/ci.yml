@@ -236,7 +236,7 @@ jobs:
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
     # Cold GCC coverage can spend 6 minutes compiling and 13 minutes in CTest.
     # Leave room for lcov and artifacts without enlarging plain-build budgets.
-    timeout-minutes: ${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && 25 || 15 }}
+    timeout-minutes: ${{ matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 25 || 15 }}
     strategy:
       fail-fast: false
       matrix:
@@ -352,8 +352,8 @@ jobs:
           CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
           # Instrument only the GCC leg so the existing compiler matrix still
           # exercises an ordinary non-instrumented Clang build.
-          COVERAGE_COMPILE_FLAGS: ${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && '-fprofile-arcs -ftest-coverage -fprofile-update=atomic' || '' }}
-          COVERAGE_LINK_FLAGS: ${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && '--coverage' || '' }}
+          COVERAGE_COMPILE_FLAGS: ${{ matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '-fprofile-arcs -ftest-coverage -fprofile-update=atomic' || '' }}
+          COVERAGE_LINK_FLAGS: ${{ matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '--coverage' || '' }}
         run: >-
           cmake -S . -B build -G Ninja
           -DGENERATIVEQC_ENABLE_CUDA=OFF
@@ -389,14 +389,14 @@ jobs:
           path: .artifacts/cuda-ownership-current.json
           retention-days: 14
       - name: Collect C++ coverage
-        if: matrix.compiler == 'gcc' && github.event_name != 'merge_group' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           sudo apt-get install --yes lcov
           lcov --capture --directory build --output-file coverage-cpp.info \
             --exclude '/usr/*' --exclude '*/tests/*' \
             --ignore-errors mismatch,unused
       - name: Preserve C++ coverage for the upload-only job
-        if: matrix.compiler == 'gcc' && github.event_name != 'merge_group' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -718,6 +718,11 @@ jobs:
       - name: Install native CLI dependencies
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
+      - name: Restore stationary AOT semantic sources
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: ./.github/actions/cache-stationary-sources
       - name: Configure production CUDA compile check
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
@@ -728,6 +733,7 @@ jobs:
           -DGENERATIVEQC_CUDA_FAST_COMPILE=ON
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
           -DGENERATIVEQC_COMPILER_CACHE=ccache
+          -DGENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE="$RUNNER_TEMP/stationary-aot-source-cache"
       - name: Compile production CUDA prerequisite archive
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 10
@@ -1034,7 +1040,11 @@ jobs:
           cmake --preset cuda-release
           -DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120
           -DGENERATIVEQC_AOT_PROFILE=sm_120
-          -DGENERATIVEQC_BUILD_TESTS=ON
+          -DGENERATIVEQC_BUILD_TESTS=OFF
+          -DGENERATIVEQC_BUILD_CLI=OFF
+          -DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF
+          -DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=OFF
+          -DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF
           -DGENERATIVEQC_CUDA_FAST_COMPILE=ON
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
           -DGENERATIVEQC_COMPILER_CACHE=ccache
@@ -1275,7 +1285,11 @@ jobs:
           cmake --preset cuda-release -B build/cuda-release-sm120
           -DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120
           -DGENERATIVEQC_AOT_PROFILE=sm_120
-          -DGENERATIVEQC_BUILD_TESTS=ON
+          -DGENERATIVEQC_BUILD_TESTS=OFF
+          -DGENERATIVEQC_BUILD_CLI=OFF
+          -DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF
+          -DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=OFF
+          -DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF
           -DGENERATIVEQC_CUDA_FAST_COMPILE=OFF
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
           -DGENERATIVEQC_COMPILER_CACHE=ccache
@@ -1652,8 +1666,19 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 14
+      - name: Preserve Python test timings
+        if: always() && steps.python_tests.outcome != '' && steps.python_tests.outcome != 'skipped' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-timing-${{ matrix.shard }}
+          path: .artifacts/pytest-${{ matrix.shard }}.xml
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
       - name: Preserve Python coverage for the upload-only job
-        if: github.event_name != 'merge_group' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -1853,7 +1878,7 @@ jobs:
     name: upload-coverage (${{ matrix.batch }})
     timeout-minutes: 8
     needs: [cpu, python]
-    if: ${{ github.event_name != 'merge_group' && github.event_name != 'push' && !cancelled() && needs.cpu.result == 'success' && needs.python.result == 'success' }}
+    if: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && !cancelled() && needs.cpu.result == 'success' && needs.python.result == 'success' }}
     # Coverage reporting is observability rather than a correctness gate. A
     # Codecov or artifact-service outage must not fail the workflow.
     continue-on-error: true
@@ -2192,6 +2217,11 @@ jobs:
       # The required cuda-compile job already checks fast CUDA on PRs/merge
       # groups. Only master seeds both compiler-flag identities here, on the
       # same runner that saves/publishes the shared cache snapshot.
+      - name: Restore stationary AOT semantic sources
+        if: steps.cli_scope.outputs.tier != 'skip'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: ./.github/actions/cache-stationary-sources
       - name: Seed fast CUDA CI objects in the shared cache
         id: fast_cuda_seed
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_scope.outputs.tier != 'skip'
@@ -2210,7 +2240,8 @@ jobs:
             -DGENERATIVEQC_BUILD_TESTS=ON \
             -DGENERATIVEQC_CUDA_FAST_COMPILE=ON \
             -DGENERATIVEQC_CUDA_COMPILE_JOBS=3 \
-            -DGENERATIVEQC_COMPILER_CACHE=ccache
+            -DGENERATIVEQC_COMPILER_CACHE=ccache \
+            -DGENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE="$RUNNER_TEMP/stationary-aot-source-cache"
           cmake --build --preset cuda-release \
             --target generativeqc_cuda_runtime_tests --parallel 3
       - name: Report fast CUDA seed compiler cache
@@ -2252,6 +2283,7 @@ jobs:
             -DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120 \
             -DGENERATIVEQC_AOT_PROFILE=sm_120 \
             -DGENERATIVEQC_ENABLE_CXX_PCH=OFF \
+            -DGENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE="$RUNNER_TEMP/stationary-aot-source-cache" \
             -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
           cmake --build --preset cuda-release-cli --parallel 3
       - name: Report completed CLI Ninja command timings

@@ -234,9 +234,15 @@ def emit_df_rys_shell_cuda(
             else "generated_df_shell_derivatives.cuh"
         )
     selected = select_shell_classes(classes)
+    quadrature = "if(work) *work={{}}; (void)total; generated_df_rys::roots<Roots>({argument},g.f,g.f+Roots);"
     geometry = emit_df_geometry_cuda(
         "prepare_geometry_rys",
-        moments="if(work) *work={}; (void)total; generated_df_rys::roots<Roots>(rho*distance,g.f,g.f+Roots);",
+        moments=quadrature.format(argument="rho*distance"),
+        # The same t=sqrt(theta)*u substitution used by the polynomial
+        # lowering scales geometry and the quadrature argument. Roots stay in
+        # u coordinates; scaling them again would apply theta twice.
+        range_separated=True,
+        range_moments=quadrature.format(argument="(rho*theta)*distance"),
     ).replace("__device__", "static __device__")
     lines = [
         "// Compiler-owned low-l Rys derivatives from shared Gaussian-moment IR.",

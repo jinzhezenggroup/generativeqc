@@ -69,6 +69,7 @@ def specialization(source: typing.Any, declaration: typing.Any) -> typing.Any:
     raise AssertionError("unterminated emitted specialization")
 
 
+@pytest.mark.ci_nightly
 def test_units_cover_all_classes_once_and_are_deterministic(
     units: typing.Any,
 ) -> None:

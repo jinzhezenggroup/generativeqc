@@ -33,6 +33,7 @@ int main() {
     double values[4]{};
     const int device_=0;
     const std::size_t aos_=2;
+    const CudaKsResidentOccupiedFactorBinding* occupied_factor=nullptr;
     bool fitted=true;
     struct { struct { bool present=true; } exchange; } spec;
     struct { void* stream=reinterpret_cast<void*>(1); } provider;
@@ -133,7 +134,8 @@ struct PreparedFockPlan {
   const ResolvedFockBuild& strategy() const { return model; }
   generativeqc_status consume_fitted_energy_derivatives(int, void*, const double*, const double*,
       const double*, const CudaDerivativeSourceConsumer&, std::string&, bool,
-      const CudaDfBorrowedFittedProjection*, bool=false) const;
+      const CudaDfBorrowedFittedProjection*, bool=false,
+      const CudaDfBorrowedOccupiedFactor* = nullptr) const;
 };
 struct CudaFockProviderView {
   CudaFockProviderView(CudaDensityFittingJkPlan*, const Data&) {}
@@ -150,7 +152,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     std::size_t, std::vector<double>&, std::string&, DfGradientResources*,
     const CudaDfFinalStateToken*, const CudaDfBorrowedFittedProjection* projection,
     const CudaDfBorrowedResponseDensity*, const CudaDfGradientPrecisionRequest*,
-    const CudaDfResidentForceRequest* request) {
+    const CudaDfResidentForceRequest* request, const CudaDfBorrowedOccupiedFactor* factor) {
+  assert(!factor || (range && factor->nbf == 2));
   assert(request && request->device_id == 0 && request->stream == reinterpret_cast<void*>(1));
   assert(request->matrix_elements == 4 && budget == 4096);
   const bool exchange = request->kind != CudaDerivativeSourceKind::Coulomb;
@@ -186,7 +189,7 @@ int main() {
   const CudaDerivativeSourceConsumer consume=[](const auto& view) {
     publications.push_back(view.kind);
   };
-  for (int mode=0; mode<14; ++mode) {
+  for (int mode=0; mode<19; ++mode) {
     State state;
     PreparedFockPlan plan{&state, {}};
     plan.model.spec.spin=FockSpin::Restricted;
@@ -199,6 +202,16 @@ int main() {
                             ? nullptr : &lease;
     scratch_live=true; fail_exchange=mode==2 || mode==12;
     unrestricted=mode==4 || mode==13; range=mode==5 || mode==8;
+    CudaDfBorrowedOccupiedFactor factor{0,coefficients,2,1,stream};
+    if (mode >= 14) {
+      expected_projection=nullptr;
+      range=true;
+      plan.model.spec.coulomb.present=false;
+      if (mode == 15) factor.nbf=3;
+      if (mode == 16) factor.device_id=1;
+      if (mode == 17) range=false;
+      if (mode == 18) plan.model.spec.spin=FockSpin::Unrestricted;
+    }
     publications.clear();
     if (mode==3) lease.projection=nullptr;
     if (mode==4 || mode==7 || mode==13) plan.model.spec.spin=FockSpin::Unrestricted;
@@ -206,8 +219,8 @@ int main() {
     if (mode==6 || mode==9) plan.model.spec.exchange.present=false;
     std::string detail;
     const auto status=plan.consume_fitted_energy_derivatives(
-        0,stream,alpha,beta,total,consume,detail,range,expected_projection,mode>=10);
-    if (mode==3 || (mode>=7 && mode<=9)) {
+        0,stream,alpha,beta,total,consume,detail,range,expected_projection,mode>=10,mode>=14 ? &factor : nullptr);
+    if (mode==3 || (mode>=7 && mode<=9) || mode>=15) {
       assert(status==GENERATIVEQC_STATUS_INVALID_ARGUMENT && publications.empty());
     } else if (mode==2 || mode==12) {
       assert(status==GENERATIVEQC_STATUS_NUMERICAL_FAILURE && publications.empty());
@@ -217,7 +230,7 @@ int main() {
         assert(publications.size()==1);
         assert(publications[0]==CudaDerivativeSourceKind::FullRangeJkSum);
       }
-      else if (mode==5 || mode==6) assert(publications.size()==1);
+      else if (mode==5 || mode==6 || mode==14) assert(publications.size()==1);
       else {
         assert(publications.size()==2);
         assert(publications[0]==CudaDerivativeSourceKind::Exchange);

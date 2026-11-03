@@ -316,6 +316,7 @@ def streamed_probe(
         "contract_raw_coulomb_response",
         "contract_retained_coulomb_response",
         "contract_occupied_response",
+        "contract_spectral_occupied_exchange",
         "fit_full_tensor_in_place",
         "contract_full_rank_response",
         "contract_resident_response",

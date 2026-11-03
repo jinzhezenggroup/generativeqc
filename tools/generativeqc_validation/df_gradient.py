@@ -146,7 +146,7 @@ def execute_df_gradient(
 
 
 def reference_df_matrices(
-    orbital_inputs: typing.Any, auxiliary_inputs: typing.Any
+    orbital_inputs: typing.Any, auxiliary_inputs: typing.Any, *, omega: float = 0.0
 ) -> typing.Any:
     """All physical-atom derivatives, including independent auxiliary centers.
 
@@ -181,11 +181,14 @@ def reference_df_matrices(
     combined = gto.conc_mol(o, x)
     combined.cart = o.cart
     shells = (0, o.nbas, 0, o.nbas, o.nbas, o.nbas + x.nbas)
-    a = combined.intor("int3c2e_cart", shls_slice=shells)
-    ip1 = combined.intor("int3c2e_ip1_cart", comp=3, shls_slice=shells)
-    ip2 = combined.intor("int3c2e_ip2_cart", comp=3, shls_slice=shells)
-    m = x.intor("int2c2e_cart")
-    metric_ip = x.intor("int2c2e_ip1_cart", comp=3)
+    # Each independent libcint owner must receive the same radial operator.
+    # Its zero convention is Coulomb; positive omega selects erf exchange.
+    with combined.with_range_coulomb(omega), x.with_range_coulomb(omega):
+        a = combined.intor("int3c2e_cart", shls_slice=shells)
+        ip1 = combined.intor("int3c2e_ip1_cart", comp=3, shls_slice=shells)
+        ip2 = combined.intor("int3c2e_ip2_cart", comp=3, shls_slice=shells)
+        m = x.intor("int2c2e_cart")
+        metric_ip = x.intor("int2c2e_ip1_cart", comp=3)
     atoms = len(orbital_inputs["coordinates"])
     da = np.zeros((atoms, 3, *a.shape))
     dm = np.zeros((atoms, 3, *m.shape))

@@ -26,18 +26,28 @@ __device__ __forceinline__ Response convert(generated_df_auxiliary_g_derivatives
   return {r.value,{r.first.x,r.first.y,r.first.z},{r.second.x,r.second.y,r.second.z},
                  {r.third.x,r.third.y,r.third.z}};
 }
-__device__ __forceinline__ Response metric(double alpha,Vec3 A,Angular a,double gamma,Vec3 C,Angular c) {
+/** Select the raised g domain for both erf values and center responses. Lower
+ * angular classes retain the smaller evaluator and its existing arithmetic. */
+__device__ __forceinline__ Response evaluate(bool metric,double alpha,Vec3 A,Angular a,
+    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c,double omega,bool responses) {
   if(generated_df_derivatives::order(a)<=3 && generated_df_derivatives::order(c)<=3)
-    return generated_df_derivatives::metric(alpha,A,a,gamma,C,c);
+    return generated_df_derivatives::evaluate(metric,alpha,A,a,beta,B,b,gamma,C,c,omega,responses);
+  return convert(generated_df_auxiliary_g_derivatives::evaluate(metric,
+      alpha,{A.x,A.y,A.z},{a.x,a.y,a.z},beta,{B.x,B.y,B.z},{b.x,b.y,b.z},
+      gamma,{C.x,C.y,C.z},{c.x,c.y,c.z},omega,responses));
+}
+__device__ __forceinline__ Response metric(double alpha,Vec3 A,Angular a,double gamma,Vec3 C,Angular c,double omega=0.0) {
+  if(generated_df_derivatives::order(a)<=3 && generated_df_derivatives::order(c)<=3)
+    return generated_df_derivatives::metric(alpha,A,a,gamma,C,c,omega);
   return convert(generated_df_auxiliary_g_derivatives::metric(alpha,{A.x,A.y,A.z},{a.x,a.y,a.z},
-                  gamma,{C.x,C.y,C.z},{c.x,c.y,c.z}));
+                  gamma,{C.x,C.y,C.z},{c.x,c.y,c.z},omega));
 }
 __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
-    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c) {
+    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c,double omega=0.0) {
   if(generated_df_derivatives::order(c)<=3)
-    return generated_df_derivatives::three_center(alpha,A,a,beta,B,b,gamma,C,c);
+    return generated_df_derivatives::three_center(alpha,A,a,beta,B,b,gamma,C,c,omega);
   return convert(generated_df_auxiliary_g_derivatives::three_center(alpha,{A.x,A.y,A.z},{a.x,a.y,a.z},
-       beta,{B.x,B.y,B.z},{b.x,b.y,b.z},gamma,{C.x,C.y,C.z},{c.x,c.y,c.z}));
+       beta,{B.x,B.y,B.z},{b.x,b.y,b.z},gamma,{C.x,C.y,C.z},{c.x,c.y,c.z},omega));
 }
 } // namespace generativeqc::scf::generated_df_g_adapter
 """.replace("__device__", "static __device__")
@@ -204,6 +214,7 @@ template<unsigned Math=0> struct CompensatedValue {
                 "e[1],second,second_angular);", "e[1],second,second_angular,omega);"
             )
             .replace("e[2],third,third_angular);", "e[2],third,third_angular,omega);")
+            .replace("generated_df_derivatives::", "generated_df_g_adapter::")
             + r"""
 /** Value-only erf kernel shares the exact center-response moment algebra. */
 struct LongRangeValue {
@@ -218,10 +229,10 @@ struct LongRangeValue {
     const Vec3 zero_center=centers[0];
     const Angular zero_angular{0,0,0};
     if constexpr(Rank==2)
-      out+=weight*generated_df_derivatives::evaluate(true,exponents[0],centers[0],angular[0],
+      out+=weight*generated_df_g_adapter::evaluate(true,exponents[0],centers[0],angular[0],
           0.0,zero_center,zero_angular,exponents[1],centers[1],angular[1],omega,false).value;
     else
-      out+=weight*generated_df_derivatives::evaluate(false,exponents[0],centers[0],angular[0],
+      out+=weight*generated_df_g_adapter::evaluate(false,exponents[0],centers[0],angular[0],
           exponents[1],centers[1],angular[1],exponents[2],centers[2],angular[2],omega,false).value;
   }
 };
