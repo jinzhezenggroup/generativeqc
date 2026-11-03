@@ -223,7 +223,7 @@ def test_master_complete_cache_cannot_precede_the_python_seed() -> None:
         ("ci.yml", "python", "posthf", 45),
         ("ci.yml", "python", "compiler-heavy", 45),
         ("ci.yml", "python", "ecp-forces", 40),
-        ("cumetal-cuda.yml", "cuda-tests", "", 30),
+        ("cumetal-cuda.yml", "cuda-tests", "", 75),
     ],
 )
 def test_full_qualification_has_a_separate_finite_budget(
@@ -246,7 +246,7 @@ def test_full_qualification_has_a_separate_finite_budget(
             expression(budget, {**context, "github.event_name": event})
             == routine_minutes
         )
-    # CuMetal queue jobs run the full cold native build and scientific suite.
+    # CuMetal PR/queue jobs can both require a cold native build before tests.
     queue_minutes = 75 if filename == "cumetal-cuda.yml" else routine_minutes
     assert (
         expression(budget, {**context, "github.event_name": "merge_group"})
