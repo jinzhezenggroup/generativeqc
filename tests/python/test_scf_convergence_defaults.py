@@ -20,13 +20,14 @@ from tools.generativeqc_validation.native_registry_stub import install_registry_
 
 @pytest.fixture
 def library(monkeypatch: pytest.MonkeyPatch, policy_library: Any) -> SimpleNamespace:
-    """Resolve real model identities without allocating a CUDA context."""
+    """Borrow real model/policy queries without allocating a CUDA context."""
 
     def available(method: int, pointer: object) -> int:
         ctypes.cast(pointer, ctypes.POINTER(ctypes.c_int32))[0] = 1
         return _native.STATUS_SUCCESS
 
     native = SimpleNamespace(
+        generativeqc_precision_controls_query_v1=policy_library.generativeqc_precision_controls_query_v1,
         generativeqc_ks_options_version=lambda: 1,
         generativeqc_standard_scf_convergence_version_v1=lambda: 1,
         generativeqc_method_available=available,
