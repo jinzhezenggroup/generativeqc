@@ -53,3 +53,18 @@ mandatory file-fingerprint update to accept unrelated refactors.
 - PR #2938, advisory work audit run 41570561638, job 125702201110.
 - [Original decision](2026-10-09-materialization-candidate-review.md).
 - [Current performance engineering guide](../../../../docs/maintainer/performance_engineering.md).
+
+## CI follow-up: cold CUDA compilation (2026-11-03)
+
+The first #2947 CI run independently passed the retired audit but the required
+CUDA 12.9 sm_120 build timed out after 45 minutes with 698/725 generated build
+steps complete, 619 ccache misses and zero hits: neither the shared nor PR-only
+cache key was present. The success-only PR cache publication path discarded
+all compiled objects on a step timeout, making retries start cold again.
+The CI build remains required, but its finite cold budget is raised to 60
+minutes (80-minute job cap), and failed-but-completed attempts may publish
+only their bounded, source-validated, PR-private ccache miss delta. They
+cannot publish trusted master/queue caches or mark the build successful.
+The AO radial report uploader now runs only if its producing step actually
+executed; upstream compilation failure cannot fabricate a missing-report
+failure. This changes CI mechanics only, not numerical qualification.

@@ -455,7 +455,7 @@ def test_fast_cuda_compiler_delta_does_not_weaken_required_build() -> None:
     restore = fast_step("Restore only this PR fast CUDA compiler delta")
     prerequisite = fast_step("Compile production CUDA prerequisite archive")
     build = fast_step("Compile production CUDA and runtime CTest")
-    bound = fast_step("Bound successful PR fast CUDA compiler misses")
+    bound = fast_step("Bound completed PR fast CUDA compiler misses")
     save = fast_step("Save this PR fast CUDA compiler delta once")
     for optional in (prepare, restore, bound, save):
         assert field(optional, "continue-on-error") == "true"
@@ -475,8 +475,8 @@ def test_fast_cuda_compiler_delta_does_not_weaken_required_build() -> None:
         assert "read-only" in remote
         assert "CCACHE_REMOTE_ONLY" not in step
         assert "CCACHE_SLOPPINESS" not in step
-    assert "steps.cuda_runtime_build.outcome == 'success'" in field(bound, "if")
-    assert "steps.cuda_runtime_build.outcome == 'success'" in field(save, "if")
+    assert "(steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure')" in field(bound, "if")
+    assert "(steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure')" in field(save, "if")
     assert "steps.pr_fast_ccache_restore.outputs.cache-hit != 'true'" in field(
         bound, "if"
     )
@@ -492,7 +492,7 @@ def test_fast_cuda_remote_and_publication_follow_exact_pr_cache_state() -> None:
         fast_step("Compile production CUDA prerequisite archive"),
         fast_step("Compile production CUDA and runtime CTest"),
     )
-    bound = fast_step("Bound successful PR fast CUDA compiler misses")
+    bound = fast_step("Bound completed PR fast CUDA compiler misses")
     for event in ("pull_request", "merge_group", "pull_request_target", "push"):
         for prepared in ("", "exact-pr-key"):
             for outcome in ("success", "failure", "cancelled", "skipped", ""):
@@ -530,6 +530,8 @@ def test_fast_cuda_remote_and_publication_follow_exact_pr_cache_state() -> None:
                             == expected
                         )
                     publish = allowed and hit != "true" and matched == ""
-                    assert bool(expression(field(bound, "if"), context)) == publish
-                    context["steps.cuda_runtime_build.outcome"] = "failure"
-                    assert not expression(field(bound, "if"), context)
+                    for build_outcome in ("success", "failure", "cancelled", "skipped", ""):
+                        context["steps.cuda_runtime_build.outcome"] = build_outcome
+                        assert bool(expression(field(bound, "if"), context)) == (
+                            publish and build_outcome in {"success", "failure"}
+                        )
