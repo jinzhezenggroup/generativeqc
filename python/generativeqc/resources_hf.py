@@ -885,17 +885,6 @@ def hf_resource_request(
                     {**controls, **_cuda_library_identity(library)}, sort_keys=True
                 ),
             )
-            inventories = tuple(
-                _small_cuda_item_inventory(
-                    library,
-                    item,
-                    diis_history,
-                    precision,
-                    energy_tolerance,
-                    screening_tolerance,
-                )
-                for item in items
-            )
             if fitted:
                 from .resources_hf_df import cuda_df_candidates
 
@@ -917,6 +906,20 @@ def hf_resource_request(
                         "opaque CUDA library retention above the reported allowance is untracked",
                     ),
                 )
+            # DF owns its AO eigensolver and response inventory. Requiring the
+            # Direct-HF quartet/small-eigensolver owner first incorrectly rejects
+            # generated-source DF even though that route never allocates it.
+            inventories = tuple(
+                _small_cuda_item_inventory(
+                    library,
+                    item,
+                    diis_history,
+                    precision,
+                    energy_tolerance,
+                    screening_tolerance,
+                )
+                for item in items
+            )
             native_inventory = _native_cuda_fleet_inventory(library, items, inventories)
         except ValueError as error:
             if "budget" not in str(error):
