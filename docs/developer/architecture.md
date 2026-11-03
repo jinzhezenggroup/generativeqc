@@ -614,8 +614,11 @@ incumbent budget-Fock SCF controls from qualified model traits and preserves
 explicit caller ceilings. Availability still comes from the Direct capability
 or the fitted model qualification owner. Python retains model-gradient
 qualification, candidate/auditor execution and independent seed-history
-selection. Missing additive symbols retain
-compatibility; a selected native query failure propagates.
+selection. The selected library must implement both policy queries; missing
+support is an actionable installation error, not a Python numerical-policy
+fallback. Fast verifies admission support before any molecular solve and checks
+the selected owner again when consuming evidence. A selected native query
+failure propagates.
 
 Default SCF convergence controls are queried through
 `generativeqc_scf_defaults_query_v1` in `<generativeqc/scf_defaults.h>`. The native

@@ -198,16 +198,8 @@ def test_calculator_policy_stays_on_selected_library(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Real CC preparation uses its selected native policy without Python arithmetic."""
-    from generativeqc import _correlation_convergence as policy
-
-    def forbidden(*args: object, **kwargs: object) -> None:
-        raise AssertionError(
-            "selected correlated policy escaped to Python/default discovery"
-        )
-
-    monkeypatch.setattr(policy, "_optional_library", forbidden)
-    monkeypatch.setattr(policy, "_compatibility_scale", forbidden)
-    monkeypatch.setattr(policy, "_compatibility_limits", forbidden)
+    library = _native.load_library(device="cpu")
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
     owner = Calculator(
         method="ccsd(t)",
         basis="sto-3g",
@@ -222,6 +214,11 @@ def test_calculator_policy_stays_on_selected_library(
         owner.clear_cache()
     with pytest.raises(ValueError, match="ccsd_residual_tolerance"):
         Calculator(method="ccsd(t)", basis="sto-3g", ccsd_residual_tolerance=1e-6)
+    monkeypatch.setattr(library, "generativeqc_correlation_convergence_query_v1", None)
+    with pytest.raises(
+        NotImplementedError, match="required correlated-convergence query"
+    ):
+        Calculator(method="ccsd(t)", basis="sto-3g")
 
 
 def test_native_budget_descriptor_and_batch_boundary() -> None:

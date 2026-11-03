@@ -1,6 +1,6 @@
 """Transport completed precision evidence to the shared native admission policy.
 
-Only absence of the additive protocol retains compatibility. A selected native
+The selected library must implement the policy. Missing support and native
 refusal cannot retry Python admission arithmetic. Model/gradient qualification,
 observable audits and solver/seed lifetimes keep their separate owners.
 """
@@ -51,12 +51,14 @@ _CONTROLS_QUERY = ct.CFUNCTYPE(
 
 def budget_controls(
     calculator: Any, budget: Any, requested: dict, *, available: bool
-) -> dict[str, float] | None:
-    """Query shared budget controls; only absent protocol permits compatibility.
+) -> dict[str, float]:
+    """Require shared budget controls from the selected native policy owner.
 
     The existing Direct/fitted qualification owner supplies availability. Native
     policy owns the budget thresholds and caller-ceiling selection; this adapter
     does not infer that a model/provider has independent numerical evidence.
+    Unresolved options supply no plan facts; reading their plan would require
+    model resolution merely to establish that no model has been admitted.
     """
     library = getattr(calculator, "_library", None)
     name = "generativeqc_precision_controls_query_v1"
@@ -68,14 +70,17 @@ def budget_controls(
         try:
             query = _CONTROLS_QUERY((name, library))
         except AttributeError:
-            return None
+            query = None
     else:
         query = getattr(library, name, None)
     if query is None:
-        return None
+        raise NotImplementedError(
+            "native library lacks required precision-controls query "
+            "generativeqc_precision_controls_query_v1; rebuild or install a current library"
+        )
     options = getattr(calculator, "_ks_options", None)
     model = getattr(options, "_method_ir", None)
-    plan = getattr(options, "execution_plan", None)
+    plan = getattr(options, "execution_plan", None) if model is not None else None
     context = _ControlsContext(ct.sizeof(_ControlsContext), _native.ABI_VERSION)
     context.modules_available = bool(available)
     context.ks_model = model is not None
@@ -190,6 +195,22 @@ def _state(value: Any) -> tuple[int, int, int]:
     return tuple(_uint(int(field)) for field in fields[1:])
 
 
+def require_admission(calculator: Any) -> Any:
+    """Resolve the selected policy before Fast can execute any molecular work.
+
+    Repeat this check when consuming evidence so replacing the selected library
+    cannot reuse another installation's admission protocol.
+    """
+    library = getattr(calculator, "_library", None)
+    query = getattr(library, "generativeqc_precision_admission_query_v1", None)
+    if query is None:
+        raise NotImplementedError(
+            "native library lacks required precision-admission query "
+            "generativeqc_precision_admission_query_v1; rebuild or install a current library"
+        )
+    return query
+
+
 def admission(
     calculator: Any,
     work: dict,
@@ -198,7 +219,7 @@ def admission(
     qualified_gradient: bool = False,
     precision: str | None = None,
     budget: Any = None,
-) -> tuple[bool, bool, bool] | None:
+) -> tuple[bool, bool, bool]:
     """Query the selected library using its existing public precision records.
 
     Missing counters stay unknown. The adapter translates names and shapes; it
@@ -206,9 +227,7 @@ def admission(
     Explicit TargetAccuracy requests still use their independent audit path.
     """
     library = getattr(calculator, "_library", None)
-    query = getattr(library, "generativeqc_precision_admission_query_v1", None)
-    if query is None:
-        return None
+    query = require_admission(calculator)
     context = _Context(ct.sizeof(_Context), _native.ABI_VERSION)
     options = getattr(calculator, "_ks_options", None)
     context.ks_model = (

@@ -9,6 +9,33 @@ from generativeqc import _generated_methods as manifest
 from generativeqc import _native
 
 
+def install_correlation_policy_stub(library: Any) -> None:
+    """Inject a fixed strict receipt, never infer stopping limits from a budget.
+
+    Registry/facade fixtures do not qualify numerical policy. Tests of actual
+    stopping selection and molecular endpoints use the compiled native owner.
+    """
+    from generativeqc._correlation_convergence import _Limits
+
+    def query(budget: Any, output: Any) -> int:
+        record = ctypes.cast(output, ctypes.POINTER(_Limits)).contents
+        record.scale = 0
+        for name, value in (
+            ("energy_tolerance", 1e-11),
+            ("density_tolerance", 1e-11),
+            ("ccsd_energy_tolerance", 1e-8),
+            ("ccsd_residual_tolerance", 1e-9),
+            ("lambda_residual_tolerance", 1e-9),
+            ("response_absolute_tolerance", 1e-12),
+            ("orbital_residual_tolerance", 1e-10),
+            ("stationarity_tolerance", 1e-8),
+        ):
+            setattr(record, name, value)
+        return _native.STATUS_SUCCESS
+
+    library.generativeqc_correlation_convergence_query_v1 = query
+
+
 def install_registry_stub(
     library: Any, properties: Any, *, supports_batch: bool = True
 ) -> None:
@@ -44,3 +71,5 @@ def install_registry_stub(
 
     library.generativeqc_method_from_name = None
     library.generativeqc_method_get_capabilities = query
+    if not hasattr(library, "generativeqc_correlation_convergence_query_v1"):
+        install_correlation_policy_stub(library)

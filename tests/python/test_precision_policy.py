@@ -21,6 +21,7 @@ from generativeqc import (
     Result,
     TargetAccuracy,
     TargetErrorBudget,
+    _native,
 )
 from generativeqc import precision_policy as implementation
 from generativeqc.batch import BatchItemResult
@@ -40,8 +41,26 @@ def result(energy: float = -1.0, force: float = 0.0, **changes: typing.Any) -> R
     )
 
 
+@pytest.fixture(scope="module")
+def policy_library() -> typing.Any:
+    """Use actual host policy queries while injecting only molecular observations."""
+    return _native.load_library()
+
+
+def policy_metadata(library: typing.Any, **capabilities: typing.Any) -> SimpleNamespace:
+    """Borrow native predicates without granting the fake backend real work."""
+    return SimpleNamespace(
+        generativeqc_precision_controls_query_v1=library.generativeqc_precision_controls_query_v1,
+        generativeqc_precision_admission_query_v1=library.generativeqc_precision_admission_query_v1,
+        generativeqc_scf_defaults_query_v1=library.generativeqc_scf_defaults_query_v1,
+        **capabilities,
+    )
+
+
 @pytest.fixture
-def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+def backend(
+    monkeypatch: pytest.MonkeyPatch, policy_library: typing.Any
+) -> SimpleNamespace:
     """Inject endpoint observations while exercising the real policy controller.
 
     Native numerical/model qualification lives in the companion integration
@@ -57,6 +76,7 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         auto_properties=None,
         transport_v2=False,
         standard_convergence=False,
+        missing_admission=False,
     )
 
     class Backend:
@@ -64,13 +84,14 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             if state.block_auto and options["precision"] == "auto":
                 raise NotImplementedError("unavailable AUTO domain")
             self.options = options
+            self._method = _native.METHOD_RHF
+            self._library = policy_metadata(policy_library)
+            if state.missing_admission:
+                self._library.generativeqc_precision_admission_query_v1 = None
             if state.standard_convergence:
-                from generativeqc import _native
-
-                self._method = _native.METHOD_RHF
                 self._device_name = options.get("device")
-                self._library = SimpleNamespace(
-                    generativeqc_standard_scf_convergence_version_v1=lambda: 1
+                self._library.generativeqc_standard_scf_convergence_version_v1 = (
+                    lambda: 1
                 )
             self._basis = options.get("basis", ())
             self._auxiliary_basis = options.get("auxiliary_basis")
@@ -79,9 +100,7 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
                 "_application_precision_budget"
             )
             if state.transport_v2:
-                self._library = SimpleNamespace(
-                    generativeqc_application_precision_version_v2=lambda: 2
-                )
+                self._library.generativeqc_application_precision_version_v2 = lambda: 2
             if options.get("method") == "pbe0-rks" and self._ks_options is None:
                 from generativeqc import KsOptions
 
@@ -134,6 +153,16 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(implementation, "Calculator", Backend)
     monkeypatch.setattr("generativeqc.ecp.resolve_ecp", lambda *args: ((0, 0), ()))
     return state
+
+
+def test_fast_rejects_missing_policy_before_molecular_work(
+    backend: SimpleNamespace,
+) -> None:
+    """An older installation cannot turn missing admission into an FP64 audit."""
+    backend.missing_admission = True
+    with pytest.raises(NotImplementedError, match="required precision-admission query"):
+        PrecisionCalculator(policy="fast")
+    assert backend.calls == []
 
 
 @pytest.mark.parametrize("profile", ["audit_auto", "balanced", "strict", "Balanced"])
@@ -389,11 +418,15 @@ def test_fast_fitted_hf_keeps_unavailable_work_counters_unknown(
 def test_budget_fock_accepts_strict_j_only_for_pure_xc_proposals(
     method: str,
     proposal: str,
+    policy_library: typing.Any,
 ) -> None:
     """A strict replacement needs a real dtype census and physical closure."""
     from generativeqc.ks import resolve_ks_options
 
-    calculator = SimpleNamespace(_ks_options=resolve_ks_options(method, KsOptions()))
+    calculator = SimpleNamespace(
+        _library=policy_metadata(policy_library),
+        _ks_options=resolve_ks_options(method, KsOptions()),
+    )
     work = {
         "operator_work_counters_valid": True,
         "complete": True,
@@ -444,12 +477,13 @@ def test_budget_fock_accepts_strict_j_only_for_pure_xc_proposals(
 )
 def test_budget_fock_controls_use_shared_modules_and_new_native_capability(
     method: str,
+    policy_library: typing.Any,
 ) -> None:
     from generativeqc.ks import resolve_ks_options
 
     calculator = SimpleNamespace(
-        _library=SimpleNamespace(
-            generativeqc_application_fock_precision_version_v2=lambda: 2
+        _library=policy_metadata(
+            policy_library, generativeqc_application_fock_precision_version_v2=lambda: 2
         ),
         _ks_options=resolve_ks_options(method, KsOptions(grid=GridSpec(48, 16, 32))),
         _density_fitting_mode=0,
@@ -493,13 +527,13 @@ def test_budget_fock_controls_use_shared_modules_and_new_native_capability(
         method, KsOptions(grid=GridSpec(48, 16, 32), xc_schedule="host_unfused")
     )
     assert select(calculator, budget, {}) == {}
-    calculator._library = SimpleNamespace()
+    calculator._library = policy_metadata(policy_library)
     assert select(calculator, budget, {}) == {}
     calculator._ks_options = resolve_ks_options(
         method, KsOptions(grid=GridSpec(48, 16, 32))
     )
-    calculator._library = SimpleNamespace(
-        generativeqc_application_fock_precision_version_v1=lambda: 1
+    calculator._library = policy_metadata(
+        policy_library, generativeqc_application_fock_precision_version_v1=lambda: 1
     )
     assert select(calculator, budget, {}) == {}
 
@@ -605,12 +639,12 @@ def test_fast_strict_warm_requires_complete_state_bound_evidence(
         "mixed_stage_fock_builds": 0,
         "strict_stage_fock_builds": 1,
         "final_residual_audits": int(missing != "audit"),
-        "returned_state_identity": "owner:epoch:returned",
+        "returned_state_identity": "cuda-ks:17:5:9",
         "scf_fock_timeline": [
-            {"kind": "strict_fock", "state": "owner:epoch:returned", "count": 1},
+            {"kind": "strict_fock", "state": "cuda-ks:17:5:9", "count": 1},
             {
                 "kind": "final_audit",
-                "state": "stale" if missing == "state" else "owner:epoch:returned",
+                "state": "cuda-ks:17:5:10" if missing == "state" else "cuda-ks:17:5:9",
                 "count": 1,
             },
         ],
@@ -685,13 +719,14 @@ def test_fast_strict_warm_requires_complete_state_bound_evidence(
     ),
 )
 def test_budget_fock_evidence_follows_the_exchange_graph(
-    method: str, has_exchange: bool
+    method: str, has_exchange: bool, policy_library: typing.Any
 ) -> None:
     """J-only graphs do not invent K, and strict range work cannot prove mixed K."""
     from generativeqc.ks import resolve_ks_options
 
     calculator = SimpleNamespace(
-        _ks_options=resolve_ks_options(method, KsOptions(grid=GridSpec(48, 16, 32)))
+        _library=policy_metadata(policy_library),
+        _ks_options=resolve_ks_options(method, KsOptions(grid=GridSpec(48, 16, 32))),
     )
     work = {
         "operator_work_counters_valid": True,
@@ -1110,7 +1145,9 @@ def test_property_fallback_preserves_later_energy_only_auto(
 
 
 @pytest.fixture
-def cuda_constructor(monkeypatch: pytest.MonkeyPatch) -> None:
+def cuda_constructor(
+    monkeypatch: pytest.MonkeyPatch, policy_library: typing.Any
+) -> None:
     """Use actual scientific resolution and capability gates without a GPU."""
     from generativeqc import _native
 
@@ -1118,7 +1155,8 @@ def cuda_constructor(monkeypatch: pytest.MonkeyPatch) -> None:
         ctypes.cast(pointer, ctypes.POINTER(ctypes.c_int32))[0] = 1
         return _native.STATUS_SUCCESS
 
-    library = SimpleNamespace(
+    library = policy_metadata(
+        policy_library,
         generativeqc_ks_options_version=lambda: 1,
         generativeqc_application_precision_version_v1=lambda: 1,
         generativeqc_method_available=available,

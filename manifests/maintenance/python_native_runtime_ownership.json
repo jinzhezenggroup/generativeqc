@@ -954,28 +954,13 @@
         },
         {
           "path": "python/generativeqc/precision_policy.py",
-          "symbol": "_compatibility_budget_fock_work_admitted",
-          "classification": "compatibility"
-        },
-        {
-          "path": "python/generativeqc/precision_policy.py",
           "symbol": "_budget_fock_strict_warm_admitted",
           "classification": "wrapper"
         },
         {
           "path": "python/generativeqc/precision_policy.py",
-          "symbol": "_compatibility_budget_fock_strict_warm_admitted",
-          "classification": "compatibility"
-        },
-        {
-          "path": "python/generativeqc/precision_policy.py",
           "symbol": "_standard_fallback_admitted",
           "classification": "wrapper"
-        },
-        {
-          "path": "python/generativeqc/precision_policy.py",
-          "symbol": "_compatibility_standard_fallback_admitted",
-          "classification": "compatibility"
         },
         {
           "path": "python/generativeqc/_precision_native.py",
@@ -1104,6 +1089,30 @@
       "method_selectors": [
         "catalog-family:hartree_fock",
         "catalog-family:density_functional"
+      ],
+      "retired_python_sites": [
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbols": [
+            "_compatibility_budget_fock_controls",
+            "_compatibility_budget_fock_strict_warm_admitted",
+            "_compatibility_budget_fock_work_admitted",
+            "_compatibility_standard_fallback_admitted"
+          ],
+          "last_present_source_sha": "1622554d9ca1d7d4b7ca07b82a059b4e5174b51a",
+          "replacement": "python/generativeqc/_precision_native.py",
+          "reason": "Required selected-library controls/admission queries replace all Python budget-control, completed-work, warm-replay and strict-fallback policy arithmetic. Missing support rejects the installation; independent observable audits remain live."
+        },
+        {
+          "path": "python/generativeqc/_correlation_convergence.py",
+          "symbols": [
+            "_compatibility_scale",
+            "_compatibility_limits"
+          ],
+          "last_present_source_sha": "1622554d9ca1d7d4b7ca07b82a059b4e5174b51a",
+          "replacement": "python/generativeqc/_correlation_convergence.py",
+          "reason": "CBS planning and selected Calculator admission require the native correlated stopping-policy query. The normal native loader replaces independent optional discovery; metadata-only construction no longer computes Python ceilings."
+        }
       ]
     },
     {

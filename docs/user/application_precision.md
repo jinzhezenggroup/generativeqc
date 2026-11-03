@@ -675,6 +675,14 @@ Two rules matter when reading this page's guarantees:
 (python-precision-errors)=
 ## Failure behavior
 
+The selected runtime must provide the shared precision-controls and
+precision-admission queries used by Fast. Missing policy support is an
+installation error with an update/rebuild diagnostic; it does not authorize
+Python selection or an implicit FP64 audit. Unsupported numerical domains with
+a current policy still retain their explicit strict/audit paths. This protocol
+requirement does not qualify a model, provider or derivative domain, and explicit
+observable targets continue to incur their independent endpoint audit.
+
 Invalid policy types, requirements, properties or molecular inputs raise
 `TypeError`/`ValueError`; unsupported scientific domains raise
 `NotImplementedError`. Native nonconvergence, allocation/execution failures,

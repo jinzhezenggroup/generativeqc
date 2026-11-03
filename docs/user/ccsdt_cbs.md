@@ -120,9 +120,10 @@ with a DZ correction that sum is approximately `4.196866`.
 Python CBS planning queries `generativeqc_correlation_convergence_query_v1`,
 which uses the same stopping-policy owner as the native correlated solvers.
 Standalone `Calculator` validates CC ceilings using its selected library before
-creating a context. Native-free planning and older libraries missing this
-additive query retain explicit metadata compatibility; an admitted query failure
-is an error and does not retry Python arithmetic. This does not replace the
+creating a context. Planning also requires an installed native runtime: it uses
+the normal native loader and never computes stopping limits in Python. A library
+without this query must be rebuilt or updated; a refused query or malformed
+receipt is an error rather than permission to rediscover another library. This does not replace the
 separate native convergence-transport capability required for actual execution.
 
 The component allowance selects a scale `s`: the minimum of one and its

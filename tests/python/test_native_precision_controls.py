@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from generativeqc import TargetErrorBudget, _native
+from generativeqc import KsOptions, TargetErrorBudget, _native
 from generativeqc import _precision_native as transport
 from generativeqc import precision_policy as policy
 
@@ -139,13 +139,7 @@ def test_unsupported_traits_preserve_strict_selection(library: Any, trait: str) 
     )
 
 
-def test_selected_policy_never_calls_compatibility(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def forbidden(*args: Any, **kwargs: Any) -> None:
-        raise AssertionError("selected native policy retried Python")
-
-    monkeypatch.setattr(policy, "_compatibility_budget_fock_controls", forbidden)
+def test_selected_policy_failure_is_authoritative(library: Any) -> None:
     calculator = model(library)
     assert policy._budget_fock_controls(calculator, TargetErrorBudget(1e-5, 1e-4), {})
     assert (
@@ -162,19 +156,26 @@ def test_selected_policy_never_calls_compatibility(
         policy._budget_fock_controls(calculator, TargetErrorBudget(1e-5, 1e-4), {})
 
 
-def test_missing_protocol_retains_compatibility() -> None:
+def test_unresolved_options_cannot_admit_budget_controls(library: Any) -> None:
+    """An unresolved model supplies no plan facts and stays strict, without lowering."""
+    calculator = model(library)
+    calculator._ks_options = KsOptions()
+    assert (
+        policy._budget_fock_controls(calculator, TargetErrorBudget(1e-5, 1e-4), {})
+        == {}
+    )
+
+
+def test_missing_protocol_rejects_selected_library() -> None:
     calculator = model(
         SimpleNamespace(generativeqc_application_fock_precision_version_v2=lambda: 2)
     )
-    assert (
+    with pytest.raises(NotImplementedError, match="required precision-controls query"):
         transport.budget_controls(
             calculator, TargetErrorBudget(1e-5, 1e-4), {}, available=True
         )
-        is None
-    )
-    assert policy._budget_fock_controls(
-        calculator, TargetErrorBudget(1e-5, 1e-4), {}
-    ) == dict(zip(NAMES, (1e-6, 1e-4, 1e-10), strict=True))
+    with pytest.raises(NotImplementedError, match="required precision-controls query"):
+        policy._budget_fock_controls(calculator, TargetErrorBudget(1e-5, 1e-4), {})
 
 
 def test_transient_binding_does_not_retain_retired_library(

@@ -63,7 +63,8 @@ def _budget_fock_controls(
     Direct admission is independent of XC identity; DF authenticates its local
     complete model and keeps J strict. Native preparation checks the actual
     provider and basis/resource domain.
-    Older libraries, unsupported providers and tighter budgets stay strict.
+    Unsupported providers and tighter budgets stay strict. The selected library
+    must provide the shared policy rather than delegate its selection to Python.
     Explicit caller tolerances are ceilings, never silently loosened.
     The density ceiling matches the native owner's maximum authenticated force
     stationarity allowance; it is not an observable-error estimate.
@@ -83,57 +84,14 @@ def _budget_fock_controls(
     )
     from ._precision_native import budget_controls
 
-    selected = budget_controls(calculator, budget, requested, available=available)
-    if selected is not None:
-        return selected
-    return _compatibility_budget_fock_controls(
-        calculator, budget, requested, available=available
-    )
-
-
-def _compatibility_budget_fock_controls(
-    calculator: Calculator,
-    budget: TargetErrorBudget,
-    requested: dict,
-    *,
-    available: bool,
-) -> dict[str, float]:
-    """Retain the incumbent selection only for libraries without native policy."""
-    ks_options = getattr(calculator, "_ks_options", None)
-    model = getattr(ks_options, "_method_ir", None)
-    if (
-        not available
-        or model is None
-        or model.spin != "unpolarized"
-        or not ks_options.execution_plan.self_consistent
-        or ks_options.xc_schedule != "device_fused"
-        or budget.energy_abs < 1e-5
-        or budget.force_max_abs < 1e-4
-        or (budget.force_rms is not None and budget.force_rms < 3e-5)
-    ):
-        return {}
-    return {
-        name: min(
-            ceiling, ceiling if requested.get(name) is None else float(requested[name])
-        )
-        for name, ceiling in (
-            ("energy_tolerance", 1e-6),
-            ("density_tolerance", 1e-4),
-            ("screening_tolerance", 1e-10),
-        )
-    }
+    return budget_controls(calculator, budget, requested, available=available)
 
 
 def _budget_fock_work_admitted(calculator: Calculator, work: dict) -> bool:
-    """Use native work admission; retain only missing-protocol compatibility."""
+    """Use the selected native owner's completed-work admission receipt."""
     from ._precision_native import admission
 
-    decision = admission(calculator, work)
-    return (
-        _compatibility_budget_fock_work_admitted(calculator, work)
-        if decision is None
-        else decision[0]
-    )
+    return admission(calculator, work)[0]
 
 
 def _budget_fock_strict_warm_admitted(
@@ -148,13 +106,7 @@ def _budget_fock_strict_warm_admitted(
         result=result,
         qualified_gradient=qualified_gradient,
     )
-    return (
-        _compatibility_budget_fock_strict_warm_admitted(
-            calculator, result, qualified_gradient=qualified_gradient
-        )
-        if decision is None
-        else decision[1]
-    )
+    return decision[1]
 
 
 def _standard_fallback_admitted(
@@ -173,200 +125,7 @@ def _standard_fallback_admitted(
         precision=precision,
         budget=budget,
     )
-    return (
-        _compatibility_standard_fallback_admitted(
-            calculator, candidate, precision, budget
-        )
-        if decision is None
-        else decision[2]
-    )
-
-
-def _compatibility_budget_fock_work_admitted(
-    calculator: Calculator, work: dict
-) -> bool:
-    """Require executed mixed modules and physical closure, not a method label.
-
-    Pure semilocal graphs have no K work to prove. Use the existing native
-    full-range projection of the exchange graph, including SR/LR decompositions,
-    without confusing separate range recurrence work with full-range K. Optional residency does not
-    create recurrence work.
-    """
-    options = getattr(calculator, "_ks_options", None)
-    if options is None or getattr(options, "_method_ir", None) is None:
-        return False
-    required = {"coulomb_j", "coulomb_recurrence"}
-    if options.coefficients[2] != 0:
-        required.add("exchange_k")
-    observed = {
-        operator.get("name")
-        for operator in work.get("operators", ())
-        if operator.get("compute") == "fp32"
-        and operator.get("accumulation") == "fp64"
-        and operator.get("arithmetic_mode") == "mixed"
-        and operator.get("count", 0) > 0
-    }
-    # A pure semilocal proposal may use the faster generated FP64 J while XC
-    # or density contractions remain budget selected. Strict J is no less accurate than its admitted
-    # recurrence-only mixed counterpart; require its actual complete dtype row
-    # instead of demanding unnecessary FP32 work or inventing a recurrence count.
-    j_rows = [
-        row
-        for row in work.get("operators", ())
-        if row.get("name") == "coulomb_j" and row.get("count", 0) > 0
-    ]
-    strict_j = bool(j_rows) and all(
-        row.get("arithmetic_mode") == "strict"
-        and all(
-            row.get(field) == "fp64"
-            for field in ("storage", "compute", "accumulation", "reduction")
-        )
-        for row in j_rows
-    )
-    mixed_proposal = any(
-        row.get("name") in ("xc", "matrix_product", "density_build")
-        and row.get("compute") == "fp32"
-        and row.get("arithmetic_mode") == "mixed"
-        and row.get("count", 0) > 0
-        for row in work.get("operators", ())
-    )
-    pure_strict_j = (
-        options.coefficients[2] == 0
-        and not options.has_range_exchange
-        and strict_j
-        and mixed_proposal
-    )
-    return (
-        work.get("operator_work_counters_valid") is True
-        and work.get("complete") is True
-        and work.get("operator_inventory_complete") is True
-        and (required <= observed or pure_strict_j)
-        and work.get("strict_stage_fock_builds", 0) >= 2
-        and work.get("strict_refinement_applied") is True
-        and work.get("final_residual_audits", 0) > 0
-    )
-
-
-def _compatibility_budget_fock_strict_warm_admitted(
-    calculator: Calculator, result: typing.Any, *, qualified_gradient: bool = False
-) -> bool:
-    """Accept a fully revalidated FP64 warm endpoint without inventing mixed work.
-
-    A prepared warm seed can already satisfy the budget's physical SCF gates.
-    Repeating an approximate proposal merely to prove positive FP32 work would
-    perturb that seed. Require a complete strict operator census and a fresh
-    physical audit bound to the returned state instead. Missing/legacy evidence,
-    cold results and mixed attempts retain the incumbent audit fallback.
-    Explicit observable targets are handled by the caller and never use this
-    qualification shortcut. This is not a per-call observable-error estimate.
-    """
-    options = getattr(calculator, "_ks_options", None)
-    work = result.precision or {}
-    if (
-        options is None
-        or getattr(options, "_method_ir", None) is None
-        or getattr(result, "warm_start_used", False) is not True
-        or getattr(result, "warm_start_fallback", True) is not False
-        or work.get("operator_work_counters_valid") is not True
-        or work.get("complete") is not True
-        or work.get("operator_inventory_complete") is not True
-        or work.get("effective_bits") != 64
-        or work.get("mixed_stage_fock_builds") != 0
-        or work.get("strict_stage_fock_builds", 0) < 1
-        or work.get("final_residual_audits", 0) < 1
-        or (
-            work.get("gradient")
-            and work["gradient"].get("returned_mode") != "fp64"
-            and not qualified_gradient
-        )
-    ):
-        return False
-    required = {"coulomb_j", "xc", "fock_assembly", "physical_residual"}
-    if options.coefficients[2] != 0 or options.has_range_exchange:
-        required.add("exchange_k")
-    if options.execution_plan.nonlocal_correlation:
-        required.add("nonlocal_correlation")
-    observed = set()
-    for operator in work.get("operators", ()):
-        if operator.get("count", 0) <= 0:
-            continue
-        if operator.get("arithmetic_mode") != "strict" or any(
-            operator.get(field) != "fp64"
-            for field in ("storage", "compute", "accumulation", "reduction")
-        ):
-            return False
-        observed.add(operator.get("name"))
-    identity = work.get("returned_state_identity")
-    events = work.get("scf_fock_timeline", ())
-    # The same returned density must own both the strict physical Fock and its
-    # audit. A historical audit from a different generation cannot authorize it.
-    bound = {
-        event.get("kind")
-        for event in events
-        if identity and event.get("state") == identity and event.get("count", 0) > 0
-    }
-    return required <= observed and {"strict_fock", "final_audit"} <= bound
-
-
-def _compatibility_standard_fallback_admitted(
-    calculator: Calculator,
-    candidate: typing.Any,
-    precision: str,
-    budget: TargetErrorBudget,
-) -> bool:
-    """Retain a completed Standard endpoint when Fast cannot narrow its work.
-
-    This is the native Standard contract, not an observable-error certificate.
-    Require strict execution under the native final-state contract, and never
-    extend the fallback to tighter budgets or caller-relaxed solver controls.
-    Direct HF can retain its checked physical final Fock on cold or warm calls; fitted
-    HF lacks the optional work ledger. Keep those accounting limits explicit
-    without repeating an otherwise completed Standard endpoint.
-    Explicit TargetAccuracy requests bypass this policy in the caller.
-    """
-    work = candidate.precision or {}
-    gradient = work.get("gradient") or {}
-    strict_work = (
-        work.get("operator_work_counters_valid") is True
-        and work.get("strict_stage_fock_builds", 0) > 0
-        and (
-            work.get("final_residual_audits", 0) > 0
-            or (
-                calculator.capabilities.family == "hartree_fock"
-                # The native force-ready path validates the retained D/F[D]
-                # inside SCF even on a cold solve. Its reuse counter records
-                # that proof; warm-start metadata describes only the seed.
-                and work.get("skipped_final_fock_builds", 0) > 0
-            )
-        )
-    )
-    # The fitted HF owner predates the detailed work ledger. Its strict native
-    # result still enforces the Standard physical-final-state contract; absence
-    # of counters must remain unknown rather than induce a second strict solve.
-    fitted_hf = (
-        calculator.capabilities.family == "hartree_fock"
-        and bool(getattr(calculator, "_density_fitting_mode", None))
-        and work.get("operator_work_counters_valid") is False
-        and not gradient
-    )
-    return (
-        precision == "fp64"
-        and candidate.converged
-        and candidate.executed_backend == "cuda"
-        and budget.energy_abs >= 1e-5
-        and budget.force_max_abs >= 1e-4
-        and (budget.force_rms is None or budget.force_rms >= 3e-5)
-        and all(
-            0 < getattr(calculator, attribute, math.inf) <= limit
-            for name, limit in default_scf_controls(calculator).items()
-            for attribute in ("_" + name,)
-        )
-        and work.get("requested_mode") == "fp64"
-        and work.get("effective_bits") == 64
-        and work.get("mixed_stage_fock_builds") == 0
-        and (strict_work or fitted_hf)
-        and (not gradient or gradient.get("returned_mode") == "fp64")
-    )
+    return decision[2]
 
 
 @dataclass(frozen=True)
@@ -808,8 +567,10 @@ class PrecisionCalculator:
         self._fast_transport_v2 = False
         self._route_reasons = ["fp32_gradient_not_qualified"]
         if policy.profile == "fast":
+            from ._precision_native import require_admission
             from .ks import KsOptions
 
+            require_admission(self._candidate)
             method_transport = getattr(
                 getattr(self._candidate, "_library", None),
                 "generativeqc_application_precision_version_v2",
