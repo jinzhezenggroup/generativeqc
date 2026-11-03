@@ -413,10 +413,10 @@ jobs:
     permissions:
       contents: read
       actions: read
-    # Keep the prerequisite (10m) and full runtime build (45m) independently
-    # bounded, with 10m for setup, required probes and diagnostic cleanup.
-    # The outer cap must not truncate a build still within its phase budget.
-    timeout-minutes: 65
+    # Cold CUDA builds with no restored compiler objects can exceed 45 minutes.
+    # Bound the prerequisite (10m) and runtime (60m) independently and reserve
+    # 10m for setup, probes and cleanup; do not skip build/CTest qualification.
+    timeout-minutes: 80
     env:
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
@@ -452,6 +452,10 @@ jobs:
           fi
           printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
           printf 'README-only CI scope: %s\n' "$scope"
+      - name: Reclaim hosted CUDA build disk space
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 5
+        run: bash tools/ci_cuda_disk_space.sh
       - name: Add NVIDIA CUDA repository
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
@@ -735,7 +739,7 @@ jobs:
       - name: Compile production CUDA and runtime CTest
         id: cuda_runtime_build
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        timeout-minutes: 45
+        timeout-minutes: 60
         # This target links the full generativeqc shared library. Native GFN2 CUDA is
         # therefore compiled, device-linked, and consumed through the public
         # method adapter as part of this existing integration gate.
@@ -747,16 +751,19 @@ jobs:
         env:
           CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || github.event_name == 'pull_request' && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && (steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' || steps.pr_fast_ccache_restore.outputs.cache-matched-key == '') && format('file://{0}{1}', steps.pr_fast_ccache.outputs.path, steps.pr_fast_ccache_restore.outputs.cache-hit == 'true' && ' read-only' || '') || '' }}
           CCACHE_NORESHARE: "true"
-      - name: Bound successful PR fast CUDA compiler misses
+      # Incomplete cold builds still contain validated, source-keyed ccache objects.
+      # Persist a bounded PR-private delta after failure so retries make progress;
+      # this never qualifies the failed build or seeds master/merge queues.
+      - name: Bound completed PR fast CUDA compiler misses
         id: pr_fast_ccache_bound
-        if: always() && github.event_name == 'pull_request' && steps.cuda_runtime_build.outcome == 'success' && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && steps.pr_fast_ccache_restore.outputs.cache-hit != 'true' && steps.pr_fast_ccache_restore.outputs.cache-matched-key == ''
+        if: always() && github.event_name == 'pull_request' && (steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure') && steps.pr_fast_ccache.outputs.key != '' && steps.pr_fast_ccache_restore.outcome == 'success' && steps.pr_fast_ccache_restore.outputs.cache-hit != 'true' && steps.pr_fast_ccache_restore.outputs.cache-matched-key == ''
         continue-on-error: true
         timeout-minutes: 1
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: python3 tools/ci_pr_fast_ccache.py bound
       - name: Save this PR fast CUDA compiler delta once
-        if: always() && github.event_name == 'pull_request' && steps.cuda_runtime_build.outcome == 'success' && steps.pr_fast_ccache_bound.outputs.available == 'true'
+        if: always() && github.event_name == 'pull_request' && (steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure') && steps.pr_fast_ccache_bound.outputs.available == 'true'
         continue-on-error: true
         timeout-minutes: 2
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -764,6 +771,7 @@ jobs:
           path: ${{ steps.pr_fast_ccache.outputs.path }}
           key: ${{ steps.pr_fast_ccache.outputs.key }}
       - name: Compile opted-in AO radial kernels with release resources
+        id: ao_radial_compile
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         # Default native emission intentionally omits this experimental schedule.
         # Exercise its exact six kernel resource records without running a GPU.
@@ -826,7 +834,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Preserve opted-in AO radial resource reports
-        if: ${{ always() && github.event_name != 'push' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose') }}
+        # A skipped producer has no reports to upload; retain failures after
+        # the actual resource probe runs, including partial diagnostic output.
+        if: ${{ always() && github.event_name != 'push' && (steps.ao_radial_compile.outcome == 'success' || steps.ao_radial_compile.outcome == 'failure') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ao-radial-release-compile
@@ -964,6 +974,10 @@ jobs:
           fi
           printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
           printf 'README-only CI scope: %s\n' "$scope"
+      - name: Reclaim hosted CUDA build disk space
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 5
+        run: bash tools/ci_cuda_disk_space.sh
       - name: Add NVIDIA CUDA repository
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
@@ -1201,6 +1215,10 @@ jobs:
           fi
           printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
           printf 'README-only CI scope: %s\n' "$scope"
+      - name: Reclaim hosted CUDA build disk space
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 5
+        run: bash tools/ci_cuda_disk_space.sh
       - name: Add NVIDIA CUDA repository
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
@@ -2039,6 +2057,10 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "release=$release" >> "$GITHUB_OUTPUT"
+      - name: Reclaim hosted CUDA build disk space
+        if: steps.cli_scope.outputs.tier != 'skip'
+        timeout-minutes: 5
+        run: bash tools/ci_cuda_disk_space.sh
       - name: Add NVIDIA CUDA repository
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
