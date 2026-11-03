@@ -37,8 +37,8 @@ def test_actual_supporting_phases_replay() -> None:
 def _publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     target = tmp_path / "support"
     shutil.copytree(evidence.DIRECTORY, target)
-    for name in ("nsys-v1-analysis.tar.xz.part00", "nsys-v1-analysis.tar.xz.part01"):
-        (target / name).write_bytes(evidence.artifact_bytes(name))
+    for part in evidence.checked_publication()["nsys_archive_parts"]:
+        (target / part["path"]).write_bytes(evidence.artifact_bytes(part["path"]))
     monkeypatch.setattr(evidence, "DIRECTORY", target)
     return target
 
@@ -61,6 +61,21 @@ def test_support_cohort_recovers_missing_archive_part(
     assert evidence.artifact_bytes(path.name) == expected
     evidence.checked_publication()
     assert not path.exists()
+
+
+@pytest.mark.parametrize("kind", ["directory", "symlink"])
+def test_support_cohort_rejects_nonregular_archive_parts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    target = _publication(tmp_path, monkeypatch)
+    path = target / "nsys-v1-analysis.tar.xz.part01"
+    path.unlink()
+    if kind == "directory":
+        path.mkdir()
+    else:
+        path.symlink_to(target / "cohort.json")
+    with pytest.raises(ValueError, match="Support cohort bytes differ"):
+        evidence.artifact_bytes(path.name)
 
 
 def test_support_cohort_rejects_changed_archive_part(
@@ -91,7 +106,7 @@ def test_support_cohort_rejects_missing_history(
 ) -> None:
     target = _publication(tmp_path, monkeypatch)
     (target / "nsys-v1-analysis.tar.xz.part01").unlink()
-    manifest = target / "historical.manifest.json"
+    manifest = target / "historical-snapshot.json"
     data = json.loads(manifest.read_text())
     data["source_revision"] = "0" * 40
     manifest.write_text(json.dumps(data))
@@ -104,7 +119,7 @@ def test_support_cohort_rejects_changed_recovery_digest(
 ) -> None:
     target = _publication(tmp_path, monkeypatch)
     (target / "nsys-v1-analysis.tar.xz.part01").unlink()
-    manifest = target / "historical.manifest.json"
+    manifest = target / "historical-snapshot.json"
     data = json.loads(manifest.read_text())
     data["files"][1]["sha256"] = "0" * 64
     manifest.write_text(json.dumps(data))
