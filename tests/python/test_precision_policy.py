@@ -41,12 +41,6 @@ def result(energy: float = -1.0, force: float = 0.0, **changes: typing.Any) -> R
     )
 
 
-@pytest.fixture(scope="module")
-def policy_library() -> typing.Any:
-    """Use actual host policy queries while injecting only molecular observations."""
-    return _native.load_library()
-
-
 def policy_metadata(library: typing.Any, **capabilities: typing.Any) -> SimpleNamespace:
     """Borrow native predicates without granting the fake backend real work."""
     return SimpleNamespace(
