@@ -22,19 +22,22 @@ struct BoundedDirectQueuePage {
 
 /** Decode only a block claim. Candidate geometry is intentionally unfinished,
  * so a consumer can reject inactive/screened blocks before loading pair ranges.
- * Complete the page with bounded_direct_queue_candidate_page before use. */
-template <class Batch>
+ * Complete the page with bounded_direct_queue_candidate_page using the same
+ * indexed width. Consumers may match pages to their lane count without
+ * changing the block inventory or screening domain. */
+template <std::size_t IndexedCandidates = detail::kBoundedDirectShellPairBlockSize *
+                                          detail::kBoundedDirectShellPairBlockSize /
+                                          detail::kBoundedDirectIndexedCandidatePages,
+          class Batch>
 __device__ inline bool bounded_direct_queue_block_page(const Batch& batch,
                                                        detail::BoundedDirectBlockDomain domain,
                                                        std::uint64_t ordinal,
                                                        BoundedDirectQueuePage& page) {
   constexpr auto block_candidates =
       detail::kBoundedDirectShellPairBlockSize * detail::kBoundedDirectShellPairBlockSize;
-  constexpr auto indexed_candidates =
-      block_candidates / detail::kBoundedDirectIndexedCandidatePages;
-  static_assert(block_candidates % detail::kBoundedDirectIndexedCandidatePages == 0);
-  static_assert(indexed_candidates <= detail::kBoundedDirectQueueCapacity);
-  const std::size_t pages = domain.prefix ? detail::kBoundedDirectIndexedCandidatePages : 1U;
+  static_assert(IndexedCandidates > 0 && block_candidates % IndexedCandidates == 0);
+  static_assert(IndexedCandidates <= detail::kBoundedDirectQueueCapacity);
+  const std::size_t pages = domain.prefix ? block_candidates / IndexedCandidates : 1U;
   const std::size_t products =
       domain.prefix ? domain.quartet_count : batch.total_shell_pair_block_quartets;
   if (ordinal >= products * pages) return false;
@@ -57,17 +60,18 @@ __device__ inline bool bounded_direct_queue_block_page(const Batch& batch,
     page.second_block += first;
   }
   page.same_block = page.first_block == page.second_block;
-  page.candidate_begin = domain.prefix ? (ordinal % pages) * indexed_candidates : 0U;
+  page.candidate_begin = domain.prefix ? (ordinal % pages) * IndexedCandidates : 0U;
   return true;
 }
 
 /** Finish a surviving claim without changing its page or physical ownership. */
-template <class Batch>
+template <std::size_t IndexedCandidates = detail::kBoundedDirectShellPairBlockSize *
+                                          detail::kBoundedDirectShellPairBlockSize /
+                                          detail::kBoundedDirectIndexedCandidatePages,
+          class Batch>
 __device__ inline void bounded_direct_queue_candidate_page(const Batch& batch, bool indexed,
                                                            BoundedDirectQueuePage& page) {
-  constexpr auto indexed_candidates = detail::kBoundedDirectShellPairBlockSize *
-                                      detail::kBoundedDirectShellPairBlockSize /
-                                      detail::kBoundedDirectIndexedCandidatePages;
+  static_assert(IndexedCandidates > 0 && IndexedCandidates <= detail::kBoundedDirectQueueCapacity);
   const auto system_block_begin =
       static_cast<std::size_t>(batch.system_shell_pair_block_offsets[page.system]);
   const auto system_pair_begin =
@@ -85,17 +89,21 @@ __device__ inline void bounded_direct_queue_candidate_page(const Batch& batch, b
   const auto candidates =
       page.same_block ? first_count * (first_count + 1U) / 2U : first_count * page.second_count;
   page.candidate_end =
-      indexed ? min(candidates, page.candidate_begin + indexed_candidates) : candidates;
+      indexed ? min(candidates, page.candidate_begin + IndexedCandidates) : candidates;
 }
 
 /** One-step adapter for existing experimental class-domain consumers. */
-template <class Batch>
+template <std::size_t IndexedCandidates = detail::kBoundedDirectShellPairBlockSize *
+                                          detail::kBoundedDirectShellPairBlockSize /
+                                          detail::kBoundedDirectIndexedCandidatePages,
+          class Batch>
 __device__ inline bool bounded_direct_queue_page(const Batch& batch,
                                                  detail::BoundedDirectBlockDomain domain,
                                                  std::uint64_t ordinal,
                                                  BoundedDirectQueuePage& page) {
-  if (!bounded_direct_queue_block_page(batch, domain, ordinal, page)) return false;
-  bounded_direct_queue_candidate_page(batch, domain.prefix != nullptr, page);
+  if (!bounded_direct_queue_block_page<IndexedCandidates>(batch, domain, ordinal, page))
+    return false;
+  bounded_direct_queue_candidate_page<IndexedCandidates>(batch, domain.prefix != nullptr, page);
   return true;
 }
 
