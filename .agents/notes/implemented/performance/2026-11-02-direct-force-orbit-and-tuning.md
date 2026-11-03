@@ -205,3 +205,11 @@ performance claim follows. The full result archive is retained locally as
 `db9c976d9e262f1f51bbad0bed3e63eaeb60bbe3867c72cd8f5da1f0f34bd469`.
 All pre-commit checks passed. The local GPU job completed successfully, the
 A100 dependent job was cancelled, and the task-owned transfer server stopped.
+
+## Follow-up on 2026-11-03
+
+A newly authorized task resumes the deferred A100 build/qualification and
+automatic scheduling work. The [guarded A100 automatic-tiling decision](2026-11-03-a100-direct-automatic-tiles.md)
+records its separate source identities, controls, retained fallbacks and new
+evidence. This follow-up does not reattribute the historical measurements here
+to a newer source or turn the earlier handoff into an A100 performance result.

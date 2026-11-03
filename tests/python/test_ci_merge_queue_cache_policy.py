@@ -134,16 +134,19 @@ def _assert_isolated_transport(workflow: str) -> None:
             "steps.prose_scope.outputs.scope": scope,
         }
         assert _condition(download, context) == (
-            active and event == "merge_group" and bool(run_id)
+            active and event in ("merge_group", "pull_request") and bool(run_id)
         )
         assert _condition(activate, context) == (
-            active and event == "merge_group" and outcome == "success"
+            active and event in ("merge_group", "pull_request") and outcome == "success"
         )
         assert _condition(fallback, context) == (
-            active and (event != "merge_group" or outcome != "success")
+            active
+            and (event not in ("merge_group", "pull_request") or outcome != "success")
         )
         assert _condition(discard, context) == (
-            active and event == "merge_group" and outcome in ("failure", "cancelled")
+            active
+            and event in ("merge_group", "pull_request")
+            and outcome in ("failure", "cancelled")
         )
 
     # Transport may choose a cache, never suppress or soften required work.
@@ -218,12 +221,14 @@ def test_restore_policy_rejects_unsafe_transport_mutations(
     ],
     ids=["success", "timeout", "checksum-failure", "cancelled", "skipped", "not-run"],
 )
+@pytest.mark.parametrize("event", ["merge_group", "pull_request"])
 @pytest.mark.parametrize(
     "staging_exists", [True, False], ids=["partial-or-complete", "missing"]
 )
 @pytest.mark.parametrize(("selector_outcome", "scope", "active"), SCOPE_CASES)
 def test_actual_activation_shell_never_selects_failed_or_missing_staging(
     tmp_path: Path,
+    event: str,
     outcome: str,
     downloaded: bytes,
     staging_exists: bool,
@@ -245,7 +250,7 @@ def test_actual_activation_shell_never_selects_failed_or_missing_staging(
     environment_file.touch()
     activate = _step(ACTIVATE)
     context = {
-        "github.event_name": "merge_group",
+        "github.event_name": event,
         "steps.trusted_cuda_ccache_download.outcome": outcome,
         "steps.prose_scope.outcome": selector_outcome,
         "steps.prose_scope.outputs.scope": scope,

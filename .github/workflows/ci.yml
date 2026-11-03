@@ -504,6 +504,7 @@ jobs:
       # Publish a bounded snapshot from trusted master pushes and consume it
       # on merge groups or after PR/master cache misses; retain native cache
       # restore and strict object validation on every event.
+      # PRs may consume verified master objects but never publish a master seed.
       - name: Locate trusted master CUDA ccache snapshot
         id: trusted_cuda_ccache
         if: (github.event_name == 'pull_request' || github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
@@ -592,7 +593,7 @@ jobs:
           echo "publish=${publish}" >> "$GITHUB_OUTPUT"
       - name: Restore trusted master CUDA ccache snapshot
         id: trusted_cuda_ccache_download
-        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache.outputs.run_id != '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: (github.event_name == 'merge_group' || github.event_name == 'pull_request') && steps.trusted_cuda_ccache.outputs.run_id != '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         # The downloader's inactivity timeout does not bound a slow transfer.
         # Leave the required compile budget available and try actions/cache next.
@@ -609,7 +610,7 @@ jobs:
           run-id: ${{ steps.trusted_cuda_ccache.outputs.run_id }}
       - name: Activate verified trusted CUDA ccache snapshot
         id: trusted_cuda_ccache_activate
-        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache_download.outcome == 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: (github.event_name == 'merge_group' || github.event_name == 'pull_request') && steps.trusted_cuda_ccache_download.outcome == 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 1
         env:
@@ -620,7 +621,7 @@ jobs:
           # Select the completed cache without copying several GB a second time.
           printf 'CCACHE_DIR=%s\n' "$TRUSTED_CUDA_CCACHE_DIR" >> "$GITHUB_ENV"
       - name: Discard incomplete trusted CUDA cache download
-        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache_download.outcome != '' && steps.trusted_cuda_ccache_download.outcome != 'skipped' && steps.trusted_cuda_ccache_activate.outcome != 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: (github.event_name == 'merge_group' || github.event_name == 'pull_request') && steps.trusted_cuda_ccache_download.outcome != '' && steps.trusted_cuda_ccache_download.outcome != 'skipped' && steps.trusted_cuda_ccache_activate.outcome != 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 1
         env:
@@ -636,7 +637,7 @@ jobs:
           rm -rf -- "$expected"
       - name: Restore shared Linux CUDA ccache
         id: cuda_ccache
-        if: (github.event_name != 'merge_group' || steps.trusted_cuda_ccache_activate.outcome != 'success') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: ((github.event_name != 'merge_group' && github.event_name != 'pull_request') || steps.trusted_cuda_ccache_activate.outcome != 'success') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
