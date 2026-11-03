@@ -11,6 +11,7 @@
 #include "scf/cuda/direct_force_order4_sources.cuh"
 #include "scf/cuda/direct_force_order5_sources.cuh"
 #include "scf/cuda/direct_force_quartet.cuh"
+#include "scf/cuda/direct_force_queue_order.hpp"
 #include "scf/cuda/direct_queue_profile.cuh"
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/direct_task_encoding.cuh"
@@ -90,6 +91,7 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
     detail::BoundedDirectBlockDomain block_domain) {
   __shared__ ActiveShellQuartetTile queue[detail::kBoundedDirectQueueCapacity];
   __shared__ std::uint32_t queue_count;
+  __shared__ std::uint32_t class_offsets[kDirectSpdForceQueueClasses];
   __shared__ BoundedDirectQueuePage page;
   __shared__ bool available;
   while (true) {
@@ -117,6 +119,9 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
     __syncthreads();
     for (auto packet = page.candidate_begin; packet < page.candidate_end; packet += blockDim.x) {
       if (threadIdx.x == 0U) queue_count = 0U;
+      if (threadIdx.x < kDirectSpdForceQueueClasses) class_offsets[threadIdx.x] = 0U;
+      unsigned queued_class = kDirectSpdForceQueueClasses;
+      ActiveShellQuartetTile queued_task{};
       __syncthreads();
       const auto candidate = packet + threadIdx.x;
       if (candidate < page.candidate_end) {
@@ -148,7 +153,9 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
                 bounded_generated_class_enabled(shell_class, enabled_mask_pointer, enabled_mask);
             if (census) atomicAdd(generated ? &census->generated_owned : &census->admitted, 1ULL);
             if (!generated) {
-              queue[atomicAdd(&queue_count, 1U)] = task;
+              queued_class = shell_class;
+              queued_task = task;
+              atomicAdd(&class_offsets[shell_class], 1U);
               profile_bounded_direct_shell_quartet(batch, task, profile);
             }
           } else if (census) {
@@ -158,6 +165,14 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
           atomicAdd(&traversal->angular_rejected, 1ULL);
         }
       }
+      __syncthreads();
+      // Group already-admitted tasks so scalar recurrence callees in each
+      // warp see less class divergence without repeating the candidate scan.
+      // This bounded permutation depends on task classes, not GPU identity.
+      if (threadIdx.x == 0U) queue_count = direct_force_class_queue_offsets(class_offsets);
+      __syncthreads();
+      if (queued_class < kDirectSpdForceQueueClasses)
+        queue[atomicAdd(&class_offsets[queued_class], 1U)] = queued_task;
       __syncthreads();
       contract_bounded_spd_low_queue<Unrestricted, Mode, true, Partition>(
           batch, queue, queue_count, screening_tolerance, schwarz_bounds, density, active, output,

@@ -452,6 +452,31 @@
       "owner": "H100 frozen-cd2b supporting qualification",
       "reason": "Exact completed source-bound compressed observations, full E/F vectors, producer and platform bindings; original failed/unfavorable results retained. CPU-only receiver recomputes accepted and failed outcomes; no final-majority or later-source qualification.",
       "sha256": "e32a78dbf630340fe8442b8c3553a2c4fe2f7830cffa17a6a7c1a47ee731af43"
+    },
+    "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/facade-guards-v1-completed.tar.xz": {
+      "owner": "H100 frozen cd2b public guard delivery",
+      "reason": "Exact source-bound original full E/F, failure/refusal, lifecycle and actual route observations, independently CPU replayable; preserves Budget5/7 and original facade failures with separately scoped Budget9/API fallback acceptance. No clean timing or later-source qualification.",
+      "sha256": "ff80506f497cc8a8156fbe2a69e45e36db6f878fcd9b193def1e5912d8ac923e"
+    },
+    "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/notebook-public-guards-v1-completed.tar.xz": {
+      "owner": "H100 frozen cd2b public guard delivery",
+      "reason": "Exact source-bound original full E/F, failure/refusal, lifecycle and actual route observations, independently CPU replayable; preserves Budget5/7 and original facade failures with separately scoped Budget9/API fallback acceptance. No clean timing or later-source qualification.",
+      "sha256": "85dc9af1c10e6396fde0db9b1bb5b7b3f7caa8017824b3deab052bc9ff054394"
+    },
+    "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/public-budget-v5-completed.tar.xz": {
+      "owner": "H100 frozen cd2b public guard delivery",
+      "reason": "Exact source-bound original full E/F, failure/refusal, lifecycle and actual route observations, independently CPU replayable; preserves Budget5/7 and original facade failures with separately scoped Budget9/API fallback acceptance. No clean timing or later-source qualification.",
+      "sha256": "925f052fc548f7947bfe78c09176ecee51886b9ce54f85489dc0f3e690aa3b4b"
+    },
+    "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/public-budget-v7-completed.tar.xz": {
+      "owner": "H100 frozen cd2b public guard delivery",
+      "reason": "Exact source-bound original full E/F, failure/refusal, lifecycle and actual route observations, independently CPU replayable; preserves Budget5/7 and original facade failures with separately scoped Budget9/API fallback acceptance. No clean timing or later-source qualification.",
+      "sha256": "d29accf0501fb3f3418387fc4d608ef948be46c1d8d9ef85af061bf378a52db1"
+    },
+    "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/public-budget-v9-completed.tar.xz": {
+      "owner": "H100 frozen cd2b public guard delivery",
+      "reason": "Exact source-bound original full E/F, failure/refusal, lifecycle and actual route observations, independently CPU replayable; preserves Budget5/7 and original facade failures with separately scoped Budget9/API fallback acceptance. No clean timing or later-source qualification.",
+      "sha256": "bdaa53bcc2e5fd2c1e21a0cc75aad0aa45294192e67495798cf3be569008c8a2"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

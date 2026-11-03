@@ -1,0 +1,219 @@
+{
+  "audit_skill": "experiment-audit",
+  "overall_verdict": "FAIL",
+  "verdict": "FAIL_FOR_CURRENT_FINAL_DISPATCH",
+  "reason_code": "current_facade_admission_failed_contract_correction_not_yet_qualified",
+  "integrity_status": "warn",
+  "dispatch_blocked": true,
+  "summary": "A separately versioned contract correction is justified; public API need not make every Fast trial native or support heterogeneous explicit auxiliary templates. Original Facade18 stays FAILED and current admissions cannot dispatch final30.",
+  "requested_reviewer_model": "gpt-6.1-sol",
+  "requested_reviewer_reasoning": "ultra",
+  "reported_reviewer_model": null,
+  "actual_backend_identity": "unverified",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
+  "agent_id": "/root/facade_contract_scope_sol_audit",
+  "review_scope_complete": true,
+  "original_facade": {
+    "status": "FAILED",
+    "qualified_populations": 9,
+    "attempted_populations": 18,
+    "public_EF": 71,
+    "closed_owner_controls": 39,
+    "directional_controls": 6,
+    "original_pass_expectations_unchanged": [
+      18,
+      142,
+      72,
+      8
+    ]
+  },
+  "fixed30": {
+    "cases": 30,
+    "processes": 180,
+    "complete_EF": 720,
+    "arms": {
+      "standard": 90,
+      "gpu4pyscf": 90
+    },
+    "original_physics_measurement_and_acceptance_equal": true
+  },
+  "diagnostic_provenance": [
+    {
+      "case": "uks-pbe-water3-cation-direct-fast",
+      "public_EF": 7,
+      "prepared_batch_calls": 13,
+      "internal_item_endpoints": 14,
+      "internal_force_routes": {
+        "compatibility_force": 7,
+        "native_force_eligible": 7
+      },
+      "public_return_role": "compatibility_candidate",
+      "exact_native_audit_return_matches": 0,
+      "independent_full_vector_gates": "PASS",
+      "directional_controls": 0
+    },
+    {
+      "case": "uks-pbe0-water3-cation-direct-fast",
+      "public_EF": 11,
+      "prepared_batch_calls": 21,
+      "internal_item_endpoints": 22,
+      "internal_force_routes": {
+        "compatibility_force": 11,
+        "native_force_eligible": 11
+      },
+      "public_return_role": "compatibility_candidate",
+      "exact_native_audit_return_matches": 0,
+      "independent_full_vector_gates": "PASS",
+      "directional_controls": 2
+    }
+  ],
+  "contract_findings": [
+    {
+      "id": "F1",
+      "disposition": "observer_preexecution_veto_exceeds_public_api",
+      "evidence": [
+        "facade-guard-endpoint-v1.py:91-105",
+        "python/generativeqc/batch.py:1163-1171",
+        "python/generativeqc/batch.py:1388-1393",
+        "python/generativeqc/precision_policy.py:1376-1424"
+      ]
+    },
+    {
+      "id": "F2",
+      "disposition": "explicit_global_auxiliary_heterogeneous_topology_unimplemented_rejected_combination_documentation_gap",
+      "evidence": [
+        "python/generativeqc/batch.py:443-455",
+        "src/methods/dft_method.cpp:252-264",
+        "tests/python/test_dft_df_public.py:373-389"
+      ]
+    },
+    {
+      "id": "F3",
+      "disposition": "separate_diagnostics_are_compatibility_candidates_with_native_audits_not_original_native_acceptance",
+      "evidence": [
+        "cpu-provenance-check.json",
+        "fast-uks-capability-diagnostic-v1/diagnostic.json:2-30"
+      ]
+    },
+    {
+      "id": "F4",
+      "disposition": "existing_final_admission_remains_blocked",
+      "evidence": [
+        "final-admissions-v5.py:21-27",
+        "final-pairs-protocol-v2.json:2806-2816"
+      ]
+    }
+  ],
+  "checks": {
+    "gt_provenance": {
+      "status": "pass",
+      "scope": "authenticated supplied independent scientific oracle vectors, no rerun of generation"
+    },
+    "score_normalization": {
+      "status": "pass"
+    },
+    "result_existence": {
+      "status": "pass_for_retained_observations_fail_for_expected_successful_facade"
+    },
+    "dead_code": {
+      "status": "warn",
+      "detail": "five original observer-vetoed executions never reached underlying call; two separate diagnostics observed"
+    },
+    "scope": {
+      "status": "fail_for_original_facade_or_majority_acceptance"
+    },
+    "eval_type": "simulation_only",
+    "eval_type_detail": "independent scientific solver oracle; internal precision audit is same-model solver consistency"
+  },
+  "minimal_next_work": [
+    "Preserve original failed receipt and all original expectations/failures; do not relabel it PASS.",
+    "Prospectively version and independently review a replacement contract with complete population/claim coverage; retain every attempted population and unsupported explicit-input refusals as nonexecution.",
+    "Qualify all actually declared supported API stages using unchanged full-vector/directional/lifetime gates and candidate/audit/fallback/returned provenance plus complete costs; retain pending remaining Fast branches as unqualified.",
+    "Bind corrected admission only after replacement review and actual affected evidence; keep native-only qualification separate.",
+    "Then complete unchanged Standard fixed30, 180 processes, 720 E/F, three-pair rule and all30 denominator."
+  ],
+  "prohibited_relaxations": [
+    "original 18/142/72/8 expectations cannot be lowered to call original Facade18 PASS",
+    "scientific geometries/bases/fitting approximations/oracles/thresholds",
+    "all30 denominator,20-win requirement,three independent pairs,median>1.05,each pair>1,complete-set geometric mean>1",
+    "refusal-to-execution/native-force relabeling",
+    "discarding candidate/audit/fallback costs or failed observations"
+  ],
+  "cpu_control_status": "PASS_SCOPED_CPU_PROVENANCE_AND_UNCHANGED_FIXED30_CONTRACT",
+  "input_seal_unchanged": true,
+  "audited_input_hashes": {
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/issue-2884-live-20261103-v1.json": "sha256:281931755a16ede468fcba1a7c21f02d13aca46c4395f47adcddcb677aaeba04",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/runtime-lifecycle-authorization-20261103-v1.json": "sha256:c9facc9f296d6b7ff512f17923b0fb21799eb473cee5c9c1f8e737a14c655604",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/original-final-protocol-v1.json": "sha256:2391b71fb49660f682f1b60056b2892d5516f01871d7479319f0be2cf925fdaa",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-pairs-protocol-v2.json": "sha256:e9145bf2fce53929e981ed0a24042acdc78040fff052172cb1e72db9fb96ffd3",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-admissions-v5.py": "sha256:545f1fceb58daec7413f2d78757b77ebb0ede9a250a3a1e7f7bb0613cabd4b7d",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-protocol-v1.json": "sha256:7d046a34511803636b52c41fb7cd9d51681cac3a4bfc59f254073f1a87645980",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guard-endpoint-v1.py": "sha256:3b9f475811b072e4662d53feed0bfc280f7b03bb1d6b0d08673412c0891dc6a8",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-facade-guards-v5.py": "sha256:68da72cdd440efb2acd540631afe1ad3e65a9fe5784a154bcac858c092794c72",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-facade-guards-v5.py": "sha256:c2c2532cf24ce188190b4b5daf5eefb6630cad5ee2762e2b780011bd56f616f6",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-local-replay.json": "sha256:72119b12c9eb8d18091800946132035e1286a1094db5fe820c372134fa75291a",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/campaign.json": "sha256:dd7225608bbe26ca63f126c40006ec83de87edf450d14996093c4a180e826039",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe-water3-cation-direct-fast.json": "sha256:c27af01bc90384f0760b07fa606ecf8823a2f2d3257575716efa63797a53c10d",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe0-water3-cation-direct-fast.json": "sha256:ce3670cc0c9cf2caa132427d0785b2afcaf515d794a1397a64558f780f947e68",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-standard-df.json": "sha256:ecbae11c45fe463155ae1413556490df7df9db1e6f527e1808b1e84318c792c9",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-standard-df.json": "sha256:cd7b876d4edee043c4eaaed9b6dbcc60eb75c133178b295b52acf4e7363babac",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-fast-df.json": "sha256:048292b9606329a8b6a3620ec1c745fbe4f1ab82edc42b8f8ed36c42f8b8d38b",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-fast-df.json": "sha256:d5ef7aece87ec07dedae79dbc139ea0d8f83404dc3b074c36981e40c1fe08ce7",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-native-capability-diagnostic-v1.py": "sha256:3f133f67fdf581d3975574486e4705c8eda18ae4623560fd3d418cb00376bb85",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-fast-uks-capability-diagnostic-v1.py": "sha256:66948b10ec5eae13a047c6e03bb89a5551c58951ecb5407820b8a17a1296c5d8",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/fast-uks-capability-diagnostic-v1/diagnostic.json": "sha256:e83dee70c994c54aac61de07d648a671c50aa7b63c05cffd838411a51c48ff01",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/fast-uks-capability-diagnostic-v1/uks-pbe-water3-cation-direct-fast.json": "sha256:f0071b4e16ce825ef33aef100ae4152b88f141b3e506c0c5b91ed12f97c06a55",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/fast-uks-capability-diagnostic-v1/uks-pbe0-water3-cation-direct-fast.json": "sha256:3d6adb7ac32d02001ce9dca3871c74f74225ec19eb49887c1076eca1b1a091e5",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-scope-reviewer-route-v1.json": "sha256:46736c34fac2719244c0c66988e163994c5f8792c2c7579d89eb1655d8c9236a",
+    "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-measurement-cd2b/python/generativeqc/_precision_batch.py": "sha256:2d0dd4a95514bcfcf9d6969e14c541f443e21e3408f37a2b100e768a033b0d95",
+    "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-measurement-cd2b/python/generativeqc/precision_policy.py": "sha256:6970e19a3e78468bfeca706bdee3291c60cc7f7bbf657ae9d8d2bd5f9d3905ae",
+    "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-measurement-cd2b/python/generativeqc/batch.py": "sha256:f1f5735e8200f89a83ad0903cacdff2b521f11f2e74fed0918c0405f23d1164e",
+    "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-measurement-cd2b/python/generativeqc/calculator.py": "sha256:b76139c008c4e5f4615d2de173eeede2c5bb90192f59b2770a6a5d405f71ce56",
+    "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-measurement-cd2b/src/methods/dft_method.cpp": "sha256:e80e38c9b6eb44ccbca9862318fdc5f8a2d663b50ba64df63d7420f0c6185143",
+    "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-measurement-cd2b/tests/python/test_dft_df_public.py": "sha256:b5c5aa4179756cef59f9b6b28c71ba33e7daf3bff0217a5f169373a26a4fb576",
+    "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-measurement-cd2b/AGENTS.md": "sha256:9cd61adb577f8e9c490a55e42fda3236003a6a3b779427925d1811f7dc1b554f"
+  },
+  "additional_input_hashes": {
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-local-replay.json": "sha256:498a9ea8302afea2f993672b5425d4e90f14f42c20154b8a5bb0b81690f6f0ea",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/campaign.json": "sha256:524ee0bded1bcc3b2a324c41821928f36e0b7b1883d8e26ef14680068f1f12a2",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe-water3-cation-base-grid4.json": "sha256:58acf75692bef517211bcfcd2ee23841591213754cc09b99fdeebf3fd7ec69a2",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe-water3-cation-moved-grid4.json": "sha256:df72eba921bb9940925b03f7e8c1a8194fa859f59be6b23713645edac8fb425c",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-base-grid4.json": "sha256:ffef95987870053fb959000a673c83155282aefdcc08d7c98d56739d45679fd5",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-moved-grid4.json": "sha256:e889ace8a42444b4d3a84f408cdfcf97a1b5c11c85bd7904861d26e8c4ee883b",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-direction-0.001--1-grid4.json": "sha256:e43b6f764817eb20394beebd74d9a031fb1ccda2e0697962a19204cdc7916dd1",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-direction-0.001-+1-grid4.json": "sha256:d4272fe80497b5b0ce464f55d0631d60f5f95fb956e97f5e5faf72385ab65902",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-direction-0.0005--1-grid4.json": "sha256:cf471856d5247f5c817d7a6be4fe314ad90d22c533286c836aadc23236b07e35",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-direction-0.0005-+1-grid4.json": "sha256:d62316f9fb22a2c24af0ed7e0567f6a56726d0f77a508df3f5c5d6374791e5b5",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-fast-direct.json": "sha256:0ee7364706eced4cfd889bcc1b32d7e7122497d5c7614ba9260b436e173d9e5d",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-fast-direct.json": "sha256:92ef3eb50d66da20d3fb62064c6beb53461a7d5541cb02f1a55f375f44096bf8",
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-fast-direct.json": "sha256:6b634577eda2636e2b32247614d4226a5b9cbad6fe201ac79b41f2d92aa4cea1",
+    "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-measurement-cd2b/docs/user/dft_density_fitting.md": "sha256:96521ebc16f720098bc9f34b38c6d80196a4e04a026cd6ab75d978e902788022",
+    "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-measurement-cd2b/docs/reference/python_execution_contracts.md": "sha256:4ebcd7a935304f3140de764bcef3ee64f92ea1c1c0a372cbb47308ba1c7bcf0a"
+  },
+  "trace_path": "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-scope-audit-sol-v1/review-trace",
+  "limitations": [
+    "No new GPU/remote/production execution",
+    "No broad historical source/build/science rerun",
+    "No timing or majority acceptance",
+    "Three remaining Fast Direct diagnostics unavailable in audited input set",
+    "Current issue judged from supplied dated snapshot"
+  ],
+  "generated_at": "2026-11-03T02:57:03.444104+00:00",
+  "proposed_replacement_compliance": {
+    "status": "LEGITIMATE_CONTRACT_CORRECTION_IN_PRINCIPLE_NOT_IMPLEMENTED_OR_ACCEPTED",
+    "dispatch_still_blocked": true,
+    "conditions": [
+      "Original failed 18/142/72/8 cohort and expectations retained",
+      "All four incompatible global-explicit-auxiliary heterogeneous requests produce exact observed refusal in both orders",
+      "Fallback single-system executions preserve all original142 physical stage/item E/F requests, same Standard/Fast arm, geometry/model/auxiliary primitives/policy, independent oracle and numerical gates",
+      "Every actual owner receives all3 closure checks; minimum72 is not permission to omit added owners",
+      "All8 directional controls and final30/180/720/three-pair acceptance unchanged",
+      "Candidate compatibility force, native FP64 audits, fallback and returned routes/costs/failures remain distinct",
+      "No heterogeneous explicit-auxiliary DF batch/native raggedDF/timing qualification claimed",
+      "Reuse original9 passed populations only with authenticated same source/core/inputs/policy and retained vectors/proofs",
+      "Freeze replacement inventory prospectively; actual affected observations plus independent replay/review and binding admission required"
+    ],
+    "claim_ceiling": "supported public API and explicit single-system fallback coverage, with rejected heterogeneous explicit-auxiliary combination remaining unqualified for execution"
+  }
+}

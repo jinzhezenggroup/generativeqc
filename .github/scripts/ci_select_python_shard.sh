@@ -13,6 +13,9 @@ if [[ "${GITHUB_EVENT_NAME}" != "merge_group" ]]; then
   coverage_args+=(--cov --cov-report="xml:coverage-python-${GENERATIVEQC_CI_SHARD}.xml")
 fi
 if [[ "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
+  # Retain multi-minute full-oracle qualifications on nightly/manual CI while
+  # keeping representative physics and admission checks on each PR/merge group.
+  extra_args+=(-m 'not ci_nightly')
   # Keep exhaustive qualification matrices on scheduled/manual CI.
   # Routine PR/master CI retains one complete CPU HF endpoint for
   # orbital-f and f-projector support, while avoiding redundant

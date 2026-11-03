@@ -1,0 +1,104 @@
+{
+  "schema": "generativeqc.h100-corrected-public-api-fallback-guards.v1",
+  "status": "NEW_CONTRACT_NOT_YET_ACCEPTED",
+  "scope": "Public API/science/lifetime scope correction after independent source audit. Original native-only18 proof stays FAILED. No native heterogeneousDF batch qualification. Fast compatibility candidates and native FP64 audits stay separate. No timing votes or production promotion.",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "build_receipt_sha256": "67ba3327447651bb566a003636e9e40cb06dc29cf382b2a6f9a5e33ec4b0ef64",
+  "core_sha256": "37b8bd02c1dddbf42385c494ae21ff51b50d874dae1dd0c01ab2b75fb0eb194e",
+  "original_facade_protocol_sha256": "7d046a34511803636b52c41fb7cd9d51681cac3a4bfc59f254073f1a87645980",
+  "original_failed_proof_sha256": "72119b12c9eb8d18091800946132035e1286a1094db5fe820c372134fa75291a",
+  "original_failed_archive_sha256": "ff80506f497cc8a8156fbe2a69e45e36db6f878fcd9b193def1e5912d8ac923e",
+  "scope_audit_sha256": "988ff7981ca15a688ed07dc4b1b3012869daad7623542581f1d5a5ba12f2123d",
+  "original_final_protocol_sha256": "2391b71fb49660f682f1b60056b2892d5516f01871d7479319f0be2cf925fdaa",
+  "common_observable_gates": {
+    "energy_abs_per_atom_hartree": 1e-05,
+    "force_max_abs_hartree_per_bohr": 0.0001,
+    "force_rms_hartree_per_bohr": 3e-05
+  },
+  "reused_populations": [
+    "rks-pbe0-water12-direct-fast",
+    "rks-pbe0-water12-df-fast",
+    "uks-pbe-water3-cation-df-fast",
+    "uks-pbe0-water3-cation-df-fast",
+    "large96-standard-direct",
+    "ragged-12-96-standard-direct",
+    "ragged-96-12-standard-direct",
+    "large96-standard-df",
+    "large96-fast-df"
+  ],
+  "fast_recovery_populations": [
+    "uks-pbe-water3-cation-direct-fast",
+    "uks-pbe0-water3-cation-direct-fast",
+    "large96-fast-direct",
+    "ragged-12-96-fast-direct",
+    "ragged-96-12-fast-direct"
+  ],
+  "unsupported_global_auxiliary_populations": [
+    "ragged-12-96-standard-df",
+    "ragged-96-12-standard-df",
+    "ragged-12-96-fast-df",
+    "ragged-96-12-fast-df"
+  ],
+  "expected_original_unsupported_exception": {
+    "type": "RuntimeError",
+    "diagnostic": "GENERATIVEQC error 1: DFT auxiliary basis atom count differs",
+    "note": "Use exact actually retained original diagnostic when replaying; no arbitrary error acceptance."
+  },
+  "fallback_protocol_sha256": "a5f2882d031e6a8c857365497b1c43799ee06cfee6cbbdd008d21bae4c089d7e",
+  "fallback_mapping": [
+    {
+      "original_population": "ragged-12-96-standard-df",
+      "original_item": 0,
+      "fallback_population": "ragged-12-96-standard-df-singleton-0"
+    },
+    {
+      "original_population": "ragged-12-96-standard-df",
+      "original_item": 1,
+      "fallback_population": "ragged-12-96-standard-df-singleton-1"
+    },
+    {
+      "original_population": "ragged-96-12-standard-df",
+      "original_item": 0,
+      "fallback_population": "ragged-96-12-standard-df-singleton-0"
+    },
+    {
+      "original_population": "ragged-96-12-standard-df",
+      "original_item": 1,
+      "fallback_population": "ragged-96-12-standard-df-singleton-1"
+    },
+    {
+      "original_population": "ragged-12-96-fast-df",
+      "original_item": 0,
+      "fallback_population": "ragged-12-96-fast-df-singleton-0"
+    },
+    {
+      "original_population": "ragged-12-96-fast-df",
+      "original_item": 1,
+      "fallback_population": "ragged-12-96-fast-df-singleton-1"
+    },
+    {
+      "original_population": "ragged-96-12-fast-df",
+      "original_item": 0,
+      "fallback_population": "ragged-96-12-fast-df-singleton-0"
+    },
+    {
+      "original_population": "ragged-96-12-fast-df",
+      "original_item": 1,
+      "fallback_population": "ragged-96-12-fast-df-singleton-1"
+    }
+  ],
+  "expected_physical_guard_populations": 18,
+  "expected_actual_component_populations": 22,
+  "expected_public_returned_EF": 142,
+  "expected_closed_owner_controls": 84,
+  "expected_created_owners": 28,
+  "expected_directional_controls": 8,
+  "expected_typed_unsupported_layout_refusals": 4,
+  "numerical_gate_change": false,
+  "original_final_cases": 30,
+  "original_final_pairs": 3,
+  "original_final_processes": 180,
+  "original_final_complete_EF": 720,
+  "original_final_rules_changed": false,
+  "acceptance": "Needs complete raw-byte authentication, new independent corrected replay and independent contract/result review before any final dispatch-admission update."
+}

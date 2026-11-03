@@ -112,6 +112,7 @@ def test_raw_wb97mv_hessian_uses_one_scf_and_matches_all_gradient_columns(
             )
 
 
+@pytest.mark.ci_nightly
 def test_asymmetric_sp_water_hvp_includes_relaxed_exchange_tau_and_vv10(
     tmp_path: Path,
 ) -> None:

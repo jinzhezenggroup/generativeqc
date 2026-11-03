@@ -215,7 +215,13 @@ def test_corrected_physical_weights_close_reconverged_total_energy_fd(
 @pytest.mark.parametrize(
     "atoms,spin,broken,representation",
     [
-        (_RESTRICTED_H4, 0, False, "cartesian"),
+        pytest.param(
+            _RESTRICTED_H4,
+            0,
+            False,
+            "cartesian",
+            marks=pytest.mark.ci_nightly,
+        ),
         (
             [("H", (0.0, 0.0, 2.45665 * index)) for index in range(4)],
             0,
