@@ -31,3 +31,13 @@ The host-compiled compact-source probe uses CUDA API fakes and performs no
 real-device execution. Source changes require refreshing live catalog input
 identities, not historical qualification measurements. This correction does
 not requalify an integrated CUDA scientific endpoint.
+
+## Host lifetime fixture follow-up (2026-11-04)
+
+Core-c job 126046989772 exposed an outdated stand-in: the lifetime-only harness
+returned a constant common source bound, so removing the adapter's duplicate
+reservation also removed ECP accounting from that fake environment. The fixture
+now supplies the retained ECP allocation through the common-owner contract. Its
+existing ECP-copy, budget, terminal-failure and deferred-fence assertions remain
+unchanged. Actual exact/short/spare-capacity arithmetic is independently checked
+by the compact-source probe and native contracts; no production bound changes.
