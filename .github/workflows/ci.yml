@@ -667,7 +667,7 @@ jobs:
         shell: bash
         run: |
           test -d "$TRUSTED_CUDA_CCACHE_MISS_DIR"
-          printf 'CCACHE_DIR=%s\\n' "$TRUSTED_CUDA_CCACHE_MISS_DIR" >> "$GITHUB_ENV"
+          printf 'CCACHE_DIR=%s\n' "$TRUSTED_CUDA_CCACHE_MISS_DIR" >> "$GITHUB_ENV"
       - name: Discard incomplete trusted CUDA ccache miss download
         if: steps.nonqueue_cuda_ccache_download.outcome != '' && steps.nonqueue_cuda_ccache_download.outcome != 'skipped' && steps.nonqueue_cuda_ccache_activate.outcome != 'success'
         continue-on-error: true
