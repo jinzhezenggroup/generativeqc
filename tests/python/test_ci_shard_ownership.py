@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 from collections import Counter
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -280,9 +281,7 @@ def test_expensive_full_oracles_run_in_nightly_not_routine_ci(
 ) -> None:
     # Check the sourced production selector, not a mocked list of exclusions.
     _, _, arguments = _selection(event, shard)
-    marker_filters = list(zip(arguments, arguments[1:])).count(
-        ("-m", "not ci_nightly")
-    )
+    marker_filters = list(pairwise(arguments)).count(("-m", "not ci_nightly"))
     assert marker_filters == (0 if event in {"schedule", "workflow_dispatch"} else 1)
 
 
