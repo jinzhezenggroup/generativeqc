@@ -89,6 +89,10 @@ completion is implied.
 
 ## Revisit when
 
+The subsequent [capability-derived derivative decision](2026-11-04-packaged-correlated-cpu-derivatives.md)
+implements the separate derivative selection below. It does not retroactively
+qualify this source-only implementation or its earlier endpoint campaign.
+
 Consider further derivative routing only with an owner-provided capability
 contract, independent full-observable references and supported-domain/resource
 fallback gates. Consider source or tile changes only with complete endpoint and

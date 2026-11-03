@@ -2369,6 +2369,27 @@ bool has_packaged_cpu_eri_shell_derivatives() noexcept {
 }
 
 namespace {
+bool packaged_cpu_eri_shell_supported(unsigned angular_momentum) noexcept {
+  const auto expected = molecule::cartesian_count(angular_momentum);
+  const auto available = static_cast<std::size_t>(std::count_if(
+      std::begin(generated_stationary_dispatch::components),
+      std::end(generated_stationary_dispatch::components), [&](const auto& component) {
+        return component[0] + component[1] + component[2] == angular_momentum;
+      }));
+  return expected != 0 && available == expected;
+}
+}  // namespace
+
+bool supports_packaged_cpu_eri_shell_derivatives(
+    const core::System& system, const std::array<std::size_t, 4>& shell_indices) noexcept {
+  return has_packaged_cpu_eri_shell_derivatives() &&
+         std::all_of(shell_indices.begin(), shell_indices.end(), [&](std::size_t index) {
+           return index < system.shells.size() &&
+                  packaged_cpu_eri_shell_supported(system.shells[index].angular_momentum);
+         });
+}
+
+namespace {
 /** Restore compiler-canonicalized slots before channel weighting. A unit
  * external weight evaluates the primitive once for every independent J/K
  * channel; coefficients and public-AO normalization stay in the shared loop. */
@@ -2423,8 +2444,9 @@ std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
     if (shell_indices[slot] >= system.shells.size())
       throw std::invalid_argument("weighted ERI shell index is out of range");
     shells[slot] = &system.shells[shell_indices[slot]];
-    if (packaged && shells[slot]->angular_momentum > 2)
-      throw std::invalid_argument("packaged CPU ERI derivatives require s/p/d shells");
+    if (packaged && !packaged_cpu_eri_shell_supported(shells[slot]->angular_momentum))
+      throw std::invalid_argument(
+          "packaged CPU ERI derivatives require supported shell components");
     expansions[slot] =
         molecule::ao_expansions(shells[slot]->angular_momentum, system.basis_representation);
     expected = checked_product(expected, expansions[slot].size());

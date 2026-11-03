@@ -702,6 +702,90 @@ def _statement(source: str, start: str) -> str:
     return source[begin : source.index(";", begin) + 1] + "\n"
 
 
+def test_actual_cpu_mp2_source_retry_unwinds_before_owner_retirement(
+    tmp_path: Path,
+) -> None:
+    """Fault the real phase callback without running integrals or CUDA work."""
+    method = (ROOT / "src/methods/mp2_method.cpp").read_text(encoding="utf-8")
+    setup = _between(
+        method,
+        "      std::unique_ptr<posthf::RawSource> raw_source;",
+        "      Result result;",
+    )
+    phase = _between(
+        method, "      const auto run_phase =", "      if (components & kHfComponent)"
+    )
+    code = (
+        PLAN_STANDINS
+        + CC_CALLBACK_STANDINS
+        + r"""
+#include "runtime/df_progress_trace.hpp"
+void probe(int failure, bool fail_replay) {
+  reset_injection(failure);
+  // RawSource's independent constructor-failure case is exercised elsewhere.
+  raw_constructions = 1;
+  std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_ =
+      std::make_unique<scf::PreparedFockPlan>();
+  auto* prepared_exact = cpu_exact_plan_.get();
+  scf::CudaRhfBucketPlan** reference_plan = nullptr;
+  std::shared_ptr<const integrals::ElectronInteractionSource> reference_source;
+  core::System system_;
+  std::optional<core::System> auxiliary_;
+  const bool density_fitted_ = false;
+  const std::size_t phase_budget = 100, component_capacity = 7;
+  struct {
+    std::shared_ptr<scf::PendingReferenceProviderOwner> reference_provider_initialization_owner;
+  } options_;
+"""
+        + setup
+        + phase
+        + r"""
+  int attempts = 0, published = -1;
+  try {
+    published = run_phase([&](std::size_t available) {
+      PhaseOwner partial_output;
+      ++attempts;
+      assert(available == phase_budget - component_capacity);
+      prepare_source();
+      if (attempts == 1) {
+        assert(prepared_source && cpu_exact_plan_ && live_source_views == 1);
+        assert(conventional_source->retained_numeric_bytes() == 17);
+        injected_exception();
+      }
+      assert(attempts == 2 && !prepared_source && !cpu_exact_plan_);
+      assert(!prepared_exact && live_source_views == 0 && destroyed_sources == 1);
+      assert(conventional_source == raw_source.get() && raw_constructions == 2);
+      if (fail_replay) injected_exception();
+      return 23;
+    });
+    assert(failure != 2 && !fail_replay && published == 23);
+    // Later phases must reuse the bounded source, not resurrect its owner.
+    assert(run_phase([&](std::size_t available) {
+      prepare_source();
+      assert(available == 93 && conventional_source == raw_source.get());
+      assert(!cpu_exact_plan_ && raw_constructions == 2);
+      return 29;
+    }) == 29);
+  } catch (const std::invalid_argument&) {
+    assert(failure == 2 && attempts == 1 && published == -1);
+    assert(cpu_exact_plan_ && prepared_source && destroyed_sources == 0);
+  } catch (const std::length_error&) {
+    assert(failure == 0 && fail_replay && attempts == 2 && published == -1);
+  } catch (const std::bad_alloc&) {
+    assert(failure == 1 && fail_replay && attempts == 2 && published == -1);
+  }
+  assert(live_phase_owners == 0);
+}
+int main() {
+  for (int failure : {0,1,2}) probe(failure,false);
+  for (int failure : {0,1}) probe(failure,true);
+  std::cout << "actual CPU MP2 source rollback gates passed\n";
+}
+"""
+    )
+    assert "actual CPU MP2 source rollback gates passed" in _compile_run(tmp_path, code)
+
+
 def test_actual_mp2_and_cc_force_triples_callbacks_restore_budgets(
     tmp_path: Path,
 ) -> None:
@@ -816,6 +900,7 @@ void mp2_probe(int failure, std::size_t warm_capacity) {
   struct { int device_id = 0; } context_;
   core::System system_;
   std::optional<core::System> auxiliary_;
+  std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
   scf::PreparedFockPlan* prepared_exact = nullptr;
   std::shared_ptr<const integrals::ElectronInteractionSource> reference_source;
   hf::PhysicalReference ref;
@@ -1096,6 +1181,7 @@ void probe(int stage, int failure, std::size_t budget = 1000, bool readable = tr
   Source source{readable};
   Source* raw_source = &source;
   const Source* conventional_source = &source;
+  std::optional<int> prepared_source;
   Reference ref{2,1};
   const bool cuda = true, density_fitted_ = false;
   const double threshold_ = 1e-10;
@@ -1248,6 +1334,7 @@ struct ForceCall {
 namespace integrals { enum class ElectronInteractionOperator { eri }; }
 struct Source {
   bool readable;
+  std::size_t retained_numeric_bytes() const { return 0; }
   bool supports_device_read(integrals::ElectronInteractionOperator, int) const {
     return readable;
   }

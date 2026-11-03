@@ -70,13 +70,13 @@ def _execute_twice(record: dict[str, Any], budget: int) -> list[BatchItemResult]
     return results
 
 
-def _trace_values(journal: Path, key: str) -> list[Any]:
+def _trace_values(journal: Path, key: str, scope: str = "mp2_endpoint") -> list[Any]:
     return [
         event["value"]
         for line in journal.read_text().splitlines()
         if (event := json.loads(line)).get("key") == key
         and event["event"] == "VALUE"
-        and event["name"] == "mp2_endpoint"
+        and event["name"] == scope
     ]
 
 
@@ -111,6 +111,21 @@ def test_cpu_mp2_prepared_source_complete_endpoint(
     assert tiles and all(tile > 0 for tile in tiles)
     if tiling is None:
         assert all(tile > 1 for tile in tiles)
+    derivative_scope = "mp2_cpu_derivative"
+    available = _trace_values(journal, "packaged_available", derivative_scope)
+    packaged = _trace_values(journal, "packaged_quartets", derivative_scope)
+    reference = _trace_values(journal, "reference_quartets", derivative_scope)
+    assert available
+    for supported, selected, fallback in zip(
+        available, packaged, reference, strict=True
+    ):
+        assert (
+            (selected > 0 and fallback == 0)
+            if supported
+            else (selected == 0 and fallback > 0)
+        )
+    evaluations = _trace_values(journal, "primitive_evaluations", derivative_scope)
+    assert evaluations and all(count > 0 for count in evaluations)
 
 
 def test_cpu_mp2_optional_source_preserves_reported_budget(

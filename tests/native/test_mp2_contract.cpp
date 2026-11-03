@@ -553,6 +553,9 @@ void shared_shell_derivative_channels() {
     }
     const std::array<std::size_t, 4> shells{0, 1, 0, 1};
     const std::array<std::span<const double>, 3> channels{first, second, zeros};
+    require(generativeqc::integrals::supports_packaged_cpu_eri_shell_derivatives(system, shells) ==
+                generativeqc::integrals::has_packaged_cpu_eri_shell_derivatives(),
+            "compiled derivative capability does not cover valid d/s components");
     std::uint64_t shared_evaluations = 0;
     const auto shared = generativeqc::integrals::contract_weighted_eri_shell_derivatives(
         system, shells, channels, &shared_evaluations);
@@ -638,6 +641,68 @@ void shared_shell_derivative_channels() {
   }
 }
 
+/** Unsupported artifacts remain explicit errors, while the MP2 consumer keeps
+ * its bounded reference route. This is a cotangent contract, not an SCF oracle. */
+void unsupported_packaged_derivative_preserves_reference_consumer() {
+  auto system = h2();
+  const std::array<std::size_t, 4> shells{0, 1, 1, 1};
+  auto invalid = shells;
+  invalid[0] = system.shells.size();
+  require(!generativeqc::integrals::supports_packaged_cpu_eri_shell_derivatives(system, invalid),
+          "compiled derivative capability accepted an invalid shell index");
+  system.shells[0] = {0, 3, {{0.8, 1.0}}};
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "reference derivative fallback fixture is invalid");
+  require(!generativeqc::integrals::supports_packaged_cpu_eri_shell_derivatives(system, shells),
+          "compiled derivative capability claims unqualified f components");
+  const auto count = generativeqc::molecule::ao_expansions(3, system.basis_representation).size();
+  std::vector<double> local(count, 0.37);
+  const std::array<std::span<const double>, 1> channels{local};
+  std::uint64_t evaluations = 123;
+  bool rejected = false;
+  try {
+    (void)generativeqc::integrals::contract_weighted_eri_shell_derivatives(
+        system, shells, channels, &evaluations,
+        generativeqc::integrals::WeightedEriDerivativeExecution::PackagedCpu);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected && evaluations == 123,
+          "unsupported explicit derivative execution fell back or published work");
+
+  const auto orbitals = generativeqc::molecule::ao_count(system);
+  generativeqc::hf::PhysicalReference reference;
+  reference.nbf = orbitals;
+  reference.nocc = 1;
+  reference.coefficients.resize(orbitals * orbitals);
+  for (std::size_t orbital = 0; orbital < orbitals; ++orbital)
+    reference.coefficients[orbital * orbitals + orbital] = 1.0;
+  generativeqc::mp2::LagrangianWeights weights;
+  weights.orbitals = orbitals;
+  weights.occupied = reference.nocc;
+  weights.one_electron.resize(orbitals * orbitals);
+  weights.overlap.resize(orbitals * orbitals);
+  weights.two_electron.resize(orbitals * orbitals * orbitals * orbitals);
+  weights.two_electron[orbitals * orbitals * orbitals - 1] = 0.37;
+  const auto expected = generativeqc::mp2::detail::conventional_derivative(
+      system, reference, weights,
+      [&](auto overlap, auto hcore) {
+        return generativeqc::integrals::contract_weighted_one_electron_derivative(system, overlap,
+                                                                                  hcore, true);
+      },
+      [&](const auto& quartet, auto cotangent) {
+        return generativeqc::integrals::contract_weighted_eri_shell_derivative(system, quartet,
+                                                                               cotangent);
+      });
+  const auto selected = generativeqc::mp2::conventional_derivative_cpu(system, reference, weights);
+  require(selected.size() == expected.size(), "reference fallback gradient shape");
+  for (std::size_t coordinate = 0; coordinate < expected.size(); ++coordinate)
+    require(std::abs(selected[coordinate] - expected[coordinate]) < 2e-11,
+            "unsupported packaged domain changes the reference consumer");
+}
+
 void streamed_one_electron_derivative() {
   const auto system = h2();
   const auto oracle = generativeqc::integrals::build_integrals(system, true, false);
@@ -706,6 +771,12 @@ void conventional_derivative_from_mo_weights(bool with_p_shell) {
       });
   const auto pairs = system.shells.size() * (system.shells.size() + 1) / 2;
   require(shell_calls == pairs * (pairs + 1) / 2, "dense derivative canonical work count");
+
+  const auto selected = generativeqc::mp2::conventional_derivative_cpu(system, ref, weights);
+  require(selected.size() == derivative.size(), "selected CPU derivative gradient shape");
+  for (std::size_t coordinate = 0; coordinate < derivative.size(); ++coordinate)
+    require(std::abs(selected[coordinate] - derivative[coordinate]) < 2e-11,
+            "selected CPU derivative differs from the independent reference consumer");
 
   const auto oracle = generativeqc::integrals::build_integrals(system);
   std::vector<double> one_ao(n2), overlap_ao(n2), two_ao(n4);
@@ -870,6 +941,7 @@ int main() {
     conventional_energy_batch_fallback_matches();
     shell_local_weighted_eri_derivative();
     shared_shell_derivative_channels();
+    unsupported_packaged_derivative_preserves_reference_consumer();
     cuda_shell_derivative_budget_failure_is_transactional();
     streamed_one_electron_derivative();
     conventional_derivative_from_mo_weights(false);
