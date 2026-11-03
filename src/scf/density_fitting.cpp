@@ -1282,6 +1282,23 @@ std::size_t method_owned_df_resident_capacity(std::size_t nbf, std::size_t naux,
   return values.peak_workspace_bytes + response;
 }
 
+std::size_t method_owned_df_optional_value_capacity(const DfResolvedBudget& budget, std::size_t nbf,
+                                                    std::size_t naux, std::size_t restricted_rank,
+                                                    std::size_t source_device_bytes,
+                                                    bool allow_zero_rank_coulomb) {
+  if (!budget.feasible || !budget.live_resource || budget.requested_bytes ||
+      budget.response_override_bytes || !budget.response_bytes ||
+      (!restricted_rank && !allow_zero_rank_coulomb) || restricted_rank > nbf ||
+      budget.observed_free_bytes <= budget.reserved_headroom_bytes)
+    return budget.value_bytes;
+  const auto ceiling =
+      std::min(budget.observed_free_bytes - budget.reserved_headroom_bytes,
+               method_owned_df_resident_capacity(nbf, naux, restricted_rank, source_device_bytes));
+  return ceiling > budget.response_bytes
+             ? std::max(budget.value_bytes, ceiling - budget.response_bytes)
+             : budget.value_bytes;
+}
+
 DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget& budget,
                                                          std::size_t nbf, std::size_t naux,
                                                          std::size_t restricted_rank,
@@ -1354,6 +1371,27 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
         result.response_bytes = response_floor;
         result.total_bytes = upper + response_floor;
         return result;
+      }
+      // Two independent radial owners can leave room for B but not complete
+      // occupied U. Retaining B still eliminates repeated physical integrals;
+      // K and force response then use their existing bounded projection panels.
+      // Preserve the requested-rank response floor and absolute headroom. Keep
+      // the remaining value allowance available for optional prepared E rather
+      // than forcing a minimum-size B whose raw source cannot be accelerated.
+      if (restricted_rank) {
+        try {
+          const auto plan = plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, upper,
+                                                              source_device_bytes, 0, false);
+          if (plan.stores_full_three_center) {
+            auto result = budget;
+            result.value_bytes = upper;
+            result.response_bytes = response_floor;
+            result.total_bytes = available;
+            return result;
+          }
+        } catch (const DensityFittingBudgetError&) {
+          // Neither resident representation fits; retain the streamed owner.
+        }
       }
     }
   }

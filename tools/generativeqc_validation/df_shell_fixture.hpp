@@ -1,5 +1,6 @@
 #pragma once
 // Shared test-only basis uploads, independent of production packet traversal.
+#include <algorithm>
 #include <map>
 #include <stdexcept>
 #include <vector>
@@ -27,6 +28,10 @@ struct Storage {
     return p;
   }
   scf::DfShellBasisView basis(const core::System& system) {
+    const bool auxiliary_g = std::any_of(system.shells.begin(), system.shells.end(),
+                                         [](const auto& s) { return s.angular_momentum == 4; });
+    const auto expansion_terms = auxiliary_g ? molecule::kMaximumAuxiliaryAoExpansionTerms
+                                             : molecule::kMaximumAoExpansionTerms;
     std::vector<std::int32_t> atoms, ao_shells, ids;
     std::vector<std::int64_t> primitives{0}, aos{0};
     std::vector<std::uint8_t> counts, angular;
@@ -36,7 +41,7 @@ struct Storage {
            molecule::ao_expansions(shell.angular_momentum, system.basis_representation)) {
         ao_shells.push_back(atoms.size());
         counts.push_back(expansion.size());
-        for (std::size_t t = 0; t < molecule::kMaximumAoExpansionTerms; ++t) {
+        for (std::size_t t = 0; t < expansion_terms; ++t) {
           if (t < expansion.size()) {
             const auto& term = expansion[t];
             for (auto l : term.component) angular.push_back(l);
@@ -57,7 +62,8 @@ struct Storage {
       primitives.push_back(exponents.size());
     }
     scf::DfShellBasisView result;
-    for (unsigned l = 0; l < 4; ++l) {
+    result.expansion_terms = expansion_terms;
+    for (unsigned l = 0; l < 5; ++l) {
       result.begin[l] = ids.size();
       for (std::size_t s = 0; s < system.shells.size(); ++s)
         if (system.shells[s].angular_momentum == l) ids.push_back(s);
@@ -82,6 +88,8 @@ struct Storage {
     for (const auto& [signature, shells] : ids) {
       scf::DfShellBasisView view;
       view.basis = base.basis;
+      view.expansion_terms = base.expansion_terms;
+      view.range_omega = base.range_omega;
       view.shell_ids = upload(shells);
       view.ao_offsets = base.ao_offsets;
       view.count[signature.first] = shells.size();

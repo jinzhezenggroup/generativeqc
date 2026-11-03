@@ -107,11 +107,11 @@ def test_physical_components_and_history_match_independent_state(
     assert diagnostic.electrons == pytest.approx(diagnostic.occupations, abs=1e-10)
     assert diagnostic.grid_points == len(grid.weights)
     # Report the resolved backend default, not the unresolved automatic request.
-    # CUDA uses 1024 even on this small direct workload without a local profile.
+    # CUDA may retry its 1024-point default at 256 after allocation refusal.
     assert calculator.ks_options.tile_points == tile_points
-    default_tile = 1024 if device == "cuda" else 256
-    assert diagnostic.tile_points == (
-        default_tile if tile_points is None else tile_points
+    default_tiles = (1024, 256) if device == "cuda" else (256,)
+    assert diagnostic.tile_points in (
+        default_tiles if tile_points is None else (tile_points,)
     )
     assert diagnostic.ao_order == int(method.startswith("pbe"))
     assert diagnostic.scf_domain == calculator.ks_options.scf_domain

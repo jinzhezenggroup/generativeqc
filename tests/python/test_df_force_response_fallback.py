@@ -40,7 +40,10 @@ int cudaMemcpyAsync(void* out,const void* in,std::size_t n,int,void*) {
 int cudaMemsetAsync(void* out,int value,std::size_t n,void*) {
   std::memset(out,value,n); return 0;
 }
-int cudaStreamSynchronize(void*) { return 0; }
+void* failing_stream=nullptr;
+int cudaStreamSynchronize(void* stream) {
+  return failing_stream && stream==failing_stream ? cudaErrorLaunchFailure : cudaSuccess;
+}
 namespace generativeqc::runtime::cuda_trace {
 struct TraceShape { std::size_t systems,nbf,naux; bool source,streamed; std::size_t offset; };
 struct TraceOperation { TraceOperation(const char*,void*,TraceShape) {} };
@@ -154,10 +157,30 @@ generativeqc_status execute_cuda_df_hf_gradient(int,void*,CudaDensityFittingInte
     const std::vector<double>&,const std::vector<double>&,
     std::span<const DensityFittingDensityResponse>,double,unsigned,std::size_t,std::size_t,
     std::vector<double>& output,std::string&,DfGradientResources* resources,const CudaDfMetricView*,void*,
-    const CudaDfResponseBuffers*,const CudaDfPackedRawTensorView*,const CudaDfWhitenedTensorView* fitted,
+    const CudaDfResponseBuffers*,const CudaDfPackedRawTensorView* packed,const CudaDfWhitenedTensorView* fitted,
     const CudaDfOccupiedResponseView* occupied,const CudaDfBorrowedResponseDensity*,bool mixed_shell,
     const CudaDfRawChargeView* raw_charge, const CudaDfResidentForceRequest* resident_force) {
   assert(!raw_charge && !resident_force);
+  if(mode>=31) {
+    assert(resources && !resources->precision_work_collected);
+    if(occupied) {
+      ++occupied_calls;
+      // These two mutually exclusive bridge inputs used to collide when an
+      // independently leased C was supplied to a packed resident LR owner.
+      assert(!packed && !occupied->final_fitted_occupied_projection);
+      assert(occupied->factors[0].density_scale==2.0);
+      if(mode==34 || mode==36 || mode==40) {
+        pending_error=mode==36 ? cudaErrorLaunchFailure : cudaErrorMemoryAllocation;
+        return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+      }
+      if(mode==35) return GENERATIVEQC_STATUS_CUDA_ERROR;
+    } else {
+      ++panel_calls;
+      assert(packed && packed->data==active->packed_raw && pending_error==0);
+      if(mode==40) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    }
+    output={42}; return GENERATIVEQC_STATUS_SUCCESS;
+  }
   // A retry may drop the final projection, but its immutable forward values
   // must retain the producing plan's auxiliary coordinates.
   if(fitted) assert(fitted->spectral_basis==active->resident_spectral_factors);
@@ -205,6 +228,58 @@ int main(int argc,char** argv) {
   auto requested=current;
   auto density=std::vector<double>(state.density,state.density+4);
   core::System orbital,auxiliary; orbital.atoms.resize(1); auxiliary.atoms.resize(2);
+  if(mode>=41) {
+    // An unused optional producer must not poison a diagnostic panel response.
+    plan.final_projection_token.reset();
+    plan.value_storage.pairs=DfPairStorage::SymmetricLower;
+    plan.packed_raw=plan.values;
+    if(mode==41 || mode==47) setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA","scalar",1);
+    if(mode==42) setenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT","1",1);
+    if(mode==43) setenv("GENERATIVEQC_DF_RESPONSE_SPACE","dense",1);
+    if(mode==44) setenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE","1",1);
+    if(mode==45) setenv("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE","1",1);
+    int producer_stream{};
+    failing_stream=&producer_stream;
+    CudaDfBorrowedOccupiedFactor factor{0,state.factor,2,1,&producer_stream};
+    if(mode==47) factor.rank=0;
+    const DensityFittingDensityResponse term{density,0.0,.25};
+    std::vector<double> output{-1}; std::string detail; DfGradientResources resources;
+    const auto status=execute_cuda_density_fitting_generated_force_response(
+        &plan,0,orbital,auxiliary,{},{},{&term,1},0,4096,0,output,detail,&resources,
+        nullptr,nullptr,nullptr,nullptr,nullptr,&factor);
+    const auto expected=mode==46 ? GENERATIVEQC_STATUS_CUDA_ERROR
+        : mode==47 ? GENERATIVEQC_STATUS_INVALID_ARGUMENT : GENERATIVEQC_STATUS_SUCCESS;
+    assert(status==expected);
+    assert(output==std::vector<double>{status==GENERATIVEQC_STATUS_SUCCESS ? 42.0 : -1.0});
+    return 0;
+  }
+  if(mode>=31) {
+    plan.final_projection_token.reset();
+    plan.value_storage.pairs=DfPairStorage::SymmetricLower;
+    plan.packed_raw=plan.values;
+    plan.metric_full_rank[0]=mode==31;
+    if(mode==32) setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA","scalar",1);
+    if(mode==33) setenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT","1",1);
+    if(mode==37) setenv("GENERATIVEQC_DF_RESPONSE_SPACE","dense",1);
+    if(mode==38) setenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE","1",1);
+    if(mode==39) setenv("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE","1",1);
+    const CudaDfBorrowedOccupiedFactor factor{0,state.factor,2,1,plan.stream};
+    const DensityFittingDensityResponse term{density,0.0,.25};
+    std::vector<double> output{-1}; std::string detail; DfGradientResources resources;
+    const auto status=execute_cuda_density_fitting_generated_force_response(
+        &plan,0,orbital,auxiliary,{},{},{&term,1},0,4096,0,output,detail,&resources,
+        nullptr,nullptr,nullptr,nullptr,nullptr,&factor);
+    const auto expected=(mode==35 || mode==36) ? GENERATIVEQC_STATUS_CUDA_ERROR
+        : mode==40 ? GENERATIVEQC_STATUS_OUT_OF_MEMORY : GENERATIVEQC_STATUS_SUCCESS;
+    assert(status==expected);
+    const bool diagnostic=mode==32 || mode==33 || (mode>=37 && mode<=39);
+    assert(occupied_calls==int(!diagnostic));
+    assert(panel_calls==int(diagnostic || mode==34 || mode==40));
+    assert(error_clears==int(mode==34 || mode==40));
+    assert(output==std::vector<double>{status==GENERATIVEQC_STATUS_SUCCESS ? 42.0 : -1.0});
+    assert(plan.packed_raw==plan.values); // Fallback retains the immutable value owner.
+    return 0;
+  }
   DensityFittingDensityResponse term{density,1.0,.25};
   CudaDfBorrowedFittedProjection borrowed{0,state.factor,plan.auxiliary_tile_values,2,8,1,plan.stream};
   const CudaDfBorrowedFittedProjection* lease=nullptr;
@@ -293,7 +368,7 @@ def response_probe(
 
 @pytest.mark.parametrize(
     "mode",
-    range(31),
+    range(48),
     ids=(
         "success-and-repeat",
         "occupied-oom",
@@ -326,6 +401,23 @@ def response_probe(
         "corrected-generation-mismatch",
         "corrected-empty-occupations",
         "corrected-projection-off",
+        "borrowed-factor-packed-owner",
+        "borrowed-factor-scalar-fallback",
+        "borrowed-factor-serial-fallback",
+        "borrowed-factor-oom-fallback",
+        "borrowed-factor-compute-error",
+        "borrowed-factor-pending-error",
+        "borrowed-factor-dense-control",
+        "borrowed-factor-scatter-control",
+        "borrowed-factor-upload-control",
+        "borrowed-factor-persistent-oom",
+        "unused-factor-scalar-stream-error",
+        "unused-factor-serial-stream-error",
+        "unused-factor-dense-stream-error",
+        "unused-factor-scatter-stream-error",
+        "unused-factor-upload-stream-error",
+        "selected-factor-stream-error",
+        "unused-factor-invalid-lease",
     ),
 )
 def test_fitted_response_failure_and_lease_fallback(
@@ -336,6 +428,10 @@ def test_fitted_response_failure_and_lease_fallback(
         "GENERATIVEQC_DF_RESPONSE_STORAGE",
         "GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE",
         "GENERATIVEQC_DF_FINAL_PROJECTION",
+        "GENERATIVEQC_DF_RESPONSE_ALGEBRA",
+        "GENERATIVEQC_DF_SERIAL_RESPONSE_DOT",
+        "GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE",
+        "GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE",
     ):
         monkeypatch.delenv(name, raising=False)
     result = subprocess.run(

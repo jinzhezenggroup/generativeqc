@@ -20,6 +20,8 @@ struct DfShellLaunch {
   bool mixed = false;
   /** Optional device census: attempted tasks, primitive products, strict retries. */
   unsigned long long* precision_work = nullptr;
+  /** LR polynomial geometry is supported; the Rys lowering is Coulomb-only. */
+  double range_omega = 0;
 };
 
 /** Every generated angular class provides the same three public launch forms. */

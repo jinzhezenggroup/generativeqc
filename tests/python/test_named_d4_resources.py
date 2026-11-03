@@ -64,8 +64,10 @@ def test_cuda_replay_rejects_changed_planning_environment(
 ) -> None:
     """Retained capacity cannot authorize a different execution schedule."""
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires a finite Slurm CUDA allocation")
-    assert os.environ.get("SLURM_JOB_ID")
+        pytest.skip("requires a finite scheduler CUDA allocation")
+    assert os.environ.get("SLURM_JOB_ID") or (
+        os.environ.get("LSB_JOBID") and os.environ.get("CUDA_VISIBLE_DEVICES")
+    ), "real GPU tests require a Slurm or LSF GPU allocation"
     monkeypatch.delenv(control, raising=False)
     calc = calculator(
         "cuda", resource_budget=ResourceBudget(host_bytes=2 << 30, device_bytes=2 << 30)
@@ -92,8 +94,10 @@ def test_replay_rejects_changed_scientific_inputs(
     """Value changes must be detected even while the same batch remains alive."""
     if device == "cuda":
         if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-            pytest.skip("requires a finite Slurm CUDA allocation")
-        assert os.environ.get("SLURM_JOB_ID")
+            pytest.skip("requires a finite scheduler CUDA allocation")
+        assert os.environ.get("SLURM_JOB_ID") or (
+            os.environ.get("LSB_JOBID") and os.environ.get("CUDA_VISIBLE_DEVICES")
+        ), "real GPU tests require a Slurm or LSF GPU allocation"
     calc = calculator(
         device, resource_budget=ResourceBudget(host_bytes=2 << 30, device_bytes=2 << 30)
     )
@@ -206,8 +210,10 @@ def test_budgeted_complete_d4_replay_failure_and_recovery(
 ) -> None:
     if device == "cuda":
         if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-            pytest.skip("requires a finite Slurm CUDA allocation")
-        assert os.environ.get("SLURM_JOB_ID")
+            pytest.skip("requires a finite scheduler CUDA allocation")
+        assert os.environ.get("SLURM_JOB_ID") or (
+            os.environ.get("LSB_JOBID") and os.environ.get("CUDA_VISIBLE_DEVICES")
+        ), "real GPU tests require a Slurm or LSF GPU allocation"
     calc = calculator(device)
     expected = [
         calc.singlepoint(atoms, properties=("energy", "forces")) for atoms in systems()
@@ -284,8 +290,10 @@ def test_budgeted_complete_d4_replay_failure_and_recovery(
 def test_equal_share_correction_budget_boundary(library: Any, device: str) -> None:
     if device == "cuda":
         if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-            pytest.skip("requires a finite Slurm CUDA allocation")
-        assert os.environ.get("SLURM_JOB_ID")
+            pytest.skip("requires a finite scheduler CUDA allocation")
+        assert os.environ.get("SLURM_JOB_ID") or (
+            os.environ.get("LSB_JOBID") and os.environ.get("CUDA_VISIBLE_DEVICES")
+        ), "real GPU tests require a Slurm or LSF GPU allocation"
     inventory = resources_d4._ks_d4_inventory((2, 3), device, library)
     required = inventory["minimum_maximum_bytes"]
     assert required > inventory["retained_bytes"]
@@ -356,8 +364,10 @@ def test_larger_cuda_d4_fleet_keeps_bounded_optional_fallback(
 ) -> None:
     """Exercise a larger grid and provider owner, plus the old-image fallback."""
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires a finite Slurm CUDA allocation")
-    assert os.environ.get("SLURM_JOB_ID")
+        pytest.skip("requires a finite scheduler CUDA allocation")
+    assert os.environ.get("SLURM_JOB_ID") or (
+        os.environ.get("LSB_JOBID") and os.environ.get("CUDA_VISIBLE_DEVICES")
+    ), "real GPU tests require a Slurm or LSF GPU allocation"
     waters = [
         (symbol, (xyz[0] + 8 * copy, xyz[1], xyz[2]))
         for copy in range(4)
@@ -411,8 +421,10 @@ def test_global_exact_and_below_capacity_gate(library: Any, device: str) -> None
 
     if device == "cuda":
         if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-            pytest.skip("requires a finite Slurm CUDA allocation")
-        assert os.environ.get("SLURM_JOB_ID")
+            pytest.skip("requires a finite scheduler CUDA allocation")
+        assert os.environ.get("SLURM_JOB_ID") or (
+            os.environ.get("LSB_JOBID") and os.environ.get("CUDA_VISIBLE_DEVICES")
+        ), "real GPU tests require a Slurm or LSF GPU allocation"
     from itertools import product
 
     from generativeqc import ResourcePlan
@@ -565,8 +577,10 @@ def test_complete_budgeted_endpoint_against_independent_pyscf_and_d4(
     """
     if device == "cuda":
         if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-            pytest.skip("requires a Slurm-allocated CUDA device")
-        assert os.environ.get("SLURM_JOB_ID")
+            pytest.skip("requires a scheduler-allocated CUDA device")
+        assert os.environ.get("SLURM_JOB_ID") or (
+            os.environ.get("LSB_JOBID") and os.environ.get("CUDA_VISIBLE_DEVICES")
+        ), "real GPU tests require a Slurm or LSF GPU allocation"
     pyscf = pytest.importorskip("pyscf")
     from generativeqc import Atom
     from generativeqc_compiler.dft.grid import MolecularGrid

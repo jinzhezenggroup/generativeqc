@@ -51,8 +51,8 @@ struct PreparedCudaFockBinding {
  */
 PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan) noexcept;
 
-/** Device-resident occupied-factor execution binding for one full-range fitted
- * provider. This is a capability view only: the method consumer still owns the
+/** Device-resident occupied-factor execution binding for one fitted full-range
+ * J/K or exchange-only LR provider. This is a capability view only: the consumer owns the
  * proof that its canonical occupied coefficients reconstruct the supplied
  * density. No final-state or force-response lease is implied by this binding. */
 struct PreparedCudaOccupiedFockBinding {
@@ -101,11 +101,12 @@ struct PreparedCudaOccupiedFockInput {
   std::size_t alpha_rank{}, beta_rank{};
 };
 
-/** Enqueue full-range fitted J plus occupied-factor RI-K without staging the
+/** Enqueue the provider's fitted J (when present) and occupied-factor RI-K without staging the
  * canonical coefficients through host memory. The caller must prove that the
  * factors belong to the exact density pointers supplied here. Unsupported
  * provider/model compositions fail closed; this call never creates a final
- * projection lease by itself. */
+ * projection lease by itself. Exchange-only LR requires a null Coulomb output
+ * and consumes only its independent omega-specific fitted source. */
 generativeqc_status enqueue_prepared_cuda_occupied_fock(
     const PreparedFockPlan& plan, const double* density, const double* beta,
     std::size_t matrix_elements, const PreparedCudaOccupiedFockInput& occupied, double* coulomb,

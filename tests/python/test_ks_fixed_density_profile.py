@@ -144,6 +144,9 @@ class OwnedCudaEvent {
 };
 }
 namespace runtime = generativeqc::runtime;
+namespace generativeqc::runtime::cuda_trace {
+void trace_counter(const char*, std::uint64_t value) { assert(value == 0); }
+}
 struct RangeEvent {
   char id;
   char get() const { return id; }
@@ -175,6 +178,13 @@ struct Provider {
   Direct* cuda_direct_source() { return mode == 4 || mode >= 21 ? nullptr : &direct; }
   Fitted* cuda_fitted_source() { return mode == 4 || mode >= 21 ? &fitted : nullptr; }
 };
+// Fixed-density profiling supplies no occupied-factor lease. Keep the optional
+// production dispatch callable, but fail if profiling starts using that route.
+struct PreparedCudaOccupiedFockInput {};
+bool prepared_cuda_occupied_fock_binding(Provider&) { return false; }
+template<class... Args> int enqueue_prepared_cuda_occupied_fock(Args&&...) {
+  throw std::logic_error("fixed-density profile used an occupied factor");
+}
 struct JkTermSelection { bool coulomb, exchange; };
 enum class FockMatrixLayout { RowMajor };
 int enqueue(char stage, const double* density, const double* beta, std::size_t matrix,
@@ -293,6 +303,7 @@ struct Impl {
   } dft_diagnostic; } output;
   bool final_state_ready{true}, final_frame_ready{true}, final_stationary_weights_ready{true};
   bool final_fitted_projection_ready{true};
+  bool final_occupied_factor_ready{true};
   unsigned final_generation{5};
   int identity{5}, device{2}, stream{7}, primary_error{}, range_error{};
   unsigned spins{1};
@@ -388,6 +399,7 @@ int main(int argc, char** argv) {
     assert(p.final_frame_ready == preflight_failure);
     assert(p.final_stationary_weights_ready == preflight_failure);
     assert(p.final_fitted_projection_ready == preflight_failure);
+    assert(p.final_occupied_factor_ready == preflight_failure);
     assert(p.final_generation == (preflight_failure ? 5U : 0U));
     assert(drains == (preflight_failure ? 0 : 1));
     if (preflight_failure) assert(submissions == 0);

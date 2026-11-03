@@ -36,6 +36,10 @@ struct DfShellBasisView {
   std::size_t force_shell_stride{};
   double force_shell_budget{};
   unsigned long long* force_shell_counts{};
+  // Zero selects Coulomb; positive omega selects erf(omega*r)/r. Every
+  // clipped/signature view retains the same operator as its response owner.
+  // LR currently uses strict polynomial moments without Coulomb-only screens.
+  double range_omega{};
 };
 
 /** Ordered dense reference, folded dense shell pairs, or folded packed AOs.
