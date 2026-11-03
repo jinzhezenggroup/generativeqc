@@ -379,7 +379,9 @@ def test_pr_master_trusted_snapshot_fallback_is_cache_miss_only() -> None:
     assert 0 < int(_field(download, "timeout-minutes")) <= 3
     assert _field(download, "digest-mismatch") == "error"
     assert _field(download, "repository") == "${{ github.repository }}"
-    assert _field(download, "run-id") == "${{ steps.trusted_cuda_ccache.outputs.run_id }}"
+    assert (
+        _field(download, "run-id") == "${{ steps.trusted_cuda_ccache.outputs.run_id }}"
+    )
     stage = _field(download, "path")
     assert stage == _field(activate, "TRUSTED_CUDA_CCACHE_MISS_DIR")
     assert stage == _field(discard, "TRUSTED_CUDA_CCACHE_MISS_DIR")
