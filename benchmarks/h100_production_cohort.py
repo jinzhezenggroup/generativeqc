@@ -13,6 +13,8 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
+from tools.restore_retained_evidence import read_evidence_bytes
+
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT
 DIRECTORY = ROOT / "benchmarks/results/h100-sm90-cd2b-guards-20261102"
@@ -58,6 +60,7 @@ READERS = {
     "replay-reference-six-v6.py",
 }
 REQUIRED_FILES = {
+    "historical-snapshot.json",
     "reference-six-v5-completed.tar.xz",
     "reference-six-v5-download-manifest.json",
     "nsys-v1-analysis-download.json",
@@ -115,26 +118,24 @@ def artifact(name: str) -> Path:
 
 
 def artifact_bytes(name: str) -> bytes:
-    """Read exact current bytes or only the two declared local-Git archive parts."""
+    """Recover only the explicitly retained trace parts from local Git history."""
     path = artifact(name)
-    if path.is_symlink():
+    if path.is_symlink() or (path.exists() and not path.is_file()):
         raise ValueError("Support cohort bytes differ: " + name)
-    if path.exists():
+    if path.is_file():
         return path.read_bytes()
-    if name not in {"nsys-v1-analysis.tar.xz.part00", "nsys-v1-analysis.tar.xz.part01"}:
+    if name not in {
+        "nsys-v1-analysis.tar.xz.part00",
+        "nsys-v1-analysis.tar.xz.part01",
+    }:
         raise ValueError("Support cohort bytes differ: " + name)
-    spec = importlib.util.spec_from_file_location(
-        "_h100_history", REPO / "tools/restore_retained_evidence.py"
-    )
-    history = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(history)
-    manifest = DIRECTORY / "historical.manifest.json"
-    entries = history._records(manifest)
-    relative = "benchmarks/results/h100-sm90-cd2b-guards-20261102/" + name
-    matches = [entry for entry in entries if entry["path"] == relative]
-    if len(matches) != 1:
-        raise ValueError("Support cohort bytes differ: " + name)
-    return history._read(matches[0])
+    try:
+        return read_evidence_bytes(
+            REPO / "benchmarks/results/h100-sm90-cd2b-guards-20261102" / name,
+            manifest=DIRECTORY / "historical-snapshot.json",
+        )
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise ValueError(f"Support cohort bytes differ: {name}: {error}") from error
 
 
 def checked_publication() -> dict:

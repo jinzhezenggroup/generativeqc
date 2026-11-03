@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 def test_automatic_tile_preserves_overrides_and_resource_fallbacks(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """Only large fitted strict-FP64 RKS on full-rate FP64 devices may grow."""
+    """CUDA XC defaults to 1024 without a profile, shape or FP64-device gate."""
     unit = tmp_path / "tiles.cpp"
     unit.write_text(
         r"""
@@ -26,7 +26,7 @@ int main() {
   while (std::cin >> requested >> fitted >> unconstrained >> nao >> points
                  >> nonlocal >> major >> ratio)
     std::cout << generativeqc::dft::automatic_ks_scf_tile(
-        requested, fitted, unconstrained, nao, points, nonlocal, major, ratio) << '\n';
+        requested, fitted, unconstrained, nao, points, nonlocal, major, ratio, false) << '\n';
 }
 """
     )
@@ -44,15 +44,15 @@ int main() {
     for tile in (1, 31, 256, 512, 4096):
         cases.append(((tile, 0, 0, 1, 1, 0, 0, 0), tile))
     for index, value, expected in (
-        (1, 0, 256),
+        (1, 0, 1024),
         (2, 0, 256),
-        (3, 511, 256),
-        (4, (1 << 19) - 1, 256),
+        (3, 511, 1024),
+        (4, (1 << 19) - 1, 1024),
         (5, 1, 512),
-        (6, 7, 256),
-        (6, 0, 256),
-        (7, 0, 256),
-        (7, 64, 256),
+        (6, 7, 1024),
+        (6, 0, 1024),
+        (7, 0, 1024),
+        (7, 64, 1024),
     ):
         row = list(eligible)
         row[index] = value
@@ -60,7 +60,11 @@ int main() {
     cases.extend(
         [
             ((0, 1, 1, 512, 1 << 19, 0, 9, 2), 1024),
+            ((0, 0, 1, 1, 1, 0, 12, 64), 1024),
+            ((0, 0, 0, 768, 1 << 20, 0, 12, 64), 256),
             ((0, 1, 1, 768, 1 << 20, 1, 12, 64), 256),
+            ((0, 0, 1, 768, 1 << 20, 1, 8, 2), 256),
+            ((0, 1, 1, 511, 1 << 20, 1, 8, 2), 256),
         ]
     )
     result = subprocess.run(
@@ -133,26 +137,23 @@ int main() {
     assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]
 
 
-def test_unqualified_direct_keeps_native_defaults_on_every_gpu_generation(
+def test_unqualified_direct_keeps_native_defaults_without_reverting_other_cuda_defaults(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """GPU compute capability alone is not evidence for a larger Direct tile."""
+    """Exercise Direct qualification separately from the merged non-Direct default."""
     unit = tmp_path / "direct_tiles.cpp"
     unit.write_text(
         r"""
 #include <iostream>
 #include "dft/ks_tile_policy.hpp"
 int main() {
-  std::size_t requested, atoms, nao, points;
-  bool qualified, unconstrained, all_electron;
+  std::size_t requested, nao, points;
+  bool direct, fitted, unconstrained, nonlocal;
   int major, ratio;
-  while (std::cin >> requested >> qualified >> unconstrained >> all_electron
-                 >> atoms >> nao >> points >> major >> ratio) {
+  while (std::cin >> requested >> direct >> fitted >> unconstrained >> nao >> points
+                 >> nonlocal >> major >> ratio)
     std::cout << generativeqc::dft::automatic_ks_scf_tile(
-        requested, qualified, unconstrained, nao, points, false, major, ratio) << ' ';
-    std::cout << generativeqc::dft::automatic_ks_force_tile(
-        qualified, unconstrained, all_electron, 2, atoms, nao, points, major) << '\n';
-  }
+        requested, fitted, unconstrained, nao, points, nonlocal, major, ratio, direct) << '\n';
 }
 """
     )
@@ -164,18 +165,18 @@ int main() {
             "-I" + str(Path(__file__).resolve().parents[2] / "src"),
         ),
     )
-    cases: list[tuple[tuple[int, ...], tuple[int, int]]] = []
+    cases: list[tuple[tuple[int, ...], int]] = []
     for major, ratio in ((0, 0), (7, 2), (8, 2), (9, 2), (12, 64)):
-        # No performance qualification: neither tile grows, even on fast FP64 GPUs.
-        cases.append(((0, 0, 1, 1, 96, 768, 1 << 20, major, ratio), (256, 256)))
-        # An explicitly selected SCF tile still takes priority. Force inheritance
-        # is resolved by the enclosing owner before this automatic force policy.
-        cases.append(((1024, 0, 1, 1, 96, 768, 1 << 20, major, ratio), (1024, 256)))
+        cases.append(((0, 1, 0, 1, 768, 1 << 20, 0, major, ratio), 256))
+        cases.append(((1024, 1, 0, 1, 768, 1 << 20, 0, major, ratio), 1024))
     cases.extend(
         [
-            # Existing fitted route remains independently eligible.
-            ((0, 1, 1, 1, 96, 768, 1 << 20, 8, 2), (1024, 1024)),
-            ((0, 1, 1, 1, 96, 768, 1 << 20, 12, 64), (256, 1024)),
+            ((0, 1, 0, 0, 768, 1 << 20, 0, 8, 2), 256),
+            ((0, 1, 0, 1, 768, 1 << 20, 1, 8, 2), 256),
+            ((0, 0, 0, 1, 1, 1, 0, 12, 64), 1024),
+            ((0, 0, 1, 1, 768, 1 << 20, 0, 12, 64), 1024),
+            ((0, 0, 1, 1, 768, 1 << 20, 1, 8, 2), 512),
+            ((0, 0, 1, 0, 768, 1 << 20, 0, 8, 2), 256),
         ]
     )
     inputs = "".join(" ".join(map(str, row)) + "\n" for row, _ in cases)
@@ -187,5 +188,4 @@ int main() {
         check=True,
         timeout=15,
     )
-    actual = [tuple(map(int, line.split())) for line in result.stdout.splitlines()]
-    assert actual == [expected for _, expected in cases]
+    assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]

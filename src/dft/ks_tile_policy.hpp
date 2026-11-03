@@ -6,19 +6,21 @@
 
 namespace generativeqc::dft {
 
-/** Resolve the public automatic SCF tile without changing an explicit request.
- * The larger tiles amortize launch and mapped FP64 contraction overhead for
- * qualified fitted RKS grids. Direct XC schedules use a conservative native
- * default unless a measured exact-workload profile or an explicit tile selects
- * another size. Nonlocal work has a different fitted optimum.
- * CPU, small, mixed, unrestricted, constrained, and unknown device domains
- * retain 256. Force tiling is independently resolved by the enclosing owner.
+/** Resolve the public automatic CUDA SCF tile without changing an explicit request.
+ * Non-Direct-RKS semilocal XC retains the general 1024-point CUDA default.
+ * Direct RKS stays at 256 without exact-workload performance qualification;
+ * hardware generation alone cannot supply that qualification.
+ * Numeric resource promises retain their quoted 256-point owner.
+ * Nonlocal work retains its separately measured fitted/full-rate-FP64 policy;
+ * CPU callers do not consult this CUDA policy.
  */
 constexpr std::size_t automatic_ks_scf_tile(std::size_t requested, bool qualified_rks_fp64,
                                             bool unconstrained, std::size_t nao, std::size_t points,
-                                            bool nonlocal, int compute_major,
-                                            int fp32_fp64_ratio) noexcept {
+                                            bool nonlocal, int compute_major, int fp32_fp64_ratio,
+                                            bool direct_rks) noexcept {
   if (requested) return requested;
+  if (direct_rks) return 256;
+  if (unconstrained && !nonlocal) return 1024;
   if (!qualified_rks_fp64 || !unconstrained || nao < 512 || points < (1U << 19) ||
       !runtime::cuda_fp64_matrix_acceleration_supported(compute_major, fp32_fp64_ratio))
     return 256;

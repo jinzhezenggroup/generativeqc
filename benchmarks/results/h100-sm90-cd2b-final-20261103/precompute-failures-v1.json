@@ -1,0 +1,65 @@
+{
+  "scope": "Two failed precompute launches; zero molecular E/F and zero primary attempts. Exact distinct original records and old producers included. Full v2 archive ae69c942dd229fe91a75e6c2b1ab12455ff2350f14a64fd08bd2550041093607 remains in private task retention; it is not bundled here. Common scientific inputs/admissions are retained by the complete successful final archive.",
+  "files": {
+    "v1/campaign.json": {
+      "bytes": 207,
+      "sha256": "e30338cebf8e0761508d17db4d9ea46c8a0d8e92a315ba7ac24d97ec1b3cb745"
+    },
+    "v1/platform-status.json": {
+      "bytes": 406,
+      "sha256": "7f2f8bcba49fad7b81cc8fb7ac3cf6b02268dc3c084cd356a4369818c6e49d57"
+    },
+    "v1/platform.log": {
+      "bytes": 3278,
+      "sha256": "0ee91859e30d4fa0564106a90bb7c6e618174de05683b04c5f508d878130d151"
+    },
+    "v1/recovery.json": {
+      "bytes": 940,
+      "sha256": "fc69fc9b9f2e82191c8fc0a779dbc535842c8a887fe49aacf3637d3c2d5046af"
+    },
+    "v2/run-final-pairs-v7.py": {
+      "bytes": 18221,
+      "sha256": "3ded140a6dc14aeb391ff69b735aa4968dddebc1091a62b6d7c1640711468edb"
+    },
+    "v2/run-final-pairs-v7-job.sh": {
+      "bytes": 622,
+      "sha256": "4917b02db89d6c5a91b3cc5ba8d590c78b8b2591b773217f1ef9b576c250350a"
+    },
+    "v2/run-final-pairs-v8.py": {
+      "bytes": 18221,
+      "sha256": "4977adb073c21af440121b1f09f205c3575e45512d9ace8c128fd7d36e278167"
+    },
+    "v2/run-final-pairs-v8-job.sh": {
+      "bytes": 622,
+      "sha256": "20d2e77cb049aaced32611a754e48b9aa642b06f924f28ca588e78c74b2b8b7a"
+    },
+    "v2/final-reference-runtime-v1.py": {
+      "bytes": 5219,
+      "sha256": "017732f12dc475562706dc4669493b3b0ffeded503895b66fc6464db8b31ca22"
+    },
+    "v2/final-pairs-v2-precompute-failure-v1.json": {
+      "bytes": 1020,
+      "sha256": "717b85f4571db660d61fd8ffd14cca135284aa9be45215587ed9c410a12861d2"
+    },
+    "v2/final-pairs-v2-misplaced-runtime-v1.json": {
+      "bytes": 101308,
+      "sha256": "350794b8dc5763d3f3f6d29bb51debf0dada645c5c33fe0aa87a48c7166d0536"
+    },
+    "v2/final-pairs-v2-terminal-status.json": {
+      "bytes": 406,
+      "sha256": "7c6951ff3ca12f0d3c5a3bde389d8726cb0aa485879d49582e25a496e5658a2b"
+    },
+    "v2/campaign.json": {
+      "bytes": 9628,
+      "sha256": "194830be3161b1c018a70d26981e93c0000a8b508a02ea808502e7d3c1d44ad9"
+    },
+    "v2/reference-runtime.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "v2/reference-runtime.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

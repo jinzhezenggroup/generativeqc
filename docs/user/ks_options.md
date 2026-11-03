@@ -211,40 +211,37 @@ the [complete endpoint and accuracy qualification](../maintainer/performance_eng
 ## SCF and force tile policies
 
 `KsOptions.tile_points=None` (the default) selects SCF AO/grid/XC panels during
-native preparation. Large device-fused, density-fitted, strict-FP64 RKS workloads
-with gradient-dependent XC use 1024 points on devices with FP64 matrix acceleration
-and full-rate FP64 throughput; nonlocal correlation uses 512. Eligibility requires
-at least 512 AOs, 524288 grid points and 1 GiB of free device memory. CPU, small,
-unrestricted, mixed-precision, low-FP64-throughput and unknown devices retain 256.
+native preparation. Ordinary non-Direct-RKS CUDA semilocal XC, including fitted
+and unrestricted calculations, uses **1024 points** without a local profile,
+minimum system size or GPU FP64-throughput restriction. CPU retains 256.
 Numeric capacity promises, active resource ledgers and reference-memory budgets
 also retain 256. An automatically enlarged owner that cannot allocate storage
 retries preparation once at 256; other failures propagate. A positive integer
 always preserves the explicit SCF request.
 
-Fully Direct RKS uses the conservative **256-point native automatic default**
-on every GPU, without an A100 name or SM80 generation allowlist. A GPU's
-compute capability and FP64 ratio establish hardware legality, not whether
-larger tiles improve the **complete energy + force** endpoint. The previously
-measured A100 1024-point default is therefore no longer promoted globally:
-**A100 may run slower without a profile than before this policy correction**.
-This change does not alter the density-fitted automatic tile policy.
+Nonlocal CUDA calculations retain their separate policy: large device-fused,
+density-fitted, strict-FP64 RKS with gradient-dependent XC uses 512 SCF points on
+full-rate FP64 matrix devices, requiring at least 512 AOs, 524288 grid points
+and 1 GiB free device memory. Other nonlocal owners retain 256.
 
-For performance-qualified Direct workloads, use a matching local DFT profile
-created by [generativeqc-tune](local_autotuning.md#tune-a-dft-workload), or pass
-explicit `tile_points` and `force_tile_points` when their resource envelope has
-been verified. The tuner measures 128/256/512/1024 candidates (quick mode),
-requires independent numerical and resource checks plus complete E+F speedup,
-and reuses only an exact source/device/basis/geometry/control match. A missing,
-stale, or rejected profile leaves the native Direct default unchanged. Profile
-tuning is explicit and never runs implicitly during cold-start preparation.
-The [historical A100 Direct qualification](../../.agents/notes/implemented/performance/2026-11-03-a100-direct-automatic-tiles.md)
-retains the scoped 1024-point evidence; it is not transferable to H100, A800,
-RTX 5090, or arbitrary input molecules.
+Fully Direct RKS uses the conservative **256-point native automatic default**
+on every GPU, without an A100-name or SM80-generation allowlist. Hardware
+legality does not establish a complete energy-plus-force speedup. This Direct policy
+does not revert the merged 1024-point default for other semilocal CUDA owners;
+**A100 Direct may still run slower without a profile than before this correction**.
+Use a matching [local DFT profile](local_autotuning.md#tune-a-dft-workload) or an
+explicit SCF/force tile only within its verified resource envelope. Profile tuning
+is explicit, requires independent numerical and complete-endpoint checks, and
+never runs implicitly during preparation. Historical A100 qualification remains
+[source- and workload-scoped](../../.agents/notes/implemented/performance/2026-11-03-a100-direct-automatic-tiles.md).
 
 `force_tile_points` independently bounds CUDA stationary-force batches (1..4096
 points). When omitted, an explicit SCF tile is inherited. With automatic SCF,
-large qualified strict-FP64, gradient-dependent RKS owners independently use 1024
-force points on compute capability 8 or newer. This requires the same AO/grid
+ordinary non-Direct-RKS CUDA semilocal XC also defaults to 1024 force points,
+so a bare call uses the same two-consumer schedule as an explicit 1024-point
+SCF tile. Fully Direct RKS retains 256 automatic force points as well.
+Nonlocal large fitted strict-FP64, gradient-dependent RKS owners independently
+use 1024 force points on compute capability 8 or newer. This requires the same AO/grid
 size and free-memory thresholds, all-electron basis shells through d, 48–128
 atoms, native stationary admission and no resource promise. Other owners use
 256. An automatic force owner that exceeds an allowance or cannot allocate
@@ -252,7 +249,7 @@ storage drains its controller and retries once at 256 with the same final-state
 token. Explicit bounds never silently shrink. CPU execution uses the SCF tile.
 Neither control changes quadrature, precision or screening thresholds.
 
-For an independently qualified larger-tile workload, request the size explicitly:
+An explicit force tile can still differ from the SCF tile:
 
 ```python
 options = KsOptions(
