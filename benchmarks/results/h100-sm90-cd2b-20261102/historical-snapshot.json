@@ -1,0 +1,37 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "5efc730f4c6d809cc4a31d23db4cdb5f87dae6e3",
+  "file_count": 4,
+  "total_bytes": 1365031,
+  "purpose": "Exact original frozen-CD2B build/DF44/screen66/audit payloads retained in already merged local Git. Original scientific receipts, full vectors, negative results and CPU proof bytes remain recoverable; this creates room for DB36 safety evidence without a larger budget or external backup.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-20261102/production-build-v1-metadata.tar.xz",
+      "bytes": 305620,
+      "sha256": "7094d35e3550f8fa718d06246b32e4f22403b0427f7261c2b6442b9feeb80130",
+      "git_blob_sha1": "30ee24be843b7a9d1c3884aa8592ecdeee9390a2",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-20261102/df-molecular-v1-completed.tar.xz",
+      "bytes": 450284,
+      "sha256": "e825d613530aa72486f6f7037ac1cd5d08c7bd773b78b499e7f6c9065cee558c",
+      "git_blob_sha1": "e7b0a9e4e1a94409a781baadb8d895844b9b5b1f",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-20261102/screening-v1-completed.tar.xz",
+      "bytes": 415028,
+      "sha256": "555cec1d0b368db8e063909ac22c05681a5a5be65881b9aeeecc5d440c9d5689",
+      "git_blob_sha1": "680b63d890e5e978de7a90700d9c7a567459813d",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-20261102/audit/EXPERIMENT_AUDIT.json",
+      "bytes": 194099,
+      "sha256": "0e3967ce5d3258b8145eb6136131126b8f0b4f7e45768c3bb6f73ab853ea2190",
+      "git_blob_sha1": "736bad6aa5ae7398720247a44ecdeae11e103dbc",
+      "git_mode": "100644"
+    }
+  ]
+}

@@ -327,7 +327,8 @@ def replay(
         for binding in base_publication["files"]:
             name = binding["path"]
             if Path(name).parent == Path("."):
-                copy_exact(BASE / name, task / name)
+                with (task / name).open("xb") as stream:
+                    stream.write(base.artifact_bytes(BASE, name))
         build = json.loads(
             (task / "production-build-v1-download-manifest.json").read_text()
         )
