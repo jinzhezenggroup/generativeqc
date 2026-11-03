@@ -111,7 +111,10 @@ def report(folder: Path) -> dict:
         if (folder / "sha256.txt").exists()
         else sorted(p.parent for p in folder.glob("*/sha256.txt"))
     ):
-        bundle, recovered = load(part)
+        snapshot = part / "historical-snapshot.json"
+        bundle, recovered = load(
+            part, historical_manifest=snapshot if snapshot.exists() else None
+        )
         archives.extend(bundle["input_archives"])
         omitted.extend(bundle.get("intrusive_stream_inventory", []))
         for name, text in recovered.items():

@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "8c6c6208bb1d68c96e62ed2d15ee561fcc784081",
+  "file_count": 1,
+  "total_bytes": 868556,
+  "purpose": "Exact original source-bound A100 molecular receipts, recovered offline from existing merged Git history; all texts, independent vectors, failures and acceptance gates remain unchanged.",
+  "files": [
+    {
+      "path": "benchmarks/results/a100-native-stages-20261102/molecular/receipts.json.xz",
+      "bytes": 868556,
+      "sha256": "4258272718f942b829e0653f46d89a1702a5feeed8b44e51928e344372c5ee9f",
+      "git_blob_sha1": "680781b3809b3c1e7f2ab03cf2eaeb1aab7b7190",
+      "git_mode": "100644"
+    }
+  ]
+}
