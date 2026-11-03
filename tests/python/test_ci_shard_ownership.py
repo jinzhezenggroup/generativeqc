@@ -729,7 +729,7 @@ def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     # progress still prints failures and retains the slowest-case report.
     assert 'pytest "${collection_targets[@]}" -q' in source
     assert "--durations=25" in source
-    assert "-n 4 --dist=\"$dist_mode\"" in source
+    assert '-n 4 --dist="$dist_mode"' in source
     assert "source .github/scripts/ci_collect_python_shard.sh" in source
     assert '"${collection_args[@]}"' in source
     _assert_timed_diagnostics_contract(source)
