@@ -97,6 +97,7 @@
     "generativeqc.ResourceRequest": "generativeqc_compiler/common/resources.py:ResourceRequest",
     "generativeqc.ResourceSession": "generativeqc_compiler/common/resources.py:ResourceSession",
     "generativeqc.Result": "generativeqc/_api_types.py:Result",
+    "generativeqc.ElectronicDensity": "generativeqc/_electronic_properties.py:ElectronicDensity",
     "generativeqc.ScfEffortDecision": "generativeqc/force_aware_scf.py:ScfEffortDecision",
     "generativeqc.ScfEffortLevel": "generativeqc/force_aware_scf.py:ScfEffortLevel",
     "generativeqc.ScfEffortState": "generativeqc/force_aware_scf.py:ScfEffortState",
@@ -444,6 +445,44 @@
     "generativeqc.torch.integral_energy": "generativeqc/torch.py:integral_energy"
   },
   "declarations": {
+    "generativeqc/_electronic_properties.py:ElectronicDensity": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/electronic_properties.md#python-electronic-values",
+        "ownership": "docs/user/electronic_properties.md#python-electronic-ownership"
+      }
+    },
+    "generativeqc/_electronic_properties.py:ElectronicDensity.evaluate": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/electronic_properties.md#python-electronic-values",
+        "errors": "docs/user/electronic_properties.md#python-electronic-errors",
+        "ownership": "docs/user/electronic_properties.md#python-electronic-ownership",
+        "backends": "docs/user/electronic_properties.md#python-electronic-backends"
+      }
+    },
+    "generativeqc/_electronic_properties.py:ElectronicDensity.write_cube": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/electronic_properties.md#python-electronic-values",
+        "errors": "docs/user/electronic_properties.md#python-electronic-errors",
+        "ownership": "docs/user/electronic_properties.md#python-electronic-ownership",
+        "backends": "docs/user/electronic_properties.md#python-electronic-backends"
+      }
+    },
+    "generativeqc/calculator.py:Calculator.supported_electronic_properties": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
     "generativeqc/_api_types.py:Atom": {
       "kind": "class",
       "profile": "record",
@@ -506,6 +545,13 @@
         "behavior": "docstring",
         "ownership": "docs/reference/python_execution_contracts.md#python-results-ownership",
         "values": "docs/reference/python_execution_contracts.md#python-results-values"
+      }
+    },
+    "generativeqc/_api_types.py:Result.dipole_debye": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
       }
     },
     "generativeqc/_api_types.py:Shell": {
