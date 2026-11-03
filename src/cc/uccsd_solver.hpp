@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
+#include <vector>
 
 #include "cc/solver.hpp"
 #include "hf/reference.hpp"
@@ -25,11 +27,14 @@ struct UnrestrictedSolve {
   posthf::ProviderWork provider_work;
   double problem_seconds{}, solver_seconds{}, triples_seconds{};
   double iteration_seconds{}, replay_seconds{}, update_seconds{}, diis_seconds{};
+  // Retained only for an explicitly admitted analytic response consumer.
+  std::array<std::vector<double>, 5> amplitudes;
 };
 
 /** Admission precedes reference execution and uses maximum configured work.
- * This deliberately bounded conventional owner supports at most twelve AOs.
- * Exceeding its complete numeric/work domain is an error, never a fallback. */
+ * There is no fixed AO-count cutoff: checked shape arithmetic and complete
+ * numeric/work admission bound execution. Exceeding those resource limits is
+ * an error, never authorization to change the backend or scientific model. */
 std::size_t unrestricted_capacity(std::size_t nbf, std::size_t alpha, std::size_t beta,
                                   const SolverOptions& options, bool triples,
                                   std::size_t reference_capacity);
@@ -40,7 +45,8 @@ std::size_t unrestricted_capacity(std::size_t nbf, std::size_t alpha, std::size_
 UnrestrictedSolve solve_unrestricted(const hf::UnrestrictedPhysicalReference& reference,
                                      const integrals::ElectronInteractionSource& source,
                                      const SolverOptions& options, bool triples,
-                                     std::size_t reference_capacity);
+                                     std::size_t reference_capacity, bool retain_amplitudes = false,
+                                     bool cuda = false, int device = 0);
 
 const char* unrestricted_equation_hash() noexcept;
 const char* unrestricted_triples_hash() noexcept;

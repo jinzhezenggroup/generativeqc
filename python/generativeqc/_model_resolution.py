@@ -173,6 +173,7 @@ class ModelResolutionInput:
     multiplicity: int
     density_fitting: bool
     density_fitting_relative_threshold: float | None
+    full_df_reference: bool = False
 
 
 def resolve_model_identity(request: ModelResolutionInput) -> typing.Any:
@@ -226,6 +227,11 @@ def resolve_model_identity(request: ModelResolutionInput) -> typing.Any:
         metric_relative_threshold=(
             request.density_fitting_relative_threshold if fitted else None
         ),
+        reference_approximation=(
+            "density_fitting" if request.full_df_reference else "conventional"
+        )
+        if fitted and resolved_method in ("ump2", "uccsd", "uccsd(t)")
+        else None,
     )
 
 

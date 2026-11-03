@@ -1244,13 +1244,16 @@ ScfResult run_prepared_fock_strategy(const PreparedFockPlan& plan, const ScfOpti
   if (strategy.spec.spin == FockSpin::Restricted &&
       (system.electron_count <= 0 || system.electron_count % 2 || system.multiplicity != 1))
     throw std::invalid_argument("restricted Fock SCF requires a closed-shell electron count");
-  if (options.export_physical_reference && strategy.spec.spin == FockSpin::Unrestricted &&
-      (strategy.backend != FockBackend::Cpu ||
-       strategy.spec.coulomb.approximation != FockApproximation::Exact ||
-       strategy.spec.exchange.approximation != FockApproximation::Exact ||
-       options.screening_tolerance != 0))
-    throw std::invalid_argument(
-        "physical UHF reference requires exact unscreened CPU Fock execution");
+  if (options.export_physical_reference && strategy.spec.spin == FockSpin::Unrestricted) {
+    const auto approximation = strategy.spec.coulomb.approximation;
+    auto expected = make_hf_fock_spec(FockSpin::Unrestricted, approximation);
+    expected.derivative_order = strategy.spec.derivative_order;
+    if ((approximation != FockApproximation::Exact &&
+         approximation != FockApproximation::DensityFitted) ||
+        strategy.spec != expected || options.screening_tolerance != 0)
+      throw std::invalid_argument(
+          "physical UHF reference requires one consistent unscreened HF Hamiltonian");
+  }
   if (options.preliminary_guess) {
     ScfOptions target_options = options;
     target_options.preliminary_guess.reset();

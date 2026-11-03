@@ -141,13 +141,21 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
             if self.method == "ccsd(t)" and kwargs.get("charge") == 2:
                 raise RuntimeError("injected CC failure")
             basis_scale = 1.0 if self.basis.name == "sto-3g" else 2.0
-            method_scale = {"rhf": 1.0, "mp2": 1.2, "ccsd(t)": 1.3, "df-ccsd(t)": 1.3}[
-                self.method
-            ]
+            method_scale = {
+                "rhf": 1.0,
+                "uhf": 1.0,
+                "mp2": 1.2,
+                "ump2": 1.2,
+                "ccsd(t)": 1.3,
+                "uccsd(t)": 1.3,
+                "df-ccsd(t)": 1.3,
+            }[self.method]
             scale = basis_scale * method_scale
             coordinates = np.asarray([atom.position for atom in atoms])
             self.event["properties"] = properties
             self.event["options"] = self.options
+            self.event["charge"] = kwargs.get("charge")
+            self.event["multiplicity"] = kwargs.get("multiplicity")
             requested = self._correlation_preconvergence == "mixed" or (
                 self._correlation_preconvergence == "auto"
                 and "_correlation_convergence_budget" in self.options
@@ -345,7 +353,6 @@ def test_basis_contracts(bases: tuple[CBSBasis, CBSBasis]) -> None:
 @pytest.mark.parametrize(
     "kwargs",
     (
-        {"multiplicity": 3},
         {"multiplicity": True},
         {"charge": True},
         {"properties": ()},
@@ -360,6 +367,122 @@ def test_invalid_execution_rejects_before_native(
     with pytest.raises((ValueError, TypeError, NotImplementedError)):
         CCSDTCBSCalculator(bases).singlepoint(ATOMS, **kwargs)
     assert not fake_native
+
+
+@pytest.mark.parametrize("charge,multiplicity", ((1, 2), (0, 3)))
+@pytest.mark.parametrize("hf_scheme", ("exponential", "highest"))
+@pytest.mark.parametrize("correction", (None, "def2-svp", "def2-tzvp"))
+def test_open_shell_composes_unrestricted_native_groups(
+    bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    charge: int,
+    multiplicity: int,
+    hf_scheme: str,
+    correction: str | None,
+) -> None:
+    """Spin selection preserves weights, grouping, charge and bounded ownership."""
+    workflow = CCSDTCBSCalculator(
+        bases, correction_basis=correction, hf_extrapolation=hf_scheme
+    )
+    result = workflow.singlepoint(
+        iter(ATOMS), charge=charge, multiplicity=multiplicity, properties=("energy",)
+    )
+    assert {component.method for component in result.components} == {
+        "uhf",
+        "ump2",
+        "uccsd(t)",
+    }
+    assert all(event["charge"] == charge for event in fake_native)
+    assert all(event["multiplicity"] == multiplicity for event in fake_native)
+    assert all(event["properties"] == ("energy",) for event in fake_native)
+    assert all(event["closed"] for event in fake_native)
+    assert len(result.execution_groups) == (3 if correction == "def2-tzvp" else 2)
+    assert result.energy == pytest.approx(
+        math.fsum(
+            component.coefficient * component.result.energy
+            for component in result.components
+        )
+    )
+    assert result.energy == pytest.approx(
+        result.hf_energy + result.mp2_correlation_energy + result.delta_ccsdt_energy
+    )
+    assert result.forces is result.hf_forces is None
+    assert result.mp2_correlation_forces is result.delta_ccsdt_forces is None
+    assert result.basis_metadata["spin_reference"] == "uhf"
+    assert result.basis_metadata["charge"] == charge
+    assert result.basis_metadata["multiplicity"] == multiplicity
+    assert result.convergence["arithmetic"] == "fp64"
+    assert result.convergence["selected"] == "strict_fp64"
+    assert result.convergence["reason"] == "unrestricted_strict_convergence"
+    assert result.convergence["scale"] == 0
+    assert all(
+        "_correlation_convergence_budget" not in event["options"]
+        for event in fake_native
+    )
+    assert result.convergence["lambda_arithmetic"] == "not_requested"
+
+
+def test_open_shell_df_uses_unrestricted_grouped_endpoints(
+    bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+) -> None:
+    """DF changes only the selected operator, never the spin or grouping policy."""
+    result = CCSDTCBSCalculator(
+        bases, device="cuda", auxiliary_bases=("sto-3g", "def2-svp")
+    ).singlepoint(ATOMS, charge=1, multiplicity=2)
+    assert result.converged
+    assert {event["method"] for event in fake_native} == {"uccsd(t)", "ump2"}
+    assert all(
+        event["options"]["density_fitting"] == "correlation_cuda"
+        for event in fake_native
+    )
+
+
+def test_open_shell_invalid_electron_state_rejects_before_native(
+    bases: tuple[CBSBasis, CBSBasis], fake_native: list[dict]
+) -> None:
+    """An energy-only request still checks electron count and spin parity."""
+    with pytest.raises(ValueError):
+        CCSDTCBSCalculator(bases).singlepoint(
+            ATOMS, multiplicity=2, properties=("energy",)
+        )
+    assert not fake_native
+
+
+def test_one_workflow_can_alternate_closed_and_open_shell(
+    bases: tuple[CBSBasis, CBSBasis], fake_native: list[dict]
+) -> None:
+    """Spin-specific method selection is per call, not mutable workflow state."""
+    workflow = CCSDTCBSCalculator(bases)
+    for multiplicity in (1, 3, 1):
+        result = workflow.singlepoint(
+            ATOMS, multiplicity=multiplicity, properties=("energy",)
+        )
+        assert result.basis_metadata["spin_reference"] == (
+            "rhf" if multiplicity == 1 else "uhf"
+        )
+        assert result.convergence["selected"] == (
+            "relaxed" if multiplicity == 1 else "strict_fp64"
+        )
+    assert all(event["closed"] for event in fake_native)
+
+
+def test_open_shell_preserves_explicit_tighter_controls(
+    bases: tuple[CBSBasis, CBSBasis], fake_native: list[dict]
+) -> None:
+    """Strict unrestricted admission is a ceiling, not a replacement for input."""
+    controls = {
+        "energy_tolerance": 1e-14,
+        "density_tolerance": 1e-13,
+        "ccsd_energy_tolerance": 1e-14,
+        "ccsd_residual_tolerance": 1e-12,
+    }
+    result = CCSDTCBSCalculator(bases, calculator_options=controls).singlepoint(
+        ATOMS, multiplicity=3, properties=("energy",)
+    )
+    for name, value in controls.items():
+        assert result.convergence["limits"][name] == value
+        assert all(event["options"][name] == value for event in fake_native)
 
 
 def test_configuration_snapshots_caller_options(

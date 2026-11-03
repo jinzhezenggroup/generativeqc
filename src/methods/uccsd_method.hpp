@@ -8,8 +8,9 @@ namespace generativeqc::methods::detail {
 generativeqc_status validate_uccsd_system(generativeqc_method method, const core::System& system,
                                           std::string& detail);
 
-/** Prepare the native energy-only unrestricted CC owner. Unsupported backends,
- * derivative properties and optional Hamiltonians never select prototypes. */
+/** Prepare the resource-bounded native CPU/CUDA unrestricted energy/force owner.
+ * Optional fitted operators preserve their explicitly selected UHF reference;
+ * unsupported requests never select prototypes or reference-oracle work. */
 std::unique_ptr<PreparedCalculation> prepare_uccsd_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
     const generativeqc_method_descriptor& descriptor,

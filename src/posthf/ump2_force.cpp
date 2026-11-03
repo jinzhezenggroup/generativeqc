@@ -9,7 +9,10 @@
 
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
+#include "molecule/nuclear_gradient.hpp"
 #include "posthf/capacity.hpp"
+#include "posthf/cuda_derivative.hpp"
+#include "posthf/df_interaction_source.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/ump2_cpu_generated.hpp"
 #include "posthf/ump2_energy.hpp"
@@ -39,25 +42,27 @@ std::size_t ci(std::size_t i, std::size_t j, std::size_t a, std::size_t b, std::
 // into the one alpha-alpha|beta-beta frame before any orbital/AO pullback.
 template <class Consume>
 void terms(const hf::UnrestrictedPhysicalReference& ref, const Weights& w, unsigned channel,
-           Consume consume) {
+           Consume consume, bool include_fock = true, bool include_correlation = true) {
   const auto n = ref.nbf;
   const auto [left, right] = channels[channel];
-  for (unsigned spin = 0; spin < 2; ++spin)
-    for (std::size_t p = 0; p < n; ++p)
-      for (std::size_t q = 0; q < n; ++q) {
-        const auto weight = w.fock[spin][p * n + q];
-        if (weight == 0) continue;
-        for (unsigned other = 0; other < 2; ++other)
-          for (std::size_t i = 0; i < ref.nocc[other]; ++i) {
-            if (spin == left && other == right)
-              consume(p, q, i, i, weight);
-            else if (left != right && spin == right && other == left)
-              consume(i, i, p, q, weight);
-          }
-        if (left == right && spin == left)
-          for (std::size_t i = 0; i < ref.nocc[spin]; ++i) consume(p, i, i, q, -weight);
-      }
+  if (include_fock)
+    for (unsigned spin = 0; spin < 2; ++spin)
+      for (std::size_t p = 0; p < n; ++p)
+        for (std::size_t q = 0; q < n; ++q) {
+          const auto weight = w.fock[spin][p * n + q];
+          if (weight == 0) continue;
+          for (unsigned other = 0; other < 2; ++other)
+            for (std::size_t i = 0; i < ref.nocc[other]; ++i) {
+              if (spin == left && other == right)
+                consume(p, q, i, i, weight);
+              else if (left != right && spin == right && other == left)
+                consume(i, i, p, q, weight);
+            }
+          if (left == right && spin == left)
+            for (std::size_t i = 0; i < ref.nocc[spin]; ++i) consume(p, i, i, q, -weight);
+        }
   const auto nl = ref.nocc[left], nr = ref.nocc[right], vl = n - nl, vr = n - nr;
+  if (!include_correlation) return;
   for (std::size_t i = 0; i < nl; ++i)
     for (std::size_t j = 0; j < nr; ++j)
       for (std::size_t a = 0; a < vl; ++a)
@@ -67,7 +72,9 @@ void terms(const hf::UnrestrictedPhysicalReference& ref, const Weights& w, unsig
         }
 }
 SpinMatrices rotation_gradient(const hf::UnrestrictedPhysicalReference& ref,
-                               const posthf::NativeBlockProvider& provider, const Weights& w) {
+                               const posthf::NativeBlockProvider& provider, const Weights& w,
+                               bool cuda, int device,
+                               const posthf::NativeBlockProvider* reference_provider) {
   const auto n = ref.nbf, n2 = mul(n, n);
   SpinMatrices gradient{Matrix(n2), Matrix(n2)};
   for (unsigned spin = 0; spin < 2; ++spin)
@@ -79,21 +86,27 @@ SpinMatrices rotation_gradient(const hf::UnrestrictedPhysicalReference& ref,
         }
   std::vector<std::size_t> all(n);
   std::iota(all.begin(), all.end(), 0);
-  for (unsigned channel = 0; channel < 3; ++channel) {
-    const auto [left, right] = channels[channel];
-    for (std::size_t t = 0; t < n; ++t) {
-      std::array<Matrix, 4> block;
-      for (unsigned slot = 0; slot < 4; ++slot) {
-        posthf::SpinMOSlots request{{all, all, all, all}, {left, left, right, right}};
-        request.slots[slot] = {t};
-        block[slot] = provider.get_spin(request);
+  for (unsigned group = 0; group < (reference_provider ? 2U : 1U); ++group) {
+    const auto& selected_provider = group ? *reference_provider : provider;
+    for (unsigned channel = 0; channel < 3; ++channel) {
+      const auto [left, right] = channels[channel];
+      for (std::size_t t = 0; t < n; ++t) {
+        std::array<Matrix, 4> block;
+        for (unsigned slot = 0; slot < 4; ++slot) {
+          posthf::SpinMOSlots request{{all, all, all, all}, {left, left, right, right}};
+          request.slots[slot] = {t};
+          block[slot] = selected_provider.get_spin(request, nullptr, cuda, device);
+        }
+        terms(
+            ref, w, channel,
+            [&](auto p, auto q, auto r, auto s, double weight) {
+              gradient[left][t * n + p] += weight * block[0][(q * n + r) * n + s];
+              gradient[left][t * n + q] += weight * block[1][(p * n + r) * n + s];
+              gradient[right][t * n + r] += weight * block[2][(p * n + q) * n + s];
+              gradient[right][t * n + s] += weight * block[3][(p * n + q) * n + r];
+            },
+            !reference_provider || group == 1, group == 0);
       }
-      terms(ref, w, channel, [&](auto p, auto q, auto r, auto s, double weight) {
-        gradient[left][t * n + p] += weight * block[0][(q * n + r) * n + s];
-        gradient[left][t * n + q] += weight * block[1][(p * n + r) * n + s];
-        gradient[right][t * n + r] += weight * block[2][(p * n + q) * n + s];
-        gradient[right][t * n + s] += weight * block[3][(p * n + q) * n + r];
-      });
     }
   }
   for (const auto& g : gradient)
@@ -109,7 +122,8 @@ void subtract_fock(Weights& w, unsigned spin, std::size_t n, std::size_t p, std:
 // All three correlation energies and their epsilon/integral cotangents use
 // the existing spin-labelled TensorIR and the common generated native VJP.
 Weights initial_weights(const hf::UnrestrictedPhysicalReference& ref,
-                        const posthf::NativeBlockProvider& provider, double threshold) {
+                        const posthf::NativeBlockProvider& provider, double threshold, bool cuda,
+                        int device) {
   const auto n = ref.nbf, n2 = mul(n, n);
   Weights w;
   SpinMatrices eps{Matrix(n), Matrix(n)};
@@ -140,12 +154,12 @@ Weights initial_weights(const hf::UnrestrictedPhysicalReference& ref,
                 posthf::MOSlots{std::vector<std::size_t>{i}, std::vector<std::size_t>{nl + a},
                                 std::vector<std::size_t>{j}, std::vector<std::size_t>{nr + b}},
                 {left, left, right, right}};
-            const auto g = provider.get_spin(request).at(0);
+            const auto g = provider.get_spin(request, nullptr, cuda, device).at(0);
             double x = 0;
             if (left == right) {
               request.slots = {std::vector<std::size_t>{i}, std::vector<std::size_t>{nr + b},
                                std::vector<std::size_t>{j}, std::vector<std::size_t>{nl + a}};
-              x = provider.get_spin(request).at(0);
+              x = provider.get_spin(request, nullptr, cuda, device).at(0);
             }
             std::array<double, 6> bars{};
             program.run(g, x, ei, ej, ea, eb, bars.data());
@@ -207,7 +221,9 @@ void complete_same_space_weights(const hf::UnrestrictedPhysicalReference& ref, W
 // Rectangular per-shell pullback. Each spin frame acts on its own slots;
 // no molecular AO-rank-four cotangent or coordinate derivative tensor exists.
 Matrix derivative(const hf::UnrestrictedPhysicalReference& ref, const core::System& system,
-                  const Weights& w, const SpinMatrices& overlap) {
+                  const Weights& w, const SpinMatrices& overlap, bool cuda, int device,
+                  std::size_t budget, const posthf::DensityFittedInteractionSource* fitted,
+                  bool separate_reference, const integrals::CorrelationIntegralBackend& backend) {
   const auto n = ref.nbf, n2 = mul(n, n);
   Matrix one(n2), ov(n2), tmp(n2), scratch(n2);
   for (unsigned spin = 0; spin < 2; ++spin) {
@@ -218,7 +234,23 @@ Matrix derivative(const hf::UnrestrictedPhysicalReference& ref, const core::Syst
                            scratch.data());
     for (std::size_t k = 0; k < n2; ++k) ov[k] += tmp[k];
   }
-  auto result = integrals::contract_weighted_one_electron_derivative(system, ov, one, true);
+  Matrix result;
+  if (cuda) {
+#if GENERATIVEQC_HAS_CUDA
+    if (!backend.one_electron_gradient)
+      throw std::invalid_argument("CUDA UMP2 forces require an explicit integral backend");
+    result = backend.one_electron_gradient(device, system, ov, one, budget);
+    molecule::add_nuclear_repulsion_gradient(system, result);
+#else
+    throw std::invalid_argument("CUDA UMP2 forces require a CUDA build");
+#endif
+  } else
+    result = integrals::contract_weighted_one_electron_derivative(system, ov, one, true);
+#if GENERATIVEQC_HAS_CUDA
+  std::unique_ptr<posthf::CudaEriDerivativeBatch> cuda_derivative;
+  if (cuda)
+    cuda_derivative = std::make_unique<posthf::CudaEriDerivativeBatch>(device, system, budget);
+#endif
   std::vector<std::size_t> offsets{0};
   for (const auto& shell : system.shells) {
     const auto count = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
@@ -228,68 +260,104 @@ Matrix derivative(const hf::UnrestrictedPhysicalReference& ref, const core::Syst
   }
   if (offsets.back() != n) throw std::invalid_argument("UMP2 derivative shell/reference mismatch");
   const auto ns = system.shells.size();
-  for (unsigned channel = 0; channel < 3; ++channel) {
-    const auto [left, right] = channels[channel];
-    const auto& ca = ref.coefficients[left];
-    const auto& cb = ref.coefficients[right];
-    for (std::size_t si = 0; si < ns; ++si) {
-      const auto di = offsets[si + 1] - offsets[si];
-      Matrix first(mul(di, mul(n, n2)));
-      terms(ref, w, channel, [&](auto p, auto q, auto r, auto s, double weight) {
-        for (std::size_t u = 0; u < di; ++u)
-          first[((u * n + q) * n + r) * n + s] += ca[(offsets[si] + u) * n + p] * weight;
-      });
-      for (std::size_t sj = 0; sj < ns; ++sj) {
-        const auto dj = offsets[sj + 1] - offsets[sj];
-        Matrix second(mul(mul(di, dj), n2));
-        for (std::size_t u = 0; u < di; ++u)
-          for (std::size_t v = 0; v < dj; ++v)
-            for (std::size_t r = 0; r < n; ++r)
-              for (std::size_t s = 0; s < n; ++s)
-                for (std::size_t q = 0; q < n; ++q)
-                  second[((u * dj + v) * n + r) * n + s] +=
-                      ca[(offsets[sj] + v) * n + q] * first[((u * n + q) * n + r) * n + s];
-        for (std::size_t sk = 0; sk < ns; ++sk) {
-          const auto dk = offsets[sk + 1] - offsets[sk];
-          Matrix third(mul(mul(mul(di, dj), dk), n));
+  Matrix fitted_seed(fitted ? mul(n2, n2) : 0);
+  for (unsigned group = 0; group < (separate_reference ? 2U : 1U); ++group) {
+    const bool fitted_group = fitted && group == 0;
+    for (unsigned channel = 0; channel < 3; ++channel) {
+      const auto [left, right] = channels[channel];
+      const auto& ca = ref.coefficients[left];
+      const auto& cb = ref.coefficients[right];
+      for (std::size_t si = 0; si < ns; ++si) {
+        const auto di = offsets[si + 1] - offsets[si];
+        Matrix first(mul(di, mul(n, n2)));
+        terms(
+            ref, w, channel,
+            [&](auto p, auto q, auto r, auto s, double weight) {
+              for (std::size_t u = 0; u < di; ++u)
+                first[((u * n + q) * n + r) * n + s] += ca[(offsets[si] + u) * n + p] * weight;
+            },
+            !separate_reference || group == 1, group == 0);
+        for (std::size_t sj = 0; sj < ns; ++sj) {
+          const auto dj = offsets[sj + 1] - offsets[sj];
+          Matrix second(mul(mul(di, dj), n2));
           for (std::size_t u = 0; u < di; ++u)
             for (std::size_t v = 0; v < dj; ++v)
-              for (std::size_t z = 0; z < dk; ++z)
+              for (std::size_t r = 0; r < n; ++r)
                 for (std::size_t s = 0; s < n; ++s)
-                  for (std::size_t r = 0; r < n; ++r)
-                    third[((u * dj + v) * dk + z) * n + s] +=
-                        cb[(offsets[sk] + z) * n + r] * second[((u * dj + v) * n + r) * n + s];
-          for (std::size_t sl = 0; sl < ns; ++sl) {
-            const auto dl = offsets[sl + 1] - offsets[sl];
-            Matrix local(mul(mul(mul(di, dj), dk), dl));
+                  for (std::size_t q = 0; q < n; ++q)
+                    second[((u * dj + v) * n + r) * n + s] +=
+                        ca[(offsets[sj] + v) * n + q] * first[((u * n + q) * n + r) * n + s];
+          for (std::size_t sk = 0; sk < ns; ++sk) {
+            const auto dk = offsets[sk + 1] - offsets[sk];
+            Matrix third(mul(mul(mul(di, dj), dk), n));
             for (std::size_t u = 0; u < di; ++u)
               for (std::size_t v = 0; v < dj; ++v)
                 for (std::size_t z = 0; z < dk; ++z)
-                  for (std::size_t t = 0; t < dl; ++t)
-                    for (std::size_t s = 0; s < n; ++s)
-                      local[((u * dj + v) * dk + z) * dl + t] +=
-                          cb[(offsets[sl] + t) * n + s] * third[((u * dj + v) * dk + z) * n + s];
-            const std::array<std::size_t, 4> shells{si, sj, sk, sl};
-            const auto values =
-                integrals::contract_weighted_eri_shell_derivative(system, shells, local);
-            for (unsigned slot = 0; slot < 4; ++slot)
-              for (unsigned xyz = 0; xyz < 3; ++xyz)
-                result[3 * system.shells[shells[slot]].atom_index + xyz] += values[3 * slot + xyz];
+                  for (std::size_t s = 0; s < n; ++s)
+                    for (std::size_t r = 0; r < n; ++r)
+                      third[((u * dj + v) * dk + z) * n + s] +=
+                          cb[(offsets[sk] + z) * n + r] * second[((u * dj + v) * n + r) * n + s];
+            for (std::size_t sl = 0; sl < ns; ++sl) {
+              const auto dl = offsets[sl + 1] - offsets[sl];
+              Matrix local(mul(mul(mul(di, dj), dk), dl));
+              for (std::size_t u = 0; u < di; ++u)
+                for (std::size_t v = 0; v < dj; ++v)
+                  for (std::size_t z = 0; z < dk; ++z)
+                    for (std::size_t t = 0; t < dl; ++t)
+                      for (std::size_t s = 0; s < n; ++s)
+                        local[((u * dj + v) * dk + z) * dl + t] +=
+                            cb[(offsets[sl] + t) * n + s] * third[((u * dj + v) * dk + z) * n + s];
+              const std::array<std::size_t, 4> shells{si, sj, sk, sl};
+              if (fitted_group) {
+                for (std::size_t row = 0; row < di; ++row)
+                  for (std::size_t column = 0; column < dj; ++column)
+                    for (std::size_t third = 0; third < dk; ++third)
+                      for (std::size_t fourth = 0; fourth < dl; ++fourth)
+                        fitted_seed[(((offsets[si] + row) * n + offsets[sj] + column) * n +
+                                     offsets[sk] + third) *
+                                        n +
+                                    offsets[sl] + fourth] +=
+                            local[((row * dj + column) * dk + third) * dl + fourth];
+                continue;
+              }
+              if (cuda) {
+#if GENERATIVEQC_HAS_CUDA
+                cuda_derivative->append(shells, local, result);
+                continue;
+#endif
+              }
+              const auto values =
+                  integrals::contract_weighted_eri_shell_derivative(system, shells, local);
+              for (unsigned slot = 0; slot < 4; ++slot)
+                for (unsigned xyz = 0; xyz < 3; ++xyz)
+                  result[3 * system.shells[shells[slot]].atom_index + xyz] +=
+                      values[3 * slot + xyz];
+            }
           }
         }
       }
     }
   }
+  if (fitted) {
+    const auto fitted_gradient = fitted->nuclear_derivative(fitted_seed);
+    for (std::size_t coordinate = 0; coordinate < result.size(); ++coordinate)
+      result[coordinate] += fitted_gradient.at(coordinate);
+  }
+#if GENERATIVEQC_HAS_CUDA
+  if (cuda_derivative) cuda_derivative->finish(result);
+#endif
   if (!finite(result)) throw std::runtime_error("nonfinite UMP2 force contraction");
   for (auto& x : result) x = -x;
   return result;
 }
 }  // namespace
 
-ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalReference& ref,
-                                               const response::SpinResponseProblem* problem,
-                                               const integrals::ElectronInteractionSource& source,
-                                               std::size_t budget, double threshold) {
+ConventionalForceResult unrestricted_force_cpu(
+    const hf::UnrestrictedPhysicalReference& ref, const response::SpinResponseProblem* problem,
+    const integrals::ElectronInteractionSource& source, std::size_t budget, double threshold,
+    bool cuda, int device, const posthf::DensityFittedInteractionSource* fitted,
+    const integrals::ElectronInteractionSource* independent_reference,
+    const integrals::CorrelationIntegralBackend& backend) {
   const auto n = ref.nbf, n2 = mul(n, n);
   if (!n || source.nbf() != n || !ref.source_identity ||
       !ref.source_identity->matches(source.orbital()) || !std::isfinite(threshold) ||
@@ -312,7 +380,13 @@ ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalRef
   options.relative_tolerance = 1e-11;
   response::ResponsePlan plan;
   if (problem) plan = response::prepare_response(*problem, options);
-  posthf::NativeBlockProvider provider(source, ref, budget, 2);
+  posthf::NativeBlockProvider provider(
+      source, ref, budget, cuda ? 8 : 2,
+      cuda ? posthf::AOTileDomain::Basis : posthf::AOTileDomain::Shell);
+  std::optional<posthf::NativeBlockProvider> reference_provider;
+  if (independent_reference)
+    reference_provider.emplace(*independent_reference, ref, budget, cuda ? 8 : 2,
+                               cuda ? posthf::AOTileDomain::Basis : posthf::AOTileDomain::Shell);
   std::size_t correlation = 0, max_shell = 1;
   for (const auto [left, right] : channels)
     correlation = add(correlation, mul(mul(ref.nocc[left], ref.nocc[right]),
@@ -326,7 +400,7 @@ ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalRef
   // weights/frames, four O(N^3) provider blocks, and the four shell-transform
   // stages even though these phases do not all overlap. Object/allocator and
   // compiler stack overhead are outside this numeric-payload contract.
-  const auto provider_peak = provider.batch_bytes({1, n, n, n}, 1, false);
+  const auto provider_peak = provider.batch_bytes({1, n, n, n}, 1, cuda);
   const auto rank3 = mul(n, n2), shell3 = mul(max_shell, max_shell);
   std::size_t elements = add(correlation, add(mul(48, n2), mul(8, rank3)));
   const auto staging_elements =
@@ -341,6 +415,7 @@ ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalRef
   const auto coordinate_elements = add(mul(ncoord, ncoord), mul(16, ncoord));
   elements = add(elements, coordinate_elements);
   auto peak = add(provider_peak, add(mul(elements, sizeof(double)), plan.workspace_bytes));
+  if (fitted) peak = add(peak, mul(mul(n2, n2), sizeof(double)));
   for (unsigned c = 0; c < 3; ++c) {
     peak = add(peak, generated::ump2_adjoint_cpu_plan(c).numeric_bytes);
     peak = add(peak, generated::ump2_density_cpu_plan(c).numeric_bytes);
@@ -351,9 +426,10 @@ ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalRef
   peak = add(peak, posthf::source_scratch_bytes);
   if (peak > budget)
     throw std::length_error("complete UMP2 force endpoint exceeds numeric memory budget");
-  auto w = initial_weights(ref, provider, threshold);
+  auto w = initial_weights(ref, provider, threshold, cuda, device);
   complete_same_space_weights(ref, w);
-  auto gradient = rotation_gradient(ref, provider, w);
+  auto gradient = rotation_gradient(ref, provider, w, cuda, device,
+                                    reference_provider ? &*reference_provider : nullptr);
   // Retain the strict degenerate-subspace compatibility gate independently of
   // the later full relaxed residual. A small gap never discards finite density.
   for (unsigned spin = 0; spin < 2; ++spin) {
@@ -395,7 +471,8 @@ ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalRef
     }
     offset += no * nv;
   }
-  gradient = rotation_gradient(ref, provider, w);
+  gradient = rotation_gradient(ref, provider, w, cuda, device,
+                               reference_provider ? &*reference_provider : nullptr);
   SpinMatrices overlap{Matrix(n2), Matrix(n2)};
   double residual = 0;
   for (unsigned spin = 0; spin < 2; ++spin)
@@ -408,7 +485,9 @@ ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalRef
   if (!std::isfinite(residual) || residual > 1e-7)
     throw std::runtime_error("UMP2 relaxed Lagrangian is not stationary");
   ConventionalForceResult result;
-  result.forces = derivative(ref, source.orbital(), w, overlap);
+  result.forces =
+      derivative(ref, source.orbital(), w, overlap, cuda, device, posthf::source_scratch_bytes,
+                 fitted, independent_reference != nullptr, backend);
   result.response = std::move(solved);
   result.stationarity_residual = residual;
   result.planned_endpoint_peak_bytes = peak;

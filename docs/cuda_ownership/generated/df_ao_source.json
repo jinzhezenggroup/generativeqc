@@ -1,0 +1,9 @@
+{
+  "name": "df_ao_source",
+  "outputs": [
+    "generated/generated_df_ao_source.hpp",
+    "generated/generated_df_ao_source.cu"
+  ],
+  "owner": "python/generativeqc_compiler/method/df_ao_source.py",
+  "scope": "Shared TensorIR fitted AO Gram value and VJP through both three-center integral legs and the inverse metric root. Native composition retains the shared host FP64 metric conditioning/Frechet owner and admitted integral derivative consumers. This bounded dense interaction source does not claim a low-memory rank-three DF-CC algorithm or fully resident CUDA response."
+}

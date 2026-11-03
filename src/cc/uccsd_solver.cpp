@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "cc/iteration_driver.hpp"
+#include "cc/uccsd_executor.hpp"
 #include "generated_uccsd_cpu.hpp"
 #include "posthf/capacity.hpp"
 #include "solver/diis.hpp"
@@ -91,7 +92,8 @@ using Feeds = std::map<std::string, Feed>;
  * chemists' provider. The spin Kronecker deltas are independent: mixed-spin
  * exchange is neither invented nor discarded by restricted symmetry. */
 void integral_feed(const graph::FeedSpec& spec, Feed& feed, const Shape& sizes,
-                   posthf::NativeBlockProvider& provider, posthf::ProviderWork& work) {
+                   posthf::NativeBlockProvider& provider, posthf::ProviderWork& work, bool cuda,
+                   int device) {
   if (feed.values.empty()) return;
   Shape spins{};
   posthf::MOSlots slots;
@@ -109,7 +111,7 @@ void integral_feed(const graph::FeedSpec& spec, Feed& feed, const Shape& sizes,
       request.spins[axis] = static_cast<unsigned>(spins[axes[axis]]);
       request_shape[axis] = feed.shape[axes[axis]];
     }
-    const auto transformed = provider.get_spin(request, &work);
+    const auto transformed = provider.get_spin(request, &work, cuda, device);
     if (transformed.size() != feed.values.size())
       throw std::runtime_error("UCCSD MO provider returned an invalid block");
     for (std::size_t flat = 0; flat < feed.values.size(); ++flat) {
@@ -302,9 +304,8 @@ double triples_channel(const std::array<unsigned, 3>& spins, const Bindings& bin
 std::size_t unrestricted_capacity(std::size_t nbf, std::size_t alpha, std::size_t beta,
                                   const SolverOptions& options, bool triples,
                                   std::size_t reference_capacity) {
-  if (nbf > 12 || !nbf || alpha > nbf || beta > nbf)
-    throw std::invalid_argument(
-        "native unrestricted CC supports valid references through twelve AOs");
+  if (!nbf || alpha > nbf || beta > nbf)
+    throw std::invalid_argument("native unrestricted CC requires valid spin populations");
   const Shape sizes{alpha, beta, nbf - alpha, nbf - beta};
   std::size_t feed_elements = 0;
   for (const auto& feed : graph::kFeeds)
@@ -352,13 +353,33 @@ std::size_t unrestricted_capacity(std::size_t nbf, std::size_t alpha, std::size_
 UnrestrictedSolve solve_unrestricted(const hf::UnrestrictedPhysicalReference& reference,
                                      const integrals::ElectronInteractionSource& source,
                                      const SolverOptions& options, bool triples,
-                                     std::size_t reference_capacity) {
+                                     std::size_t reference_capacity, bool retain_amplitudes,
+                                     bool cuda, int device) {
   UnrestrictedSolve result;
   result.numeric_capacity_bytes = unrestricted_capacity(
       reference.nbf, reference.nocc[0], reference.nocc[1], options, triples, reference_capacity);
   const auto sizes = populations(reference);
   auto started = Clock::now();
-  posthf::NativeBlockProvider provider(source, reference, options.max_bytes);
+  posthf::NativeBlockProvider provider(
+      source, reference, options.max_bytes, cuda ? 8 : 2,
+      cuda ? posthf::AOTileDomain::Basis : posthf::AOTileDomain::Shell);
+  std::unique_ptr<UnrestrictedCudaExecutor> executor;
+  if (cuda) {
+#if GENERATIVEQC_HAS_CUDA
+    executor =
+        make_unrestricted_cuda_executor(reference.nbf, reference.nocc[0], reference.nocc[1], device,
+                                        options.max_bytes - result.numeric_capacity_bytes, false);
+    auto provider_peak =
+        provider.batch_bytes({reference.nbf, reference.nbf, reference.nbf, reference.nbf}, 1, true);
+    result.numeric_capacity_bytes =
+        posthf::checked_add(result.numeric_capacity_bytes,
+                            posthf::checked_add(executor->numeric_capacity_bytes(), provider_peak));
+    if (result.numeric_capacity_bytes > options.max_bytes)
+      throw std::length_error("complete unrestricted CUDA endpoint exceeds numeric memory budget");
+#else
+    throw std::invalid_argument("unrestricted CUDA CC requires a CUDA build");
+#endif
+  }
   Feeds feeds;
   graph::Inputs inputs;
   for (const auto& spec : graph::kFeeds) {
@@ -367,7 +388,8 @@ UnrestrictedSolve solve_unrestricted(const hf::UnrestrictedPhysicalReference& re
     feed.shape = feed_shape(spec, sizes);
     feed.rank = spec.rank;
     feed.values.resize(elements(feed.shape));
-    if (name.starts_with('g')) integral_feed(spec, feed, sizes, provider, result.provider_work);
+    if (name.starts_with('g'))
+      integral_feed(spec, feed, sizes, provider, result.provider_work, cuda, device);
     if (name.starts_with('f')) {
       const auto spin = spec.axes[0] % 2;
       const auto& coefficients = reference.coefficients[spin];
@@ -394,12 +416,26 @@ UnrestrictedSolve solve_unrestricted(const hf::UnrestrictedPhysicalReference& re
   solver::Diis diis(options.diis_size, current.size());
   result.problem_seconds = seconds(started);
   started = Clock::now();
+  UnrestrictedFeeds device_outputs;
   const auto evaluate = [&](bool replay = false) {
     const auto phase_started = Clock::now();
     unpack(current, entries, feeds);
     ++result.graph_calls;
-    const auto output =
-        graph::evaluate(sizes[0], sizes[1], sizes[2], sizes[3], inputs, arena.data(), arena.size());
+    graph::Outputs output;
+    if (executor) {
+      UnrestrictedFeeds values;
+      for (const auto& [name, feed] : feeds) values[name] = feed.values;
+      device_outputs = executor->evaluate("cc", values);
+      output = {device_outputs.at("correlation_energy").data(),
+                device_outputs.at("r1a").data(),
+                device_outputs.at("r1b").data(),
+                device_outputs.at("r2aa").data(),
+                device_outputs.at("r2ab").data(),
+                device_outputs.at("r2bb").data()};
+    } else {
+      output = graph::evaluate(sizes[0], sizes[1], sizes[2], sizes[3], inputs, arena.data(),
+                               arena.size());
+    }
     if (replay)
       result.replay_seconds += seconds(phase_started);
     else
@@ -446,7 +482,15 @@ UnrestrictedSolve solve_unrestricted(const hf::UnrestrictedPhysicalReference& re
       [&] { result.converged = true; },
       [](const std::runtime_error& error) { throw std::runtime_error(error.what()); });
   result.solver_seconds = seconds(started);
-  if (!result.converged || !triples) return result;
+  const auto retain = [&] {
+    if (retain_amplitudes && result.converged)
+      for (unsigned block = 0; block < kAmplitudes.size(); ++block)
+        result.amplitudes[block] = std::move(feeds.at(kAmplitudes[block]).values);
+  };
+  if (!result.converged || !triples) {
+    retain();
+    return result;
+  }
   // The converged replay leaves feeds bound to exactly the admitted parent
   // excitation state. Retire DIIS and CC arena before allocating triples work.
   diis.clear();
@@ -456,19 +500,46 @@ UnrestrictedSolve solve_unrestricted(const hf::UnrestrictedPhysicalReference& re
   result.triples_workspace_bytes = posthf::checked_mul(
       sizeof(double), posthf::checked_add(arena.size(), posthf::checked_mul(256, reference.nbf)));
   started = Clock::now();
-  result.triples_energy +=
-      triples_channel<graph::Inputs_aaa>({0, 0, 0}, graph::kBindings_aaa, graph::evaluate_aaa,
-                                         reference, feeds, sizes, options, arena, result);
-  result.triples_energy +=
-      triples_channel<graph::Inputs_aab>({0, 0, 1}, graph::kBindings_aab, graph::evaluate_aab,
-                                         reference, feeds, sizes, options, arena, result);
-  result.triples_energy +=
-      triples_channel<graph::Inputs_abb>({0, 1, 1}, graph::kBindings_abb, graph::evaluate_abb,
-                                         reference, feeds, sizes, options, arena, result);
-  result.triples_energy +=
-      triples_channel<graph::Inputs_bbb>({1, 1, 1}, graph::kBindings_bbb, graph::evaluate_bbb,
-                                         reference, feeds, sizes, options, arena, result);
+  const auto tile_evaluator = [&](const auto& bindings, const char* channel, auto cpu) {
+    return [&, bindings, channel, cpu](std::size_t oa, std::size_t ob, std::size_t va,
+                                       std::size_t vb, std::size_t tile_extent,
+                                       const auto& tile_inputs, double* memory,
+                                       std::size_t capacity) {
+      if (!executor) return cpu(oa, ob, va, vb, tile_extent, tile_inputs, memory, capacity);
+      UnrestrictedFeeds values;
+      for (const auto& binding : bindings) {
+        std::size_t count = 1;
+        for (unsigned axis = 0; axis < binding.rank; ++axis)
+          if (binding.labels[axis] == 'm' || binding.labels[axis] == 'e')
+            count = posthf::checked_mul(count, feeds.at(binding.source).shape[binding.axes[axis]]);
+        const auto* pointer = tile_inputs.*(binding.field);
+        if (count)
+          values[binding.name].assign(pointer, pointer + count);
+        else
+          values[binding.name] = {};
+      }
+      device_outputs = executor->evaluate(std::string("vectors_") + channel, values);
+      return graph::TriplesOutput{device_outputs.at("triples_energy").data()};
+    };
+  };
+  result.triples_energy += triples_channel<graph::Inputs_aaa>(
+      {0, 0, 0}, graph::kBindings_aaa,
+      tile_evaluator(graph::kBindings_aaa, "aaa", graph::evaluate_aaa), reference, feeds, sizes,
+      options, arena, result);
+  result.triples_energy += triples_channel<graph::Inputs_aab>(
+      {0, 0, 1}, graph::kBindings_aab,
+      tile_evaluator(graph::kBindings_aab, "aab", graph::evaluate_aab), reference, feeds, sizes,
+      options, arena, result);
+  result.triples_energy += triples_channel<graph::Inputs_abb>(
+      {0, 1, 1}, graph::kBindings_abb,
+      tile_evaluator(graph::kBindings_abb, "abb", graph::evaluate_abb), reference, feeds, sizes,
+      options, arena, result);
+  result.triples_energy += triples_channel<graph::Inputs_bbb>(
+      {1, 1, 1}, graph::kBindings_bbb,
+      tile_evaluator(graph::kBindings_bbb, "bbb", graph::evaluate_bbb), reference, feeds, sizes,
+      options, arena, result);
   result.triples_seconds = seconds(started);
+  retain();
   return result;
 }
 

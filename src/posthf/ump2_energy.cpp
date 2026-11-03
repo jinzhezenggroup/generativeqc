@@ -4,8 +4,10 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <stdexcept>
 
+#include "cc/uccsd_executor.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/ump2_cpu_generated.hpp"
 
@@ -72,12 +74,15 @@ double validate_unrestricted_energy_input(const hf::UnrestrictedPhysicalReferenc
 
 UnrestrictedEnergy conventional_unrestricted_energy(
     const hf::UnrestrictedPhysicalReference& owned,
-    const integrals::ElectronInteractionSource& source, std::size_t budget, double threshold) {
+    const integrals::ElectronInteractionSource& source, std::size_t budget, double threshold,
+    bool cuda, int device) {
   UnrestrictedEnergy result;
   result.minimum_denominator = validate_unrestricted_energy_input(owned, source, threshold);
   const auto reference = owned.electronic_reference();
   if (budget == 0) throw std::length_error("UMP2 numeric memory budget is zero");
-  posthf::NativeBlockProvider provider(source, owned, budget, 2);
+  posthf::NativeBlockProvider provider(
+      source, owned, budget, cuda ? 8 : 2,
+      cuda ? posthf::AOTileDomain::Basis : posthf::AOTileDomain::Shell);
   const std::array<std::size_t, 4> shape{1, 1, 1, 1};
   const auto provider_peak = provider.batch_bytes(shape, 1, false);
   const auto n = reference.basis_functions;
@@ -90,6 +95,75 @@ UnrestrictedEnergy conventional_unrestricted_energy(
   }
   if (result.numeric_capacity_bytes > budget)
     throw std::length_error("UMP2 reference/source/transform/tile exceed numeric memory budget");
+
+  if (cuda) {
+#if GENERATIVEQC_HAS_CUDA
+    const auto provider_peak = provider.batch_bytes({n, n, n, n}, 1, true);
+    const auto square = posthf::checked_mul(n, n);
+    const auto host_buffers =
+        posthf::checked_mul(16 * sizeof(double), posthf::checked_mul(square, square));
+    auto peak = posthf::checked_add(provider_peak, host_buffers);
+    if (peak >= budget) throw std::length_error("UMP2 CUDA host/provider capacity exceeds budget");
+    auto executor = cc::make_unrestricted_cuda_executor(n, owned.nocc[0], owned.nocc[1], device,
+                                                        budget - peak, false, true);
+    result.numeric_capacity_bytes = posthf::checked_add(peak, executor->numeric_capacity_bytes());
+    for (unsigned channel = 0; channel < 3; ++channel) {
+      const auto [left, right] = kChannels[channel];
+      const auto no_left = owned.nocc[left], no_right = owned.nocc[right], nv_left = n - no_left,
+                 nv_right = n - no_right;
+      if (!no_left || !no_right || !nv_left || !nv_right) continue;
+      const std::array<std::size_t, 4> extents{no_left, nv_left, no_right, nv_right};
+      posthf::SpinMOSlots request;
+      request.spins = {left, left, right, right};
+      for (unsigned axis = 0; axis < 4; ++axis) {
+        request.slots[axis].resize(extents[axis]);
+        std::iota(request.slots[axis].begin(), request.slots[axis].end(),
+                  axis % 2 ? owned.nocc[request.spins[axis]] : 0);
+      }
+      const auto block = provider.get_spin(request, nullptr, true, device);
+      cc::UnrestrictedFeeds inputs;
+      auto& direct = inputs["g"];
+      direct.resize(block.size());
+      for (std::size_t occupied_left = 0; occupied_left < no_left; ++occupied_left)
+        for (std::size_t occupied_right = 0; occupied_right < no_right; ++occupied_right)
+          for (std::size_t virtual_left = 0; virtual_left < nv_left; ++virtual_left)
+            for (std::size_t virtual_right = 0; virtual_right < nv_right; ++virtual_right)
+              direct[((occupied_left * no_right + occupied_right) * nv_left + virtual_left) *
+                         nv_right +
+                     virtual_right] =
+                  block[((occupied_left * nv_left + virtual_left) * no_right + occupied_right) *
+                            nv_right +
+                        virtual_right];
+      if (left == right) {
+        auto& exchange = inputs["x"];
+        exchange.resize(direct.size());
+        for (std::size_t first = 0; first < no_left; ++first)
+          for (std::size_t second = 0; second < no_right; ++second)
+            for (std::size_t first_virtual = 0; first_virtual < nv_left; ++first_virtual)
+              for (std::size_t second_virtual = 0; second_virtual < nv_right; ++second_virtual)
+                exchange[((first * no_right + second) * nv_left + first_virtual) * nv_right +
+                         second_virtual] =
+                    direct[((first * no_right + second) * nv_left + second_virtual) * nv_right +
+                           first_virtual];
+      }
+      inputs["ei"].assign(owned.orbital_energies[left].begin(),
+                          owned.orbital_energies[left].begin() + no_left);
+      inputs["ej"].assign(owned.orbital_energies[right].begin(),
+                          owned.orbital_energies[right].begin() + no_right);
+      inputs["ea"].assign(owned.orbital_energies[left].begin() + no_left,
+                          owned.orbital_energies[left].end());
+      inputs["eb"].assign(owned.orbital_energies[right].begin() + no_right,
+                          owned.orbital_energies[right].end());
+      const std::array<std::string, 3> names{"alpha_alpha", "beta_beta", "alpha_beta"};
+      result.channels[channel] =
+          executor->evaluate("mp2_" + names[channel], inputs).at("energy")[0];
+      result.tiles = posthf::checked_add(result.tiles, direct.size());
+    }
+    return result;
+#else
+    throw std::invalid_argument("CUDA UMP2 requires a CUDA build");
+#endif
+  }
 
   std::array<double, 3> corrections{};
   for (unsigned channel = 0; channel < 3; ++channel) {

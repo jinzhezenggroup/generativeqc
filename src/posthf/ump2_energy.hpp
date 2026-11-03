@@ -24,6 +24,6 @@ double validate_unrestricted_energy_input(const hf::UnrestrictedPhysicalReferenc
 UnrestrictedEnergy conventional_unrestricted_energy(
     const hf::UnrestrictedPhysicalReference& reference,
     const integrals::ElectronInteractionSource& source, std::size_t budget,
-    double denominator_threshold);
+    double denominator_threshold, bool cuda = false, int device = 0);
 
 }  // namespace generativeqc::mp2

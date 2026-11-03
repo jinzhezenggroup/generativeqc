@@ -1,6 +1,6 @@
 # Native unrestricted coupled cluster
 
-Use `uccsd` or `uccsd(t)` for conventional all-electron UHF-based energies.
+Use `uccsd` or `uccsd(t)` for all-electron UHF-based energies and analytic forces.
 The C ABI, C++ SDK, native CLI and Python `Calculator` select the same C++
 method owner. Python is a source-build generation dependency, not a native
 runtime computation dependency. Method names and declared properties come
@@ -42,23 +42,54 @@ layout changes are needed. See the [native C++ guide](native_cpp.md).
 
 ## Current admission and failure behavior
 
-This native owner is bounded to at most twelve AOs, real FP64, unscreened
+This native owner requires real FP64, unscreened
 conventional integrals and all-electron s/p/d shells, including supplied
 Cartesian or real-spherical bases. Each spin retains its own occupied and
 virtual dimensions and all five amplitude blocks remain independent. A singlet
 still runs through UHF/UCCSD rather than selecting a restricted CC owner.
+There is no fixed AO-count cutoff; admission uses checked dimensions and the
+complete storage/work limits described below, before starting the reference.
 
-The current public native contract is **CPU energy only**. CUDA, analytic
-forces, prepared batches, DF/RI, ECP, frozen core, KS references, mixed
-precision and preliminary initial-guess controls are rejected explicitly.
-The separate internal response/gradient prototypes are not production
-fallbacks and their earlier GPU/force evidence does not qualify this owner.
+The native contract supports CPU and CUDA with real FP64. Forces are opt-in
+for `Calculator`: pass `properties=("energy", "forces")`. They differentiate
+the converged physical CCSD/(T) Lagrangian, including Lambda, full same-space
+triples Fock response, the UHF adjoint, Pulay terms and nuclear repulsion.
+Fresh amplitude and full orbital stationarity checks precede publication.
+No production finite differences or reference-oracle imports are involved.
+
+CUDA is an explicit hybrid endpoint, not a fully resident CC implementation:
+integral transforms, CC/response graph arithmetic and nuclear integral
+derivatives execute on the selected device. Packed DIIS/Krylov control,
+MO-to-AO cotangent transport and small host matrix projections remain native
+host consumers. UMP2 also retains native host scalar cotangent assembly.
+Conventional CUDA UHF uses native host SCF control and FP64 diagonalization
+with device J/K; full DF uses the prepared fitted owner's eigensolver.
+Selecting CUDA never retries an operation on the CPU backend.
+
+Supply `auxiliary_basis` and `density_fitting="correlation_cuda"` for fitted
+correlation with a conventional UHF reference, or `"full_cuda"` for fitted
+UHF J/K and fitted correlation using the same auxiliary/metric policy.
+These two unrestricted policies also work with `device="cpu"` for native
+reference qualification. `"cpu"`/`"cuda"`/`"auto"` fitting modes select
+correlation-only fitting. Host FP64 spectral conditioning is explicit in
+the fitted contract. All raw three-center and metric derivative contributions
+are included, including auxiliary-center motion and retained/discarded metric
+cross terms. CUDA fitted response currently materializes bounded coordinate
+derivative tensors and does not claim the conventional shell-streaming flags.
+
+Prepared CC batches, ECP, frozen core, KS references, mixed precision and
+preliminary initial-guess controls remain unsupported. Internal prototypes
+are not production fallbacks.
 
 Preparation admits the simultaneous reference, MO feeds, generated arenas,
 packed state, DIIS and triples workspace against
 `correlation_memory_budget_bytes` (default 256 MiB). It also bounds worst-case
 CCSD/triples scalar contraction work at 100 billion summands using the
-configured iteration limit. These are numeric storage/work limits, not an RSS
+configured iteration limit; response actions have the same cumulative work
+ceiling. Forces and fitting reserve their additional raw-MO/AO tensors,
+metric/derivative buffers and response arenas. The current fitted interaction
+is a dense resource-bounded AO Gram map, not a low-memory rank-three CC solver.
+These are numeric storage/work limits, not an RSS
 or runtime guarantee. Increase neither limit by silently running a different
 method/backend; split work or use a qualified endpoint instead.
 
