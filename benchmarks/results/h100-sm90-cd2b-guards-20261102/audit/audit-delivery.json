@@ -1,0 +1,36 @@
+{
+  "schema": "generativeqc.audit-delivery.v1",
+  "scope": "Original fresh Sol-route same-family provisional review; actual model/effort unverified. The published report retains all529primary/29repo input hashes. Full private forensic output manifest and generated mutation fixtures are not redistributed, and are not required by the public numeric CPU receiver. Scientific archives/readers remain exact.",
+  "files": [
+    {
+      "path": "AUDIT_SEAL.json",
+      "bytes": 1164,
+      "sha256": "41dcb1c945a6bfc7b6ace4aafea4270da55fa18facd30a13ad4fa2bfa117fdd2"
+    },
+    {
+      "path": "EXPERIMENT_AUDIT.json",
+      "bytes": 115632,
+      "sha256": "12af37b4dc29f38a64558a32e81f8d1fbb613ed872a88278c79fe036df54b4fb"
+    },
+    {
+      "path": "EXPERIMENT_AUDIT.md",
+      "bytes": 15150,
+      "sha256": "ef12f62ff3f0674ad01eaf7bbe9b8e15e29690a1b229370ddbfd60f6ff9c7f31"
+    },
+    {
+      "path": "deterministic-test-log.json",
+      "bytes": 18239,
+      "sha256": "fa2c6554b5d16e168c55f229f9bb331db04cd8305569151ac41d714c6e220e18"
+    },
+    {
+      "path": "preservation.json",
+      "bytes": 1003,
+      "sha256": "edc9b5dc42d7f58a115eab6d203677ae066a9d87486015501746e0148c263970"
+    }
+  ],
+  "private_forensic_manifest": {
+    "original_name": "artifact-manifest.json",
+    "original_bytes": 3489406,
+    "original_sha256": "a714b6d4a8de9a18b4517596df5f09e077199c8793523bad98ea86046693161b"
+  }
+}

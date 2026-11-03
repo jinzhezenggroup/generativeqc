@@ -1,0 +1,170 @@
+{
+  "schema": "generativeqc.h100-guard-cohort.v1",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "source_tree": "c76f5bd3cfa62416255c5d6914cf701d34e10a8d",
+  "reference_source_revision": "15ab66a68a061355fda833a93e88484dbfee6360",
+  "phases": [
+    [
+      "native-qualification-v1",
+      "replay-native-v2.py",
+      "native-qualification-v1-local-replay-v2.json"
+    ],
+    [
+      "nsys-v1",
+      "replay-nsys-v2.py",
+      "nsys-v1-local-replay-v2.json"
+    ],
+    [
+      "standard-guards-v1",
+      "replay-standard-guards-v2.py",
+      "standard-guards-v1-local-replay.json"
+    ],
+    [
+      "uks-fit-v1",
+      "replay-uks-fit-v1.py",
+      "uks-fit-v1-local-replay.json"
+    ],
+    [
+      "reference-six-v5",
+      "replay-reference-six-v6.py",
+      "reference-six-v5-local-replay.json"
+    ]
+  ],
+  "expected_statuses": {
+    "native-qualification-v1": "PASS_CURRENT_SOURCE_NATIVE_FOUR_UNFILTERED_MEMCHECK",
+    "nsys-v1": "PASS_CURRENT_SOURCE_3_CAPTURES_12_FULL_EF_AND_ACTUAL_SQLITE_REPLAY",
+    "standard-guards-v1": "NATIVE_GUARDS_FAILED_OR_INCOMPLETE_WITH_ALL_ORIGINALS_RETAINED",
+    "uks-fit-v1": "PASS_EXPLICIT_REFINED_UKS_DF_NINE_EF_ORIGINAL_DEFAULT_FAILURE_RETAINED",
+    "reference-six-v5": "PASS6_PRIMARY_KNOWN_SOURCE_REPLICATIONS12_FULL_EF_AND_DUAL_GRID_QUARTER_GATES"
+  },
+  "files": [
+    {
+      "path": "native-qualification-v1-completed.tar.xz",
+      "bytes": 118280,
+      "sha256": "f57c575df7f708b6c175a2cbc490ca680fca6fd0bc65e629f9416403fcfb791c"
+    },
+    {
+      "path": "native-qualification-v1-download-manifest.json",
+      "bytes": 7193,
+      "sha256": "77c20c4e989465ca2d7087f72479ad1b59585a8c974fe6bb7676e4250537c7a8"
+    },
+    {
+      "path": "nsys-cpu-tool-observation-v1.json",
+      "bytes": 1198,
+      "sha256": "69b0a9dfc860c75f5a3a080b490216d7969412664f7ac0db83da9d1f1db1c501"
+    },
+    {
+      "path": "nsys-terminal-status-v1.json",
+      "bytes": 376,
+      "sha256": "1bdb18ae07e40842546d097758adef8402191e531a4746243d628591220f24db"
+    },
+    {
+      "path": "nsys-tool-identity-v1.json",
+      "bytes": 303,
+      "sha256": "201d09ac73afdc8e66b696cb86528fc401c7596adb770bc1ca12ce19a1a23a69"
+    },
+    {
+      "path": "nsys-v1-analysis-download.json",
+      "bytes": 10591,
+      "sha256": "b50b8c894f8d001ca4ca8d72779b9f20c117cc0663a12f1c83189a2111108fd6"
+    },
+    {
+      "path": "nsys-v1-analysis.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "397a7290392a15e022437763b97e2e6d1196d7ab9f9ef242197f6bf672900f14"
+    },
+    {
+      "path": "nsys-v1-analysis.tar.xz.part01",
+      "bytes": 653788,
+      "sha256": "ec42bee043b2730b18c8f00d79bd41fe1d5a0c3186e7d96e1079c84c33d8f220"
+    },
+    {
+      "path": "observe-nsys-cpu-tools-v1.py",
+      "bytes": 1020,
+      "sha256": "76f6687f49c34934ebef532caa724e94485d7bf3bdf7b244374d4a0d19b57db9"
+    },
+    {
+      "path": "readers/budget-capacity-replay-v1.py",
+      "bytes": 4698,
+      "sha256": "eb8e867992f54a95a10bfec927fffbe4b5665b64b1d8f76888dc2994ac614634"
+    },
+    {
+      "path": "readers/cohort-replay-v1.py",
+      "bytes": 7437,
+      "sha256": "468ab33ae2e868c3e1cbf8df292b14b94238d97b3e41d9d1f5322c13452edb06"
+    },
+    {
+      "path": "readers/replay-native-v2.py",
+      "bytes": 8515,
+      "sha256": "a90bbfe92f5f62c502551fa2777de8ed7f5d009c821dfb88cf758a400dffc4d7"
+    },
+    {
+      "path": "readers/replay-nsys-v2.py",
+      "bytes": 12044,
+      "sha256": "41291beff01cc415f022fc2a9896a493ac081701ead657af341b4d1accf7f160"
+    },
+    {
+      "path": "readers/replay-reference-six-v6.py",
+      "bytes": 12840,
+      "sha256": "0b6f98ce9a1f5e59e4e202a74e8fc32f667fba463ee26a7bff77d33c72b4e8f4"
+    },
+    {
+      "path": "readers/replay-standard-guards-v2.py",
+      "bytes": 15437,
+      "sha256": "d2e8ead17efacf9bdac49e4f9648d042a459966cbacbf6df25f76712dcd8eb13"
+    },
+    {
+      "path": "readers/replay-uks-fit-v1.py",
+      "bytes": 8818,
+      "sha256": "792f2426c65aa6b5b732af488c2f1ad90c2c70e7d1b0355580e36a062c5153e4"
+    },
+    {
+      "path": "readers/unpack-cohort-v2.py",
+      "bytes": 2661,
+      "sha256": "46fe6fd001614757a820dc5bb6dbd748562e29718d036cc7d2244df9dbbad8ae"
+    },
+    {
+      "path": "reference-six-v5-completed.tar.xz",
+      "bytes": 165456,
+      "sha256": "de4e8473cd247f59fa9a3e7b27ddffa9645471dfedd0877437967113058f3678"
+    },
+    {
+      "path": "reference-six-v5-download-manifest.json",
+      "bytes": 12992,
+      "sha256": "06ac5e9ee5965fa8ef0ab79d577a57e17a005710de86602dbf8ea4de38c2efa6"
+    },
+    {
+      "path": "standard-guards-v1-completed.tar.xz",
+      "bytes": 183616,
+      "sha256": "bde51c8931560635d38a16f0027fab08e85ebc9a3d063c8b5265e022c4114564"
+    },
+    {
+      "path": "standard-guards-v1-download-manifest.json",
+      "bytes": 14708,
+      "sha256": "f1abf39e6371cee77494f981cac40ad95d90aee9e5a58200cd7a19ca73532d09"
+    },
+    {
+      "path": "uks-fit-v1-completed.tar.xz",
+      "bytes": 57372,
+      "sha256": "e32a78dbf630340fe8442b8c3553a2c4fe2f7830cffa17a6a7c1a47ee731af43"
+    },
+    {
+      "path": "uks-fit-v1-download-manifest.json",
+      "bytes": 5647,
+      "sha256": "b3f1ecaa82bdff0da4a4376047dddf0c80faf313ab4a61816daa341ee7026794"
+    }
+  ],
+  "scope": "Five completed source-bound support phases only. Four native executions/two unfiltered memchecks; 3 intrusive SQLite captures/12EF, no clean timing votes; original Standard84 7/8, independent CPU12 attribution and separate explicit 139-auxiliary9EF qualification; 6 known-source fresh references/12EF. No final majority, public ResourceBudget or facade acceptance. Older14 oracle producer-byte provenance remains unrecovered; base scientific binary observations and remote installed-wheel attestation are not local binary verification.",
+  "nsys_archive_parts": [
+    {
+      "path": "nsys-v1-analysis.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "397a7290392a15e022437763b97e2e6d1196d7ab9f9ef242197f6bf672900f14"
+    },
+    {
+      "path": "nsys-v1-analysis.tar.xz.part01",
+      "bytes": 653788,
+      "sha256": "ec42bee043b2730b18c8f00d79bd41fe1d5a0c3186e7d96e1079c84c33d8f220"
+    }
+  ]
+}

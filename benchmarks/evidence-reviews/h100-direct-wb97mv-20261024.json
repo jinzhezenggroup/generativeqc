@@ -2,16 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "h100-direct-wb97mv-20261024",
   "owner": "#2732 bounded Direct WB97M-V water48/96 H100 evidence",
-  "reason": "Live scientific/runtime/control/source originals remain self-contained, including every98 complete EF return,72 formal returns and10 NOT_RUN with independent oracles. Superseded optional HOST producer/failure capsules use separately verified published Git recovery, not ordinary numerical-test inputs.",
+  "reason": "Exact historical terminal and HOST capsules now use authenticated existing-Git recovery. Default terminal replay checks the immutable580440-byte capsule and original SHA before decoding all98EF,72formal and10NOT_RUN outcomes; no scientific value,unfavorable timing,negative control or numeric gate changes. Current checkout retains outcomes,independent references and restoration manifests.",
   "review_document": "benchmarks/results/h100-direct-wb97mv-20261024/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/h100-direct-wb97mv-20261024/terminal-evidence.json.xz",
-      "bytes": 580440,
-      "sha256": "7b11180809ab45d366690bf74df13925bc674c69a3287c118b0cd80b32fa3a3e",
-      "family": "h100-direct-wb97mv-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Storage classification only: exact immutable HOST/terminal history including FAIL/NOT_RUN; original E/F/source/control bytes; not whole2732, purehardware or parent acceptance"
-    }
-  ]
+  "files": []
 }

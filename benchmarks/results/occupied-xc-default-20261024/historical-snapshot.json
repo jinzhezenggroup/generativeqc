@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "file_count": 1,
+  "total_bytes": 730016,
+  "purpose": "Exact existing historical evidence bytes read from local Git only; every observation,source,gate,failed/noisy/unfavorable outcome retained. No later-source qualification transfer.",
+  "files": [
+    {
+      "path": "benchmarks/results/occupied-xc-default-20261024/receipts.json.xz",
+      "bytes": 730016,
+      "sha256": "485742900892278eee58d927c699711ba336d1fb5d14da352648fda98482546d",
+      "git_blob_sha1": "cf6f3b490cf0d3aa12626827f1335267e0a93f93",
+      "git_mode": "100644"
+    }
+  ]
+}
