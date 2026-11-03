@@ -438,18 +438,6 @@
       "reason": "Exact completed source-bound compressed observations, full E/F vectors, producer and platform bindings; original failed/unfavorable results retained. CPU-only receiver recomputes accepted and failed outcomes; no final-majority or later-source qualification.",
       "sha256": "f57c575df7f708b6c175a2cbc490ca680fca6fd0bc65e629f9416403fcfb791c"
     },
-    "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part00": {
-      "owner": "H100 frozen-cd2b supporting qualification",
-      "reason": "Authenticated part of exact 1,440,220-byte Nsight analysis archive retaining all3actual SQLite databases for independent CPU timeline reduction. Compression and two-part storage preserve whole-archive SHA; no raw remote trace, timing vote or summary-only substitution.",
-      "sha256": "397a7290392a15e022437763b97e2e6d1196d7ab9f9ef242197f6bf672900f14",
-      "review_change": true
-    },
-    "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part01": {
-      "owner": "H100 frozen-cd2b supporting qualification",
-      "reason": "Authenticated part of exact 1,440,220-byte Nsight analysis archive retaining all3actual SQLite databases for independent CPU timeline reduction. Compression and two-part storage preserve whole-archive SHA; no raw remote trace, timing vote or summary-only substitution.",
-      "sha256": "ec42bee043b2730b18c8f00d79bd41fe1d5a0c3186e7d96e1079c84c33d8f220",
-      "review_change": true
-    },
     "benchmarks/results/h100-sm90-cd2b-guards-20261102/reference-six-v5-completed.tar.xz": {
       "owner": "H100 frozen-cd2b supporting qualification",
       "reason": "Exact completed source-bound compressed observations, full E/F vectors, producer and platform bindings; original failed/unfavorable results retained. CPU-only receiver recomputes accepted and failed outcomes; no final-majority or later-source qualification.",
@@ -489,6 +477,31 @@
       "owner": "H100 frozen cd2b public guard delivery",
       "reason": "Exact source-bound original full E/F, failure/refusal, lifecycle and actual route observations, independently CPU replayable; preserves Budget5/7 and original facade failures with separately scoped Budget9/API fallback acceptance. No clean timing or later-source qualification.",
       "sha256": "bdaa53bcc2e5fd2c1e21a0cc75aad0aa45294192e67495798cf3be569008c8a2"
+    },
+    "benchmarks/results/h100-sm90-cd2b-final-20261103/actual-result-audit.json.xz": {
+      "owner": "H100 frozen CD2B final fixed30 delivery",
+      "reason": "Exact completed180-process/720-full-EF original archive part or lossless scientific metadata/failure record. All30 physical inputs and every unfavorable outcome retained; no source or storage gate relaxation.",
+      "sha256": "ba70ef611e6ff4cbe49671005011e6306627cbc07c4995eeddb1d266ccf216ed"
+    },
+    "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-completed.tar.xz.part00": {
+      "owner": "H100 frozen CD2B final fixed30 delivery",
+      "reason": "Exact completed180-process/720-full-EF original archive part or lossless scientific metadata/failure record. All30 physical inputs and every unfavorable outcome retained; no source or storage gate relaxation.",
+      "sha256": "9954b73488a24c9b8f5c080066602e9062889aff5771c774e66bd7d158c198a5"
+    },
+    "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-completed.tar.xz.part01": {
+      "owner": "H100 frozen CD2B final fixed30 delivery",
+      "reason": "Exact completed180-process/720-full-EF original archive part or lossless scientific metadata/failure record. All30 physical inputs and every unfavorable outcome retained; no source or storage gate relaxation.",
+      "sha256": "f920881d29a149d3ef460503b53bb014b8881b0c1ea1b9685ed0ef4e959c2ecf"
+    },
+    "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-download-manifest.json.xz": {
+      "owner": "H100 frozen CD2B final fixed30 delivery",
+      "reason": "Exact completed180-process/720-full-EF original archive part or lossless scientific metadata/failure record. All30 physical inputs and every unfavorable outcome retained; no source or storage gate relaxation.",
+      "sha256": "8f6cfed046a0bb5d966601eac7a880ca381dc18cd890be64d59189d58aae6aa9"
+    },
+    "benchmarks/results/h100-sm90-cd2b-final-20261103/precompute-failures-v1.tar.xz": {
+      "owner": "H100 frozen CD2B final fixed30 delivery",
+      "reason": "Exact completed180-process/720-full-EF original archive part or lossless scientific metadata/failure record. All30 physical inputs and every unfavorable outcome retained; no source or storage gate relaxation.",
+      "sha256": "a95df8789c09adf7ad0f0f3aeffd6feafc1f6349f771b0a5311d7cbef64e60b8"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

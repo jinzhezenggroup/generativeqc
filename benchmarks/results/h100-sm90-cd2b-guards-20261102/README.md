@@ -53,3 +53,11 @@ the twelve CPU diagnostic observations and replays the matched-DF comparisons
 used by the refined nine-call qualification. Its dormant budget helper files
 add no resource-budget acceptance. The audit input seal includes private control
 fixtures; the published audit metadata describes that boundary.
+
+The two Nsight analysis archive parts are retained byte-for-byte in the existing
+merged Git objects at `4c7354958468810dc83eb409c493ae49d810e613`.
+`historical-snapshot.json` authenticates both SHA256 and Git object identities.
+The replay command reads only these explicit entries through the offline history
+loader; no network, Release or external backup is used. Full Git history is
+required. All three SQLite databases and twelve intrusive E/F remain available;
+this storage change adds no timing votes and changes no scientific proof.

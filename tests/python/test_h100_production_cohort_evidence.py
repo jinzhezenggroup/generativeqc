@@ -37,6 +37,8 @@ def test_actual_supporting_phases_replay() -> None:
 def _publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     target = tmp_path / "support"
     shutil.copytree(evidence.DIRECTORY, target)
+    for part in evidence.checked_publication()["nsys_archive_parts"]:
+        (target / part["path"]).write_bytes(evidence.artifact_bytes(part["path"]))
     monkeypatch.setattr(evidence, "DIRECTORY", target)
     return target
 
