@@ -221,9 +221,20 @@ also retain 256. An automatically enlarged owner that cannot allocate storage
 retries preparation once at 256; other failures propagate. A positive integer
 always preserves the explicit SCF request.
 
+Full-range Direct strict-FP64 RKS with gradient-dependent XC on A100 devices
+(SM80, FP32/FP64 throughput ratio two) also uses 1024 SCF and force points inside
+the same size/headroom gates.
+This Direct policy requires zero application arithmetic budgets and is limited
+to 48–128 all-electron atoms and shells through d;
+range-separated/nonlocal methods, other GPU families and larger geometries keep
+their existing automatic schedules. Explicit controls and resource promises
+retain their existing priority, and the same bounded allocation retries apply.
+The [A100 Direct tiling decision](../../.agents/notes/implemented/performance/2026-11-03-a100-direct-automatic-tiles.md)
+records the qualification scope and retained alternatives.
+
 `force_tile_points` independently bounds CUDA stationary-force batches (1..4096
 points). When omitted, an explicit SCF tile is inherited. With automatic SCF,
-large fitted strict-FP64, gradient-dependent RKS owners independently use 1024
+large qualified strict-FP64, gradient-dependent RKS owners independently use 1024
 force points on compute capability 8 or newer. This requires the same AO/grid
 size and free-memory thresholds, all-electron basis shells through d, 48–128
 atoms, native stationary admission and no resource promise. Other owners use

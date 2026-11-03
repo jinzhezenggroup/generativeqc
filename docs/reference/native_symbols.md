@@ -232,6 +232,13 @@ capability authorities, serialization, and status handling.
 - [generativeqc_batch_restore_warm_seeds_v1](#native-c-generativeqc-batch-restore-warm-seeds-v1)
 - [generativeqc_warm_seed_snapshot_read_v1](#native-c-generativeqc-warm-seed-snapshot-read-v1)
 - [generativeqc_warm_seed_snapshot_destroy](#native-c-generativeqc-warm-seed-snapshot-destroy)
+- [generativeqc_electronic_properties_cuda_create_v1](#native-c-generativeqc-electronic-properties-cuda-create-v1)
+- [generativeqc_electronic_properties_cuda_analyze_v1](#native-c-generativeqc-electronic-properties-cuda-analyze-v1)
+- [generativeqc_electronic_properties_cuda_evaluate_v1](#native-c-generativeqc-electronic-properties-cuda-evaluate-v1)
+- [generativeqc_electronic_properties_destroy_v1](#native-c-generativeqc-electronic-properties-destroy-v1)
+- [generativeqc_calculation_execute_density_v1](#native-c-generativeqc-calculation-execute-density-v1)
+- [generativeqc_ks_batch_copy_density_v1](#native-c-generativeqc-ks-batch-copy-density-v1)
+- [generativeqc_system_position_integrals_cpu_v1](#native-c-generativeqc-system-position-integrals-cpu-v1)
 
 (native-c-generativeqc-ks-options-version)=
 ## generativeqc_ks_options_version
@@ -6160,3 +6167,185 @@ GENERATIVEQC_API void generativeqc_warm_seed_snapshot_destroy ( generativeqc_war
 **Execution.** Synchronous host-only destruction; requires no live context or GPU.
 
 **Units.** Not applicable.
+
+(native-c-generativeqc-electronic-properties-cuda-create-v1)=
+## generativeqc_electronic_properties_cuda_create_v1
+
+Source: [electronic_properties.h](../../include/generativeqc/electronic_properties.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_electronic_properties_cuda_create_v1 ( generativeqc_context * context , const generativeqc_system * system , const double * density , size_t density_count , size_t point_capacity , generativeqc_electronic_properties * * output ) ;
+```
+
+**Behavior.** Create a detached CUDA FP64 property/sampling owner, without SCF.
+
+**Inputs.** CUDA context, normalized all-electron through-f system, finite symmetric
+row-major restricted total or alpha then beta density, exact density_count of
+nAO*nAO or 2*nAO*nAO, positive point_capacity <= INT_MAX, non-NULL output.
+
+**Outputs.** Owned handle; output is NULL on failure. Density and basis are copied.
+
+**Errors.** INVALID_ARGUMENT for malformed inputs; NOT_IMPLEMENTED without CUDA or
+for CPU contexts/ECP systems; allocation and CUDA errors propagate. No CPU fallback.
+
+**Lifetime.** Owner survives input system/context destruction. Destroy explicitly.
+
+**Execution.** Synchronous upload on context device; serialize owner operations.
+
+**Units.** Geometry Bohr; density in normalized public AO basis, electrons.
+
+(native-c-generativeqc-electronic-properties-cuda-analyze-v1)=
+## generativeqc_electronic_properties_cuda_analyze_v1
+
+Source: [electronic_properties.h](../../include/generativeqc/electronic_properties.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_electronic_properties_cuda_analyze_v1 ( generativeqc_context * context , generativeqc_electronic_properties * properties , double * dipole , double * mulliken , double * lowdin , size_t atom_count ) ;
+```
+
+**Behavior.** Compute dipole and optional Mulliken/Lowdin charges entirely on CUDA.
+
+**Inputs.** Live owner and CUDA context on its device; optional dipole[3], and either
+both Mulliken/Lowdin[natom] outputs with exact atom_count or neither with zero.
+At least one property must be requested.
+
+**Outputs.** Owned host output buffers, published synchronously after device work.
+
+**Errors.** INVALID_ARGUMENT for shapes/device mismatch; NUMERICAL_FAILURE for
+nonpositive overlap eigenvalues/nonfinite results; CUDA/allocation errors.
+Output contents on failure are unspecified; a later call may retry.
+
+**Lifetime.** Caller owns outputs; no borrowed pointers escape.
+
+**Execution.** FP64 overlap/position kernels, cuSOLVER and cuBLAS; no host analysis.
+Serialize with evaluation/destruction. Restores the caller's current device.
+
+**Units.** Dipole e*Bohr including nuclei; charges in elementary-charge units.
+
+(native-c-generativeqc-electronic-properties-cuda-evaluate-v1)=
+## generativeqc_electronic_properties_cuda_evaluate_v1
+
+Source: [electronic_properties.h](../../include/generativeqc/electronic_properties.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_electronic_properties_cuda_evaluate_v1 ( generativeqc_context * context , generativeqc_electronic_properties * properties , const double * points , size_t point_count , int spin , double * output , size_t output_count ) ;
+```
+
+**Behavior.** Sample total or alpha-minus-beta density using generated CUDA AOs.
+
+**Inputs.** Live owner and same-device CUDA context; finite row-major points[n,3],
+spin equal to 0 or 1, output[n] with output_count == point_count. Empty calls
+permit NULL points/output. Nonempty calls require both buffers.
+
+**Outputs.** Host density values; native point tiles respect owner's point_capacity.
+
+**Errors.** INVALID_ARGUMENT for bad inputs; CUDA/allocation/numerical errors.
+No host AO or density-contraction fallback. Failure may leave partial output.
+
+**Lifetime.** Caller owns all buffers. Owner retains only its detached state.
+
+**Execution.** Synchronous FP64 generated AO/contraction path; serialize owner use.
+Restores the caller's current device, including on failure.
+
+**Units.** Points Bohr; output electrons/Bohr**3, signed for spin density.
+
+(native-c-generativeqc-electronic-properties-destroy-v1)=
+## generativeqc_electronic_properties_destroy_v1
+
+Source: [electronic_properties.h](../../include/generativeqc/electronic_properties.h)
+
+```cpp
+GENERATIVEQC_API void generativeqc_electronic_properties_destroy_v1 ( generativeqc_electronic_properties * properties ) ;
+```
+
+**Behavior.** Destroy a detached electronic-property owner; NULL is a no-op.
+
+**Inputs.** Owner or NULL; externally serialize against all owner operations.
+
+**Outputs.** None; outstanding device work is drained before resources retire.
+
+**Errors.** No exceptions cross the ABI; destruction does not report CUDA errors.
+
+**Lifetime.** Invalidates owner and releases all host/device storage.
+
+**Execution.** Synchronous teardown on its device; restores caller device.
+
+**Units.** Not applicable.
+
+(native-c-generativeqc-calculation-execute-density-v1)=
+## generativeqc_calculation_execute_density_v1
+
+Source: [electronic_properties.h](../../include/generativeqc/electronic_properties.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_execute_density_v1 ( generativeqc_calculation * calculation , generativeqc_result_descriptor * output , double * density , size_t density_count ) ;
+```
+
+**Behavior.** Execute one mean-field calculation and detach its converged AO density.
+No second SCF, reference solver, or correlated-density approximation is used.
+
+**Inputs.** Live RHF/UHF/RKS/UKS calculation; ordinary versioned result descriptor;
+non-NULL density buffer with exactly nAO*nAO (restricted) or 2*nAO*nAO doubles.
+
+**Outputs.** Ordinary energy/optional forces and row-major density. Restricted
+density includes double occupation; unrestricted stores alpha followed by beta.
+
+**Errors.** Ordinary execution errors; NOT_IMPLEMENTED for non-mean-field methods,
+NOT_CONVERGED for an unaccepted state, INVALID_ARGUMENT for wrong capacity.
+A rejected capture revokes publication; output contents on failure are unspecified.
+
+**Lifetime.** Caller owns all output buffers; copies survive calculation destruction.
+
+**Execution.** Synchronous on the prepared backend, with explicit host density export.
+Serialize against all other operations on the calculation/context.
+
+**Units.** Energy Hartree, geometry Bohr, density in the normalized public AO basis.
+
+(native-c-generativeqc-ks-batch-copy-density-v1)=
+## generativeqc_ks_batch_copy_density_v1
+
+Source: [electronic_properties.h](../../include/generativeqc/electronic_properties.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_batch_copy_density_v1 ( generativeqc_batch * batch , size_t index , double * density , size_t density_count ) ;
+```
+
+**Behavior.** Detach the accepted density of one completed KS batch item without SCF replay.
+
+**Inputs.** Live batch, zero-based item index, non-NULL output of exactly one
+restricted or two unrestricted square AO matrices, as for execute_density_v1.
+
+**Outputs.** Row-major restricted total density or alpha then beta matrices.
+
+**Errors.** INVALID_ARGUMENT for bad pointers/count/index; NOT_IMPLEMENTED for
+non-KS owners; final-state validation rejects stale or unsuccessful executions.
+
+**Lifetime.** Caller owns the detached output; no borrowed device pointers escape.
+
+**Execution.** Synchronous token-checked native final-state export. Externally serialize
+with batch execute, coordinate changes, reset and destruction.
+
+**Units.** Normalized public AO basis; restricted density includes double occupation.
+
+(native-c-generativeqc-system-position-integrals-cpu-v1)=
+## generativeqc_system_position_integrals_cpu_v1
+
+Source: [electronic_properties.h](../../include/generativeqc/electronic_properties.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_system_position_integrals_cpu_v1 ( generativeqc_context * context , const generativeqc_system * system , double * output , size_t output_count ) ;
+```
+
+**Behavior.** Evaluate the three normalized AO position-operator matrices.
+
+**Inputs.** Live context/system; non-NULL output of exactly 3*nAO*nAO doubles.
+
+**Outputs.** Axis-major row-major <mu|r_axis|nu>, with origin at (0,0,0).
+
+**Errors.** INVALID_ARGUMENT for NULL inputs or wrong capacity; native failures propagate.
+
+**Lifetime.** Caller owns the output, which outlives the context/system.
+
+**Execution.** Explicit synchronous CPU FP64 Gaussian analysis; no SCF or ERIs.
+
+**Units.** Bohr; public Cartesian or real-spherical AO ordering and normalization.

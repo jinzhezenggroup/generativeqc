@@ -17,6 +17,9 @@ print(result.energy)
 print(result.forces)
 ```
 
+For opt-in dipoles, Mulliken/Lowdin atomic charges and electron-density sampling
+or Cube export, see [electronic properties](electronic_properties.md).
+
 Discover current public methods with:
 
 ```bash
