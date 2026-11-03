@@ -1,6 +1,11 @@
 # Decision: group SM80 Direct force classes after one bounded scan
 
 Status: implemented
+
+The architecture-specific policy is being superseded by the
+[portable packet-grouping revision](../../proposed/2026-11-03-portable-direct-force-class-grouping.md).
+This note retains the original version's measurements; they do not qualify the
+portable version's changed SM120 kernel.
 Date: 2026-11-03
 
 ## Problem

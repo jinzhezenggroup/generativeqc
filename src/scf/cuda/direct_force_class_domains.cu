@@ -91,9 +91,7 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
     detail::BoundedDirectBlockDomain block_domain) {
   __shared__ ActiveShellQuartetTile queue[detail::kBoundedDirectQueueCapacity];
   __shared__ std::uint32_t queue_count;
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 800
   __shared__ std::uint32_t class_offsets[kDirectSpdForceQueueClasses];
-#endif
   __shared__ BoundedDirectQueuePage page;
   __shared__ bool available;
   while (true) {
@@ -121,11 +119,9 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
     __syncthreads();
     for (auto packet = page.candidate_begin; packet < page.candidate_end; packet += blockDim.x) {
       if (threadIdx.x == 0U) queue_count = 0U;
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 800
       if (threadIdx.x < kDirectSpdForceQueueClasses) class_offsets[threadIdx.x] = 0U;
       unsigned queued_class = kDirectSpdForceQueueClasses;
       ActiveShellQuartetTile queued_task{};
-#endif
       __syncthreads();
       const auto candidate = packet + threadIdx.x;
       if (candidate < page.candidate_end) {
@@ -157,13 +153,9 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
                 bounded_generated_class_enabled(shell_class, enabled_mask_pointer, enabled_mask);
             if (census) atomicAdd(generated ? &census->generated_owned : &census->admitted, 1ULL);
             if (!generated) {
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 800
               queued_class = shell_class;
               queued_task = task;
               atomicAdd(&class_offsets[shell_class], 1U);
-#else
-              queue[atomicAdd(&queue_count, 1U)] = task;
-#endif
               profile_bounded_direct_shell_quartet(batch, task, profile);
             }
           } else if (census) {
@@ -174,17 +166,14 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
         }
       }
       __syncthreads();
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 800
-      // Ampere's scalar callees retain large private frames. Cluster their
-      // classes within this already-screened packet instead of repeating the
-      // candidate scan in separate angular kernels. Other GPUs keep their
-      // qualified queue policy until this extra synchronization is measured.
+      // Group already-admitted tasks so scalar recurrence callees in each
+      // warp see less class divergence without repeating the candidate scan.
+      // This bounded permutation depends on task classes, not GPU identity.
       if (threadIdx.x == 0U) queue_count = direct_force_class_queue_offsets(class_offsets);
       __syncthreads();
       if (queued_class < kDirectSpdForceQueueClasses)
         queue[atomicAdd(&class_offsets[queued_class], 1U)] = queued_task;
       __syncthreads();
-#endif
       contract_bounded_spd_low_queue<Unrestricted, Mode, true, Partition>(
           batch, queue, queue_count, screening_tolerance, schwarz_bounds, density, active, output,
           coulomb_coefficient, exchange_coefficient);
