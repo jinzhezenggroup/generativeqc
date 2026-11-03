@@ -11,7 +11,8 @@ on:
 permissions:
   contents: read
 
-# Preserve the running job and let GitHub replace only superseded pending work.
+# PR-only cancellation preempts stale macOS GPU work; keep merge-group,
+# manual, and scheduled qualification running to preserve protected evidence.
 concurrency:
   group: cumetal-cuda-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event_name == 'merge_group' && github.ref || github.run_id }}
   # An updated PR supersedes the old macOS GPU run. Preserve every merge-
