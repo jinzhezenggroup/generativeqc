@@ -179,3 +179,10 @@ paths and settings. The reusable entry point is
 inside a finite `srun` allocation, using the same source/binary/input identity
 for all arms. See the [current cache contract](../../../docs/developer/xc_native_cuda.md#experimental-pageable-lr-eri-backing)
 and [decision note](../../../.agents/notes/implemented/performance/2026-10-24-host-lr-eri-experiment.md).
+
+The original compressed packets are retained byte-for-byte in the already-merged
+Git revision identified by `historical-snapshot.json`. The CPU reproduction
+command above uses the existing public offline snapshot reader, checking the
+original size, SHA-256 and Git blob before all scientific gates. Keep Git history
+available: missing or corrupt history fails explicitly. No external archive,
+new GPU measurement, numerical rounding or evidence-budget increase is involved.

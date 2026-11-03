@@ -125,3 +125,10 @@ numeric/device and available-job-RAM bounds. Setup I/O refusal preserves
 GPU/RAM/Direct; replay I/O failure fails the action. Geometry/precision ownership
 retires the descriptor. Flush/page-eviction calls are OS hints, not a physical
 I/O guarantee. No persistent, shared, or cross-geometry cache is created.
+
+The original compressed packets are retained byte-for-byte in the already-merged
+Git revision identified by `historical-snapshot.json`. The CPU reproduction
+command above uses the existing public offline snapshot reader, checking the
+original size, SHA-256 and Git blob before all scientific gates. Keep Git history
+available: missing or corrupt history fails explicitly. No external archive,
+new GPU measurement, numerical rounding or evidence-budget increase is involved.

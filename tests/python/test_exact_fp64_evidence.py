@@ -139,3 +139,32 @@ def test_missing_stream_digest_is_rejected(tmp_path: Path) -> None:
     (tmp_path / "sha256.txt").write_text("")
     with pytest.raises(ValueError, match="missing stream digest"):
         load(tmp_path)
+
+
+def test_explicit_historical_streams_retain_bundle_authentication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tools import restore_retained_evidence
+
+    bundle = {
+        "schema": "generativeqc.exact-fp64-evidence.v3",
+        "float_count": 0,
+        "files": [],
+    }
+    write_bundle(tmp_path, bundle, [])
+    receipt = tmp_path / "receipts.json.xz"
+    original = receipt.read_bytes()
+    receipt.unlink()
+    snapshot = tmp_path / "historical-snapshot.json"
+
+    def recover(path: Path, *, manifest: Path) -> bytes:
+        assert manifest == snapshot
+        return original if path == receipt else path.read_bytes()
+
+    monkeypatch.setattr(restore_retained_evidence, "read_evidence_bytes", recover)
+    with pytest.raises(FileNotFoundError):
+        load(tmp_path)
+    assert load(tmp_path, historical_manifest=snapshot) == (bundle, {})
+    original = lzma.compress(b"changed historical bytes")
+    with pytest.raises(ValueError, match="receipts.json.xz"):
+        load(tmp_path, historical_manifest=snapshot)
