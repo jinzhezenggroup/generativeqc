@@ -243,6 +243,12 @@ bounded tile schedule. Initial-guess options govern cold-start preparation and
 its budgets without changing the target method, basis, grid, precision or final
 tolerances. Existing explicit/imported/retained densities take precedence.
 
+`KsOptions.tile_points=None` selects the native backend default: ordinary CUDA
+semilocal XC uses 1024-point SCF and force tiles without installing a profile.
+See [SCF and force tile policies](../user/ks_options.md#scf-and-force-tile-policies)
+for explicit overrides, resource promises, CPU/nonlocal defaults and bounded
+allocation-failure retries.
+
 `KsOptions(grid=xc_grid, nonlocal_grid=vv10_grid)` independently prescribes the
 semilocal and VV10/rVV10 quadratures. For Treutler v4 XC prescriptions, an
 omitted VV10/rVV10 grid defaults to level 3 even when XC uses another level

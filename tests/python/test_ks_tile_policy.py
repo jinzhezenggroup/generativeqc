@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 def test_automatic_tile_preserves_overrides_and_resource_fallbacks(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """Only large fitted strict-FP64 RKS on full-rate FP64 devices may grow."""
+    """CUDA XC defaults to 1024 without a profile, shape or FP64-device gate."""
     unit = tmp_path / "tiles.cpp"
     unit.write_text(
         r"""
@@ -44,15 +44,15 @@ int main() {
     for tile in (1, 31, 256, 512, 4096):
         cases.append(((tile, 0, 0, 1, 1, 0, 0, 0), tile))
     for index, value, expected in (
-        (1, 0, 256),
+        (1, 0, 1024),
         (2, 0, 256),
-        (3, 511, 256),
-        (4, (1 << 19) - 1, 256),
+        (3, 511, 1024),
+        (4, (1 << 19) - 1, 1024),
         (5, 1, 512),
-        (6, 7, 256),
-        (6, 0, 256),
-        (7, 0, 256),
-        (7, 64, 256),
+        (6, 7, 1024),
+        (6, 0, 1024),
+        (7, 0, 1024),
+        (7, 64, 1024),
     ):
         row = list(eligible)
         row[index] = value
@@ -60,7 +60,11 @@ int main() {
     cases.extend(
         [
             ((0, 1, 1, 512, 1 << 19, 0, 9, 2), 1024),
+            ((0, 0, 1, 1, 1, 0, 12, 64), 1024),
+            ((0, 0, 0, 768, 1 << 20, 0, 12, 64), 256),
             ((0, 1, 1, 768, 1 << 20, 1, 12, 64), 256),
+            ((0, 0, 1, 768, 1 << 20, 1, 8, 2), 256),
+            ((0, 1, 1, 511, 1 << 20, 1, 8, 2), 256),
         ]
     )
     result = subprocess.run(
@@ -133,26 +137,23 @@ int main() {
     assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]
 
 
-def test_direct_tiles_require_the_qualified_a100_domain(
+def test_direct_tiles_require_the_qualified_sm80_fp64_domain(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """Do not export A100 Direct measurements to other targets or geometry domains."""
+    """Require SM80/A100-class capabilities rather than a GPU name string."""
     unit = tmp_path / "direct_tiles.cpp"
     unit.write_text(
         r"""
-#include <iomanip>
 #include <iostream>
-#include <string>
 #include "dft/ks_tile_policy.hpp"
 int main() {
   bool direct, strict_budget, all_electron;
   std::size_t angular, atoms;
-  std::string device;
   int major, minor, ratio;
-  while (std::cin >> direct >> strict_budget >> all_electron >> angular >> atoms >> std::quoted(device)
+  while (std::cin >> direct >> strict_budget >> all_electron >> angular >> atoms
                  >> major >> minor >> ratio)
     std::cout << generativeqc::dft::automatic_direct_ks_tiles_eligible(
-        direct, strict_budget, all_electron, angular, atoms, device, major, minor, ratio) << '\n';
+        direct, strict_budget, all_electron, angular, atoms, major, minor, ratio) << '\n';
 }
 """
     )
@@ -164,7 +165,9 @@ int main() {
             "-I" + str(Path(__file__).resolve().parents[2] / "src"),
         ),
     )
-    eligible = (1, 1, 1, 2, 96, "NVIDIA A100-PCIE-40GB", 8, 0, 2)
+    # This capability tuple is shared by qualifying A100-class SM80 devices.
+    # GPU model names must not participate in the production policy.
+    eligible = (1, 1, 1, 2, 96, 8, 0, 2)
     cases = [(eligible, True)]
     for index, value in (
         (0, 0),
@@ -173,33 +176,29 @@ int main() {
         (3, 3),
         (4, 47),
         (4, 129),
-        (5, "NVIDIA A30"),
-        (5, "NVIDIA H100"),
-        (5, "NVIDIA GeForce RTX 5090"),
-        (5, "unknown"),
-        (6, 7),
-        (6, 9),
-        (7, 6),
-        (8, 0),
-        (8, 64),
+        (5, 7),
+        (5, 9),
+        (5, 12),
+        (6, 1),
+        (6, 6),
+        (7, 0),
+        (7, 1),
+        (7, 64),
     ):
         row = list(eligible)
         row[index] = value
         cases.append((tuple(row), False))
     for atoms in (48, 128):
-        row = list(eligible)
-        row[4] = atoms
-        row[5] = "NVIDIA A100-SXM4-80GB"
-        cases.append((tuple(row), True))
-    for atoms in (48, 96, 128):
-        cases.append(((1, 1, 1, 2, atoms, "NVIDIA GeForce RTX 5090", 12, 0, 64), False))
-    inputs = "".join(
-        " ".join(
-            f'"{value}"' if isinstance(value, str) else str(value) for value in row
-        )
-        + "\n"
-        for row, _ in cases
+        cases.append(((1, 1, 1, 2, atoms, 8, 0, 2), True))
+    # Do not export A100 endpoint measurements to Hopper or Blackwell.
+    cases.extend(
+        [
+            ((1, 1, 1, 2, 96, 9, 0, 2), False),
+            ((1, 1, 1, 2, 96, 12, 0, 64), False),
+            ((1, 1, 1, 2, 96, 8, 6, 64), False),
+        ]
     )
+    inputs = "".join(" ".join(map(str, row)) + "\n" for row, _ in cases)
     result = subprocess.run(
         [str(executable)],
         input=inputs,
