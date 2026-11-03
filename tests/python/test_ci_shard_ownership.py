@@ -271,6 +271,21 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
         assert f"tests/python/{filename}" in targets
 
 
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("shard", SHARDS)
+def test_expensive_full_oracles_run_in_nightly_not_routine_ci(
+    event: str, shard: str
+) -> None:
+    # Check the sourced production selector, not a mocked list of exclusions.
+    _, _, arguments = _selection(event, shard)
+    marker_filters = list(zip(arguments, arguments[1:])).count(
+        ("-m", "not ci_nightly")
+    )
+    assert marker_filters == (0 if event in {"schedule", "workflow_dispatch"} else 1)
+
+
 @pytest.mark.parametrize("event", ("schedule", "workflow_dispatch"))
 @pytest.mark.parametrize("shard", SHARDS)
 def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:

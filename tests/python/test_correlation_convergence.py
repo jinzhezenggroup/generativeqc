@@ -249,7 +249,9 @@ def test_native_budget_descriptor_and_batch_boundary() -> None:
 
 
 @pytest.mark.parametrize("device", ("cpu", "cuda"))
-@pytest.mark.parametrize("policy", ("standard", "fast"))
+@pytest.mark.parametrize(
+    "policy", (pytest.param("standard", marks=pytest.mark.ci_nightly), "fast")
+)
 def test_routine_composite_and_components_against_independent_water_oracle(
     device: str,
     policy: str,
