@@ -1,0 +1,463 @@
+{
+  "schema": "local-h100-production-goal.v1",
+  "status": "PRIMARY_CASES_PREREGISTERED_PROTOCOL_AUDIT_PENDING",
+  "tracker": 2889,
+  "intake_master": "15ab66a68a061355fda833a93e88484dbfee6360",
+  "intake_candidate": {
+    "pr": 2888,
+    "sha": "ba424c457cff8bfd92ca0df62b42f03593a9197c"
+  },
+  "primary_physical_cases": [
+    {
+      "id": "hf-water-48-direct",
+      "method": "hf",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "hf-water-48-df",
+      "method": "hf",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "hf-water-96-direct",
+      "method": "hf",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "hf-water-96-df",
+      "method": "hf",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "pbe-water-48-direct",
+      "method": "pbe",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "pbe-water-48-df",
+      "method": "pbe",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "pbe-water-96-direct",
+      "method": "pbe",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "pbe-water-96-df",
+      "method": "pbe",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "pbe0-water-48-direct",
+      "method": "pbe0",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "pbe0-water-48-df",
+      "method": "pbe0",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "pbe0-water-96-direct",
+      "method": "pbe0",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "pbe0-water-96-df",
+      "method": "pbe0",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "b3lyp-water-48-direct",
+      "method": "b3lyp",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "b3lyp-water-48-df",
+      "method": "b3lyp",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "b3lyp-water-96-direct",
+      "method": "b3lyp",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "b3lyp-water-96-df",
+      "method": "b3lyp",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "r2scan-water-48-direct",
+      "method": "r2scan",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "r2scan-water-48-df",
+      "method": "r2scan",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "r2scan-water-96-direct",
+      "method": "r2scan",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "r2scan-water-96-df",
+      "method": "r2scan",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "r2scan-3c-water-48-direct",
+      "method": "r2scan-3c",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-mTZVPP",
+      "basis_representation": "spherical",
+      "corrections": [
+        "D4",
+        "gCP"
+      ]
+    },
+    {
+      "id": "r2scan-3c-water-48-df",
+      "method": "r2scan-3c",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-mTZVPP",
+      "basis_representation": "spherical",
+      "corrections": [
+        "D4",
+        "gCP"
+      ]
+    },
+    {
+      "id": "r2scan-3c-water-96-direct",
+      "method": "r2scan-3c",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-mTZVPP",
+      "basis_representation": "spherical",
+      "corrections": [
+        "D4",
+        "gCP"
+      ]
+    },
+    {
+      "id": "r2scan-3c-water-96-df",
+      "method": "r2scan-3c",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-mTZVPP",
+      "basis_representation": "spherical",
+      "corrections": [
+        "D4",
+        "gCP"
+      ]
+    },
+    {
+      "id": "m06-2x-water-48-direct",
+      "method": "m06-2x",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "m06-2x-water-48-df",
+      "method": "m06-2x",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "m06-2x-water-96-direct",
+      "method": "m06-2x",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "m06-2x-water-96-df",
+      "method": "m06-2x",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "wb97m-v-water-48-direct",
+      "method": "wb97m-v",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    },
+    {
+      "id": "wb97m-v-water-96-direct",
+      "method": "wb97m-v",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "direct",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": []
+    }
+  ],
+  "declared_noncomparable_coverage_rows": [
+    {
+      "id": "wb97m-v-water-48-df",
+      "method": "wb97m-v",
+      "atoms": 48,
+      "fixture": "water-48",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": [],
+      "reason": "Native full-range fitted plus exact long-range exchange differs from reference full-range and long-range fitting; not equivalent approximation contracts."
+    },
+    {
+      "id": "wb97m-v-water-96-df",
+      "method": "wb97m-v",
+      "atoms": 96,
+      "fixture": "water-96",
+      "route": "df",
+      "spin": 0,
+      "charge": 0,
+      "orbital_basis": "def2-svp",
+      "basis_representation": "spherical",
+      "corrections": [],
+      "reason": "Native full-range fitted plus exact long-range exchange differs from reference full-range and long-range fitting; not equivalent approximation contracts."
+    }
+  ],
+  "required_win_count": 20,
+  "primary_case_count": 30,
+  "win_rule": {
+    "median_process_paired_speedup_gpu4_over_native_gt": 1.05,
+    "each_of_three_process_pair_ratios_gt": 1.0,
+    "all_full_vector_gates_pass": true
+  },
+  "overall_gate": {
+    "geometric_mean_speedup_gt": 1.0,
+    "all_required_cases_complete_and_scientifically_qualified": true,
+    "missing_failed_timed_out_cases_not_wins": true
+  },
+  "numerical_gates": {
+    "energy_abs_per_atom_hartree": 1e-05,
+    "force_max_abs_hartree_per_bohr": 0.0001,
+    "force_rms_hartree_per_bohr": 3e-05
+  },
+  "measurement": {
+    "independent_processes_per_engine_case": 3,
+    "cold_calls_per_process": 1,
+    "warm_calls_per_process": 3,
+    "warm_seed": "own cold density, updates frozen",
+    "primary_phase": "complete static warm energy plus analytic force",
+    "cold_and_moved_separate": true,
+    "same_physical_gpu_within_each_comparison": true,
+    "reference_optimizations": "supported independently qualified production options; do not handicap reference",
+    "production_policy": "one documented selection/default or recommended policy frozen before final validation; no per-case exploratory winner selection",
+    "standard_fast_and_repeats_are_not_extra_votes": true
+  },
+  "qualification_guards": [
+    "3/12 atom small cases",
+    "UKS",
+    "changed geometry and moved-warm",
+    "constrained-memory fallback",
+    "batch/lifetime",
+    "independent directional force controls"
+  ],
+  "known_unresolved": [
+    "HF DF default fitting error must remain failed until a qualified fitting contract passes unchanged gates",
+    "M06-2X small default-grid failures remain visible",
+    "source-bound independent references and grid stability still require audit per method",
+    "water-series primary matrix does not establish universal chemistry coverage"
+  ],
+  "evidence": {
+    "budget_bytes": 83886080,
+    "intake_mainline_headroom_bytes": 111,
+    "intake_candidate_headroom_bytes": 3169,
+    "new_external_backup_authorized": false,
+    "next_step": "verified lossless compaction/history recovery for non-live historical material; no numerical data loss or policy increase"
+  },
+  "scope": "H100/SM90; A100 ownership preserved; RTX5090 execution not a gate; CBS not in GPU4 performance denominator"
+}
