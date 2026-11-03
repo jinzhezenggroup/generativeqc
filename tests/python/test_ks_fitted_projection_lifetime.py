@@ -99,6 +99,7 @@ PreparedCudaOccupiedFockBinding prepared_cuda_occupied_fock_binding(const Prepar
     )
     unit += "\n}\n"
     unit += _definition(public, "struct CudaKsResidentFittedProjectionBinding") + ";\n"
+    unit += _definition(public, "struct CudaKsResidentOccupiedFactorBinding") + ";\n"
     unit += r"""
 struct CudaKsFinalStateToken {
   unsigned version=1;
@@ -112,6 +113,7 @@ struct Owner {
   scf::PreparedCudaOccupiedFockBinding occupied_fock_binding =
       scf::prepared_cuda_occupied_fock_binding(provider);
   bool pending_fitted_occupied=true, final_fitted_projection_ready=false;
+  bool final_occupied_factor_ready=false;
   bool warm_orbitals_ready=true;
   bool warm_orbitals_are_ao=false;
   unsigned spins=1;
@@ -137,12 +139,17 @@ struct Owner {
 };
 struct CudaKsPlan {
   Owner* impl_;
+  generativeqc_status resident_final_occupied_factor(const CudaKsFinalStateToken&,
+      CudaKsResidentOccupiedFactorBinding&, std::string&) const;
   generativeqc_status resident_final_fitted_projection(const CudaKsFinalStateToken&,
       CudaKsResidentFittedProjectionBinding&, std::string&) const;
 };
 """
     unit += _definition(
         owner, "generativeqc_status CudaKsPlan::resident_final_fitted_projection("
+    )
+    unit += _definition(
+        owner, "generativeqc_status CudaKsPlan::resident_final_occupied_factor("
     )
     unit += r"""
 int main(int argc, char** argv) {
@@ -165,7 +172,7 @@ int main(int argc, char** argv) {
     if (mode == "unexecuted") source.completed_occupied_projection_rank=0;
     owner.capture_submission(true);
     owner.retain_final_fitted_projection();
-    assert(!owner.final_fitted_projection_ready && launches == 0);
+    assert(!owner.final_fitted_projection_ready && owner.final_occupied_factor_ready);
     return 0;
   }
   owner.capture_submission(true);
@@ -173,11 +180,11 @@ int main(int argc, char** argv) {
     source.revoke_projection_leases();
     source.completed_occupied_projection_rank=1;
     owner.retain_final_fitted_projection();
-    assert(!owner.final_fitted_projection_ready && launches == 0);
+    assert(!owner.final_fitted_projection_ready && owner.final_occupied_factor_ready);
     return 0;
   }
   owner.retain_final_fitted_projection();
-  assert(owner.final_fitted_projection_ready && launches == 1);
+  assert(owner.final_fitted_projection_ready && owner.final_occupied_factor_ready && launches == 1);
   const auto token=owner.token();
   CudaKsPlan plan{&owner};
   CudaKsResidentFittedProjectionBinding binding;
@@ -200,6 +207,11 @@ int main(int argc, char** argv) {
   }
   assert(plan.resident_final_fitted_projection(token,binding,detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   assert(!binding && launches == 1);
+  CudaKsResidentOccupiedFactorBinding factor;
+  const auto factor_status=plan.resident_final_occupied_factor(token,factor,detail);
+  assert(factor_status == (mode == "new-state" ? GENERATIVEQC_STATUS_INVALID_ARGUMENT
+                                             : GENERATIVEQC_STATUS_SUCCESS));
+  if (mode != "new-state") assert(factor.coefficients == owner.proposal);
   // Only a new method-owned final publication may bind a new resident write.
   if (mode == "same-rank") {
     owner.capture_submission(true);

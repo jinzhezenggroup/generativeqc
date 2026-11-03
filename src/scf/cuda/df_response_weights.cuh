@@ -116,7 +116,10 @@ cudaError_t contract_cuda_df_response_weights(
     // Optional pure-J metric consumer takes v and the coefficient of v^T M v/2.
     // Its owner borrows the same stream; the general dense-weight fallback is
     // retained whenever this authenticated factored consumer is absent.
-    const std::function<void(const double*, double)>& consume_raw_metric_derivative = {});
+    const std::function<void(const double*, double)>& consume_raw_metric_derivative = {},
+    // Exact restricted C only; raw projected values preserve truncated modes.
+    // Workspace is df_spectral_occupied_workspace, not the dense AO layout.
+    const CudaDfOccupiedResponseFactor* spectral_occupied = nullptr);
 
 }  // namespace generativeqc::scf
 #endif

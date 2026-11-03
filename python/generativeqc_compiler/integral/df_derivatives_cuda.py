@@ -63,6 +63,7 @@ def emit_df_geometry_cuda(
     moments: typing.Any = "boys_values(total+1,rho*distance,g.f,work);",
     compensated: bool = False,
     range_separated: bool = False,
+    range_moments: str | None = None,
 ) -> typing.Any:
     """Share primitive geometry between polynomial and Rys derivative lowering.
 
@@ -71,9 +72,16 @@ def emit_df_geometry_cuda(
     to the existing polynomial path, including floating-point operation order.
     The emitted function lives where Vec3, Geometry, BoysWork and component
     already name the scalar derivative contract; no native equations are copied.
+    A custom quadrature must explicitly supply ``range_moments`` to consume
+    ``(rho*theta)*distance`` in the scaled integration coordinate. This keeps
+    an unadapted custom rule from silently evaluating the Coulomb operator.
     """
-    if range_separated and moments != "boys_values(total+1,rho*distance,g.f,work);":
-        raise ValueError("range-separated DF geometry does not support custom moments")
+    if range_separated and range_moments is None:
+        if moments != "boys_values(total+1,rho*distance,g.f,work);":
+            raise ValueError(
+                "range-separated DF geometry does not support custom moments without a range rule"
+            )
+        range_moments = "boys_values(total+1,(rho*theta)*distance,g.f,work);"
     source = r"""__device__ __forceinline__ void prepare_geometry(double alpha,Vec3 A,double beta,Vec3 B,
     double gamma,Vec3 C,unsigned total,Geometry& g,BoysWork* work=nullptr) {
   const double p=alpha+beta,q=gamma,rho=p*q/(p+q);
@@ -89,6 +97,7 @@ def emit_df_geometry_cuda(
   g.prefactor=34.986836655249725694/(p*q*sqrt(p+q))*exp(-alpha*beta/p*ab2);
 }"""
     if range_separated:
+        assert range_moments is not None
         source = (
             source.replace(
                 "BoysWork* work=nullptr)", "BoysWork* work=nullptr,double omega=0.0)"
@@ -100,7 +109,10 @@ def emit_df_geometry_cuda(
   double scale=1.0,theta=1.0;
   if(omega>0.0) { scale=omega/hypot(omega,sqrt(rho));theta=scale*scale; }
   g.sx*=theta;g.sy*=theta;
-  boys_values(total+1,(rho*theta)*distance,g.f,work);""",
+  __DF_RANGE_MOMENTS__""".replace(
+                    "__DF_RANGE_MOMENTS__",
+                    range_moments,
+                ),
             )
             .replace("*exp(-alpha*beta/p*ab2);", "*exp(-alpha*beta/p*ab2)*scale;")
         )
