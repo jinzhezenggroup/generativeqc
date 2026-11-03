@@ -61,3 +61,8 @@ explicit overrides and precision profile consumers. Existing compiled adapter
 tests retain real native model/grid admission and concurrent binding retirement.
 Independent physical and endpoint qualification remains separate from these
 host-only metadata/ownership checks.
+
+Source-bound full-endpoint receipts, independent CPU validation and the frozen
+1.05 ABBA/BAAB gates are retained in
+`benchmarks/results/required-native-scf-defaults-20261104/`. Their explicitly
+bounded CPU scope does not extend this decision to new numerical/GPU domains.
