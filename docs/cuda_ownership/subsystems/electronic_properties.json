@@ -1,0 +1,14 @@
+{
+  "owner": "electronic_properties",
+  "current_default": "Opt-in all-electron RHF/UHF and RKS/UKS properties consume the accepted SCF density. CUDA uses a detached device owner for analytic dipoles, Mulliken/Lowdin charges and bounded total/spin spatial density sampling; the accepted-state export is explicitly a host snapshot, not a resident zero-copy path.",
+  "generated_capability": "Spatial sampling reuses the compiled generated grid owner's normalized Cartesian/spherical s/p/d/f AO and density contractions. Position moments reuse the shared compact overlap recurrence, and symmetric eigen/GEMM work uses existing device providers.",
+  "missing_capability": "Compiler-owned position-operator lifting and population/dipole tensor lowering are not yet provided. ECP, correlated/xTB density analysis, explicit resource-budget analysis and a resident accepted-density lease remain outside this contract.",
+  "retirement_condition": "Replace handwritten position lifting, property reductions and Lowdin orchestration only after compiler-owned equivalents pass independent PySCF/libcint spdf operators, accepted-state CPU/CUDA endpoint, nonpositive-spectrum, detached-lifetime, malformed-buffer, two-device restoration and sanitizer gates. Do not duplicate the existing generated AO/density evaluator or claim a performance win without complete-endpoint receipts.",
+  "evidence": [
+    "docs/user/electronic_properties.md",
+    "tests/python/test_electronic_properties.py",
+    "tests/python/test_electronic_properties_cuda.py",
+    ".agents/notes/implemented/architecture/2026-11-03-cuda-electronic-properties.md"
+  ],
+  "status": "qualified_detached_native_cuda_with_generated_density_sampling"
+}

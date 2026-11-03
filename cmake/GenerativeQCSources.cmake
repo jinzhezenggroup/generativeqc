@@ -8,6 +8,7 @@ function(generativeqc_add_api_sources target)
   target_sources(${target} PRIVATE
     src/api/c_api_batch.cpp
     src/api/c_api_calculation.cpp
+    src/api/c_api_electronic_properties.cpp
     src/api/c_api_provider_initialization.cpp
     src/api/c_api_provider_initialization_lifetime.cpp
     src/api/c_api_integral_ad.cpp
@@ -89,6 +90,7 @@ function(generativeqc_add_dft_sources target)
       src/dft/cuda_ks.cpp
       src/dft/cuda_stationary_controller.cpp
       src/dft/cuda_ks_kernels.cu
+      src/dft/electronic_properties_cuda.cu
       src/dft/cuda_quadrature.cu
       src/dft/dispersion/d3_cuda.cu
       src/dft/dispersion/d4_cuda.cu

@@ -1759,6 +1759,55 @@ DensityFittingIntegralData transform_density_fitting_integrals(
   return transformed;
 }
 
+void position_integrals(const core::System& system, std::span<double> output) {
+  const auto count = molecule::ao_count(system);
+  const auto matrix_size = checked_product(count, count);
+  if (!count || output.size() != checked_product(3, matrix_size))
+    throw std::invalid_argument("position output must contain three square AO matrices");
+  const auto cartesian = expand_cartesian_aos(system);
+  const auto public_aos = public_ao_expansions(system);
+  std::vector<Vec3> centers;
+  for (const auto& atom : system.atoms)
+    centers.push_back(
+        {Jet(atom.position[0], 0), Jet(atom.position[1], 0), Jet(atom.position[2], 0)});
+  for (std::size_t first = 0; first < count; ++first) {
+    for (std::size_t second = 0; second <= first; ++second) {
+      std::array<double, 3> values{};
+      for (const auto& left : public_aos[first]) {
+        const auto& bra = cartesian[left.cartesian_ao];
+        const auto& bra_center = centers[bra.shell->atom_index];
+        for (const auto& right : public_aos[second]) {
+          const auto& ket = cartesian[right.cartesian_ao];
+          const auto& ket_center = centers[ket.shell->atom_index];
+          const auto factor = left.coefficient * right.coefficient * bra.component_normalization *
+                              ket.component_normalization;
+          for (const auto& bra_primitive : bra.shell->primitives) {
+            for (const auto& ket_primitive : ket.shell->primitives) {
+              const auto weight = factor * bra_primitive.coefficient * ket_primitive.coefficient;
+              const auto overlap = production_overlap_value_cartesian(
+                  bra_primitive.exponent, bra_center, bra.angular, ket_primitive.exponent,
+                  ket_center, ket.angular);
+              for (std::size_t axis = 0; axis < 3; ++axis) {
+                auto raised = ket.angular;
+                ++raised[axis];
+                // r = (r - B) + B: raise the polynomial, not its normalization.
+                values[axis] += weight * (production_overlap_value_cartesian(
+                                              bra_primitive.exponent, bra_center, bra.angular,
+                                              ket_primitive.exponent, ket_center, raised) +
+                                          ket_center[axis].value * overlap);
+              }
+            }
+          }
+        }
+      }
+      for (std::size_t axis = 0; axis < 3; ++axis) {
+        output[axis * matrix_size + first * count + second] = values[axis];
+        output[axis * matrix_size + second * count + first] = values[axis];
+      }
+    }
+  }
+}
+
 void cross_overlap(const core::System& target, const core::System& source,
                    std::span<double> output) {
   const auto nt = molecule::ao_count(target), ns = molecule::ao_count(source);

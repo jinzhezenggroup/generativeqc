@@ -121,6 +121,7 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   result.preliminary_guess = native.preliminary_guess;
   result.energy = native.energy;
   result.forces = std::move(native.forces);
+  result.density = std::move(native.density);
   result.convergence.iterations = native.iterations;
   result.convergence.energy_change = native.energy_change;
   result.convergence.residual_rms = native.density_rms;
