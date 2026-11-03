@@ -127,14 +127,17 @@ class UccsdPrepared final : public PreparedCalculation {
         retained_reference_capacity =
             posthf::checked_add(retained_reference_capacity, fitted->numeric_capacity_bytes());
       }
-      // CUDA provider batches already own the complete retained fitted source.
-      auto charged_reference_capacity = retained_reference_capacity;
-      if (cuda_ && fitted) {
+      // MP2 providers own the retained fitted source on both backends. CC's
+      // provider includes it only on CUDA; preserve the CPU CC reservation.
+      auto mp2_reference_capacity = retained_reference_capacity;
+      if (fitted && (cuda_ || (components & kMp2Component))) {
         const auto retained_source = fitted->retained_numeric_bytes();
-        if (retained_source > charged_reference_capacity)
+        if (retained_source > mp2_reference_capacity)
           throw std::logic_error("unrestricted fitted source accounting underflow");
-        charged_reference_capacity -= retained_source;
+        mp2_reference_capacity -= retained_source;
       }
+      const auto charged_reference_capacity =
+          cuda_ ? mp2_reference_capacity : retained_reference_capacity;
       const integrals::ElectronInteractionSource& source =
           fitted ? static_cast<const integrals::ElectronInteractionSource&>(*fitted)
                  : reference_source;
@@ -161,9 +164,9 @@ class UccsdPrepared final : public PreparedCalculation {
                                                      fitted ? retained_reference_capacity : 0);
       }
       if (components & kMp2Component) {
-        if (retained_reference_capacity >= options_.max_bytes)
+        if (mp2_reference_capacity >= options_.max_bytes)
           throw std::length_error("UMP2 companion reference/source exceeds endpoint budget");
-        const auto phase_budget = options_.max_bytes - retained_reference_capacity;
+        const auto phase_budget = options_.max_bytes - mp2_reference_capacity;
         // Finish the bounded MP2 phase before CC allocates its solver workspace.
         // Both phases use this exact physical UHF frame and interaction owner.
         const auto corr = mp2::conventional_unrestricted_energy(reference, source, phase_budget,
@@ -192,7 +195,7 @@ class UccsdPrepared final : public PreparedCalculation {
         diagnostic.same_spin_energy = corr.channels[0] + corr.channels[1];
         diagnostic.minimum_absolute_denominator = corr.minimum_denominator;
         diagnostic.numeric_capacity_bytes =
-            posthf::checked_add(retained_reference_capacity, corr.numeric_capacity_bytes);
+            posthf::checked_add(mp2_reference_capacity, corr.numeric_capacity_bytes);
         diagnostic.energy_tile_count = corr.tiles;
         diagnostic.mo_host_staging = cuda_ ? 1 : 0;
         if (companion_force) {
@@ -209,7 +212,7 @@ class UccsdPrepared final : public PreparedCalculation {
           diagnostic.derivative_workspace_bytes = force.derivative_workspace_bytes;
           diagnostic.planned_endpoint_peak_bytes = std::max<std::uint64_t>(
               diagnostic.numeric_capacity_bytes,
-              posthf::checked_add(retained_reference_capacity, force.planned_endpoint_peak_bytes));
+              posthf::checked_add(mp2_reference_capacity, force.planned_endpoint_peak_bytes));
           diagnostic.numeric_capacity_bytes = diagnostic.planned_endpoint_peak_bytes;
           diagnostic.force_provenance_flags = fitted && cuda_ ? 0x1 : 0x7;
         }

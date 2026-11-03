@@ -189,15 +189,29 @@ def test_open_shell_df_analytic_components(
         assert result.energy == pytest.approx(expected[method], abs=1e-8)
     standalone = Calculator(**{**options, "method": "ump2"})
     try:
-        perturbation = standalone.singlepoint(
+        # Match the grouped request's UHF-force lifetime as well as its frame.
+        perturbation = standalone.singlepoint_components(
             ATOMS,
+            companions=("uhf",),
             charge=charge,
             multiplicity=multiplicity,
             properties=("energy", "forces"),
-        )
+        )["ump2"]
     finally:
         standalone.clear_cache()
     assert perturbation.energy == pytest.approx(actual["ump2"].energy, abs=1e-10)
+    # Grouped and standalone MP2 use the same physical frame/provider. A fitted
+    # source must be charged once in both paths, on CPU as well as CUDA.
+    assert perturbation.correlation is not None
+    assert actual["ump2"].correlation is not None
+    assert (
+        actual["ump2"].correlation.numeric_capacity_bytes
+        == perturbation.correlation.numeric_capacity_bytes
+    )
+    assert (
+        actual["ump2"].correlation.planned_endpoint_peak_bytes
+        == perturbation.correlation.planned_endpoint_peak_bytes
+    )
     np.testing.assert_allclose(
         perturbation.forces, actual["ump2"].forces, atol=2e-9, rtol=0
     )

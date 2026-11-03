@@ -14,12 +14,13 @@ def _assert_cpu_budget(workflow: str) -> None:
     match = re.search(
         r"timeout-minutes: \$\{\{ matrix.compiler == 'gcc' && "
         r"\(github.event_name == 'schedule' \|\| "
-        r"github.event_name == 'workflow_dispatch'\) && (\d+) \|\| (\d+) \}\}",
+        r"github.event_name == 'workflow_dispatch'\) && (\d+) \|\| "
+        r"matrix.compiler == 'clang' && (\d+) \|\| (\d+) \}\}",
         header,
     )
     assert match, "instrumented GCC needs time for cold build, tests, and coverage"
-    coverage, plain = map(int, match.groups())
-    assert (coverage, plain) == (25, 15)
+    coverage, clang, plain = map(int, match.groups())
+    assert (coverage, clang, plain) == (25, 20, 15)
     assert "compiler: [gcc, clang]" in header
     assert "fail-fast: false" in header
     assert "continue-on-error:" not in header
@@ -123,7 +124,7 @@ def test_cpu_coverage_has_a_bounded_cold_build_budget() -> None:
 @pytest.mark.parametrize(
     "event", ["pull_request", "merge_group", "schedule", "workflow_dispatch"]
 )
-def test_cpu_extended_budget_is_only_for_instrumented_gcc(
+def test_cpu_budgets_preserve_instrumentation_and_bound_cold_clang(
     compiler: str, event: str
 ) -> None:
     path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
@@ -134,7 +135,9 @@ def test_cpu_extended_budget_is_only_for_instrumented_gcc(
     assert budget
     context = {"matrix.compiler": compiler, "github.event_name": event}
     instrumented = compiler == "gcc" and event in {"schedule", "workflow_dispatch"}
-    assert expression(budget[1], context) == (25 if instrumented else 15)
+    assert expression(budget[1], context) == (
+        25 if instrumented else 20 if compiler == "clang" else 15
+    )
     for flag, enabled in (
         (
             "COVERAGE_COMPILE_FLAGS",
@@ -155,8 +158,10 @@ def test_cpu_budget_preserves_required_work_and_independent_master_cache_save() 
 @pytest.mark.parametrize(
     ("before", "after"),
     [
-        ("&& 25 || 15", "&& 20 || 15"),
-        ("&& 25 || 15", "&& 25 || 25"),
+        ("&& 25 ||", "&& 20 ||"),
+        ("&& 20 || 15", "&& 20 || 25"),
+        ("&& 20 || 15", "&& 15 || 15"),
+        ("&& 20 || 15", "&& 25 || 15"),
         (
             "run: cmake --build build --parallel",
             "if: false\n        run: cmake --build build --parallel",
