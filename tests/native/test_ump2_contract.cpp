@@ -100,6 +100,35 @@ void one_electron_response_admission() {
           "one-electron response admission omits the two device weight matrices");
 }
 
+// Query a synthetic topology only: no AO tensor or physical endpoint is evaluated.
+void full_fitted_reference_admission() {
+  auto system = h2();
+  system.shells.resize(1024, system.shells.front());
+  generativeqc::methods::detail::UnrestrictedFitting full;
+  full.full_reference = true;
+  full.auxiliary = h2();
+  full.budget = 4ULL << 30;
+  const auto fitted_capacity = full.reference_capacity(system, 8);
+  const auto conventional_capacity =
+      generativeqc::methods::detail::UnrestrictedFitting{}.reference_capacity(system, 8);
+  require(fitted_capacity < full.budget,
+          "full DF reference reserves a nonexistent dense four-index tensor");
+  require(conventional_capacity > full.budget,
+          "conventional reference lost its dense ERI reservation");
+  auto correlation_only = full;
+  correlation_only.full_reference = false;
+  require(correlation_only.reference_capacity(system, 8) == conventional_capacity,
+          "correlation-only fitting changed conventional reference admission");
+  full.budget = 1024;
+  bool rejected = false;
+  try {
+    full.reference_capacity(system, 8);
+  } catch (const std::length_error&) {
+    rejected = true;
+  }
+  require(rejected, "full DF reference stopped enforcing fitted storage admission");
+}
+
 class CountingSource final : public generativeqc::integrals::ElectronInteractionSource {
  public:
   explicit CountingSource(const generativeqc::core::System& system) : raw_(system) {}
@@ -625,6 +654,7 @@ int main() {
     sparse_coordinate_admission();
     energy_only_reference_admission();
     one_electron_response_admission();
+    full_fitted_reference_admission();
     unsupported_requests();
     source_and_slots();
     force_contract();

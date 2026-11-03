@@ -47,8 +47,10 @@ integrals and all-electron s/p/d shells, including supplied
 Cartesian or real-spherical bases. Each spin retains its own occupied and
 virtual dimensions and all five amplitude blocks remain independent. A singlet
 still runs through UHF/UCCSD rather than selecting a restricted CC owner.
-There is no fixed AO-count cutoff; admission uses checked dimensions and the
-complete storage/work limits described below, before starting the reference.
+There is no fixed AO-count cutoff. A lower-bound check uses checked dimensions
+and storage/work limits before the reference starts. For force jobs, complete
+storage admission repeats after actual fitted and reference storage is known,
+before CC work. Cumulative response work is checked during force execution.
 
 The native contract supports CPU and CUDA with real FP64. Forces are opt-in
 for `Calculator`: pass `properties=("energy", "forces")`. They differentiate
