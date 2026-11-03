@@ -79,9 +79,10 @@ def test_pr_concurrency_cancels_only_superseded_nonrelease_checks() -> None:
     }
     for filename, policy in expected.items():
         source = (WORKFLOWS / filename).read_text(encoding="utf-8")
-        concurrency = source.split("concurrency:\\n", 1)[1].split("\\njobs:\\n", 1)[0]
+        concurrency = source.split("concurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
         assert "github.event.pull_request.number" in concurrency
         assert policy in concurrency
+
 
 def test_ci_aggregate_accepts_only_explicitly_confirmed_orphans() -> None:
     source = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
