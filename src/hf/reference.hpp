@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "core/electronic_reference.hpp"
-#include "molecule/basis_geometry_identity.hpp"
+#include "molecule/scalar_hamiltonian_identity.hpp"
 
 namespace generativeqc::hf {
 
@@ -55,7 +55,7 @@ struct UnrestrictedPhysicalReference {
   std::array<std::vector<double>, 2> fock, coefficients, orbital_energies, density;
   double energy{};
   double commutator_residual{}, canonical_density_drift{}, canonical_error{};
-  std::optional<molecule::BasisGeometryIdentity> source_identity;
+  std::optional<molecule::ScalarHamiltonianIdentity> source_identity;
   int source_charge{}, source_electrons{};
   unsigned source_multiplicity{};
 

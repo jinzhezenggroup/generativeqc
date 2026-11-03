@@ -320,7 +320,7 @@ generativeqc_status validate_uccsd_system(generativeqc_method method, const core
   }
   if (std::any_of(system.shells.begin(), system.shells.end(),
                   [](const auto& shell) { return shell.angular_momentum > 2; })) {
-    detail = "native unrestricted CC is qualified for all-electron s/p/d references";
+    detail = "native unrestricted CC is qualified for s/p/d references";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   return GENERATIVEQC_STATUS_SUCCESS;
@@ -337,7 +337,7 @@ std::unique_ptr<PreparedCalculation> prepare_uccsd_calculation(
       descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
       descriptor.screening_tolerance != 0)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "native unrestricted CC requires unscreened all-electron real FP64 without "
+                      "native unrestricted CC requires unscreened real FP64 without "
                       "KS, initial-guess or frozen-core controls");
   if (descriptor.correlation_memory_budget_bytes > static_cast<std::uint64_t>(INT64_MAX))
     throw std::invalid_argument("unrestricted CC memory budget exceeds signed-64-bit capacity");

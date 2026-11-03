@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins
 import ctypes
+import json
 import math
 import os
 from dataclasses import replace
@@ -55,6 +56,7 @@ def independent_components(
     atoms: tuple = ATOMS,
     auxiliary: BasisSet | None = None,
     full_reference: bool = False,
+    restricted: bool = False,
 ) -> dict:
     """Feed canonical input shells, never native orbitals/intermediates, to PySCF."""
     pyscf = pytest.importorskip("pyscf")
@@ -72,16 +74,37 @@ def independent_components(
                 ],
             ]
         )
+    potentials = {}
+    for label, atom in zip(labels, atoms, strict=True):
+        element = basis.by_element[Atom.from_value(atom).atomic_number]
+        if not element.ecp_data:
+            continue
+        channels = json.loads(element.ecp_data)
+        local = max(channel["angular_momentum"][0] for channel in channels)
+        converted = []
+        for channel in channels:
+            rows = [[] for _ in range(5)]
+            for power, exponent, coefficient in zip(
+                channel["r_exponents"],
+                channel["gaussian_exponents"],
+                channel["coefficients"][0],
+                strict=True,
+            ):
+                rows[power].append([float(exponent), float(coefficient)])
+            angular = channel["angular_momentum"][0]
+            converted.append([-1 if angular == local else angular, rows])
+        potentials[label] = [element.ecp_core_electrons, converted]
     molecule = pyscf.gto.M(
         atom=[(label, atom[1]) for label, atom in zip(labels, atoms, strict=True)],
         basis=matched,
+        ecp=potentials,
         charge=charge,
         spin=multiplicity - 1,
         unit="Bohr",
         cart=basis.representation == "cartesian",
         verbose=0,
     )
-    reference = pyscf.scf.UHF(molecule)
+    reference = (pyscf.scf.RHF if restricted else pyscf.scf.UHF)(molecule)
     fitted_eri = None
     if auxiliary is not None:
         from pyscf import ao2mo, df
@@ -124,17 +147,18 @@ def independent_components(
 
             reference.get_jk = exact_jk
         reference._eri = ao2mo.restore(8, fitted_eri, molecule.nao)
-    perturbation = mp.UMP2(reference).run()
-    coupled = cc.UCCSD(reference)
+    perturbation = (mp.MP2 if restricted else mp.UMP2)(reference).run()
+    coupled = (cc.CCSD if restricted else cc.UCCSD)(reference)
     coupled.conv_tol, coupled.conv_tol_normt, coupled.max_cycle = 1e-13, 1e-11, 200
     coupled.kernel()
     assert coupled.converged
     triples = coupled.ccsd_t()
+    prefix = "" if restricted else "u"
     return {
-        "uhf": reference.e_tot,
-        "ump2": perturbation.e_tot,
-        "uccsd": coupled.e_tot,
-        "uccsd(t)": coupled.e_tot + triples,
+        "rhf" if restricted else "uhf": reference.e_tot,
+        prefix + "mp2": perturbation.e_tot,
+        prefix + "ccsd": coupled.e_tot,
+        prefix + "ccsd(t)": coupled.e_tot + triples,
         "triples": triples,
     }
 

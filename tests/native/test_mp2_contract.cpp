@@ -345,6 +345,16 @@ void provider_and_reference() {
   const auto with_eri = generativeqc::posthf::rhf_reference_capacity(spherical, 8, true);
   require(with_eri - without_eri >= 8 * (2 * cart * cart * cart * cart + n * n * n * n),
           "CPU reference budget omitted simultaneous Cartesian/spherical tensors");
+  auto ecp = system;
+  ecp.atoms[0].atomic_number = 11;
+  ecp.atoms[0].ecp_core = 10;
+  ecp.ecp_terms.push_back({0, -1, 2, 0.5, 0.2});
+  const auto ecp_workspace = generativeqc::integrals::ecp_workspace_capacity(ecp);
+  require(ecp_workspace > 0 && generativeqc::integrals::ecp_workspace_capacity(system) == 0,
+          "ECP workspace must be reserved only for an ECP operator");
+  require(generativeqc::posthf::rhf_reference_capacity(ecp, 8) >=
+              generativeqc::posthf::rhf_reference_capacity(system, 8) + ecp_workspace,
+          "correlated reference admission omitted checked ECP staging");
 }
 
 void conventional_energy_batch_fallback_matches() {

@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-11-03
 
+The original all-electron admission boundary is superseded for scalar ECPs by
+[the matching-Hamiltonian ECP response decision](2026-11-03-cbs-scalar-ecp-response.md).
+The response ownership, fitted-operator and failure-publication contracts here
+remain in force.
+
 ## Problem
 
 The initial native unrestricted CBS promotion deliberately admitted CPU energy

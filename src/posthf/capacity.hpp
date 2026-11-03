@@ -6,8 +6,9 @@
 #include <stdexcept>
 
 #include "core/types.hpp"
+#include "integrals/ecp.hpp"
 #include "molecule/basis.hpp"
-#include "molecule/basis_geometry_identity.hpp"
+#include "molecule/scalar_hamiltonian_identity.hpp"
 
 namespace generativeqc::posthf {
 inline std::size_t checked_add(std::size_t a, std::size_t b) {
@@ -26,6 +27,7 @@ inline std::size_t checked_mul(std::size_t a, std::size_t b) {
  * and allocator rounding are excluded, as in the existing source contract. */
 inline std::size_t source_capacity(const core::System& system) {
   auto bytes = checked_mul(128, system.atoms.size());
+  bytes = checked_add(bytes, checked_mul(sizeof(core::EcpTerm), system.ecp_terms.size()));
   for (const auto& shell : system.shells) {
     if (shell.angular_momentum > 4)
       throw std::invalid_argument("post-HF source capacity supports through g");
@@ -48,6 +50,7 @@ inline std::size_t rhf_reference_capacity(const core::System& system, unsigned d
   const auto matrices = checked_add(64, checked_mul(2, diis_history));
   auto bytes = checked_add(checked_add(source_capacity(system), source_scratch_bytes + 4096),
                            checked_mul(8, checked_mul(matrix_elements, matrices)));
+  bytes = checked_add(bytes, integrals::ecp_workspace_capacity(system));
   // CPU preparation holds both Cartesian Jet values and the unpacked FP64
   // tensor. A spherical conversion adds the public tensor while both Cartesian
   // copies are still live. Count scalar payloads here; Jet vector headers and
@@ -74,7 +77,7 @@ inline std::size_t uhf_reference_capacity(const core::System& system, unsigned d
                      checked_mul(2, n)));
   return checked_add(
       checked_add(rhf_reference_capacity(system, diis_history, include_dense_eri), additional_spin),
-      molecule::BasisGeometryIdentity::required_storage_bytes(system));
+      molecule::ScalarHamiltonianIdentity::required_storage_bytes(system));
 }
 
 /** Conservative peak for one energy-only RI-MP2 phase.

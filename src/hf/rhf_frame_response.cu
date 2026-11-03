@@ -644,9 +644,8 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
                 options.orbital_screening_tolerance == 0.0,
             "DF response source/frame mismatch or unsupported Schwarz screening");
   require(device >= 0 && o && o < n && n == molecule::ao_count(system) &&
-              system.ecp_terms.empty() && system.electron_count == int(2 * o) &&
-              system.multiplicity == 1,
-          "invalid all-electron RHF frame response domain");
+              system.electron_count == int(2 * o) && system.multiplicity == 1,
+          "invalid closed-shell RHF frame response domain");
   const auto v = n - o, nn = checked_mul(n, n);
   require(n <= std::size_t(std::numeric_limits<int>::max()) && bar_f.size() == nn &&
               bar_c.size() == nn && finite(bar_f) && finite(bar_c),
