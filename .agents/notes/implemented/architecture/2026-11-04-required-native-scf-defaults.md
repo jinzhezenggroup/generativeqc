@@ -66,3 +66,19 @@ Source-bound full-endpoint receipts, independent CPU validation and the frozen
 1.05 ABBA/BAAB gates are retained in
 `benchmarks/results/required-native-scf-defaults-20261104/`. Their explicitly
 bounded CPU scope does not extend this decision to new numerical/GPU domains.
+
+## Retained-catalog integration
+
+The required `core-a` check compares the complete native Libxc catalog, not
+only capability transitions. Retiring frontend policy changes its checked input
+identities even though the retained Libxc campaign was already stale and has no
+current-source admitted endpoints. An empty transition suffix in that failure
+does not authorize bypassing the check or relabelling historical measurements.
+
+After integrating master through `604c04259`, regenerate the snapshot and its
+reference with `tools/check_libxc_native_catalog.py --write`. The exact retained
+summary already equals the ratchet's previous summary. Compare every generated
+field: only `source_identity` and `native_source_identity` change. Preserve the
+campaign bytes, measured revision/identity, execution identity, all capability
+stages, blockers, empty admitted endpoint sets and `stale: true`. No regression
+acknowledgement or new scientific qualification is appropriate for this refresh.

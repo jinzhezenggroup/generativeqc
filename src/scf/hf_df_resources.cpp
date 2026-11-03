@@ -284,16 +284,23 @@ std::vector<CudaDfResourceCandidate> cuda_df_fleet_resources(
                              item.naux, item.cartesian_naux, item.auxiliary_shells,
                              item.auxiliary_primitives, item.nalpha, item.nbeta, item.repetitions})
       static_cast<void>(sum({value}));
-    if (item.nbf > 16 || item.naux > 128)
+    // The larger envelope is restricted to explicitly budgeted RHF sources.
+    // It uses the existing bounded ordinary AO/metric provider workspaces,
+    // generated integral/response tiles and detached singleton retry. Do not
+    // silently admit the unbudgeted resident or large UHF routes as well.
+    const bool small = item.nbf <= 16 && item.naux <= 128;
+    const bool budgeted_rhf =
+        requested_budget && item.spins == 1 && item.nbf <= 768 && item.naux <= 768;
+    if (!small && !budgeted_rhf)
       throw CudaDfResourceUnsupported(
-          "CUDA DF inventory v1 requires <=16 orbital AOs and <=128 auxiliary AOs");
+          "CUDA DF inventory requires <=16 orbital/128 auxiliary AOs, or explicitly "
+          "budgeted RHF with <=768 orbital/768 auxiliary AOs");
     if (!item.atoms || !item.nbf || !item.naux || item.cartesian_nbf < item.nbf ||
         item.cartesian_naux < item.naux || !item.shells || !item.primitives ||
         !item.auxiliary_shells || !item.auxiliary_primitives || !item.repetitions ||
         (item.spins != 1 && item.spins != 2) || item.nalpha > item.nbf || item.nbeta > item.nbf ||
         (item.spins == 1 && item.nalpha != item.nbeta))
-      throw std::invalid_argument(
-          "invalid CUDA DF topology: requires <=16 orbital AOs and <=128 auxiliary AOs");
+      throw std::invalid_argument("invalid CUDA DF topology or spin population");
     groups[{item.nbf, item.nalpha, item.nbeta, item.primitives}].push_back(item);
   }
   std::vector<Row> rows;
