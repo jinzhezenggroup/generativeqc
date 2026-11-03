@@ -10,6 +10,7 @@
 #include "api/handles.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "methods/ump2_method.hpp"
+#include "methods/unrestricted_df.hpp"
 #include "methods/unrestricted_response.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
@@ -66,7 +67,7 @@ generativeqc::core::System h14() {
 
 void energy_only_reference_admission() {
   const auto system = h14();
-  const auto spec = generativeqc::methods::detail::ump2_reference_fock_spec();
+  const auto spec = generativeqc::methods::detail::UnrestrictedFitting{}.reference_spec(false);
   const auto strategy =
       generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu, 0);
   const generativeqc::scf::PreparedFockPlan plan(system, nullptr, strategy);
@@ -78,6 +79,25 @@ void energy_only_reference_admission() {
   std::cout << "14-H energy-only Fock capacity " << plan.cpu_observation_capacity()
             << " <= admitted " << budget << '\n';
   require(spec.derivative_order == 0, "UMP2 energy-only reference retained derivative order");
+  for (const bool full_reference : {false, true}) {
+    generativeqc::methods::detail::UnrestrictedFitting fitting;
+    fitting.full_reference = full_reference;
+    require(fitting.reference_spec(false).derivative_order == 0,
+            "energy-only fitted policy retained derivative resources");
+    require(fitting.reference_spec(true).derivative_order == 1,
+            "force fitted policy lost derivative resources");
+  }
+}
+
+void one_electron_response_admission() {
+  auto system = h2();
+  system.shells.resize(1024, system.shells.front());
+  const auto basis_count = generativeqc::molecule::ao_count(system);
+  const auto two_weights = 2 * basis_count * basis_count * sizeof(double);
+  require(two_weights > generativeqc::posthf::source_scratch_bytes,
+          "large response fixture does not exceed the old fixed scratch allowance");
+  require(generativeqc::posthf::one_electron_response_capacity(system) > two_weights,
+          "one-electron response admission omits the two device weight matrices");
 }
 
 class CountingSource final : public generativeqc::integrals::ElectronInteractionSource {
@@ -168,8 +188,8 @@ void degenerate_occupied_gauge() {
   std::string detail;
   require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
           "degenerate H6 setup failed");
-  const auto strategy = scf::resolve_fock_build(methods::detail::ump2_reference_fock_spec(),
-                                                scf::FockBackend::Cpu, 0);
+  const auto strategy = scf::resolve_fock_build(
+      methods::detail::UnrestrictedFitting{}.reference_spec(false), scf::FockBackend::Cpu, 0);
   scf::PreparedFockPlan plan(system, nullptr, strategy);
   scf::ScfOptions options;
   options.export_physical_reference = true;
@@ -292,7 +312,7 @@ void force_contract() {
       generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
       "open-shell force fixture setup failed");
   const auto strategy = generativeqc::scf::resolve_fock_build(
-      generativeqc::methods::detail::ump2_reference_fock_spec(),
+      generativeqc::methods::detail::UnrestrictedFitting{}.reference_spec(false),
       generativeqc::scf::FockBackend::Cpu, 0);
   generativeqc::scf::PreparedFockPlan plan(system, nullptr, strategy);
   generativeqc::scf::ScfOptions options;
@@ -604,6 +624,7 @@ int main() {
     degenerate_occupied_gauge();
     sparse_coordinate_admission();
     energy_only_reference_admission();
+    one_electron_response_admission();
     unsupported_requests();
     source_and_slots();
     force_contract();

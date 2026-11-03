@@ -77,17 +77,21 @@ class UccsdPrepared final : public PreparedCalculation {
                         "unrestricted companions require UCCSD(T)");
     try {
       const bool triples = capabilities_.method == GENERATIVEQC_METHOD_UCCSD_T;
+      const auto derivative_capacity = cuda_ && compute_forces
+                                           ? posthf::one_electron_response_capacity(system_)
+                                           : posthf::source_scratch_bytes;
       if (compute_forces) {
         const auto nbf = molecule::ao_count(system_);
         const auto alpha =
             static_cast<std::size_t>((system_.electron_count + system_.multiplicity - 1) / 2);
-        cc::unrestricted_force_capacity(nbf, alpha, system_.electron_count - alpha, options_,
-                                        triples, reference_capacity_);
+        cc::unrestricted_force_capacity(
+            nbf, alpha, system_.electron_count - alpha, options_, triples, reference_capacity_,
+            fitting_.auxiliary && !fitting_.full_reference, derivative_capacity);
       }
       const auto started = std::chrono::steady_clock::now();
       const auto strategy = scf::resolve_fock_build(
-          fitting_.reference_spec(), cuda_ ? scf::FockBackend::Cuda : scf::FockBackend::Cpu, 0,
-          fitting_.threshold);
+          fitting_.reference_spec(compute_forces),
+          cuda_ ? scf::FockBackend::Cuda : scf::FockBackend::Cpu, 0, fitting_.threshold);
       scf::PreparedFockPlan reference_plan(
           system_, fitting_.full_reference ? &*fitting_.auxiliary : nullptr, strategy,
           cuda_ ? device_ : -1, cuda_ ? options_.max_bytes : 0,
@@ -128,11 +132,15 @@ class UccsdPrepared final : public PreparedCalculation {
                  : reference_source;
       const auto* independent_reference =
           fitted && !fitting_.full_reference ? &reference_source : nullptr;
+      if (compute_forces)
+        cc::unrestricted_force_capacity(reference.nbf, reference.nocc[0], reference.nocc[1],
+                                        options_, triples, retained_reference_capacity,
+                                        independent_reference != nullptr, derivative_capacity);
       std::optional<response::SpinResponseProblem> orbital_problem;
       if (compute_forces && (reference.nocc[0] * (reference.nbf - reference.nocc[0]) +
                              reference.nocc[1] * (reference.nbf - reference.nocc[1])))
-        orbital_problem.emplace(
-            unrestricted_response_problem(reference, reference_plan, fitting_.reference_spec()));
+        orbital_problem.emplace(unrestricted_response_problem(reference, reference_plan,
+                                                              fitting_.reference_spec(true)));
       Result result;
       if (components & kHfComponent) {
         result.hf_component.emplace();

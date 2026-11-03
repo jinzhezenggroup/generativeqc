@@ -25,12 +25,6 @@
 
 namespace generativeqc::methods::detail {
 
-scf::FockBuildSpec ump2_reference_fock_spec() {
-  auto spec = scf::make_hf_fock_spec(scf::FockSpin::Unrestricted);
-  spec.derivative_order = 0;
-  return spec;
-}
-
 namespace {
 
 class Ump2Prepared final : public PreparedCalculation, public ReferenceSeededCalculation {
@@ -91,8 +85,8 @@ class Ump2Prepared final : public PreparedCalculation, public ReferenceSeededCal
                           "UMP2 warm state and UHF reference exceed numeric memory budget");
       const auto phase_budget = budget_ - warm_capacity;
       const auto strategy = scf::resolve_fock_build(
-          fitting_.reference_spec(), cuda_ ? scf::FockBackend::Cuda : scf::FockBackend::Cpu, 0,
-          fitting_.threshold);
+          fitting_.reference_spec(compute_forces),
+          cuda_ ? scf::FockBackend::Cuda : scf::FockBackend::Cpu, 0, fitting_.threshold);
       scf::PreparedFockPlan reference_plan(
           system_, fitting_.full_reference ? &*fitting_.auxiliary : nullptr, strategy,
           cuda_ ? device_ : -1, cuda_ ? phase_budget : 0,
@@ -150,8 +144,8 @@ class Ump2Prepared final : public PreparedCalculation, public ReferenceSeededCal
         std::optional<response::SpinResponseProblem> response_problem;
         if (reference.nocc[0] * (reference.nbf - reference.nocc[0]) +
             reference.nocc[1] * (reference.nbf - reference.nocc[1]))
-          response_problem.emplace(
-              unrestricted_response_problem(reference, reference_plan, fitting_.reference_spec()));
+          response_problem.emplace(unrestricted_response_problem(reference, reference_plan,
+                                                                 fitting_.reference_spec(true)));
         force = mp2::unrestricted_force_cpu(
             reference, response_problem ? &*response_problem : nullptr, source, correlation_budget,
             threshold_, cuda_, device_, fitted ? &*fitted : nullptr, independent_reference,

@@ -42,8 +42,8 @@ layout changes are needed. See the [native C++ guide](native_cpp.md).
 
 ## Current admission and failure behavior
 
-This native owner requires real FP64, unscreened
-conventional integrals and all-electron s/p/d shells, including supplied
+On the conventional path, this native owner requires real FP64, unscreened
+integrals and all-electron s/p/d shells, including supplied
 Cartesian or real-spherical bases. Each spin retains its own occupied and
 virtual dimensions and all five amplitude blocks remain independent. A singlet
 still runs through UHF/UCCSD rather than selecting a restricted CC owner.

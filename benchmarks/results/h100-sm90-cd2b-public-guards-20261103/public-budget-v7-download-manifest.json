@@ -1,0 +1,287 @@
+{
+  "status": "COMPLETE_IMMUTABLE_TERMINAL_ARCHIVE",
+  "cohort": "public-budget-v7",
+  "archive": "public-budget-v7-completed.tar.xz",
+  "bytes": 129748,
+  "sha256": "d29accf0501fb3f3418387fc4d608ef948be46c1d8d9ef85af061bf378a52db1",
+  "files": {
+    "public-budget-v7/campaign.json": {
+      "bytes": 7688,
+      "sha256": "51d1eede8c16410ec7c4b49df6286862bf19e95d80695f76c488cdeb2a5239ab"
+    },
+    "public-budget-v7/rks-pbe0-water12-df.json": {
+      "bytes": 4630,
+      "sha256": "1cdc4e150a4008e77b77aa528d318498c2f9930098bbacc31cb51ddb0e7f0750"
+    },
+    "public-budget-v7/rks-pbe0-water12-df.plan.json": {
+      "bytes": 9478,
+      "sha256": "af8bda36b0ff2111d429e09ea4964443c46a54522a77ea828f6e49fafc98e7fa"
+    },
+    "public-budget-v7/rks-pbe0-water12-df.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/rks-pbe0-water12-df.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/rks-pbe0-water12-direct.json": {
+      "bytes": 280353,
+      "sha256": "1d6c77b8695f744ec5f7fde2c30259d196457e89817f92293876dd9bcd109a14"
+    },
+    "public-budget-v7/rks-pbe0-water12-direct.plan.json": {
+      "bytes": 9482,
+      "sha256": "6c5254cd313e8322f7418394a8976db1aa7100ed7c06c43b354f512a5b9c1eab"
+    },
+    "public-budget-v7/rks-pbe0-water12-direct.stderr": {
+      "bytes": 1158,
+      "sha256": "008e4a44e750e36536800f0f37453b36211d71ed5fc4a5373d9b16726414a41c"
+    },
+    "public-budget-v7/rks-pbe0-water12-direct.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/rks-pbe0-water96-df.json": {
+      "bytes": 4630,
+      "sha256": "ca0622c0d6d176899372a981741e80bd73357cef65c7f66d96c00e1a3ad988ca"
+    },
+    "public-budget-v7/rks-pbe0-water96-df.plan.json": {
+      "bytes": 20282,
+      "sha256": "e30d78abd52396d0ec847dab5ef829fb8118edeb3e0a96b028753474c314549a"
+    },
+    "public-budget-v7/rks-pbe0-water96-df.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/rks-pbe0-water96-df.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/rks-pbe0-water96-direct.json": {
+      "bytes": 169092,
+      "sha256": "0d612b0a1cc9bbbcc4638e8da844994ec2cbeda1cbd864ef6b0a49b14c5efbc3"
+    },
+    "public-budget-v7/rks-pbe0-water96-direct.plan.json": {
+      "bytes": 20286,
+      "sha256": "abd83f57cd133d1dc3d039f24d6ab3557432aa16243bb7e04392287606efec24"
+    },
+    "public-budget-v7/rks-pbe0-water96-direct.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/rks-pbe0-water96-direct.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/uks-pbe-water3-cation-df.json": {
+      "bytes": 4635,
+      "sha256": "d380257add1887d09afaec540c5aede927b13c97f80f59b5353ab1eba897768a"
+    },
+    "public-budget-v7/uks-pbe-water3-cation-df.plan.json": {
+      "bytes": 6733,
+      "sha256": "0b6623adb64aefc31aa71c0642e497d82b74a2c0c56fa0b3b0438b36bab9a581"
+    },
+    "public-budget-v7/uks-pbe-water3-cation-df.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/uks-pbe-water3-cation-df.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/uks-pbe-water3-cation-direct.json": {
+      "bytes": 259940,
+      "sha256": "9c1737d957f83736578a0a5fe6eca1d51f0a2822a86d958bce6c4ac0de608266"
+    },
+    "public-budget-v7/uks-pbe-water3-cation-direct.plan.json": {
+      "bytes": 6696,
+      "sha256": "a40faaf9c5a9b93658b3655e0e088add2009fd24d9156e54d5da331a896c5bbf"
+    },
+    "public-budget-v7/uks-pbe-water3-cation-direct.stderr": {
+      "bytes": 1158,
+      "sha256": "008e4a44e750e36536800f0f37453b36211d71ed5fc4a5373d9b16726414a41c"
+    },
+    "public-budget-v7/uks-pbe-water3-cation-direct.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/uks-pbe0-water3-cation-df.json": {
+      "bytes": 4636,
+      "sha256": "987fd5eec3843a275a2a32587bcc76e82f615084e61dec8dd2c5c9a70407762f"
+    },
+    "public-budget-v7/uks-pbe0-water3-cation-df.plan.json": {
+      "bytes": 6699,
+      "sha256": "bde5118512fb860eb281b4cba6f409b94f7bb5a5ff4360e4ffd17f2590008694"
+    },
+    "public-budget-v7/uks-pbe0-water3-cation-df.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/uks-pbe0-water3-cation-df.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7/uks-pbe0-water3-cation-direct.json": {
+      "bytes": 261440,
+      "sha256": "5eac4fd5c3ca93b6586e1fb19122326dc73cc1eb69a25aa2c7ff74bf97a414c7"
+    },
+    "public-budget-v7/uks-pbe0-water3-cation-direct.plan.json": {
+      "bytes": 6703,
+      "sha256": "fee952b64baed57d6547d7ccf1c10ed3659aa5f6404e100658ba69bcda76e00a"
+    },
+    "public-budget-v7/uks-pbe0-water3-cation-direct.stderr": {
+      "bytes": 1158,
+      "sha256": "008e4a44e750e36536800f0f37453b36211d71ed5fc4a5373d9b16726414a41c"
+    },
+    "public-budget-v7/uks-pbe0-water3-cation-direct.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "public-budget-v7-executed-producers/run-public-budget-v7.py": {
+      "bytes": 8571,
+      "sha256": "967d6dcdb38e994fde56dcfa686b750e2aab392ab6c3617d370c6263272d26ad"
+    },
+    "public-budget-v7-executed-producers/run-public-budget-v7-job.sh": {
+      "bytes": 623,
+      "sha256": "ca8cce308c54535474f03a063ea23822574f3fb4366e8247cc6dde9ec4044e06"
+    },
+    "public-budget-v7-executed-producers/public-budget-protocol-v6.json": {
+      "bytes": 26254,
+      "sha256": "d3e7ef211e12cd1ce24f15a2e36bf72e1cbbe564880e01912229cf8982efad85"
+    },
+    "public-budget-v7-executed-producers/public-budget-endpoint-v5.py": {
+      "bytes": 15405,
+      "sha256": "16f01956e82773410368ff7190d35415d8e865e372e64c549eac92688c79cdf1"
+    },
+    "public-budget-v7-executed-producers/cohort-gates-v4.py": {
+      "bytes": 584,
+      "sha256": "0a397381e3dc8531d7894514ecf7aa993f12f2a233e9f2279b32a392c054b40e"
+    },
+    "public-budget-v7-executed-producers/cohort-gates-v3.py": {
+      "bytes": 2626,
+      "sha256": "a0240af4a30169a6ab8353ec8c599fd51dd7482f2f1ac30fca68cc90c022e6b1"
+    },
+    "public-budget-v7-executed-producers/cohort-gates.py": {
+      "bytes": 3531,
+      "sha256": "573ee26fc4b232c1ad566945f95d4b6df6783996612272e4208f77ecb1971399"
+    },
+    "public-budget-v7-executed-producers/process-ownership-v1.py": {
+      "bytes": 1201,
+      "sha256": "d9954f6b7838c464dac5e18bda89a805c9b3c46791cd3f0dbff01e8d6e4d7b9f"
+    },
+    "public-budget-v7-executed-producers/run-screening-v3.py": {
+      "bytes": 14734,
+      "sha256": "b23194e91979ea5e6ecc476d7e1cacf657e6dda4db625fe9e67e0331b2d4101c"
+    },
+    "public-budget-v7-executed-producers/pilot.py": {
+      "bytes": 9725,
+      "sha256": "5ecd9d5778afbee70f095dfd53c30e1f19ec6b8c002b20627f9b90ee9e683568"
+    },
+    "public-budget-v7-reference-inputs/native-guard-geometries-v1.json": {
+      "bytes": 37447,
+      "sha256": "74230839822e73633ac5be204ae7b1c85591670b79c059d0180cabb1d8cc8d07"
+    },
+    "public-budget-v7-reference-inputs/guard-cpu-oracles-local-replay.json": {
+      "bytes": 7454,
+      "sha256": "498a9ea8302afea2f993672b5425d4e90f14f42c20154b8a5bb0b81690f6f0ea"
+    },
+    "public-budget-v7-reference-inputs/guard-cpu-oracles-v1/campaign.json": {
+      "bytes": 6724,
+      "sha256": "524ee0bded1bcc3b2a324c41821928f36e0b7b1883d8e26ef14680068f1f12a2"
+    },
+    "public-budget-v7-reference-inputs/data/oracles.json.xz": {
+      "bytes": 56528,
+      "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+    },
+    "public-budget-v7-reference-inputs/inputs-default.json": {
+      "bytes": 2419,
+      "sha256": "244f999baf2528fe198e12dc1884179eaf3624046ec72bb5652838c21c2f7033"
+    },
+    "public-budget-v7-reference-inputs/guard-cpu-oracles-v1/rks-pbe0-water12-base-grid4.json": {
+      "bytes": 3676,
+      "sha256": "6de9008fe7281b6dc42f9b459e47f45d65c14c16dcde114e43bc514d0b1afeb8"
+    },
+    "public-budget-v7-reference-inputs/guard-cpu-oracles-v1/rks-pbe0-water12-moved-grid4.json": {
+      "bytes": 3686,
+      "sha256": "946722a711942a68a7a8a712baa1992c85826cbc038ee16b0cc8708892785385"
+    },
+    "public-budget-v7-reference-inputs/guard-cpu-oracles-v1/uks-pbe-water3-cation-base-grid4.json": {
+      "bytes": 1587,
+      "sha256": "58acf75692bef517211bcfcd2ee23841591213754cc09b99fdeebf3fd7ec69a2"
+    },
+    "public-budget-v7-reference-inputs/guard-cpu-oracles-v1/uks-pbe-water3-cation-moved-grid4.json": {
+      "bytes": 1588,
+      "sha256": "df72eba921bb9940925b03f7e8c1a8194fa859f59be6b23713645edac8fb425c"
+    },
+    "public-budget-v7-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-base-grid4.json": {
+      "bytes": 1587,
+      "sha256": "ffef95987870053fb959000a673c83155282aefdcc08d7c98d56739d45679fd5"
+    },
+    "public-budget-v7-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-moved-grid4.json": {
+      "bytes": 1593,
+      "sha256": "e889ace8a42444b4d3a84f408cdfcf97a1b5c11c85bd7904861d26e8c4ee883b"
+    },
+    "public-budget-v7-available-admissions/production-build-v1/build-receipt.json": {
+      "bytes": 10488,
+      "sha256": "67ba3327447651bb566a003636e9e40cb06dc29cf382b2a6f9a5e33ec4b0ef64"
+    },
+    "public-budget-v7-available-admissions/production-build-v1-local-replay.json": {
+      "bytes": 4569,
+      "sha256": "12484b811594e485b6091dd688fdcc2fde40d40dbd01623b4c7e67429edca810"
+    },
+    "public-budget-v7-available-admissions/screening-v1-local-replay.json": {
+      "bytes": 273423,
+      "sha256": "8f5003b6d48fddeec9ba7e72c6f88f3ad84d02bb788f5f575ffc834b9b5357cd"
+    },
+    "public-budget-v7-available-admissions/screening-protocol-v3.json": {
+      "bytes": 14759,
+      "sha256": "87265d70a8cddde529437ab51aa72898d4bf6702a4d99410132f28fdbcdad2f6"
+    },
+    "public-budget-v7-available-admissions/native-qualification-v1-local-replay.json": {
+      "bytes": 932,
+      "sha256": "a55ba0c2f32ee591eacabc2beceae9593007c1706f539b8224cedf24b9ff05b5"
+    },
+    "public-budget-v7-available-admissions/native-qualification-v1-local-replay-v2.json": {
+      "bytes": 932,
+      "sha256": "a55ba0c2f32ee591eacabc2beceae9593007c1706f539b8224cedf24b9ff05b5"
+    },
+    "public-budget-v7-available-admissions/standard-guards-v1-local-replay.json": {
+      "bytes": 43200,
+      "sha256": "5e3f01a16bd39682f5ad5a1544f5ac6efd0105cfdc36f2dab81d86cb657f3bd1"
+    },
+    "public-budget-v7-available-admissions/uks-fit-v1-local-replay.json": {
+      "bytes": 6689,
+      "sha256": "eeb72d0837957e135a5e6b6c3dfa5bf823882fc56d6766cd87032359ff89302c"
+    },
+    "public-budget-v7-available-admissions/uks-fit-protocol-v1.json": {
+      "bytes": 3096,
+      "sha256": "8f70564c6df5f1a38c498fa8df4e8cfcc4b4f45c4c97c199a23842ac1fedb47a"
+    },
+    "public-budget-v7-reference-inputs/inputs-default/pbe0-auxiliary.json": {
+      "bytes": 8846,
+      "sha256": "22c203803f1682ea50ad5aee2eb97831f4d7c67409dd8b86104ed58b4f3ea15d"
+    },
+    "public-budget-v7-reference-inputs/inputs-default/pbe-auxiliary.json": {
+      "bytes": 8845,
+      "sha256": "9eaad1a657b67cedd4e784bea1064e53e20ed8c33ce74e2ecc67b3100b8b7c38"
+    },
+    "public-budget-v7-reference-inputs/inputs-hf-ccpvtz/hf-auxiliary.json": {
+      "bytes": 9200,
+      "sha256": "5adb284790231935af7930859ffbaab862416d6083342c35734cb1b64eda15aa"
+    },
+    "public-budget-v7-archival-admissions/public-budget-v7-terminal-status.json": {
+      "bytes": 378,
+      "sha256": "b480536e812760d081eec3b2c62f05a0615628d626ae40ade7e54fe673a6bb3c"
+    },
+    "public-budget-v7-archival-producers/pack-cohort-v13.py": {
+      "bytes": 8338,
+      "sha256": "cd12e110c1cac5af42e107a3f3016d016b6e1b743c1c3807a96718f8605db9b2"
+    }
+  },
+  "campaign_sha256": "51d1eede8c16410ec7c4b49df6286862bf19e95d80695f76c488cdeb2a5239ab",
+  "platform_status": "SUCCEEDED",
+  "platform_status_sha256": "b480536e812760d081eec3b2c62f05a0615628d626ae40ade7e54fe673a6bb3c",
+  "campaign_status": "TERMINAL_EIGHT_PUBLIC_BUDGET_ATTEMPTS_INDEPENDENT_REPLAY_PENDING",
+  "recorded_provenance_errors": [],
+  "scope": "Original terminal attempt and exact available recorded producers. Admissions are byte recovery, not transferred scientific acceptance; receivers verify all required bindings. Binary package remains immutable remote."
+}
