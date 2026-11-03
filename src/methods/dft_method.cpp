@@ -649,8 +649,17 @@ class KsPreparedState final : public KsSingleOwnerPort {
         // observed headroom for ordinary unpromised preparation as well.
         const bool unconstrained = !capacity_ && !runtime::active_device_resource_ledger &&
                                    !options_.reference_memory_budget_bytes;
-        if (fitted_rks_fp64 && unconstrained && basis_.nao >= 512 &&
-            grid_.point_count() >= (1U << 19)) {
+        if (unconstrained && !execution_plan_.nonlocal_correlation) {
+          options_.xc_tile_points = dft::automatic_ks_scf_tile(0, fitted_rks_fp64, true, basis_.nao,
+                                                               grid_.point_count(), false, 0, 0);
+          // Match the qualified explicit tile in both consumers, not just SCF.
+          // Automatic allocation failures retain the bounded 256-point retries.
+          if (automatic_force) {
+            options_.xc_force_tile_points = options_.xc_tile_points;
+            automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
+          }
+        } else if (fitted_rks_fp64 && unconstrained && basis_.nao >= 512 &&
+                   grid_.point_count() >= (1U << 19)) {
           cudaDeviceProp properties{};
           auto status = cudaGetDeviceProperties(&properties, device);
           if (status == cudaErrorNotSupported || status == cudaErrorInvalidValue) {

@@ -132,7 +132,12 @@ Duplicate tiles and the actual incumbent tile are removed; `--max-candidates`
 and the shared wall-clock budget bound the remaining search. DFT uses neither
 `--coverage` nor `--max-classes`, which belong to HF shell-class selection.
 The baseline keeps native automatic tiling unless an exact local winner is
-already active. Use `--retune` to reconsider such a winner.
+already active. Ordinary CUDA semilocal XC, including global hybrids, now
+defaults to 1024-point SCF and force tiles without a profile. CPU and explicit
+resource-plan defaults remain bounded at 256; nonlocal CUDA retains its own
+policy. Explicit user tiles and qualified profile overrides still take
+precedence, and automatic allocation failures retain bounded smaller retries.
+Use `--retune` to reconsider a local winner.
 Autotuned winners additionally match the full basis data, representation, batch
 size, MethodIR and SCF controls. A grid-only match cannot reuse endpoint timing
 from a different AO or solver workload. Explicit initial guesses and fitted

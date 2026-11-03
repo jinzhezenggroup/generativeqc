@@ -25,6 +25,8 @@ from pathlib import Path
 from generativeqc.profiles import atomic_json, canonical_hash, file_hash
 from typing_extensions import Self
 
+from benchmarks._retention import raw_output_path
+
 
 def configurations(tile: int | None, policy: dict) -> dict:
     """Represent only execution choices; all scientific controls live elsewhere."""
@@ -291,6 +293,7 @@ def run(
     requested_configuration: dict | None = None,
 ) -> dict:
     """Search XC then J/K, requalifying the final composition against defaults."""
+    output = raw_output_path(output)
     if not os.environ.get("SLURM_JOB_ID") or repeats < 5:
         raise ValueError(
             "at least five paired repeats inside a Slurm allocation are required"
@@ -410,7 +413,7 @@ def run(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("plan", type=Path)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=raw_output_path)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--worker-fd", type=int)
     parser.add_argument("--configuration", type=json.loads)

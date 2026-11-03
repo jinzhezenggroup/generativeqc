@@ -1,5 +1,10 @@
 # Complete cold-start DFT96 qualification
 
+Follow-up: [1024-point CUDA defaults](../default-cuda-xc-1024-20261103/README.md)
+now apply the measured tile to ordinary semilocal-XC calls without a profile.
+This campaign and its source-matched archives remain unchanged historical
+evidence; the application paragraph below describes the campaign itself.
+
 ## Result
 
 On the exact 96-atom water cluster in

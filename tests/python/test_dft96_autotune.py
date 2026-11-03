@@ -295,3 +295,43 @@ def test_explicit_configuration_only_runs_fresh_qualification(
     assert report["identity"] == {"device": "test-only"}
     assert report["holdout"]["passed"]
     assert report["selected"] == configuration
+
+
+@pytest.mark.parametrize("entrypoint", ["cli", "api"])
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_retained_output_rejected_before_plan_or_native_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    entrypoint: str,
+    destination_kind: str,
+) -> None:
+    import sys
+
+    from benchmarks import _retention, dft96_autotune
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "report.json"
+    original.write_text("preserved reviewed evidence")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+    missing_plan = tmp_path / "must-not-read-plan.json"
+    if entrypoint == "api":
+        with pytest.raises(ValueError, match="raw benchmark output"):
+            dft96_autotune.run(missing_plan, destination, repeats=5)
+    else:
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["dft96_autotune", str(missing_plan), "--output", str(destination)],
+        )
+        with pytest.raises(SystemExit) as error:
+            dft96_autotune.main()
+        assert error.value.code == 2
+    assert original.read_text() == "preserved reviewed evidence"
+    assert not (tmp_path / ".artifacts").exists()
