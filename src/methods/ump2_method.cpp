@@ -125,6 +125,12 @@ class Ump2Prepared final : public PreparedCalculation, public ReferenceSeededCal
                        compute_forces, unrestricted_integral_backend());
         external_capacity =
             posthf::checked_add(external_capacity, fitted->numeric_capacity_bytes());
+        // The block provider charges the complete retained source, including
+        // its borrowed reference. Keep preparation scratch outside that owner.
+        const auto retained_source = fitted->retained_numeric_bytes();
+        if (retained_source > external_capacity)
+          throw std::logic_error("UMP2 fitted source accounting underflow");
+        external_capacity -= retained_source;
       }
       if (external_capacity >= phase_budget)
         throw std::length_error("UMP2 source/reference exceeds endpoint budget");

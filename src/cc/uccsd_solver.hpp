@@ -41,7 +41,9 @@ std::size_t unrestricted_capacity(std::size_t nbf, std::size_t alpha, std::size_
 
 /** Solve/replay CCSD and optionally replay all four standard (T) channels.
  * All scientific contractions are build-time-generated shared TensorIR; this
- * owner supplies unshifted physical UHF Fock/integrals and packed host DIIS. */
+ * owner supplies unshifted physical UHF Fock/integrals and packed host DIIS.
+ * Set retain_amplitudes=true when passing the result to unrestricted_force;
+ * energy-only results do not own the five response-input amplitude blocks. */
 UnrestrictedSolve solve_unrestricted(const hf::UnrestrictedPhysicalReference& reference,
                                      const integrals::ElectronInteractionSource& source,
                                      const SolverOptions& options, bool triples,

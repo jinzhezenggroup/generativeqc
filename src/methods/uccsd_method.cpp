@@ -254,6 +254,8 @@ class UccsdPrepared final : public PreparedCalculation {
         diagnostic.numeric_capacity_bytes =
             std::max(diagnostic.numeric_capacity_bytes,
                      result.mp2_component->correlation->numeric_capacity_bytes);
+      diagnostic.planned_endpoint_peak_bytes =
+          std::max(diagnostic.planned_endpoint_peak_bytes, diagnostic.numeric_capacity_bytes);
       diagnostic.ccsd_iterations = solved.iterations;
       diagnostic.ccsd_correlation_energy = solved.correlation_energy;
       diagnostic.ccsd_energy_change = solved.energy_change;

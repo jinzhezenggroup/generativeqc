@@ -117,6 +117,9 @@ triples and analytic force response use FP64. The selected Hamiltonian, basis
 groups and complete analytic-force work are preserved. Budget-scaled stopping
 applies to conventional CPU/CUDA CBS and both CUDA DF reference models;
 CPU and conventional CCSD keep FP64 arithmetic.
+Unrestricted CBS also retains its strict FP64 owner, including explicit mixed
+preconvergence requests: result metadata records the request separately from
+`preconvergence_selection="fp64"`; it never invokes the restricted mixed owner.
 
 | Request | Final convergence | Auxiliary preconvergence |
 | --- | --- | --- |
@@ -351,8 +354,12 @@ Standalone full-DF analytic E+F uses
 `Calculator(method="mp2", density_fitting="full_cuda", device="cuda",
 auxiliary_basis=..., correlation_memory_budget_bytes=2 << 30)`;
 `method="df-ccsd(t)"` accepts the same selector. This is distinct from legacy
-`density_fitting="cuda"` RI-MP2. Full DF currently supports single points and
-same-basis groups, not prepared batches, CPU fallback, or open-shell variants.
+`density_fitting="cuda"` RI-MP2. Full DF currently supports restricted and
+unrestricted single points and same-basis groups, not prepared batches or CPU fallback.
+The unrestricted UMP2/UCCSD owners also admit an explicitly requested native
+CPU-reference context with these fitting selectors; results report
+`cpu_reference`. This separate reference domain never substitutes CPU work for
+a requested CUDA context. The restricted full-DF owners remain CUDA-only.
 
 The positive `correlation_memory_budget_bytes` bounds complete numeric
 capacity, including simultaneous host/device owners and a conservative retained

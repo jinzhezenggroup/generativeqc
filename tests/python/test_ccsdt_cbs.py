@@ -422,13 +422,18 @@ def test_open_shell_composes_unrestricted_native_groups(
     assert result.convergence["lambda_arithmetic"] == "not_requested"
 
 
+@pytest.mark.parametrize("preconvergence", ("auto", "fp64", "mixed"))
 def test_open_shell_df_uses_unrestricted_grouped_endpoints(
     bases: tuple[CBSBasis, CBSBasis],
     fake_native: list[dict],
+    preconvergence: str,
 ) -> None:
     """DF changes only the selected operator, never the spin or grouping policy."""
     result = CCSDTCBSCalculator(
-        bases, device="cuda", auxiliary_bases=("sto-3g", "def2-svp")
+        bases,
+        device="cuda",
+        auxiliary_bases=("sto-3g", "def2-svp"),
+        preconvergence=preconvergence,
     ).singlepoint(ATOMS, charge=1, multiplicity=2)
     assert result.converged
     assert {event["method"] for event in fake_native} == {"uccsd(t)", "ump2"}
@@ -436,6 +441,13 @@ def test_open_shell_df_uses_unrestricted_grouped_endpoints(
         event["options"]["density_fitting"] == "correlation_cuda"
         for event in fake_native
     )
+    assert all(
+        "_correlation_preconvergence" not in event["options"] for event in fake_native
+    )
+    assert result.convergence["preconvergence"] == preconvergence
+    assert result.convergence["preconvergence_selection"] == "fp64"
+    assert result.convergence["arithmetic_request"] == "fp64"
+    assert result.convergence["arithmetic"] == "fp64"
 
 
 def test_open_shell_invalid_electron_state_rejects_before_native(

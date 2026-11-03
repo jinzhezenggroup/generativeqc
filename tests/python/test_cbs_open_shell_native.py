@@ -183,6 +183,9 @@ def test_open_shell_df_analytic_components(
         basis, charge, multiplicity, auxiliary=auxiliary, full_reference=full_reference
     )
     for method, result in actual.items():
+        assert result.executed_backend == (
+            "cuda" if device == "cuda" else "cpu_reference"
+        )
         assert result.energy == pytest.approx(expected[method], abs=1e-8)
     standalone = Calculator(**{**options, "method": "ump2"})
     try:
@@ -458,6 +461,17 @@ def test_unrestricted_default_companion_and_spin_identity(method: str) -> None:
         )
         assert set(results) == {method, "uhf"}
         assert results[method].correlation.reference_energy == results["uhf"].energy
+        if method == "uccsd(t)":
+            grouped = calculator.singlepoint_components(
+                [("Li", (0.0, 0.0, 0.0))],
+                multiplicity=2,
+                properties=("energy",),
+                companions=("uhf", "ump2"),
+            )
+            assert grouped[method].correlation.planned_endpoint_peak_bytes >= max(
+                grouped[method].correlation.numeric_capacity_bytes,
+                grouped["ump2"].correlation.numeric_capacity_bytes,
+            )
         with pytest.raises(ValueError, match="companion"):
             calculator.singlepoint_components(
                 ATOMS, companions=("rhf",), multiplicity=2
