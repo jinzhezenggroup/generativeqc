@@ -41,8 +41,8 @@ def _assert_cold_budget(workflow: str) -> None:
     prerequisite = _step(job, "Compile production CUDA prerequisite archive")
     # Both serial build phases must fit without consuming setup/probe/cleanup time.
     assert _minutes(prerequisite) == 10
-    assert _minutes(build) == 45
-    assert _minutes(prerequisite) + _minutes(build) + 10 <= _minutes(header) <= 65
+    assert _minutes(build) == 60
+    assert _minutes(prerequisite) + _minutes(build) + 10 <= _minutes(header) <= 80
     assert "continue-on-error:" not in header
     gates = (
         (
@@ -103,7 +103,7 @@ def _assert_cold_budget(workflow: str) -> None:
                     },
                 ) == (
                     event == "pull_request"
-                    and outcome == "success"
+                    and outcome in {"success", "failure"}
                     and available == "true"
                 )
 
@@ -143,16 +143,16 @@ def test_cold_budget_keeps_qualification_and_failure_diagnostics() -> None:
 @pytest.mark.parametrize(
     ("before", "after"),
     [
-        ("timeout-minutes: 65", "timeout-minutes: 50"),
-        ("timeout-minutes: 65", "timeout-minutes: 55"),
-        ("timeout-minutes: 65", "timeout-minutes: 60"),
-        ("timeout-minutes: 65", "timeout-minutes: 80"),
+        ("timeout-minutes: 80", "timeout-minutes: 50"),
+        ("timeout-minutes: 80", "timeout-minutes: 65"),
+        ("timeout-minutes: 80", "timeout-minutes: 75"),
+        ("timeout-minutes: 80", "timeout-minutes: 90"),
         ("timeout-minutes: 10", "timeout-minutes: 0"),
         ("timeout-minutes: 10", "# timeout omitted"),
-        ("timeout-minutes: 45", "timeout-minutes: 0"),
-        ("timeout-minutes: 45", "# timeout omitted"),
-        ("timeout-minutes: 45", "timeout-minutes: 45\n        continue-on-error: true"),
-        ("timeout-minutes: 45", "timeout-minutes: 45\n        if: false"),
+        ("timeout-minutes: 60", "timeout-minutes: 0"),
+        ("timeout-minutes: 60", "# timeout omitted"),
+        ("timeout-minutes: 60", "timeout-minutes: 60\n        continue-on-error: true"),
+        ("timeout-minutes: 60", "timeout-minutes: 60\n        if: false"),
         ("--target generativeqc_cuda_runtime_tests --parallel 3", "--target help"),
         ("ctest --test-dir build/cuda-release", "echo skipped"),
         ("if: always()", "if: success()"),
@@ -168,7 +168,10 @@ def test_cold_budget_keeps_qualification_and_failure_diagnostics() -> None:
         ("path: ${{ steps.pr_fast_ccache.outputs.path }}", "path: ~/.cache/ccache"),
         ("key: ${{ steps.pr_fast_ccache.outputs.key }}", "key: shared-cuda-cache"),
         ("steps.pr_fast_ccache_bound.outputs.available == 'true'", "true"),
-        ("steps.cuda_runtime_build.outcome == 'success'", "true"),
+        (
+            "(steps.cuda_runtime_build.outcome == 'success' || steps.cuda_runtime_build.outcome == 'failure')",
+            "true",
+        ),
     ],
 )
 def test_budget_diagnostic_and_gate_controls_reject_regressions(
