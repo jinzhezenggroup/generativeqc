@@ -645,15 +645,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
             options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
         const bool fitted_rks_fp64 =
             fused_rks_fp64 && options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA;
-        const bool direct_rks_fp64 =
-            fused_rks_fp64 && options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
-            !range_strategy_ && !execution_plan_.nonlocal_correlation;
         // Public numeric promises quote the conservative 256-point owner.
         // Do not change its work/storage shape after admission. Reserve ample
         // observed headroom for ordinary unpromised preparation as well.
         const bool unconstrained = !capacity_ && !runtime::active_device_resource_ledger &&
                                    !options_.reference_memory_budget_bytes;
-        if ((fitted_rks_fp64 || direct_rks_fp64) && unconstrained && basis_.nao >= 512 &&
+        if (fitted_rks_fp64 && unconstrained && basis_.nao >= 512 &&
             grid_.point_count() >= (1U << 19)) {
           cudaDeviceProp properties{};
           auto status = cudaGetDeviceProperties(&properties, device);
@@ -679,19 +676,13 @@ class KsPreparedState final : public KsSingleOwnerPort {
                 std::all_of(options_.application_precision_budget.begin(),
                             options_.application_precision_budget.end(),
                             [](double value) { return value == 0; });
-            const bool qualified_rks_fp64 =
-                fitted_rks_fp64 ||
-                dft::automatic_direct_ks_tiles_eligible(
-                    direct_rks_fp64, strict_precision_budget, all_electron, maximum_angular,
-                    basis_.natom, properties.major, properties.minor,
-                    properties.singleToDoublePrecisionPerfRatio);
             options_.xc_tile_points = dft::automatic_ks_scf_tile(
-                0, qualified_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
+                0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
                 execution_plan_.nonlocal_correlation, properties.major,
                 properties.singleToDoublePrecisionPerfRatio);
             if (automatic_force && strict_precision_budget && admitted_cuda_stationary_binding()) {
               options_.xc_force_tile_points = dft::automatic_ks_force_tile(
-                  qualified_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
+                  fitted_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
                   basis_.natom, basis_.nao, grid_.point_count(), properties.major);
               automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
             }

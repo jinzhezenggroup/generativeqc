@@ -3,6 +3,29 @@
 Status: implemented; scoped default-grid scheduling qualified; broader/identity limits retained
 Date: 2026-11-03
 
+## Follow-up: native architecture-independent fallback
+
+The default-policy decision below is **superseded** by PR #2948 after review.
+Neither an A100 name check nor an exact SM80 equality is an endpoint-speed
+qualification. Fully Direct native automatic SCF and force tile selection now
+retains 256 on every GPU unless the caller has an explicit tile or the Python
+frontend has selected an independently qualified exact local DFT schedule.
+The existing `generativeqc-tune` search already binds accepted profiles to
+source/device/workload identity and complete energy/force numerical, resource,
+and performance gates. Native C++/C callers can select a measured tile
+explicitly; their default path does not load Python's local profile cache.
+
+**Performance tradeoff:** the A100 data below remain valid for the recorded
+water-96 population, but no longer trigger a 1024-point default without a
+matching qualified profile or explicit configuration. Untuned A100 Direct
+endpoints can regress to the old 256-point timing. This is deliberate until
+portable, evidence-backed native profile consumption is implemented; it
+must not be represented as performance-neutral. The fitted scheduler is
+unchanged, and nothing is inferred for H100, A800, RTX 5090 or other devices.
+
+The original evidence, conclusions and failed diagnostics below are retained
+as historical provenance rather than edited into unmeasured performance claims.
+
 ## Problem
 
 The preceding [Direct orbit investigation](2026-11-02-direct-force-orbit-and-tuning.md)

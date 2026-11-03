@@ -133,23 +133,26 @@ int main() {
     assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]
 
 
-def test_direct_tiles_require_the_qualified_sm80_fp64_domain(
+def test_unqualified_direct_keeps_native_defaults_on_every_gpu_generation(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """Require SM80/A100-class capabilities rather than a GPU name string."""
+    """GPU compute capability alone is not evidence for a larger Direct tile."""
     unit = tmp_path / "direct_tiles.cpp"
     unit.write_text(
         r"""
 #include <iostream>
 #include "dft/ks_tile_policy.hpp"
 int main() {
-  bool direct, strict_budget, all_electron;
-  std::size_t angular, atoms;
-  int major, minor, ratio;
-  while (std::cin >> direct >> strict_budget >> all_electron >> angular >> atoms
-                 >> major >> minor >> ratio)
-    std::cout << generativeqc::dft::automatic_direct_ks_tiles_eligible(
-        direct, strict_budget, all_electron, angular, atoms, major, minor, ratio) << '\n';
+  std::size_t requested, atoms, nao, points;
+  bool qualified, unconstrained, all_electron;
+  int major, ratio;
+  while (std::cin >> requested >> qualified >> unconstrained >> all_electron
+                 >> atoms >> nao >> points >> major >> ratio) {
+    std::cout << generativeqc::dft::automatic_ks_scf_tile(
+        requested, qualified, unconstrained, nao, points, false, major, ratio) << ' ';
+    std::cout << generativeqc::dft::automatic_ks_force_tile(
+        qualified, unconstrained, all_electron, 2, atoms, nao, points, major) << '\\n';
+  }
 }
 """
     )
@@ -161,37 +164,18 @@ int main() {
             "-I" + str(Path(__file__).resolve().parents[2] / "src"),
         ),
     )
-    # This capability tuple is shared by qualifying A100-class SM80 devices.
-    # GPU model names must not participate in the production policy.
-    eligible = (1, 1, 1, 2, 96, 8, 0, 2)
-    cases = [(eligible, True)]
-    for index, value in (
-        (0, 0),
-        (1, 0),
-        (2, 0),
-        (3, 3),
-        (4, 47),
-        (4, 129),
-        (5, 7),
-        (5, 9),
-        (5, 12),
-        (6, 1),
-        (6, 6),
-        (7, 0),
-        (7, 1),
-        (7, 64),
-    ):
-        row = list(eligible)
-        row[index] = value
-        cases.append((tuple(row), False))
-    for atoms in (48, 128):
-        cases.append(((1, 1, 1, 2, atoms, 8, 0, 2), True))
-    # Do not export A100 endpoint measurements to Hopper or Blackwell.
+    cases: list[tuple[tuple[int, ...], tuple[int, int]]] = []
+    for major, ratio in ((0, 0), (7, 2), (8, 2), (9, 2), (12, 64)):
+        # No performance qualification: neither tile grows, even on fast FP64 GPUs.
+        cases.append(((0, 0, 1, 1, 96, 768, 1 << 20, major, ratio), (256, 256)))
+        # An explicitly selected SCF tile still takes priority. Force inheritance
+        # is resolved by the enclosing owner before this automatic force policy.
+        cases.append(((1024, 0, 1, 1, 96, 768, 1 << 20, major, ratio), (1024, 256)))
     cases.extend(
         [
-            ((1, 1, 1, 2, 96, 9, 0, 2), False),
-            ((1, 1, 1, 2, 96, 12, 0, 64), False),
-            ((1, 1, 1, 2, 96, 8, 6, 64), False),
+            # Existing fitted route remains independently eligible.
+            ((0, 1, 1, 1, 96, 768, 1 << 20, 8, 2), (1024, 1024)),
+            ((0, 1, 1, 1, 96, 768, 1 << 20, 12, 64), (256, 1024)),
         ]
     )
     inputs = "".join(" ".join(map(str, row)) + "\n" for row, _ in cases)
@@ -203,6 +187,8 @@ int main() {
         check=True,
         timeout=15,
     )
-    assert list(map(int, result.stdout.split())) == [
-        int(expected) for _, expected in cases
+    actual = [
+        tuple(map(int, line.split()))
+        for line in result.stdout.splitlines()
     ]
+    assert actual == [expected for _, expected in cases]

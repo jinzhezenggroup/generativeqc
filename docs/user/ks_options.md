@@ -221,19 +221,25 @@ also retain 256. An automatically enlarged owner that cannot allocate storage
 retries preparation once at 256; other failures propagate. A positive integer
 always preserves the explicit SCF request.
 
-Full-range Direct strict-FP64 RKS with gradient-dependent XC on SM80 devices
-reporting an FP32/FP64 throughput ratio of two (A100-class hardware) also uses
-1024 SCF and force points inside the same size/headroom gates. Admission uses
-reported compute capability and throughput, never a device-model name string.
-Only A100 has measured complete-endpoint performance; other matching devices
-are not independently benchmarked. This Direct policy requires zero application
-arithmetic budgets and is limited to 48–128 all-electron atoms and shells
-through d; range-separated/nonlocal methods, other GPU architectures (including
-H100 and RTX 5090) and larger geometries keep their automatic schedules.
-Explicit controls and resource promises retain priority, and the same bounded
-allocation retries apply.
-The [A100 Direct tiling decision](../../.agents/notes/implemented/performance/2026-11-03-a100-direct-automatic-tiles.md)
-records the measured scope and retained alternatives.
+Fully Direct RKS uses the conservative **256-point native automatic default**
+on every GPU, without an A100 name or SM80 generation allowlist. A GPU's
+compute capability and FP64 ratio establish hardware legality, not whether
+larger tiles improve the **complete energy + force** endpoint. The previously
+measured A100 1024-point default is therefore no longer promoted globally:
+**A100 may run slower without a profile than before this policy correction**.
+This change does not alter the density-fitted automatic tile policy.
+
+For performance-qualified Direct workloads, use a matching local DFT profile
+created by [generativeqc-tune](local_autotuning.md#tune-a-dft-workload), or pass
+explicit `tile_points` and `force_tile_points` when their resource envelope has
+been verified. The tuner measures 128/256/512/1024 candidates (quick mode),
+requires independent numerical and resource checks plus complete E+F speedup,
+and reuses only an exact source/device/basis/geometry/control match. A missing,
+stale, or rejected profile leaves the native Direct default unchanged. Profile
+tuning is explicit and never runs implicitly during cold-start preparation.
+The [historical A100 Direct qualification](../../.agents/notes/implemented/performance/2026-11-03-a100-direct-automatic-tiles.md)
+retains the scoped 1024-point evidence; it is not transferable to H100, A800,
+RTX 5090, or arbitrary input molecules.
 
 `force_tile_points` independently bounds CUDA stationary-force batches (1..4096
 points). When omitted, an explicit SCF tile is inherited. With automatic SCF,
