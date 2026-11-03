@@ -656,8 +656,9 @@ int main(int argc,char** argv) {
 
 
 @pytest.mark.parametrize("cumetal", [False, True])
+@pytest.mark.parametrize("separate_sources", [False, True])
 def test_resident_capture_refusal_uses_portable_status_without_submission(
-    tmp_path: Path, native_cxx: NativeCxx, cumetal: bool
+    tmp_path: Path, native_cxx: NativeCxx, cumetal: bool, separate_sources: bool
 ) -> None:
     """Run the real resident transport with a CUDA API lacking capture-error enums."""
     body = _extract_function(
@@ -675,6 +676,7 @@ def test_resident_capture_refusal_uses_portable_status_without_submission(
             "-std=c++20",
             "-O0",
             "-I" + str(ROOT / "src"),
+            f"-DTEST_SEPARATE_SOURCES={int(separate_sources)}",
             *provider_args,
         ],
     )
@@ -736,16 +738,20 @@ int main() {
   Shared shared;
   double force[6]{}, density[4]{};
   GeneratedExchangePlan plan{&shared, force};
+  constexpr bool separate = TEST_SEPARATE_SOURCES;
   bool callback_failure = false;
   const CudaDerivativeSourceConsumer consumer = [&](const auto& view) {
     if (view.values != force || view.producer_stream != shared.stream ||
-        view.coordinates != 3 || view.channels != 2) throw std::logic_error("bad view");
+        view.coordinates != 3 || view.channels != (separate ? 2U : 1U) ||
+        view.kind != (separate ? CudaDerivativeSourceKind::FullRangeJk
+                              : CudaDerivativeSourceKind::FullRangeJkSum))
+      throw std::logic_error("bad view");
     ++callbacks;
     if (callback_failure) throw std::runtime_error("consumer failure");
   };
   const auto invoke = [&] {
     return consume_generated_full_range_energy_derivatives(
-        plan, false, density, nullptr, 1.0, -0.5, consumer, false, nullptr);
+        plan, false, density, nullptr, 1.0, -0.5, consumer, separate, false, nullptr);
   };
   capture_state = cudaStreamCaptureStatusActive;
   if (invoke() != expected_capture_error || submissions || drains || callbacks) return 1;
@@ -773,7 +779,7 @@ int main() {
   DirectForcePrecisionRequest precision{true, true};
   const auto collect = [&] {
     return consume_generated_full_range_energy_derivatives(
-        plan, false, density, nullptr, 1.0, -0.5, consumer, false, &precision);
+        plan, false, density, nullptr, 1.0, -0.5, consumer, separate, false, &precision);
   };
   if (collect() != cudaSuccess || drains != 3 ||
       precision.work != std::array<std::uint64_t, 3>{19, 37, 2}) return 8;
