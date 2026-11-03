@@ -23,7 +23,8 @@
     "host": "node3, CPU only",
     "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
     "compiled_compact_source_sha256": "e1feadd90a9179924f9c6c75ae777465dd3a55d21835f49c30a6768a807a4c8f",
-    "compiled_compact_binary_sha256": "8677f72308a45aa92cfda3274edf2dce56b29d87e37253d0f9d22a844e4ee493"
+    "compiled_compact_binary_sha256": "8677f72308a45aa92cfda3274edf2dce56b29d87e37253d0f9d22a844e4ee493",
+    "elapsed_seconds": 24.93
   },
   "gpu_suite": {
     "slurm_job": 15794,
@@ -76,6 +77,13 @@
         "retained_source_on_node1": "/tmp/qc-2751-certificate-retained-20261104/racecheck/occupied-xc-cuda0/probe.cu",
         "retained_library_on_node1": "/tmp/qc-2751-certificate-retained-20261104/racecheck/occupied-xc-cuda0/probe.so"
       }
+    },
+    "device_uuid": "GPU-45f177f9-33ac-0e4e-f473-2beeaf6d413d",
+    "elapsed_seconds": {
+      "normal": 2.49,
+      "memcheck": 5.86,
+      "synccheck": 5.6,
+      "racecheck": 12.59
     }
   },
   "finite_probe": {
@@ -157,5 +165,21 @@
     "whole-runtime compiled resource envelopes",
     "complete admission-inclusive cold/warm endpoint cost",
     "default requalification; selector unchanged"
-  ]
+  ],
+  "original_test_logs": {
+    "source_revision": "db9612c0b01205eba593a33293fd319b4e5f904a",
+    "scope": "Exact original stdout remains recoverable from this existing Git commit. Suite elapsed times are diagnostic, not molecular endpoint timings.",
+    "files": [
+      {
+        "path": "benchmarks/results/occupied-xc-current-certificate-20261104/gpu-tests.log",
+        "bytes": 1134,
+        "sha256": "d556d93b79282ba4fd44a9184ff169efff1b9acbafea393c098bd0a1877587a2"
+      },
+      {
+        "path": "benchmarks/results/occupied-xc-current-certificate-20261104/host-tests.log",
+        "bytes": 261,
+        "sha256": "afcc80347f52c856987e0d5015f2d9a5f1ae03f44eddee01130d7a31102f8b94"
+      }
+    ]
+  }
 }

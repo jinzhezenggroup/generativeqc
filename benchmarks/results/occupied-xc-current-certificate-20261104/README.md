@@ -84,3 +84,14 @@ The same command is prefixed inside the allocation with `compute-sanitizer
 --tool memcheck|synccheck|racecheck --error-exitcode 86 --target-processes all`
 for the three sanitizer cohorts. Do not unset or override the visibility
 assigned by Slurm and do not use node3 for device execution.
+
+## Compact test receipts
+
+The counts, sanitizer results, device identity and diagnostic suite durations
+are retained in `receipt.json`; duplicate test stdout is not tracked
+in the current tree. Its `original_test_logs` entries retain exact byte counts
+and SHA-256 identities at existing commit
+`db9612c0b01205eba593a33293fd319b4e5f904a`. Recover either original without
+re-running a device campaign using `git show <source_revision>:<path>` and check
+its recorded hash. This storage-only change preserves all scientific evidence
+and remaining acceptance limits; it changes no retention exception or budget.
