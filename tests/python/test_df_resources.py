@@ -1,6 +1,7 @@
 """The common DF adapter uses the production tile planner without a solve."""
 
 import typing
+from pathlib import Path
 
 import pytest
 from generativeqc import Calculator
@@ -8,6 +9,60 @@ from generativeqc.resources_df import (
     density_fitting_tile_plan,
     density_fitting_value_layout,
 )
+
+
+def test_budgeted_df96_uses_its_own_native_inventory(monkeypatch: typing.Any) -> None:
+    """A scalar DF plan must not borrow Direct-HF's small eigensolver domain."""
+    import json
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
+        pytest.fail("DF admission queried the unrelated Direct-HF inventory")
+
+    geometry = (
+        Path(__file__).resolve().parents[2] / "tools/dft_mp_v1/inputs/water32.json"
+    )
+    atoms = json.loads(geometry.read_text())["atoms"]
+    calculator = Calculator(
+        device="cuda",
+        basis="def2-svp",
+        basis_representation="spherical",
+        density_fitting="cuda",
+        auxiliary_basis="def2-svp",
+        density_fitting_memory_budget_bytes=2 << 30,
+    )
+    monkeypatch.setattr(
+        calculator._library, "generativeqc_resource_small_hf_cuda_v2", forbidden
+    )
+    request = calculator._resource_request([atoms])
+    assert request.unsupported_reason is None
+    assert len(request.candidates) == 1
+    inventory = json.loads(dict(request.candidates[0].decisions)["bucket_inventory"])
+    assert len(inventory) == 1
+    row = inventory[0]
+    assert row["nbf"] == row["naux"] == 768
+    assert row["rhf_occupied"] == 160
+    assert row["energy_tiles"]["peak_workspace_bytes"] <= 2 << 30
+    assert row["force_tiles"]["peak_workspace_bytes"] <= 1 << 30
+    assert row["ordinary_eigen_device_bytes"] >= (1 << 20) + 128 * 768**2
+
+
+def test_unbudgeted_df96_is_still_refused() -> None:
+    """Large support does not silently enable the unbounded resident contract."""
+    import json
+
+    geometry = (
+        Path(__file__).resolve().parents[2] / "tools/dft_mp_v1/inputs/water32.json"
+    )
+    atoms = json.loads(geometry.read_text())["atoms"]
+    request = Calculator(
+        device="cuda",
+        basis="def2-svp",
+        basis_representation="spherical",
+        density_fitting="cuda",
+        auxiliary_basis="def2-svp",
+    )._resource_request([atoms])
+    assert not request.candidates
+    assert "explicitly budgeted RHF" in request.unsupported_reason
 
 
 def test_df_value_layout_contract_is_explicit_without_native_runtime() -> None:

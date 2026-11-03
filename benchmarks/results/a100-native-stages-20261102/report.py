@@ -113,7 +113,12 @@ def report(folder: Path) -> dict:
     ):
         snapshot = part / "historical-snapshot.json"
         bundle, recovered = load(
-            part, historical_manifest=snapshot if snapshot.exists() else None
+            part,
+            historical_manifest=(
+                snapshot
+                if snapshot.exists() and part.resolve().is_relative_to(ROOT)
+                else None
+            ),
         )
         archives.extend(bundle["input_archives"])
         omitted.extend(bundle.get("intrusive_stream_inventory", []))
