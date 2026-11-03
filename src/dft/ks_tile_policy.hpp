@@ -23,7 +23,8 @@ constexpr bool automatic_direct_ks_tiles_eligible(bool full_range_rks_fp64, bool
 
 /** Resolve the public automatic SCF tile without changing an explicit request.
  * The larger tiles amortize launch and mapped FP64 contraction overhead for
- * qualified fitted or SM80 full-rate-FP64 Direct RKS grids. Nonlocal work has a different optimum.
+ * qualified fitted or SM80 full-rate-FP64 Direct RKS grids. Nonlocal work
+ * has a different optimum.
  * CPU, small, mixed, unrestricted, constrained, and unknown device domains
  * retain 256. Force tiling is independently resolved by the enclosing owner.
  */
