@@ -692,7 +692,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                 fitted_rks_fp64 ||
                 dft::automatic_direct_ks_tiles_eligible(
                     direct_rks_fp64, strict_precision_budget, all_electron, maximum_angular,
-                    basis_.natom, properties.name, properties.major, properties.minor,
+                    basis_.natom, properties.major, properties.minor,
                     properties.singleToDoublePrecisionPerfRatio);
             options_.xc_tile_points = dft::automatic_ks_scf_tile(
                 0, qualified_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
