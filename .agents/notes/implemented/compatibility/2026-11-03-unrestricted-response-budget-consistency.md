@@ -24,3 +24,11 @@ The host regression includes a synthetic 1024-AO staging inventory without
 executing that unphysical system. Existing independent small-system numerical,
 inclusive-budget and failure-publication contracts remain the acceptance gates;
 this budget-only change is not new GPU or large-domain scientific qualification.
+
+Full-reference DF preparation calls the integral builder without a dense ERI;
+correlation-only fitting retains the conventional exact reference. Reference
+admission must select that same storage boundary instead of charging a
+nonexistent four-index tensor to full DF. A synthetic 1024-AO inventory checks
+that full DF fits a budget below the dense-reference minimum, correlation-only
+keeps that minimum, and an insufficient fitted budget still refuses. It never
+allocates or evaluates the synthetic AO tensor.

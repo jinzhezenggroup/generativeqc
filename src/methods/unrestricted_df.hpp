@@ -22,7 +22,7 @@ struct UnrestrictedFitting {
    * tensors before constructing the reference provider, including one-electron
    * states for which an MP2 occupied/virtual capacity query is not applicable. */
   std::size_t reference_capacity(const core::System& system, unsigned history) const {
-    auto result = posthf::uhf_reference_capacity(system, history, true);
+    auto result = posthf::uhf_reference_capacity(system, history, !full_reference);
     if (!full_reference) return result;
     const auto orbital = molecule::cartesian_ao_count(system);
     const auto auxiliary_count = molecule::cartesian_ao_count(*auxiliary);

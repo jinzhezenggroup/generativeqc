@@ -22,12 +22,12 @@ inline std::size_t checked_mul(std::size_t a, std::size_t b) {
   return a * b;
 }
 
-/** CG10 numeric source capacity, including normalized/original coefficients
- * and a conservative complete public-to-Cartesian expansion. Object headers
- * and allocator rounding are excluded, as in the existing source contract. */
+/** CG10 numeric source capacity, including ECP allocation capacity, normalized/original
+ * coefficients and a conservative complete public-to-Cartesian expansion. Object headers and
+ * allocator rounding are excluded, as in the existing source contract. */
 inline std::size_t source_capacity(const core::System& system) {
   auto bytes = checked_mul(128, system.atoms.size());
-  bytes = checked_add(bytes, checked_mul(sizeof(core::EcpTerm), system.ecp_terms.size()));
+  bytes = checked_add(bytes, checked_mul(sizeof(core::EcpTerm), system.ecp_terms.capacity()));
   for (const auto& shell : system.shells) {
     if (shell.angular_momentum > 4)
       throw std::invalid_argument("post-HF source capacity supports through g");
