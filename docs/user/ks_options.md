@@ -215,41 +215,46 @@ native preparation. Large device-fused, density-fitted, strict-FP64 RKS workload
 with gradient-dependent XC use 1024 points on devices with FP64 matrix acceleration
 and full-rate FP64 throughput; nonlocal correlation uses 512. Eligibility requires
 at least 512 AOs, 524288 grid points and 1 GiB of free device memory. CPU, small,
-unrestricted, mixed-precision, low-FP64-throughput and unknown devices retain 256.
+unrestricted and mixed-precision workloads retain 256; fitted workloads on
+low-FP64-throughput and unknown devices also retain 256.
 Numeric capacity promises, active resource ledgers and reference-memory budgets
 also retain 256. An automatically enlarged owner that cannot allocate storage
 retries preparation once at 256; other failures propagate. A positive integer
 always preserves the explicit SCF request.
 
-Fully Direct RKS uses the conservative **256-point native automatic default**
-on every GPU, without an A100 name or SM80 generation allowlist. A GPU's
-compute capability and FP64 ratio establish hardware legality, not whether
-larger tiles improve the **complete energy + force** endpoint. The previously
-measured A100 1024-point default is therefore no longer promoted globally:
-**A100 may run slower without a profile than before this policy correction**.
-This change does not alter the density-fitted automatic tile policy.
+Fully Direct RKS **prefers 1024-point automatic SCF and force tiles on every
+supported CUDA GPU**, without a device-name, architecture-generation or FP64
+throughput allowlist. This preference requires device-fused, full-range,
+gradient-dependent, strict-FP64 RKS with no application arithmetic budget,
+all-electron shells through d and 48–128 atoms, in addition to the AO/grid,
+free-memory and resource-promise limits above. Other Direct owners retain 256.
+This is a portable scheduling preference, not a claim that 1024 is optimal on
+every device or molecule. The density-fitted automatic policy is unchanged.
 
-For performance-qualified Direct workloads, use a matching local DFT profile
+To tune the preference for a particular workload, use a matching local DFT profile
 created by [generativeqc-tune](local_autotuning.md#tune-a-dft-workload), or pass
 explicit `tile_points` and `force_tile_points` when their resource envelope has
 been verified. The tuner measures 128/256/512/1024 candidates (quick mode),
 requires independent numerical and resource checks plus complete E+F speedup,
 and reuses only an exact source/device/basis/geometry/control match. A missing,
-stale, or rejected profile leaves the native Direct default unchanged. Profile
+stale, or rejected profile leaves the native Direct policy unchanged; a profile
+is not required to select 1024 automatically within its workload envelope. Profile
 tuning is explicit and never runs implicitly during cold-start preparation.
 The [historical A100 Direct qualification](../../.agents/notes/implemented/performance/2026-11-03-a100-direct-automatic-tiles.md)
-retains the scoped 1024-point evidence; it is not transferable to H100, A800,
-RTX 5090, or arbitrary input molecules.
+retains the scoped 1024-point evidence; timings and numerical qualification are
+not transferred to other devices or arbitrary input molecules.
 
 `force_tile_points` independently bounds CUDA stationary-force batches (1..4096
 points). When omitted, an explicit SCF tile is inherited. With automatic SCF,
-large qualified strict-FP64, gradient-dependent RKS owners independently use 1024
-force points on compute capability 8 or newer. This requires the same AO/grid
-size and free-memory thresholds, all-electron basis shells through d, 48–128
-atoms, native stationary admission and no resource promise. Other owners use
-256. An automatic force owner that exceeds an allowance or cannot allocate
-storage drains its controller and retries once at 256 with the same final-state
-token. Explicit bounds never silently shrink. CPU execution uses the SCF tile.
+large qualified fitted strict-FP64, gradient-dependent RKS owners independently
+use 1024 force points on compute capability 8 or newer. This requires the same
+AO/grid size and free-memory thresholds, all-electron basis shells through d,
+48–128 atoms, native stationary admission and no resource promise. Direct owners
+use the device-independent preference above, also requiring native stationary
+admission. Other owners use 256. An automatic force owner that exceeds an
+allowance or cannot allocate storage drains its controller and retries once at
+256 with the same final-state token. Explicit bounds never silently shrink. CPU
+execution uses the SCF tile.
 Neither control changes quadrature, precision or screening thresholds.
 
 For an independently qualified larger-tile workload, request the size explicitly:

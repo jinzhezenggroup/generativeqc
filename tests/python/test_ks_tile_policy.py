@@ -133,26 +133,23 @@ int main() {
     assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]
 
 
-def test_unqualified_direct_keeps_native_defaults_on_every_gpu_generation(
+def test_direct_prefers_1024_with_workload_and_resource_fallbacks(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """GPU compute capability alone is not evidence for a larger Direct tile."""
+    """Direct defaults need no device profile and preserve their bounded envelope."""
     unit = tmp_path / "direct_tiles.cpp"
     unit.write_text(
         r"""
 #include <iostream>
 #include "dft/ks_tile_policy.hpp"
 int main() {
-  std::size_t requested, atoms, nao, points;
-  bool qualified, unconstrained, all_electron;
-  int major, ratio;
-  while (std::cin >> requested >> qualified >> unconstrained >> all_electron
-                 >> atoms >> nao >> points >> major >> ratio) {
-    std::cout << generativeqc::dft::automatic_ks_scf_tile(
-        requested, qualified, unconstrained, nao, points, false, major, ratio) << ' ';
-    std::cout << generativeqc::dft::automatic_ks_force_tile(
-        qualified, unconstrained, all_electron, 2, atoms, nao, points, major) << '\n';
-  }
+  std::size_t requested, angular, atoms, nao, points;
+  bool full_range_rks_fp64, strict_budget, unconstrained, all_electron;
+  while (std::cin >> requested >> full_range_rks_fp64 >> strict_budget >> unconstrained
+                 >> all_electron >> angular >> atoms >> nao >> points)
+    std::cout << generativeqc::dft::automatic_direct_ks_tile(
+        requested, full_range_rks_fp64, strict_budget, unconstrained, all_electron,
+        angular, atoms, nao, points) << '\n';
 }
 """
     )
@@ -164,20 +161,27 @@ int main() {
             "-I" + str(Path(__file__).resolve().parents[2] / "src"),
         ),
     )
-    cases: list[tuple[tuple[int, ...], tuple[int, int]]] = []
-    for major, ratio in ((0, 0), (7, 2), (8, 2), (9, 2), (12, 64)):
-        # No performance qualification: neither tile grows, even on fast FP64 GPUs.
-        cases.append(((0, 0, 1, 1, 96, 768, 1 << 20, major, ratio), (256, 256)))
-        # An explicitly selected SCF tile still takes priority. Force inheritance
-        # is resolved by the enclosing owner before this automatic force policy.
-        cases.append(((1024, 0, 1, 1, 96, 768, 1 << 20, major, ratio), (1024, 256)))
-    cases.extend(
-        [
-            # Existing fitted route remains independently eligible.
-            ((0, 1, 1, 1, 96, 768, 1 << 20, 8, 2), (1024, 1024)),
-            ((0, 1, 1, 1, 96, 768, 1 << 20, 12, 64), (256, 1024)),
-        ]
-    )
+    eligible = (0, 1, 1, 1, 1, 2, 96, 768, 1 << 20)
+    cases = [(eligible, 1024)]
+    for index, value in (
+        (1, 0),
+        (2, 0),
+        (3, 0),
+        (4, 0),
+        (5, 3),
+        (6, 47),
+        (6, 129),
+        (7, 511),
+        (8, (1 << 19) - 1),
+    ):
+        row = list(eligible)
+        row[index] = value
+        cases.append((tuple(row), 256))
+    for atoms in (48, 128):
+        for angular in (0, 1, 2):
+            cases.append(((0, 1, 1, 1, 1, angular, atoms, 512, 1 << 19), 1024))
+    for tile in (1, 31, 256, 512, 1024, 4096):
+        cases.append(((tile, 0, 0, 0, 0, 3, 1, 1, 1), tile))
     inputs = "".join(" ".join(map(str, row)) + "\n" for row, _ in cases)
     result = subprocess.run(
         [str(executable)],
@@ -187,5 +191,4 @@ int main() {
         check=True,
         timeout=15,
     )
-    actual = [tuple(map(int, line.split())) for line in result.stdout.splitlines()]
-    assert actual == [expected for _, expected in cases]
+    assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]

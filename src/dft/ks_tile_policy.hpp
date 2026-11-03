@@ -6,11 +6,28 @@
 
 namespace generativeqc::dft {
 
+/** Prefer larger Direct batches without treating device identity as a cost model.
+ * This is a portable scheduling preference, not a universal speedup claim.
+ * Keep the established full-range, strict-FP64, all-electron RKS workload and
+ * resource envelope; the two owners retain explicit controls and bounded retries.
+ */
+constexpr std::size_t automatic_direct_ks_tile(std::size_t requested, bool full_range_rks_fp64,
+                                               bool strict_budget, bool unconstrained,
+                                               bool all_electron, std::size_t maximum_angular,
+                                               std::size_t atoms, std::size_t nao,
+                                               std::size_t points) noexcept {
+  if (requested) return requested;
+  return full_range_rks_fp64 && strict_budget && unconstrained && all_electron &&
+                 maximum_angular <= 2 && atoms >= 48 && atoms <= 128 && nao >= 512 &&
+                 points >= (1U << 19)
+             ? 1024
+             : 256;
+}
+
 /** Resolve the public automatic SCF tile without changing an explicit request.
  * The larger tiles amortize launch and mapped FP64 contraction overhead for
- * qualified fitted RKS grids. Direct XC schedules use a conservative native
- * default unless a measured exact-workload profile or an explicit tile selects
- * another size. Nonlocal work has a different fitted optimum.
+ * qualified fitted RKS grids. Direct XC uses its independent portable policy;
+ * nonlocal work has a different fitted optimum.
  * CPU, small, mixed, unrestricted, constrained, and unknown device domains
  * retain 256. Force tiling is independently resolved by the enclosing owner.
  */

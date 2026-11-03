@@ -13,12 +13,14 @@
     "src/dft/ks_tile_policy.hpp",
     "src/methods/dft_method.cpp"
   ],
-  "rationale": "Unspecified public SCF and stationary-force tiles resolve independently from hardware capability, fitted restricted strict-FP64 gradient-dependent work and grid size. Eligible full-rate FP64 SCF owners use 1024 (nonlocal 512); eligible all-electron through-d native force owners on compute capability 8 or newer use 1024 for 48\u2013128 atoms. Explicit sizes, scientific controls and bounded 256-point fallbacks remain authoritative. Complete default-path qualification is required before promotion.",
+  "rationale": "Unspecified public SCF and stationary-force tiles resolve independently. Fitted restricted strict-FP64 gradient-dependent owners retain their hardware capability policy: eligible full-rate FP64 SCF owners use 1024 (nonlocal 512), and eligible all-electron through-d force owners on compute capability 8 or newer use 1024 for 48\u2013128 atoms. Full-range device-fused strict-FP64 Direct RKS with zero application arithmetic budgets prefers 1024 on every supported CUDA device within the existing all-electron through-d, 48\u2013128-atom, AO/grid-size and free-memory envelope, without a device profile or hardware allowlist. Explicit sizes, scientific controls, resource promises and bounded 256-point fallbacks remain authoritative. Historical endpoint evidence does not qualify new-source/device performance claims.",
   "revisit_condition": "Requalify complete cold/warm/moved and larger endpoints with independent observables before extending eligibility or weakening resource admission. Preserve explicit SCF inheritance, force overrides, conservative promised capacity and at most one resource-failure retry. Product names are not scheduling capabilities.",
   "evidence": [
     "docs/user/ks_options.md",
     "tests/python/test_ks_tile_policy.py",
     "tests/python/test_ks_options.py",
+    "tests/python/test_force_tile_options.py",
+    ".agents/notes/implemented/performance/2026-11-04-portable-direct-ks-tiles.md",
     "benchmarks/results/automatic-ks-tiles-20261102/README.md"
   ]
 }

@@ -3,7 +3,17 @@
 Status: implemented; scoped default-grid scheduling qualified; broader/identity limits retained
 Date: 2026-11-03
 
-## Follow-up: native architecture-independent fallback
+## Superseding portable default
+
+The [portable Direct tile decision](2026-11-04-portable-direct-ks-tiles.md)
+supersedes both the original hardware allowlist and the earlier draft fallback
+policy recorded below. It prefers 1024 within the existing Direct workload and
+resource envelope on every supported CUDA device, without requiring a local
+profile. Historical measurements and their original qualification remain intact.
+
+## Earlier draft: native architecture-independent fallback
+
+This section records the superseded draft policy, not current behavior.
 
 The default-policy decision below is **superseded** by PR #2948 after review.
 Neither an A100 name check nor an exact SM80 equality is an endpoint-speed
