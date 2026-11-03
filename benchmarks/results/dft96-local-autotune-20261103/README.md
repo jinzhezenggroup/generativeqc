@@ -2,6 +2,10 @@
 
 ## Result and scope
 
+Separate complete fresh-process cold-start measurements are retained in
+`../dft96-cold-autotune-20261103/README.md`; they do not change the warm timing
+boundary or historical classification of the observations in this report.
+
 For the repository's `tools/dft_mp_v1/inputs/water32.json` water cluster
 (96 atoms, 768 spherical def2-SVP AOs), PBE0-RKS selects XC tile **1024** and
 keeps the incumbent J/K policy. A fresh five-pair holdout measures the complete
