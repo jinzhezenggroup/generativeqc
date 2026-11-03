@@ -795,12 +795,43 @@ void complete_conventional_force_matches_resolved_energy() {
   require(forwarded.forces == analytic.forces &&
               forwarded.response.residual_norm == analytic.response.residual_norm,
           "complete MP2 force still requires a concrete RawSource owner");
+  // A smaller allowance can select another valid source tile. Find actual
+  // admission before checking its exact boundary and pre-work rejection.
+  std::size_t rejected_budget = 0;
+  std::size_t admitted_budget = analytic.planned_endpoint_peak_bytes;
+  while (admitted_budget - rejected_budget > 1) {
+    const auto budget = rejected_budget + (admitted_budget - rejected_budget) / 2;
+    ForwardingInteractionSource candidate_source(source);
+    try {
+      const auto candidate = generativeqc::mp2::conventional_force_cpu(
+          *hf.reference, candidate_source, budget, 1e-10, 1e-10, response);
+      require(candidate.planned_endpoint_peak_bytes <= budget && candidate.response.converged(),
+              "admitted complete MP2 force exceeds its budget or fails response");
+      require(candidate.forces.size() == analytic.forces.size(), "bounded MP2 force shape");
+      for (std::size_t coordinate = 0; coordinate < analytic.forces.size(); ++coordinate)
+        require(std::abs(candidate.forces[coordinate] - analytic.forces[coordinate]) < 1e-12,
+                "bounded source tiling changes complete MP2 forces");
+      admitted_budget = budget;
+    } catch (const std::length_error&) {
+      require(candidate_source.reads() == 0,
+              "rejected complete force budget performed source work before admission");
+      rejected_budget = budget;
+    }
+  }
+  ForwardingInteractionSource bounded_source(source);
+  const auto bounded = generativeqc::mp2::conventional_force_cpu(
+      *hf.reference, bounded_source, admitted_budget, 1e-10, 1e-10, response);
+  require(bounded.planned_endpoint_peak_bytes <= admitted_budget && bounded_source.reads() > 0,
+          "minimum admitted complete force budget did not execute its bounded source");
+  require(bounded.forces.size() == analytic.forces.size(), "minimum-budget MP2 force shape");
+  for (std::size_t coordinate = 0; coordinate < analytic.forces.size(); ++coordinate)
+    require(std::abs(bounded.forces[coordinate] - analytic.forces[coordinate]) < 1e-12,
+            "minimum-budget source tiling changes complete MP2 forces");
   ForwardingInteractionSource rejected_source(source);
   bool short_budget_rejected = false;
   try {
     (void)generativeqc::mp2::conventional_force_cpu(*hf.reference, rejected_source,
-                                                    analytic.planned_endpoint_peak_bytes - 1, 1e-10,
-                                                    1e-10, response);
+                                                    admitted_budget - 1, 1e-10, 1e-10, response);
   } catch (const std::length_error&) {
     short_budget_rejected = true;
   }

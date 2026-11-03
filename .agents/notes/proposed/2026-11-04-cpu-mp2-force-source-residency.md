@@ -3,6 +3,12 @@
 Status: proposed
 Date: 2026-11-04
 
+Source-lifetime and CPU force-tile implementation follow-up:
+`../implemented/performance/2026-11-04-cpu-mp2-prepared-force-source.md`.
+That scoped decision does not implement packaged derivatives or qualify the
+complete CBS endpoint/performance campaign described here. The diagnostic
+observations below remain historical, not production measurements.
+
 ## Problem
 
 The policy-retirement CBS campaign remains incomplete. Subsequent diagnostic

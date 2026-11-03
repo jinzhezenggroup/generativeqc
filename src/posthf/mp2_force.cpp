@@ -134,8 +134,10 @@ ConventionalForceResult conventional_force_impl(
       reference.nbf, reference.nocc, provider->provider_bytes(), plan, maximum_shell,
       coordinate_count, posthf::checked_mul(coordinate_count, sizeof(double)), legacy_budget);
   const auto* tile_override = std::getenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
-  if (cuda && source.supports_device_read(integrals::ElectronInteractionOperator::eri, device_id) &&
-      (!tile_override || std::string_view(tile_override) != "0")) {
+  const bool readable_source =
+      cuda ? source.supports_device_read(integrals::ElectronInteractionOperator::eri, device_id)
+           : source.supports_host_read(integrals::ElectronInteractionOperator::eri);
+  if (readable_source && (!tile_override || std::string_view(tile_override) != "0")) {
     // Reuse the compiler's cross-shell source planner from CC/MP2 energy.
     // Every candidate covers all force consumers, not just OVOV. Preserve the
     // legacy derivative allowance up to its actual bounded scratch ceiling.

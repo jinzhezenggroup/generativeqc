@@ -262,11 +262,11 @@ class Mp2Prepared final : public PreparedCalculation,
               try {
                 return run_current();
               } catch (const std::length_error& error) {
-                if (!reference_source) throw;
+                if (!reference_source && !prepared_source) throw;
                 runtime::df_progress::Scope::label("mp2_reference_source_memory_error",
                                                    error.what());
               } catch (const std::bad_alloc&) {
-                if (!reference_source) throw;
+                if (!reference_source && !prepared_source) throw;
                 runtime::df_progress::Scope::label("mp2_reference_source_memory_error",
                                                    "allocation");
               }
@@ -275,6 +275,13 @@ class Mp2Prepared final : public PreparedCalculation,
               // once, then reconstruct the bounded compatibility provider.
               conventional_source = nullptr;
               reference_source.reset();
+              if (prepared_source) {
+                // Destroy the borrowing view before its prepared integral owner.
+                prepared_source.reset();
+                cpu_exact_plan_.reset();
+                prepared_exact = nullptr;
+                runtime::df_progress::Scope::label("mp2_cpu_reference_source_fallback", "memory");
+              }
               runtime::df_progress::Scope::label("mp2_reference_source_fallback", "memory");
               // Source destruction may return its still-live bucket (including
               // A) to the cache. Re-read that reservation before the retry.
@@ -322,12 +329,14 @@ class Mp2Prepared final : public PreparedCalculation,
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
       std::optional<mp2::ConventionalForceResult> force_diagnostic;
-      const bool force_started_with_reference_plan =
-          cuda_reference_plan_.get() != nullptr || reference_source != nullptr;
+      const bool force_started_with_reference_plan = cuda_reference_plan_.get() != nullptr ||
+                                                     reference_source != nullptr ||
+                                                     prepared_source.has_value();
       if (compute_forces) {
-        // Preserve the legacy CPU force reservation; CUDA keeps the qualified
-        // source across energy, adjoint, response and relaxed-weight replay.
-        if (!cuda) {
+        // The provider charges the borrowed CPU owner's actual retained bytes.
+        // Admission/allocation failure releases that owner before retrying the
+        // legacy streaming route; no second molecular ERI tensor is allocated.
+        if (!cuda && !share_reference_source) {
           prepared_source.reset();
           cpu_exact_plan_.reset();
           prepared_exact = nullptr;
@@ -451,6 +460,10 @@ class Mp2Prepared final : public PreparedCalculation,
         }
         force_diagnostic = run_phase([&](std::size_t correlation_budget) {
           prepare_source();
+          runtime::df_progress::Scope::number("mp2_force_cpu_prepared_source",
+                                              !cuda && prepared_source.has_value());
+          runtime::df_progress::Scope::number("mp2_force_source_retained_bytes",
+                                              conventional_source->retained_numeric_bytes());
           runtime::df_progress::Scope::number(
               "mp2_force_device_source",
               conventional_source &&
@@ -494,8 +507,9 @@ class Mp2Prepared final : public PreparedCalculation,
                      : (cuda ? mp2::conventional_force_cuda(ref, *conventional_source,
                                                             correlation_budget, threshold_, 1e-10,
                                                             response_options, context_.device_id)
-                             : mp2::conventional_force_cpu(ref, *raw_source, correlation_budget,
-                                                           threshold_, 1e-10, response_options));
+                             : mp2::conventional_force_cpu(ref, *conventional_source,
+                                                           correlation_budget, threshold_, 1e-10,
+                                                           response_options));
         });
         result.forces = force_diagnostic->forces;
       }
