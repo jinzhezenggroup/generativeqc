@@ -16,11 +16,17 @@ coverage to DFT or substituting microkernel measurements for complete endpoints.
 
 Reuse the existing independent SCF and stationary-force tile owners. Admit 1024
 automatically only for device-fused, full-range, gradient-dependent, strict-FP64
-RKS with no application arithmetic budget, on A100-named SM80 devices reporting
-FP32/FP64 throughput ratio two. Require all-electron shells through d, 48–128
-atoms, at least 512 AOs, 524288 actual XC grid points and 1 GiB free device memory.
-The device-name/architecture guard intentionally does not infer measurements for
-A30, H100, RTX 5090 or future architectures from throughput alone.
+RKS with no application arithmetic budget, on SM80 (compute capability 8.0)
+devices reporting FP32/FP64 throughput ratio two. Require all-electron shells
+through d, 48–128 atoms, at least 512 AOs, 524288 actual XC grid points and
+1 GiB free device memory. The SM80/FP64 hardware gate does not infer performance
+on H100, RTX 5090 or future architectures from throughput alone.
+
+A review follow-up removed the original `device_name.find("A100")` gate:
+driver/SKU/MIG labels are not stable capability identifiers. Other SM80 devices
+reporting the same FP64 ratio now pass the hardware predicate, but only A100 has
+measured complete energy-and-force endpoints in this note. This change is not
+evidence of a performance improvement on any newly admitted device.
 
 Explicit SCF and force bounds retain priority, including explicit SCF-to-force
 inheritance. Numeric capacity promises, active resource ledgers and reference

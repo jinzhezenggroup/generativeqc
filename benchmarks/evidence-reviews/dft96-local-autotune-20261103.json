@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "dft96-local-autotune-20261103",
+  "owner": "96-atom resident hybrid-DFT autotune qualification",
+  "reason": "Compact hash-bound scientific receipts retain full energy/force vectors, all 90 paired endpoint observations, independent CPU reference residuals, allocation/work censuses and executed sources. Only the ten final source-matched holdout samples support the qualified warm-latency result. The 70 source-mismatched exploratory samples, ten incomplete-postcheck samples, earlier failures and large-DF admission limits remain explicitly classified; no native binaries or CPU checkpoint binaries are published.",
+  "review_document": "benchmarks/results/dft96-local-autotune-20261103/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/dft96-local-autotune-20261103/receipts.json.xz",
+      "bytes": 131528,
+      "sha256": "2a0d689420c477e4dcbbbdddb48f6a00f01bd09e699ae3dd7fd551e06026f413",
+      "family": "dft96-local-autotune-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete reproducible resident-session qualification and classified historical/negative evidence. Warm fixed-density PBE0 energy plus analytic forces for one 96-atom workload only; no cold-SCF, profile activation, universal crossover or DF96 qualification claim. Storage review does not re-accept the historical source-mismatched observations."
+    }
+  ]
+}
