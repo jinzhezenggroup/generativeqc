@@ -1,5 +1,14 @@
 // Independent fixed-density RSH source qualification. Included in the native
 // composition test's anonymous namespace, after its fixture/assertion helpers.
+void emit_rsh_vector(std::string_view label, const std::vector<double>& values) {
+  std::cout << "RSH_VECTOR " << label << " [";
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    if (i) std::cout << ',';
+    std::cout << values[i];
+  }
+  std::cout << "]\n";
+}
+
 std::vector<double> independent_rsh_source_reference(const System& system, FockSpin spin,
                                                      const std::vector<double>& density,
                                                      const std::vector<double>& beta,
@@ -35,6 +44,12 @@ std::vector<double> independent_rsh_source_reference(const System& system, FockS
       }
       response[coordinate] =
           (energies[0] - 8 * energies[1] + 8 * energies[2] - energies[3]) / (12 * step);
+      std::cout << "RSH_CPU_STENCIL {\"range\":\""
+                << (op == FockOperator::ShortRange ? "short" : "long")
+                << "\",\"coefficient\":" << coefficient << ",\"step\":" << step
+                << ",\"coordinate\":" << coordinate << ",\"energies\":[" << energies[0] << ','
+                << energies[1] << ',' << energies[2] << ',' << energies[3]
+                << "],\"derivative\":" << response[coordinate] << "}\n";
     }
     return response;
   };
@@ -51,6 +66,7 @@ std::vector<double> independent_rsh_source_reference(const System& system, FockS
 }
 
 void independent_rsh_source_cases() {
+  std::cout.precision(17);
   for (unsigned basis = 0; basis < 3; ++basis)
     for (const auto spin : {FockSpin::Restricted, FockSpin::Unrestricted}) {
       auto system = fixture(true);
@@ -106,25 +122,61 @@ void independent_rsh_source_cases() {
         // The s/p cases cover default and two exact runtime radial identities;
         // both d representations additionally cover the failing non-default gate.
         if (basis != 0 && omega != 0.4) continue;
+        std::cout << "RSH_CASE {\"basis\":" << basis << ",\"nbf\":" << n << ",\"spin\":\""
+                  << (spin == FockSpin::Restricted ? "RKS" : "UKS") << "\",\"omega\":" << omega
+                  << "}\n";
+        emit_rsh_vector("density-alpha", density);
+        emit_rsh_vector("density-beta", beta);
         const auto correction = resolve_fock_build(
             make_rsh_correction_fock_spec(spin, 0.2, 0.5, omega), FockBackend::Cuda, 0.0);
         const auto expected = independent_rsh_source_reference(system, spin, density, beta, omega);
+        emit_rsh_vector("cpu", expected);
         std::vector<double> host, resident;
         std::string detail;
         require(execute_prepared_cuda_direct_rsh_energy_derivatives(
                     plan, correction, density, beta, host, detail) == GENERATIVEQC_STATUS_SUCCESS,
                 detail.c_str());
+        // Deliberately leave a different host-uploaded density in the owner.
+        // Resident/borrowed calls must honor their external device pointers.
+        auto poison_density = density, poison_beta = beta, poison_expected = expected;
+        for (auto& value : poison_density) value *= 0.7;
+        for (auto& value : poison_beta) value *= 0.7;
+        for (auto& value : poison_expected) value *= 0.49;
+        auto replace_host_density = [&] {
+          std::vector<double> poison;
+          require(execute_prepared_cuda_direct_rsh_energy_derivatives(
+                      plan, correction, poison_density, poison_beta, poison, detail) ==
+                      GENERATIVEQC_STATUS_SUCCESS,
+                  detail.c_str());
+          matrix(poison, poison_expected, "distinct preceding host density source derivatives");
+        };
+        emit_rsh_vector("host", host);
+        matrix(host, expected, "host RSH independent CPU source derivatives");
+        replace_host_density();
         require(execute_prepared_cuda_direct_rsh_energy_derivatives_device(
                     plan, correction, device.values, device_beta, n * n, resident, detail) ==
                     GENERATIVEQC_STATUS_SUCCESS,
                 detail.c_str());
-        matrix(host, expected, "host RSH independent CPU source derivatives");
+        emit_rsh_vector("resident", resident);
         matrix(resident, expected, "resident RSH independent CPU source derivatives");
 
         if (basis == 0 && omega == 0.4) {
           // A failed callback may have queued a copy. The provider must drain
           // it, preserve its typed status, and remain reusable by the check below.
-          std::vector<double> failed_copy(3 * coordinates);
+          DeviceDensity failed_device;
+          require(cudaMalloc(reinterpret_cast<void**>(&failed_device.values),
+                             3 * coordinates * sizeof(double)) == cudaSuccess,
+                  "RSH failure copy allocation failed");
+          struct CompletionEvent {
+            cudaEvent_t value{};
+            ~CompletionEvent() {
+              if (value) (void)cudaEventDestroy(value);
+            }
+          } completion;
+          require(
+              cudaEventCreateWithFlags(&completion.value, cudaEventDisableTiming) == cudaSuccess,
+              "RSH failure completion event creation failed");
+          bool witnessed_pending = false;
           for (const auto status :
                {GENERATIVEQC_STATUS_CUDA_ERROR, GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                 GENERATIVEQC_STATUS_NUMERICAL_FAILURE, GENERATIVEQC_STATUS_INVALID_ARGUMENT}) {
@@ -132,18 +184,38 @@ void independent_rsh_source_cases() {
                         plan, correction, device.values, device_beta, n * n,
                         [&](const CudaDerivativeSourceView& view) {
                           require(view.channels == 3, "general RSH failure fixture lost rows");
-                          require(cudaMemcpyAsync(failed_copy.data(), view.values,
-                                                  failed_copy.size() * sizeof(double),
-                                                  cudaMemcpyDeviceToHost,
-                                                  binding.stream) == cudaSuccess,
-                                  "RSH failure fixture copy failed");
+                          // Device copies avoid pageable-host synchronization.
+                          // Retain an actual not-ready witness before throwing.
+                          for (unsigned copy = 0; copy < 32; ++copy)
+                            require(cudaMemcpyAsync(failed_device.values, view.values,
+                                                    3 * coordinates * sizeof(double),
+                                                    cudaMemcpyDeviceToDevice,
+                                                    binding.stream) == cudaSuccess,
+                                    "RSH failure fixture device copy failed");
+                          require(cudaEventRecord(completion.value, binding.stream) == cudaSuccess,
+                                  "RSH failure completion event recording failed");
+                          const auto ready = cudaEventQuery(completion.value);
+                          require(ready == cudaSuccess || ready == cudaErrorNotReady,
+                                  "RSH failure completion event query failed");
+                          witnessed_pending |= ready == cudaErrorNotReady;
                           throw generativeqc::Error(status, "injected RSH callback failure");
                         },
                         detail) == status,
                     "RSH callback failure lost its typed status");
             require(cudaStreamQuery(binding.stream) == cudaSuccess,
                     "failed RSH callback returned before its copy drained");
+            require(cudaEventQuery(completion.value) == cudaSuccess,
+                    "failed RSH callback returned before its completion event");
+            std::vector<double> failed_copy(3 * coordinates);
+            require(cudaMemcpy(failed_copy.data(), failed_device.values,
+                               failed_copy.size() * sizeof(double),
+                               cudaMemcpyDeviceToHost) == cudaSuccess,
+                    "RSH drained failure copy export failed");
+            matrix(failed_copy, expected, "RSH asynchronous failure copy source derivatives");
           }
+          require(witnessed_pending, "RSH failure drain lacks a pending device-work witness");
+          std::cout << "RSH_FAILURE_DRAIN {\"pending_witness\":true,\"spin\":\""
+                    << (spin == FockSpin::Restricted ? "RKS" : "UKS") << "\"}\n";
           require(cudaStreamBeginCapture(binding.stream, cudaStreamCaptureModeThreadLocal) ==
                       cudaSuccess,
                   "RSH capture fixture failed");
@@ -164,6 +236,7 @@ void independent_rsh_source_cases() {
         // source keeps its own transport convention until the independent check.
         std::vector<double> copies(6 * coordinates), signs(3, 0);
         bool have_full = false, have_correction = false, have_rsh = false;
+        replace_host_density();
         require(
             consume_prepared_cuda_direct_rsh_energy_derivatives_device(
                 plan, correction, device.values, device_beta, n * n,
@@ -215,6 +288,7 @@ void independent_rsh_source_cases() {
             callback[2 * coordinates + i] = (1 + ratio) * correction_value;
           }
         }
+        emit_rsh_vector("borrowed", callback);
         matrix(callback, expected, "borrowed RSH independent CPU source derivatives");
       }
     }
