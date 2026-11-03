@@ -1,8 +1,8 @@
 """Full-rank FP64 density-fitting oracle and native endpoint observations.
 
-The tuner initially admits the small-topology RHF resource owner (<=16 orbital
-and <=128 auxiliary AOs). UHF lacks a complete native Fock census and composed
-DFT/DF admission is not qualified. Independent oracle support is broader.
+The tuner admits small RHF resource owners and explicitly budgeted RHF sources
+with <=768 orbital and auxiliary AOs. UHF lacks a complete native Fock census
+and composed DFT/DF admission is not qualified. Independent oracle support is broader.
 No metric cutoff, auxiliary basis or arithmetic precision is a tuning variable.
 """
 

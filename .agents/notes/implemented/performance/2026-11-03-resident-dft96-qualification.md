@@ -32,6 +32,13 @@ The experiment does not install a local profile, emit an execution-tuner recipe,
 or change ordinary Calculator defaults. Its resident-session evidence is labelled
 separately from the existing CLI's fresh-process-per-replay receipts.
 
+## Follow-up boundary
+
+The separate `2026-11-03-budgeted-df96-admission.md` decision supersedes the DF
+admission boundary for explicitly budgeted RHF sources. The original refusal,
+source identities and DFT-only performance conclusions below remain historical
+evidence; they do not retroactively become a DF qualification.
+
 ## Invariants
 
 - Every accepted comparison retains at least five alternating-order pairs.

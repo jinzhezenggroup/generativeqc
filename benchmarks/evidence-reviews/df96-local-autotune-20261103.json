@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "df96-local-autotune-20261103",
+  "owner": "Budgeted RHF DF96 resource admission and endpoint autotune qualification",
+  "reason": "Compact source-bound receipts retain all 70 measured endpoint observations, independent fitted-HF E/F and physical residual, metric/rank and actual Fock census, both allocation owners, classified budget/startup refusals, executed controllers and the separately verified cleanup correction. Seven complete five-pair comparisons yield no performance winner. Retention supports resource-domain acceptance and negative performance decisions, not a new DF speedup, installed recipe or global default.",
+  "review_document": "benchmarks/results/df96-local-autotune-20261103/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/df96-local-autotune-20261103/receipts.json.xz",
+      "bytes": 134752,
+      "sha256": "9ac5dd4982c286e456d0e078387220d7ac14350638c665b9759226a9ff6e060e",
+      "family": "df96-local-autotune-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact-workload Calculator/Python-frontend resource-domain acceptance, independent native default replay and fully retained negative policy search. No winner, automatic application, practical finite-host/RSS, large native-CLI, composed KS/DF or DF cold-speedup claim; startup retirement is not a numerical or timed-performance result. No native or checkpoint binaries are published."
+    }
+  ]
+}
