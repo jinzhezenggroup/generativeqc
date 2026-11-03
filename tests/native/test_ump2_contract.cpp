@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "api/handles.hpp"
+#include "generativeqc/generativeqc.hpp"
 #include "methods/ump2_method.hpp"
 #include "methods/unrestricted_response.hpp"
 #include "molecule/basis.hpp"
@@ -378,7 +379,7 @@ void force_contract() {
 
 void unsupported_requests() {
   generativeqc::core::ContextState context;
-  context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
+  context.requested_backend = GENERATIVEQC_BACKEND_HYBRID_CUDA;
   generativeqc::methods::Capabilities capabilities;
   capabilities.method = GENERATIVEQC_METHOD_UMP2;
   auto descriptor = ump2_descriptor();
@@ -389,7 +390,26 @@ void unsupported_requests() {
   } catch (const generativeqc::methods::MethodError& error) {
     rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
-  require(rejected, "native UMP2 silently admitted CUDA backend");
+  require(rejected, "native UMP2 silently admitted an unsupported hybrid backend");
+
+  // CUDA is an admitted request, not a promise of a device in this host test.
+  context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
+  context.device_id = 0;
+  auto cuda_calculation = generativeqc::methods::detail::prepare_ump2_calculation(
+      capabilities, context, h2(), descriptor);
+  require(static_cast<bool>(cuda_calculation), "native UMP2 rejected CUDA preparation");
+#if !GENERATIVEQC_HAS_CUDA
+  for (bool forces : {false, true}) {
+    rejected = false;
+    try {
+      (void)cuda_calculation->execute(forces);
+    } catch (const generativeqc::Error& error) {
+      rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    require(rejected && !cuda_calculation->correlation_diagnostic(),
+            "CPU-only UMP2 executed CUDA or published a failed diagnostic");
+  }
+#endif
 
   context.requested_backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
   descriptor.energy_tolerance = std::numeric_limits<double>::quiet_NaN();
