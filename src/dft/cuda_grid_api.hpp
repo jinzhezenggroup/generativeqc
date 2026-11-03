@@ -21,7 +21,10 @@ int grid_cuda_density_device_v1(void*, const double*, const double*, std::size_t
 int grid_cuda_run_selected_device_deferred_v1(void*, const double*, std::size_t, int,
                                               const std::size_t*, std::size_t, double*, double*,
                                               char*, std::size_t);
+int grid_cuda_run_selected_deferred_v1(void*, const double*, std::size_t, int, const std::size_t*,
+                                       std::size_t, double*, double*, char*, std::size_t);
 int grid_cuda_view_v1(void*, generativeqc::dft::GridTaskView*, char*, std::size_t);
+int grid_cuda_basis_v1(void*, generativeqc::dft::GridBasisView*, char*, std::size_t);
 int grid_cuda_prepare_exact_ao_map_device_v1(void*, const double*, std::size_t, double, std::size_t,
                                              const char*, std::size_t*, char*, std::size_t);
 int grid_cuda_run_ao_map_device_deferred_v1(void*, const double*, std::size_t, std::size_t,

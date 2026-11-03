@@ -17,6 +17,7 @@ from .elements import atomic_number as element_number
 if typing.TYPE_CHECKING:
     import numpy as np
 
+    from ._electronic_properties import ElectronicDensity
     from .accuracy import AccuracyAssessment
     from .ks_diagnostics import KsDiagnostic, KsTransportDiagnostic
     from .precision_policy import PrecisionValidation
@@ -195,7 +196,14 @@ class Result:
     freeze contained arrays or mappings. ``precision_validation`` holds the
     optional strict-endpoint or application-budget report from ``PrecisionCalculator``; ordinary
     calculations leave it unset. See :ref:`python-results-values`
-    and :ref:`python-results-ownership`."""
+    and :ref:`python-results-ownership`.
+
+    Opt-in electronic outputs are ``dipole`` (xyz e*Bohr at the coordinate
+    origin), ``charges`` (Mulliken atomic partial charges), ``lowdin_charges``
+    (Lowdin atomic partial charges), and ``density`` (detached total/spin AO
+    density with real-space sampling). Charge units are elementary charge;
+    each partition sums to the molecular charge. Unrequested fields are None.
+    These are mean-field, not correlated/relaxed response densities."""
 
     energy: float
     forces: np.ndarray | None
@@ -217,6 +225,21 @@ class Result:
     dispersion: object | None = None
     initial_guess: dict | None = None
     precision_validation: PrecisionValidation | None = None
+    dipole: np.ndarray | None = None
+    charges: np.ndarray | None = None
+    lowdin_charges: np.ndarray | None = None
+    density: ElectronicDensity | None = None
+
+    @property
+    def dipole_debye(self) -> np.ndarray | None:
+        """Return a fresh xyz dipole in Debye, or None when not requested.
+
+        ``dipole`` itself is in e*Bohr, referenced to the coordinate origin;
+        charged systems therefore have origin-dependent dipoles.
+        """
+        from ._electronic_properties import AU_TO_DEBYE
+
+        return None if self.dipole is None else self.dipole * AU_TO_DEBYE
 
 
 @dataclass(frozen=True)

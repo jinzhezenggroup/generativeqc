@@ -13,6 +13,7 @@ from generativeqc_compiler.common.resources import (
 from generativeqc_compiler.dft.grid import GridPolicy, GridProfile, GridSpec
 
 from ._cuda_runtime import install_native_loader as _install_native_loader
+from ._electronic_properties import ElectronicDensity
 from .accuracy import (
     AccuracyAssessment,
     ErrorEvidence,
@@ -183,6 +184,7 @@ __all__ = [
     "DiscreteTransition",
     "EigensolverDiagnostic",
     "ElectronState",
+    "ElectronicDensity",
     "ElementBasis",
     "ErrorEvidence",
     "EvidenceKind",

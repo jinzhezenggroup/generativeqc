@@ -3402,6 +3402,118 @@
       ],
       "fields": [],
       "field_declarations": []
+    },
+    "generativeqc_electronic_properties_cuda_create_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/electronic_properties.h",
+      "signature_sha256": "5dd4f14d99f1c6134a98817fb64abb092397e023e57e95cb70cd483ff69a9a19",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_electronic_properties_cuda_analyze_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/electronic_properties.h",
+      "signature_sha256": "cfc831f9ab1cbb132fba58a15a45988cac3d59a4ae4e58ac84679dbbb5fe4a29",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_electronic_properties_cuda_evaluate_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/electronic_properties.h",
+      "signature_sha256": "a059ecc0eb14e26f8354692b16aebd5620728b3403305007890f03e01bc2c579",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_electronic_properties_destroy_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/electronic_properties.h",
+      "signature_sha256": "ba0f6a768b92de1ae78dac76b6c0075e6bfd0e593fe23f070f9dac5329fbf5f0",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_calculation_execute_density_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/electronic_properties.h",
+      "signature_sha256": "677fa4fced417f32febe66adcdff76fa739f09022762b52e513e8ff8019c0b0f",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_ks_batch_copy_density_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/electronic_properties.h",
+      "signature_sha256": "044517894271c9747c8c5ae5eef76b5d5635a907cad263799285211120930234",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_system_position_integrals_cpu_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/electronic_properties.h",
+      "signature_sha256": "d2793ccc4d3f58a7ec260c27d806224187abde7c0b641e4c4dcf330afc65c12b",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
     }
   }
 }
