@@ -1,0 +1,44 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "5efc730f4c6d809cc4a31d23db4cdb5f87dae6e3",
+  "file_count": 5,
+  "total_bytes": 844368,
+  "purpose": "Exact owned historical source-bound guard observations retained in already merged Git. Original failures, negative outcomes and all fourteen proof files remain replayable. No external backup or storage-limit relaxation.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/facade-guards-v1-completed.tar.xz",
+      "bytes": 284704,
+      "sha256": "ff80506f497cc8a8156fbe2a69e45e36db6f878fcd9b193def1e5912d8ac923e",
+      "git_blob_sha1": "9007a46414045264c46bbe0b7198b481fd0868ff",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/notebook-public-guards-v1-completed.tar.xz",
+      "bytes": 172280,
+      "sha256": "85dc9af1c10e6396fde0db9b1bb5b7b3f7caa8017824b3deab052bc9ff054394",
+      "git_blob_sha1": "1b9d6f2650f865f1c8e7e6f368ed975c2fff1d10",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/public-budget-v5-completed.tar.xz",
+      "bytes": 125956,
+      "sha256": "925f052fc548f7947bfe78c09176ecee51886b9ce54f85489dc0f3e690aa3b4b",
+      "git_blob_sha1": "c255c2d2025b0487a25878c7293a847bca6c32d3",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/public-budget-v7-completed.tar.xz",
+      "bytes": 129748,
+      "sha256": "d29accf0501fb3f3418387fc4d608ef948be46c1d8d9ef85af061bf378a52db1",
+      "git_blob_sha1": "dc821434c4f760bd00218e113ea602b8fbd210ce",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/public-budget-v9-completed.tar.xz",
+      "bytes": 131680,
+      "sha256": "bdaa53bcc2e5fd2c1e21a0cc75aad0aa45294192e67495798cf3be569008c8a2",
+      "git_blob_sha1": "cb086767e100916f457a2d65729409a77c8e940b",
+      "git_mode": "100644"
+    }
+  ]
+}

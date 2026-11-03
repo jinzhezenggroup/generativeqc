@@ -36,10 +36,10 @@ def test_public_guards_reject_missing_or_changed_evidence(
     shutil.copytree(evidence.DIRECTORY, directory)
     monkeypatch.setattr(evidence, "DIRECTORY", directory)
     if mutation == "missing-reference":
-        (directory / "facade-guards-v1-completed.tar.xz").unlink()
+        (directory / "readers/facade-correction-reference-replay-v1.py").unlink()
     elif mutation == "corrupt-archive":
         path = directory / "notebook-public-guards-v1-completed.tar.xz"
-        data = path.read_bytes()
+        data = evidence.artifact_bytes(path.name)
         path.write_bytes(bytes([data[0] ^ 1]) + data[1:])
     else:
         path = directory / "cohort.json"

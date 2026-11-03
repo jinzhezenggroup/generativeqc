@@ -1,10 +1,13 @@
 """Replay frozen H100 public API guards, explicit fallbacks and retained failures."""
 
+import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 from benchmarks import h100_production_cohort as support
+from tools.restore_retained_evidence import read_evidence_bytes
 
 DIRECTORY = support.ROOT / "benchmarks/results/h100-sm90-cd2b-public-guards-20261103"
 READERS = {
@@ -37,6 +40,34 @@ def check(value: bool, message: str) -> None:
         raise ValueError(message)
 
 
+def artifact_bytes(name: str) -> bytes:
+    """Read an original packet, falling back only to declared local Git history."""
+    relative = Path(name)
+    path = DIRECTORY / relative
+    check(
+        not relative.is_absolute()
+        and ".." not in relative.parts
+        and not path.is_symlink(),
+        "Unsafe public guard evidence path",
+    )
+    if path.is_file():
+        return path.read_bytes()
+    check(
+        not path.exists()
+        and name in {cohort + "-completed.tar.xz" for cohort in COHORTS},
+        "Missing original public guard evidence",
+    )
+    try:
+        return read_evidence_bytes(
+            support.ROOT
+            / "benchmarks/results/h100-sm90-cd2b-public-guards-20261103"
+            / relative,
+            manifest=DIRECTORY / "historical-snapshot.json",
+        )
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise ValueError("Missing historical public guard evidence: " + name) from error
+
+
 def checked_publication() -> dict:
     publication = json.loads((DIRECTORY / "cohort.json").read_text())
     expected = (
@@ -63,14 +94,12 @@ def checked_publication() -> dict:
     )
     for binding in entries:
         relative = Path(binding["path"])
-        path = DIRECTORY / relative
+        data = artifact_bytes(binding["path"])
         check(
             not relative.is_absolute()
             and ".." not in relative.parts
-            and path.is_file()
-            and not path.is_symlink()
-            and path.stat().st_size == binding["bytes"]
-            and support.sha(path) == binding["sha256"],
+            and len(data) == binding["bytes"]
+            and hashlib.sha256(data).hexdigest() == binding["sha256"],
             "Public guard artifact differs: " + str(relative),
         )
     return publication
@@ -128,7 +157,8 @@ def extend(task: Path, native: Path, reference: Path) -> list[dict]:
     outputs = []
     for cohort in COHORTS:
         for suffix in ["-completed.tar.xz", "-download-manifest.json"]:
-            support.copy_exact(DIRECTORY / (cohort + suffix), task / (cohort + suffix))
+            with (task / (cohort + suffix)).open("xb") as stream:
+                stream.write(artifact_bytes(cohort + suffix))
         notebook = cohort.startswith("notebook-")
         unpacker = (
             task / "unpack-notebook-guards-v1.py"
