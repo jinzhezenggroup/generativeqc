@@ -1,0 +1,1909 @@
+{
+  "audit_skill": "experiment-audit",
+  "verdict": "WARN",
+  "overall_verdict": "WARN",
+  "integrity_status": "warn",
+  "reason_code": "scoped_deterministic_pass_with_explicit_assurance_limits",
+  "summary": "Corrected guards and final resource-admission preparation pass; original Facade18 remains failed; actual dispatch still rejects absent real review attestation. No final GPU acceptance.",
+  "dispatch_admission_blocker": false,
+  "corrected_guard_verdict": "PASS",
+  "original_final_rules_preserved": true,
+  "original_failure_retained": true,
+  "requested_reviewer_model": "gpt-6.1-sol",
+  "requested_reviewer_reasoning": "ultra",
+  "reported_reviewer_model": null,
+  "reviewer_model": null,
+  "reviewer_family": "unverified",
+  "reviewer_reasoning": null,
+  "actual_backend_identity": "unverified",
+  "actual_model_identity": "unverified",
+  "actual_effort_identity": "unverified",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
+  "review_completed": true,
+  "review_scope_complete": true,
+  "agent_id": "/root/facade_correction_actual_sol_audit",
+  "verdict_id": "/root/facade_correction_actual_sol_audit",
+  "scope": "Actual corrected guards and final resource-admission preparation only; no final GPU/performance acceptance.",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "build_receipt_sha256": "67ba3327447651bb566a003636e9e40cb06dc29cf382b2a6f9a5e33ec4b0ef64",
+  "core_sha256": "37b8bd02c1dddbf42385c494ae21ff51b50d874dae1dd0c01ab2b75fb0eb194e",
+  "original_facade": {
+    "status": "FAILED",
+    "qualified_populations": 9,
+    "attempted_populations": 18,
+    "public_EF": 71,
+    "closed_owner_controls": 39,
+    "directions": 6,
+    "original_pass_expectations_unchanged": [
+      18,
+      142,
+      72,
+      8
+    ]
+  },
+  "corrected_census": {
+    "fast_solves": 118,
+    "fast_public": 100,
+    "prepared_items": 160,
+    "native_eligible_items": 129,
+    "compatibility_items": 31,
+    "failed_items": 0,
+    "components": 22,
+    "public_EF": 142,
+    "owners": 28,
+    "closed_controls": 84,
+    "public_compatibility": 31,
+    "public_native": 111,
+    "logical_populations": 18,
+    "directional_controls": 8,
+    "unsupported_global_auxiliary_refusals": 4
+  },
+  "components": [
+    {
+      "case": "rks-pbe0-water12-direct-fast",
+      "logical_population": "rks-pbe0-water12-direct-fast",
+      "public_EF": 11,
+      "owners": 2,
+      "closed_controls": 6,
+      "public_routes": {
+        "native": 11
+      }
+    },
+    {
+      "case": "rks-pbe0-water12-df-fast",
+      "logical_population": "rks-pbe0-water12-df-fast",
+      "public_EF": 11,
+      "owners": 2,
+      "closed_controls": 6,
+      "public_routes": {
+        "native": 11
+      }
+    },
+    {
+      "case": "uks-pbe-water3-cation-df-fast",
+      "logical_population": "uks-pbe-water3-cation-df-fast",
+      "public_EF": 7,
+      "owners": 2,
+      "closed_controls": 6,
+      "public_routes": {
+        "native": 7
+      }
+    },
+    {
+      "case": "uks-pbe0-water3-cation-df-fast",
+      "logical_population": "uks-pbe0-water3-cation-df-fast",
+      "public_EF": 11,
+      "owners": 2,
+      "closed_controls": 6,
+      "public_routes": {
+        "native": 11
+      }
+    },
+    {
+      "case": "large96-standard-direct",
+      "logical_population": "large96-standard-direct",
+      "public_EF": 5,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 5
+      }
+    },
+    {
+      "case": "ragged-12-96-standard-direct",
+      "logical_population": "ragged-12-96-standard-direct",
+      "public_EF": 8,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 8
+      }
+    },
+    {
+      "case": "ragged-96-12-standard-direct",
+      "logical_population": "ragged-96-12-standard-direct",
+      "public_EF": 8,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 8
+      }
+    },
+    {
+      "case": "large96-standard-df",
+      "logical_population": "large96-standard-df",
+      "public_EF": 5,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 5
+      }
+    },
+    {
+      "case": "large96-fast-df",
+      "logical_population": "large96-fast-df",
+      "public_EF": 5,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 5
+      }
+    },
+    {
+      "case": "uks-pbe-water3-cation-direct-fast",
+      "logical_population": "uks-pbe-water3-cation-direct-fast",
+      "public_EF": 7,
+      "owners": 2,
+      "closed_controls": 6,
+      "public_routes": {
+        "compatibility": 7
+      }
+    },
+    {
+      "case": "uks-pbe0-water3-cation-direct-fast",
+      "logical_population": "uks-pbe0-water3-cation-direct-fast",
+      "public_EF": 11,
+      "owners": 2,
+      "closed_controls": 6,
+      "public_routes": {
+        "compatibility": 11
+      }
+    },
+    {
+      "case": "large96-fast-direct",
+      "logical_population": "large96-fast-direct",
+      "public_EF": 5,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "compatibility": 5
+      }
+    },
+    {
+      "case": "ragged-12-96-fast-direct",
+      "logical_population": "ragged-12-96-fast-direct",
+      "public_EF": 8,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 4,
+        "compatibility": 4
+      }
+    },
+    {
+      "case": "ragged-96-12-fast-direct",
+      "logical_population": "ragged-96-12-fast-direct",
+      "public_EF": 8,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "compatibility": 4,
+        "native": 4
+      }
+    },
+    {
+      "case": "ragged-12-96-standard-df-singleton-0",
+      "logical_population": "ragged-12-96-standard-df",
+      "public_EF": 4,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 4
+      }
+    },
+    {
+      "case": "ragged-12-96-standard-df-singleton-1",
+      "logical_population": "ragged-12-96-standard-df",
+      "public_EF": 4,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 4
+      }
+    },
+    {
+      "case": "ragged-96-12-standard-df-singleton-0",
+      "logical_population": "ragged-96-12-standard-df",
+      "public_EF": 4,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 4
+      }
+    },
+    {
+      "case": "ragged-96-12-standard-df-singleton-1",
+      "logical_population": "ragged-96-12-standard-df",
+      "public_EF": 4,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 4
+      }
+    },
+    {
+      "case": "ragged-12-96-fast-df-singleton-0",
+      "logical_population": "ragged-12-96-fast-df",
+      "public_EF": 4,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 4
+      }
+    },
+    {
+      "case": "ragged-12-96-fast-df-singleton-1",
+      "logical_population": "ragged-12-96-fast-df",
+      "public_EF": 4,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 4
+      }
+    },
+    {
+      "case": "ragged-96-12-fast-df-singleton-0",
+      "logical_population": "ragged-96-12-fast-df",
+      "public_EF": 4,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 4
+      }
+    },
+    {
+      "case": "ragged-96-12-fast-df-singleton-1",
+      "logical_population": "ragged-96-12-fast-df",
+      "public_EF": 4,
+      "owners": 1,
+      "closed_controls": 3,
+      "public_routes": {
+        "native": 4
+      }
+    }
+  ],
+  "directional_controls": [
+    {
+      "case": "rks-pbe0-water12-direct-fast",
+      "step": 0.001,
+      "absolute_error": 6.054563703918742e-07
+    },
+    {
+      "case": "rks-pbe0-water12-direct-fast",
+      "step": 0.0005,
+      "absolute_error": 7.140841438348783e-07
+    },
+    {
+      "case": "rks-pbe0-water12-df-fast",
+      "step": 0.001,
+      "absolute_error": 1.3623123076671184e-07
+    },
+    {
+      "case": "rks-pbe0-water12-df-fast",
+      "step": 0.0005,
+      "absolute_error": 1.2707944033012175e-07
+    },
+    {
+      "case": "uks-pbe0-water3-cation-df-fast",
+      "step": 0.001,
+      "absolute_error": 1.0192226087418765e-07
+    },
+    {
+      "case": "uks-pbe0-water3-cation-df-fast",
+      "step": 0.0005,
+      "absolute_error": 2.529022682246085e-08
+    },
+    {
+      "case": "uks-pbe0-water3-cation-direct-fast",
+      "step": 0.001,
+      "absolute_error": 1.0200731898751814e-07
+    },
+    {
+      "case": "uks-pbe0-water3-cation-direct-fast",
+      "step": 0.0005,
+      "absolute_error": 2.5410812072579336e-08
+    }
+  ],
+  "fast_solve_roles": {
+    "candidate": 100,
+    "fp64_audit": 18
+  },
+  "solve_work_census": {
+    "known_solve_fock": 118
+  },
+  "archive_member_counts": {
+    "facade-guards-v1": 142,
+    "notebook-public-guards-v1": 89
+  },
+  "physical_request_ledger": "142 unique original population/stage/item requests, each once",
+  "checks": {
+    "gt_provenance": {
+      "status": "PASS",
+      "details": "Authenticated retained independent CPU grid4, old dense oracle, independently executed large reference calibration/moved values and isolation; no solver rerun.",
+      "evidence": [
+        "facade-correction-reference-replay-v1.py:19-87",
+        "facade-large-reference-endpoint-v1.py:18-45"
+      ]
+    },
+    "score_normalization": {
+      "status": "PASS",
+      "details": "Independent complete-vector absolute errors with atom/component denominators; all142 numerical and8 directional gates pass.",
+      "evidence": [
+        "replay-facade-guards-v5.py:26-33",
+        "cpu-audit-results.json",
+        "cpu-supplement-results.json"
+      ]
+    },
+    "result_existence": {
+      "status": "PASS",
+      "details": "Both archives verified member-by-member against manifest/recovered bytes; exact author CPU replay equals stored proof, independent census/ledger equal.",
+      "evidence": [
+        "cpu-audit.py:74-105",
+        "cpu-command-02.log"
+      ]
+    },
+    "dead_code": {
+      "status": "PASS",
+      "details": "Observed real PreparedBatch calls and returned vectors, per-stage distinct witnesses, complete candidate/audit work metadata and all public owner closure controls.",
+      "evidence": [
+        "facade-singleton-fallback-endpoint-v1.py:91-199",
+        "replay-facade-guards-v5.py:52-130"
+      ]
+    },
+    "scope": {
+      "status": "PASS",
+      "details": "Separately corrected API/fallback scope preserves all142 physical endpoints and original failure. No native heterogeneousDF/allFast-native/timing or final performance acceptance.",
+      "evidence": [
+        "replay-facade-correction-v2.py:114-158",
+        "facade-scope-audit-sol-v1/audit-report.json",
+        "issue-2884-live-20261103-v1.json"
+      ]
+    },
+    "producer_provenance": {
+      "status": "WARN",
+      "blocking": false,
+      "details": "Diagnostic parents v1/v2 lack historical parent runner self-hashes; exact staged versions, observed invocation, plan/endpoint/raw hashes and build/source identity retained. Fallback parent self-records producer hashes.",
+      "evidence": [
+        "notebook-public-guards-v1/campaign.json",
+        "replay-facade-correction-v2.py:35-51"
+      ]
+    },
+    "admission": {
+      "status": "PASS",
+      "details": "Missing/incomplete/stale review fails; counts, source/core, original failure, scope flags and proof/contract/report hashes bind admission. Actual task currently rejects missing real attestation.",
+      "evidence": [
+        "final-admissions-v6.py:24-38",
+        "cpu-command-02.log",
+        "cpu-command-03.log"
+      ]
+    },
+    "original_final_rules": {
+      "status": "PASS",
+      "details": "30cases/180processes/720EF, threepairs and original science/performance gates unchanged; v4/v7/v17 only prerequisite wording/version metadata.",
+      "evidence": [
+        "cpu-audit.py:233-249",
+        "replay-final-pairs-v7.py:214-223",
+        "final-protocol-metadata-correction-v1.json"
+      ]
+    },
+    "eval_type": "simulation_only"
+  },
+  "adversarial_controls": [
+    {
+      "name": "dropped_logical_population",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "all18 physical logical groups required"
+    },
+    {
+      "name": "missing_case",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "Complete original physical sequence differs"
+    },
+    {
+      "name": "duplicate_case",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "Complete original physical sequence differs"
+    },
+    {
+      "name": "force_corruption",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "Independent dense complete E/F gate failed"
+    },
+    {
+      "name": "wrong_source",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "Complete raw identity differs"
+    },
+    {
+      "name": "wrong_core_artifact",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "Physical model or core changed"
+    },
+    {
+      "name": "wrong_project",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "Notebook execution identity differs"
+    },
+    {
+      "name": "missing_owner_closed_control",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "Every actual owner needs all three closed checks and stable detached outputs"
+    },
+    {
+      "name": "duplicate_owner_closed_control",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "Every actual owner needs all three closed checks and stable detached outputs"
+    },
+    {
+      "name": "compatibility_falsely_promoted_to_native_only",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "Unsupported native-only path was promoted"
+    },
+    {
+      "name": "candidate_cost_dropped",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "Actual public candidate/audit coverage or work accounting failed"
+    },
+    {
+      "name": "missing_review_attestation",
+      "status": "PASS_REJECTED",
+      "exception": "FileNotFoundError",
+      "diagnostic": "[Errno 2] No such file or directory: '/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-correction-result-audit-sol-v1/minimal-admission-fixture-run02/facade-correction-dispatch-review-v1.json'"
+    },
+    {
+      "name": "minimal_fixture_valid_metadata_baseline",
+      "status": "PASS_ADMITTED_FIXTURE_ONLY"
+    },
+    {
+      "name": "unqualified_raggedDF_native_promotion",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "unqualified paths/timing were promoted"
+    },
+    {
+      "name": "allFast_native_promotion",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "unqualified paths/timing were promoted"
+    },
+    {
+      "name": "admission_status_only_missing_row_counts",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "corrected public API/fallback population differs"
+    },
+    {
+      "name": "status_only_rows_erased_without_new_review",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "corrected guard review incomplete or for other inputs"
+    },
+    {
+      "name": "original_failure_relabel",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "prior status differs: facade-guards-v1-local-replay.json"
+    },
+    {
+      "name": "admission_wrong_source",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "prior source/build differs: facade"
+    },
+    {
+      "name": "admission_wrong_core",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "corrected public API/fallback population differs"
+    },
+    {
+      "name": "review_incomplete",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "corrected guard review incomplete or for other inputs"
+    },
+    {
+      "name": "review_denies_dispatch",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "corrected guard review incomplete or for other inputs"
+    },
+    {
+      "name": "actual_live_dispatch_has_no_attestation",
+      "status": "PASS_REJECTED",
+      "exception": "FileNotFoundError",
+      "diagnostic": "[Errno 2] No such file or directory: '/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-correction-dispatch-review-v1.json'"
+    },
+    {
+      "name": "running_notebook_cannot_be_terminal_job_archive",
+      "status": "PASS_REJECTED",
+      "exception": "ValueError",
+      "diagnostic": "exact job must be platform-terminal"
+    }
+  ],
+  "cpu_control_count": 24,
+  "cpu_status": "PASS",
+  "fixture_file_count": 20,
+  "fixture_scope": "JSON admission metadata only; fixture attestation is synthetic test data and never an actual review attestation",
+  "input_preservation_passed": true,
+  "input_seal_unchanged": true,
+  "primary_sealed_input_count": 35,
+  "audited_input_hashes": {
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-correction-contract-v1.json": {
+      "bytes": 4385,
+      "sha256": "31fc7038abd4706f62120e2fc56019d67cc4af2d4e52d514991d9751604dfcff"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-correction-v2-local-replay.json": {
+      "bytes": 161296,
+      "sha256": "6b5d1939f5bcf10e8ceeb4c4863ed53e6799394ffbb95efc5b801930af414762"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-facade-correction-v2.py": {
+      "bytes": 23614,
+      "sha256": "5cd71e0741c238522286949d95577b105b9b105846e225367b53cc006ca63bd6"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-correction-reference-replay-v1.py": {
+      "bytes": 9044,
+      "sha256": "4596a218dd3ad49f27af35bee16e8fa92b2bb5aa3e4755fe514dd40b2f4f9377"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-facade-guards-v5.py": {
+      "bytes": 28502,
+      "sha256": "c2c2532cf24ce188190b4b5daf5eefb6630cad5ee2762e2b780011bd56f616f6"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/cohort-replay-atomic-v1.py": {
+      "bytes": 7544,
+      "sha256": "c3a845760f36066ac3027f188bb8ce7de90e0ea4301029a9e868de60eca402a4"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-completed.tar.xz": {
+      "bytes": 172280,
+      "sha256": "85dc9af1c10e6396fde0db9b1bb5b7b3f7caa8017824b3deab052bc9ff054394"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-download-manifest.json": {
+      "bytes": 21066,
+      "sha256": "40b4a3ef97acba34c8d6aa8dd61dd3b6f3eaa74cdd0d2d5f15a177da1be6ad64"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/campaign.json": {
+      "bytes": 1448,
+      "sha256": "4db11e3f6c7df63b37d32a3cff86c81dc94877874a1fd89fac1d515640825c92"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/pack-notebook-guards-v1.py": {
+      "bytes": 5519,
+      "sha256": "f7da8c3823ca824352f63525cfead13b78dccad5063097882730ea233a6e311d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/unpack-notebook-guards-v1.py": {
+      "bytes": 2766,
+      "sha256": "fa49376b774e8681147ca5c7b407570e927f85e7e70cf8e8d422fb97388d0cbf"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-completed.tar.xz": {
+      "bytes": 284704,
+      "sha256": "ff80506f497cc8a8156fbe2a69e45e36db6f878fcd9b193def1e5912d8ac923e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-download-manifest.json": {
+      "bytes": 26491,
+      "sha256": "8cfe1122125d37f4ce7564d527df9879c0facc5857dc615b5a6d882ec717feb7"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-local-replay.json": {
+      "bytes": 83264,
+      "sha256": "72119b12c9eb8d18091800946132035e1286a1094db5fe820c372134fa75291a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-protocol-v1.json": {
+      "bytes": 84836,
+      "sha256": "7d046a34511803636b52c41fb7cd9d51681cac3a4bfc59f254073f1a87645980"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-singleton-fallback-protocol-v1.json": {
+      "bytes": 62601,
+      "sha256": "a5f2882d031e6a8c857365497b1c43799ee06cfee6cbbdd008d21bae4c089d7e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-singleton-fallback-endpoint-v1.py": {
+      "bytes": 16392,
+      "sha256": "47eb24ee2095c2a9cc4156444a715d10dd04bee1cd0e41ee86779a753acb79be"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-facade-singleton-fallback-v1.py": {
+      "bytes": 5099,
+      "sha256": "225e451555ce744e76106a118488de7bcf11aae660b930a8a67976ea4d237be1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-native-capability-diagnostic-v1.py": {
+      "bytes": 16485,
+      "sha256": "3f133f67fdf581d3975574486e4705c8eda18ae4623560fd3d418cb00376bb85"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-fast-uks-capability-diagnostic-v1.py": {
+      "bytes": 3439,
+      "sha256": "66948b10ec5eae13a047c6e03bb89a5551c58951ecb5407820b8a17a1296c5d8"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-fast-direct-capability-diagnostic-v2.py": {
+      "bytes": 3441,
+      "sha256": "612b318edbe8c2a73aa37c63f8fcf6ea4e7e847e6ee437b07b22e76a383bdb1e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/original-final-protocol-v1.json": {
+      "bytes": 12199,
+      "sha256": "2391b71fb49660f682f1b60056b2892d5516f01871d7479319f0be2cf925fdaa"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-pairs-protocol-v2.json": {
+      "bytes": 64683,
+      "sha256": "e9145bf2fce53929e981ed0a24042acdc78040fff052172cb1e72db9fb96ffd3"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-pairs-protocol-v3.json": {
+      "bytes": 64886,
+      "sha256": "5cf0021ef628a29caa98ff095cf2a0767bf1910c2197361141a2bdd028b1aa0c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-admissions-v5.py": {
+      "bytes": 5332,
+      "sha256": "545f1fceb58daec7413f2d78757b77ebb0ede9a250a3a1e7f7bb0613cabd4b7d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-admissions-v6.py": {
+      "bytes": 8143,
+      "sha256": "b418112eafb4194f05bb600240323f6ebb3acb43cc081bd8b47e28166dc50e2a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-final-pairs-v5.py": {
+      "bytes": 18221,
+      "sha256": "472c7836c585314a4fe2e06fa69431cbf6fad026af31545e183fe38df7c4ed04"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-final-pairs-v6.py": {
+      "bytes": 18221,
+      "sha256": "f18cc08e6875e1ae1928e192f6529cc12dff7bfd7e974efcb5e971b73b90b03d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-final-pairs-v5.py": {
+      "bytes": 25740,
+      "sha256": "5ff6fec687aca320bcaf56d4cf314798ef820eece4d310ec3884407687baad7e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-final-pairs-v6.py": {
+      "bytes": 25740,
+      "sha256": "53cb6f76156b5db5531d3df9462ff442e45e799e087837f661b2e3fdb955190a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-final-pairs-v6-job.sh": {
+      "bytes": 622,
+      "sha256": "bc6f9b351a6647aaae09f03400ae6f5a0acdbe703559b3994583c65c8be1c7d4"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/pack-cohort-v16.py": {
+      "bytes": 8376,
+      "sha256": "dd2cb27aa610f2362016b8bdaf5d0cad09af1e03b3473ce8392dca63913d3b63"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-scope-audit-sol-v1/audit-report.md": {
+      "bytes": 17448,
+      "sha256": "ac16fd0a7db5e04f986d6c83a05a845a3a3f1c8437341f6382fc9cc2f1be48fa"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-scope-audit-sol-v1/audit-report.json": {
+      "bytes": 17319,
+      "sha256": "988ff7981ca15a688ed07dc4b1b3012869daad7623542581f1d5a5ba12f2123d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/issue-2884-live-20261103-v1.json": {
+      "bytes": 6389,
+      "sha256": "281931755a16ede468fcba1a7c21f02d13aca46c4395f47adcddcb677aaeba04"
+    }
+  },
+  "additional_input_hashes": {
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-protocol-metadata-correction-v1.json": {
+      "bytes": 756,
+      "sha256": "700fb1c2192abcc9c907796c6300376862e5e240dbf71e6ef3a4855d7e27e808"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-pairs-protocol-v4.json": {
+      "bytes": 65102,
+      "sha256": "b6bd300e649fcf62fab4bf60601b8292f60458215636f63cd4853ffd9ad513ff"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-final-pairs-v7.py": {
+      "bytes": 18221,
+      "sha256": "3ded140a6dc14aeb391ff69b735aa4968dddebc1091a62b6d7c1640711468edb"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-final-pairs-v7-job.sh": {
+      "bytes": 622,
+      "sha256": "4917b02db89d6c5a91b3cc5ba8d590c78b8b2591b773217f1ef9b576c250350a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-final-pairs-v7.py": {
+      "bytes": 25740,
+      "sha256": "e3b1aa2df0ffd1d1997b05d5689df9269b8c4a067f23e30dc92ed842033d8590"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/pack-cohort-v17.py": {
+      "bytes": 8376,
+      "sha256": "92efc7edd79720ade236239552bb58a7a804dbf91733dff69297e510457316d1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-large-reference-endpoint-v1.py": {
+      "bytes": 5979,
+      "sha256": "146225360398c53b20c83a15a59608f5f686ec4689d50aca92e31b7cb4623be4"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-measurement-cd2b/python/generativeqc/_precision_batch.py": {
+      "bytes": 32670,
+      "sha256": "2d0dd4a95514bcfcf9d6969e14c541f443e21e3408f37a2b100e768a033b0d95"
+    }
+  },
+  "raw_and_dependency_hashes": {
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-correction-contract-v1.json": {
+      "bytes": 4385,
+      "sha256": "31fc7038abd4706f62120e2fc56019d67cc4af2d4e52d514991d9751604dfcff"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-correction-v2-local-replay.json": {
+      "bytes": 161296,
+      "sha256": "6b5d1939f5bcf10e8ceeb4c4863ed53e6799394ffbb95efc5b801930af414762"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-facade-correction-v2.py": {
+      "bytes": 23614,
+      "sha256": "5cd71e0741c238522286949d95577b105b9b105846e225367b53cc006ca63bd6"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-correction-reference-replay-v1.py": {
+      "bytes": 9044,
+      "sha256": "4596a218dd3ad49f27af35bee16e8fa92b2bb5aa3e4755fe514dd40b2f4f9377"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-facade-guards-v5.py": {
+      "bytes": 28502,
+      "sha256": "c2c2532cf24ce188190b4b5daf5eefb6630cad5ee2762e2b780011bd56f616f6"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/cohort-replay-atomic-v1.py": {
+      "bytes": 7544,
+      "sha256": "c3a845760f36066ac3027f188bb8ce7de90e0ea4301029a9e868de60eca402a4"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-completed.tar.xz": {
+      "bytes": 172280,
+      "sha256": "85dc9af1c10e6396fde0db9b1bb5b7b3f7caa8017824b3deab052bc9ff054394"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-download-manifest.json": {
+      "bytes": 21066,
+      "sha256": "40b4a3ef97acba34c8d6aa8dd61dd3b6f3eaa74cdd0d2d5f15a177da1be6ad64"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/campaign.json": {
+      "bytes": 1448,
+      "sha256": "4db11e3f6c7df63b37d32a3cff86c81dc94877874a1fd89fac1d515640825c92"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/pack-notebook-guards-v1.py": {
+      "bytes": 5519,
+      "sha256": "f7da8c3823ca824352f63525cfead13b78dccad5063097882730ea233a6e311d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/unpack-notebook-guards-v1.py": {
+      "bytes": 2766,
+      "sha256": "fa49376b774e8681147ca5c7b407570e927f85e7e70cf8e8d422fb97388d0cbf"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-completed.tar.xz": {
+      "bytes": 284704,
+      "sha256": "ff80506f497cc8a8156fbe2a69e45e36db6f878fcd9b193def1e5912d8ac923e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-download-manifest.json": {
+      "bytes": 26491,
+      "sha256": "8cfe1122125d37f4ce7564d527df9879c0facc5857dc615b5a6d882ec717feb7"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-local-replay.json": {
+      "bytes": 83264,
+      "sha256": "72119b12c9eb8d18091800946132035e1286a1094db5fe820c372134fa75291a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-protocol-v1.json": {
+      "bytes": 84836,
+      "sha256": "7d046a34511803636b52c41fb7cd9d51681cac3a4bfc59f254073f1a87645980"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-singleton-fallback-protocol-v1.json": {
+      "bytes": 62601,
+      "sha256": "a5f2882d031e6a8c857365497b1c43799ee06cfee6cbbdd008d21bae4c089d7e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-singleton-fallback-endpoint-v1.py": {
+      "bytes": 16392,
+      "sha256": "47eb24ee2095c2a9cc4156444a715d10dd04bee1cd0e41ee86779a753acb79be"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-facade-singleton-fallback-v1.py": {
+      "bytes": 5099,
+      "sha256": "225e451555ce744e76106a118488de7bcf11aae660b930a8a67976ea4d237be1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-native-capability-diagnostic-v1.py": {
+      "bytes": 16485,
+      "sha256": "3f133f67fdf581d3975574486e4705c8eda18ae4623560fd3d418cb00376bb85"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-fast-uks-capability-diagnostic-v1.py": {
+      "bytes": 3439,
+      "sha256": "66948b10ec5eae13a047c6e03bb89a5551c58951ecb5407820b8a17a1296c5d8"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-fast-direct-capability-diagnostic-v2.py": {
+      "bytes": 3441,
+      "sha256": "612b318edbe8c2a73aa37c63f8fcf6ea4e7e847e6ee437b07b22e76a383bdb1e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/original-final-protocol-v1.json": {
+      "bytes": 12199,
+      "sha256": "2391b71fb49660f682f1b60056b2892d5516f01871d7479319f0be2cf925fdaa"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-pairs-protocol-v2.json": {
+      "bytes": 64683,
+      "sha256": "e9145bf2fce53929e981ed0a24042acdc78040fff052172cb1e72db9fb96ffd3"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-pairs-protocol-v3.json": {
+      "bytes": 64886,
+      "sha256": "5cf0021ef628a29caa98ff095cf2a0767bf1910c2197361141a2bdd028b1aa0c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-admissions-v5.py": {
+      "bytes": 5332,
+      "sha256": "545f1fceb58daec7413f2d78757b77ebb0ede9a250a3a1e7f7bb0613cabd4b7d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-admissions-v6.py": {
+      "bytes": 8143,
+      "sha256": "b418112eafb4194f05bb600240323f6ebb3acb43cc081bd8b47e28166dc50e2a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-final-pairs-v5.py": {
+      "bytes": 18221,
+      "sha256": "472c7836c585314a4fe2e06fa69431cbf6fad026af31545e183fe38df7c4ed04"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-final-pairs-v6.py": {
+      "bytes": 18221,
+      "sha256": "f18cc08e6875e1ae1928e192f6529cc12dff7bfd7e974efcb5e971b73b90b03d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-final-pairs-v5.py": {
+      "bytes": 25740,
+      "sha256": "5ff6fec687aca320bcaf56d4cf314798ef820eece4d310ec3884407687baad7e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-final-pairs-v6.py": {
+      "bytes": 25740,
+      "sha256": "53cb6f76156b5db5531d3df9462ff442e45e799e087837f661b2e3fdb955190a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-final-pairs-v6-job.sh": {
+      "bytes": 622,
+      "sha256": "bc6f9b351a6647aaae09f03400ae6f5a0acdbe703559b3994583c65c8be1c7d4"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/pack-cohort-v16.py": {
+      "bytes": 8376,
+      "sha256": "dd2cb27aa610f2362016b8bdaf5d0cad09af1e03b3473ce8392dca63913d3b63"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-scope-audit-sol-v1/audit-report.md": {
+      "bytes": 17448,
+      "sha256": "ac16fd0a7db5e04f986d6c83a05a845a3a3f1c8437341f6382fc9cc2f1be48fa"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-scope-audit-sol-v1/audit-report.json": {
+      "bytes": 17319,
+      "sha256": "988ff7981ca15a688ed07dc4b1b3012869daad7623542581f1d5a5ba12f2123d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/issue-2884-live-20261103-v1.json": {
+      "bytes": 6389,
+      "sha256": "281931755a16ede468fcba1a7c21f02d13aca46c4395f47adcddcb677aaeba04"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/campaign.json": {
+      "bytes": 41893,
+      "sha256": "dd7225608bbe26ca63f126c40006ec83de87edf450d14996093c4a180e826039"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-fast-df.json": {
+      "bytes": 334908,
+      "sha256": "e8516c25195ccd85d324415e5be66cec58ae310de99444630132a03bf8de1c75"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-fast-df.plan.json": {
+      "bytes": 36672,
+      "sha256": "2dd03ee37ad9b4ea47b7194cc7d15ae2efa128da287a13d29d8cd14d6b6d299d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-fast-df.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-fast-df.stdout": {
+      "bytes": 145,
+      "sha256": "8c5b72d54f2c068217171dcbfad83d036d98ecb1d5a01a3563b97159756d547b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-fast-direct.json": {
+      "bytes": 7376,
+      "sha256": "0ee7364706eced4cfd889bcc1b32d7e7122497d5c7614ba9260b436e173d9e5d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-fast-direct.plan.json": {
+      "bytes": 36680,
+      "sha256": "07d4a69fa815dc2dfd3daf470324fecb1e2c7927890136b9ccc998f759a753d1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-fast-direct.stderr": {
+      "bytes": 1317,
+      "sha256": "d3af8e2191e07df6a892e8ff87d1fa6300638628526efea5cde822e49c9a1117"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-fast-direct.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-standard-df.json": {
+      "bytes": 295266,
+      "sha256": "81c57ab2a543c508242caf65d906a09edb3de9ebb0320f169db6650ade135741"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-standard-df.plan.json": {
+      "bytes": 36680,
+      "sha256": "9259f54d3a25a3c0c875ca9824d8a99c625fa47eda3a5bace39a6caad1714b4d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-standard-df.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-standard-df.stdout": {
+      "bytes": 145,
+      "sha256": "8c5b72d54f2c068217171dcbfad83d036d98ecb1d5a01a3563b97159756d547b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-standard-direct.json": {
+      "bytes": 295051,
+      "sha256": "56ff8878176e0df156dc90f3d65ea0aa31f2742dcd3e10951178ec61be898dfe"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-standard-direct.plan.json": {
+      "bytes": 36688,
+      "sha256": "e3bd4e51d93a8ba3fb19a84c171330f79982fd3f9b4c5340859a2eeffac3fa50"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-standard-direct.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/large96-standard-direct.stdout": {
+      "bytes": 145,
+      "sha256": "8c5b72d54f2c068217171dcbfad83d036d98ecb1d5a01a3563b97159756d547b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-fast-df.json": {
+      "bytes": 8238,
+      "sha256": "048292b9606329a8b6a3620ec1c745fbe4f1ab82edc42b8f8ed36c42f8b8d38b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-fast-df.plan.json": {
+      "bytes": 40946,
+      "sha256": "01906a46bcf3920b661e651f37f33549cdceb85ebf7915866fd7f44b6fca27b2"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-fast-df.stderr": {
+      "bytes": 2175,
+      "sha256": "4aa24ffd19bb3bd65e06196cf537bc6dfd58dce9c3f3a4c69f217c37bf9d106b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-fast-df.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-fast-direct.json": {
+      "bytes": 7361,
+      "sha256": "92ef3eb50d66da20d3fb62064c6beb53461a7d5541cb02f1a55f375f44096bf8"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-fast-direct.plan.json": {
+      "bytes": 40954,
+      "sha256": "fb50ed9332dcea9639f48489758130b61ffcfe48d4c21b7c4b30b9690523c865"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-fast-direct.stderr": {
+      "bytes": 1317,
+      "sha256": "d3af8e2191e07df6a892e8ff87d1fa6300638628526efea5cde822e49c9a1117"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-fast-direct.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-standard-df.json": {
+      "bytes": 7627,
+      "sha256": "ecbae11c45fe463155ae1413556490df7df9db1e6f527e1808b1e84318c792c9"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-standard-df.plan.json": {
+      "bytes": 40954,
+      "sha256": "63b9f957e674b3d743d42dd9000f7fc9d460e20b6d57d31004ff09d7d6539eea"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-standard-df.stderr": {
+      "bytes": 1566,
+      "sha256": "8581b2c94c8075bbba626cd027f56c2082460099bbf46f3eaa9ea85b9c8a6391"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-standard-df.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-standard-direct.json": {
+      "bytes": 323164,
+      "sha256": "9c183c30934aa63b0caca1304db8b4a05e5871793ecfef3e58555fd685d2e106"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-standard-direct.plan.json": {
+      "bytes": 40962,
+      "sha256": "3da4b51b45a6f0864928c91c07990962a7f6e92ba27296238f82e87a7d80e460"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-standard-direct.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-12-96-standard-direct.stdout": {
+      "bytes": 145,
+      "sha256": "fbb11f3f21437c28f3d8cb507427576185a0e1944e3f9d588470ec81b9b65736"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-fast-df.json": {
+      "bytes": 8238,
+      "sha256": "d5ef7aece87ec07dedae79dbc139ea0d8f83404dc3b074c36981e40c1fe08ce7"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-fast-df.plan.json": {
+      "bytes": 40946,
+      "sha256": "c4178d989b340c3881b4652cb979f89f0a11eeae294f64ce63208d24a70cb2cf"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-fast-df.stderr": {
+      "bytes": 2175,
+      "sha256": "4aa24ffd19bb3bd65e06196cf537bc6dfd58dce9c3f3a4c69f217c37bf9d106b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-fast-df.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-fast-direct.json": {
+      "bytes": 7361,
+      "sha256": "6b634577eda2636e2b32247614d4226a5b9cbad6fe201ac79b41f2d92aa4cea1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-fast-direct.plan.json": {
+      "bytes": 40954,
+      "sha256": "05b0727340fd0bc2757438de772f9274680536eeaa2d5dba8295f20b8b8bdfe8"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-fast-direct.stderr": {
+      "bytes": 1317,
+      "sha256": "d3af8e2191e07df6a892e8ff87d1fa6300638628526efea5cde822e49c9a1117"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-fast-direct.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-standard-df.json": {
+      "bytes": 7627,
+      "sha256": "cd7b876d4edee043c4eaaed9b6dbcc60eb75c133178b295b52acf4e7363babac"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-standard-df.plan.json": {
+      "bytes": 40954,
+      "sha256": "02f6250dff2949da889232431be14874ae3e2ac39ca28c29c3fab7e21937d777"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-standard-df.stderr": {
+      "bytes": 1566,
+      "sha256": "8581b2c94c8075bbba626cd027f56c2082460099bbf46f3eaa9ea85b9c8a6391"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-standard-df.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-standard-direct.json": {
+      "bytes": 323156,
+      "sha256": "1bd3ba8bdae1a2ecb1d59644236230d60cdd80f05c7771f937d19b43cd1279b7"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-standard-direct.plan.json": {
+      "bytes": 40962,
+      "sha256": "cf2c48bd8ef3cc8c71c02dba496f884f0eb1c44b391f12415eaf464e529bc017"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-standard-direct.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/ragged-96-12-standard-direct.stdout": {
+      "bytes": 145,
+      "sha256": "fbb11f3f21437c28f3d8cb507427576185a0e1944e3f9d588470ec81b9b65736"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-pbe0-96-base-calibration.json": {
+      "bytes": 31282,
+      "sha256": "64e9bf6756e4f50cc275f8f9335bed33c97428954e92b6afeea93b31e1c25334"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-pbe0-96-base-calibration.plan.json": {
+      "bytes": 15533,
+      "sha256": "6237185fa5bbc1b5ccce3fef3b2a3415fed69289c8a3a7d263b67db53580f3e9"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-pbe0-96-base-calibration.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-pbe0-96-base-calibration.stdout": {
+      "bytes": 90,
+      "sha256": "1be45f8ac039b75fd75a32b9ead4c5bfe39fec571b4e1806a15892058638f3db"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-pbe0-96-moved.json": {
+      "bytes": 43389,
+      "sha256": "45638f737a7f167a1b1f29def2602d02bc8554af6f57cc6a53376ddb1534e983"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-pbe0-96-moved.plan.json": {
+      "bytes": 15567,
+      "sha256": "957d211546b828455222ca3628a25a40dd13671cd13d4489e454c949c98e0d8c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-pbe0-96-moved.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-pbe0-96-moved.stdout": {
+      "bytes": 90,
+      "sha256": "2e0b777892e99ab27391b698accd17433de932fb4c21908521516d06ed21b531"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-runtime.json": {
+      "bytes": 2668,
+      "sha256": "5c91838462f42a877b5ec73b7ffb5304997bc766ab425dfc9a7b552b78c60c13"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-runtime.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/reference-runtime.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/rks-pbe0-water12-df-fast.json": {
+      "bytes": 389054,
+      "sha256": "9cf3928ec89afbf8bb98a086e9316c7c98f5f3af37ce35299cd7d7a982944f13"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/rks-pbe0-water12-df-fast.plan.json": {
+      "bytes": 20724,
+      "sha256": "c405efba71dc614777271dc7e2b4a28897d1e4c718bd02c6226c8cbd26246165"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/rks-pbe0-water12-df-fast.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/rks-pbe0-water12-df-fast.stdout": {
+      "bytes": 147,
+      "sha256": "cb253c6ef4527df3d0ee74788d0b755a5e163c96c65f304629d82afb4b081345"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/rks-pbe0-water12-direct-fast.json": {
+      "bytes": 421932,
+      "sha256": "0b25ecf5cbfa89567667caf2ffba52cdd3870bdbee81de3a11ab02a6b1bfcd86"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/rks-pbe0-water12-direct-fast.plan.json": {
+      "bytes": 20732,
+      "sha256": "7bd9ff26d077a005b60c9c5df5fe070b67453d41cd52b2f346cf34b88e1338e5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/rks-pbe0-water12-direct-fast.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/rks-pbe0-water12-direct-fast.stdout": {
+      "bytes": 147,
+      "sha256": "cb253c6ef4527df3d0ee74788d0b755a5e163c96c65f304629d82afb4b081345"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe-water3-cation-df-fast.json": {
+      "bytes": 268172,
+      "sha256": "86d07a2105d137329ce8b183c2be785397c9b5de62e46f40a84ca7d4526014b2"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe-water3-cation-df-fast.plan.json": {
+      "bytes": 8462,
+      "sha256": "e55775a50254bb9c1c5e5662d8a529a2704a46b1ab09fddcc4f5964aeb5879af"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe-water3-cation-df-fast.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe-water3-cation-df-fast.stdout": {
+      "bytes": 145,
+      "sha256": "86323aa60343c925a1cf7cceab48b462e7afed2f050083cce06be6fe226bc2c2"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe-water3-cation-direct-fast.json": {
+      "bytes": 7834,
+      "sha256": "c27af01bc90384f0760b07fa606ecf8823a2f2d3257575716efa63797a53c10d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe-water3-cation-direct-fast.plan.json": {
+      "bytes": 8429,
+      "sha256": "34bac5b048991f661477b6c06176dbd46e81840a209340a979162cdc2198aedf"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe-water3-cation-direct-fast.stderr": {
+      "bytes": 1317,
+      "sha256": "d3af8e2191e07df6a892e8ff87d1fa6300638628526efea5cde822e49c9a1117"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe-water3-cation-direct-fast.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe0-water3-cation-df-fast.json": {
+      "bytes": 431153,
+      "sha256": "e2402606a801e34af9d6e9059c82891afd23597b9d5d95714e0c5341287800f7"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe0-water3-cation-df-fast.plan.json": {
+      "bytes": 12479,
+      "sha256": "abfcd0d787a5eab1d055ea137b6281d31973518e05fc2d004108ce502ea6d84c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe0-water3-cation-df-fast.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe0-water3-cation-df-fast.stdout": {
+      "bytes": 147,
+      "sha256": "cb253c6ef4527df3d0ee74788d0b755a5e163c96c65f304629d82afb4b081345"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe0-water3-cation-direct-fast.json": {
+      "bytes": 8738,
+      "sha256": "ce3670cc0c9cf2caa132427d0785b2afcaf515d794a1397a64558f780f947e68"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe0-water3-cation-direct-fast.plan.json": {
+      "bytes": 12487,
+      "sha256": "990e071a1afa28cc20fa6152e0b9fecb9b5c6ba410b6b2ffb16faaddad95c47e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe0-water3-cation-direct-fast.stderr": {
+      "bytes": 1317,
+      "sha256": "d3af8e2191e07df6a892e8ff87d1fa6300638628526efea5cde822e49c9a1117"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1/uks-pbe0-water3-cation-direct-fast.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/run-facade-guards-v5.py": {
+      "bytes": 15467,
+      "sha256": "68da72cdd440efb2acd540631afe1ad3e65a9fe5784a154bcac858c092794c72"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/run-facade-guards-v5-job.sh": {
+      "bytes": 623,
+      "sha256": "7151ddaf474530a0ee97740a1e5cc9e2f4a017b4199e104c51586e9eff371b3f"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/facade-guard-endpoint-v1.py": {
+      "bytes": 16380,
+      "sha256": "3b9f475811b072e4662d53feed0bfc280f7b03bb1d6b0d08673412c0891dc6a8"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/facade-large-reference-endpoint-v1.py": {
+      "bytes": 5979,
+      "sha256": "146225360398c53b20c83a15a59608f5f686ec4689d50aca92e31b7cb4623be4"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/facade-reference-runtime-v1.py": {
+      "bytes": 4198,
+      "sha256": "a0c82652bc9d7b8be43bb6dacdca727fd5049786a343fe10f546233ae927fe51"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/oracle_replication6_solver_v2.py": {
+      "bytes": 2945,
+      "sha256": "8b2ba4e1a45be9a16a82c7135275873ba54e6c9ee0f67d305f437459ee096506"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/facade-guards-protocol-v1.json": {
+      "bytes": 84836,
+      "sha256": "7d046a34511803636b52c41fb7cd9d51681cac3a4bfc59f254073f1a87645980"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/facade-large-reference-protocol-v1.json": {
+      "bytes": 33170,
+      "sha256": "e0cb9ba42615aa6249b09fafec1c1d39b20a03028e491dc12d7463e010e2fae4"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/cohort-gates-v4.py": {
+      "bytes": 584,
+      "sha256": "0a397381e3dc8531d7894514ecf7aa993f12f2a233e9f2279b32a392c054b40e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/cohort-gates-v3.py": {
+      "bytes": 2626,
+      "sha256": "a0240af4a30169a6ab8353ec8c599fd51dd7482f2f1ac30fca68cc90c022e6b1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/cohort-gates.py": {
+      "bytes": 3531,
+      "sha256": "573ee26fc4b232c1ad566945f95d4b6df6783996612272e4208f77ecb1971399"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/process-ownership-v1.py": {
+      "bytes": 1201,
+      "sha256": "d9954f6b7838c464dac5e18bda89a805c9b3c46791cd3f0dbff01e8d6e4d7b9f"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/run-screening-v3.py": {
+      "bytes": 14734,
+      "sha256": "b23194e91979ea5e6ecc476d7e1cacf657e6dda4db625fe9e67e0331b2d4101c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-executed-producers/pilot.py": {
+      "bytes": 9725,
+      "sha256": "5ecd9d5778afbee70f095dfd53c30e1f19ec6b8c002b20627f9b90ee9e683568"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/native-guard-geometries-v1.json": {
+      "bytes": 37447,
+      "sha256": "74230839822e73633ac5be204ae7b1c85591670b79c059d0180cabb1d8cc8d07"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-local-replay.json": {
+      "bytes": 7454,
+      "sha256": "498a9ea8302afea2f993672b5425d4e90f14f42c20154b8a5bb0b81690f6f0ea"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/campaign.json": {
+      "bytes": 6724,
+      "sha256": "524ee0bded1bcc3b2a324c41821928f36e0b7b1883d8e26ef14680068f1f12a2"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/data/oracles.json.xz": {
+      "bytes": 56528,
+      "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/inputs-default.json": {
+      "bytes": 2419,
+      "sha256": "244f999baf2528fe198e12dc1884179eaf3624046ec72bb5652838c21c2f7033"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/rks-pbe0-water12-base-grid4.json": {
+      "bytes": 3676,
+      "sha256": "6de9008fe7281b6dc42f9b459e47f45d65c14c16dcde114e43bc514d0b1afeb8"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/rks-pbe0-water12-moved-grid4.json": {
+      "bytes": 3686,
+      "sha256": "946722a711942a68a7a8a712baa1992c85826cbc038ee16b0cc8708892785385"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/rks-pbe0-water12-direction-0.001--1-grid4.json": {
+      "bytes": 3713,
+      "sha256": "4e5d031d4e858dfc91443dca16088fa63ec6ed2d3bae6938c7eaff8c0d1690bc"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/rks-pbe0-water12-direction-0.001-+1-grid4.json": {
+      "bytes": 3712,
+      "sha256": "67ab8f9a180247eb79291baffe077d8f71618b1164e89853dcc6752d49115762"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/rks-pbe0-water12-direction-0.0005--1-grid4.json": {
+      "bytes": 3713,
+      "sha256": "75696491d4aeccc54eca8159fd75f456015177ccbe8c9a5ffdcc09fb32ce3f20"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/rks-pbe0-water12-direction-0.0005-+1-grid4.json": {
+      "bytes": 3720,
+      "sha256": "aa6572bda17d91c7f82bec0a5a1e1a50db1f6e99e62400a70a2a4f4d2887e831"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe-water3-cation-base-grid4.json": {
+      "bytes": 1587,
+      "sha256": "58acf75692bef517211bcfcd2ee23841591213754cc09b99fdeebf3fd7ec69a2"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe-water3-cation-moved-grid4.json": {
+      "bytes": 1588,
+      "sha256": "df72eba921bb9940925b03f7e8c1a8194fa859f59be6b23713645edac8fb425c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-base-grid4.json": {
+      "bytes": 1587,
+      "sha256": "ffef95987870053fb959000a673c83155282aefdcc08d7c98d56739d45679fd5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-moved-grid4.json": {
+      "bytes": 1593,
+      "sha256": "e889ace8a42444b4d3a84f408cdfcf97a1b5c11c85bd7904861d26e8c4ee883b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-direction-0.001--1-grid4.json": {
+      "bytes": 1621,
+      "sha256": "e43b6f764817eb20394beebd74d9a031fb1ccda2e0697962a19204cdc7916dd1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-direction-0.001-+1-grid4.json": {
+      "bytes": 1625,
+      "sha256": "d4272fe80497b5b0ce464f55d0631d60f5f95fb956e97f5e5faf72385ab65902"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-direction-0.0005--1-grid4.json": {
+      "bytes": 1621,
+      "sha256": "cf471856d5247f5c817d7a6be4fe314ad90d22c533286c836aadc23236b07e35"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/guard-cpu-oracles-v1/uks-pbe0-water3-cation-direction-0.0005-+1-grid4.json": {
+      "bytes": 1624,
+      "sha256": "d62316f9fb22a2c24af0ed7e0567f6a56726d0f77a508df3f5c5d6374791e5b5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-available-admissions/production-build-v1/build-receipt.json": {
+      "bytes": 10488,
+      "sha256": "67ba3327447651bb566a003636e9e40cb06dc29cf382b2a6f9a5e33ec4b0ef64"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-available-admissions/production-build-v1-local-replay.json": {
+      "bytes": 4569,
+      "sha256": "12484b811594e485b6091dd688fdcc2fde40d40dbd01623b4c7e67429edca810"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-available-admissions/screening-v1-local-replay.json": {
+      "bytes": 273423,
+      "sha256": "8f5003b6d48fddeec9ba7e72c6f88f3ad84d02bb788f5f575ffc834b9b5357cd"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-available-admissions/screening-protocol-v3.json": {
+      "bytes": 14759,
+      "sha256": "87265d70a8cddde529437ab51aa72898d4bf6702a4d99410132f28fdbcdad2f6"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-available-admissions/native-qualification-v1-local-replay.json": {
+      "bytes": 932,
+      "sha256": "a55ba0c2f32ee591eacabc2beceae9593007c1706f539b8224cedf24b9ff05b5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-available-admissions/native-qualification-v1-local-replay-v2.json": {
+      "bytes": 932,
+      "sha256": "a55ba0c2f32ee591eacabc2beceae9593007c1706f539b8224cedf24b9ff05b5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-available-admissions/standard-guards-v1-local-replay.json": {
+      "bytes": 43200,
+      "sha256": "5e3f01a16bd39682f5ad5a1544f5ac6efd0105cfdc36f2dab81d86cb657f3bd1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-available-admissions/uks-fit-v1-local-replay.json": {
+      "bytes": 6689,
+      "sha256": "eeb72d0837957e135a5e6b6c3dfa5bf823882fc56d6766cd87032359ff89302c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-available-admissions/uks-fit-protocol-v1.json": {
+      "bytes": 3096,
+      "sha256": "8f70564c6df5f1a38c498fa8df4e8cfcc4b4f45c4c97c199a23842ac1fedb47a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-available-admissions/public-budget-v9-local-replay.json": {
+      "bytes": 6878,
+      "sha256": "8f57393acf7c43010bf476aadfc3fced7b1f101ab223ad5167bd3789cbd26cb0"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/inputs-default/pbe0-auxiliary.json": {
+      "bytes": 8846,
+      "sha256": "22c203803f1682ea50ad5aee2eb97831f4d7c67409dd8b86104ed58b4f3ea15d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/inputs-default/pbe-auxiliary.json": {
+      "bytes": 8845,
+      "sha256": "9eaad1a657b67cedd4e784bea1064e53e20ed8c33ce74e2ecc67b3100b8b7c38"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/inputs-hf-ccpvtz/hf-auxiliary.json": {
+      "bytes": 9200,
+      "sha256": "5adb284790231935af7930859ffbaab862416d6083342c35734cb1b64eda15aa"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/source-helper/benchmarks/readme_defaults_accuracy.py": {
+      "bytes": 7710,
+      "sha256": "c6e962347291b9eff54e3cb565172a5189dc347febe39d71dd4c8d758a1ac83c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/source-helper/benchmarks/readme_defaults.py": {
+      "bytes": 24652,
+      "sha256": "8231b80c16936d25e6598ebb1b409258ee45d155321708f3c92bad7fc91e0d2d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/source-helper/benchmarks/readme_hf_scaling.py": {
+      "bytes": 934,
+      "sha256": "c9f4f9b894c78f6c05cc7a0686f29e071e0158e727a234c90dc238e96ae601b3"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/source-helper/benchmarks/readme_wb97mv.py": {
+      "bytes": 21872,
+      "sha256": "15099500f14aa000a2aa4cd176f4c7b70fd5020bb9f8c94eef54fbece0a975a5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/source-helper/benchmarks/readme_omol25.py": {
+      "bytes": 52212,
+      "sha256": "9fda302f5854c8b39a73e3c8870f68cb4187f6a208cfdadd183b733e36f4426a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/source-helper/benchmarks/_support.py": {
+      "bytes": 11376,
+      "sha256": "6afa3b464032221905a32f3b9edf66b55ebda9c601354931ecd5cbbaba7aa088"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/source-helper/benchmarks/_cases.py": {
+      "bytes": 21940,
+      "sha256": "4d95c34f0c364d3d9d785aa72cec4904a99be8dc5c77ff4bb6cc6df8fcb1e0f8"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/source-helper/python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json": {
+      "bytes": 53341,
+      "sha256": "fb2c5d3a5f1ec149f0bf1d15d1e76cdb8baf042aeaa8be677cf25f33b1b7882b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/source-helper/tools/parameters/r2scan3c_gcp.json": {
+      "bytes": 5218,
+      "sha256": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-reference-inputs/source-helper/tools/generativeqc_gcp/reference.py": {
+      "bytes": 6678,
+      "sha256": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-archival-admissions/facade-guards-v1-terminal-status.json": {
+      "bytes": 404,
+      "sha256": "4ca23893971ff6d01b61d3321d55a73e9d9f86de65890a199261b045a5cf6e15"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-guards-v1-archival-producers/pack-cohort-v15.py": {
+      "bytes": 8376,
+      "sha256": "94115bd36e984af4ac76fa14e41dd0938e5010d2a184ea42419170c698d8e0db"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/diagnostic.json": {
+      "bytes": 2842,
+      "sha256": "e83dee70c994c54aac61de07d648a671c50aa7b63c05cffd838411a51c48ff01"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe-water3-cation-direct-fast.json": {
+      "bytes": 356279,
+      "sha256": "f0071b4e16ce825ef33aef100ae4152b88f141b3e506c0c5b91ed12f97c06a55"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe-water3-cation-direct-fast.plan.json": {
+      "bytes": 8454,
+      "sha256": "9c5deeebb4093466fa42f69e9f063b96204a57c6554aee46c11129b73f15d87b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe-water3-cation-direct-fast.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe-water3-cation-direct-fast.stdout": {
+      "bytes": 146,
+      "sha256": "f970007f49a854ef582b760ad3bbd6b09af3b4eb748cb36296198d1366f05c6e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe0-water3-cation-direct-fast.json": {
+      "bytes": 585159,
+      "sha256": "3d6adb7ac32d02001ce9dca3871c74f74225ec19eb49887c1076eca1b1a091e5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe0-water3-cation-direct-fast.plan.json": {
+      "bytes": 12512,
+      "sha256": "730cae85307368bd7f8c65abfd05dfa7c6d7c508c6e709474635e5aac24f9b31"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe0-water3-cation-direct-fast.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe0-water3-cation-direct-fast.stdout": {
+      "bytes": 147,
+      "sha256": "2fff7f318f184898bff3d775dc46756645b3f84fd89ba95333b6e84c9cbcce03"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/diagnostic.json": {
+      "bytes": 3477,
+      "sha256": "83a4d60d0ef81ede7391696ee073895b35689ba55d3d4bc433549d763a3dd74e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/large96-fast-direct.json": {
+      "bytes": 347264,
+      "sha256": "b77a7f8b5c66fbde1b2099a74da170f5bfb63586b2fa6b6afff514068e6ad110"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/large96-fast-direct.plan.json": {
+      "bytes": 36705,
+      "sha256": "1e74dcf3c974cc32e29a84b8afcb0c4396b0056afa056f7e04af7ab9217ea923"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/large96-fast-direct.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/large96-fast-direct.stdout": {
+      "bytes": 145,
+      "sha256": "8c5b72d54f2c068217171dcbfad83d036d98ecb1d5a01a3563b97159756d547b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-12-96-fast-direct.json": {
+      "bytes": 454590,
+      "sha256": "218a89415b93249dec88d70d4fb9e82fe22fb2895b176dd46806693005d6871f"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-12-96-fast-direct.plan.json": {
+      "bytes": 40979,
+      "sha256": "c9383103ad93d6077939f8468051b21f3a117b0444556b397360b1e8fb1fe522"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-12-96-fast-direct.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-12-96-fast-direct.stdout": {
+      "bytes": 145,
+      "sha256": "fbb11f3f21437c28f3d8cb507427576185a0e1944e3f9d588470ec81b9b65736"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-96-12-fast-direct.json": {
+      "bytes": 454584,
+      "sha256": "58f604033cf83229ccecffedc6f335d5c97da8f5c30e2cb830e37faefacddb97"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-96-12-fast-direct.plan.json": {
+      "bytes": 40979,
+      "sha256": "98d353776fcc1e5f4f7987d8b842f9332b5079a04a23043e23c9d75b3adf9cee"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-96-12-fast-direct.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-96-12-fast-direct.stdout": {
+      "bytes": 145,
+      "sha256": "fbb11f3f21437c28f3d8cb507427576185a0e1944e3f9d588470ec81b9b65736"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/campaign.json": {
+      "bytes": 13001,
+      "sha256": "b806f1b0967b56f5b4704bac38e8f1c7fa24772df0bbf4c2bb010060fb955b21"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-0.json": {
+      "bytes": 127974,
+      "sha256": "d3e4ad3db1e8dae5efddf61a6281c548650da0e3e800b224edb096c705387787"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-0.plan.json": {
+      "bytes": 10643,
+      "sha256": "4f0c73aeac97acb35f9fa7e4bf1d901bb3117d36fd3240c0d49aeefeb8472af6"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-0.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-0.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-1.json": {
+      "bytes": 265472,
+      "sha256": "ecdec747074fd6afe87ea1c85d8725442930ca7c81a27e843050981c3640f78b"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-1.plan.json": {
+      "bytes": 36566,
+      "sha256": "04a4891a245dd507d90d86640ccd88aeb6ea14678a2a30ebe9cb7aec22cdbb80"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-1.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-1.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-0.json": {
+      "bytes": 96579,
+      "sha256": "a75c3d62aa76a48128671565a36fe85659c125a94973e0e4497529099fdc0760"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-0.plan.json": {
+      "bytes": 10651,
+      "sha256": "237921f9bb69713a4cd5abea6402cb6f9b7b0433d11d83ca00b32dd913d14d2c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-0.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-0.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-1.json": {
+      "bytes": 234360,
+      "sha256": "5f68826c93f00c3511695863da287232525a27a3e570c3880e07853e82b99d08"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-1.plan.json": {
+      "bytes": 36574,
+      "sha256": "465ef44c1f5bd777332440ca710611ac2661932a363ea3054772c3cb78cea23c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-1.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-1.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-0.json": {
+      "bytes": 265439,
+      "sha256": "749524db1d711143cb5d58fbd0de716c8bcbfbdc51b77ea41abd12cc721a6e02"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-0.plan.json": {
+      "bytes": 36566,
+      "sha256": "825d71a1594354f2c06b1265422d7b14afdada7f948ee89ac312c524617b32b9"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-0.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-0.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-1.json": {
+      "bytes": 127960,
+      "sha256": "f0227813a29bfcd07f3fbf2cdeb2be92264621d6f8a7d5715b8d6cfe65f9190e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-1.plan.json": {
+      "bytes": 10643,
+      "sha256": "28918dbd8ebc80ca6a49976ff6ec6a22e690bef0cf115c5ced808d925ecc8b0c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-1.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-1.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-0.json": {
+      "bytes": 234278,
+      "sha256": "d0e8acbb2f5b082591fc7c62dea718329d0d84f6ede996957e506f73acab227e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-0.plan.json": {
+      "bytes": 36574,
+      "sha256": "51c345bc1714fe5d87ffe4025def8279e166952cf638405fd4ee230c9ac133f9"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-0.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-0.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-1.json": {
+      "bytes": 96569,
+      "sha256": "2e2b0d367fc02e088c679f7d6777244ae44503a7a018d07a1733aa9f61a3b02e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-1.plan.json": {
+      "bytes": 10651,
+      "sha256": "81943d17955c899635e6c554b5d78c5336e7e1036e4b00f1a562167dd903769a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-1.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-1.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-producers/facade-native-capability-diagnostic-v1.py": {
+      "bytes": 16485,
+      "sha256": "3f133f67fdf581d3975574486e4705c8eda18ae4623560fd3d418cb00376bb85"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-producers/run-fast-uks-capability-diagnostic-v1.py": {
+      "bytes": 3439,
+      "sha256": "66948b10ec5eae13a047c6e03bb89a5551c58951ecb5407820b8a17a1296c5d8"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-archival-admissions/fast-uks-capability-diagnostic-preparation-v1.json": {
+      "bytes": 789,
+      "sha256": "d324664c6ac794e958a92a4ef41c8dfda5682a01abf31957b71f85cd58c470c5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-archival-admissions/fast-uks-capability-diagnostic-stage-receipt-v1.json": {
+      "bytes": 532,
+      "sha256": "49ea9a374546f8516df676b8d2a6cd12294934422d2821d631ea32c05630568e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-producers/run-fast-direct-capability-diagnostic-v2.py": {
+      "bytes": 3441,
+      "sha256": "612b318edbe8c2a73aa37c63f8fcf6ea4e7e847e6ee437b07b22e76a383bdb1e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-archival-admissions/fast-direct-capability-diagnostic-preparation-v2.json": {
+      "bytes": 652,
+      "sha256": "ae90e56489a55976bab7b4cd2c7bade0c3519e0773e98120ddc228b1c6d5b7f8"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-archival-admissions/fast-direct-capability-diagnostic-stage-receipt-v2.json": {
+      "bytes": 372,
+      "sha256": "f74dc7ee3e8adf7d14d36b2016716bf5b7a34ccf3fe9e78c5ee33d975cba4d09"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-producers/facade-singleton-fallback-protocol-v1.json": {
+      "bytes": 62601,
+      "sha256": "a5f2882d031e6a8c857365497b1c43799ee06cfee6cbbdd008d21bae4c089d7e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-producers/facade-singleton-fallback-endpoint-v1.py": {
+      "bytes": 16392,
+      "sha256": "47eb24ee2095c2a9cc4156444a715d10dd04bee1cd0e41ee86779a753acb79be"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-producers/run-facade-singleton-fallback-v1.py": {
+      "bytes": 5099,
+      "sha256": "225e451555ce744e76106a118488de7bcf11aae660b930a8a67976ea4d237be1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-producers/facade-guards-v1-local-replay.json": {
+      "bytes": 83264,
+      "sha256": "72119b12c9eb8d18091800946132035e1286a1094db5fe820c372134fa75291a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-producers/facade-correction-contract-v1.json": {
+      "bytes": 4385,
+      "sha256": "31fc7038abd4706f62120e2fc56019d67cc4af2d4e52d514991d9751604dfcff"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-archival-admissions/facade-singleton-fallback-stage-preparation-v1.json": {
+      "bytes": 1283,
+      "sha256": "b6bb8df195158c2bc6828100c868babcf38522fbfa7d19aaccf563b54bda1acc"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-archival-admissions/facade-singleton-fallback-stage-receipt-v1.json": {
+      "bytes": 1001,
+      "sha256": "82f92ed124365e39b52f5426df4a23c4bffc362ff3d467154ba36572cb2f584e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-executed-producers/run-facade-singleton-fallback-v1.py": {
+      "bytes": 5099,
+      "sha256": "225e451555ce744e76106a118488de7bcf11aae660b930a8a67976ea4d237be1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-executed-producers/facade-singleton-fallback-protocol-v1.json": {
+      "bytes": 62601,
+      "sha256": "a5f2882d031e6a8c857365497b1c43799ee06cfee6cbbdd008d21bae4c089d7e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-executed-producers/facade-singleton-fallback-endpoint-v1.py": {
+      "bytes": 16392,
+      "sha256": "47eb24ee2095c2a9cc4156444a715d10dd04bee1cd0e41ee86779a753acb79be"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-executed-producers/cohort-gates-v4.py": {
+      "bytes": 584,
+      "sha256": "0a397381e3dc8531d7894514ecf7aa993f12f2a233e9f2279b32a392c054b40e"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-executed-producers/cohort-gates-v3.py": {
+      "bytes": 2626,
+      "sha256": "a0240af4a30169a6ab8353ec8c599fd51dd7482f2f1ac30fca68cc90c022e6b1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-executed-producers/cohort-gates.py": {
+      "bytes": 3531,
+      "sha256": "573ee26fc4b232c1ad566945f95d4b6df6783996612272e4208f77ecb1971399"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-executed-producers/process-ownership-v1.py": {
+      "bytes": 1201,
+      "sha256": "d9954f6b7838c464dac5e18bda89a805c9b3c46791cd3f0dbff01e8d6e4d7b9f"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-executed-producers/run-screening-v3.py": {
+      "bytes": 14734,
+      "sha256": "b23194e91979ea5e6ecc476d7e1cacf657e6dda4db625fe9e67e0331b2d4101c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-executed-producers/pilot.py": {
+      "bytes": 9725,
+      "sha256": "5ecd9d5778afbee70f095dfd53c30e1f19ec6b8c002b20627f9b90ee9e683568"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-admissions/production-build-v1/build-receipt.json": {
+      "bytes": 10488,
+      "sha256": "67ba3327447651bb566a003636e9e40cb06dc29cf382b2a6f9a5e33ec4b0ef64"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-admissions/production-build-v1-local-replay.json": {
+      "bytes": 4569,
+      "sha256": "12484b811594e485b6091dd688fdcc2fde40d40dbd01623b4c7e67429edca810"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-admissions/screening-v1-local-replay.json": {
+      "bytes": 273423,
+      "sha256": "8f5003b6d48fddeec9ba7e72c6f88f3ad84d02bb788f5f575ffc834b9b5357cd"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-admissions/screening-protocol-v3.json": {
+      "bytes": 14759,
+      "sha256": "87265d70a8cddde529437ab51aa72898d4bf6702a4d99410132f28fdbcdad2f6"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-admissions/native-qualification-v1-local-replay.json": {
+      "bytes": 932,
+      "sha256": "a55ba0c2f32ee591eacabc2beceae9593007c1706f539b8224cedf24b9ff05b5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-admissions/native-qualification-v1-local-replay-v2.json": {
+      "bytes": 932,
+      "sha256": "a55ba0c2f32ee591eacabc2beceae9593007c1706f539b8224cedf24b9ff05b5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-admissions/standard-guards-v1-local-replay.json": {
+      "bytes": 43200,
+      "sha256": "5e3f01a16bd39682f5ad5a1544f5ac6efd0105cfdc36f2dab81d86cb657f3bd1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-available-admissions/uks-fit-v1-local-replay.json": {
+      "bytes": 6689,
+      "sha256": "eeb72d0837957e135a5e6b6c3dfa5bf823882fc56d6766cd87032359ff89302c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-archival-admissions/notebook-public-guards-v1-platform-status.json": {
+      "bytes": 599,
+      "sha256": "cdccd6f23c2d686b6a4753c04ff10a951eaa1eb76bd4eedfb540e63187b58157"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/notebook-public-guards-v1-archival-producers/pack-notebook-guards-v1.py": {
+      "bytes": 5519,
+      "sha256": "f7da8c3823ca824352f63525cfead13b78dccad5063097882730ea233a6e311d"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-source-review-ci-v1.json": {
+      "bytes": 2084,
+      "sha256": "c9b8b2a41b6752111e6e0064792bca4f38c9c9737306c47a13799777ab3dc73c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/native-qualification-v1-local-replay-v2.json": {
+      "bytes": 932,
+      "sha256": "a55ba0c2f32ee591eacabc2beceae9593007c1706f539b8224cedf24b9ff05b5"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/nsys-v1-local-replay-v2.json": {
+      "bytes": 2611,
+      "sha256": "784444ca773c507b9a6066875e6919e9f1569934084c768b9e746ac10e922eac"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/nsys-v1/campaign.json": {
+      "bytes": 10746,
+      "sha256": "7702d0ebbbfbba0afd1c9dec02f31166c16cbf5f013d2edad8f25e12856f46da"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/production-build-v1/build-receipt.json": {
+      "bytes": 10488,
+      "sha256": "67ba3327447651bb566a003636e9e40cb06dc29cf382b2a6f9a5e33ec4b0ef64"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/public-budget-v9-local-replay.json": {
+      "bytes": 6878,
+      "sha256": "8f57393acf7c43010bf476aadfc3fced7b1f101ab223ad5167bd3789cbd26cb0"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/reference-six-protocol-v1.json": {
+      "bytes": 71883,
+      "sha256": "3f6387100340e3acf044f0946611fe74daf7fb898896b2625ce19ddbaa3ffffd"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/reference-six-v5-local-replay.json": {
+      "bytes": 17961,
+      "sha256": "0519cff724f588cba460081d50697a2b9b14c08ba2ea08d7dca8571508f4b039"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/standard-guards-v1-local-replay.json": {
+      "bytes": 43200,
+      "sha256": "5e3f01a16bd39682f5ad5a1544f5ac6efd0105cfdc36f2dab81d86cb657f3bd1"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/standard-guards-v1/campaign.json": {
+      "bytes": 7582,
+      "sha256": "b4865230d9bd2ea95a1fd14d56de2e9f45f4ad6f92523150e0d54b20923b6efe"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/uks-fit-protocol-v1.json": {
+      "bytes": 3096,
+      "sha256": "8f70564c6df5f1a38c498fa8df4e8cfcc4b4f45c4c97c199a23842ac1fedb47a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/uks-fit-v1-local-replay.json": {
+      "bytes": 6689,
+      "sha256": "eeb72d0837957e135a5e6b6c3dfa5bf823882fc56d6766cd87032359ff89302c"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/uks-fit-v1/campaign.json": {
+      "bytes": 9162,
+      "sha256": "8089f466b8baccfc0ea2d39e33cbc57651fb309042b49abdf3bcba7cbbd6c8da"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-protocol-metadata-correction-v1.json": {
+      "bytes": 756,
+      "sha256": "700fb1c2192abcc9c907796c6300376862e5e240dbf71e6ef3a4855d7e27e808"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/final-pairs-protocol-v4.json": {
+      "bytes": 65102,
+      "sha256": "b6bd300e649fcf62fab4bf60601b8292f60458215636f63cd4853ffd9ad513ff"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-final-pairs-v7.py": {
+      "bytes": 18221,
+      "sha256": "3ded140a6dc14aeb391ff69b735aa4968dddebc1091a62b6d7c1640711468edb"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/run-final-pairs-v7-job.sh": {
+      "bytes": 622,
+      "sha256": "4917b02db89d6c5a91b3cc5ba8d590c78b8b2591b773217f1ef9b576c250350a"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/replay-final-pairs-v7.py": {
+      "bytes": 25740,
+      "sha256": "e3b1aa2df0ffd1d1997b05d5689df9269b8c4a067f23e30dc92ed842033d8590"
+    },
+    "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/pack-cohort-v17.py": {
+      "bytes": 8376,
+      "sha256": "92efc7edd79720ade236239552bb58a7a804dbf91733dff69297e510457316d1"
+    }
+  },
+  "actual_dispatch_at_review_completion": "REJECTED_MISSING_REVIEW_ATTESTATION",
+  "review_attestation_created_by_auditor": false,
+  "claims": [
+    {
+      "id": "corrected_supported_public_api_and_explicit_singleton_fallback",
+      "impact": "supported"
+    },
+    {
+      "id": "native_heterogeneous_explicit_auxiliary_DF_batch",
+      "impact": "unsupported"
+    },
+    {
+      "id": "all_Fast_trials_native_force",
+      "impact": "unsupported"
+    },
+    {
+      "id": "final_fixed30_majority_performance",
+      "impact": "not_evaluated"
+    }
+  ],
+  "limitations": [
+    "Actual backend/model/effort identity unverified; same-family provisional review.",
+    "Old diagnostic parents did not self-record runner hashes; retained exact staged-version plus observed-invocation and child-byte provenance is explicitly weaker.",
+    "No GPU, remote, build, solver, job creation or production edits.",
+    "Historical scientific reference generation/build/CI not rerun; this is bounded retained-artifact review.",
+    "Issue scope judged from supplied dated #2884 snapshot, not fresh network query.",
+    "Preexisting final Job platform checks omit independent project/workspace assertion; unchanged by this delta and outside completed final-GPU audit.",
+    "First CPU harness invocation used wrong protocol key after substantive controls; failure log retained and corrected CPU invocation passes."
+  ],
+  "trace_path": "/Users/xshengrui/Projects/generativeqc-code/h100-production-20261102/cohort-cd2b/facade-correction-result-audit-sol-v1/review-trace",
+  "generated_at": "2026-11-03T03:23:27.437288+00:00",
+  "family_assurance": "Conservatively same-family/provisional under native Codex route; actual server identity was not returned."
+}

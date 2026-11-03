@@ -1,0 +1,391 @@
+{
+  "status": "COMPLETE_IMMUTABLE_NOTEBOOK_PARENT_ARCHIVE",
+  "cohort": "notebook-public-guards-v1",
+  "archive": "notebook-public-guards-v1-completed.tar.xz",
+  "bytes": 172280,
+  "sha256": "85dc9af1c10e6396fde0db9b1bb5b7b3f7caa8017824b3deab052bc9ff054394",
+  "files": {
+    "notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/diagnostic.json": {
+      "bytes": 2842,
+      "sha256": "e83dee70c994c54aac61de07d648a671c50aa7b63c05cffd838411a51c48ff01"
+    },
+    "notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe-water3-cation-direct-fast.json": {
+      "bytes": 356279,
+      "sha256": "f0071b4e16ce825ef33aef100ae4152b88f141b3e506c0c5b91ed12f97c06a55"
+    },
+    "notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe-water3-cation-direct-fast.plan.json": {
+      "bytes": 8454,
+      "sha256": "9c5deeebb4093466fa42f69e9f063b96204a57c6554aee46c11129b73f15d87b"
+    },
+    "notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe-water3-cation-direct-fast.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe-water3-cation-direct-fast.stdout": {
+      "bytes": 146,
+      "sha256": "f970007f49a854ef582b760ad3bbd6b09af3b4eb748cb36296198d1366f05c6e"
+    },
+    "notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe0-water3-cation-direct-fast.json": {
+      "bytes": 585159,
+      "sha256": "3d6adb7ac32d02001ce9dca3871c74f74225ec19eb49887c1076eca1b1a091e5"
+    },
+    "notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe0-water3-cation-direct-fast.plan.json": {
+      "bytes": 12512,
+      "sha256": "730cae85307368bd7f8c65abfd05dfa7c6d7c508c6e709474635e5aac24f9b31"
+    },
+    "notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe0-water3-cation-direct-fast.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/fast-uks-capability-diagnostic-v1/uks-pbe0-water3-cation-direct-fast.stdout": {
+      "bytes": 147,
+      "sha256": "2fff7f318f184898bff3d775dc46756645b3f84fd89ba95333b6e84c9cbcce03"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/diagnostic.json": {
+      "bytes": 3477,
+      "sha256": "83a4d60d0ef81ede7391696ee073895b35689ba55d3d4bc433549d763a3dd74e"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/large96-fast-direct.json": {
+      "bytes": 347264,
+      "sha256": "b77a7f8b5c66fbde1b2099a74da170f5bfb63586b2fa6b6afff514068e6ad110"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/large96-fast-direct.plan.json": {
+      "bytes": 36705,
+      "sha256": "1e74dcf3c974cc32e29a84b8afcb0c4396b0056afa056f7e04af7ab9217ea923"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/large96-fast-direct.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/large96-fast-direct.stdout": {
+      "bytes": 145,
+      "sha256": "8c5b72d54f2c068217171dcbfad83d036d98ecb1d5a01a3563b97159756d547b"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-12-96-fast-direct.json": {
+      "bytes": 454590,
+      "sha256": "218a89415b93249dec88d70d4fb9e82fe22fb2895b176dd46806693005d6871f"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-12-96-fast-direct.plan.json": {
+      "bytes": 40979,
+      "sha256": "c9383103ad93d6077939f8468051b21f3a117b0444556b397360b1e8fb1fe522"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-12-96-fast-direct.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-12-96-fast-direct.stdout": {
+      "bytes": 145,
+      "sha256": "fbb11f3f21437c28f3d8cb507427576185a0e1944e3f9d588470ec81b9b65736"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-96-12-fast-direct.json": {
+      "bytes": 454584,
+      "sha256": "58f604033cf83229ccecffedc6f335d5c97da8f5c30e2cb830e37faefacddb97"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-96-12-fast-direct.plan.json": {
+      "bytes": 40979,
+      "sha256": "98d353776fcc1e5f4f7987d8b842f9332b5079a04a23043e23c9d75b3adf9cee"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-96-12-fast-direct.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/fast-direct-capability-diagnostic-v2/ragged-96-12-fast-direct.stdout": {
+      "bytes": 145,
+      "sha256": "fbb11f3f21437c28f3d8cb507427576185a0e1944e3f9d588470ec81b9b65736"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/campaign.json": {
+      "bytes": 13001,
+      "sha256": "b806f1b0967b56f5b4704bac38e8f1c7fa24772df0bbf4c2bb010060fb955b21"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-0.json": {
+      "bytes": 127974,
+      "sha256": "d3e4ad3db1e8dae5efddf61a6281c548650da0e3e800b224edb096c705387787"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-0.plan.json": {
+      "bytes": 10643,
+      "sha256": "4f0c73aeac97acb35f9fa7e4bf1d901bb3117d36fd3240c0d49aeefeb8472af6"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-0.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-0.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-1.json": {
+      "bytes": 265472,
+      "sha256": "ecdec747074fd6afe87ea1c85d8725442930ca7c81a27e843050981c3640f78b"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-1.plan.json": {
+      "bytes": 36566,
+      "sha256": "04a4891a245dd507d90d86640ccd88aeb6ea14678a2a30ebe9cb7aec22cdbb80"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-1.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-fast-df-singleton-1.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-0.json": {
+      "bytes": 96579,
+      "sha256": "a75c3d62aa76a48128671565a36fe85659c125a94973e0e4497529099fdc0760"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-0.plan.json": {
+      "bytes": 10651,
+      "sha256": "237921f9bb69713a4cd5abea6402cb6f9b7b0433d11d83ca00b32dd913d14d2c"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-0.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-0.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-1.json": {
+      "bytes": 234360,
+      "sha256": "5f68826c93f00c3511695863da287232525a27a3e570c3880e07853e82b99d08"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-1.plan.json": {
+      "bytes": 36574,
+      "sha256": "465ef44c1f5bd777332440ca710611ac2661932a363ea3054772c3cb78cea23c"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-1.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-12-96-standard-df-singleton-1.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-0.json": {
+      "bytes": 265439,
+      "sha256": "749524db1d711143cb5d58fbd0de716c8bcbfbdc51b77ea41abd12cc721a6e02"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-0.plan.json": {
+      "bytes": 36566,
+      "sha256": "825d71a1594354f2c06b1265422d7b14afdada7f948ee89ac312c524617b32b9"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-0.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-0.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-1.json": {
+      "bytes": 127960,
+      "sha256": "f0227813a29bfcd07f3fbf2cdeb2be92264621d6f8a7d5715b8d6cfe65f9190e"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-1.plan.json": {
+      "bytes": 10643,
+      "sha256": "28918dbd8ebc80ca6a49976ff6ec6a22e690bef0cf115c5ced808d925ecc8b0c"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-1.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-fast-df-singleton-1.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-0.json": {
+      "bytes": 234278,
+      "sha256": "d0e8acbb2f5b082591fc7c62dea718329d0d84f6ede996957e506f73acab227e"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-0.plan.json": {
+      "bytes": 36574,
+      "sha256": "51c345bc1714fe5d87ffe4025def8279e166952cf638405fd4ee230c9ac133f9"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-0.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-0.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-1.json": {
+      "bytes": 96569,
+      "sha256": "2e2b0d367fc02e088c679f7d6777244ae44503a7a018d07a1733aa9f61a3b02e"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-1.plan.json": {
+      "bytes": 10651,
+      "sha256": "81943d17955c899635e6c554b5d78c5336e7e1036e4b00f1a562167dd903769a"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-1.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notebook-public-guards-v1/observations/facade-singleton-fallback-v1/ragged-96-12-standard-df-singleton-1.stdout": {
+      "bytes": 145,
+      "sha256": "11be0c76b07e1d551bd976bb95da053a8315dccaf8ed75c84c087b31e0e22444"
+    },
+    "notebook-public-guards-v1-available-producers/facade-native-capability-diagnostic-v1.py": {
+      "bytes": 16485,
+      "sha256": "3f133f67fdf581d3975574486e4705c8eda18ae4623560fd3d418cb00376bb85"
+    },
+    "notebook-public-guards-v1-available-producers/run-fast-uks-capability-diagnostic-v1.py": {
+      "bytes": 3439,
+      "sha256": "66948b10ec5eae13a047c6e03bb89a5551c58951ecb5407820b8a17a1296c5d8"
+    },
+    "notebook-public-guards-v1-archival-admissions/fast-uks-capability-diagnostic-preparation-v1.json": {
+      "bytes": 789,
+      "sha256": "d324664c6ac794e958a92a4ef41c8dfda5682a01abf31957b71f85cd58c470c5"
+    },
+    "notebook-public-guards-v1-archival-admissions/fast-uks-capability-diagnostic-stage-receipt-v1.json": {
+      "bytes": 532,
+      "sha256": "49ea9a374546f8516df676b8d2a6cd12294934422d2821d631ea32c05630568e"
+    },
+    "notebook-public-guards-v1-available-producers/run-fast-direct-capability-diagnostic-v2.py": {
+      "bytes": 3441,
+      "sha256": "612b318edbe8c2a73aa37c63f8fcf6ea4e7e847e6ee437b07b22e76a383bdb1e"
+    },
+    "notebook-public-guards-v1-archival-admissions/fast-direct-capability-diagnostic-preparation-v2.json": {
+      "bytes": 652,
+      "sha256": "ae90e56489a55976bab7b4cd2c7bade0c3519e0773e98120ddc228b1c6d5b7f8"
+    },
+    "notebook-public-guards-v1-archival-admissions/fast-direct-capability-diagnostic-stage-receipt-v2.json": {
+      "bytes": 372,
+      "sha256": "f74dc7ee3e8adf7d14d36b2016716bf5b7a34ccf3fe9e78c5ee33d975cba4d09"
+    },
+    "notebook-public-guards-v1-available-producers/facade-singleton-fallback-protocol-v1.json": {
+      "bytes": 62601,
+      "sha256": "a5f2882d031e6a8c857365497b1c43799ee06cfee6cbbdd008d21bae4c089d7e"
+    },
+    "notebook-public-guards-v1-available-producers/facade-singleton-fallback-endpoint-v1.py": {
+      "bytes": 16392,
+      "sha256": "47eb24ee2095c2a9cc4156444a715d10dd04bee1cd0e41ee86779a753acb79be"
+    },
+    "notebook-public-guards-v1-available-producers/run-facade-singleton-fallback-v1.py": {
+      "bytes": 5099,
+      "sha256": "225e451555ce744e76106a118488de7bcf11aae660b930a8a67976ea4d237be1"
+    },
+    "notebook-public-guards-v1-available-producers/facade-guards-v1-local-replay.json": {
+      "bytes": 83264,
+      "sha256": "72119b12c9eb8d18091800946132035e1286a1094db5fe820c372134fa75291a"
+    },
+    "notebook-public-guards-v1-available-producers/facade-correction-contract-v1.json": {
+      "bytes": 4385,
+      "sha256": "31fc7038abd4706f62120e2fc56019d67cc4af2d4e52d514991d9751604dfcff"
+    },
+    "notebook-public-guards-v1-archival-admissions/facade-singleton-fallback-stage-preparation-v1.json": {
+      "bytes": 1283,
+      "sha256": "b6bb8df195158c2bc6828100c868babcf38522fbfa7d19aaccf563b54bda1acc"
+    },
+    "notebook-public-guards-v1-archival-admissions/facade-singleton-fallback-stage-receipt-v1.json": {
+      "bytes": 1001,
+      "sha256": "82f92ed124365e39b52f5426df4a23c4bffc362ff3d467154ba36572cb2f584e"
+    },
+    "notebook-public-guards-v1-executed-producers/run-facade-singleton-fallback-v1.py": {
+      "bytes": 5099,
+      "sha256": "225e451555ce744e76106a118488de7bcf11aae660b930a8a67976ea4d237be1"
+    },
+    "notebook-public-guards-v1-executed-producers/facade-singleton-fallback-protocol-v1.json": {
+      "bytes": 62601,
+      "sha256": "a5f2882d031e6a8c857365497b1c43799ee06cfee6cbbdd008d21bae4c089d7e"
+    },
+    "notebook-public-guards-v1-executed-producers/facade-singleton-fallback-endpoint-v1.py": {
+      "bytes": 16392,
+      "sha256": "47eb24ee2095c2a9cc4156444a715d10dd04bee1cd0e41ee86779a753acb79be"
+    },
+    "notebook-public-guards-v1-executed-producers/cohort-gates-v4.py": {
+      "bytes": 584,
+      "sha256": "0a397381e3dc8531d7894514ecf7aa993f12f2a233e9f2279b32a392c054b40e"
+    },
+    "notebook-public-guards-v1-executed-producers/cohort-gates-v3.py": {
+      "bytes": 2626,
+      "sha256": "a0240af4a30169a6ab8353ec8c599fd51dd7482f2f1ac30fca68cc90c022e6b1"
+    },
+    "notebook-public-guards-v1-executed-producers/cohort-gates.py": {
+      "bytes": 3531,
+      "sha256": "573ee26fc4b232c1ad566945f95d4b6df6783996612272e4208f77ecb1971399"
+    },
+    "notebook-public-guards-v1-executed-producers/process-ownership-v1.py": {
+      "bytes": 1201,
+      "sha256": "d9954f6b7838c464dac5e18bda89a805c9b3c46791cd3f0dbff01e8d6e4d7b9f"
+    },
+    "notebook-public-guards-v1-executed-producers/run-screening-v3.py": {
+      "bytes": 14734,
+      "sha256": "b23194e91979ea5e6ecc476d7e1cacf657e6dda4db625fe9e67e0331b2d4101c"
+    },
+    "notebook-public-guards-v1-executed-producers/pilot.py": {
+      "bytes": 9725,
+      "sha256": "5ecd9d5778afbee70f095dfd53c30e1f19ec6b8c002b20627f9b90ee9e683568"
+    },
+    "notebook-public-guards-v1-available-admissions/production-build-v1/build-receipt.json": {
+      "bytes": 10488,
+      "sha256": "67ba3327447651bb566a003636e9e40cb06dc29cf382b2a6f9a5e33ec4b0ef64"
+    },
+    "notebook-public-guards-v1-available-admissions/production-build-v1-local-replay.json": {
+      "bytes": 4569,
+      "sha256": "12484b811594e485b6091dd688fdcc2fde40d40dbd01623b4c7e67429edca810"
+    },
+    "notebook-public-guards-v1-available-admissions/screening-v1-local-replay.json": {
+      "bytes": 273423,
+      "sha256": "8f5003b6d48fddeec9ba7e72c6f88f3ad84d02bb788f5f575ffc834b9b5357cd"
+    },
+    "notebook-public-guards-v1-available-admissions/screening-protocol-v3.json": {
+      "bytes": 14759,
+      "sha256": "87265d70a8cddde529437ab51aa72898d4bf6702a4d99410132f28fdbcdad2f6"
+    },
+    "notebook-public-guards-v1-available-admissions/native-qualification-v1-local-replay.json": {
+      "bytes": 932,
+      "sha256": "a55ba0c2f32ee591eacabc2beceae9593007c1706f539b8224cedf24b9ff05b5"
+    },
+    "notebook-public-guards-v1-available-admissions/native-qualification-v1-local-replay-v2.json": {
+      "bytes": 932,
+      "sha256": "a55ba0c2f32ee591eacabc2beceae9593007c1706f539b8224cedf24b9ff05b5"
+    },
+    "notebook-public-guards-v1-available-admissions/standard-guards-v1-local-replay.json": {
+      "bytes": 43200,
+      "sha256": "5e3f01a16bd39682f5ad5a1544f5ac6efd0105cfdc36f2dab81d86cb657f3bd1"
+    },
+    "notebook-public-guards-v1-available-admissions/uks-fit-v1-local-replay.json": {
+      "bytes": 6689,
+      "sha256": "eeb72d0837957e135a5e6b6c3dfa5bf823882fc56d6766cd87032359ff89302c"
+    },
+    "notebook-public-guards-v1-archival-admissions/notebook-public-guards-v1-platform-status.json": {
+      "bytes": 599,
+      "sha256": "cdccd6f23c2d686b6a4753c04ff10a951eaa1eb76bd4eedfb540e63187b58157"
+    },
+    "notebook-public-guards-v1-archival-producers/pack-notebook-guards-v1.py": {
+      "bytes": 5519,
+      "sha256": "f7da8c3823ca824352f63525cfead13b78dccad5063097882730ea233a6e311d"
+    },
+    "notebook-public-guards-v1/campaign.json": {
+      "bytes": 1448,
+      "sha256": "4db11e3f6c7df63b37d32a3cff86c81dc94877874a1fd89fac1d515640825c92"
+    }
+  },
+  "campaign_sha256": "4db11e3f6c7df63b37d32a3cff86c81dc94877874a1fd89fac1d515640825c92",
+  "workload": "notebook",
+  "platform_status": "RUNNING",
+  "platform_status_sha256": "cdccd6f23c2d686b6a4753c04ff10a951eaa1eb76bd4eedfb540e63187b58157",
+  "all_parent_records_terminal": true,
+  "parents": {
+    "fast-uks-capability-diagnostic-v1": {
+      "record": "diagnostic.json",
+      "sha256": "e83dee70c994c54aac61de07d648a671c50aa7b63c05cffd838411a51c48ff01",
+      "status": "TERMINAL_TWO_DIAGNOSTICS_NO_ACCEPTANCE",
+      "runs": 2
+    },
+    "fast-direct-capability-diagnostic-v2": {
+      "record": "diagnostic.json",
+      "sha256": "83a4d60d0ef81ede7391696ee073895b35689ba55d3d4bc433549d763a3dd74e",
+      "status": "TERMINAL_THREE_DIAGNOSTICS_NO_ACCEPTANCE",
+      "runs": 3
+    },
+    "facade-singleton-fallback-v1": {
+      "record": "campaign.json",
+      "sha256": "b806f1b0967b56f5b4704bac38e8f1c7fa24772df0bbf4c2bb010060fb955b21",
+      "status": "TERMINAL_8_SINGLETON_FALLBACK_ATTEMPTS_INDEPENDENT_REPLAY_PENDING",
+      "runs": 8
+    }
+  },
+  "scope": "This index is archive metadata, not an executed GPU campaign or scientific acceptance. Original diagnostic flags remain. Diagnostic parent v1/v2 provenance uses exact staged versions plus observed invocation; fallback parent self-records producer hashes. No Job SUCCEEDED is fabricated."
+}
