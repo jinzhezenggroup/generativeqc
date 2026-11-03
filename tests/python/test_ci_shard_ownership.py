@@ -725,7 +725,11 @@ def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     assert '--junitxml=".artifacts/pytest-${{ matrix.shard }}.xml"' in source
     assert "path: .artifacts/" in source
     assert "source .github/scripts/ci_select_python_shard.sh" in source
-    assert 'pytest "${collection_targets[@]}" -v' in source
+    # The full case ledger is JUnit, not verbose console output; quieter
+    # progress still prints failures and retains the slowest-case report.
+    assert 'pytest "${collection_targets[@]}" -q' in source
+    assert "--durations=25" in source
+    assert "-n 4 --dist=\"$dist_mode\"" in source
     assert "source .github/scripts/ci_collect_python_shard.sh" in source
     assert '"${collection_args[@]}"' in source
     _assert_timed_diagnostics_contract(source)
