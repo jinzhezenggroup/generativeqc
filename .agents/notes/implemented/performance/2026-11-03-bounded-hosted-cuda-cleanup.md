@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-11-03
 
+The byte-count probe may itself fail under `pipefail`. Its failure clears the
+optional value and retains bounded cleanup, even if partial output looks spacious;
+the ordinary human-readable space reports remain strict.
+
 ## Evidence and problem
 
 PR #2957 job `125983531776` failed before CUDA installation or compilation.

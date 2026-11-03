@@ -98,20 +98,23 @@ def test_cli_cleanup_is_shared_by_package_qualification_and_release() -> None:
 
 
 @pytest.mark.parametrize(
-    ("available", "cleanup_status", "expected_status", "skip"),
+    ("available", "probe_status", "cleanup_status", "expected_status", "skip"),
     [
-        (90 << 30, 0, 0, True),
-        (64 << 30, 0, 0, True),
-        ((64 << 30) - 1, 0, 0, False),
-        (32 << 30, 124, 0, False),
-        (32 << 30, 137, 0, False),
-        (32 << 30, 1, 1, False),
-        ("unavailable", 0, 0, False),
+        (90 << 30, 0, 0, 0, True),
+        (64 << 30, 0, 0, 0, True),
+        ((64 << 30) - 1, 0, 0, 0, False),
+        (32 << 30, 0, 124, 0, False),
+        (32 << 30, 0, 137, 0, False),
+        (32 << 30, 0, 1, 1, False),
+        ("unavailable", 0, 0, 0, False),
+        ("unavailable", 1, 0, 0, False),
+        (90 << 30, 1, 0, 0, False),
     ],
 )
 def test_cleanup_skips_spacious_hosts_and_bounds_optional_deletion(
     tmp_path: Path,
     available: int | str,
+    probe_status: int,
     cleanup_status: int,
     expected_status: int,
     skip: bool,
@@ -121,7 +124,13 @@ def test_cleanup_skips_spacious_hosts_and_bounds_optional_deletion(
     commands.mkdir()
     record = tmp_path / "timeout-arguments"
     for name, body in (
-        ("df", 'printf "Available\\n%s\\n" "$DISK_AVAILABLE_BYTES"'),
+        (
+            "df",
+            (
+                'printf "Available\\n%s\\n" "$DISK_AVAILABLE_BYTES"; '
+                'if [ "$1" = "-B1" ]; then exit "$DISK_PROBE_STATUS"; fi'
+            ),
+        ),
         (
             "sudo",
             'printf "%s\\n" "$@" > "$DISK_TIMEOUT_RECORD"; exit "$DISK_TIMEOUT_STATUS"',
@@ -139,6 +148,7 @@ def test_cleanup_skips_spacious_hosts_and_bounds_optional_deletion(
             "RUNNER_ENVIRONMENT": "github-hosted",
             "GITHUB_WORKSPACE": str(tmp_path),
             "DISK_AVAILABLE_BYTES": str(available),
+            "DISK_PROBE_STATUS": str(probe_status),
             "DISK_TIMEOUT_RECORD": str(record),
             "DISK_TIMEOUT_STATUS": str(cleanup_status),
         },
