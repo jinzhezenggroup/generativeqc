@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "file_count": 1,
+  "total_bytes": 472836,
+  "purpose": "Exact existing historical SCF evidence, including all152returned endpoints/76populations and rejected attempts, read from local Git without network; numerical/source/work identities unchanged.",
+  "files": [
+    {
+      "path": "benchmarks/results/scf-convergence-probes-20261024/evidence.json.xz",
+      "bytes": 472836,
+      "sha256": "28e06351935f9b09d39ad637f0589b95c28becd8a8fec6ebd9393d7ee3008dbb",
+      "git_blob_sha1": "2a6e90227815817941ccb0ff58f008bbddf8c83e",
+      "git_mode": "100644"
+    }
+  ]
+}
