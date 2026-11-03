@@ -9,7 +9,7 @@
 
 extra_args=()
 coverage_args=()
-if [[ "${GITHUB_EVENT_NAME}" != "merge_group" ]]; then
+if [[ "${GITHUB_EVENT_NAME}" == "schedule" || "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
   coverage_args+=(--cov --cov-report="xml:coverage-python-${GENERATIVEQC_CI_SHARD}.xml")
 fi
 if [[ "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then

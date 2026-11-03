@@ -731,6 +731,37 @@ def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     _assert_timed_diagnostics_contract(source)
 
 
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("shard", SHARDS)
+def test_coverage_instrumentation_is_reserved_for_full_qualification(
+    event: str, shard: str
+) -> None:
+    """Exercise the real sourced arguments without altering test ownership."""
+    selector = ROOT / ".github/scripts/ci_select_python_shard.sh"
+    command = (
+        f'source {shlex.quote(str(selector))}\nprintf "%s\\0" "${{coverage_args[@]}}"\n'
+    )
+    result = subprocess.run(
+        ["bash", "-eu", "-c", command],
+        check=True,
+        capture_output=True,
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "GITHUB_EVENT_NAME": event,
+            "GENERATIVEQC_CI_SHARD": shard,
+        },
+    )
+    arguments = [value for value in result.stdout.decode().split("\0") if value]
+    assert arguments == (
+        ["--cov", f"--cov-report=xml:coverage-python-{shard}.xml"]
+        if event in {"schedule", "workflow_dispatch"}
+        else []
+    )
+
+
 def _assert_timed_diagnostics_contract(source: str) -> None:
     step = source.split("      - name: Run Python tests with coverage\n", 1)[1].split(
         "\n      - name:", 1
