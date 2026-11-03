@@ -39,10 +39,8 @@ bool cuda_df_value_domain(const core::System& orbital, const core::System& auxil
   }
   if (!cuda_df_shell_domain(orbital, "orbital", detail)) return false;
   for (const auto& shell : auxiliary.shells) {
-    if (policy.range_omega > 0.0 && shell.angular_momentum > 3U) {
-      detail = "long-range CUDA DF requires auxiliary s/p/d/f coverage";
-      return false;
-    }
+    // The generic generated evaluator carries the raised g domain for both
+    // full-range and erf operators. Specialized value schedules remain f-only.
     if (shell.angular_momentum == 4U && policy.value_math != 0U) {
       detail = "g auxiliary DF values require the generic generated math policy";
       return false;

@@ -141,7 +141,14 @@ int main(int argc, char** argv) {
   core::System orbital, auxiliary;
   orbital.shells = {{0, unsigned(std::atoi(argv[3])), {{1.0, 1.0}}}};
   auxiliary.shells = {{0, unsigned(std::atoi(argv[4])), {{1.0, 1.0}}}};
-  if (endpoint == "factory") {
+  if (endpoint == "range") {
+    scf::CudaDfSourcePolicy policy;
+    std::string detail;
+    const bool resolved = scf::resolve_cuda_df_source_policy(policy, detail);
+    policy.range_omega = .3;
+    assert((resolved && scf::cuda_df_value_domain(orbital, auxiliary, policy, detail)) == admitted);
+    assert(!source_calls && !rhf_calls && !allocations);
+  } else if (endpoint == "factory") {
     scf::CudaDensityFittingIntegralSource sentinel;
     auto* source = &sentinel;
     std::vector<double> metric{77.0};
@@ -277,7 +284,7 @@ def host_policy_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("endpoint", ("admission", "factory"))
+@pytest.mark.parametrize("endpoint", ("admission", "factory", "range"))
 @pytest.mark.parametrize(
     "selection,orbital,auxiliary,expected",
     [

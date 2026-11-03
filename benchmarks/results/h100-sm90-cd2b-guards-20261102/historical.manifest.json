@@ -1,0 +1,19 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "4c7354958468810dc83eb409c493ae49d810e613",
+  "file_count": 2,
+  "total_bytes": 1440220,
+  "purpose": "Lossless offline recovery of the unchanged Nsight archive parts from merged master; no observations, failures or qualification boundaries changed.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "397a7290392a15e022437763b97e2e6d1196d7ab9f9ef242197f6bf672900f14"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/nsys-v1-analysis.tar.xz.part01",
+      "bytes": 653788,
+      "sha256": "ec42bee043b2730b18c8f00d79bd41fe1d5a0c3186e7d96e1079c84c33d8f220"
+    }
+  ]
+}

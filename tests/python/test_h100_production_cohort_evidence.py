@@ -37,6 +37,8 @@ def test_actual_supporting_phases_replay() -> None:
 def _publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     target = tmp_path / "support"
     shutil.copytree(evidence.DIRECTORY, target)
+    for name in ("nsys-v1-analysis.tar.xz.part00", "nsys-v1-analysis.tar.xz.part01"):
+        (target / name).write_bytes(evidence.artifact_bytes(name))
     monkeypatch.setattr(evidence, "DIRECTORY", target)
     return target
 
@@ -49,13 +51,16 @@ def test_support_cohort_binds_every_required_artifact() -> None:
     )
 
 
-def test_support_cohort_rejects_missing_archive_part(
+def test_support_cohort_recovers_missing_archive_part(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     target = _publication(tmp_path, monkeypatch)
-    (target / "nsys-v1-analysis.tar.xz.part01").unlink()
-    with pytest.raises(ValueError, match="bytes differ"):
-        evidence.checked_publication()
+    path = target / "nsys-v1-analysis.tar.xz.part01"
+    expected = path.read_bytes()
+    path.unlink()
+    assert evidence.artifact_bytes(path.name) == expected
+    evidence.checked_publication()
+    assert not path.exists()
 
 
 def test_support_cohort_rejects_changed_archive_part(
@@ -78,4 +83,42 @@ def test_support_cohort_rejects_unsafe_part_order(
     publication["nsys_archive_parts"][0]["path"] = "/tmp/unrelated-input"
     path.write_text(json.dumps(publication))
     with pytest.raises(ValueError, match="part inventory differs"):
+        evidence.checked_publication()
+
+
+def test_support_cohort_rejects_missing_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = _publication(tmp_path, monkeypatch)
+    (target / "nsys-v1-analysis.tar.xz.part01").unlink()
+    manifest = target / "historical.manifest.json"
+    data = json.loads(manifest.read_text())
+    data["source_revision"] = "0" * 40
+    manifest.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="historical object unavailable"):
+        evidence.checked_publication()
+
+
+def test_support_cohort_rejects_changed_recovery_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = _publication(tmp_path, monkeypatch)
+    (target / "nsys-v1-analysis.tar.xz.part01").unlink()
+    manifest = target / "historical.manifest.json"
+    data = json.loads(manifest.read_text())
+    data["files"][1]["sha256"] = "0" * 64
+    manifest.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="checksum/size mismatch"):
+        evidence.checked_publication()
+
+
+def test_support_cohort_rejects_symlink_archive_part(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = _publication(tmp_path, monkeypatch)
+    path = target / "nsys-v1-analysis.tar.xz.part01"
+    original = tmp_path / "part"
+    path.rename(original)
+    path.symlink_to(original)
+    with pytest.raises(ValueError, match="bytes differ"):
         evidence.checked_publication()

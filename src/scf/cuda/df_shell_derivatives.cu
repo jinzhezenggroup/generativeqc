@@ -35,6 +35,9 @@ DfShellLaunch select_launch(unsigned architecture, DfShellLaunch context) {
   const char* schedule = std::getenv("GENERATIVEQC_DF_SHELL_SCHEDULE");
   if (use_choice && (!schedule || std::string_view(schedule) == "auto"))
     context.variant = choice.variant;
+  // Both radial operators use the same generated moment/derivative program.
+  // Range scaling belongs to its shared geometry owner; unavailable classes
+  // (including auxiliary g) retain polynomial lowering through this policy.
   context.rys = use_choice && choice.rys;
   return context;
 }
@@ -49,9 +52,9 @@ cudaError_t launch_df_shell_derivative_panel(
   unsigned architecture = 0;
   auto status = production_target(architecture);
   if (status != cudaSuccess) return status;
-  const DfShellLaunch context{positions, begin,  count,         weights, gradient,
-                              counters,  stream, variant,       pairs,   diagnostics,
-                              false,     mixed,  precision_work};
+  const DfShellLaunch context{positions, begin,  count,          weights,      gradient,
+                              counters,  stream, variant,        pairs,        diagnostics,
+                              false,     mixed,  precision_work, o.range_omega};
   generated_df_dispatch::for_each_class(
       [&]<unsigned A, unsigned B, unsigned C>(const DfShellDispatch& entry) {
         if (status != cudaSuccess || (!full_domain && (A > 1 || B > 1 || C > 1 || A + B + C == 0)))
@@ -71,9 +74,9 @@ cudaError_t launch_df_shell_derivative_group(
   unsigned architecture = 0;
   auto status = production_target(architecture);
   if (status != cudaSuccess) return status;
-  const DfShellLaunch context{positions, begin,  count,         weights, gradient,
-                              counters,  stream, variant,       pairs,   diagnostics,
-                              false,     mixed,  precision_work};
+  const DfShellLaunch context{
+      positions, begin, count,       weights, gradient, counters,       stream,
+      variant,   pairs, diagnostics, false,   mixed,    precision_work, first.range_omega};
   generated_df_dispatch::for_each_class([&]<unsigned A, unsigned B, unsigned C>(
                                             const DfShellDispatch& entry) {
     if (status != cudaSuccess || (!full_domain && (A > 1 || B > 1 || C > 1 || A + B + C == 0)))
@@ -94,9 +97,13 @@ cudaError_t launch_df_shell_derivative_packets(
   unsigned architecture = 0;
   auto status = production_target(architecture);
   if (status != cudaSuccess) return status;
-  const DfShellLaunch context{positions, begin,  count,         weights, gradient,
-                              counters,  stream, variant,       pairs,   diagnostics,
-                              false,     mixed,  precision_work};
+  const DfShellLaunch context{positions,      begin,
+                              count,          weights,
+                              gradient,       counters,
+                              stream,         variant,
+                              pairs,          diagnostics,
+                              false,          mixed,
+                              precision_work, orbital.front().range_omega};
   generated_df_dispatch::for_each_class(
       [&]<unsigned A, unsigned B, unsigned C>(const DfShellDispatch& entry) {
         if (status != cudaSuccess || (!full_domain && (A > 1 || B > 1 || C > 1 || A + B + C == 0)))
