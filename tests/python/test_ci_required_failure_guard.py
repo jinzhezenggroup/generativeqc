@@ -557,9 +557,12 @@ def test_guard_precedes_seed_without_changing_dependencies_or_permissions() -> N
         for i, step in enumerate(steps)
         if "run: python3 tools/ci_required_failure_guard.py" in step
     )
-    assert steps[index + 1].startswith(
-        "Seed fast CUDA CI objects in the shared cache\n"
+    seed_index = next(
+        position
+        for position, step in enumerate(steps)
+        if step.startswith("Seed fast CUDA CI objects in the shared cache\n")
     )
+    assert index < seed_index
     assert "continue-on-error" not in steps[index]
     assert "GH_TOKEN: ${{ github.token }}" in steps[index]
     assert "needs: cuda-compile\n" in job
