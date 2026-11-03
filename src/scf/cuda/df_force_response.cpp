@@ -290,12 +290,6 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       detail = "occupied factor does not match one restricted source-backed exchange response";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-    // A different radial provider has a different stream. The synchronous
-    // producer drain establishes its immutable C lifetime without changing the
-    // scheduler's device visibility or borrowing that provider's mutable U.
-    const auto error =
-        cudaStreamSynchronize(reinterpret_cast<cudaStream_t>(borrowed_factor->stream));
-    if (error != cudaSuccess) return cuda_failure(error, "order occupied response factor", detail);
   }
   const bool select_borrowed_density = borrowed_response_density && !host_weights;
   if (select_borrowed_density) {
@@ -378,6 +372,14 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       (!factor_algebra || std::string_view(factor_algebra) == "blas") &&
       (!factor_dot || std::string_view(factor_dot) != "1") && (!factor_upload || !*factor_upload) &&
       (!factor_scatter || !*factor_scatter);
+  if (select_borrowed_factor) {
+    // Only the selected consumer borrows C from the other radial provider.
+    // Diagnostic panel fallbacks must not wait on or inherit errors from an
+    // unused producer, but every supplied lease is still validated above.
+    const auto error =
+        cudaStreamSynchronize(reinterpret_cast<cudaStream_t>(borrowed_factor->stream));
+    if (error != cudaSuccess) return cuda_failure(error, "order occupied response factor", detail);
+  }
   // The producer can retain complete dense/packed-two projections as well.
   // This consumer borrows only single-B; unsupported storage keeps its exact
   // ordinary response instead of turning an optional lease into an error.

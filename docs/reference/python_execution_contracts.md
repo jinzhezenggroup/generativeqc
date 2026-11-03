@@ -225,6 +225,14 @@ not an extra solve. `_bytes` means bytes; `_seconds` means seconds; counts are
 integer semantic events. Source field annotations and each record's docstring
 are authoritative for optionality and ordering.
 
+Opt-in single-point `Result.dipole` is xyz in e*Bohr about the coordinate origin;
+`dipole_debye` returns a detached Debye conversion. `charges` and `lowdin_charges`
+are atom-ordered Mulliken and Lowdin partial charges in elementary-charge units.
+`density` owns total and optional alpha-minus-beta AO density matrices and
+supports point sampling and Cube export. Unrequested fields are `None`. See
+[electronic properties](../user/electronic_properties.md) for the scientific,
+backend and supported-domain contracts.
+
 (python-results-ownership)=
 ## Result ownership
 

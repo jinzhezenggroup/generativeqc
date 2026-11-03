@@ -1,0 +1,20 @@
+{
+  "path": "src/dft/electronic_properties_cuda.cu",
+  "role": "runtime",
+  "subsystem": "electronic_properties",
+  "reason": "Detached property-state ownership, authoritative AO packing, bounded generated-grid sampling, device/stream restoration and checked publication. Scientific kernels and property-analysis algebra are classified separately; no scientific-code retirement is claimed.",
+  "regions": [
+    {
+      "start": "__global__ void position_overlap(",
+      "stop": "void solver_check(",
+      "role": "scientific",
+      "reason": "New analytic position-moment lifting over the shared compact overlap recurrence, total/spin density combination, nuclear/electronic dipole contraction, full-rank overlap-root scaling and Mulliken/Lowdin population reductions. Generated AO/density evaluation is reused rather than duplicated. Retain until compiler-owned position and population operators pass the same independent spdf and public endpoint gates."
+    },
+    {
+      "start": "  void analyze(",
+      "stop": "  void evaluate(",
+      "role": "scientific",
+      "reason": "Conservatively includes host launch/resource code around the scientific choice of full-rank symmetric Lowdin S^(1/2) D S^(1/2), analytic dipoles and atomic populations. Vendor eigensolver/GEMM providers do not make this orchestration compiler-owned; retire only after equivalent compiler lowering preserves nonpositive-spectrum rejection, accepted-state identity and independent numerical gates."
+    }
+  ]
+}

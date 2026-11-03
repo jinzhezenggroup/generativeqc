@@ -147,3 +147,16 @@ def test_invalid_rccsd_requests_fail_before_native_execution(
     _, select = selector
     with pytest.raises(error, match=message):
         select("rccsd", properties)
+
+
+@pytest.mark.parametrize("method", ("mp2", "rccsd", "rccsd(t)"))
+@pytest.mark.parametrize("property_name", ("dipole", "charges", "density"))
+def test_correlated_electronic_properties_preserve_value_error(
+    selector: typing.Any, method: str, property_name: str
+) -> None:
+    """Unsupported analyses remain invalid requests, before native execution."""
+    _, select = selector
+    with pytest.raises(
+        ValueError, match="unsupported properties|does not support properties"
+    ):
+        select(method, ("energy", property_name))

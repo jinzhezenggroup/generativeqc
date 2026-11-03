@@ -650,17 +650,21 @@ class KsPreparedState final : public KsSingleOwnerPort {
         // force inheritance; an explicit force tile always wins over this policy.
         const bool automatic_force = !options_.xc_force_tile_points;
         if (automatic_force) options_.xc_force_tile_points = 256;
-        const bool fitted_rks_fp64 =
+        const bool fused_rks_fp64 =
             execution_plan_.spin_channels == 1 && metadata.requires_gradient &&
-            options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA &&
             options_.precision_mode == GENERATIVEQC_PRECISION_FP64 &&
             options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+        const bool fitted_rks_fp64 =
+            fused_rks_fp64 && options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA;
+        const bool direct_rks_fp64 =
+            fused_rks_fp64 && options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+            !range_strategy_ && !execution_plan_.nonlocal_correlation;
         // Public numeric promises quote the conservative 256-point owner.
         // Do not change its work/storage shape after admission. Reserve ample
         // observed headroom for ordinary unpromised preparation as well.
         const bool unconstrained = !capacity_ && !runtime::active_device_resource_ledger &&
                                    !options_.reference_memory_budget_bytes;
-        if (fitted_rks_fp64 && unconstrained && basis_.nao >= 512 &&
+        if ((fitted_rks_fp64 || direct_rks_fp64) && unconstrained && basis_.nao >= 512 &&
             grid_.point_count() >= (1U << 19)) {
           cudaDeviceProp properties{};
           auto status = cudaGetDeviceProperties(&properties, device);
@@ -675,23 +679,30 @@ class KsPreparedState final : public KsSingleOwnerPort {
             status = cudaMemGetInfo(&available, &total);
             if (status != cudaSuccess)
               throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(status));
+            std::size_t maximum_angular{};
+            for (const auto& shell : system_.shells)
+              maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
+            const bool all_electron =
+                system_.ecp_terms.empty() &&
+                std::none_of(system_.atoms.begin(), system_.atoms.end(),
+                             [](const auto& atom) { return atom.ecp_core != 0; });
+            const bool strict_precision_budget =
+                std::all_of(options_.application_precision_budget.begin(),
+                            options_.application_precision_budget.end(),
+                            [](double value) { return value == 0; });
+            const bool qualified_rks_fp64 =
+                fitted_rks_fp64 ||
+                dft::automatic_direct_ks_tiles_eligible(
+                    direct_rks_fp64, strict_precision_budget, all_electron, maximum_angular,
+                    basis_.natom, properties.name, properties.major, properties.minor,
+                    properties.singleToDoublePrecisionPerfRatio);
             options_.xc_tile_points = dft::automatic_ks_scf_tile(
-                0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
+                0, qualified_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
                 execution_plan_.nonlocal_correlation, properties.major,
                 properties.singleToDoublePrecisionPerfRatio);
-            const bool strict_force = std::all_of(options_.application_precision_budget.begin(),
-                                                  options_.application_precision_budget.end(),
-                                                  [](double value) { return value == 0; });
-            if (automatic_force && strict_force && admitted_cuda_stationary_binding()) {
-              std::size_t maximum_angular{};
-              for (const auto& shell : system_.shells)
-                maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
-              const bool all_electron =
-                  system_.ecp_terms.empty() &&
-                  std::none_of(system_.atoms.begin(), system_.atoms.end(),
-                               [](const auto& atom) { return atom.ecp_core != 0; });
+            if (automatic_force && strict_precision_budget && admitted_cuda_stationary_binding()) {
               options_.xc_force_tile_points = dft::automatic_ks_force_tile(
-                  fitted_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
+                  qualified_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
                   basis_.natom, basis_.nao, grid_.point_count(), properties.major);
               automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
             }

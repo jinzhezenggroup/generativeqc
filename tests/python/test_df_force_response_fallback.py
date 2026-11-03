@@ -40,7 +40,10 @@ int cudaMemcpyAsync(void* out,const void* in,std::size_t n,int,void*) {
 int cudaMemsetAsync(void* out,int value,std::size_t n,void*) {
   std::memset(out,value,n); return 0;
 }
-int cudaStreamSynchronize(void*) { return 0; }
+void* failing_stream=nullptr;
+int cudaStreamSynchronize(void* stream) {
+  return failing_stream && stream==failing_stream ? cudaErrorLaunchFailure : cudaSuccess;
+}
 namespace generativeqc::runtime::cuda_trace {
 struct TraceShape { std::size_t systems,nbf,naux; bool source,streamed; std::size_t offset; };
 struct TraceOperation { TraceOperation(const char*,void*,TraceShape) {} };
@@ -225,6 +228,31 @@ int main(int argc,char** argv) {
   auto requested=current;
   auto density=std::vector<double>(state.density,state.density+4);
   core::System orbital,auxiliary; orbital.atoms.resize(1); auxiliary.atoms.resize(2);
+  if(mode>=41) {
+    // An unused optional producer must not poison a diagnostic panel response.
+    plan.final_projection_token.reset();
+    plan.value_storage.pairs=DfPairStorage::SymmetricLower;
+    plan.packed_raw=plan.values;
+    if(mode==41 || mode==47) setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA","scalar",1);
+    if(mode==42) setenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT","1",1);
+    if(mode==43) setenv("GENERATIVEQC_DF_RESPONSE_SPACE","dense",1);
+    if(mode==44) setenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE","1",1);
+    if(mode==45) setenv("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE","1",1);
+    int producer_stream{};
+    failing_stream=&producer_stream;
+    CudaDfBorrowedOccupiedFactor factor{0,state.factor,2,1,&producer_stream};
+    if(mode==47) factor.rank=0;
+    const DensityFittingDensityResponse term{density,0.0,.25};
+    std::vector<double> output{-1}; std::string detail; DfGradientResources resources;
+    const auto status=execute_cuda_density_fitting_generated_force_response(
+        &plan,0,orbital,auxiliary,{},{},{&term,1},0,4096,0,output,detail,&resources,
+        nullptr,nullptr,nullptr,nullptr,nullptr,&factor);
+    const auto expected=mode==46 ? GENERATIVEQC_STATUS_CUDA_ERROR
+        : mode==47 ? GENERATIVEQC_STATUS_INVALID_ARGUMENT : GENERATIVEQC_STATUS_SUCCESS;
+    assert(status==expected);
+    assert(output==std::vector<double>{status==GENERATIVEQC_STATUS_SUCCESS ? 42.0 : -1.0});
+    return 0;
+  }
   if(mode>=31) {
     plan.final_projection_token.reset();
     plan.value_storage.pairs=DfPairStorage::SymmetricLower;
@@ -340,7 +368,7 @@ def response_probe(
 
 @pytest.mark.parametrize(
     "mode",
-    range(41),
+    range(48),
     ids=(
         "success-and-repeat",
         "occupied-oom",
@@ -383,6 +411,13 @@ def response_probe(
         "borrowed-factor-scatter-control",
         "borrowed-factor-upload-control",
         "borrowed-factor-persistent-oom",
+        "unused-factor-scalar-stream-error",
+        "unused-factor-serial-stream-error",
+        "unused-factor-dense-stream-error",
+        "unused-factor-scatter-stream-error",
+        "unused-factor-upload-stream-error",
+        "selected-factor-stream-error",
+        "unused-factor-invalid-lease",
     ),
 )
 def test_fitted_response_failure_and_lease_fallback(
