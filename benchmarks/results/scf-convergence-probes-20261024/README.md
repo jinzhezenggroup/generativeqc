@@ -102,3 +102,11 @@ deletion or production policy change is involved.
 
 The [decision note](../../../.agents/notes/rejected/2026-10-24-shorter-ks-convergence-proposals.md)
 connects these observations to the historical strict-DIIS advantage.
+
+The exact 472,836-byte `evidence.json.xz` archive is retained in existing local
+Git commit `cd2b4514be0a38c4920934481b1f02d157a694b4`. The default replayer reads
+it through `historical-snapshot.json`, verifies its original byte identities and
+then runs the same scientific/work/source checks. No files are restored into
+the checkout and no network request is made. A shallow clone must explicitly
+fetch that commit first. Every rejected, unfavorable and failed proposal stays
+in the original archive; this storage change promotes no solver default.
