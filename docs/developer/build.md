@@ -256,7 +256,11 @@ Cache hits retain generator/asset dependency checks and source integrity checks;
 corruption fails the build. CMake tracks the full recipe dependency closure even
 when a hit avoids importing a lowering module. CUDA wheel CI enables this
 source-only cache with an exact science-input key, independently from the
-NVCC object cache. An uncached, build-local reference independently re-lowers
+NVCC object cache. The primary CUDA compile gate and native CLI build also
+share checked semantic sources across their separate build directories;
+their compiler flags, binary identities and required checks remain separate.
+Missing source entries lower normally, while corrupt or incomplete entries
+fail integrity validation. An uncached, build-local reference independently re-lowers
 both primitive domains once for all installed AOT manifest validations; each
 manifest still checks its wrapper and primitive source identity, final ELF
 SHA-256 and target architecture. A source-cache hit never substitutes for this
@@ -279,6 +283,24 @@ the native direct kernel owners, while
 `-DGENERATIVEQC_AOT_SPLIT_COMPILE_THREADS=N` does the same for generated AOT
 owners. Both default to `1` because split compilation can change optimizer
 resource choices; use the normal settings for performance and release binaries.
+
+## CI feedback and full qualification
+
+Pull requests and merge groups run the routine scientific and native test tiers
+without Python coverage tracing or GCC coverage instrumentation. Scheduled and
+manually dispatched CI runs retain full coverage collection and the exhaustive
+`ci_nightly` oracle tier. Local pytest does not exclude that marker unless
+explicitly requested. The native method-catalog comparison keeps representative
+LDA/GGA/meta-GGA, hybrid, range-separated/nonlocal, spin, corrected-method and
+backend-refusal checks routine; its complete catalog comparison and the complete
+DF shell-unit regeneration/determinism replay run in full qualification.
+
+Every Python shard preserves its JUnit timing report as a `pytest-timing-*`
+artifact, including failed test steps when a report exists. Use these reports
+to choose further reductions rather than raising timeouts or dropping numerical
+acceptance gates. The resource-only CUDA jobs omit unrelated native test, CLI
+and stationary-force targets during configuration; the full native library and
+CLI compile gates still build their required production consumers.
 
 ## Prebuilt CUDA wheel coverage
 
