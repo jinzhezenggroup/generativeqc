@@ -70,6 +70,31 @@ reduction. Existing FP32 contraction schedules keep their original accumulation.
 The point algebra, Vxc matrix and SCF convergence thresholds are unchanged;
 this is an accuracy improvement, not a bitwise-reproducible SCF contract.
 
+### Occupied density certificates
+
+An authenticated occupied-frame lease identifies the canonical coefficients
+that formed the stored density; it does not prove floating-point equality of
+the matrix and reassociated factor contractions. The generated strict-FP64
+four-jet consumer therefore accumulates outward-rounded absolute dot bounds
+and certifies rho, each gradient and tau separately. Coefficient, AO and bound
+exponents outside the derived representability envelope refuse reuse rather
+than relying on finite candidate outputs alone.
+
+Projection and absolute-bound panels share dead matrix-product scratch only
+when `2 * occupied_rank <= active_ao_count`. Other tiles retain the existing
+matrix schedule. A refused point consumes the original stored density with
+the current half-before-add symmetrization, ordered explicit FP64 FMA and
+scalar/warp feature reduction. It neither reconstructs D from coefficients nor
+applies the RKS occupation factor a second time. Missing bounds fail closed;
+genuine original-matrix errors are still reported. No extra global allocation
+or host oracle is introduced.
+
+The internal feature bound is not a substitute for independent whole XC
+energy/potential/force and complete-endpoint qualification. Prior default-route
+performance receipts do not qualify the extra certificate or fallback work.
+The derivation and outstanding acceptance boundary are preserved in the
+[stored-density certificate candidate note](../../.agents/notes/proposed/2026-11-04-occupied-xc-stored-density-certificate.md).
+
 ### Budget-Fock matrix products
 
 The shared physical density/potential consumer can select FP32 inner products

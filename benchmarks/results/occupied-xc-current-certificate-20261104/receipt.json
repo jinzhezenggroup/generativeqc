@@ -1,0 +1,161 @@
+{
+  "schema": "generativeqc.occupied-xc.certificate-candidate.v1",
+  "date": "2026-11-04",
+  "candidate_parent": "b735793be54caed18fb2e2cacfa9235ecb935f7c",
+  "historical_algorithm_source": "46e5f88d39645c0166264957548d1ec3b41d63c3",
+  "status": "candidate-only; #2751 remains open",
+  "scope": "emitted feature consumers and compiled host probes, not native molecular E+F",
+  "source_inputs_sha256": {
+    "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "19b6520e755ca7ead62f0a5cc7f26d4a139f03dd5996b1e3122448868e9c6440",
+    "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py": "884621443809541c79edf6524d0e24e342ac7b2e7fa722c9ac64796d241ce388",
+    "python/generativeqc_compiler/dft/ao_cuda.py": "08aada7bfaed52c3a47498c58528bd30b6a2da7eeee66db6ae1e28c1d51b3f0b",
+    "python/generativeqc_compiler/dft/feature_policy.py": "0ae365b98c67d1a95acb97ed91354785762874a309b011f023f61df670451344",
+    "src/dft/cuda_xc.hpp": "f5db5fe346c7a2640564b5ea78b56d7db636436143b5a874c047fce37ed07a8e",
+    "src/dft/cuda_xc_kernels.cuh": "07a5cde1d3c206f4d412fe620694d4a4157ab4e7972bfe81a4fdabb600141d14",
+    "tests/python/test_xc_occupied_features_cuda.py": "4837e4375d801babf5d7c95c2e43a380cb5901b272ced332a298aadf2b43174d",
+    "tests/python/test_xc_occupied_features.py": "26e73efd967a2ba94fa806eac09c60d34529c5e42b159efee1291b7a467578ba",
+    "tests/python/test_xc_occupied_certificate.py": "bfc38d10042465ef66b757385d2dd5d387f80b3fdb4c301807d92e290cefd583",
+    "tests/python/_cuda_rounding_support.py": "206f600b0df28a5d20eeefa339267a7576b42c772b71f615d19fc0b1eb67b913",
+    "tests/python/test_xc_compact_batches.py": "c04b4c7bce9f18ce3c643da7443ebea9d8bf587428a7e73b9d2a582dfd0efa11"
+  },
+  "host_tests": {
+    "passed": 156,
+    "host": "node3, CPU only",
+    "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+    "compiled_compact_source_sha256": "e1feadd90a9179924f9c6c75ae777465dd3a55d21835f49c30a6768a807a4c8f",
+    "compiled_compact_binary_sha256": "8677f72308a45aa92cfda3274edf2dce56b29d87e37253d0f9d22a844e4ee493"
+  },
+  "gpu_suite": {
+    "slurm_job": 15794,
+    "node": "node1",
+    "partition": "main",
+    "gres": "gpu:5090:1",
+    "time_limit": "00:10:00",
+    "cuda_visible_devices": "0 (preserved)",
+    "device": "NVIDIA GeForce RTX 5090",
+    "nvidia_driver": "580.95.05",
+    "nvcc": "V12.9.86",
+    "compile_options": [
+      "-std=c++17",
+      "-arch=sm_120",
+      "-O3",
+      "-Xptxas=-v",
+      "--shared",
+      "-Xcompiler=-fPIC",
+      "--fmad=false",
+      "-lineinfo"
+    ],
+    "normal_passed": 108,
+    "memcheck_passed": 108,
+    "synccheck_passed": 108,
+    "racecheck_passed": 108,
+    "sanitizer_errors": 0,
+    "racecheck_warnings": 0,
+    "products": {
+      "normal": {
+        "emitted_source_sha256": "10bf03b0046f9aa713ea97d35a695c588ff5a6fedc207fd73cefb55ab0f95e7f",
+        "library_sha256": "152bd9eed8959a9e58a71c3874fc9290820bc590f086fbd965b7cfa1c633442c",
+        "retained_source_on_node1": "/tmp/qc-2751-certificate-retained-20261104/normal/occupied-xc-cuda0/probe.cu",
+        "retained_library_on_node1": "/tmp/qc-2751-certificate-retained-20261104/normal/occupied-xc-cuda0/probe.so"
+      },
+      "memcheck": {
+        "emitted_source_sha256": "10bf03b0046f9aa713ea97d35a695c588ff5a6fedc207fd73cefb55ab0f95e7f",
+        "library_sha256": "9d893781bc9d4b4e90438dc7a2143a409bcae30bc674fb3e20e1a827c22dae22",
+        "retained_source_on_node1": "/tmp/qc-2751-certificate-retained-20261104/memcheck/occupied-xc-cuda0/probe.cu",
+        "retained_library_on_node1": "/tmp/qc-2751-certificate-retained-20261104/memcheck/occupied-xc-cuda0/probe.so"
+      },
+      "synccheck": {
+        "emitted_source_sha256": "10bf03b0046f9aa713ea97d35a695c588ff5a6fedc207fd73cefb55ab0f95e7f",
+        "library_sha256": "859fc61c6fbf31fa53d81d83a7f879db7cd13193484ff07b209338c4abbad53f",
+        "retained_source_on_node1": "/tmp/qc-2751-certificate-retained-20261104/synccheck/occupied-xc-cuda0/probe.cu",
+        "retained_library_on_node1": "/tmp/qc-2751-certificate-retained-20261104/synccheck/occupied-xc-cuda0/probe.so"
+      },
+      "racecheck": {
+        "emitted_source_sha256": "10bf03b0046f9aa713ea97d35a695c588ff5a6fedc207fd73cefb55ab0f95e7f",
+        "library_sha256": "54fe8b9beefd2b555b9c5d4285b3644b59b6fe086eada58a30ed8ac8de906fa5",
+        "retained_source_on_node1": "/tmp/qc-2751-certificate-retained-20261104/racecheck/occupied-xc-cuda0/probe.cu",
+        "retained_library_on_node1": "/tmp/qc-2751-certificate-retained-20261104/racecheck/occupied-xc-cuda0/probe.so"
+      }
+    }
+  },
+  "finite_probe": {
+    "slurm_job": 15796,
+    "node": "node1",
+    "partition": "main",
+    "gres": "gpu:5090:1",
+    "time_limit": "00:02:00",
+    "cuda_visible_devices": "0 (preserved)",
+    "density_formation": "host FP64 rank-one Gram with explicit FMA; not GPU density producer",
+    "harness_commit": "33f2c1648",
+    "harness_path": "benchmarks/results/occupied-xc-finite-input-20261104/emit_probe.py",
+    "emitted_source_sha256": "2a1fe95917d581032692d1b498edace4a232d8eb5570b1aa6700640089e5142f",
+    "executable_sha256": "2323355f2a86cece9d1bbbb8329faeb55d83e931b2f08de5260e25776ce5adfd",
+    "compile_options": [
+      "-std=c++17",
+      "-O2",
+      "--fmad=false",
+      "-arch=sm_120"
+    ],
+    "result": {
+      "device": "NVIDIA GeForce RTX 5090",
+      "driver_version": 13000,
+      "runtime_version": 12090,
+      "scope": "emitted XC feature consumers, not molecular SCF",
+      "observations": [
+        {
+          "fixture": "ordinary-control",
+          "stored_D00": 2,
+          "witness_matches": true,
+          "error": 0,
+          "dense_features": [
+            0.125,
+            0,
+            0,
+            0,
+            0
+          ],
+          "occupied_features": [
+            0.125,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "fixture": "stored-density-underflow",
+          "stored_D00": 0,
+          "witness_matches": true,
+          "error": 0,
+          "dense_features": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "occupied_features": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    }
+  },
+  "compiler_cache": {
+    "launcher": "sccache 0.16.0",
+    "existing_cache_reused": true,
+    "scope": "shared server statistics do not attribute per-invocation hits"
+  },
+  "unqualified": [
+    "native full-plan and compiled-batch GPU integration",
+    "XC point-program energy/potential/force sensitivity and domain acceptance",
+    "current-source molecular/default-grid independent E+F gates",
+    "whole-runtime compiled resource envelopes",
+    "complete admission-inclusive cold/warm endpoint cost",
+    "default requalification; selector unchanged"
+  ]
+}
