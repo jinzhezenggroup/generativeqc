@@ -15,7 +15,8 @@ enum class CudaDerivativeSourceKind {
   Coulomb,
   Exchange,
   RangeCorrection,
-  /** Already weighted J+K energy derivative. Only a total-gradient consumer
+  /** Already weighted J+K derivative in the declared transport convention.
+   * Only a total-gradient consumer
    * whose compiler proves a unit sum may accept this coalesced source; it
    * cannot recover independent J/K diagnostics or range-separated channels. */
   FullRangeJkSum

@@ -76,3 +76,12 @@ import-bound analyzers (including reloads before and during scans), directive
 line semantics, line-sensitive builtins, malformed JSON shapes and CI receipt
 retention. Existing complexity, structured
 and shared-work audit tests protect the reused classifier/provenance boundary.
+
+## Superseded (2026-11-03)
+
+The mandatory source-bound disposition gate and its manifest were retired after
+unrelated source additions caused false CI failures without changing the
+materialization candidate census. This note preserves the original reasoning;
+see [the retirement decision](2026-11-03-retire-source-bound-materialization-gate.md)
+for the current policy. Static materialization inventories remain available,
+while the exact matrix-chain regression gate and DF producer-work ratchet remain.

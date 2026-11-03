@@ -373,7 +373,7 @@ generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_de
 generativeqc_status consume_prepared_cuda_direct_shell_full_range_derivatives_device(
     const PreparedFockPlan& plan, const double* density, const double* beta,
     std::size_t matrix_elements, const CudaDerivativeSourceConsumer& consumer, std::string& detail,
-    bool allow_spatial_default, DirectForcePrecisionRequest* precision) {
+    bool separate_sources, bool allow_spatial_default, DirectForcePrecisionRequest* precision) {
   if (!prepared_full_range_derivative_domain(plan, matrix_elements)) {
     detail = "prepared CUDA shell derivative has incompatible full-range scientific identity";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -382,7 +382,7 @@ generativeqc_status consume_prepared_cuda_direct_shell_full_range_derivatives_de
   return consume_cuda_direct_shell_full_range_derivatives_device(
       plan.cuda_direct_source(), spec.spin, spec.coulomb.coefficient,
       spec.exchange.present ? spec.exchange.coefficient : 0.0, density, beta, matrix_elements,
-      consumer, detail, allow_spatial_default, precision);
+      consumer, detail, separate_sources, allow_spatial_default, precision);
 }
 
 generativeqc_status enqueue_prepared_cuda_fock(
