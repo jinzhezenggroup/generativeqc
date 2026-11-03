@@ -54,12 +54,10 @@ used by the refined nine-call qualification. Its dormant budget helper files
 add no resource-budget acceptance. The audit input seal includes private control
 fixtures; the published audit metadata describes that boundary.
 
-## Offline Nsight payload recovery
-
-The two original archive parts are now recovered from the already-merged master
-commit `4c7354958468810dc83eb409c493ae49d810e613` through `historical.manifest.json`. The public
-reader restores their exact bytes in memory from local Git only and retains the
-original archive, part and member checksums. Missing historical objects cause an
-explicit fetch instruction, never a network fetch. A shallow clone must fetch
-that revision explicitly before replay. All three SQLite databases, unfavorable
-observations and qualification boundaries are unchanged.
+The two Nsight analysis archive parts are retained byte-for-byte in the existing
+merged Git objects at `4c7354958468810dc83eb409c493ae49d810e613`.
+`historical-snapshot.json` authenticates both SHA256 and Git object identities.
+The replay command reads only these explicit entries through the offline history
+loader; no network, Release or external backup is used. Full Git history is
+required. All three SQLite databases and twelve intrusive E/F remain available;
+this storage change adds no timing votes and changes no scientific proof.
