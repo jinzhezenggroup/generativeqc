@@ -246,7 +246,13 @@ def test_df_search_binds_auxiliary_model_and_memory_without_global_activation(
     }
     monkeypatch.setattr(profiles, "cache_root", lambda: tmp_path / "cache")
     monkeypatch.setattr(
-        profiles, "select_library", lambda *args: (library, {"source": "portable"})
+        autotune,
+        "inspect_library",
+        lambda *args, **kwargs: {
+            "library": library._name,
+            "probe": probe,
+            "diagnostics": {"source": "portable"},
+        },
     )
     monkeypatch.setattr(autotune, "_worker", lambda *args, **kwargs: reference)
     observed = []
@@ -302,8 +308,6 @@ def test_df_search_binds_auxiliary_model_and_memory_without_global_activation(
         and item["df_memory_bytes"] == 20 << 20
         for item in observed
     )
-    monkeypatch.setattr(execution_tune.ctypes, "CDLL", lambda path: library)
-    monkeypatch.setattr(profiles, "probe_device", lambda *args: probe)
     execution_tune.replay(Path(report["qualified_recipe"]), tmp_path / "replayed.json")
     assert not (tmp_path / "cache/active.json").exists()
 

@@ -5,6 +5,10 @@ Date: 2026-11-03
 
 ## Problem
 
+Follow-up: [GPU oracle and disposable tuning discovery](../implemented/compatibility/2026-11-03-gpu-oracle-and-disposable-tuning-discovery.md)
+records the implemented correction to the reference/discovery workflow. The
+failed experiment below remains historical evidence, not a completed search.
+
 The remaining fully Direct performance gap is not explained by a small portable
 force-queue improvement. Repeating broad qualification for speculative tuning
 is costly. Master already provides an evidence-gated native J/K policy search;
