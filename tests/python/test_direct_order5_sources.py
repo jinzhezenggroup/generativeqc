@@ -37,6 +37,7 @@ from test_direct_low_order_sources import prepare_source_probe
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.ci_nightly
 def test_weighted_order5_independent_values_and_native_source_adapter(
     tmp_path: Path,
 ) -> None:
