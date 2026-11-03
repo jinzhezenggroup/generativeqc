@@ -12,8 +12,10 @@
 #include "api/prepared_publication.hpp"
 #include "api/provider_initialization_intent.hpp"
 #include "api/provider_initialization_lifetime.hpp"
+#include "generativeqc/electronic_properties.h"
 #include "generativeqc/generativeqc.h"
 #include "generativeqc/provider_initialization.h"
+#include "methods/dft_method.hpp"
 #include "methods/method.hpp"
 #include "methods/provider_initialization_intent.hpp"
 #include "molecule/basis_template.hpp"
@@ -322,6 +324,12 @@ generativeqc_status generativeqc_calculation_get_supported_properties_v1(
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
+static generativeqc_status execute_calculation(generativeqc_calculation* calculation,
+                                               generativeqc_result_descriptor* output,
+                                               generativeqc_result_descriptor* hf,
+                                               generativeqc_result_descriptor* mp2, double* density,
+                                               size_t density_count, bool capture_density);
+
 generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* calculation,
                                                      generativeqc_result_descriptor* output) {
   return generativeqc_calculation_execute_components_v1(calculation, output, nullptr, nullptr);
@@ -330,6 +338,20 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
 generativeqc_status generativeqc_calculation_execute_components_v1(
     generativeqc_calculation* calculation, generativeqc_result_descriptor* output,
     generativeqc_result_descriptor* hf, generativeqc_result_descriptor* mp2) {
+  return execute_calculation(calculation, output, hf, mp2, nullptr, 0, false);
+}
+
+generativeqc_status generativeqc_calculation_execute_density_v1(
+    generativeqc_calculation* calculation, generativeqc_result_descriptor* output, double* density,
+    size_t density_count) {
+  return execute_calculation(calculation, output, nullptr, nullptr, density, density_count, true);
+}
+
+static generativeqc_status execute_calculation(generativeqc_calculation* calculation,
+                                               generativeqc_result_descriptor* output,
+                                               generativeqc_result_descriptor* hf,
+                                               generativeqc_result_descriptor* mp2, double* density,
+                                               size_t density_count, bool capture_density) {
   generativeqc::runtime::host_trace::Region trace("calculation_execute");
   if (calculation == nullptr) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -374,6 +396,11 @@ generativeqc_status generativeqc_calculation_execute_components_v1(
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto method = calculation->plan->capabilities().method;
+  if (capture_density && (!density || !density_count)) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto family = calculation->plan->capabilities().family;
+  if (density && family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
+      family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   if (!omit_forces) {
     const auto bytes = calculation->plan->atom_count() * 3 * sizeof(double);
     for (const auto& pair : {std::pair{output, hf}, std::pair{output, mp2}, std::pair{hf, mp2}}) {
@@ -396,6 +423,24 @@ generativeqc_status generativeqc_calculation_execute_components_v1(
     generativeqc::methods::Result native = calculation->plan->execute(
         !omit_forces, (hf ? generativeqc::methods::kHfComponent : 0) |
                           (mp2 ? generativeqc::methods::kMp2Component : 0));
+    if (density) {
+      if (!native.convergence.converged) return GENERATIVEQC_STATUS_NOT_CONVERGED;
+      if (family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) {
+        generativeqc::dft::CudaKsFinalStateToken token;
+        auto status = generativeqc::methods::detail::dft_final_state_token(
+            *calculation->plan, token, calculation->context->last_detail);
+        if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+        generativeqc::dft::VerifiedKsFinalState state;
+        status = generativeqc::methods::detail::read_dft_final_state(
+            *calculation->plan, token, false, state, calculation->context->last_detail);
+        if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+        for (const auto& matrix : state.density)
+          native.density.insert(native.density.end(), matrix.begin(), matrix.end());
+      }
+      if (native.density.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+      if (native.density.size() != density_count) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      std::copy(native.density.begin(), native.density.end(), density);
+    }
     if ((hf || mp2) && !native.convergence.converged) return GENERATIVEQC_STATUS_NOT_CONVERGED;
     if ((hf || mp2) && !omit_forces && native.forces.size() != calculation->plan->atom_count() * 3)
       throw std::runtime_error("native endpoint returned incomplete primary forces");
