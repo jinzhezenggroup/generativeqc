@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-sm90-cd2b-final-20261103",
+  "owner": "H100 frozen CD2B final delivery",
+  "reason": "Retain the exact final archive in sub1MiB parts; reserve space by offline recovery of existing Nsight archive parts. Full original denominator and gates retained.",
+  "review_document": "benchmarks/results/h100-sm90-cd2b-final-20261103/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-completed.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "9954b73488a24c9b8f5c080066602e9062889aff5771c774e66bd7d158c198a5",
+      "family": "h100-sm90-cd2b-final-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Authenticated part of the unchanged final original archive, including all720 full E/F,180 processes and all30 physical cases; CPU replay recomputes the original three-pair acceptance."
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-completed.tar.xz.part01",
+      "bytes": 453404,
+      "sha256": "f920881d29a149d3ef460503b53bb014b8881b0c1ea1b9685ed0ef4e959c2ecf",
+      "family": "h100-sm90-cd2b-final-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Authenticated part of the unchanged final original archive, including all720 full E/F,180 processes and all30 physical cases; CPU replay recomputes the original three-pair acceptance."
+    }
+  ]
+}

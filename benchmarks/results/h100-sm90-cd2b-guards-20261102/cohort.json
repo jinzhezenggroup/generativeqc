@@ -152,6 +152,11 @@
       "path": "uks-fit-v1-download-manifest.json",
       "bytes": 5647,
       "sha256": "b3f1ecaa82bdff0da4a4376047dddf0c80faf313ab4a61816daa341ee7026794"
+    },
+    {
+      "path": "historical-snapshot.json",
+      "bytes": 1018,
+      "sha256": "449100457877a0ac1ecbcaafb215ef20a976fb3ed5651df8c1b806be82fd3d3c"
     }
   ],
   "scope": "Five completed source-bound support phases only. Four native executions/two unfiltered memchecks; 3 intrusive SQLite captures/12EF, no clean timing votes; original Standard84 7/8, independent CPU12 attribution and separate explicit 139-auxiliary9EF qualification; 6 known-source fresh references/12EF. No final majority, public ResourceBudget or facade acceptance. Older14 oracle producer-byte provenance remains unrecovered; base scientific binary observations and remote installed-wheel attestation are not local binary verification.",

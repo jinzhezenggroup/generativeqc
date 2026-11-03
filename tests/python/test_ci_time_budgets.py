@@ -13,7 +13,8 @@ def _assert_cpu_budget(workflow: str) -> None:
     header = section.split("\n    steps:\n", 1)[0]
     match = re.search(
         r"timeout-minutes: \$\{\{ matrix.compiler == 'gcc' && "
-        r"github.event_name != 'merge_group' && (\d+) \|\| (\d+) \}\}",
+        r"\(github.event_name == 'schedule' \|\| "
+        r"github.event_name == 'workflow_dispatch'\) && (\d+) \|\| (\d+) \}\}",
         header,
     )
     assert match, "instrumented GCC needs time for cold build, tests, and coverage"
@@ -101,7 +102,8 @@ def _assert_cpu_work_and_cache_lifecycle(workflow: str) -> None:
     assert "continue-on-error:" not in ownership
     coverage = step("Collect C++ coverage")
     assert (
-        "if: matrix.compiler == 'gcc' && github.event_name != 'merge_group'" in coverage
+        "if: matrix.compiler == 'gcc' && (github.event_name == 'schedule' || "
+        "github.event_name == 'workflow_dispatch')" in coverage
     )
     assert (
         "lcov --capture --directory build --output-file coverage-cpp.info" in coverage
@@ -131,7 +133,7 @@ def test_cpu_extended_budget_is_only_for_instrumented_gcc(
     budget = re.search(r"^    timeout-minutes: (.+)$", section, re.MULTILINE)
     assert budget
     context = {"matrix.compiler": compiler, "github.event_name": event}
-    instrumented = compiler == "gcc" and event != "merge_group"
+    instrumented = compiler == "gcc" and event in {"schedule", "workflow_dispatch"}
     assert expression(budget[1], context) == (25 if instrumented else 15)
     for flag, enabled in (
         (

@@ -80,6 +80,7 @@ def _tools(tmp_path: Path, failure: str = "") -> dict[str, str]:
         "GITHUB_OUTPUT": str(tmp_path / "outputs"),
         "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
         "CLI_FAST_COMPILE": "ON",
+        "RUNNER_TEMP": str(tmp_path),
     }
 
 

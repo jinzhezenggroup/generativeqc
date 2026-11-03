@@ -1,0 +1,77 @@
+{
+  "schema": "generativeqc.h100-fixed30-final.v1",
+  "source_revision": "cd2b4514be0a38c4920934481b1f02d157a694b4",
+  "core_sha256": "37b8bd02c1dddbf42385c494ae21ff51b50d874dae1dd0c01ab2b75fb0eb194e",
+  "expected_proof_sha256": "5d3a1528ef81a00e7e2dc3afa37d7484d91249126d99b3d396ca4cf8bfb852e6",
+  "original_final_protocol_sha256": "2391b71fb49660f682f1b60056b2892d5516f01871d7479319f0be2cf925fdaa",
+  "parts": [
+    {
+      "path": "final-pairs-v3-completed.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "9954b73488a24c9b8f5c080066602e9062889aff5771c774e66bd7d158c198a5"
+    },
+    {
+      "path": "final-pairs-v3-completed.tar.xz.part01",
+      "bytes": 453404,
+      "sha256": "f920881d29a149d3ef460503b53bb014b8881b0c1ea1b9685ed0ef4e959c2ecf"
+    }
+  ],
+  "archive": {
+    "name": "final-pairs-v3-completed.tar.xz",
+    "bytes": 1239836,
+    "sha256": "e7c55ac0a20e1bcb3c66471e8936658ff612af910466006d294f9d28a874c0d2"
+  },
+  "manifest": {
+    "stored": "final-pairs-v3-download-manifest.json.xz",
+    "name": "final-pairs-v3-download-manifest.json",
+    "decoded_bytes": 194051,
+    "decoded_sha256": "8d6dc66be31985350966939d3aa205b3fc9d337329efe63966ab6d1be66afe36"
+  },
+  "receiver_adaptation": {
+    "original_reader": "replay-final-pairs-v10.py",
+    "original_sha256": "1a7a397ac3cdcdfdb4b5ae9e404da69e09396bd05e2ab7f59c9a30f9b87011db",
+    "change": "Allow the isolated CPU wrapper to provide a frozen reference root; all scientific evaluation/aggregation unchanged."
+  },
+  "files": [
+    {
+      "path": "actual-result-audit.json.xz",
+      "bytes": 42148,
+      "sha256": "ba70ef611e6ff4cbe49671005011e6306627cbc07c4995eeddb1d266ccf216ed"
+    },
+    {
+      "path": "final-pairs-v3-completed.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "9954b73488a24c9b8f5c080066602e9062889aff5771c774e66bd7d158c198a5"
+    },
+    {
+      "path": "final-pairs-v3-completed.tar.xz.part01",
+      "bytes": 453404,
+      "sha256": "f920881d29a149d3ef460503b53bb014b8881b0c1ea1b9685ed0ef4e959c2ecf"
+    },
+    {
+      "path": "final-pairs-v3-download-manifest.json.xz",
+      "bytes": 35932,
+      "sha256": "8f6cfed046a0bb5d966601eac7a880ca381dc18cd890be64d59189d58aae6aa9"
+    },
+    {
+      "path": "precompute-failures-v1.json",
+      "bytes": 2611,
+      "sha256": "836ce80e826192066621989f6635ca128a592f3c2c1fb436f0ebd6e3bafaa09f"
+    },
+    {
+      "path": "precompute-failures-v1.tar.xz",
+      "bytes": 26560,
+      "sha256": "a95df8789c09adf7ad0f0f3aeffd6feafc1f6349f771b0a5311d7cbef64e60b8"
+    },
+    {
+      "path": "readers/replay-final-pairs-public-v1.py",
+      "bytes": 25764,
+      "sha256": "387b4ba94de8debf748f4c8a9e4af6012cbd705b6a19fdd79477754283960d77"
+    }
+  ],
+  "audit": {
+    "stored": "actual-result-audit.json.xz",
+    "decoded_bytes": 262542,
+    "decoded_sha256": "fc5d47cc289c0f52c56d163f4b0d51cd52293e9efddd91f39aa4916b31932637"
+  }
+}

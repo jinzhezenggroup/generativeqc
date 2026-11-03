@@ -181,7 +181,40 @@ def program(descriptor: Any) -> tuple:
     )
 
 
-def test_entire_catalog_against_independent_compiler_programs(library: Any) -> None:
+@pytest.mark.parametrize(
+    "exhaustive",
+    [False, pytest.param(True, marks=pytest.mark.ci_nightly)],
+    ids=["representative", "complete"],
+)
+def test_entire_catalog_against_independent_compiler_programs(
+    library: Any, exhaustive: bool
+) -> None:
+    """Keep every program comparison nightly and every scientific family routine."""
+    catalog = rows()
+    if not exhaustive:
+        names = {
+            f"{method}-{spin}"
+            for method in (
+                "lda_xc_pw",
+                "pbe",
+                "r2scan",
+                "pbe0",
+                "b3lyp",
+                "wb97m-v",
+                "pbe-d3(bj)",
+                "m06-2x",
+                "pbe50",
+                "cam-b3lyp",
+            )
+            for spin in ("rks", "uks")
+        }
+        names.update(
+            f"{prefix}{functional}"
+            for prefix in ("libxc:", "libxc-uks:")
+            for functional in ("lda_xc_pw", "gga_x_pbe", "mgga_x_r2scan")
+        )
+        catalog = [row for row in catalog if row.name in names]
+        assert {row.name for row in catalog} == names
     query = library.generativeqc_ks_catalog_plan_v1
     query.argtypes = [
         ctypes.c_char_p,
@@ -194,7 +227,7 @@ def test_entire_catalog_against_independent_compiler_programs(library: Any) -> N
     ]
     query.restype = ctypes.c_int
     qualified = 0
-    for row in rows():
+    for row in catalog:
         for backend, eligible in (
             (_native.BACKEND_CPU_REFERENCE, row.cpu),
             (_native.BACKEND_CUDA, row.cuda),

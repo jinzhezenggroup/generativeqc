@@ -351,7 +351,7 @@ class ProseWorkflowTests(unittest.TestCase):
                 ("", ""),
             ):
                 context = {
-                    "github.event_name": "pull_request",
+                    "github.event_name": "schedule",
                     "cancelled()": False,
                     "needs.cpu.result": "success",
                     "needs.python.result": "success",
@@ -393,7 +393,9 @@ class ProseWorkflowTests(unittest.TestCase):
                                 selected(upload, {**specific, "cancelled()": True})
                             )
 
-    def test_coverage_job_keeps_existing_event_and_result_admission(self) -> None:
+    def test_coverage_job_requires_qualification_event_and_successful_producers(
+        self,
+    ) -> None:
         admission = condition(job("upload-coverage"), indent=4)
         for event in (
             "pull_request",
@@ -412,7 +414,7 @@ class ProseWorkflowTests(unittest.TestCase):
                             "needs.python.result": python_result,
                         }
                         expected = (
-                            event not in {"merge_group", "push"}
+                            event in {"schedule", "workflow_dispatch"}
                             and cpu_result == python_result == "success"
                             and not cancelled
                         )
