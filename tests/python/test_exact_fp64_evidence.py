@@ -1,8 +1,10 @@
 """Exercise exact numerical/text recovery and fail-closed evidence decoding."""
 
 import hashlib
+import importlib.util
 import json
 import lzma
+import shutil
 import struct
 from pathlib import Path
 
@@ -168,3 +170,29 @@ def test_explicit_historical_streams_retain_bundle_authentication(
     original = lzma.compress(b"changed historical bytes")
     with pytest.raises(ValueError, match="receipts.json.xz"):
         load(tmp_path, historical_manifest=snapshot)
+
+
+def test_complete_a100_packet_replays_outside_repository(tmp_path: Path) -> None:
+    """Copied complete packets authenticate without treating temp paths as Git keys."""
+    from tools.restore_retained_evidence import read_evidence_bytes
+
+    root = Path(__file__).resolve().parents[2]
+    family = root / "benchmarks/results/a100-native-stages-20261102"
+    spec = importlib.util.spec_from_file_location(
+        "a100_evidence_report", family / "report.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    expected = module.report(family)
+    copied = tmp_path / "complete-packet"
+    shutil.copytree(family, copied)
+    for source in family.glob("*/sha256.txt"):
+        part = source.parent
+        snapshot = part / "historical-snapshot.json"
+        if snapshot.exists():
+            recovered = read_evidence_bytes(
+                part / "receipts.json.xz", manifest=snapshot
+            )
+            (copied / part.name / "receipts.json.xz").write_bytes(recovered)
+    assert module.report(copied) == expected

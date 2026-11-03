@@ -58,6 +58,9 @@ def test_cleanup_is_hosted_only_and_never_targets_compiler_caches(
     )
     if reclaim:
         assert record.read_text().splitlines() == [
+            "timeout",
+            "--kill-after=5s",
+            "120s",
             "rm",
             "-rf",
             "--",
@@ -92,3 +95,77 @@ def test_cli_cleanup_is_shared_by_package_qualification_and_release() -> None:
         )
     assert "bash tools/ci_cuda_disk_space.sh" in body
     assert section.index(STEP) < section.index("Add NVIDIA CUDA repository")
+
+
+@pytest.mark.parametrize(
+    ("available", "probe_status", "cleanup_status", "expected_status", "skip"),
+    [
+        (90 << 30, 0, 0, 0, True),
+        (64 << 30, 0, 0, 0, True),
+        ((64 << 30) - 1, 0, 0, 0, False),
+        (32 << 30, 0, 124, 0, False),
+        (32 << 30, 0, 137, 0, False),
+        (32 << 30, 0, 1, 1, False),
+        ("unavailable", 0, 0, 0, False),
+        ("unavailable", 1, 0, 0, False),
+        (90 << 30, 1, 0, 0, False),
+    ],
+)
+def test_cleanup_skips_spacious_hosts_and_bounds_optional_deletion(
+    tmp_path: Path,
+    available: int | str,
+    probe_status: int,
+    cleanup_status: int,
+    expected_status: int,
+    skip: bool,
+) -> None:
+    """Exercise real shell decisions while privileged deletion remains a fake command."""
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    record = tmp_path / "timeout-arguments"
+    for name, body in (
+        (
+            "df",
+            (
+                'printf "Available\\n%s\\n" "$DISK_AVAILABLE_BYTES"; '
+                'if [ "$1" = "-B1" ]; then exit "$DISK_PROBE_STATUS"; fi'
+            ),
+        ),
+        (
+            "sudo",
+            'printf "%s\\n" "$@" > "$DISK_TIMEOUT_RECORD"; exit "$DISK_TIMEOUT_STATUS"',
+        ),
+    ):
+        executable = commands / name
+        executable.write_text("#!/bin/sh\n" + body + "\n")
+        executable.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(SCRIPT)],
+        env={
+            **os.environ,
+            "PATH": str(commands) + os.pathsep + os.environ["PATH"],
+            "GITHUB_ACTIONS": "true",
+            "RUNNER_ENVIRONMENT": "github-hosted",
+            "GITHUB_WORKSPACE": str(tmp_path),
+            "DISK_AVAILABLE_BYTES": str(available),
+            "DISK_PROBE_STATUS": str(probe_status),
+            "DISK_TIMEOUT_RECORD": str(record),
+            "DISK_TIMEOUT_STATUS": str(cleanup_status),
+        },
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == expected_status, result.stderr
+    if skip:
+        assert not record.exists()
+        assert "Skipping optional toolchain cleanup" in result.stdout
+    else:
+        assert record.read_text().splitlines()[:3] == [
+            "timeout",
+            "--kill-after=5s",
+            "120s",
+        ]
+        if cleanup_status in (124, 137):
+            assert "::warning::" in result.stdout
