@@ -133,6 +133,22 @@ def source_identity(source: Path) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+def _compiler_inventory(package: Path) -> dict[str, str]:
+    """Hash all compiler namespaces, excluding the wheel's vendored asset tree.
+
+    A fixed family list goes stale when a new compiler owner is introduced.
+    Assets are separately owned native/provenance inputs, not imported compiler
+    modules, and exist under this package only in an installed wheel.
+    """
+    return {
+        "python/generativeqc_compiler/"
+        + path.relative_to(package).as_posix(): file_hash(path)
+        for pattern in ("*.py", "*.json")
+        for path in package.rglob(pattern)
+        if path.relative_to(package).parts[0] != "assets"
+    }
+
+
 def read_xyz(path: Path, *, units: typing.Any = "angstrom") -> list:
     """Read one ordinary XYZ geometry and convert coordinates to public-API Bohr."""
     lines = path.read_text().splitlines()
@@ -357,6 +373,7 @@ def _worker(
     *,
     generic: typing.Any = False,
     profile: typing.Any = False,
+    reference: bool = False,
     timeout: typing.Any = 600,
 ) -> dict:
     env = {
@@ -385,6 +402,8 @@ def _worker(
     ]
     if profile:
         command.append("--profile")
+    if reference:
+        command.append("--reference")
     run = subprocess.run(
         command, capture_output=True, text=True, env=env, timeout=timeout, check=False
     )
@@ -501,17 +520,13 @@ def run(args: typing.Any) -> dict:
     sys.path.insert(0, str(source / "python"))
     # Fail early with an actionable missing-dependency message before compiling.
     import pyscf
-    from generativeqc_compiler.common.paths import source_hashes
+    from generativeqc_compiler.common.paths import PACKAGE as COMPILER_PACKAGE
 
     # A wheel is a valid tuning frontend for a byte-identical checkout. Check
     # the complete loaded compiler inventory: changing sys.path cannot replace
     # an already imported parent package, and loading both would split IR types.
-    loaded_sources = source_hashes("common", "integral", "tensor", "xc", "dft")
-    checkout_sources = {
-        path.relative_to(source).as_posix(): file_hash(path)
-        for pattern in ("*.py", "*.json")
-        for path in (source / "python/generativeqc_compiler").rglob(pattern)
-    }
+    loaded_sources = _compiler_inventory(COMPILER_PACKAGE)
+    checkout_sources = _compiler_inventory(source / "python/generativeqc_compiler")
     if loaded_sources != checkout_sources:
         raise ValueError(
             "loaded compiler differs from --source-dir; install the matching checkout"
@@ -564,6 +579,18 @@ def run(args: typing.Any) -> dict:
         ptxas_version=tools["ptxas"],
         generator_abi=int(abi_profile["generator_abi"]),
     )
+    if getattr(args, "component", None) in ("jk", "df"):
+        from .execution_tune import run as run_execution
+
+        return run_execution(
+            args, base_library=base_library, probe=probe, tools=tools, target=target
+        )
+    if args.method not in ("rhf", "uhf"):
+        from ._dft_autotune import run_dft
+
+        return run_dft(
+            args, base_library=base_library, probe=probe, tools=tools, target=target
+        )
     workload = {
         "atoms": read_xyz(args.input, units=args.units),
         "basis": args.basis,

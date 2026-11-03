@@ -10,13 +10,16 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from benchmarks import readme_defaults_report as reader
+from tools.restore_retained_evidence import read_evidence_bytes
 from benchmarks.readme_defaults_qualification import qualify
 
 ROOT = Path(__file__).resolve().parent
 
 
 def unpack(path: Path) -> dict:
-    return json.loads(lzma.decompress(path.read_bytes()))
+    snapshot = path.parent / "historical-snapshot.json"
+    raw = read_evidence_bytes(path, manifest=snapshot) if snapshot.is_file() else path.read_bytes()
+    return json.loads(lzma.decompress(raw))
 
 
 def digest(raw: str) -> str:
