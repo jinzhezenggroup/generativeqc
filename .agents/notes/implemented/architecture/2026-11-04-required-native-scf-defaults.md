@@ -82,3 +82,12 @@ field: only `source_identity` and `native_source_identity` change. Preserve the
 campaign bytes, measured revision/identity, execution identity, all capability
 stages, blockers, empty admitted endpoint sets and `stale: true`. No regression
 acknowledgement or new scientific qualification is appropriate for this refresh.
+
+The native build identity includes frontend policy, not just C++/compiler bytes.
+The original paired campaign's library identity did not match its finalized
+candidate's full inventory, despite unchanged native/compiler source. Preserve
+those original receipts and correct their qualification boundary. The separate
+`integration.json.gz` campaign uses committed source `d72546b0d`, verifies the
+actual library query against the full live inventory before timing, and retains
+400 publications with the unchanged 1.05 gates. It supersedes the initial
+exact-source claim rather than rewriting its provenance.
