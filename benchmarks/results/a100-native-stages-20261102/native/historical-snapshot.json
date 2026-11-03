@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "8c6c6208bb1d68c96e62ed2d15ee561fcc784081",
+  "file_count": 1,
+  "total_bytes": 178504,
+  "purpose": "Exact original receipts recovered offline from already-merged Git history. All independent observables, source identities, failures, work counts and acceptance gates remain unchanged; no external publication or new measurement.",
+  "files": [
+    {
+      "path": "benchmarks/results/a100-native-stages-20261102/native/receipts.json.xz",
+      "bytes": 178504,
+      "sha256": "f7f846981311ffdf8f05ccef2925a796482427e2a2190db556075246253623c1",
+      "git_blob_sha1": "c512b02eb66f0ad905db101df6800c572f2e959c",
+      "git_mode": "100644"
+    }
+  ]
+}

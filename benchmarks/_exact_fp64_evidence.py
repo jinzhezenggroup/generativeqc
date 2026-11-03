@@ -22,7 +22,9 @@ def require(condition: bool, detail: str) -> None:
         raise ValueError(detail)
 
 
-def load(folder: Path) -> tuple[dict, dict[str, str]]:
+def load(
+    folder: Path, *, historical_manifest: Path | None = None
+) -> tuple[dict, dict[str, str]]:
     """Reconstruct exact receipts and authenticate their original text bytes.
 
     V2 omits redundant cursor integers from the JSON stream. Traversal order,
@@ -31,7 +33,17 @@ def load(folder: Path) -> tuple[dict, dict[str, str]]:
     earlier authenticated texts, so historical containers with embedded JSON
     strings do not defeat FP64 compression. References cannot form cycles or
     read files outside the bundle. No representation rounds numerical evidence.
+    An explicit historical manifest permits authenticated offline Git recovery;
+    ordinary readers neither import that mechanism nor search history implicitly.
     """
+
+    def read(path: Path) -> bytes:
+        if historical_manifest is None:
+            return path.read_bytes()
+        from tools.restore_retained_evidence import read_evidence_bytes
+
+        return read_evidence_bytes(path, manifest=historical_manifest)
+
     authenticated = set()
     for line in (folder / "sha256.txt").read_text().splitlines():
         digest, name = line.split()
@@ -39,12 +51,10 @@ def load(folder: Path) -> tuple[dict, dict[str, str]]:
             name in ("receipts.json.xz", "fp64.xz") and name not in authenticated,
             "compressed stream manifest",
         )
-        require(
-            hashlib.sha256((folder / name).read_bytes()).hexdigest() == digest, name
-        )
+        require(hashlib.sha256(read(folder / name)).hexdigest() == digest, name)
         authenticated.add(name)
     require(authenticated == {"receipts.json.xz", "fp64.xz"}, "missing stream digest")
-    bundle = json.loads(lzma.decompress((folder / "receipts.json.xz").read_bytes()))
+    bundle = json.loads(lzma.decompress(read(folder / "receipts.json.xz")))
     require(
         bundle["schema"]
         in (
@@ -56,7 +66,7 @@ def load(folder: Path) -> tuple[dict, dict[str, str]]:
     )
     nested = bundle["schema"] == "generativeqc.exact-fp64-evidence.v3"
     sequential = bundle["schema"] != "generativeqc.bounded-projection-evidence.v1"
-    planes = lzma.decompress((folder / "fp64.xz").read_bytes())
+    planes = lzma.decompress(read(folder / "fp64.xz"))
     count = bundle["float_count"]
     require(len(planes) == 8 * count, "FP64 storage size")
     last: dict[tuple, int] = {}

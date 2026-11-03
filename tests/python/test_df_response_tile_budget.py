@@ -86,6 +86,21 @@ int main() {
         assert(plan.potentials+terms*a == plan.elements);
         if (compact && spectral) assert(a*a <= plan.metric_adjoint);
       }
+  using generativeqc::scf::df_spectral_occupied_workspace;
+  for (const auto bad : {std::size_t{0}, maximum}) {
+    assert(!df_spectral_occupied_workspace(bad,11,2,3));
+    assert(!df_spectral_occupied_workspace(4,bad,2,3));
+    assert(!df_spectral_occupied_workspace(4,11,bad,3));
+  }
+  assert(!df_spectral_occupied_workspace(4,11,5,3));
+  assert(!df_spectral_occupied_workspace(4,11,2,12));
+  // The actual A100 LR response ceiling must cover the declared compact
+  // tensors, density upload and a 64-Q AO output panel. Dense spectral Z
+  // alone exceeds that ceiling, independent of how its panels are tiled.
+  const auto projected = df_spectral_occupied_workspace(768,3616,160,64);
+  assert(projected && 8*(projected+768UL*768) < 2549049300UL);
+  assert(8*3616UL*768*768 > 2549049300UL);
+  assert(df_spectral_occupied_workspace(768,3616,160,65)-projected == 768UL*768);
   const auto general = df_occupied_response_workspace(768,3616,1);
   const auto fitted = df_occupied_response_workspace(768,3616,1,true,false);
   const auto spectral = df_occupied_response_workspace(768,3616,1,true,true);

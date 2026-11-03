@@ -81,7 +81,7 @@ static __device__ __constant__ const signed char kDfMdAuxiliarySigns[{len(signs)
 """
     return (
         _PREAMBLE
-        + emit_md_radial_function(11, "df_md_radial")
+        + emit_md_radial_function(11, "df_md_radial", range_separated=True)
         + tables
         + _CONTRACTIONS
         + "\nnamespace generativeqc::scf::cuda_execution {\n"

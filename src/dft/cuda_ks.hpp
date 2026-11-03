@@ -124,6 +124,22 @@ std::size_t cuda_ks_state_bytes(std::size_t nao, unsigned spins, unsigned diis_h
                                 bool exact_exchange = false, bool range_correction = false,
                                 bool incremental_direct_jk = false);
 
+/** Exact restricted D=2CC^T factor owned by the KS final-state arena. Unlike
+ * fitted U, this lease survives another radial provider's scratch writes. It
+ * expires with the method token and must be ordered on its producer stream. */
+struct CudaKsResidentOccupiedFactorBinding {
+  int device_id{-1};
+  const double* coefficients{};
+  std::size_t nbf{}, rank{};
+  void* stream{};
+  std::uint64_t owner{}, solve_epoch{}, generation{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && coefficients && nbf && rank && stream && owner && solve_epoch &&
+           generation;
+  }
+};
+
 /** Borrowed exact occupied factor and fitted projection for a successful
  * restricted density-fitted hybrid final state. Both allocations stay owned by
  * the KS/provider pair and are ordered by the returned stream. A subsequent
@@ -313,6 +329,11 @@ class CudaKsPlan {
   generativeqc_status resident_final_fitted_projection(
       const CudaKsFinalStateToken& expected, CudaKsResidentFittedProjectionBinding& binding,
       std::string& detail) const;
+  /** Borrow the exact density-generating C independently of mutable fitted U.
+   * No canonical re-diagonalization, allocation or transfer is performed. */
+  generativeqc_status resident_final_occupied_factor(const CudaKsFinalStateToken& expected,
+                                                     CudaKsResidentOccupiedFactorBinding& binding,
+                                                     std::string& detail) const;
   /** Borrow total stationary D/W already staged by resident preparation or a
    * successful weighted final-state read. This performs no CUDA launch,
    * transfer, or synchronization. */

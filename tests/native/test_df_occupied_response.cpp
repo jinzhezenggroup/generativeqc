@@ -7,12 +7,14 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 #include "scf/cuda/df_jk_internal.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_scf_state.hpp"
+#include "scf/cuda/df_source_domain.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/cuda_df_gradient.hpp"
@@ -767,6 +769,105 @@ void streamed_general_response() {
   unsetenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA");
 }
 
+/** Truncated exchange must preserve raw discarded directions across bounded
+ * panels. Independent host integral derivatives check both radial operators,
+ * signed exchange seeds, one-column capacity, ragged tails and warm replay.
+ * Only the declared bridge scratch is available; no retained raw tensor or
+ * SCF projection can hide an alias between the packed panel and AO slice.
+ */
+void spectral_source_panels() {
+  setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA", "blas", 1);
+  setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "full", 1);
+  unsetenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT");
+  generativeqc::core::System orbital;
+  orbital.atoms = {{1, {0, 0, -.7}}, {1, {0, 0, .7}}};
+  orbital.shells = {{0, 0, {{1, 1}}}, {0, 0, {{.3, 1}}}, {1, 0, {{1, 1}}}, {1, 0, {{.3, 1}}}};
+  auto auxiliary = orbital;
+  auxiliary.shells.push_back({0, 0, {{3, 1}}});
+  std::string detail;
+  require(generativeqc::molecule::validate_and_normalize(orbital, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  require(generativeqc::molecule::validate_and_normalize(auxiliary, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  constexpr double cutoff = .2;
+  for (const auto omega : {0.0, .3}) {
+    const auto oracle =
+        generativeqc::integrals::build_density_fitting_integrals(orbital, auxiliary, true, omega);
+    cuda_execution::CudaDfSourcePolicy policy;
+    require(cuda_execution::resolve_cuda_df_source_policy(policy, detail), detail);
+    policy.range_omega = omega;
+    CudaDensityFittingIntegralSource* source{};
+    std::vector<double> metric;
+    std::size_t n{}, a{};
+    require(create_cuda_density_fitting_integral_source(0, {orbital}, {auxiliary}, &source, metric,
+                                                        n, a, detail,
+                                                        &policy) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    CudaDensityFittingJkPlan* raw{};
+    std::vector<CudaDensityFittingMetricDiagnostic> diagnostics;
+    require(create_cuda_density_fitting_jk_plan_from_source(0, &source, 1, n, a, metric, cutoff, 1,
+                                                            n * n, &raw, diagnostics, detail,
+                                                            false) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)> plan(
+        raw, destroy_cuda_density_fitting_jk_plan);
+    require(!plan->metric_full_rank[0], "spectral panel fixture must truncate metric directions");
+    const CudaDfMetricView metric_view{plan->inverse_square_roots,
+                                       plan->metric_eigenvectors,
+                                       plan->metric_eigenvalues,
+                                       cutoff,
+                                       false,
+                                       plan->factor_basis_identity};
+    constexpr std::size_t rank = 2;
+    std::vector<double> coefficients(n * rank), density(n * n);
+    for (std::size_t r = 0; r < rank; ++r)
+      for (std::size_t i = 0; i < n; ++i) coefficients[r * n + i] = .1 * (i + 1) - .17 * r;
+    for (std::size_t i = 0; i < n; ++i)
+      for (std::size_t j = 0; j < n; ++j)
+        for (std::size_t r = 0; r < rank; ++r)
+          density[i * n + j] += 2 * coefficients[r * n + i] * coefficients[r * n + j];
+    check(cudaMemcpyAsync(plan->exchange_density_column_major, coefficients.data(),
+                          coefficients.size() * sizeof(double), cudaMemcpyHostToDevice,
+                          plan->stream));
+    CudaDfOccupiedResponseView factors;
+    factors.nbf = n;
+    factors.naux = a;
+    factors.owner_identity = plan->factor_basis_identity;
+    factors.factors[0] = {plan->exchange_density_column_major, rank, 2.0};
+    for (const auto coefficient : {.25, -.13}) {
+      const std::vector<DensityFittingDensityResponse> terms{{density, 0, coefficient}};
+      const auto reference =
+          build_density_fitting_rhf_gradient(oracle, density, cutoff, {0, -2 * coefficient})
+              .derivative;
+      for (const auto execution : {"generic", "shell"}) {
+        setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", execution, 1);
+        for (const std::size_t tile : {1U, 2U, 4U, 5U})
+          for (unsigned replay = 0; replay < 2; ++replay) {
+            DfGradientResources resources;
+            std::vector<double> derivative;
+            constexpr std::size_t allowance = 4U << 20;
+            require(execute_cuda_df_hf_gradient(
+                        0, reinterpret_cast<void*>(plan->stream), plan->integral_source, 0, orbital,
+                        auxiliary, {}, {}, {}, terms, cutoff, 0, allowance, tile, derivative,
+                        detail, &resources, &metric_view, reinterpret_cast<void*>(plan->blas),
+                        nullptr, nullptr, nullptr, &factors) == GENERATIVEQC_STATUS_SUCCESS,
+                    "spectral panel bridge: " + detail);
+            require(resources.device_response && resources.device_bytes <= allowance &&
+                        resources.auxiliary_weight_tile <= tile,
+                    "spectral response exceeded its device or panel budget");
+            require(derivative.size() == reference.size(), "spectral force shape");
+            for (std::size_t i = 0; i < derivative.size(); ++i)
+              require(
+                  std::isfinite(derivative[i]) && std::abs(derivative[i] - reference[i]) < 8e-10,
+                  "spectral panel force differs from independent raw-integral oracle");
+          }
+      }
+    }
+  }
+}
+
 /** Source-first K uses the same physical integrals for both coefficient
  * layouts and captured replays. Four/five AO rows and rank one/two exercise
  * two, three and four blocks, including a shorter last block. This detects
@@ -880,8 +981,12 @@ void streamed_projected_exchange(bool ragged) {
   unsetenv("GENERATIVEQC_DF_RESIDENT_EXCHANGE");
 }
 }  // namespace
-int main() {
+int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string_view(argv[1]) == "--spectral-panels") {
+      spectral_source_panels();
+      return 0;
+    }
     malformed_automatic_token();
     lifecycle(false);
     lifecycle(true);
@@ -904,6 +1009,7 @@ int main() {
     }
     for (bool ragged : {false, true}) streamed_projected_exchange(ragged);
     streamed_general_response();
+    spectral_source_panels();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;
