@@ -207,7 +207,4 @@ def test_master_cache_saves_remain_read_only_on_merge_groups_and_precede_gate() 
     assert "\n  cumetal-benchmark:" not in workflow
     # Cache snapshots still cannot publish to merge-group refs. Stale PR
     # revisions can now be cancelled while queue/manual jobs run to completion.
-    assert (
-        "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
-        in workflow
-    )
+    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in workflow
