@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import numpy as np
 import pytest
@@ -17,6 +22,8 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize("displacement", (0.0, 0.02))
 def test_default_and_explicit_strict_complete_physical_endpoints(
     displacement: float,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Use an independent same-grid solve; never lend its density to native SCF."""
     import cupy as cp
@@ -47,6 +54,8 @@ def test_default_and_explicit_strict_complete_physical_endpoints(
     }
 
     for controls in ({}, {"energy_tolerance": 1e-10, "density_tolerance": 1e-8}):
+        trace = tmp_path / ("strict.jsonl" if controls else "default.jsonl")
+        monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(trace))
         calculator = Calculator(
             method="wb97m-v-rks",
             device="cuda",
@@ -74,3 +83,12 @@ def test_default_and_explicit_strict_complete_physical_endpoints(
         finally:
             owner.close()
             calculator.clear_cache()
+        # Scientific parity alone can pass through the strict fallback. Prove
+        # the qualified default actually uses its physical MO-gradient gate.
+        rows = [json.loads(line) for line in trace.read_text().splitlines()]
+        checks = sum(
+            row.get("value", 0)
+            for row in rows
+            if row.get("key") == "physical_orbital_gradient_checks"
+        )
+        assert checks == 0 if controls else checks > 0

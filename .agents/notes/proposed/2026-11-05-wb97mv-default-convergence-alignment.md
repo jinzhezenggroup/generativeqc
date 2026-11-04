@@ -1,6 +1,6 @@
 # Decision: align native WB97M-V defaults toward stock GPU4PySCF
 
-Status: proposed; exact-source device qualification pending
+Status: proposed; small-device science/admission pass, large endpoint pending
 Date: 2026-11-05
 
 ## Problem
@@ -65,6 +65,46 @@ retain their own bounded policies.
   `generativeqc_precision_execution_run_v1`: 24 pass/18 fixture errors. The native
   default-query adapter and predicate probe passed; complete current-runtime
   tests must be rerun rather than treating this installation mismatch as a pass.
+
+### Initial complete-image qualification and admission repair
+
+The exact O3 SM80/SM120 build completed with source identity
+`da3b9fe66779ceb401d68846dd63b81f64629d9336ec0e453a736a24390331e0`
+and core ELF SHA256
+`9b594b756ee495567aef1890bb5923a61848d92d1cfff0fc445b11a655ee053a`.
+Actual changed-unit compilation was retained after fresh-mtime overlays, not
+merely an identity-bearing relink. Slurm 15925 stopped at a host fixture's
+missing `ccache`; selecting its supported verified `sccache` launcher in the job
+environment corrected that prerequisite without changing unrelated tests.
+Slurm 15926 passed all 43 current-runtime host tests and both small water E/F,
+own-density warm and displaced-geometry tests. However, its separate admission
+audit failed: no physical orbital-gradient checks ran. The job stopped before
+the larger endpoint; these scientific passes do not qualify the changed policy.
+
+The cause was not small-matrix admission: 24 AOs exceeds the existing 17-AO
+library crossover. The catalog stores SR/LR exchange, while resident Focks use
+full/LR-correction operators. Comparing their operator kinds and coefficients
+directly rejected the canonical model. Reuse the production RSH lowering to
+authenticate `a*SR+b*LR = a*full+(b-a)*LR`; retain all model/resource safeguards.
+The real-GPU scientific tests now separately require positive default-path
+admission and zero explicit-strict admission, so fallback parity cannot hide
+this error again.
+
+The incremental O3 rebuild completed with a retained actual changed-unit compile.
+Slurm 15928 authenticated repaired native identity
+`be94892b51bb82b61b10f16d88a8fec0bde87e3ab0fba1c2385cf20e5d7cc44d`
+and core ELF SHA256
+`6bfa709dbc723b520194956e3b80794add5b525c5e4f74c25193fedfcde12781`.
+All 43 host tests and both real-5090 small complete E/F tests pass. Each geometry
+records positive default-path MO checks and zero explicit-strict checks, with
+the independent tight-reference, warm and displacement gates unchanged.
+The single bounded clean water96 default/strict/stock-reference population is
+in progress; no endpoint win or large-system default qualification is inferred.
+
+CI also exposed the native Libxc catalog's checked-source snapshot changing.
+Regeneration with the existing checker changes only current input identities:
+the historical measurement remains stale, every capability summary is unchanged,
+and no numerical qualification or capability was invented to clear CI.
 
 ## References
 

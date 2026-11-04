@@ -65,6 +65,7 @@
 #include "scf/diis_work.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/initial_guess/density.hpp"
+#include "scf/mean_field.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/eigen_frame.hpp"
 #include "scf/solver/proposal_control.hpp"
@@ -1852,15 +1853,26 @@ struct CudaKsPlan::Impl : KsStateStorage {
         standard_nonlocal_model = standard_nonlocal_model &&
                                   (term.approximation == scf::FockApproximation::Exact ||
                                    term.approximation == scf::FockApproximation::DensityFitted);
-      for (const auto& term : terms) {
-        const auto& actual = term.operator_kind == GENERATIVEQC_KS_EXCHANGE_FULL_RANGE
-                                 ? strategy.spec.exchange
-                                 : range_correction->spec.exchange;
-        standard_nonlocal_model = standard_nonlocal_model &&
-                                  (term.operator_kind == GENERATIVEQC_KS_EXCHANGE_FULL_RANGE ||
-                                   term.operator_kind == GENERATIVEQC_KS_EXCHANGE_LONG_RANGE) &&
-                                  actual.coefficient == term.fock_coefficient &&
-                                  actual.omega == term.omega;
+      const auto short_range = std::find_if(terms.begin(), terms.end(), [](const auto& term) {
+        return term.operator_kind == GENERATIVEQC_KS_EXCHANGE_SHORT_RANGE;
+      });
+      const auto long_range = std::find_if(terms.begin(), terms.end(), [](const auto& term) {
+        return term.operator_kind == GENERATIVEQC_KS_EXCHANGE_LONG_RANGE;
+      });
+      if (short_range == terms.end() || long_range == terms.end()) {
+        standard_nonlocal_model = false;
+      } else {
+        // The catalog specifies a*SR+b*LR, while the resident owner executes
+        // a*full+(b-a)*LR. Reuse production lowering rather than comparing
+        // coefficients belonging to different operator representations.
+        const auto correction = scf::make_rsh_correction_fock_spec(
+            scf::FockSpin::Restricted, short_range->coefficient, long_range->coefficient,
+            short_range->omega);
+        standard_nonlocal_model =
+            standard_nonlocal_model && short_range->omega == long_range->omega &&
+            strategy.spec.exchange.coefficient == short_range->fock_coefficient &&
+            range_correction->spec.exchange.coefficient == correction.exchange.coefficient &&
+            range_correction->spec.exchange.omega == correction.exchange.omega;
       }
     }
     standard_convergence_model = standard_convergence_model || standard_nonlocal_model;
