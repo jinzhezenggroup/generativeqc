@@ -67,3 +67,10 @@ numerical, lifetime, work/resource and endpoint performance gates. Keep the full
 - `include/generativeqc/precision_admission.h`
 - `manifests/maintenance/python_native_runtime_ownership.json`
 - #2227 / #2972
+
+## Subsequent numerical-owner cutover
+
+The retained Python observable-reduction boundary described here is superseded by
+[one native observable comparison owner](../numerics/2026-11-04-native-observable-comparison.md).
+That follow-up independently qualifies compensated scaled RMS and moves runtime
+norms/allowances, not the remaining qualification, fleet or seed controllers.

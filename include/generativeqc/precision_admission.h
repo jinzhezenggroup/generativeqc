@@ -190,6 +190,59 @@ GENERATIVEQC_API generativeqc_status generativeqc_precision_execution_run_v1(
     generativeqc_precision_execution_callback_v1 callback, void* state,
     generativeqc_precision_execution_receipt_v1* output);
 
+/** Ordered slots/bits for energy absolute, force maximum and force RMS norms. */
+enum {
+  GENERATIVEQC_OBSERVABLE_ENERGY_ABSOLUTE = 1,
+  GENERATIVEQC_OBSERVABLE_FORCE_MAXIMUM = 2,
+  GENERATIVEQC_OBSERVABLE_FORCE_RMS = 4
+};
+
+/** One to three unique requested norms. Allowances are absolute + relative *
+ * reference_norm, with nonnegative finite coefficients and at least one positive
+ * coefficient per selected slot. Unselected coefficients/energies are zero.
+ * Forces, when requested, contain exactly atom_count*3 Cartesian components. */
+typedef struct generativeqc_observable_comparison_context_v1 {
+  uint32_t struct_size, abi_version, requested_mask, reserved;
+  uint64_t atom_count;
+  double energy, reference_energy, absolute[3], relative[3];
+} generativeqc_observable_comparison_context_v1;
+
+/** Unselected slots are zero. met_mask is a subset of measured_mask, with no
+ * implicit tolerance or slack added to the inclusive difference <= allowance. */
+typedef struct generativeqc_observable_comparison_v1 {
+  uint32_t struct_size, abi_version, policy_version, measured_mask, met_mask, reserved;
+  double differences[3], reference_norms[3], allowances[3];
+} generativeqc_observable_comparison_v1;
+
+/** @native-contract generativeqc_observable_comparison_query_v1
+ * @behavior Measure completed energy/force discrepancies and resolve allowances.
+ * Energy uses absolute scalar differences; forces use maximum absolute component
+ * or scaled RMS over all 3N components. RMS uses compensated normalized squares
+ * to avoid overflow and unbounded summation error, not an unscaled sum of squares.
+ * @inputs Nonnull versioned context/output. A nonzero requested_mask selects the
+ * three documented slots. Selected force norms require nonnull force/reference
+ * arrays and positive atom_count; otherwise both pointers and atom_count are zero.
+ * Selected observables and all coefficients are finite FP64. Values must belong
+ * to the same model and declared scope; convergence/identity admission belongs to
+ * their endpoint owner, not this comparison. Arrays may not change during the call.
+ * @outputs Transactionally publish version 1, measured/met masks, differences,
+ * reference norms and absolute-plus-relative allowances. Coefficient multiplication
+ * is rounded before addition. Every failure leaves output unchanged.
+ * @errors INVALID_ARGUMENT for null/mismatched arrays, invalid masks/reserved
+ * fields, invalid/overflowing dimensions, nonfinite values, overflowing differences
+ * or allowances, or invalid coefficients; ABI_MISMATCH for descriptor headers.
+ * @lifetime Borrow inputs/output only during the call. Copy the descriptor and
+ * complete all reads before publication, allowing input/output storage overlap.
+ * @execution Synchronous allocation-free host comparison, at most two passes
+ * over each force array. No context, compiler, device, solve, discovery or implicit
+ * oracle/fallback work. A met receipt is observed agreement, not a certificate
+ * of reference uncertainty, model accuracy, derivative qualification or convergence.
+ * @units Energy is Eh; forces are Eh/bohr; relative coefficients are dimensionless.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_observable_comparison_query_v1(
+    const generativeqc_observable_comparison_context_v1* context, const double* forces,
+    const double* reference_forces, generativeqc_observable_comparison_v1* output);
+
 #ifdef __cplusplus
 }
 #endif

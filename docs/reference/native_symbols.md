@@ -229,6 +229,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_precision_controls_query_v1](#native-c-generativeqc-precision-controls-query-v1)
 - [generativeqc_precision_execution_callback_v1](#native-c-generativeqc-precision-execution-callback-v1)
 - [generativeqc_precision_execution_run_v1](#native-c-generativeqc-precision-execution-run-v1)
+- [generativeqc_observable_comparison_query_v1](#native-c-generativeqc-observable-comparison-query-v1)
 - [generativeqc_scf_defaults_query_v1](#native-c-generativeqc-scf-defaults-query-v1)
 - [generativeqc_batch_query_warm_seed_capacity_v1](#native-c-generativeqc-batch-query-warm-seed-capacity-v1)
 - [generativeqc_batch_capture_warm_seeds_v1](#native-c-generativeqc-batch-capture-warm-seeds-v1)
@@ -6116,6 +6117,45 @@ Python fallback or retry after native protocol refusal is performed here.
 
 **Units.** Event masks and outcomes are dimensionless; numerical allowances and
 measured observable errors retain their separately declared physical units.
+
+(native-c-generativeqc-observable-comparison-query-v1)=
+## generativeqc_observable_comparison_query_v1
+
+Source: [precision_admission.h](../../include/generativeqc/precision_admission.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_observable_comparison_query_v1 ( const generativeqc_observable_comparison_context_v1 * context , const double * forces , const double * reference_forces , generativeqc_observable_comparison_v1 * output ) ;
+```
+
+**Behavior.** Measure completed energy/force discrepancies and resolve allowances.
+Energy uses absolute scalar differences; forces use maximum absolute component
+or scaled RMS over all 3N components. RMS uses compensated normalized squares
+to avoid overflow and unbounded summation error, not an unscaled sum of squares.
+
+**Inputs.** Nonnull versioned context/output. A nonzero requested_mask selects the
+three documented slots. Selected force norms require nonnull force/reference
+arrays and positive atom_count; otherwise both pointers and atom_count are zero.
+Selected observables and all coefficients are finite FP64. Values must belong
+to the same model and declared scope; convergence/identity admission belongs to
+their endpoint owner, not this comparison. Arrays may not change during the call.
+
+**Outputs.** Transactionally publish version 1, measured/met masks, differences,
+reference norms and absolute-plus-relative allowances. Coefficient multiplication
+is rounded before addition. Every failure leaves output unchanged.
+
+**Errors.** INVALID_ARGUMENT for null/mismatched arrays, invalid masks/reserved
+fields, invalid/overflowing dimensions, nonfinite values, overflowing differences
+or allowances, or invalid coefficients; ABI_MISMATCH for descriptor headers.
+
+**Lifetime.** Borrow inputs/output only during the call. Copy the descriptor and
+complete all reads before publication, allowing input/output storage overlap.
+
+**Execution.** Synchronous allocation-free host comparison, at most two passes
+over each force array. No context, compiler, device, solve, discovery or implicit
+oracle/fallback work. A met receipt is observed agreement, not a certificate
+of reference uncertainty, model accuracy, derivative qualification or convergence.
+
+**Units.** Energy is Eh; forces are Eh/bohr; relative coefficients are dimensionless.
 
 (native-c-generativeqc-scf-defaults-query-v1)=
 ## generativeqc_scf_defaults_query_v1

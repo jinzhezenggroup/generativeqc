@@ -48,6 +48,7 @@ def policy_metadata(library: typing.Any, **capabilities: typing.Any) -> SimpleNa
         generativeqc_precision_admission_query_v1=library.generativeqc_precision_admission_query_v1,
         generativeqc_scf_defaults_query_v1=library.generativeqc_scf_defaults_query_v1,
         generativeqc_precision_execution_run_v1=library.generativeqc_precision_execution_run_v1,
+        generativeqc_observable_comparison_query_v1=library.generativeqc_observable_comparison_query_v1,
         **capabilities,
     )
 
@@ -73,6 +74,7 @@ def backend(
         standard_convergence=False,
         missing_admission=False,
         missing_execution=False,
+        missing_observable=False,
     )
 
     class Backend:
@@ -86,6 +88,8 @@ def backend(
                 self._library.generativeqc_precision_admission_query_v1 = None
             if state.missing_execution:
                 self._library.generativeqc_precision_execution_run_v1 = None
+            if state.missing_observable:
+                self._library.generativeqc_observable_comparison_query_v1 = None
             if state.standard_convergence:
                 self._device_name = options.get("device")
                 self._library.generativeqc_standard_scf_convergence_version_v1 = (
@@ -175,6 +179,77 @@ def test_all_profiles_require_native_execution_before_molecular_work(
     ):
         PrecisionCalculator(policy=profile)
     assert backend.calls == []
+
+
+@pytest.mark.parametrize(
+    "profile", ("standard", "fp64", "balanced", "strict", "audit_auto", "fast")
+)
+def test_all_profiles_require_native_observables_before_molecular_work(
+    backend: SimpleNamespace, profile: str
+) -> None:
+    backend.missing_observable = True
+    with pytest.raises(NotImplementedError, match="required observable comparison"):
+        PrecisionCalculator(policy=profile)
+    assert backend.calls == []
+
+
+def test_missing_selected_observable_protocol_does_not_start_a_candidate(
+    backend: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calculator = PrecisionCalculator(policy="balanced")
+    monkeypatch.setattr(
+        calculator._candidate._library,
+        "generativeqc_observable_comparison_query_v1",
+        None,
+    )
+    with pytest.raises(NotImplementedError, match="required observable comparison"):
+        calculator.singlepoint(ATOMS)
+    assert backend.calls == []
+
+
+def test_native_measurements_control_the_observable_rejection(
+    backend: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from generativeqc._observable_comparison import _Comparison, _Context
+
+    backend.outputs = [result(), result(), result()]
+    calculator = PrecisionCalculator(policy="balanced")
+
+    def rejected(
+        context: typing.Any,
+        forces: typing.Any,
+        reference: typing.Any,
+        output: typing.Any,
+    ) -> int:
+        descriptor = ctypes.cast(context, ctypes.POINTER(_Context)).contents
+        result = ctypes.cast(output, ctypes.POINTER(_Comparison)).contents
+        result.policy_version, result.measured_mask, result.met_mask = (
+            1,
+            descriptor.requested_mask,
+            0,
+        )
+        for slot in range(3):
+            if descriptor.requested_mask & (1 << slot):
+                (
+                    result.differences[slot],
+                    result.reference_norms[slot],
+                    result.allowances[slot],
+                ) = 1, 0, 0.5
+        return 0
+
+    monkeypatch.setattr(
+        calculator._candidate._library,
+        "generativeqc_observable_comparison_query_v1",
+        rejected,
+    )
+    with pytest.raises(PrecisionBudgetError) as failure:
+        calculator.singlepoint(ATOMS)
+    assert failure.value.validation.status == "observed_unmet"
+    assert failure.value.validation.solve_count == 3
+    assert all(
+        error.difference == 1 and error.allowance == 0.5
+        for error in failure.value.validation.errors
+    )
 
 
 def test_selected_execution_refusal_does_not_start_a_portable_candidate(

@@ -16,6 +16,7 @@ from numbers import Real
 
 import numpy as np
 
+from ._observable_comparison import measure_observables
 from .elements import checked_integer
 from .profiles import canonical_hash
 
@@ -475,55 +476,6 @@ class AccuracyAssessment:
         return result
 
 
-def _observable_array(name: str, supplied: typing.Any) -> np.ndarray:
-    """Validate public scalar energy or Cartesian forces before measuring error."""
-    raw = np.asarray(supplied)
-    if raw.dtype.kind not in "fiu" or not np.isfinite(raw).all():
-        raise ValueError("observables must be finite real numeric values")
-    with np.errstate(over="ignore", invalid="ignore"):
-        value = np.asarray(raw, dtype=np.float64)
-    if not np.isfinite(value).all():
-        raise ValueError("observables exceed finite FP64 representation")
-    if name == "energy" and value.shape != ():
-        raise ValueError("energy must be a scalar")
-    if name == "forces" and (value.ndim != 2 or value.shape[1] != 3 or not len(value)):
-        raise ValueError("forces must have shape (Natom, 3)")
-    return value
-
-
-def _measure_observables(
-    target: TargetAccuracy, values: dict, reference_values: dict
-) -> tuple[tuple[ObservableTarget, float, float], ...]:
-    """Share finite-value, shape and scaled-RMS rules across endpoint audits.
-
-    This measures norms only. Model/scope admission and interpreting the strict
-    reference's unresolved uncertainty remain the caller's responsibility.
-    """
-    measurements = []
-    for requirement in target.observables:
-        name = requirement.observable
-        value = _observable_array(name, values[name])
-        reference = _observable_array(name, reference_values[name])
-        if value.shape != reference.shape:
-            raise ValueError("observable dimensions differ")
-
-        def norm(
-            array: typing.Any, norm_name: typing.Any = requirement.norm
-        ) -> typing.Any:
-            # Scaling avoids overflow when squaring large finite values.
-            maximum = float(np.max(np.abs(array)))
-            if not math.isfinite(maximum):
-                raise ValueError("observable difference overflowed")
-            if norm_name == "rms" and maximum:
-                return maximum * float(np.sqrt(np.mean((array / maximum) ** 2)))
-            return maximum
-
-        with np.errstate(over="ignore", invalid="ignore"):
-            difference = value - reference
-        measurements.append((requirement, norm(difference), norm(reference)))
-    return tuple(measurements)
-
-
 def compare_observables(
     model: ResolvedModel,
     evaluated_model: ResolvedModel,
@@ -558,7 +510,7 @@ def compare_observables(
             scope,
             provenance,
         )
-        for requirement, difference_norm, reference_norm in _measure_observables(
+        for requirement, difference_norm, reference_norm, allowance in measure_observables(
             target, values, reference_values
         )
     )

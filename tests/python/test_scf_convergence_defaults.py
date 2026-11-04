@@ -37,6 +37,9 @@ def library(monkeypatch: pytest.MonkeyPatch, policy_library: Any) -> SimpleNames
         generativeqc_precision_execution_run_v1=(
             policy_library.generativeqc_precision_execution_run_v1
         ),
+        generativeqc_observable_comparison_query_v1=(
+            policy_library.generativeqc_observable_comparison_query_v1
+        ),
     )
     install_registry_stub(native, frozenset({"energy"}))
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: native)

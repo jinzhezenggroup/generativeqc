@@ -1011,7 +1011,22 @@
         {
           "path": "python/generativeqc/precision_policy.py",
           "symbol": "_errors",
-          "classification": "scientific-runtime"
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_observable_comparison.py",
+          "symbol": "measure_observables",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/accuracy.py",
+          "symbol": "compare_observables",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/accuracy.py",
+          "symbol": "AccuracyAssessment",
+          "classification": "wrapper"
         },
         {
           "path": "python/generativeqc/_precision_batch.py",
@@ -1072,6 +1087,7 @@
         "src/scf/system_projection.hpp",
         "src/runtime/precision_admission.hpp",
         "src/runtime/precision_execution.hpp",
+        "src/runtime/observable_comparison.hpp",
         "src/core/correlation_convergence.hpp",
         "src/methods/correlation_convergence.hpp",
         "src/methods/scf_defaults.hpp",
@@ -1093,7 +1109,7 @@
       "remaining_python_runtime": [
         "The bounded two-stage HF execution schedule uses the selected native callback controller: stage order, source-success projection, target-success/convergence density export, reverse-order cleanup and post-cleanup audit scheduling. For all-electron CPU RHF/UHF Direct/DF, the physical fixed-density audit uses one native scope for preparation, Fock/overlap, shared residual reduction and cleanup. The selected native final-verification policy owns scalar target/physical/precision/accuracy/work-budget disposition. Python retains typed planning, resource preflight, audit transport/presentation, typed identity/observable validation and diagnostic presentation, with explicit old-protocol/out-of-range-integer compatibility; unsupported audit domains and missing protocols retain explicit compatibility, never a retry after admitted native refusal; general coarse-to-fine and force-aware physical execution remain Python-owned. Missing-symbol scheduling is explicit compatibility, never a retry after native refusal. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance and custom types remain explicit Python work. Plain-policy occupied-basis projection and pure-density reconstruction share the existing native transport and ordinary CPU eigen provider; old-protocol/custom/unbounded policy domains retain explicit compatibility. Numeric working-capacity admission is not full physical/provider memory authority or target convergence.",
         "Admitted all-electron CPU HF system projection owns overlap preparation and every spin projection natively. Python retains per-item eligibility, immutable source transport, reports and transactional seed installation. Old/custom/unsupported domains retain explicit preparation compatibility; native execution failure never retries it. The composed capacity remains a numeric-matrix envelope rather than complete memory authority.",
-        "The required selected-library application-precision evidence policy owns budget-Fock operator admission, exact returned-state strict warm proof, and the Standard fallback decision. The native execution controller additionally owns bounded per-item candidate/retry/classification/release/audit/verification order; completed receipts are checked before publication and an unmet verification still rejects the observable budget. Python adapts electronic owners, transports typed model traits and completed diagnostics; missing execution/query support rejects the installation and selected failures never retry Python policy. Complete-gradient qualification, observable comparison, initial prepared fleet execution and bounded independent seed eligibility/history remain Python production owners. This callback controller is not an autonomous native precision endpoint, SDK/CLI parity or new numerical qualification.",
+        "The required selected-library application-precision evidence policy owns budget-Fock operator admission, exact returned-state strict warm proof, and the Standard fallback decision. The native execution controller additionally owns bounded per-item candidate/retry/classification/release/audit/verification order. The shared native observable owner measures absolute energy, maximum/RMS force errors and reference norms, resolves relative allowances and compares declared gates. Completed receipts are checked before publication and an unmet verification still rejects the observable budget. Python adapts electronic owners, validates array shape/representation, transports typed model traits and diagnostics; missing execution/query support rejects the installation and selected failures never retry Python policy/reductions. Typed offline evidence/status views remain portable metadata, not a replacement array norm or electronic scheduler. Complete-gradient qualification, initial prepared fleet execution and bounded independent seed eligibility/history remain Python production owners. This is not an autonomous native precision endpoint, SDK/CLI parity or new numerical qualification.",
         "Default SCF controls query the shared native catalog/grid policy for the incumbent qualified CUDA contexts. Python copies model/backend/ECP and immutable grid facts, while explicit caller overrides remain unchanged. Missing additive support alone retains the older-library selection policy. This neither qualifies new methods nor transfers precision execution or custom MethodIR resolution.",
         "Precision seed staging queries immutable native prepared dimensions before resident export. Native immutable host snapshots own density/coordinate arrays, copying and release independently of source batch/context lifetime; restore reuses existing physical validation. Python retains same-model eligibility, validation reservations, metadata, update policy and independent candidate/auditor history selection. Only absent capacity/capture symbols permit topology/descriptor compatibility. Numeric bounds and snapshots do not establish complete host/provider memory authority or cross-model admission.",
         "Budget-Fock SCF control selection requires the shared native policy for qualified restricted self-consistent device-fused models. Python transports Direct/fitted qualification facts and caller ceilings; missing query support rejects the installation instead of selecting thresholds in Python. General solver defaults and full method/gradient qualification remain separate owners. No new numerical domain is admitted.",
@@ -1117,6 +1133,8 @@
         "tests/python/test_native_precision_admission.py",
         "tests/native/test_precision_execution.cpp",
         "tests/python/test_native_precision_execution.py",
+        "tests/native/test_observable_comparison.cpp",
+        "tests/python/test_native_observable_comparison.py",
         "tests/python/test_precision_policy_native.py",
         "tests/python/test_precision_batch_cuda.py",
         "tests/python/test_native_correlation_policy.py",
@@ -1141,6 +1159,13 @@
         "catalog-family:density_functional"
       ],
       "retired_python_sites": [
+        {
+          "path": "python/generativeqc/accuracy.py",
+          "symbols": ["_measure_observables"],
+          "last_present_source_sha": "b40bd44840e9920402fa399ded64acdd0c428728",
+          "replacement": "python/generativeqc/_observable_comparison.py",
+          "reason": "Required selected-library observable comparison replaces production NumPy norms in both application precision and public array comparisons. Typed array validation moves to the transport; portable target/evidence scalar views remain explicit metadata rather than numerical execution. RMS uses independently checked compensated scaled squares, not a frozen NumPy summation bracket."
+        },
         {
           "path": "python/generativeqc/precision_policy.py",
           "symbols": [

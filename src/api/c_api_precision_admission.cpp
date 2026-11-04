@@ -2,6 +2,7 @@
 #include <span>
 
 #include "api/error.hpp"
+#include "runtime/observable_comparison.hpp"
 #include "runtime/precision_admission.hpp"
 #include "runtime/precision_execution.hpp"
 
@@ -18,6 +19,19 @@ extern "C" generativeqc_status generativeqc_precision_execution_run_v1(
   const auto status =
       generativeqc::runtime::run_precision_execution(copied, callback, state, receipt);
   *output = receipt;
+  return status;
+}
+
+extern "C" generativeqc_status generativeqc_observable_comparison_query_v1(
+    const generativeqc_observable_comparison_context_v1* context, const double* forces,
+    const double* reference, generativeqc_observable_comparison_v1* output) {
+  if (!context || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(context) || !generativeqc::api::valid_descriptor(output))
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  const auto copied = *context;
+  generativeqc_observable_comparison_v1 result{};
+  const auto status = generativeqc::runtime::compare_observables(copied, forces, reference, result);
+  if (status == GENERATIVEQC_STATUS_SUCCESS) *output = result;
   return status;
 }
 

@@ -88,6 +88,7 @@ def constructor(monkeypatch: pytest.MonkeyPatch) -> Any:
         generativeqc_precision_controls_query_v1=native.generativeqc_precision_controls_query_v1,
         generativeqc_precision_admission_query_v1=native.generativeqc_precision_admission_query_v1,
         generativeqc_precision_execution_run_v1=native.generativeqc_precision_execution_run_v1,
+        generativeqc_observable_comparison_query_v1=native.generativeqc_observable_comparison_query_v1,
     )
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
     install_registry_stub(library, frozenset({"energy", "forces"}))

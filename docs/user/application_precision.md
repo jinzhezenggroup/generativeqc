@@ -676,8 +676,8 @@ Two rules matter when reading this page's guarantees:
 ## Failure behavior
 
 The selected runtime must provide the shared precision-controls and
-precision-admission queries used by Fast, and the precision execution controller
-used by every profile. Missing policy or execution support is an
+precision-admission queries used by Fast, and the precision execution and
+observable-comparison owners used by every profile. Missing required support is an
 installation error with an update/rebuild diagnostic; it does not authorize
 Python selection or an implicit FP64 audit. Unsupported numerical domains with
 a current policy still retain their explicit strict/audit paths. This protocol
@@ -729,9 +729,18 @@ allocation and audit failures do not request it. A completed controller receipt
 is not evidence that an observable budget passed: an unmet tighter verification
 still raises `PrecisionBudgetError`.
 
-Python adapts the existing electronic owners to these operations, interprets
-qualification/gradient evidence, measures observable errors and publishes detached
-reports. Prepared fleet execution, eligibility and independent candidate/auditor
+The selected native observable-comparison owner measures energy absolute error,
+maximum Cartesian force error and RMS over all 3N force components, including
+reference norms and absolute-plus-relative allowances. The RMS reduction scales
+before squaring and compensates accumulation; it does not reproduce a particular
+NumPy/platform summation bracket. Acceptance remains the inclusive declared
+`difference <= allowance`, without added slack. Nonfinite/overflowing inputs,
+differences or allowances reject instead of producing a successful report.
+
+Python adapts the existing electronic owners to these operations, validates array
+shape/representation, interprets qualification/gradient evidence and publishes
+detached native measurement receipts. Prepared fleet execution, eligibility and
+independent candidate/auditor
 seed history also retain their existing Python owners. This bounded stage-order
 contract is not a standalone native precision endpoint, SDK/CLI parity, or a new
 scientific qualification.

@@ -44,6 +44,21 @@ def test_missing_execution_protocol_rejects_before_candidate_fleet_work(
         assert fleet.executions == []
 
 
+def test_missing_observable_protocol_rejects_before_candidate_fleet_work(
+    fleet: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    facade = PrecisionCalculator(policy="balanced")
+    with facade.prepare_batch([ATOMS]) as batch:
+        monkeypatch.setattr(
+            facade._candidate._library,
+            "generativeqc_observable_comparison_query_v1",
+            None,
+        )
+        with pytest.raises(NotImplementedError, match="required observable comparison"):
+            batch.execute()
+        assert fleet.executions == []
+
+
 def item(index: int = 0, energy: float = -1.0, **changes: Any) -> BatchItemResult:
     """Detach a converged result whose Fock total is not its iteration count."""
     return replace(

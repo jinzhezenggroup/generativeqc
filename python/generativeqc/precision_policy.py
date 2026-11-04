@@ -18,6 +18,11 @@ from time import perf_counter
 from ._api_types import Atom, MethodCapabilities, Result
 from ._composite_precision import COMPOSITE_GRADIENT_QUALIFICATIONS
 from ._df_precision import DF_GRADIENT_QUALIFICATIONS
+from ._observable_comparison import (
+    _observable_array,
+    measure_observables,
+    require_observable_comparison,
+)
 from ._precision_execution import (
     PrecisionEvent,
     PrecisionOutcome,
@@ -28,8 +33,6 @@ from ._scf_convergence import default_scf_controls
 from .accuracy import (
     ObservableTarget,
     TargetAccuracy,
-    _measure_observables,
-    _observable_array,
 )
 from .calculator import Calculator
 from .elements import checked_integer
@@ -359,9 +362,9 @@ def _model_identity(
 
 
 def _errors(
-    target: TargetAccuracy, candidate: Result, reference: Result
+    target: TargetAccuracy, candidate: Result, reference: Result, *, library: typing.Any
 ) -> tuple[PrecisionError, ...]:
-    """Use public HF evidence's shape, finite-value and scaled-norm rules."""
+    """Publish the selected native owner's complete norm/allowance receipt."""
     if not candidate.converged or not reference.converged:
         raise RuntimeError("application precision audit requires two converged solves")
     return tuple(
@@ -371,12 +374,13 @@ def _errors(
             requirement.unit,
             difference,
             reference_norm,
-            requirement.allowance(reference_norm),
+            allowance,
         )
-        for requirement, difference, reference_norm in _measure_observables(
+        for requirement, difference, reference_norm, allowance in measure_observables(
             target,
             {"energy": candidate.energy, "forces": candidate.forces},
             {"energy": reference.energy, "forces": reference.forces},
+            library=library,
         )
     )
 
@@ -651,6 +655,7 @@ class PrecisionCalculator:
                 except NotImplementedError:
                     self._route_reasons.append("auto_scf_unavailable_for_model")
         require_precision_schedule(self._candidate._library)
+        require_observable_comparison(self._candidate._library)
 
     @property
     def policy(self) -> PrecisionPolicy:
@@ -927,6 +932,7 @@ class PrecisionCalculator:
         errors = rejected = ()
         gradient_admission = "no-application-qualified-fp32-gradient-route"
         selected_library = candidate_calculator._library
+        require_observable_comparison(selected_library)
 
         def operation(event: PrecisionEvent) -> int:
             nonlocal candidate_calculator, candidate_precision, candidate, reference
@@ -967,7 +973,7 @@ class PrecisionCalculator:
                 )
             if event == PrecisionEvent.AUDIT:
                 reference = solve(reference_factory(), "fp64_audit", "fp64")
-                errors = _errors(target, candidate, reference)
+                errors = _errors(target, candidate, reference, library=selected_library)
                 return int(all(error.met for error in errors))
             if event == PrecisionEvent.VERIFY:
                 if reference is None:
@@ -983,7 +989,9 @@ class PrecisionCalculator:
                     "fp64_fallback_verification",
                     "fp64",
                 )
-                errors = _errors(target, candidate, verification)
+                errors = _errors(
+                    target, candidate, verification, library=selected_library
+                )
                 return int(all(error.met for error in errors))
             raise RuntimeError(
                 "native precision controller requested an unknown operation"
