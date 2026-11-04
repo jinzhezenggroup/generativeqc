@@ -48,6 +48,36 @@ def tensor(
     return input_tensor(name, TensorSpec((Index("i", space),), role=role, **kwargs))
 
 
+def test_repeated_graph_metadata_preserves_replay_and_detached_names() -> None:
+    """Immutable graph reuse must not cache numerical feeds or mutable name maps."""
+    original = tensor("x")
+    duplicate = tensor("x")
+    dead = tensor("unused")
+    program = Program({"value": add(original, duplicate)}, definitions=(dead,))
+    snapshot = program.dumps()
+    identity = program.logical_hash
+    names = program.debug_names
+    assert names[original] != names[duplicate]
+    names.clear()
+    assert program.debug_names
+    assert dead in program.nodes and dead not in program.live_nodes
+    previous = None
+    for values in (np.array([1.0, -2.0, 3.0]), np.array([-4.0, 0.5, 2.0])):
+        expected = 2 * values
+        result = execute(program, {"x": values}).outputs["value"]
+        np.testing.assert_array_equal(result, expected)
+        if previous is not None:
+            np.testing.assert_array_equal(previous, np.array([2.0, -4.0, 6.0]))
+        previous = result
+        assert program.logical_hash == identity
+        assert program.dumps() == snapshot
+        replay = Program.loads(snapshot)
+        assert replay.logical_hash == identity
+        np.testing.assert_array_equal(
+            execute(replay, {"x": values}).outputs["value"], expected
+        )
+
+
 @pytest.mark.parametrize("kind", sorted(SPACE_KINDS))
 @pytest.mark.parametrize("spin", [None, "alpha", "beta"])
 def test_explicit_space_ranges_and_spin(kind: typing.Any, spin: typing.Any) -> None:

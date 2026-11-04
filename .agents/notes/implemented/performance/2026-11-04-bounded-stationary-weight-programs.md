@@ -60,6 +60,26 @@ WB97M-V direct/full-rank-DF RKS/UKS molecular cases in 781.71 s (eight JUnit
 warnings). This is a cache-enabled replay with missing artifacts rebuilt, not
 a wholly warm-cache timing or an installed-public Ni qualification.
 
+## Subsequent complete low-level evidence
+
+On eb051d0d1 the complete spherical Ni HVP passes all three independent
+moving-grid gradient-difference steps with normalized maximum errors
+2.6253e-8, 7.2917e-9 and 1.0926e-8, below the frozen 1e-5 Eh/Bohr^2 gate.
+All eight stationary sources occur exactly once, with one response solve,
+17 iterations / 34 actions / true residual 8.1108e-12 and no displaced production
+SCF. Assembly takes 1875.44 s; the full 1895.66 s probe and 1021276 KiB peak
+include independent reference setup and are not isolated native performance.
+This is explicit 5760-point-grid, source-checkout, low-level qualification,
+not default-grid or installed/public admission. Receipts are
+`/tmp/gqc-2843-2849/ni-hvp-weight-tiles-acceptance.json` and the associated log.
+
+The raw native replay passes its first column against all three independent
+matrices (errors 2.1983e-6, 5.5001e-7 and 1.9838e-7), then is intentionally
+interrupted at 2522.25 s to avoid repeating diagnosed metadata work. The partial
+column and logs are retained with the eb051d0d1 suffix; they do not qualify a
+full raw matrix. The follow-up immutable graph metadata rationale is recorded
+in `2026-11-04-immutable-tensor-graph-metadata.md`.
+
 ## Rejected alternatives
 
 Raising the global element cap would hide a consumer scheduling error and weaken
