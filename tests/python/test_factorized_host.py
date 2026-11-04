@@ -185,16 +185,22 @@ import json
 import shutil
 import sys
 from pathlib import Path
-import numpy as np
-sys.path.insert(0, sys.argv[1])
+package_root = Path(sys.argv[1]).resolve()
+# Supply the installed NumPy files without executing site-packages .pth hooks.
+sys.path[:0] = [str(package_root), sys.argv[4]]
 class BlockRuntime(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname in ("generativeqc", "pyscf", "tools") or fullname.startswith(("generativeqc.", "pyscf.", "tools.")):
             raise AssertionError("compiler consumer imported " + fullname)
 sys.meta_path.insert(0, BlockRuntime())
+import numpy as np
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from generativeqc_compiler.common.paths import source_root
+from generativeqc_compiler.common.paths import PACKAGE, asset_path, source_root
 from generativeqc_compiler.integral.factorized_host import FactorizedERIHost
+assert PACKAGE == package_root / "generativeqc_compiler"
+for name in ("factorized_host_runtime.hpp", "eri_geometry.hpp", "range_moments.hpp"):
+    relative = "src/integrals/" + name
+    assert asset_path(relative) == PACKAGE / "assets" / relative
 try:
     source_root()
 except ValueError:
@@ -206,6 +212,9 @@ owner = FactorizedERIHost(CppCompilerAdapter(Path(shutil.which("c++"))), Path(sy
 try:
     actual = owner.raw_first((0,0,0,0), (0,), tuple(((exponent,1.0),) for exponent in data["exponents"]), data["centers"])
     np.testing.assert_allclose(actual[0], data["expected"], atol=3e-10, rtol=2e-9)
+    for name, module in tuple(sys.modules.items()):
+        if name == "generativeqc_compiler" or name.startswith("generativeqc_compiler."):
+            assert Path(module.__file__).resolve().is_relative_to(PACKAGE), name
 finally:
     owner.close()
 """
@@ -213,11 +222,14 @@ finally:
         [
             sys.executable,
             "-I",
+            # Isolated mode alone still runs editable-install .pth import hooks.
+            "-S",
             "-c",
             code,
             str(package_root),
             str(tmp_path / "cache"),
             json.dumps(inputs),
+            str(Path(np.__file__).resolve().parents[1]),
         ],
         cwd=tmp_path,
         capture_output=True,
