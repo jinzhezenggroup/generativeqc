@@ -84,6 +84,15 @@ admission. Independent complete molecular references, real-spherical Ni,
 external def2-SVP records, installed endpoint/resource qualification and the
 production-scale gate remain necessary before promotion or issue closure.
 The low-level receipt explicitly reports `public_calculator_endpoint=False`.
+CPU full-range integral sources reuse the compiler's factorized Hermite/Boys
+jets through a bounded host consumer, rather than compiling each ERI component
+tile separately. This consumer admits at most 128 primitive records and 64
+components per page; Cartesian normalization and physical atom scattering stay
+with their shared owners. Second-order execution reserves shell/publication
+buffers before lending the remaining numeric budget, and retains the original
+bounded component lowering when the factorized lease cannot fit. Generated
+scalar stack temporaries, compiler processes and library mappings are excluded
+from this numeric lease; it is not a complete endpoint memory/time bound.
 Its admitted AO-jet reserve includes native basis storage and tile/publication
 buffers and is passed explicitly to the native evaluator. The remaining grid
 budget excludes that reserve; raising the grid allowance does not remove the

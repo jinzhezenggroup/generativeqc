@@ -21,12 +21,14 @@ from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.common.resources import ResourceBudget
 from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.integral.blocks import TensorLayout, WeightTile
+from generativeqc_compiler.integral.factorized_host import FactorizedERIHost
 from generativeqc_compiler.integral.first_derivatives_execute import (
     FirstDerivativeEvaluator,
     compile_first_derivative,
 )
 from generativeqc_compiler.integral.first_derivatives_native import (
     first_component_identity,
+    validate_first_components,
 )
 from generativeqc_compiler.integral.first_directional import (
     DirectionalMatrixTerm,
@@ -52,6 +54,7 @@ from generativeqc_compiler.integral.one_electron_derivatives import (
 from generativeqc_compiler.integral.second_derivatives import (
     build_eri_second_ir,
     build_one_electron_second_ir,
+    require_second_consumer,
 )
 from generativeqc_compiler.integral.second_derivatives_execute import (
     PreparedSecondDerivative,
@@ -183,6 +186,7 @@ class _FirstDerivativeProvider:
         self.compiler = CppCompilerAdapter(Path(shutil.which("c++") or "c++"))
         self.cache = Path(cache) / "first-cache"
         self.evaluators: dict[str, FirstDerivativeEvaluator] = {}
+        self.factorized: FactorizedERIHost | None = None
         self.shells = topology.shells
         self.offsets = np.cumsum((0, *topology.shell_sizes))
         self.primitives = tuple(
@@ -215,19 +219,32 @@ class _FirstDerivativeProvider:
         )
         for start in range(0, count, 64):
             indices = tuple(range(start, min(start + 64, count)))
-            key = first_component_identity(ir, indices)
-            if key not in self.evaluators:
-                artifact = compile_first_derivative(
-                    ir,
-                    self.compiler,
-                    self.cache,
-                    component_indices=indices,
+            if ir.operator == FOUR_CENTER_ERI_OPERATOR:
+                validate_first_components(ir, indices)
+                if self.factorized is None:
+                    self.factorized = FactorizedERIHost(
+                        self.compiler, self.cache.parent / "factorized-eri"
+                    )
+                values = self.factorized.raw_first(
+                    angular,
+                    indices,
+                    tuple(self.primitives[i] for i in slots),
+                    self.coords[list(atom_indices)],
                 )
-                self.evaluators[key] = FirstDerivativeEvaluator(artifact)
-            values = self.evaluators[key].contract(
-                tuple(self.primitives[i] for i in slots),
-                self.coords[list(atom_indices)],
-            )
+            else:
+                key = first_component_identity(ir, indices)
+                if key not in self.evaluators:
+                    artifact = compile_first_derivative(
+                        ir,
+                        self.compiler,
+                        self.cache,
+                        component_indices=indices,
+                    )
+                    self.evaluators[key] = FirstDerivativeEvaluator(artifact)
+                values = self.evaluators[key].contract(
+                    tuple(self.primitives[i] for i in slots),
+                    self.coords[list(atom_indices)],
+                )
             values *= scales[list(indices), None]
             for row, index in enumerate(indices):
                 yield (
@@ -888,6 +905,49 @@ def _run_kernel_hvp(
     center_direction = mapping.expand_direction(direction[list(mapping.atom_indices)])
     full = np.zeros(len(center_indices) * 3)
     signature = ir.signature
+    consumer = require_second_consumer(ir)
+    # The shared factor jets trade component-specific compilation for a fixed
+    # host lease. Preserve the original bounded lowering when it cannot fit.
+    reserve_bytes = data["output_accumulator_bytes"] + 8 * (3 * component_count + 12)
+    if (
+        data["backend"] == "cpu"
+        and ir.operator == FOUR_CENTER_ERI_OPERATOR
+        and consumer.output == "weighted_hvp"
+        and consumer.weights is not None
+        and center_indices == ir.operator.centers
+        and reserve_bytes + FactorizedERIHost.required_bytes() <= data["budget_bytes"]
+    ):
+        if data["factorized_provider"] is None:
+            data["factorized_provider"] = FactorizedERIHost(
+                data["adapter"],
+                data["cache"].parent / "factorized-eri",
+                budget_bytes=data["budget_bytes"] - reserve_bytes,
+            )
+        scales = np.asarray(
+            [
+                value
+                for _, value in normalized_cartesian_components(
+                    signature.angular, np.ones(signature.component_shape)
+                )
+            ]
+        )
+        coefficient = (
+            consumer.output_sign * consumer.weights.sign * consumer.weights.prefactor
+        )
+        for ao_chunk in _component_tiles(component_count):
+            selection = list(ao_chunk)
+            values, diagnostic = data["factorized_provider"].weighted_hvp(
+                signature.angular,
+                ao_chunk,
+                primitives,
+                centers,
+                coefficient * scales[selection] * weight_flat[selection],
+                center_direction,
+            )
+            full += values.ravel()
+            diagnostic["resources"]["peak_bytes"]["host"] += reserve_bytes
+            data["second_executions"].append(diagnostic)
+        return _scatter_hvp(full, center_indices, center_atoms, data["state"].nat)
     # The public shell-stream adapter freezes its weight tile before the
     # next AO chunk: one FP64 backing buffer can be reset and reused.
     weights = np.zeros(component_count)
@@ -1020,6 +1080,7 @@ def _second_data(
         "output_accumulator_bytes": output_bytes,
         "resource_budget": resource_budget,
         "second_executions": [],
+        "factorized_provider": None,
     }
 
 
@@ -1048,6 +1109,9 @@ def _second_diagnostics(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
         ),
         "executions": len(executions),
         "primitive_records": sum(item["records"] for item in executions),
+        "factorized_primitive_component_evaluations": sum(
+            item.get("component_evaluations", 0) for item in executions
+        ),
         "record_batches": chunks,
         "record_batch_uploads": chunks if cuda else 0,
         "result_tile_downloads": chunks if cuda else 0,
@@ -1199,28 +1263,32 @@ def generated_weighted_second_integral_hvp(
         compiler=compiler,
         device_id=device_id,
     )
-    vector = checked_direction(direction, data["state"].nat)
-    if source_name == "coulomb":
-        if pair_weights is not None or not callable(eri_shell_weights):
-            raise ValueError("coulomb second HVP requires shell-local ERI weights")
-        value = _run_eri_hvp(data, eri_shell_weights, vector, eri_operator)
-    else:
-        if eri_shell_weights is not None:
-            raise ValueError("pair second HVP cannot consume ERI shell weights")
-        weights = _checked_ao_weight(
-            pair_weights, topology.nbf, "pair second HVP weight"
-        )
-        if source_name == "one_electron":
-            value = _run_one_electron_hvp(
-                data, "kinetic", weights, vector
-            ) + _run_one_electron_hvp(data, "nuclear_attraction", weights, vector)
+    try:
+        vector = checked_direction(direction, data["state"].nat)
+        if source_name == "coulomb":
+            if pair_weights is not None or not callable(eri_shell_weights):
+                raise ValueError("coulomb second HVP requires shell-local ERI weights")
+            value = _run_eri_hvp(data, eri_shell_weights, vector, eri_operator)
         else:
-            value = _run_one_electron_hvp(data, "overlap", weights, vector)
-    if not np.isfinite(value).all():
-        raise FloatingPointError("nonfinite generated second-integral HVP")
-    diagnostic = _second_diagnostics(data)
-    diagnostic.update(source=source_name, full_ao_rank_four_weights=False)
-    return immutable(value), diagnostic
+            if eri_shell_weights is not None:
+                raise ValueError("pair second HVP cannot consume ERI shell weights")
+            weights = _checked_ao_weight(
+                pair_weights, topology.nbf, "pair second HVP weight"
+            )
+            if source_name == "one_electron":
+                value = _run_one_electron_hvp(
+                    data, "kinetic", weights, vector
+                ) + _run_one_electron_hvp(data, "nuclear_attraction", weights, vector)
+            else:
+                value = _run_one_electron_hvp(data, "overlap", weights, vector)
+        if not np.isfinite(value).all():
+            raise FloatingPointError("nonfinite generated second-integral HVP")
+        diagnostic = _second_diagnostics(data)
+        diagnostic.update(source=source_name, full_ao_rank_four_weights=False)
+        return immutable(value), diagnostic
+    finally:
+        if data["factorized_provider"] is not None:
+            data["factorized_provider"].close()
 
 
 def nuclear_hvp_from_topology(

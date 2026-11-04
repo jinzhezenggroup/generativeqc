@@ -19,6 +19,34 @@ from generativeqc_compiler.integral.range_separation import CoulombKernel
 from test_integral_autodiff_second import require_native_library  # noqa: F401
 
 
+def test_multicenter_weighted_hvp_keeps_its_small_budget_fallback(
+    tmp_path: Path,
+) -> None:
+    """A smaller admitted lease must preserve arbitrary ordered cotangents."""
+    atoms = [("H", (0.1, -0.2, 0.3)), ("H", (-0.4, 0.3, 1.2))]
+    direction = np.array(((0.1, -0.2, 0.05), (-0.06, 0.04, 0.03)))
+    with NativeAO(atoms) as basis:
+        topology = RKSIntegralTopology.from_basis(basis)
+        coefficients = np.random.default_rng(2843).normal(size=(len(basis.shells),) * 4)
+
+        def weights(slots: tuple[int, ...]) -> np.ndarray:
+            return np.full(
+                tuple(topology.shell_sizes[slot] for slot in slots), coefficients[slots]
+            )
+
+        common = {"eri_shell_weights": weights, "cache": tmp_path}
+        fast, large = generated_weighted_second_integral_hvp(
+            topology, "coulomb", direction, **common
+        )
+        bounded, small = generated_weighted_second_integral_hvp(
+            topology, "coulomb", direction, budget_bytes=32 << 10, **common
+        )
+        np.testing.assert_allclose(fast, bounded, atol=2e-12, rtol=2e-11)
+        assert large["factorized_primitive_component_evaluations"] > 0
+        assert small["factorized_primitive_component_evaluations"] == 0
+        assert small["peak_host_bytes"] <= 32 << 10
+
+
 def test_one_center_f_sources_are_exact_translations_with_normal_guards(
     tmp_path: Path,
 ) -> None:
