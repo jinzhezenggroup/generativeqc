@@ -99,6 +99,97 @@ GENERATIVEQC_API generativeqc_status
 generativeqc_precision_controls_query_v1(const generativeqc_precision_controls_context_v1* context,
                                          generativeqc_precision_controls_v1* output);
 
+/** Execution events are operations, not inferred scientific work counts. */
+enum {
+  GENERATIVEQC_PRECISION_EXECUTE_CANDIDATE = 0,
+  GENERATIVEQC_PRECISION_EXECUTE_FP64_FALLBACK = 1,
+  GENERATIVEQC_PRECISION_CLASSIFY_CANDIDATE = 2,
+  GENERATIVEQC_PRECISION_RELEASE_CANDIDATE = 3,
+  GENERATIVEQC_PRECISION_EXECUTE_AUDIT = 4,
+  GENERATIVEQC_PRECISION_VERIFY_FALLBACK = 5
+};
+
+enum {
+  GENERATIVEQC_PRECISION_CALLBACK_SUCCESS = 0,
+  GENERATIVEQC_PRECISION_CALLBACK_RETRY = 1,
+  GENERATIVEQC_PRECISION_CALLBACK_ERROR = 2
+};
+
+enum {
+  GENERATIVEQC_PRECISION_EXECUTION_QUALIFIED = 0,
+  GENERATIVEQC_PRECISION_EXECUTION_AUDITED = 1,
+  GENERATIVEQC_PRECISION_EXECUTION_VERIFIED = 2,
+  GENERATIVEQC_PRECISION_EXECUTION_REJECTED = 3,
+  GENERATIVEQC_PRECISION_EXECUTION_FAILED = 4
+};
+
+/** retry_candidate is 0/1. Only an explicitly retryable candidate callback
+ * failure may select one FP64 replacement. All reserved fields are zero. */
+typedef struct generativeqc_precision_execution_context_v1 {
+  uint32_t struct_size, abi_version, retry_candidate, reserved;
+} generativeqc_precision_execution_context_v1;
+
+/** Versioned execution receipt. Attempted and completed event masks distinguish
+ * a failed candidate from its replacement. REJECTED means the independently
+ * verified replacement still misses its target; it cannot publish a Result. */
+typedef struct generativeqc_precision_execution_receipt_v1 {
+  uint32_t struct_size, abi_version, policy_version;
+  uint32_t attempted_events, completed_events, outcome;
+} generativeqc_precision_execution_receipt_v1;
+
+/** @native-contract generativeqc_precision_execution_callback_v1
+ * @behavior Execute one synchronous operation requested by the native schedule.
+ * @inputs state is the caller's opaque owner. event is one of the six precision
+ * execution events; the native owner supplies nonnull decision storage.
+ * @outputs Return CALLBACK_SUCCESS and set decision=0 for execution/release;
+ * CLASSIFY returns 1 for an admitted no-audit publication or 0 to require an
+ * independent audit. AUDIT/VERIFY return 1 only when every declared observable
+ * gate meets its allowance. Return CALLBACK_RETRY only for a candidate failure
+ * eligible under the caller's unchanged numerical retry policy; other failures
+ * return CALLBACK_ERROR. No exception may cross this callback boundary.
+ * @errors Callback failures stop the schedule, except the single explicitly
+ * admitted candidate retry. Neither audit nor verification errors are retried.
+ * @lifetime The callback owns preparation, identity validation and cleanup,
+ * including failed preparation/solve. It releases transient auditors before
+ * returning and candidate residency before allocating an independent auditor.
+ * Retained candidate fleets, detached results and independent seed histories
+ * stay owned by state; native code retains no resource or pointer after return.
+ * @execution Invoked synchronously on the calling thread. Numerical kernels,
+ * model/qualification admission, observable reduction and resource leases keep
+ * their existing owners. Native stage order is not an observable certificate.
+ * @units decision is boolean; masks/events do not denote iterations or work.
+ */
+typedef int (*generativeqc_precision_execution_callback_v1)(void* state, uint32_t event,
+                                                            uint32_t* decision);
+
+/** @native-contract generativeqc_precision_execution_run_v1
+ * @behavior Own bounded application-precision candidate/auditor/fallback order.
+ * Run candidate, at most one admitted FP64 retry, then classification. An audit
+ * request releases candidate residency before one independent FP64 audit. Only
+ * an unmet audit selects one tighter verification of the FP64 replacement.
+ * @inputs Nonnull versioned context, callback and receipt; state may be null.
+ * The callback must preserve the same scientific model and independent histories
+ * and must not present numerical/qualification failure as unsupported protocol.
+ * @outputs Publish policy version 1, attempted/completed event masks and final
+ * outcome. Callback failure publishes a FAILED progress receipt, not a partial
+ * observable. REJECTED is a completed schedule, not a successful budget gate.
+ * Malformed descriptor errors leave receipt unchanged and invoke no callback.
+ * @errors INVALID_ARGUMENT for null pointers, invalid flags/reserved fields or
+ * invalid callback decisions; ABI_MISMATCH for incompatible descriptor headers;
+ * INTERNAL_ERROR for callback errors. No C++ exception escapes this boundary.
+ * @lifetime Borrow all storage synchronously; retain no callback, state, result
+ * or endpoint owner. Context and receipt may overlap; inputs are copied first.
+ * @execution Constant-storage host control; electronic work occurs only through
+ * explicit callbacks. No device, context, library discovery, compiler, implicit
+ * Python fallback or retry after native protocol refusal is performed here.
+ * @units Event masks and outcomes are dimensionless; numerical allowances and
+ * measured observable errors retain their separately declared physical units.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_precision_execution_run_v1(
+    const generativeqc_precision_execution_context_v1* context,
+    generativeqc_precision_execution_callback_v1 callback, void* state,
+    generativeqc_precision_execution_receipt_v1* output);
+
 #ifdef __cplusplus
 }
 #endif

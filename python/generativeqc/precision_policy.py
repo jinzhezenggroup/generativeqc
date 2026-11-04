@@ -18,6 +18,12 @@ from time import perf_counter
 from ._api_types import Atom, MethodCapabilities, Result
 from ._composite_precision import COMPOSITE_GRADIENT_QUALIFICATIONS
 from ._df_precision import DF_GRADIENT_QUALIFICATIONS
+from ._precision_execution import (
+    PrecisionEvent,
+    PrecisionOutcome,
+    require_precision_schedule,
+    run_precision_schedule,
+)
 from ._scf_convergence import default_scf_controls
 from .accuracy import (
     ObservableTarget,
@@ -644,6 +650,7 @@ class PrecisionCalculator:
                     self._candidate_precision = "auto"
                 except NotImplementedError:
                     self._route_reasons.append("auto_scf_unavailable_for_model")
+        require_precision_schedule(self._candidate._library)
 
     @property
     def policy(self) -> PrecisionPolicy:
@@ -906,24 +913,134 @@ class PrecisionCalculator:
         started: float,
         reference_factory: typing.Callable | None = None,
     ) -> typing.Any:
-        """Apply one policy to either a singlepoint or an input-indexed batch item.
+        """Adapt endpoint owners to the selected native execution controller.
 
-        Drivers own execution, residency and timing. This shared controller owns
-        complete-model qualification, explicit audits and bounded rejection.
+        Numerical qualification and observable measurement keep their existing
+        owners. Native code alone chooses candidate retry, audit and bounded
+        replacement verification; Python only executes each requested operation
+        and publishes a complete detached validation after receipt checks.
         """
         target = self.policy.target
         if reference_factory is None:
             reference_factory = self._reference
-        try:
-            candidate = solve(candidate_calculator, "candidate", candidate_precision)
-        except (RuntimeError, NotImplementedError):
-            if not self._fast_fock:
-                raise
-            route_reasons.append("budget_fock_failed_fp64_fallback")
-            candidate_calculator = reference_factory()
-            candidate_precision = "fp64"
-            fast_native = False
-            candidate = solve(candidate_calculator, "fp64_fallback", "fp64")
+        candidate = reference = publication = None
+        errors = rejected = ()
+        gradient_admission = "no-application-qualified-fp32-gradient-route"
+        selected_library = candidate_calculator._library
+
+        def operation(event: PrecisionEvent) -> int:
+            nonlocal candidate_calculator, candidate_precision, candidate, reference
+            nonlocal publication, target, errors, rejected, gradient_admission
+            if event == PrecisionEvent.CANDIDATE:
+                candidate = solve(
+                    candidate_calculator, "candidate", candidate_precision
+                )
+                return 0
+            if event == PrecisionEvent.FP64_FALLBACK:
+                route_reasons.append("budget_fock_failed_fp64_fallback")
+                candidate_calculator = reference_factory()
+                candidate_precision = "fp64"
+                candidate = solve(candidate_calculator, "fp64_fallback", "fp64")
+                return 0
+            if candidate is None:
+                raise RuntimeError(
+                    "native precision controller has no completed candidate"
+                )
+            if event == PrecisionEvent.CLASSIFY:
+                publication, target, gradient_admission = self._classify_candidate(
+                    candidate=candidate,
+                    candidate_calculator=candidate_calculator,
+                    candidate_precision=candidate_precision,
+                    requested=requested,
+                    route_reasons=route_reasons,
+                    model=model,
+                    solves=solves,
+                    started=started,
+                )
+                return int(publication is not None)
+            if event == PrecisionEvent.RELEASE:
+                self._candidate.clear_cache()
+                return 0
+            if target is None:
+                raise RuntimeError(
+                    "native precision controller requested an undeclared audit"
+                )
+            if event == PrecisionEvent.AUDIT:
+                reference = solve(reference_factory(), "fp64_audit", "fp64")
+                errors = _errors(target, candidate, reference)
+                return int(all(error.met for error in errors))
+            if event == PrecisionEvent.VERIFY:
+                if reference is None:
+                    raise RuntimeError(
+                        "native precision controller has no independent auditor"
+                    )
+                rejected = errors
+                route_reasons.append("candidate_exceeded_observable_budget")
+                candidate = reference
+                gradient_admission = "fp64-after-observable-budget-rejection"
+                verification = solve(
+                    reference_factory(tighter=True),
+                    "fp64_fallback_verification",
+                    "fp64",
+                )
+                errors = _errors(target, candidate, verification)
+                return int(all(error.met for error in errors))
+            raise RuntimeError(
+                "native precision controller requested an unknown operation"
+            )
+
+        outcome = run_precision_schedule(
+            selected_library, operation, retry_candidate=self._fast_fock
+        )
+        if outcome == PrecisionOutcome.QUALIFIED:
+            if publication is None:
+                raise RuntimeError(
+                    "native precision controller omitted candidate publication"
+                )
+            return replace(
+                candidate,
+                precision_validation=replace(
+                    publication, endpoint_seconds=perf_counter() - started
+                ),
+            )
+        validation = PrecisionValidation(
+            self.policy.profile,
+            target,
+            model,
+            "observed_unmet"
+            if outcome == PrecisionOutcome.REJECTED
+            else "observed_met",
+            tuple(route_reasons),
+            errors,
+            rejected,
+            tuple(solves),
+            perf_counter() - started,
+            budget=self.policy.budget,
+            gradient_admission=gradient_admission,
+        )
+        if outcome == PrecisionOutcome.REJECTED:
+            raise PrecisionBudgetError(validation)
+        return replace(candidate, precision_validation=validation)
+
+    def _classify_candidate(
+        self,
+        *,
+        candidate: Result,
+        candidate_calculator: Calculator,
+        candidate_precision: str,
+        requested: frozenset[str],
+        route_reasons: list[str],
+        model: str,
+        solves: list[PrecisionSolve],
+        started: float,
+    ) -> tuple[PrecisionValidation | None, TargetAccuracy | None, str]:
+        """Interpret qualification evidence without scheduling another endpoint.
+
+        This remains an explicit Python admission/presentation adapter for the
+        existing native predicates and qualified gradient owners. It cannot
+        bypass an explicit target or choose an audit/replacement solve order.
+        """
+        target = self.policy.target
         fast_native = self._fast_native and (
             candidate_calculator is self._candidate or self._fast_transport_v2
         )
@@ -1020,7 +1137,11 @@ class PrecisionCalculator:
                     scope="qualification_not_per_call_observable_audit",
                     budget=self.policy.budget,
                 )
-                return replace(candidate, precision_validation=validation)
+                return (
+                    validation,
+                    target,
+                    gradient_admission,
+                )
             if (
                 fast_native
                 and not self._fast_fock
@@ -1078,7 +1199,11 @@ class PrecisionCalculator:
                     scope="qualification_not_per_call_observable_audit",
                     budget=self.policy.budget,
                 )
-                return replace(candidate, precision_validation=validation)
+                return (
+                    validation,
+                    target,
+                    gradient_admission,
+                )
             if (
                 fast_native
                 and not self._fast_fock
@@ -1115,7 +1240,11 @@ class PrecisionCalculator:
                     scope="qualification_not_per_call_observable_audit",
                     budget=self.policy.budget,
                 )
-                return replace(candidate, precision_validation=validation)
+                return (
+                    validation,
+                    target,
+                    gradient_admission,
+                )
             if _standard_fallback_admitted(
                 candidate_calculator, candidate, candidate_precision, self.policy.budget
             ):
@@ -1133,7 +1262,11 @@ class PrecisionCalculator:
                     scope="native_fp64",
                     budget=self.policy.budget,
                 )
-                return replace(candidate, precision_validation=validation)
+                return (
+                    validation,
+                    target,
+                    gradient_admission,
+                )
             target = _budget_target(self.policy.budget, forces="forces" in requested)
             route_reasons.append("budget_or_domain_requires_fp64_audit")
         if target is None:
@@ -1150,36 +1283,9 @@ class PrecisionCalculator:
                 reference="native-fp64-final-state-checks-no-observable-audit",
                 scope="native_fp64",
             )
-            return replace(candidate, precision_validation=validation)
-        self._candidate.clear_cache()
-        reference_calculator = reference_factory()
-        reference = solve(reference_calculator, "fp64_audit", "fp64")
-        errors = _errors(target, candidate, reference)
-        rejected = ()
-        reasons = route_reasons
-        if not all(error.met for error in errors):
-            rejected = errors
-            reasons.append("candidate_exceeded_observable_budget")
-            candidate = reference
-            gradient_admission = "fp64-after-observable-budget-rejection"
-            verification_calculator = reference_factory(tighter=True)
-            verification = solve(
-                verification_calculator, "fp64_fallback_verification", "fp64"
+            return (
+                validation,
+                target,
+                gradient_admission,
             )
-            errors = _errors(target, candidate, verification)
-        validation = PrecisionValidation(
-            self.policy.profile,
-            target,
-            model,
-            "observed_met" if all(error.met for error in errors) else "observed_unmet",
-            tuple(reasons),
-            errors,
-            rejected,
-            tuple(solves),
-            perf_counter() - started,
-            budget=self.policy.budget,
-            gradient_admission=gradient_admission,
-        )
-        if validation.status != "observed_met":
-            raise PrecisionBudgetError(validation)
-        return replace(candidate, precision_validation=validation)
+        return None, target, gradient_admission

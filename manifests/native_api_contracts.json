@@ -3323,6 +3323,38 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_precision_execution_callback_v1": {
+      "kind": "c-callback",
+      "header": "include/generativeqc/precision_admission.h",
+      "signature_sha256": "5ad28852b7e54cf2169c4bbc138f74ab4bb9c5a98fef662303b6369aa3f71e55",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_precision_execution_run_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/precision_admission.h",
+      "signature_sha256": "77b77a150109c32b4b3f2530198ac0cbeb49bf603d05778fdfb166cb4639712d",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_scf_defaults_query_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/scf_defaults.h",

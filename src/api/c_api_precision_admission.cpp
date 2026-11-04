@@ -3,6 +3,23 @@
 
 #include "api/error.hpp"
 #include "runtime/precision_admission.hpp"
+#include "runtime/precision_execution.hpp"
+
+extern "C" generativeqc_status generativeqc_precision_execution_run_v1(
+    const generativeqc_precision_execution_context_v1* context,
+    generativeqc_precision_execution_callback_v1 callback, void* state,
+    generativeqc_precision_execution_receipt_v1* output) {
+  if (!context || !callback || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(context) || !generativeqc::api::valid_descriptor(output))
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  const auto copied = *context;
+  if (copied.retry_candidate > 1 || copied.reserved) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  generativeqc_precision_execution_receipt_v1 receipt{};
+  const auto status =
+      generativeqc::runtime::run_precision_execution(copied, callback, state, receipt);
+  *output = receipt;
+  return status;
+}
 
 extern "C" generativeqc_status generativeqc_precision_controls_query_v1(
     const generativeqc_precision_controls_context_v1* context,

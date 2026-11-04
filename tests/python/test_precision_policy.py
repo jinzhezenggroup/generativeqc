@@ -47,6 +47,7 @@ def policy_metadata(library: typing.Any, **capabilities: typing.Any) -> SimpleNa
         generativeqc_precision_controls_query_v1=library.generativeqc_precision_controls_query_v1,
         generativeqc_precision_admission_query_v1=library.generativeqc_precision_admission_query_v1,
         generativeqc_scf_defaults_query_v1=library.generativeqc_scf_defaults_query_v1,
+        generativeqc_precision_execution_run_v1=library.generativeqc_precision_execution_run_v1,
         **capabilities,
     )
 
@@ -71,6 +72,7 @@ def backend(
         transport_v2=False,
         standard_convergence=False,
         missing_admission=False,
+        missing_execution=False,
     )
 
     class Backend:
@@ -82,6 +84,8 @@ def backend(
             self._library = policy_metadata(policy_library)
             if state.missing_admission:
                 self._library.generativeqc_precision_admission_query_v1 = None
+            if state.missing_execution:
+                self._library.generativeqc_precision_execution_run_v1 = None
             if state.standard_convergence:
                 self._device_name = options.get("device")
                 self._library.generativeqc_standard_scf_convergence_version_v1 = (
@@ -156,6 +160,36 @@ def test_fast_rejects_missing_policy_before_molecular_work(
     backend.missing_admission = True
     with pytest.raises(NotImplementedError, match="required precision-admission query"):
         PrecisionCalculator(policy="fast")
+    assert backend.calls == []
+
+
+@pytest.mark.parametrize(
+    "profile", ("standard", "fp64", "balanced", "strict", "audit_auto", "fast")
+)
+def test_all_profiles_require_native_execution_before_molecular_work(
+    backend: SimpleNamespace, profile: str
+) -> None:
+    backend.missing_execution = True
+    with pytest.raises(
+        NotImplementedError, match="required precision execution controller"
+    ):
+        PrecisionCalculator(policy=profile)
+    assert backend.calls == []
+
+
+def test_selected_execution_refusal_does_not_start_a_portable_candidate(
+    backend: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calculator = PrecisionCalculator(policy="balanced")
+    selected = calculator._candidate._library
+    monkeypatch.setattr(
+        selected,
+        "generativeqc_precision_execution_run_v1",
+        lambda *args: _native.STATUS_INVALID_ARGUMENT,
+    )
+    selected.generativeqc_status_message = lambda status: b"selected controller refused"
+    with pytest.raises(RuntimeError, match="selected controller refused"):
+        calculator.singlepoint(ATOMS)
     assert backend.calls == []
 
 

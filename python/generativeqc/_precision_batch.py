@@ -13,6 +13,7 @@ import numpy as np
 
 from . import _native
 from ._api_types import Atom
+from ._precision_execution import require_precision_schedule
 from .batch import BatchResult
 from .checkpoint import _descriptor, _pointer, _resource_check, _restore_states
 from .precision_policy import (
@@ -234,6 +235,7 @@ class PreparedPrecisionBatch:
                 "application precision ECP model identity is not implemented"
             )
         self._options = dict(options)
+        require_precision_schedule(self._calculator._library)
         self._signature = self._calculator._model_signature()
         self._owner = self._calculator.prepare_batch(self._systems, **self._options)
         try:
@@ -573,6 +575,7 @@ class PreparedPrecisionBatch:
         """
         with self._facade._lock:
             self._ensure_open()
+            require_precision_schedule(self._calculator._library)
             started = perf_counter()
             requested = self._facade._properties(properties)
             if requested - self.capabilities.supported_properties:

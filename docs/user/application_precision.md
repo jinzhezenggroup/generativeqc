@@ -676,7 +676,8 @@ Two rules matter when reading this page's guarantees:
 ## Failure behavior
 
 The selected runtime must provide the shared precision-controls and
-precision-admission queries used by Fast. Missing policy support is an
+precision-admission queries used by Fast, and the precision execution controller
+used by every profile. Missing policy or execution support is an
 installation error with an update/rebuild diagnostic; it does not authorize
 Python selection or an implicit FP64 audit. Unsupported numerical domains with
 a current policy still retain their explicit strict/audit paths. This protocol
@@ -717,6 +718,23 @@ Policies and report records are frozen. Targets own immutable requirements;
 `to_dict()` returns detached data. Calculator inputs are snapshotted through the
 native facade, including resolved local basis and KS settings. Calls on one
 instance serialize; use independent instances for concurrent execution.
+
+The selected native library owns the bounded per-item candidate, eligible FP64
+retry, classification, release, independent audit and tighter verification order.
+Its synchronous callback protocol is documented in the
+[native API reference](../reference/native_symbols.md). A missing or refused
+controller does not select a Python schedule. Only an eligible initial numerical
+candidate failure can request the single FP64 retry; cancellation, input,
+allocation and audit failures do not request it. A completed controller receipt
+is not evidence that an observable budget passed: an unmet tighter verification
+still raises `PrecisionBudgetError`.
+
+Python adapts the existing electronic owners to these operations, interprets
+qualification/gradient evidence, measures observable errors and publishes detached
+reports. Prepared fleet execution, eligibility and independent candidate/auditor
+seed history also retain their existing Python owners. This bounded stage-order
+contract is not a standalone native precision endpoint, SDK/CLI parity, or a new
+scientific qualification.
 
 Endpoint workspaces are released before starting the next audit owner, so a
 retained candidate does not double the resident resource budget. Returned

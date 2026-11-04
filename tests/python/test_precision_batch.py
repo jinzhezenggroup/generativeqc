@@ -29,6 +29,21 @@ from test_precision_policy import backend as _scalar_backend
 backend = _scalar_backend
 
 
+def test_missing_execution_protocol_rejects_before_candidate_fleet_work(
+    fleet: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    facade = PrecisionCalculator(policy="balanced")
+    with facade.prepare_batch([ATOMS]) as batch:
+        monkeypatch.setattr(
+            facade._candidate._library, "generativeqc_precision_execution_run_v1", None
+        )
+        with pytest.raises(
+            NotImplementedError, match="required precision execution controller"
+        ):
+            batch.execute()
+        assert fleet.executions == []
+
+
 def item(index: int = 0, energy: float = -1.0, **changes: Any) -> BatchItemResult:
     """Detach a converged result whose Fock total is not its iteration count."""
     return replace(
