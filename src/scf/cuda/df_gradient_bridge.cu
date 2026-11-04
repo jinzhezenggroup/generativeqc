@@ -2276,7 +2276,9 @@ generativeqc_status execute_cuda_df_hf_gradient(
               // Generate a bounded panel once, then unpack each requested Q
               // into the disjoint raw AO slice used by C^T*A*C. Auxiliary
               // columns remain contiguous per packed pair, including tails.
-              auto* packed = workspace + spectral_fixed;
+              // The admitted fixed count includes the separately allocated density.
+              // The packed panel begins after the spectral workspace alone.
+              auto* packed = workspace + (source_fixed_elements - n * n);
               if (p < spectral_raw_begin || p - spectral_raw_begin >= spectral_raw_count) {
                 spectral_raw_begin = p;
                 spectral_raw_count = std::min(tile, a - p);

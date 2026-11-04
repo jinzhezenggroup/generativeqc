@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from _cpp_source_support import cpp_function_definition, cpp_if_block
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -175,3 +178,231 @@ int main() {
         ),
     )
     subprocess.run([str(binary)], check=True, capture_output=True, timeout=30)
+
+
+def test_spectral_packed_source_uses_the_consumer_workspace_boundary(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute the CUDA bridge's actual packed reader against guarded host storage.
+
+    The source-admission count includes an independently uploaded density. The
+    packed panel must start at the consumer's weight interval, not at that larger
+    count. Extract both sides so a stale identifier fails compilation and an
+    in-bounds but shifted pointer cannot pass a copied arithmetic-only probe.
+    """
+    root = Path(__file__).resolve().parents[2]
+    bridge = (root / "src/scf/cuda/df_gradient_bridge.cu").read_text()
+    fixed = re.search(
+        r"\bconst\s+auto\s+source_fixed_elements\s*=[^;]+;"
+        r"\s*if\s*\(\s*!source_fixed_elements\s*\)\s*throw\s+std::bad_alloc\(\);",
+        bridge,
+    )
+    assert fixed is not None, "missing source admission declaration and guard"
+    reader = cpp_if_block(bridge, "spectral_occupied && source")
+    consumer = cpp_function_definition(
+        (root / "src/scf/cuda/df_response_weights.cu").read_text(),
+        "contract_spectral_occupied_exchange",
+    )
+    layout = re.search(
+        r"\bconst\s+auto\s+rank\s*=.*?(?=\bconst\s+auto\s+ni\s*=)",
+        consumer,
+        re.DOTALL,
+    )
+    assert layout is not None, "missing spectral consumer layout"
+    source = tmp_path / "spectral_packed_layout.cpp"
+    source.write_text(
+        SPECTRAL_PACKED_PRELUDE
+        + fixed.group()
+        + "\nreturn source_fixed_elements;\n}\n"
+        + SPECTRAL_PACKED_PROBE
+        + layout.group()
+        + SPECTRAL_PACKED_READER_SETUP
+        + reader
+        + SPECTRAL_PACKED_MAIN
+    )
+    binary = tmp_path / "spectral_packed_layout"
+    native_cxx.build_executable(
+        [source],
+        binary,
+        compile_args=(
+            "-std=c++20",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(root / "src"),
+        ),
+    )
+    subprocess.run([str(binary)], check=True, capture_output=True, timeout=30)
+
+
+SPECTRAL_PACKED_PRELUDE = r"""
+#include "scf/df_response_tile_budget.hpp"
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cstddef>
+#include <new>
+#include <stdexcept>
+#include <string>
+#include <vector>
+using namespace generativeqc::scf;
+constexpr int cudaSuccess=0, cudaErrorInvalidValue=1;
+constexpr int GENERATIVEQC_STATUS_SUCCESS=0, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2;
+int cudaGetLastError() { return cudaSuccess; }
+void check(int status) { assert(status==cudaSuccess); }
+namespace runtime::cuda_trace {
+void trace_counter(const char*, std::size_t) {}
+}
+struct Factor { std::size_t rank; const double* coefficients; };
+struct Occupied { std::array<Factor,1> factors; };
+struct Metric { bool full_rank; };
+struct Arena { struct { std::size_t recomputed_value_bytes=0; } stats; int stream=0; };
+struct Source {
+  std::size_t n, a, epoch, calls=0;
+  double* expected_packed;
+  double value(std::size_t pair, std::size_t q) const {
+    return static_cast<double>(epoch*1000000+q*10000+pair+1);
+  }
+};
+int generate_cuda_density_fitting_packed_raw_tile(
+    Source* source, std::size_t source_index, std::size_t first_pair, std::size_t pairs,
+    std::size_t begin, std::size_t count, int stream, double* packed, std::string&) {
+  assert(source_index==0 && first_pair==0 && stream==0);
+  assert(pairs==source->n*(source->n+1)/2 && begin+count<=source->a);
+  // Check before writing: even the one-column mutant stays a defined failure.
+  assert(packed==source->expected_packed);
+  ++source->calls;
+  for (std::size_t pair=0; pair<pairs; ++pair)
+    for (std::size_t q=0; q<count; ++q)
+      packed[pair*count+q]=source->value(pair,begin+q);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+namespace cuda_df {
+void launch_unpack_df_values(int stream, std::size_t n, std::size_t columns,
+                             std::size_t first_row, std::size_t rows, std::size_t column,
+                             std::size_t count, bool auxiliary_major,
+                             const double* packed, double* values) {
+  assert(stream==0 && first_row==0 && rows==n && count==1 && auxiliary_major);
+  assert(column<columns);
+  for (std::size_t i=0; i<n; ++i) for (std::size_t j=0; j<n; ++j) {
+    const auto high=std::max(i,j), low=std::min(i,j);
+    values[i*n+j]=packed[(high*(high+1)/2+low)*columns+column];
+  }
+}
+}  // namespace cuda_df
+std::size_t selected_fixed(std::size_t n, std::size_t a, std::size_t term_count,
+                           bool truncated, std::size_t rank) {
+  std::vector<int> terms(term_count);
+  Metric metric{!truncated};
+  const auto* device_metric=&metric;
+  Occupied owner{{Factor{rank,nullptr}}};
+  const auto* occupied=&owner;
+  const bool spectral_occupied=rank!=0;
+"""
+
+SPECTRAL_PACKED_PROBE = r"""
+int exercise_panel(std::size_t n, std::size_t a, std::size_t rank_value,
+                    std::size_t tile, std::size_t epoch) {
+  const auto expected_fixed=4*a*a+2*a*rank_value*rank_value+n*n+n*rank_value;
+  const auto source_fixed_elements=selected_fixed(n,a,1,true,rank_value);
+  assert(source_fixed_elements==expected_fixed+n*n);
+  const auto elements=df_spectral_occupied_workspace(n,a,rank_value,tile);
+  assert(elements==expected_fixed+tile*n*n);
+  constexpr double untouched=-991, guard=-882;
+  std::vector<double> storage(elements+2,untouched), density(n*n+2,guard);
+  storage.front()=storage.back()=guard;
+  auto* workspace=storage.data()+1;
+  // These are the actual CUDA consumer's declaration, validation and pointers.
+  const Factor factor{rank_value,density.data()+1};
+  constexpr bool read_values=true;
+"""
+
+SPECTRAL_PACKED_READER_SETUP = r"""
+  assert(bar_root==workspace && metric_temporary==workspace+a*a);
+  assert(transformed==workspace+2*a*a && raw_projected==workspace+4*a*a);
+  assert(fitted==raw_projected+a*rank*rank && raw==fitted+a*rank*rank);
+  assert(half==raw+n*n && weights==half+n*rank);
+  assert(weights==workspace+expected_fixed && weights+tile*n*n==workspace+elements);
+  // The packed panel aliases only the still-dead derivative weight interval.
+  // No metric/occupied matrix, raw AO slice or half projection may alias it.
+  Source fixture{n,a,epoch,0,workspace+expected_fixed};
+  auto* source=&fixture;
+  constexpr bool spectral_occupied=true;
+  constexpr std::size_t source_index=0;
+  constexpr int stream_handle=0;
+  std::string detail;
+  Arena arena;
+  std::size_t spectral_raw_begin=a, spectral_raw_count=0;
+  auto read=[&](std::size_t p, double* values) {
+"""
+
+SPECTRAL_PACKED_MAIN = r"""
+  };
+  auto check_guards=[&] {
+    assert(storage.front()==guard && storage.back()==guard);
+    assert(std::all_of(workspace,raw,[&](double v) { return v==untouched; }));
+    assert(std::all_of(half,weights,[&](double v) { return v==untouched; }));
+    assert(std::all_of(density.begin(),density.end(),[&](double v) { return v==guard; }));
+  };
+  const auto pairs=n*(n+1)/2;
+  for (std::size_t p=0; p<a; ++p) {
+    const auto calls=fixture.calls;
+    const bool new_panel=p%tile==0;
+    // A new panel may overwrite only its live packed prefix. Cache hits must
+    // preserve the actual earlier generated data, not reconstruct it in the test.
+    if (new_panel) std::fill(weights,workspace+elements,untouched);
+    read(p,raw);
+    assert(fixture.calls==calls+new_panel);
+    for (std::size_t i=0; i<n; ++i) for (std::size_t j=0; j<n; ++j) {
+      const auto high=std::max(i,j), low=std::min(i,j);
+      assert(raw[i*n+j]==fixture.value(high*(high+1)/2+low,p));
+    }
+    // Including the shorter last panel, storage beyond packed pairs is untouched.
+    assert(std::all_of(weights+pairs*spectral_raw_count,workspace+elements,
+                       [&](double v) { return v==untouched; }));
+    const auto before_repeat=storage;
+    read(p,raw);
+    assert(storage==before_repeat && fixture.calls==calls+new_panel);
+    check_guards();
+  }
+  assert(fixture.calls==(a+tile-1)/tile);
+  assert(arena.stats.recomputed_value_bytes==pairs*a*sizeof(double));
+  // A backwards read invalidates a later cached panel rather than serving it stale.
+  const auto old_calls=fixture.calls;
+  read(0,raw);
+  assert(fixture.calls==old_calls+(a>tile));
+  assert(raw[0]==fixture.value(0,0));
+  check_guards();
+  // Once projection is finished, the complete dense derivative panel reuses
+  // the same interval without crossing the allocation's trailing sentinel.
+  std::fill(weights,weights+tile*n*n,37);
+  check_guards();
+  return cudaSuccess;
+}
+int main() {
+  // Full-rank and dense truncated source paths include their uploaded densities
+  // and retain their own existing layouts; only occupied truncation uses rank.
+  for (std::size_t n : {1U,2U,5U,17U}) for (std::size_t a : {1U,3U,8U}) {
+    for (std::size_t terms : {1U,2U,3U}) for (bool truncated : {false,true}) {
+      const auto expected=4*a*a+(3+terms)*n*n+2*terms*a+(truncated ? a*n*n : 0);
+      assert(selected_fixed(n,a,terms,truncated,0)==expected);
+    }
+    for (std::size_t rank : {std::size_t{1},n})
+      for (std::size_t tile : {std::size_t{1},std::min(std::size_t{3},a),a})
+        for (std::size_t epoch : {1U,2U})
+          assert(exercise_panel(n,a,rank,tile,epoch)==cudaSuccess);
+  }
+  // Declaration/guard extraction must retain admission failure as well as size.
+  for (const auto shape : {std::array<std::size_t,5>{0,3,1,1,1},
+                            std::array<std::size_t,5>{2,3,2,1,1},
+                            std::array<std::size_t,5>{2,3,1,0,1},
+                            std::array<std::size_t,5>{2,3,1,1,3}}) {
+    bool rejected=false;
+    try { (void)selected_fixed(shape[0],shape[1],shape[2],shape[3],shape[4]); }
+    catch (const std::bad_alloc&) { rejected=true; }
+    assert(rejected);
+  }
+}
+"""
