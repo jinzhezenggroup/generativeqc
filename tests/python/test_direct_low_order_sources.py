@@ -57,6 +57,7 @@ def prepare_source_probe(directory: Path) -> Path:
         "#pragma once\n#include <algorithm>\n#include <cmath>\n"
         "#define __device__\n#define __host__\n#define __forceinline__ inline\n"
         "#define __noinline__\nusing std::min; using std::max; using std::isfinite;\n"
+        "inline unsigned long long clock64() { return 0; }\n"
         "template<class T> inline T atomicAdd(T* target, T value) {\n"
         "  const T previous = *target; *target += value; return previous;\n}\n"
     )
