@@ -1128,7 +1128,8 @@ void run_fast_anchor_delta_case() {
                              &gpu_model.correction, gpu_nonlocal.get(),
                              dft::nlc::Vv10DensityDomain::MolecularV1);
         const auto result = plan.run(nullptr, false);
-        require(result.converged && std::abs(result.energy - reference.energy) < 1e-5,
+        const auto energy_gate = mode == 0 ? 1e-5 : 1e-8;
+        require(result.converged && std::abs(result.energy - reference.energy) < energy_gate,
                 "Fast anchor total-density XC/VV10 endpoint disagrees with independent CPU");
         const auto cold = plan.transfers();
         const bool expected = mode != 2 && selection && std::strcmp(selection, "1") == 0;
@@ -1209,6 +1210,7 @@ void run_fast_anchor_delta_case() {
         std::size_t free_bytes{}, total_bytes{};
         require(cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess,
                 "Could not query Fast anchor force-memory pressure");
+        detail.clear();
         const auto handoff_status = plan.prepare_force_memory(token, total_bytes, receipt, detail);
         const auto retired_state_bytes = plan.resources().state_device_bytes;
         // Strict pressure can retire frozen-VV10 storage as well as J/K anchors.

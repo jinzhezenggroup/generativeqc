@@ -120,6 +120,39 @@ Fast owner; its separate retry preserves the original attempt rather than
 overwriting it. These small shape-specific observations are not general
 performance or default-promotion evidence.
 
+## Mainline integration
+
+During this trial, mainline merged both the independent strict prototype in
+#2986 and the facade work in #2990. The follow-up consolidates the prototype's
+separate strict/Fast admission helpers while preserving its native
+`cuda_ks_anchor_admission` and `cuda_ks_anchor_validation` progress scopes and
+stricter native CPU-oracle energy gate. Mainline's unrelated standalone BJ
+curvature work is retained. All timing numbers above remain attached to the
+frozen dirty `c511f9a33` trial image, not relabeled as measurements of the later
+integrated mainline image.
+
+The integrated source identity is
+`3bf9c947cef976911bd1c2a20a6b062803ad50ec73b1b40b9cf722f3fdf4b941`;
+the hook-free normal Release library SHA256 is
+`288955266cb2dbe2b1d0ba3b5c680671bea9d2a09382de6e592c3c2010c4f08f`.
+Its focused host suites pass **909 tests, with 20 skips**. The stronger native
+CPU-oracle/lifetime fixture passes under finite Slurm job **15938**. Separate
+water-24 OFF/ON Standard numerical checks, each with three warm calls, pass
+all eight complete E/F gates in job **15940**. Maximum independent energy,
+force-component and force-RMS errors are 5.503e-11/1.277e-11/4.830e-12,
+respectively. These are numerical integration checks, not a new paired timing
+qualification. The initial job 15939 fails the harness selector precondition
+before execution; its receipt is retained separately from the successful retry.
+
+Integrated raw receipts remain ignored under
+`.artifacts/standard-fast/unified-anchor/integrated-device/`. The two successful
+endpoint receipt SHA256 values are
+`df2ff1d9045a130ec5659f9e138a89a4a3236192d249bc53776f135df5052e0f`
+and `9972dcc4671e2fb66cfbc663ab243b1b11f39d12338aa04999dc885af3c33eaa`.
+Before rebuilding, preserve the complete original remote source/build at
+`source-frozen-0ad` within the task-owned qualification root. Its original
+library still hashes to `a1b97c319f7855a3763c1965e172ec0cf0b08e6ccc9483577060c1b68b4cb281`.
+
 ## Rejected alternatives and remaining scope
 
 Do not copy the earlier research timings or infer speed from anchor counts.
