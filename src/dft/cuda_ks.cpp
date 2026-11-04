@@ -372,14 +372,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // Algebraic cold factors have no canonical generation and cannot lend W/U.
   bool cold_fitted_factor_ready{};
   std::vector<double> cold_factor_spectrum;
-  bool occupied_xc_frame_ready{};
-  const bool occupied_xc_requested = [] {
-    const auto* value = std::getenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC");
-    // Request the existing exact-frame route automatically. Admission still
-    // requires the canonical frame that formed this D, strict FP64 meta-GGA
-    // work, and a smaller occupied domain; explicit 0 restores matrix products.
-    return !value || (value[0] == '1' && value[1] == '\0');
-  }();
   // Only this immutable owner can create a factor-backed warm seed. A separate
   // storage tag survives frozen replays and provider scratch/force writes.
   bool warm_factor_storage{};
@@ -2425,7 +2417,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
     final_generation = 0;
     cold_fitted_factor_ready = occupied_fitted_factor_ready = false;
     pending_fitted_occupied = false;
-    occupied_xc_frame_ready = false;
     // Arbitrary imported/changed-geometry seeds never borrow a previous frame.
     // A same-owner factor-backed warm seed can restore its own exact AO C below.
     invalidate_warm_orbitals();
@@ -3372,20 +3363,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
       runtime::cuda_trace::trace_counter("xc_point_ao_visits", prepared_ao_work.point_ao_visits);
       runtime::cuda_trace::trace_counter("xc_point_ao_square_sum",
                                          prepared_ao_work.point_ao_square_sum);
-      CudaXcOccupiedDensity occupied_frame;
-      if (occupied_xc_requested && occupied_xc_frame_ready && !device_chunk_mode &&
-          !device_nonlocal && !precision_schedule.any_lower_precision()) {
-        occupied_frame = {
-            density,        tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
-            next_generation};
-      }
-      // The lease ends before residual/DIIS scratch reuses tmp1 on this stream.
-      // Only accepting a new structured proposal can publish another frame.
-      occupied_xc_frame_ready = false;
-      runtime::cuda_trace::trace_counter("occupied_xc_frame_generation",
-                                         occupied_frame.coefficients ? next_generation : 0);
+      // Exact occupied verification repeats original-D work after projection.
+      // Until a cheaper qualified contract exists, all KS requests (including
+      // GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1) use the ordinary matrix route.
+      // Lower-level CudaXcPlan experiments retain their explicit frame API.
+      runtime::cuda_trace::trace_counter("occupied_xc_frame_generation", 0);
       if (!device_nonlocal || nonlocal_seed_stage) {
-        xc->enqueue(density, elements, next_generation, phase, occupied_frame);
+        xc->enqueue(density, elements, next_generation, phase);
         return xc->view(next_generation);
       }
       // Keep AO/semilocal work separate from the quadratic nonlocal pair sweep
@@ -4367,10 +4351,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = !output.converged && refinement_budget;
     }
     try {
-      // Every completion decision retires the old scratch lease. Only a newly
-      // accepted proposal whose canonical frame survived final probing may
-      // lend tmp1 to the next XC generation below.
-      occupied_xc_frame_ready = false;
       // Final RI-K provenance is independent of whether the caller elects to
       // update the reusable warm density cache.
       if (output.converged) retain_final_fitted_projection();
@@ -4409,7 +4389,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
           warm_orbitals_are_ao = retain_ao;
           ++movement.warm_orbital_frames_retained;
           occupied_fitted_factor_ready = fitted_exchange;
-          occupied_xc_frame_ready = !device_chunk_mode;
         }
       } else {
         occupied_fitted_factor_ready = false;

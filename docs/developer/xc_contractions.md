@@ -85,19 +85,20 @@ arithmetic contract.
 
 ## Explicit native execution
 
-The CUDA KS owner automatically requests occupied-orbital density features for
-eligible strict-FP64 meta-GGA proposals. Only the token-bound canonical frame
-that actually formed the accepted density can supply the four orbital jets,
-and a tile uses it only when its occupied rank is smaller than its active AO
-count. Existing density scratch holds the projection; potential assembly still
-uses the original AO jets. No extra allocation or screening change is required.
+The CUDA KS owner uses ordinary matrix features for all requests, including
+`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1`. This control does not select a production
+occupied shortcut. The exact certificate repeats original-D feature work after
+projection, so KS does not supply an occupied frame. Cold, warm and moved owners
+retain the same matrix route without candidate projection or verification work.
 
-Every completion retires that frame lease. Held confirmations, rejected probes,
-imported densities, mixed precision, nonlocal and response work, and missing or
-stale frames retain matrix contraction. LDA/GGA's one-jet route is unchanged.
-`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=0` disables the request for comparison or
-rollback; unset or `1` requests it without bypassing any admission check.
-Other explicit values also retain matrix contraction.
+Lower-level `CudaXcPlan` experiments retain the explicit borrowed-frame API and
+[native certificate contract](xc_native_cuda.md#occupied-density-certificates).
+They require eligible strict-FP64 meta-GGA inputs, exact original-D identity,
+a matching canonical generation and bounded scratch capacity. The feature,
+compact-batch and native-plan tests continue to exercise these contracts.
+Re-enabling production admission requires both numerical and complete-endpoint
+cost qualification; see the
+[matrix-fallback decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-production-matrix-fallback.md).
 
 The CUDA density-feature reduction uses one warp per spin/grid point for
 32 or more AOs. Lanes traverse adjacent AO components and reduce the existing

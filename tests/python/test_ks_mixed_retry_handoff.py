@@ -165,7 +165,7 @@ struct Owner {
   double* nonlocal_anchor_potential=&anchor_data;
   int* nonlocal_anchor_error{};
   bool device_nonlocal = true;
-  bool occupied_xc_requested{}, occupied_xc_frame_ready{}, device_chunk_mode{};
+  bool device_chunk_mode{};
   struct { bool any_lower_precision() const { return false; } } precision_schedule;
   double* tmp1{};
   std::size_t n{1}, spins{1}, occupations[2]{1, 0};

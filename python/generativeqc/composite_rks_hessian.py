@@ -19,6 +19,7 @@ import time
 import typing
 from copy import deepcopy
 from dataclasses import dataclass, replace
+from functools import partial
 from types import MappingProxyType, SimpleNamespace
 
 from generativeqc_compiler.common.array_execution import arrays as np
@@ -65,7 +66,7 @@ from .hessian_basis import HessianBasis
 from .ks import composite_stationary_second_order_eligible
 from .profiles import canonical_hash
 from .response_operator import CPKSResponseOperator
-from .response_solver import GMRESOptions, solve
+from .response_solver import DiagonalPreconditioner, GMRESOptions, solve
 from .rks_hessian import (
     RKSHessianResult,
     _checked_integral_budget,
@@ -1091,15 +1092,24 @@ def composite_rks_hvp(
             operator.integral_basis.matrix(overlap),
         )
 
+    response_preconditioner = "none"
+
     def response_driver(values: tuple) -> typing.Any:
+        nonlocal response_preconditioner
         if isinstance(operator, CompositeUKSResponse):
             return operator.solve_nuclear(
                 *values, GMRESOptions() if solver_options is None else solver_options
             )
+        preconditioner = DiagonalPreconditioner.from_orbital_gaps(
+            operator.problem.reference.orbital_energies, operator.problem.layout
+        )
+        response_preconditioner = (
+            "orbital-gap" if preconditioner is not None else "none-singular-orbital-gap"
+        )
         return solve_stationary_nuclear_perturbation(
             operator,
             *values,
-            solver=solve,
+            solver=partial(solve, preconditioner=preconditioner),
             options=GMRESOptions() if solver_options is None else solver_options,
         )
 
@@ -1226,6 +1236,7 @@ def composite_rks_hvp(
         else None,
         "execution_residency": "host",
         "nuclear_response_solves": 1,
+        "response_preconditioner": response_preconditioner,
         "displaced_scf_evaluations": 0,
         "response_residual_norm": response.solve_result.residual_norm,
         "response_iterations": response.solve_result.iterations,

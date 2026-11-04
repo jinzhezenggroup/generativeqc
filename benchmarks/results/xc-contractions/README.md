@@ -119,14 +119,14 @@ process trials. Full native-library build time is not included in the generated
 point compilation total. Complete program construction, basis/spatial/prepared
 construction and execution times remain separate in the samples.
 
-`samples.json.gz`, `summary.json`, `evidence.json.gz` and `publication.json` form the
+`samples.json.gz`, `summary.json.xz`, `evidence.json.gz` and `publication.json` form the
 shared-policy publication. The sample case list is grouped by fixture under
 `samples-cases/`; `tools.vibeqc_validation.record.load_record` checks the part
 hashes and reconstructs all 128 cases and 640 samples without changing values.
 Every file fits the hard 1 MiB limit.
 Transient compiler output and benchmark logs remain under `.artifacts/`.
 
-The supplemental `sanitizer.json` retains 16 CPU ASan/UBSan ABI harness results
+The supplemental `sanitizer.json.xz` retains 16 CPU ASan/UBSan ABI harness results
 covering LDA/PBE, both spin layouts, all four observables, malformed counts,
 null pointers and zero/overflow sizes. All emitted point-source hashes were
 verified identical at the measured revision. It does not relabel the normal
@@ -142,3 +142,11 @@ Large retained JSON members use deterministic gzip. The publication manifest
 pins their stored paths and hashes; the shared record reader restores every
 original numerical value and sample order. This storage change adds no new
 measurement, acceptance decision or performance claim.
+
+The summary and supplemental sanitizer record also use lossless XZ. Decode
+with Python's standard-library `lzma.open` and `json.load`, or use
+`tools.generativeqc_validation.record.load_publication_record` with the logical
+names `summary.json` and `sanitizer.json` and role `summary`. Both are bound by
+stored-byte hashes in `publication.json`; no Git history or network is required.
+The decompressed bytes are unchanged, including all source identities, failed
+controls, numerical observations and timing samples.

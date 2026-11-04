@@ -84,6 +84,11 @@ admission. Independent complete molecular references, real-spherical Ni,
 external def2-SVP records, installed endpoint/resource qualification and the
 production-scale gate remain necessary before promotion or issue closure.
 The low-level receipt explicitly reports `public_calculator_endpoint=False`.
+The CPU restricted composite owner conditions its existing shared response
+solve with signed occupied/virtual orbital gaps. Zero/near-zero gaps decline
+this scaling without modifying the physical operator or residual gates; see
+[the response contract](response.md). This is method-neutral conditioning,
+not a new hybrid response solver or additional endpoint qualification.
 CPU full-range integral sources reuse the compiler's factorized Hermite/Boys
 jets through a bounded host consumer, rather than compiling each ERI component
 tile separately. This consumer admits at most 128 primitive records and 64
