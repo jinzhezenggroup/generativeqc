@@ -3977,7 +3977,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       launch_subtract_matrix_batches_kernel(blocks, 128, 0, stream, 1, spins, n, tmp2, enabled,
                                             residual);
       check(cudaGetLastError());
-      if (standard_nonlocal_model && standard_convergence_active()) {
+      const bool physical_orbital_check = standard_nonlocal_model &&
+                                          standard_convergence_active() && !pending_nonlocal_seed &&
+                                          !pending_nonlocal_frozen;
+      if (physical_orbital_check) {
         // X^T S X=I and D=2 C_occ C_occ^T. Hence the transformed physical
         // commutator norm is sqrt(2)*||2 C_vir^T F C_occ||_F. Neither AO RMS
         // nor its largest element can be compared to the MO threshold directly.
@@ -4026,13 +4029,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
       multiply(x, false, false, tmp2, true, tmp1);
       build_density(tmp1, nullptr, enabled, proposal);
       check(cudaGetLastError());
-      cuda_ks_detail::diagnostics(
-          stream, n, spins, density, proposal, residual, hcore, overlap, j, exchange,
-          exchange_coefficient, range_exchange, range_exchange_coefficient, potential.totals,
-          potential.error, jk_error, range_jk_error,
-          device_nonlocal ? nonlocal_domain_error : nullptr,
-          device_nonlocal ? nonlocal_pair_error : nullptr, solver_info, enabled, scalar_records,
-          standard_nonlocal_model && standard_convergence_active());
+      cuda_ks_detail::diagnostics(stream, n, spins, density, proposal, residual, hcore, overlap, j,
+                                  exchange, exchange_coefficient, range_exchange,
+                                  range_exchange_coefficient, potential.totals, potential.error,
+                                  jk_error, range_jk_error,
+                                  device_nonlocal ? nonlocal_domain_error : nullptr,
+                                  device_nonlocal ? nonlocal_pair_error : nullptr, solver_info,
+                                  enabled, scalar_records, physical_orbital_check);
       check(cudaGetLastError());
     } catch (...) {
       cudaStreamSynchronize(stream);
