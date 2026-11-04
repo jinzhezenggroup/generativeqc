@@ -55,6 +55,10 @@ retain their own bounded policies.
 - Inspected reference: GPU4PySCF 1.9 `2fdc1951670a8e173dce063e697727bbc9f97616`,
   `gpu4pyscf/scf/hf.py`, physical gradient and `_kernel` stopping predicates.
 - Frozen replay: six pairs, all 96 independent cross-engine E/F comparisons pass.
+- Slurm 15916, physical RTX 5090: the exact changed CUDA diagnostic unit passes
+  an independent host-sum versus device MO-gradient reduction, preservation by
+  physical diagnostics, and isolation from strict/unsupported diagnostics.
+  This standalone unit is not a full production image or an endpoint timing.
 - Exact-source CUDA build and targeted native default/explicit-strict E+F
   comparisons remain pending; no new speedup or default qualification claimed.
 - An initial host test attempt used an older runtime missing

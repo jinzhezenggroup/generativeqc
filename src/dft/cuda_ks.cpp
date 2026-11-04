@@ -3988,6 +3988,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         multiply(x, false, true, tmp1, true, tmp2);
         cuda_ks_detail::orbital_gradient(stream, n, tmp2, enabled, scalar_records);
         check(cudaGetLastError());
+        runtime::cuda_trace::trace_counter("physical_orbital_gradient_checks", 1);
       }
       if (final_closure) {
         // Discard DIIS history and rebuild the closure proposal from F[D].
