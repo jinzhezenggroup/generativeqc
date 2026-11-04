@@ -121,6 +121,14 @@ int main() {
                 retained,
             "ECP capacity omitted");
     value.source.reset();
+    copy = system;
+    copy.ecp_terms.reserve(43);
+    const auto spare_ecp_terms = copy.ecp_terms.capacity() - system.ecp_terms.capacity();
+    value = scf::detach_rhf_cuda_source(owner, std::move(copy), peak, 1000000);
+    require(value.source &&
+                value.retained_numeric_bytes == retained + spare_ecp_terms * sizeof(core::EcpTerm),
+            "reserved ECP allocation omitted or counted twice");
+    value.source.reset();
     mode = 1;
     copy = system;
     value = scf::detach_rhf_cuda_source(owner, std::move(copy), peak, 1000000);

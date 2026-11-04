@@ -10,7 +10,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  # Only the newest PR overlap report is actionable.
+  cancel-in-progress: true
 
 jobs:
   overlap:

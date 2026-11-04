@@ -150,6 +150,34 @@ EcpData checked_ecp_integrals(const core::System& system, bool derivatives) {
   return fine;
 }
 
+std::size_t ecp_workspace_capacity(const core::System& system) {
+  if (system.ecp_terms.empty()) return 0;
+  const auto ao_count = molecule::ao_count(system);
+  const auto polar = generated::ecp_refined_polar_points;
+  const auto angular = runtime::size_mul(2 * polar, polar);
+  const auto tile = generated::ecp_cuda_radial_tile(ao_count, polar);
+  const auto coordinates = runtime::size_add(1, runtime::size_mul(3, system.atoms.size()));
+  // Both checked grids can coexist with public value/coordinate output panels.
+  auto bytes = runtime::size_mul(
+      8 * sizeof(double), runtime::size_mul(runtime::size_mul(ao_count, ao_count), coordinates));
+  // Four-component values/projections include simultaneous host/device staging.
+  bytes = runtime::size_add(
+      bytes,
+      runtime::size_mul(
+          64, runtime::size_mul(runtime::size_mul(tile, ao_count),
+                                runtime::size_add(angular, generated::ecp_projector_count))));
+  // Grid/metadata bounds include upload copies and geometric vector growth.
+  bytes = runtime::size_add(bytes, runtime::size_mul(4 * sizeof(EcpSpherePoint), angular));
+  bytes = runtime::size_add(
+      bytes, runtime::size_mul(4 * sizeof(EcpRadialPoint), generated::ecp_refined_radial_points));
+  bytes = runtime::size_add(bytes, runtime::size_mul(512, ao_count));
+  bytes = runtime::size_add(bytes,
+                            runtime::size_mul(4 * sizeof(core::EcpTerm), system.ecp_terms.size()));
+  for (const auto& shell : system.shells)
+    bytes = runtime::size_add(bytes, runtime::size_mul(64, shell.primitives.size()));
+  return bytes;
+}
+
 void add_ecp(const EcpData& ecp, std::vector<double>& hcore, std::vector<double>& derivative) {
   if (hcore.size() != ecp.local.size() || derivative.size() != ecp.local_derivative.size())
     throw std::invalid_argument("ECP and one-electron matrix layouts differ");

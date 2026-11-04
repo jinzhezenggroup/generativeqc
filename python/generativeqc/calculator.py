@@ -577,21 +577,29 @@ class Calculator:
             raise ValueError(
                 "density_fitting must be 'none', 'cpu', 'cuda', 'auto', 'correlation_cuda', or 'full_cuda'"
             ) from error
+        unrestricted_correlated = method_id in (
+            _native.METHOD_UMP2,
+            _native.METHOD_UCCSD,
+            _native.METHOD_UCCSD_T,
+        )
         if density_fitting_mode == _native.DENSITY_FITTING_FULL_CUDA:
-            if method_id not in (_native.METHOD_MP2, _native.METHOD_DF_RCCSD_T):
-                raise ValueError("full_cuda requires MP2 or DF-CCSD(T)")
-            if device != "cuda":
+            if (
+                method_id not in (_native.METHOD_MP2, _native.METHOD_DF_RCCSD_T)
+                and not unrestricted_correlated
+            ):
+                raise ValueError("full_cuda requires a qualified correlated method")
+            if device != "cuda" and not unrestricted_correlated:
                 raise NotImplementedError("full DF correlated methods require CUDA")
             if auxiliary_basis is None:
                 raise ValueError(
                     "full DF requires an explicit shared JK/correlation auxiliary basis"
                 )
         if density_fitting_mode == _native.DENSITY_FITTING_CORRELATION_CUDA:
-            if method_id != _native.METHOD_MP2:
+            if method_id != _native.METHOD_MP2 and not unrestricted_correlated:
                 raise ValueError(
                     "correlation_cuda density fitting is an MP2 reference contract"
                 )
-            if device != "cuda":
+            if device != "cuda" and not unrestricted_correlated:
                 raise NotImplementedError("correlation-only DF-MP2 requires CUDA")
             if auxiliary_basis is None:
                 raise ValueError(
@@ -1274,7 +1282,11 @@ class Calculator:
                 self._capabilities,
                 supported_second_order=frozenset(("hvp", "hessian")),
             )
-        if self._method in _COUPLED_CLUSTER_METHODS and not intrinsic_df_rccsdt:
+        if (
+            self._method in _COUPLED_CLUSTER_METHODS
+            and not intrinsic_df_rccsdt
+            and not unrestricted_correlated
+        ):
             if density_fitting_mode != _native.DENSITY_FITTING_NONE:
                 raise NotImplementedError(
                     "native coupled-cluster density fitting is not implemented"
@@ -1420,7 +1432,13 @@ class Calculator:
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
         if (
-            self._method in (_native.METHOD_RCCSD, _native.METHOD_UMP2)
+            self._method
+            in (
+                _native.METHOD_RCCSD,
+                _native.METHOD_UMP2,
+                _native.METHOD_UCCSD,
+                _native.METHOD_UCCSD_T,
+            )
             or (
                 not batch
                 and self._method == _native.METHOD_MP2
@@ -2057,6 +2075,8 @@ class Calculator:
                 density_fitting_relative_threshold=(
                     self._density_fitting_relative_threshold
                 ),
+                full_df_reference=self._density_fitting_mode
+                == _native.DENSITY_FITTING_FULL_CUDA,
             )
         )
 
@@ -2271,6 +2291,7 @@ class Calculator:
                     source.has_ecp
                     and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
                     and not self._composite_rks_second_order
+                    and self._method not in _CORRELATED_METHODS
                 ):
                     raise NotImplementedError(
                         "ECP density-fitting execution is not yet validated"
@@ -2340,6 +2361,7 @@ class Calculator:
             if (
                 self._density_fitting_mode != _native.DENSITY_FITTING_NONE
                 and not self._composite_rks_second_order
+                and self._method not in _CORRELATED_METHODS
             ):
                 raise NotImplementedError(
                     "ECP density-fitting execution is not yet validated"
@@ -3196,26 +3218,45 @@ class Calculator:
         self,
         atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
         *,
-        companions: Iterable[str] = ("rhf",),
+        companions: Iterable[str] | None = None,
         charge: int = 0,
         multiplicity: int = 1,
         properties: Iterable[str] | None = None,
     ) -> dict[str, Result]:
-        """Execute a conventional MP2/CCSD(T) group with one RHF reference.
+        """Execute an MP2/CCSD(T) group with one native HF reference.
 
         MP2 can supply ``rhf``; CCSD(T) can supply ``rhf`` and ``mp2``.
+        UMP2 can supply ``uhf``; UCCSD(T) can supply ``uhf`` and ``ump2``.
+        Omitting ``companions`` requests the matching HF reference.
+        Unrestricted groups support analytic forces and explicit fitted operators
+        on CPU/CUDA; companions never substitute a restricted reference.
         Coordinates and outputs have the same units as :meth:`singlepoint`.
         All requested analytic forces must complete before any group is returned.
         Method-specific response solves remain separate, while the reference,
-        exact integral source and compatible correction-basis OVOV block are shared.
+        selected integral source and compatible restricted correction-basis OVOV
+        block are shared. Unrestricted phases own bounded spin-aware transforms.
         """
         if getattr(self, "_provider_initialization_intent", None) is not None:
             raise NotImplementedError(
                 "provider initialization intent does not admit companion execution"
             )
-        names = tuple(companions)
-        allowed = {"rhf"} if self._method_name == "mp2" else {"rhf", "mp2"}
-        if self._method_name not in ("mp2", "ccsd(t)", "df-rccsd(t)", "df-ccsd(t)"):
+        unrestricted = self._method_name in ("ump2", "uccsd(t)")
+        hf_method = "uhf" if unrestricted else "rhf"
+        mp2_method = "ump2" if unrestricted else "mp2"
+        names = (hf_method,) if companions is None else tuple(companions)
+        allowed = (
+            {hf_method}
+            if self._method_name in ("mp2", "ump2")
+            else {hf_method, mp2_method}
+        )
+        if self._method_name not in (
+            "mp2",
+            "ccsd(t)",
+            "df-rccsd(t)",
+            "df-ccsd(t)",
+            "ump2",
+            "uccsd(t)",
+        ):
             raise NotImplementedError("companions require MP2 or CCSD(T)")
         if not names or len(set(names)) != len(names) or not set(names) <= allowed:
             raise ValueError("unsupported or duplicate companion methods")
@@ -3532,14 +3573,17 @@ class Calculator:
                     return self._library.generativeqc_calculation_execute(
                         calculation, ctypes.byref(result_descriptor)
                     )
+                unrestricted = self._method_name in ("ump2", "uccsd(t)")
+                hf_method = "uhf" if unrestricted else "rhf"
+                mp2_method = "ump2" if unrestricted else "mp2"
                 return self._library.generativeqc_calculation_execute_components_v1(
                     calculation,
                     ctypes.byref(result_descriptor),
-                    ctypes.byref(component_descriptors["rhf"])
-                    if "rhf" in component_descriptors
+                    ctypes.byref(component_descriptors[hf_method])
+                    if hf_method in component_descriptors
                     else None,
-                    ctypes.byref(component_descriptors["mp2"])
-                    if "mp2" in component_descriptors
+                    ctypes.byref(component_descriptors[mp2_method])
+                    if mp2_method in component_descriptors
                     else None,
                 )
 
@@ -3672,7 +3716,7 @@ class Calculator:
                             context=context,
                             mp2_component=True,
                         )
-                        if method == "mp2"
+                        if method in ("mp2", "ump2")
                         else None,
                     )
             return native_result

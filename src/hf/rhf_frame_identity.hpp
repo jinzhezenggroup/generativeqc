@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "hf/reference.hpp"
-#include "molecule/basis_geometry_identity.hpp"
+#include "molecule/scalar_hamiltonian_identity.hpp"
 #include "posthf/capacity.hpp"
 
 namespace generativeqc::hf {
@@ -25,17 +25,14 @@ class RHFFrameIdentity {
       words = posthf::checked_add(words, 1);
       return true;
     });
-    return posthf::checked_add(molecule::BasisGeometryIdentity::required_storage_bytes(system),
+    return posthf::checked_add(molecule::ScalarHamiltonianIdentity::required_storage_bytes(system),
                                posthf::checked_mul(words, sizeof(std::uint64_t)));
   }
 
   RHFFrameIdentity(const core::System& system, const PhysicalReference& reference)
-      : source_(system),
-        charge_(system.charge),
-        electrons_(system.electron_count),
-        multiplicity_(system.multiplicity) {
+      : source_(system) {
     const auto total = required_storage_bytes(system, reference);
-    words_.reserve((total - molecule::BasisGeometryIdentity::required_storage_bytes(system)) /
+    words_.reserve((total - molecule::ScalarHamiltonianIdentity::required_storage_bytes(system)) /
                    sizeof(std::uint64_t));
     visit(reference, [&](std::uint64_t word) {
       words_.push_back(word);
@@ -44,12 +41,7 @@ class RHFFrameIdentity {
   }
 
   [[nodiscard]] bool matches(const core::System& system, const PhysicalReference& reference) const {
-    // This response owner is all-electron and closed-shell. Do not reuse an
-    // identity outside that domain even if a supplied matrix happens to match.
-    if (!system.ecp_terms.empty() || charge_ != system.charge ||
-        electrons_ != system.electron_count || multiplicity_ != system.multiplicity ||
-        !source_.matches(system))
-      return false;
+    if (!source_.matches(system)) return false;
     std::size_t i = 0;
     return visit(reference,
                  [&](std::uint64_t word) { return i < words_.size() && words_[i++] == word; }) &&
@@ -74,9 +66,7 @@ class RHFFrameIdentity {
     }
     return true;
   }
-  molecule::BasisGeometryIdentity source_;
-  int charge_{}, electrons_{};
-  unsigned multiplicity_{};
+  molecule::ScalarHamiltonianIdentity source_;
   std::vector<std::uint64_t> words_;
 };
 

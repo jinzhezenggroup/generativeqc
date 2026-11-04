@@ -87,8 +87,10 @@ class NativeBlockProvider final : public MOBlockProvider {
                                             generativeqc_tensor::Metrics* metrics = nullptr,
                                             ProviderWork* work = nullptr) const;
   std::vector<std::vector<double>> get_many_spin(const std::vector<SpinMOSlots>& requests,
-                                                 ProviderWork* work = nullptr) const;
-  std::vector<double> get_spin(const SpinMOSlots& request, ProviderWork* work = nullptr) const;
+                                                 ProviderWork* work = nullptr, bool cuda = false,
+                                                 int device = 0) const;
+  std::vector<double> get_spin(const SpinMOSlots& request, ProviderWork* work = nullptr,
+                               bool cuda = false, int device = 0) const;
   std::vector<double> get(const MOSlots& slots, bool cuda = false, int device = 0,
                           generativeqc_tensor::Metrics* metrics = nullptr) const override {
     return get(slots, cuda, device, metrics, nullptr);

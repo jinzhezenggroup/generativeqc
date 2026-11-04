@@ -1,0 +1,193 @@
+{
+  "schema": "generativeqc.h100-db36-profile-baseline.v1",
+  "source_revision": "db3657f08d983791c45b7d949cb9028fe0055e3f",
+  "source_tree": "681cefe8bd066a3fb973ab38e0ef856280625ed1",
+  "core_sha256": "472bd0f9bceaa7917f7137c2cb543f0ebfc6c0b728ed024aeacc81b92c8c83a4",
+  "prior_source_revision": "7013148d8d74e714faf20ce87c533db916264f37",
+  "prior_source_tree": "2a295aa3b05116461a0f4813e4bb9a8d720de1ce",
+  "receiver_adaptation": "None: original receivers in isolated task/source views. Prior-source receipts retain source7013 labels.",
+  "packets": [
+    {
+      "cohort": "nsys-v1",
+      "archive": {
+        "path": "nsys-v1-analysis.tar.xz",
+        "bytes": 636000,
+        "sha256": "9f7c5ba3a8a6fd10cea9e15d34772d346d12b514d9870208e04b1e48f6b5bba1"
+      },
+      "manifest": {
+        "path": "nsys-v1-analysis-download.json.xz",
+        "bytes": 2896,
+        "sha256": "d65df5c7f96070ed650c069bd21804ad9060a0a3424a8314c217756d9dea09ee",
+        "decoded_name": "nsys-v1-analysis-download.json",
+        "decoded_bytes": 8227,
+        "decoded_sha256": "1517d0a4fe663063a7fa69485007ac529f13c8893ce10dff23ba79fa1478b20c"
+      }
+    },
+    {
+      "cohort": "df-molecular-v1",
+      "archive": {
+        "path": "df-molecular-v1-completed.tar.xz",
+        "bytes": 447876,
+        "sha256": "69483f766a0247bfb28b486e9f3c1d3564283e71ce5d973131887fa8a11ec02e"
+      },
+      "manifest": {
+        "path": "df-molecular-v1-download-manifest.json.xz",
+        "bytes": 14800,
+        "sha256": "7e37076e017602c764d2ae009df8c2bebcf9727f9b094e5ef8a0eb7ff7c87629",
+        "decoded_name": "df-molecular-v1-download-manifest.json",
+        "decoded_bytes": 66657,
+        "decoded_sha256": "bbea9b809e856463b2d8e200449ab5d25ac1fab43f14665a2d73f9539737a5e3"
+      }
+    },
+    {
+      "cohort": "screening-v1",
+      "archive": {
+        "path": "screening-v1-completed.tar.xz",
+        "bytes": 413848,
+        "sha256": "ad379382ee761ea3a28b62640b07c0ba72ade613ac82a86d4cfa84e55ae3e121"
+      },
+      "manifest": {
+        "path": "screening-v1-download-manifest.json.xz",
+        "bytes": 13228,
+        "sha256": "c0901d3adb3534c7c77436f19b058ea944e60600007e2f03aba9775f68c5f213",
+        "decoded_name": "screening-v1-download-manifest.json",
+        "decoded_bytes": 62655,
+        "decoded_sha256": "38c7663a11fc051e950cc35d6a256fe21ca8d9008c526368cb450d1c913a0a07"
+      }
+    }
+  ],
+  "source_ledgers": [
+    {
+      "path": "source-applicability-db36-ledger.json.xz",
+      "bytes": 1920,
+      "sha256": "6da5ad85878568b2de63739ca3ff95515f72a91942fb6aa70356ed51492d3f53",
+      "decoded_bytes": 4159,
+      "decoded_sha256": "387dc7cae1b3e7029c926d5b7bc9fe3e76618b0c58a184faa8b076318edb0da7"
+    },
+    {
+      "path": "source-applicability-7013-ledger.json.xz",
+      "bytes": 3152,
+      "sha256": "62f1c74c66ccb8898c12bfd9eb332c6584eccc08880da12d220d77b27b87a9dd",
+      "decoded_bytes": 7686,
+      "decoded_sha256": "a39df438726a594adbcb54bb08fac2316bd280a3cb245c1fbd3560f8b9870a99"
+    },
+    {
+      "path": "source-applicability-review.json.xz",
+      "bytes": 8840,
+      "sha256": "334bad59067eee5ef1a1336b0b346a0f8d8e55032abd8c87d4981f90b4f82871",
+      "decoded_bytes": 31047,
+      "decoded_sha256": "0dfcbfaea17aae4f3c32ca23efaaada421b6ab271e5b493b5887124d8d595249"
+    }
+  ],
+  "proofs": {
+    "source7013-df-molecular-v1-local-replay.json": {
+      "sha256": "7491d8420fdfea0080f1be832a38197fc8226ca1552e89c9cf3c1a80e77f9e6a",
+      "status": "PASS_CURRENT_SOURCE44_DF_TESTS_FULL_PUBLIC_EF_AND_COMPARISON_REPLAY",
+      "source_revision": "7013148d8d74e714faf20ce87c533db916264f37"
+    },
+    "source7013-screening-v1-local-replay-v4.json": {
+      "sha256": "eec82da1c9fbeaddbbe223ddfbb10450e172f64918e1aed861610e713b7e5f8a",
+      "status": "PASS_RECEIVER_REPLAY_ALL66_FIXED_POLICY_ATTEMPTS_WITH_FAILURES_RETAINED",
+      "source_revision": "7013148d8d74e714faf20ce87c533db916264f37"
+    },
+    "source-applicability-admission-v1.json": {
+      "sha256": "5efd57aabc0c30ac9e716c6c12db267ea3637bda42b2b63fb73dfa6b4b3a5701",
+      "status": "PASS_SOURCE_APPLICABILITY_ONLY_NOT_NEW_DEVICE_ACCEPTANCE",
+      "source_revision": "db3657f08d983791c45b7d949cb9028fe0055e3f"
+    },
+    "nsys-v1-local-replay-affected-v1.json": {
+      "sha256": "1ea568419cfc39a13623627d0dcec49cbc3f510a51b916459ddf33baf473251e",
+      "status": "PASS_CURRENT_SOURCE_ONE_AFFECTED_DIRECT_CAPTURE4_EF_ACTUAL_SQLITE_REPLAY",
+      "source_revision": "db3657f08d983791c45b7d949cb9028fe0055e3f"
+    }
+  },
+  "files": [
+    {
+      "path": "nsys-v1-analysis.tar.xz",
+      "bytes": 636000,
+      "sha256": "9f7c5ba3a8a6fd10cea9e15d34772d346d12b514d9870208e04b1e48f6b5bba1"
+    },
+    {
+      "path": "nsys-v1-analysis-download.json.xz",
+      "bytes": 2896,
+      "sha256": "d65df5c7f96070ed650c069bd21804ad9060a0a3424a8314c217756d9dea09ee"
+    },
+    {
+      "path": "df-molecular-v1-completed.tar.xz",
+      "bytes": 447876,
+      "sha256": "69483f766a0247bfb28b486e9f3c1d3564283e71ce5d973131887fa8a11ec02e"
+    },
+    {
+      "path": "df-molecular-v1-download-manifest.json.xz",
+      "bytes": 14800,
+      "sha256": "7e37076e017602c764d2ae009df8c2bebcf9727f9b094e5ef8a0eb7ff7c87629"
+    },
+    {
+      "path": "screening-v1-completed.tar.xz",
+      "bytes": 413848,
+      "sha256": "ad379382ee761ea3a28b62640b07c0ba72ade613ac82a86d4cfa84e55ae3e121"
+    },
+    {
+      "path": "screening-v1-download-manifest.json.xz",
+      "bytes": 13228,
+      "sha256": "c0901d3adb3534c7c77436f19b058ea944e60600007e2f03aba9775f68c5f213"
+    },
+    {
+      "path": "readers/unpack-nsys-affected-v1.py",
+      "bytes": 2579,
+      "sha256": "57fef1f757cdee878d8525de493cfd67a1a4c2330fe671f75b1623c1134e98b8"
+    },
+    {
+      "path": "readers/replay-nsys-affected-v5.py",
+      "bytes": 16148,
+      "sha256": "088b215de23d568f1269fcf5a0e8a4063630b5573071371e35c809ef35e53a6a"
+    },
+    {
+      "path": "readers/unpack-terminal-v2.py",
+      "bytes": 2634,
+      "sha256": "0eb7f74580a531d700275b733083415e917f0ed43a2f67df85582d61442ce0cb"
+    },
+    {
+      "path": "readers/replay-df-molecular-v4.py",
+      "bytes": 15168,
+      "sha256": "42e682775726f52810631e2a279da7b0ece0dfc2c6d25794adc6c9d810aa9a88"
+    },
+    {
+      "path": "readers/replay-screening-integration-v4.py",
+      "bytes": 21933,
+      "sha256": "434f7e212740ea66cb43a011a7195abea4ba126a42bd050767dc68d22c9ca26f"
+    },
+    {
+      "path": "source-applicability-admission-v1.json",
+      "bytes": 11833,
+      "sha256": "5efd57aabc0c30ac9e716c6c12db267ea3637bda42b2b63fb73dfa6b4b3a5701"
+    },
+    {
+      "path": "source-applicability-db36-ledger.json.xz",
+      "bytes": 1920,
+      "sha256": "6da5ad85878568b2de63739ca3ff95515f72a91942fb6aa70356ed51492d3f53"
+    },
+    {
+      "path": "source-applicability-7013-ledger.json.xz",
+      "bytes": 3152,
+      "sha256": "62f1c74c66ccb8898c12bfd9eb332c6584eccc08880da12d220d77b27b87a9dd"
+    },
+    {
+      "path": "source-applicability-review.json.xz",
+      "bytes": 8840,
+      "sha256": "334bad59067eee5ef1a1336b0b346a0f8d8e55032abd8c87d4981f90b4f82871"
+    },
+    {
+      "path": "readers/observe-nsys-cpu-tools-v1.py",
+      "bytes": 1020,
+      "sha256": "76f6687f49c34934ebef532caa724e94485d7bf3bdf7b244374d4a0d19b57db9"
+    }
+  ],
+  "profile_complete_EF": 4,
+  "prior_DF_tests": 44,
+  "prior_DF_complete_EF": 299,
+  "prior_screening_processes": 66,
+  "prior_screening_complete_EF": 264,
+  "clean_final_timing_votes": 0,
+  "majority_accepted": false
+}

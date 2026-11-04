@@ -20,6 +20,7 @@ SHARED_OWNERS = ("core", "runtime", "tensor", "solver", "response")
 # contract itself rather than incorrectly treating the whole directory as a
 # shared layer.
 SHARED_CONTRACTS = {
+    "integrals/correlation_backend.hpp": "synchronous integral backend contract",
     "integrals/electron_interaction_source.hpp": "provider contract",
 }
 METHOD_PREFIXES = ("scf/", "hf/", "dft/", "posthf/", "cc/")
