@@ -39,6 +39,30 @@ def test_census_capture_lifetime_errors_and_unavailable_counts(
     assert complete[0]["executed_shells"] == 7
     assert complete[0]["executed_components"] is None
     assert complete[0]["coulomb_preparations"] is None
+    assert complete[0]["scalar_contraction"] == {
+        "calls": 7,
+        "separable_calls": 4,
+        "separable_primitive_products": 19,
+        "sampled_calls": 3,
+        "sampled_thread_cycles": 123456,
+        "separable_sampled_calls": 2,
+        "separable_sampled_thread_cycles": 76543,
+    }
+    assert all(not any(row["scalar_contraction"].values()) for row in complete[1:])
+    assert complete[0]["scalar_pair_contraction"] == {
+        "attempted_shells": 5,
+        "accepted_shells": 3,
+        "mask_rejections": 1,
+        "numerical_rejections": 1,
+        "checked_ao_quartets": 97,
+        "bra_density_terms": 18,
+        "ket_density_terms": 9,
+        "primitive_products": 16,
+        "screening_pair_terms": 27,
+        "screening_pair_proofs": 2,
+        "screening_pair_fallbacks": 1,
+    }
+    assert all(not any(row["scalar_pair_contraction"].values()) for row in complete[1:])
     assert all(
         row["executed_shells"] is None for row in complete if row["angular_order"] == 6
     )
@@ -120,6 +144,17 @@ int main(int argc, char** argv) {
   assert((calls == std::vector<int>{1,2,3,4,5,6})); calls.clear(); copying = cudaSuccess;
   { DirectForceDiagnostic good(17); assert(good.prepare() == cudaSuccess);
     good.set_complete_domain(true); good.device()->classes[0].executed_shells = 7;
+    auto& scalar = good.device()->classes[0].scalar;
+    scalar.calls = 7; scalar.separable_calls = 4; scalar.separable_primitive_products = 19;
+    scalar.sampled_calls = 3; scalar.sampled_thread_cycles = 123456;
+    scalar.separable_sampled_calls = 2; scalar.separable_sampled_thread_cycles = 76543;
+    auto& pair = good.device()->classes[0].scalar_pair;
+    pair.attempted_shells = 5; pair.accepted_shells = 3;
+    pair.mask_rejections = 1; pair.numerical_rejections = 1;
+    pair.checked_ao_quartets = 97; pair.bra_density_terms = 18;
+    pair.screening_pair_terms = 27; pair.screening_pair_proofs = 2;
+    pair.screening_pair_fallbacks = 1;
+    pair.ket_density_terms = 9; pair.primitive_products = 16;
     assert(good.finish(cudaSuccess) == cudaSuccess); }
   assert((calls == std::vector<int>{1,2,3,4,5,6})); calls.clear();
   { DirectForceDiagnostic partial(17); assert(partial.prepare() == cudaSuccess);
