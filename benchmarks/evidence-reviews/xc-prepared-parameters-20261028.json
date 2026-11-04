@@ -10,8 +10,8 @@
       "family": "xc-prepared-parameters-20261028",
       "classification": "required-compact-accepted-evidence",
       "role": "complete-endpoint-and-point-qualification",
-      "bytes": 284648,
-      "sha256": "2265560c799872163fd33926ab9eab9d01dc3a00c1849be42207b2d90a5b32a8"
+      "bytes": 277948,
+      "sha256": "8872703cce9fe95736c674bff84d9294779698f2fdfbc846dde2a9da0c79996c"
     }
   ]
 }

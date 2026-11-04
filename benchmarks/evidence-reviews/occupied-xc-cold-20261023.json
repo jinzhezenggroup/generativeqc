@@ -10,8 +10,8 @@
       "family": "occupied-xc-cold-20261023",
       "classification": "required-compact-accepted-evidence",
       "role": "complete-endpoint-receipts",
-      "bytes": 346752,
-      "sha256": "99cc6488b3ec7de6f9186f566ea89980d77b88dc23c70a92a2fa4d5ab4516bba"
+      "bytes": 335532,
+      "sha256": "f2bbd7207e6d8c757b6e5ed727cbc9b3eb8435543b09a9426cf14d16a70312bc"
     }
   ]
 }
