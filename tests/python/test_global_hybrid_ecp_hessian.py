@@ -56,14 +56,24 @@ def independent_moved_gradient(
     return gradient.kernel()
 
 
+@pytest.mark.parametrize(
+    "direction",
+    (
+        np.array(((0.02, -0.03, 0.1), (0.0, 0.0, 0.0))),
+        np.array(((1.0, 0.0, 0.0), (0.0, 0.0, 0.0))),
+    ),
+    ids=("original-direction", "unit-cs-x"),
+)
 def test_low_level_def2_cs_rks_hvp_matches_independent_moving_grid_gradients(
-    ecp_records: tuple, tmp_path: object, record_property: object
+    ecp_records: tuple,
+    tmp_path: object,
+    record_property: object,
+    direction: np.ndarray,
 ) -> None:
-    """Freeze a 1e-5 HVP oracle gate and keep failed/unqualified domains separate."""
+    """Retain the 1e-5 oracle gate and the original unscaled unit-column failure."""
     pytest.importorskip("pyscf")
     _, raw, record = ecp_records
     atoms = molecule_atoms("Cs")
-    direction = np.array(((0.02, -0.03, 0.1), (0.0, 0.0, 0.0)))
     calculator = make_calculator(record)
     assert not calculator.capabilities.supported_second_order
     started = perf_counter()

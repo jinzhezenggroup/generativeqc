@@ -49,6 +49,8 @@ void configure_direct_weighted_force_response(DeviceBatch& batch) noexcept {
   const auto* selector = std::getenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES");
   batch.direct_force_relative_response =
       select_direct_weighted_force_response(selector ? selector : "");
+  const auto* separable = std::getenv("GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_PAIR_SEPARABLE");
+  batch.direct_force_pair_separable = separable && std::string_view(separable) == "1";
 }
 
 bool direct_fp32_block_screening_requested() noexcept {

@@ -30,8 +30,11 @@ inherit the canonical WB97M-V public capability registry.
 
 The existing grid owner reserves its persistent storage before handing the
 remaining explicit byte budget to ECP radial-layer jets. Keep this bounded
-failure path and the unchanged two-grid ECP HVP convergence gate. A successful
-SCF or matrix does not waive derivative quadrature admission. Do not replace
+failure path and the unchanged 2e-8 ECP HVP source tolerance. The original
+two-grid fast check now has one bounded denser validation after a finite
+mismatch; it still returns the fixed native fine-grid model, as documented in
+`2026-11-04-scalar-ecp-hessian-bounded-validation.md`. A successful SCF or matrix
+does not waive derivative quadrature admission. Do not replace
 an admission failure with reference work, displaced SCFs, symmetrization or
 inferred Hessian columns.
 
@@ -112,12 +115,20 @@ or the reference-only complete matrices. The fixed absolute ECP source gate
 is not changed, unit columns are not rescaled to bypass it, and no posthoc
 symmetrization or reference fallback is introduced.
 
+The retained failure above predates the bounded-validation repair. For this
+declared CsH fixture, all six actual unscaled native columns and independent
+native bilinear checks now pass; the original coarse-grid rejection remains
+recorded rather than being relabeled. Raw matrices, independent references,
+limits and work observations are in
+`benchmarks/results/scalar-ecp-hessian-2993/qualification.json`.
+
 This is low-level electronic-only candidate admission, not completion of #2847.
-IH molecular HVPs, every native raw Hessian column, independent bilinear
-and rotation checks, failure/lifetime/resource gates, mixed Ni/ECP and UKS
-qualification remain individually necessary. #2846 retains a failing mixed
-Ni/I/H quadrature fixture and native displaced IH(-) SCF failures; no second-order
-claim bypasses them. Default-grid domains, installed public endpoints, total D3
+IH molecular HVPs, independent rotation checks, broader failure/lifetime/resource
+gates, mixed Ni/ECP and UKS qualification remain individually necessary. #2846's
+failed mixed Ni/I/H quadrature fixture remains outside the claimed domain. Its
+historical displaced IH(-) SCF failure is retained; the reviewed CPU UKS closure
+repair is inherited from parent1192. Neither repair waives the mixed-domain
+quadrature failure. Default-grid domains, installed public endpoints, total D3
 curvature, stationary modes and the 25–40-atom workflow remain separate gates.
 
 ## References

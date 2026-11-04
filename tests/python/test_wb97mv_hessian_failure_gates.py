@@ -50,6 +50,7 @@ def test_resident_solver_accepts_only_true_residuals(scale: float) -> None:
 @pytest.mark.parametrize("value", (np.nan, np.inf, -np.inf))
 def test_ecp_quadrature_rejects_either_nonfinite_grid(grid: str, value: float) -> None:
     owner = ECPSecondOrder.__new__(ECPSecondOrder)
+    owner.statistics = {"hvp_validation_refinements": 0}
     coarse, fine = np.zeros((2, 1, 3)), np.zeros((2, 1, 3))
     (coarse if grid == "coarse" else fine)[0, 0, 0] = value
     results = iter((coarse, fine))
@@ -61,8 +62,9 @@ def test_ecp_quadrature_rejects_either_nonfinite_grid(grid: str, value: float) -
 @pytest.mark.parametrize("difference", (0.0, 1.0))
 def test_ecp_quadrature_finite_convergence_control(difference: float) -> None:
     owner = ECPSecondOrder.__new__(ECPSecondOrder)
+    owner.statistics = {"hvp_validation_refinements": 0}
     coarse, fine = np.zeros((2, 1, 3)), np.full((2, 1, 3), difference)
-    results = iter((coarse, fine))
+    results = iter((coarse, fine, coarse))
     owner._integrate = lambda *args, **kwargs: next(results)
     args = np.zeros((1, 3)), np.zeros((1, 1)), np.zeros((1, 1))
     if difference:

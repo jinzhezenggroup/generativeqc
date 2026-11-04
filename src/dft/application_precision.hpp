@@ -187,6 +187,16 @@ inline bool admit_fast_anchor_delta(bool budget_fock, bool budget_stationarity,
  * no per-call speed or observable-error guarantee. */
 inline bool default_fast_anchor_delta(std::size_t aos) noexcept { return aos >= 192; }
 
+/** Explicit strict-FP64 reuse for provisional frozen-VV10 iterations.
+ * Full targets and final closure still rebuild physical J/K. Ledger-backed
+ * and multi-device owners retain their existing bounded resource policy. */
+inline bool admit_strict_anchor_delta(bool requested, bool strict_fp64, bool exact_direct,
+                                      unsigned spins, bool vv10, bool resource_ledger,
+                                      unsigned chunk_width) noexcept {
+  return requested && strict_fp64 && exact_direct && spins == 1 && vv10 && !resource_ledger &&
+         chunk_width == 1;
+}
+
 /** Independently qualified stationary RKS candidate at a strict final
  * density. These allowances select arithmetic, not a rigorous error bound for
  * an arbitrary molecule. Explicit observable targets still require an audit.
