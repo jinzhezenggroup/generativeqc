@@ -1612,6 +1612,9 @@ jobs:
           GENERATIVEQC_BUILD_DIR: ${{ github.workspace }}/build
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
           CCACHE_MAXSIZE: 256M
+          # Capture per-invocation cache decisions only on the measured core-a
+          # shard; this diagnostic log lives outside the persisted cache tree.
+          CCACHE_STATSLOG: ${{ matrix.shard == 'core-a' && format('{0}/ccache-python-probes.stats', runner.temp) || '' }}
         run: |
           export GENERATIVEQC_CI_SHARD="${{ matrix.shard }}"
           # Selection is sourced into this shell so its arrays flow into pytest.
@@ -1671,7 +1674,15 @@ jobs:
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
           CCACHE_MAXSIZE: 256M
-        run: ccache --show-stats
+          CCACHE_STATSLOG: ${{ matrix.shard == 'core-a' && format('{0}/ccache-python-probes.stats', runner.temp) || '' }}
+        run: |
+          # Distinguish expected linker calls from genuinely cacheable misses.
+          ccache --show-stats --verbose
+          if [[ "${{ matrix.shard }}" == "core-a" && -s "$CCACHE_STATSLOG" ]]; then
+            echo "Core-a native probe ccache outcomes (observational only):"
+            ccache --show-log-stats --verbose || echo "::warning::Unable to summarize probe-cache stats log"
+            ccache --print-log-stats --format=json || echo "::warning::Unable to export probe-cache stats log"
+          fi
       - name: Preserve transient benchmark/debug artifacts on failure
         if: failure() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

@@ -137,23 +137,22 @@ int main() {
     assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]
 
 
-def test_direct_tiles_require_the_qualified_sm80_fp64_domain(
+def test_direct_scf_tiles_are_independent_of_gpu_generation(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """Require SM80/A100-class capabilities rather than a GPU name string."""
+    """Direct semilocal defaults need no device profile, size or FP64 capability."""
     unit = tmp_path / "direct_tiles.cpp"
     unit.write_text(
         r"""
 #include <iostream>
 #include "dft/ks_tile_policy.hpp"
 int main() {
-  bool direct, strict_budget, all_electron;
-  std::size_t angular, atoms;
-  int major, minor, ratio;
-  while (std::cin >> direct >> strict_budget >> all_electron >> angular >> atoms
-                 >> major >> minor >> ratio)
-    std::cout << generativeqc::dft::automatic_direct_ks_tiles_eligible(
-        direct, strict_budget, all_electron, angular, atoms, major, minor, ratio) << '\n';
+  bool unconstrained;
+  std::size_t requested, nao, points;
+  int major, ratio;
+  while (std::cin >> requested >> unconstrained >> nao >> points >> major >> ratio)
+    std::cout << generativeqc::dft::automatic_ks_scf_tile(
+        requested, false, unconstrained, nao, points, false, major, ratio) << '\n';
 }
 """
     )
@@ -165,39 +164,13 @@ int main() {
             "-I" + str(Path(__file__).resolve().parents[2] / "src"),
         ),
     )
-    # This capability tuple is shared by qualifying A100-class SM80 devices.
-    # GPU model names must not participate in the production policy.
-    eligible = (1, 1, 1, 2, 96, 8, 0, 2)
-    cases = [(eligible, True)]
-    for index, value in (
-        (0, 0),
-        (1, 0),
-        (2, 0),
-        (3, 3),
-        (4, 47),
-        (4, 129),
-        (5, 7),
-        (5, 9),
-        (5, 12),
-        (6, 1),
-        (6, 6),
-        (7, 0),
-        (7, 1),
-        (7, 64),
-    ):
-        row = list(eligible)
-        row[index] = value
-        cases.append((tuple(row), False))
-    for atoms in (48, 128):
-        cases.append(((1, 1, 1, 2, atoms, 8, 0, 2), True))
-    # Do not export A100 endpoint measurements to Hopper or Blackwell.
-    cases.extend(
-        [
-            ((1, 1, 1, 2, 96, 9, 0, 2), False),
-            ((1, 1, 1, 2, 96, 12, 0, 64), False),
-            ((1, 1, 1, 2, 96, 8, 6, 64), False),
-        ]
-    )
+    cases: list[tuple[tuple[int, ...], int]] = []
+    for major, ratio in ((0, 0), (6, 64), (7, 2), (8, 2), (8, 64), (9, 2), (12, 64)):
+        for nao, points in ((1, 1), (511, (1 << 19) - 1), (768, 1 << 20)):
+            cases.append(((0, 1, nao, points, major, ratio), 1024))
+            cases.append(((0, 0, nao, points, major, ratio), 256))
+        for requested in (1, 31, 256, 512, 1024, 4096):
+            cases.append(((requested, 0, 1, 1, major, ratio), requested))
     inputs = "".join(" ".join(map(str, row)) + "\n" for row, _ in cases)
     result = subprocess.run(
         [str(executable)],
@@ -207,6 +180,4 @@ int main() {
         check=True,
         timeout=15,
     )
-    assert list(map(int, result.stdout.split())) == [
-        int(expected) for _, expected in cases
-    ]
+    assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]

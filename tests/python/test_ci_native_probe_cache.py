@@ -288,3 +288,26 @@ def test_partial_probe_keys_cannot_freeze_the_complete_snapshot(outcome: str) ->
     # The unchanged exact key remains the first lookup; partials are recoverable
     # only via the shard prefix and cannot overwrite a complete cache generation.
     assert actual.startswith(primary)
+
+
+def test_core_a_probe_cache_diagnostics_preserve_compile_and_scientific_gates() -> None:
+    steps = _steps()
+    test = steps["Run Python tests with coverage"]
+    report = steps["Show post-test ccache statistics"]
+    statslog = (
+        "CCACHE_STATSLOG: ${{ matrix.shard == 'core-a' && "
+        "format('{0}/ccache-python-probes.stats', runner.temp) || '' }}"
+    )
+    assert statslog in test and statslog in report
+    assert "CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes" in test
+    assert "CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes" in report
+    assert "ccache --show-stats --verbose" in report
+    assert "ccache --show-log-stats --verbose" in report
+    assert "ccache --print-log-stats --format=json" in report
+    assert (
+        'if [[ "${{ matrix.shard }}" == "core-a" && -s "$CCACHE_STATSLOG" ]]' in report
+    )
+    assert "ccache --zero-stats" in steps["Reset native probe ccache statistics"]
+    assert '-n 4 --dist="$dist_mode"' in test
+    # Diagnostics must not turn a failed test step into a successful one.
+    assert "continue-on-error:" not in test

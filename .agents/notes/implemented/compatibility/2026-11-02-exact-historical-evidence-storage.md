@@ -100,3 +100,18 @@ summaries also retain their explicitly promised original compressed bytes.
 These are historical storage changes, not new GPU runs or requalification of
 current precision sources. The small remaining space is not permission to skip
 the aggregate or changed-evidence check when upstream adds more evidence.
+
+## Follow-up: retain the complete CPU RCCSD closeout, 2026-11-04
+
+Integrating the subsequent master evidence still exceeds the unchanged aggregate
+cap after those six recompressions. The CPU RCCSD closeout now stores its original
+22,605-byte JSON as a 2,256-byte XZ stream using preset `9 | PRESET_EXTREME`.
+Its complete decoded bytes match the original Git blob recorded in the bundle
+README. The existing shared JSON reader handles transport decoding; ordinary
+and optimized replay preserve all 24 observations and reject corrupt/truncated
+streams. This does not promote the slower measured CPU-native implementation,
+change its explicit opt-in, or qualify the newly integrated source. The occupied-XC
+negative evidence and every original numerical token remain untouched. The
+one-off incoming-pin audit and rejected insufficient recompression recipes remain
+in ignored storage-investigation artifacts; no permanent implementation hash test
+or retention exemption is added.

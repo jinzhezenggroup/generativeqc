@@ -14,6 +14,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def explicit_exact_lr_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The qualified native Hessian still differentiates the exact LR model."""
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
+
+
 @pytest.mark.parametrize("unrestricted", (False, True))
 def test_cuda_composite_hvp_matches_cpu_and_complete_force_differences(
     unrestricted: bool, tmp_path: Path

@@ -67,6 +67,9 @@
 namespace generativeqc::methods::detail {
 namespace {
 
+/** Initial automatic LR admission only; never escapes a prepared batch item. */
+struct AutomaticLrFitRefused final : std::exception {};
+
 std::uint64_t next_cpu_ks_owner() {
   static std::atomic<std::uint64_t> next{1};
   auto value = next.load(std::memory_order_relaxed);
@@ -656,9 +659,6 @@ class KsPreparedState final : public KsSingleOwnerPort {
             options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
         const bool fitted_rks_fp64 =
             fused_rks_fp64 && options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA;
-        const bool direct_rks_fp64 =
-            fused_rks_fp64 && options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
-            !range_strategy_ && !execution_plan_.nonlocal_correlation;
         // Public numeric promises quote the conservative 256-point owner.
         // Do not change its work/storage shape after admission. Reserve ample
         // observed headroom for ordinary unpromised preparation as well.
@@ -673,7 +673,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
             options_.xc_force_tile_points = options_.xc_tile_points;
             automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
           }
-        } else if ((fitted_rks_fp64 || direct_rks_fp64) && unconstrained && basis_.nao >= 512 &&
+        } else if (fitted_rks_fp64 && unconstrained && basis_.nao >= 512 &&
                    grid_.point_count() >= (1U << 19)) {
           cudaDeviceProp properties{};
           auto status = cudaGetDeviceProperties(&properties, device);
@@ -699,19 +699,13 @@ class KsPreparedState final : public KsSingleOwnerPort {
                 std::all_of(options_.application_precision_budget.begin(),
                             options_.application_precision_budget.end(),
                             [](double value) { return value == 0; });
-            const bool qualified_rks_fp64 =
-                fitted_rks_fp64 ||
-                dft::automatic_direct_ks_tiles_eligible(
-                    direct_rks_fp64, strict_precision_budget, all_electron, maximum_angular,
-                    basis_.natom, properties.major, properties.minor,
-                    properties.singleToDoublePrecisionPerfRatio);
             options_.xc_tile_points = dft::automatic_ks_scf_tile(
-                0, qualified_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
+                0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
                 execution_plan_.nonlocal_correlation, properties.major,
                 properties.singleToDoublePrecisionPerfRatio);
             if (automatic_force && strict_precision_budget && admitted_cuda_stationary_binding()) {
               options_.xc_force_tile_points = dft::automatic_ks_force_tile(
-                  qualified_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
+                  fitted_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
                   basis_.natom, basis_.nao, grid_.point_count(), properties.major);
               automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
             }
@@ -747,6 +741,11 @@ class KsPreparedState final : public KsSingleOwnerPort {
   [[nodiscard]] const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy()
       const noexcept {
     return options_.preliminary_guess;
+  }
+
+  /** The admitted approximation survives replacement of this geometry owner. */
+  [[nodiscard]] bool density_fitted_range_exchange() const noexcept {
+    return execution_plan_.density_fitted_range_exchange;
   }
 
   // A NumericCap DF promise currently covers energy preparation/replay only.
@@ -2912,31 +2911,50 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                                           : scf::FockSpin::Restricted;
     const auto fock_backend =
         backend_ == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
-    range_strategy_ = scf::resolve_fock_build(
-        scf::make_rsh_correction_fock_spec(
-            spin, execution_plan_.short_range_exchange, execution_plan_.long_range_exchange,
-            execution_plan_.range_omega,
-            execution_plan_.density_fitted_range_exchange ? scf::FockApproximation::DensityFitted
-                                                          : scf::FockApproximation::Exact),
-        fock_backend, options_.screening_tolerance, options_.density_fitting_relative_threshold);
-    const bool fitted_primary =
-        fock_.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
-    if (fock_backend == scf::FockBackend::Cpu || fitted_primary) {
-      const auto budget = execution_plan_.density_fitted_range_exchange
-                              ? ks_fitted_provider_budget(options_, execution_plan_, true)
-                          : fock_backend == scf::FockBackend::Cuda
-                              ? ks_provider_bytes(system_, backend_, 1U)
-                              : 0U;
-      const auto* auxiliary =
-          execution_plan_.density_fitted_range_exchange ? fock_.auxiliary_system() : nullptr;
-      range_correction_ = std::make_unique<scf::PreparedFockPlan>(
-          system_, auxiliary, *range_strategy_, device, budget,
-          fock_backend == scf::FockBackend::Cuda && !execution_plan_.density_fitted_range_exchange
-              ? 1U
-              : 0U,
-          execution_plan_.density_fitted_range_exchange ? 1U : 0U,
-          ks_fitted_projection_reservation(system_, execution_plan_, *range_strategy_));
+    const auto prepare = [&] {
+      range_strategy_ = scf::resolve_fock_build(
+          scf::make_rsh_correction_fock_spec(
+              spin, execution_plan_.short_range_exchange, execution_plan_.long_range_exchange,
+              execution_plan_.range_omega,
+              execution_plan_.density_fitted_range_exchange ? scf::FockApproximation::DensityFitted
+                                                            : scf::FockApproximation::Exact),
+          fock_backend, options_.screening_tolerance, options_.density_fitting_relative_threshold);
+      const bool fitted_primary =
+          fock_.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
+      if (fock_backend == scf::FockBackend::Cpu || fitted_primary) {
+        const auto budget = execution_plan_.density_fitted_range_exchange
+                                ? ks_fitted_provider_budget(options_, execution_plan_, true)
+                            : fock_backend == scf::FockBackend::Cuda
+                                ? ks_provider_bytes(system_, backend_, 1U)
+                                : 0U;
+        const auto* auxiliary =
+            execution_plan_.density_fitted_range_exchange ? fock_.auxiliary_system() : nullptr;
+        range_correction_ = std::make_unique<scf::PreparedFockPlan>(
+            system_, auxiliary, *range_strategy_, device, budget,
+            fock_backend == scf::FockBackend::Cuda && !execution_plan_.density_fitted_range_exchange
+                ? 1U
+                : 0U,
+            execution_plan_.density_fitted_range_exchange ? 1U : 0U,
+            ks_fitted_projection_reservation(system_, execution_plan_, *range_strategy_));
+      }
+    };
+    if (!execution_plan_.automatic_density_fitted_range_exchange) {
+      prepare();
+      return;
     }
+
+    // The batch owns the optional transaction, including the primary's split
+    // budget. Refuse before SCF/property selection and retire this whole state
+    // before its one exact retry. Never catch invalid controls or solver errors.
+    try {
+      prepare();
+    } catch (const generativeqc::Error& error) {
+      if (error.status() != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) throw;
+      throw AutomaticLrFitRefused{};
+    }
+    if (!range_correction_ || !range_correction_->density_fitting_response_valid())
+      throw AutomaticLrFitRefused{};
+    execution_plan_.automatic_density_fitted_range_exchange = false;
   }
 
   void prepare_nonlocal(int device) {
@@ -3121,6 +3139,7 @@ class KsPreparedBatch final : public PreparedBatch,
     for (std::size_t i = 0; i < size(); ++i) {
       runtime::CpuRetainedCapacity neighbors(host_numeric_capacity());
       items_[i].plan = make_plan(systems_[i]);
+      items_[i].density_fitted_range_exchange = items_[i].plan->density_fitted_range_exchange();
       items_[i].prepared_properties = items_[i].plan->supported_properties();
     }
   }
@@ -3215,7 +3234,8 @@ class KsPreparedBatch final : public PreparedBatch,
 #endif
           item.plan.reset();
           item.resident_warm = false;
-          item.plan = make_plan(target, item.stationary_device_allowance);
+          item.plan = make_plan(target, item.stationary_device_allowance,
+                                item.density_fitted_range_exchange);
         }
         result.warm_start_used = warm_enabled_ && item.warm.has_value();
 #if GENERATIVEQC_HAS_CUDA
@@ -3770,6 +3790,9 @@ class KsPreparedBatch final : public PreparedBatch,
   }
 
   struct Item {
+    // Scientific admission belongs to the item, not its replaceable plan. In
+    // particular an exact fallback cannot become fitted after a failed rebuild.
+    bool density_fitted_range_exchange{};
     // Admission belongs to the immutable prepared model/basis/backend, not a
     // replaceable geometry owner. A failed rebuild must not revoke it and
     // prevent the next force replay from reconstructing this item's plan.
@@ -3788,12 +3811,42 @@ class KsPreparedBatch final : public PreparedBatch,
 #endif
   };
   std::unique_ptr<KsPreparedState> make_plan(
-      const core::System& system,
-      std::optional<std::size_t> stationary_device_allowance = {}) const {
+      const core::System& system, std::optional<std::size_t> stationary_device_allowance = {},
+      std::optional<bool> density_fitted_range_exchange = {}) const {
     runtime::DeviceCapacityScope capacity_scope(capacity_.get());
-    auto plan = std::make_unique<KsPreparedState>(
-        capabilities_, system, execution_plan_, options_, grid_spec_, backend_, device_,
-        ks_auxiliary_for_system(system, auxiliary_), capacity_.get());
+    auto execution_plan = execution_plan_;
+    if (density_fitted_range_exchange) {
+      execution_plan.density_fitted_range_exchange = *density_fitted_range_exchange;
+      execution_plan.automatic_density_fitted_range_exchange = false;
+    }
+    const auto prepare = [&] {
+      return std::make_unique<KsPreparedState>(
+          capabilities_, system, execution_plan, options_, grid_spec_, backend_, device_,
+          ks_auxiliary_for_system(system, auxiliary_), capacity_.get());
+    };
+    std::unique_ptr<KsPreparedState> plan;
+    try {
+      plan = prepare();
+    } catch (const AutomaticLrFitRefused&) {
+      if (!execution_plan.automatic_density_fitted_range_exchange) throw;
+    } catch (const std::bad_alloc&) {
+      if (!execution_plan.automatic_density_fitted_range_exchange) throw;
+#if GENERATIVEQC_HAS_CUDA
+      if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
+        const auto pending = cudaGetLastError();
+        if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation)
+          throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(pending));
+      }
+#endif
+    }
+    if (!plan) {
+      // This covers primary split-budget refusal too. All candidate providers
+      // have retired, so the original explicit total cap can be used by exact
+      // preparation without overlapping owners or borrowing an extra budget.
+      execution_plan.density_fitted_range_exchange = false;
+      execution_plan.automatic_density_fitted_range_exchange = false;
+      plan = prepare();
+    }
     if (stationary_device_allowance) {
       std::string detail;
       const auto status = plan->native_cuda_stationary_limit(*stationary_device_allowance, detail);
