@@ -1,6 +1,6 @@
 # Decision: align native WB97M-V defaults toward stock GPU4PySCF
 
-Status: proposed; small-device science/admission pass, large endpoint pending
+Status: proposed; bounded water12 science/performance pass, water96 unqualified
 Date: 2026-11-05
 
 ## Problem
@@ -105,6 +105,59 @@ CI also exposed the native Libxc catalog's checked-source snapshot changing.
 Regeneration with the existing checker changes only current input identities:
 the historical measurement remains stale, every capability summary is unchanged,
 and no numerical qualification or capability was invented to clear CI.
+
+### Final bounded complete comparison
+
+The water96 Direct default cold endpoint in Slurm 15928 reached its declared
+540-second wall cap without publishing any complete E/F sample. The driver
+returned 124 and stopped before strict/reference arms. Its raw JSON remains
+`running` because termination interrupted the process; the scheduler/driver
+receipt establishes that it is incomplete, not a passing measurement. This
+does not identify the slow stage or establish a convergence regression. Do not
+infer a large-system timing, accuracy result, or zero work from missing samples.
+The large case was not repeated.
+
+One final reduced water12 Direct population, Slurm 15930, completed with exit 0
+on the same physical 5090 and authenticated source/core. Each arm measures one
+complete cold constructor/preparation/SCF/force/export call plus one own-density
+frozen warm call, without diagnostic tracing or production oracle imports.
+
+| Arm | Cold seconds | Warm seconds | Cold iterations |
+| --- | ---: | ---: | ---: |
+| Native default | 6.516086 | 0.845254 | 17 |
+| Native explicit strict | 9.139645 | 0.843362 | 30 |
+| Stock GPU4PySCF | 15.256367 | 3.969813 | 10 |
+
+Native default cold is 28.705% shorter than explicit strict; warm is +0.224%,
+inside the predeclared 1.05 paired guard, not proof of exactly zero regression.
+This is one bounded observation, not a statistical/general default certificate.
+Cold semantic work changes from 31 J/62 K to 18 J/36 K applications, 25 to 14
+provisional Focks, 5 to 3 target Focks, and 4 to 2 VV10 pair sweeps. All native
+warm calls use 1 J/2 K, 1 target Fock and zero VV10 sweeps. Comparing 17 native
+iterations directly with 10 reference iterations would again conflate operators.
+
+All 12 cold/warm cross-arm E/F comparisons pass the declared common gates.
+Default-versus-strict maxima are 9.522e-13 Eh/atom and 1.082e-6 Eh/Bohr force;
+default-versus-stock-reference maxima are 3.080e-13 Eh/atom, 1.506e-6 maximum
+force and 5.366e-7 force RMS. The independent tighter-reference small/moved
+tests remain the separate oracle qualification; stock defaults were not tightened.
+The existing Libxc catalog regression additionally passes all 63 host tests.
+
+Receipts: `/data/jzzeng/issue2987-defaults-20261105/endpoint-small-15930/` and
+`qualification-15928/` on n1; local authenticated copies and the 12-comparison
+audit are under `.artifacts/issue2987/receipts-repair/` and
+`.artifacts/issue2987/water12-complete-audit.json`. The audit SHA256 is
+`3dfeb3466cc9740902ca77abafcf98800404b4416d914863b2a529f6546e41af`.
+
+The pre-commit bot subsequently added only line wrapping in the RSH lowering
+call (commit `9e31525bc381353fae58ef0e2e7a45f8965f8830`, parent `14e7245f5`).
+The executed source/core identities above describe the exact pre-format image,
+not a fresh build of the differently hashed formatted source. The bot change
+has no token/behavior change; its exact existing commit was imported without
+rewriting attribution/history, and the checked-source catalog was regenerated
+again without promoting historical science. No GPU benchmark was repeated for
+formatting. Water96, A100, and the independent 1.576-second bottleneck remain
+unqualified/unresolved by this default-alignment fix.
 
 ## References
 
