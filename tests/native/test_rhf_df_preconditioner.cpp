@@ -58,6 +58,29 @@ void identity() {
   molecule = system;
   molecule.charge = 1;
   require(!id.matches(molecule, ref), "charge change admitted");
+  auto ecp = system;
+  ecp.atoms[0].atomic_number = 11;
+  ecp.atoms[0].ecp_core = 10;
+  ecp.charge = -1;
+  ecp.ecp_terms = {{0, -1, 2, .5, .2}};
+  hf::RHFFrameIdentity ecp_identity(ecp, ref);
+  molecule::BasisGeometryIdentity coulomb_identity(ecp);
+  require(ecp_identity.matches(ecp, ref), "identical ECP reference rejected");
+  require(ecp_identity.storage_bytes() == hf::RHFFrameIdentity::required_storage_bytes(ecp, ref),
+          "ECP operator identity payload omitted from admission");
+  for (int variant = 0; variant < 6; ++variant) {
+    auto changed_ecp = ecp;
+    auto& term = changed_ecp.ecp_terms[0];
+    if (variant == 0) term.exponent = std::nextafter(term.exponent, 1.);
+    if (variant == 1) term.coefficient = std::nextafter(term.coefficient, 1.);
+    if (variant == 2) term.channel = 0;
+    if (variant == 3) term.power = 1;
+    if (variant == 4) term.atom_index = 1;
+    if (variant == 5) changed_ecp.atoms[0].ecp_core = 8;
+    require(!ecp_identity.matches(changed_ecp, ref), "changed ECP operator reused an RHF frame");
+    if (variant != 5)
+      require(coulomb_identity.matches(changed_ecp), "ECP potential changed Coulomb-only identity");
+  }
 }
 
 void generated(std::size_t o, std::size_t v, std::size_t q) {

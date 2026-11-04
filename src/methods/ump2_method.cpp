@@ -237,10 +237,6 @@ generativeqc_status validate_ump2_system(generativeqc_method, const core::System
     detail = "UMP2 requires an explicit Gaussian orbital basis";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  if (!system.ecp_terms.empty()) {
-    detail = "UMP2 with ECP is unavailable";
-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  }
   if (std::any_of(system.shells.begin(), system.shells.end(),
                   [](const auto& shell) { return shell.angular_momentum > 3; })) {
     detail = "UMP2 native conventional source supports shells through f";

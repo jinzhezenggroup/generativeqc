@@ -1,4 +1,4 @@
-"""MP2-assisted, all-electron canonical CCSD(T)/CBS energy and analytic forces.
+"""MP2-assisted canonical CCSD(T)/CBS energy and analytic forces.
 
 Only orchestration and geometry-independent linear combinations live here.
 Every electronic energy and force comes from the public native calculator;
@@ -20,6 +20,7 @@ from ._api_types import Atom, Result
 from ._model_resolution import snapshot_basis
 from .basis import BasisSet
 from .calculator import Calculator
+from .ecp import resolve_ecp
 from .elements import checked_integer, electron_state
 
 if typing.TYPE_CHECKING:
@@ -38,12 +39,9 @@ def _basis_snapshot(basis: BasisSet | str | Path) -> BasisSet:
     if not isinstance(record, BasisSet):
         raise TypeError("CBS requires a named basis, canonical basis file or BasisSet")
     if any(
-        element.ecp_core_electrons
-        or element.ecp_data is not None
-        or element.nuclear_charge != element.atomic_number
-        for element in record.elements
+        element.nuclear_charge != element.atomic_number for element in record.elements
     ):
-        raise NotImplementedError("CCSD(T)/CBS currently requires all-electron bases")
+        raise NotImplementedError("CCSD(T)/CBS requires standard nuclear charges")
     return record
 
 
@@ -62,7 +60,7 @@ class CBSBasis:
     cardinal: int
 
     def __post_init__(self) -> None:
-        """Validate the cardinal number and snapshot local all-electron data."""
+        """Validate the cardinal number and snapshot local orbital/ECP data."""
         cardinal = checked_integer(
             self.cardinal, "CBS cardinal number", low=2, high=100
         )
@@ -134,7 +132,7 @@ class CCSDTCBSCalculator:
     selecting ``hf_extrapolation="highest"``. Exponents are model inputs and
     are never fitted to the current geometry.
 
-    All components use FP64, all-electron references: RHF for singlets and
+    All components use FP64 references: RHF for singlets and
     UHF for higher multiplicities. Open-shell energy and analytic-force endpoints
     support CPU/CUDA and explicit fitted operators, within native resource admission.
     Explicit auxiliary
@@ -143,7 +141,8 @@ class CCSDTCBSCalculator:
     response and its metric/center derivatives. Choose a basis suitable for
     both JK and correlation fitting; an MP2-fit label alone does not certify
     HF accuracy. This explicit model choice never changes on resource refusal.
-    ECP and frozen-core variants are not silently substituted.
+    Scalar ECPs must match across orbital bases for every atom in the geometry.
+    All remaining valence electrons are correlated; frozen core is not substituted.
     Native backend/basis/force and complete memory-admission checks still apply.
 
     Same-basis components share one native HF reference and correlation source.
@@ -512,6 +511,7 @@ class CCSDTCBSCalculator:
                 ("energy", "forces") if forces_requested else ("energy",)
             )
             low, high = self.mp2_bases
+            hamiltonians = []
             for record in (low.basis, high.basis, self.correction_basis):
                 electron_state(
                     geometry,
@@ -520,6 +520,24 @@ class CCSDTCBSCalculator:
                     element_metadata=record.by_element,
                 )
                 record.shells_for(geometry)
+                # Extrapolate basis error, never a change in the ionic operator.
+                # Compare the typed residual terms handed to the native owner,
+                # not JSON whitespace or decimal-number spellings.
+                cores, residual_terms = resolve_ecp(record, geometry)
+                hamiltonians.append(
+                    (
+                        tuple(
+                            record.by_element[atom.atomic_number].nuclear_charge
+                            for atom in geometry
+                        ),
+                        tuple(cores),
+                        tuple(sorted(residual_terms)),
+                    )
+                )
+            if any(identity != hamiltonians[0] for identity in hamiltonians[1:]):
+                raise ValueError(
+                    "all CBS orbital bases must use the same ECP Hamiltonian"
+                )
 
             terms = self._terms(unrestricted=unrestricted)
             mp2_method = "ump2" if unrestricted else "mp2"
@@ -764,6 +782,10 @@ class CCSDTCBSCalculator:
                     "hf_exponent": self.hf_exponent,
                     "correlation_exponent": self.correlation_exponent,
                     "frozen_core": 0,
+                    "ecp_core_electrons": tuple(
+                        low.basis.by_element[atom.atomic_number].ecp_core_electrons
+                        for atom in geometry
+                    ),
                     "density_fitting": bool(self._auxiliary_bases),
                     "hf_reference": self.hf_reference,
                     "spin_reference": "uhf" if unrestricted else "rhf",

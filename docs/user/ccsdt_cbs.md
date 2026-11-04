@@ -67,13 +67,46 @@ every basis group; `basis_metadata` records them and the selected
 `spin_reference`. A singlet still selects the restricted model; multiplicity
 alone does not request a broken-symmetry open-shell singlet.
 
-Open-shell CBS supports conventional or explicitly fitted, all-electron,
+Open-shell CBS supports conventional or explicitly fitted,
 real-FP64 energy and analytic-force endpoints on CPU/CUDA. Explicit CBS
 auxiliary bases require CUDA. The correction basis inherits native UCCSD(T)'s s/p/d,
 numeric memory and scalar-work admission, without a fixed AO-count cutoff.
-The larger UMP2 bases retain their own native limits. ECP and frozen-core variants
-are not substituted or silently downgraded. Unsupported native initial-guess
+The larger UMP2 bases retain their own native limits. Scalar ECPs follow the
+Hamiltonian contract below; frozen core is not substituted or silently
+downgraded. Unsupported native initial-guess
 or screening controls also remain errors.
+
+## Scalar ECP references
+
+Orbital `BasisSet` snapshots may contain supported scalar semilocal Gaussian
+ECPs on CPU/CUDA, for restricted singlets and unrestricted higher multiplicities.
+The removed core sets valence occupations and ionic charges; nuclear repulsion
+uses those same charges. The local/nonlocal residual enters the reference
+Hamiltonian and every correlated one-electron response exactly once. First
+forces include basis-center and ECP-center motion, orbital response and Pulay
+terms; they are analytic, not production numerical differences.
+
+Every atom must have identical core counts and scalar potential parameters in
+the low, high and correction orbital bases. Mixing all-electron and ECP records,
+different removed cores or different potentials raises `ValueError` before any
+native endpoint starts. JSON formatting and unused element records do not change
+this comparison. `basis_metadata["ecp_core_electrons"]` records the per-atom
+removed core. All **remaining valence electrons** are correlated: the ECP core
+is not an additional frozen-core approximation.
+
+Explicit CUDA auxiliary bases retain the same correlation-only/full-DF policy;
+they approximate the electron interaction, never the ECP operator. The checked
+two-grid ECP convergence gate, angular limits and conservative numeric-workspace
+reservation remain mandatory. An unsupported potential, unconverged reference,
+response failure or resource refusal returns no partial composite. Standalone
+HF/DF and other method-specific ECP admission is not enlarged by this workflow.
+See [scalar ECP conventions and qualification](ecp.md).
+
+The independent correlation qualification uses the physical LANL2DZ Na potential
+with compact test-only Na/H valence bases, including nonzero unrestricted triples,
+charged singlets and empty-beta triplets. These records qualify implementation,
+not a systematic CBS family or arbitrary heavy-element accuracy. Supply a
+consistent ECP/basis family and scientifically meaningful cardinals yourself.
 
 Native unrestricted owners retain strict stopping ceilings even under
 `policy="standard"` or `"fast"`; they do not admit the restricted relaxed
@@ -398,13 +431,13 @@ These are conventional extrapolation forms, not universal error guarantees;
 see Helgaker et al., *J. Chem. Phys.* **106**, 9639 (1997), and the
 [Psi4 CBS scheme definitions](https://psicode.org/psi4manual/master/cbs.html).
 
-Every component uses the same geometry, charge, spin, nonrelativistic
-all-electron reference and full correlated occupied space. The default uses
+Every component uses the same geometry, charge, spin and all-electron or matching
+scalar-ECP Hamiltonian, with the full remaining occupied space correlated. The default uses
 exact correlation integrals; explicit auxiliaries select correlation DF, while
 `hf_reference` selects exact or RI-JK reference response. Final physical checks
 and response use FP64; the [preconvergence policy](#convergence-profiles) can
 select bounded FP32 DF-CCSD/Lambda warmup independently of stopping limits.
-Frozen-core and ECP variants are not admitted. Open-shell energies use the
+Additional frozen-core variants are not admitted. Open-shell energies use the
 unrestricted model and limits described above. Cardinals must be increasing integers, the larger
 bases must have distinct identities, and all bases must have the same AO
 representation. Cardinal numbers are explicit declarations; an arbitrary
