@@ -90,3 +90,11 @@ already-stale status remain unchanged; this is not numerical requalification.
   constructor/preparation, actual Fock/force work, audit solves and memory.
 - Until those gates pass, describe the current PR as shared ownership, not full
   Standard/Fast execution parity. Local Slurm had no usable GPU at this audit.
+
+## Subsequent bounded unification trial
+
+The [shared FP64-anchor trial](../implemented/performance/2026-11-05-shared-fp64-anchor-trial.md)
+supersedes the Fast-only anchor admission described here: it shares the actual
+operator path with explicitly selected strict owners, while retaining current
+defaults and all resource/numerical gates. The constructor, tile and numeric-cap
+differences above are not removed by that trial.

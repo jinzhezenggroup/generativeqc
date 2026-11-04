@@ -1099,26 +1099,26 @@ void run_fast_anchor_delta_case() {
   strict.xc_tile_points = tile_points;
   const auto reference = scf::run_wb97mv_rks(cpu, cpu_range, basis, grid, strict, *cpu_nonlocal);
   require(reference.converged, "Fast anchor independent CPU reference did not converge");
-  const char* previous = std::getenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA");
+  const char* previous = std::getenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA");
   const std::string saved = previous ? previous : "";
   const bool had_previous = previous != nullptr;
-  std::size_t ordinary_fast_state_bytes = 0;
+  std::array<std::size_t, 4> ordinary_state_bytes{};
   const auto restore = [&] {
     if (had_previous)
-      ::setenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA", saved.c_str(), 1);
+      ::setenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", saved.c_str(), 1);
     else
-      ::unsetenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA");
+      ::unsetenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA");
   };
   try {
     for (const char* selection : {"0", "1", static_cast<const char*>(nullptr)}) {
-      require((selection ? ::setenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA", selection, 1)
-                         : ::unsetenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA")) == 0,
-              "could not select Fast anchor qualification route");
-      for (const unsigned mode : {0U, 1U, 2U}) {
+      require((selection ? ::setenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", selection, 1)
+                         : ::unsetenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA")) == 0,
+              "could not select shared anchor qualification route");
+      for (const unsigned mode : {0U, 1U, 2U, 3U}) {
         auto options = strict;
         options.precision_mode =
-            mode == 1 ? GENERATIVEQC_PRECISION_FP64 : GENERATIVEQC_PRECISION_AUTO;
-        options.application_precision_budget = {1e-5, 1e-4, 3e-5};
+            mode == 1 || mode == 3 ? GENERATIVEQC_PRECISION_FP64 : GENERATIVEQC_PRECISION_AUTO;
+        if (mode != 1) options.application_precision_budget = {1e-5, 1e-4, 3e-5};
         if (mode == 0) {
           options.energy_tolerance = 1e-6;
           options.density_tolerance = 1e-4;
@@ -1131,17 +1131,18 @@ void run_fast_anchor_delta_case() {
         require(result.converged && std::abs(result.energy - reference.energy) < 1e-5,
                 "Fast anchor total-density XC/VV10 endpoint disagrees with independent CPU");
         const auto cold = plan.transfers();
-        const bool expected = mode == 0 && selection && std::strcmp(selection, "1") == 0;
-        if (mode == 0 && !expected) ordinary_fast_state_bytes = plan.resources().state_device_bytes;
+        const bool expected = mode != 2 && selection && std::strcmp(selection, "1") == 0;
+        if (!expected) ordinary_state_bytes[mode] = plan.resources().state_device_bytes;
         if (expected) {
           const auto matrix_elements = basis.nao * basis.nao;
           require(plan.resources().state_device_bytes ==
-                      ordinary_fast_state_bytes + (5 * matrix_elements + 1) * sizeof(double),
+                      ordinary_state_bytes[mode] + (5 * matrix_elements + 1) * sizeof(double),
                   "Fast anchor capacity omitted its optional matrices or scalar");
         }
-        require(expected ? cold.fast_anchor_builds > 0 && cold.fast_delta_builds > 0
-                         : cold.fast_anchor_builds == 0 && cold.fast_delta_builds == 0,
-                "Fast anchor default/rollback or FP64 exclusion did not execute as selected");
+        require(
+            expected ? cold.fast_anchor_builds > 0 && cold.fast_delta_builds > 0
+                     : cold.fast_anchor_builds == 0 && cold.fast_delta_builds == 0,
+            "Shared anchor opt-in, default rollback or AUTO exclusion did not execute as selected");
         if (!expected) continue;
         const auto warm = plan.run();
         require(warm.converged && std::abs(warm.energy - reference.energy) < 1e-5 &&
@@ -1208,12 +1209,15 @@ void run_fast_anchor_delta_case() {
         std::size_t free_bytes{}, total_bytes{};
         require(cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess,
                 "Could not query Fast anchor force-memory pressure");
-        require(plan.prepare_force_memory(token, total_bytes, receipt, detail) ==
-                        GENERATIVEQC_STATUS_SUCCESS &&
-                    plan.resources().state_device_bytes == state_bytes - anchor_bytes &&
+        const auto handoff_status = plan.prepare_force_memory(token, total_bytes, receipt, detail);
+        const auto retired_state_bytes = plan.resources().state_device_bytes;
+        // Strict pressure can retire frozen-VV10 storage as well as J/K anchors.
+        // Every released byte must be receipted without revoking final D/W/token.
+        require(handoff_status == GENERATIVEQC_STATUS_SUCCESS &&
+                    retired_state_bytes <= state_bytes - anchor_bytes &&
                     plan.resources().provider_device_bytes <= provider_bytes &&
-                    receipt[3] ==
-                        anchor_bytes + provider_bytes - plan.resources().provider_device_bytes &&
+                    receipt[3] == state_bytes - retired_state_bytes + provider_bytes -
+                                      plan.resources().provider_device_bytes &&
                     plan.final_state_token(after_handoff, detail) == GENERATIVEQC_STATUS_SUCCESS &&
                     after_handoff == token &&
                     plan.resident_final_density(token, density_after, detail) ==
@@ -1235,8 +1239,7 @@ void run_fast_anchor_delta_case() {
                         before_handoff.fast_anchor_allocation_fallbacks &&
                     plan.prepare_force_memory(token, total_bytes, receipt, detail) ==
                         GENERATIVEQC_STATUS_SUCCESS &&
-                    receipt[3] == 0 &&
-                    plan.resources().state_device_bytes == state_bytes - anchor_bytes &&
+                    receipt[3] == 0 && plan.resources().state_device_bytes == retired_state_bytes &&
                     plan.resources().provider_device_bytes == retired_provider_bytes &&
                     plan.final_state_token(after_handoff, detail) == GENERATIVEQC_STATUS_SUCCESS &&
                     after_handoff == token,
@@ -1255,7 +1258,7 @@ void run_fast_anchor_delta_case() {
         const auto retired_recovery = plan.run(nullptr, false);
         require(retired_recovery.converged &&
                     std::abs(retired_recovery.energy - reference.energy) < 1e-5 &&
-                    plan.resources().state_device_bytes == state_bytes - anchor_bytes &&
+                    plan.resources().state_device_bytes == retired_state_bytes &&
                     plan.transfers().fast_anchor_builds == before_handoff.fast_anchor_builds &&
                     plan.transfers().fast_delta_builds == before_handoff.fast_delta_builds,
                 "Retired Fast anchor was reused by warm replay or cold recovery");

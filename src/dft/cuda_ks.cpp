@@ -1899,8 +1899,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
             "GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING requires 0 or 1");
       mixed_source_coarse_screening_requested = std::strcmp(setting, "1") == 0;
     }
-    fast_anchor_eligible = admit_fast_anchor_delta(
-        budget_fock, budget_stationarity, functional,
+    const bool strict_anchor_fp64 =
+        !budget_fock && !budget_stationarity && !precision_schedule.any_lower_precision() &&
+        options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) == GENERATIVEQC_PRECISION_FP64;
+    fast_anchor_eligible = admit_fixed_anchor_delta(
+        strict_anchor_fp64, budget_fock, budget_stationarity, functional,
         static_cast<bool>(fock_binding) && !fitted_coulomb && !fitted_exchange && has_exchange &&
             has_range_correction && scf::direct_jk_incremental_exact_eligible(strategy) &&
             range_incremental_eligible && !incremental_direct_jk,
@@ -1908,14 +1911,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         nonlocal_correlation &&
             nonlocal_correlation->parameters().variant == nlc::Vv10Variant::vv10,
         runtime::active_device_resource_ledger != nullptr, configured_chunk_width());
-    if (fast_anchor_eligible) {
-      if (const auto* selected = std::getenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA")) {
-        if (std::strcmp(selected, "0") != 0 && std::strcmp(selected, "1") != 0)
-          throw std::invalid_argument("Fast anchor delta accepts 0 or 1");
-        fast_anchor_eligible = std::strcmp(selected, "1") == 0;
-      } else {
-        fast_anchor_eligible = default_fast_anchor_delta(n);
-      }
+    if (const auto* selected = std::getenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA")) {
+      if (std::strcmp(selected, "0") != 0 && std::strcmp(selected, "1") != 0)
+        throw std::invalid_argument("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA accepts 0 or 1");
+      fast_anchor_eligible = fast_anchor_eligible && std::strcmp(selected, "1") == 0;
+    } else {
+      fast_anchor_eligible =
+          fast_anchor_eligible && default_fixed_anchor_delta(budget_fock, budget_stationarity, n);
     }
     const bool host_unfused =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
