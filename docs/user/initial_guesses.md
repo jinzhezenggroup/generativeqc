@@ -21,6 +21,10 @@ Resource planning charges only admitted seeds. CUDA and older-library admission
 remains conservative at batch scope: an unsupported element or ECP keeps that
 whole batch on Hcore. Where the target has a qualified resource plan, eligible
 items include the same Hückel numeric inventory as an explicit request.
+Only ECP records belonging to atoms actually present in that batch affect this
+decision; an unused ECP-bearing element in a basis snapshot does not disable an
+otherwise admitted automatic seed. Explicit preliminary requests still retain
+their fail-closed ECP checks.
 Automatic selection does not qualify additional resource-planner
 domains (in particular, CUDA global-hybrid plans remain unsupported).
 `calc.initial_guess` exposes the
@@ -62,6 +66,31 @@ borrows its prepared ordinary eigensystem; CUDA DF KS borrows the KS owner.
 An admitted cold seed is published directly, without warm-density normalization.
 Preparation failure keeps Hcore; seeded-target failure permits one ordinary
 DF Hcore attempt after releasing the failed arena, not an exact-HF retry.
+
+## CUDA UKS core-orbital gauge
+
+Small (at most 64 spherical AOs), all-electron, strict-FP64, full-range
+density-fitted B3LYP UKS cold starts resolve numerical core-spectrum ties touching
+the beta frontier before the ordinary metric-preserving frontier rotation.
+A core gap at most `1e-10` Eh triggers a second native CUDA core eigensolve with
+a deterministic diagonal tie-break smaller than `1e-8` Eh in the orthogonal
+guess basis. Nondegenerate frontiers and domains outside this qualification keep
+the original seed. The operation borrows setup scratch; it introduces neither
+reference-oracle work nor a retained molecular operator.
+
+Within this domain the first AO among numerically tied largest components also
+sets each core orbital's sign before mixing columns. An unmixed orbital's sign
+does not change its projector, but an undefined relative sign changes the
+frontier-rotation density. Neither sign selection nor core tie-breaking is
+applied to physical SCF or final-state orbitals.
+
+This chooses only a reproducible cold-start basin, not a ground state or a new
+occupation model. The physical Hamiltonian, integer occupations, energy, density,
+stationarity and unshifted canonical-state gates remain unchanged. Admitted
+full-range fitted CUDA KS endpoints audit the actual canonical density before
+publishing convergence rather than applying a redundant corrective closure to
+an already valid physical state. Rejected proofs continue the existing bounded
+solve and never authorize a force or warm-state token.
 
 ## Frozen-VV10 density proposals
 

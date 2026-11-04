@@ -17,6 +17,7 @@
 #include "api/handles.hpp"
 #include "api/ks_snapshot.hpp"
 #include "dft/cuda_ks.hpp"
+#include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
@@ -2774,6 +2775,112 @@ void rejected_api_requests_revoke_tokens() {
                                                     detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
               "rejected C batch request retained a previous token");
   }
+
+  generativeqc_batch_item_result_descriptor outputs[2]{};
+  for (auto& output : outputs) {
+    output.struct_size = sizeof(output);
+    output.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  ks_cuda_fail_next_runtime_for_test_v1();
+  require(generativeqc_batch_execute(batch.get(), nullptr, 0, outputs, 2) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              outputs[0].status == GENERATIVEQC_STATUS_CUDA_ERROR &&
+              outputs[1].status == GENERATIVEQC_STATUS_SUCCESS,
+          "KS batch did not isolate an injected backend failure");
+  const auto* failure_detail = generativeqc_context_get_last_detail(context.get());
+  require(
+      failure_detail && std::string(failure_detail).find(cudaGetErrorString(cudaErrorUnknown)) !=
+                            std::string::npos,
+      "KS batch discarded the original CUDA error message");
+  require(generativeqc_batch_execute(batch.get(), nullptr, 0, outputs, 2) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              outputs[0].status == GENERATIVEQC_STATUS_SUCCESS &&
+              std::string(generativeqc_context_get_last_detail(context.get())).empty(),
+          "successful KS replay retained stale failure detail");
+
+  method.max_iterations = 1;
+  generativeqc_batch* short_raw{};
+  require(generativeqc_batch_prepare(context.get(), systems, 2, &method, 0, &short_raw) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          "short KS diagnostic fixture preparation failed");
+  std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> short_batch(
+      short_raw, generativeqc_batch_destroy);
+  require(generativeqc_batch_execute(short_batch.get(), nullptr, 0, outputs, 2) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              outputs[0].status == GENERATIVEQC_STATUS_NOT_CONVERGED,
+          "short cold KS solve fabricated convergence");
+  const std::string stopping_detail = generativeqc_context_get_last_detail(context.get());
+  require(stopping_detail.find("residual_ao_max=") != std::string::npos &&
+              stopping_detail.find("density_spin_rms_max=") != std::string::npos &&
+              stopping_detail.find("energy_change=") != std::string::npos,
+          "terminal KS diagnostic omitted distinct physical stopping gates");
+}
+
+void core_guess_gauge_case() {
+  runtime::OwnedCudaStream stream(0);
+  const std::array<double, 4> spectrum{-2.0, -0.5, -0.5, 0.2};
+  runtime::OwnedCudaBuffer<double> energies(0, spectrum.size(), stream.get());
+  runtime::OwnedCudaBuffer<int> flag(0, 1, stream.get());
+  require(cudaMemcpy(energies.get(), spectrum.data(), sizeof(spectrum), cudaMemcpyHostToDevice) ==
+              cudaSuccess,
+          "core spectrum upload failed");
+  for (const int occupied : {0, 1, 2, 3, 4}) {
+    dft::cuda_ks_detail::core_guess_frontier_tie(stream.get(), 4, occupied, energies.get(),
+                                                 flag.get());
+    int tied = -1;
+    require(cudaStreamSynchronize(stream.get()) == cudaSuccess &&
+                cudaMemcpy(&tied, flag.get(), sizeof(tied), cudaMemcpyDeviceToHost) == cudaSuccess,
+            "core tie detection failed");
+    require(tied == (occupied > 0 && occupied < 4),
+            "core tie detection lost an adjacent frontier cluster or empty/full guard");
+  }
+  const std::array<double, 4> separated{-2.0, -0.5, -0.49, 0.2};
+  require(cudaMemcpy(energies.get(), separated.data(), sizeof(separated), cudaMemcpyHostToDevice) ==
+              cudaSuccess,
+          "separated spectrum upload failed");
+  dft::cuda_ks_detail::core_guess_frontier_tie(stream.get(), 4, 2, energies.get(), flag.get());
+  int tied = -1;
+  require(cudaStreamSynchronize(stream.get()) == cudaSuccess &&
+              cudaMemcpy(&tied, flag.get(), sizeof(tied), cudaMemcpyDeviceToHost) == cudaSuccess &&
+              tied == 0,
+          "nondegenerate frontier requested a gauge change");
+  std::vector<double> core_guess(16, -0.7);
+  runtime::OwnedCudaBuffer<double> device_guess(0, core_guess.size(), stream.get());
+  require(cudaMemcpy(device_guess.get(), core_guess.data(), core_guess.size() * sizeof(double),
+                     cudaMemcpyHostToDevice) == cudaSuccess,
+          "core guess upload failed");
+  dft::cuda_ks_detail::break_core_guess_ties(stream.get(), 4, device_guess.get());
+  require(cudaStreamSynchronize(stream.get()) == cudaSuccess &&
+              cudaMemcpy(core_guess.data(), device_guess.get(), core_guess.size() * sizeof(double),
+                         cudaMemcpyDeviceToHost) == cudaSuccess,
+          "core gauge update failed");
+  for (std::size_t row = 0; row < 4; ++row) {
+    for (std::size_t column = 0; column < 4; ++column) {
+      const double expected = -0.7 + (row == column ? 1e-8 * row / 4 : 0.0);
+      require(std::abs(core_guess[4 * row + column] - expected) < 1e-15,
+              "core gauge changed an off-diagonal element or exceeded its perturbation bound");
+    }
+  }
+  const std::vector<double> oriented{1.0, -1.0 - 1e-14, 0.0, 0.0, 0.0,  2.0, -1.0, 0.0,
+                                     0.0, 0.0,          2.0, 1.0, -1.0, 2.0, 0.0,  0.0};
+  for (unsigned signs = 0; signs < 16; ++signs) {
+    auto coefficients = oriented;
+    for (std::size_t column = 0; column < 4; ++column)
+      for (std::size_t row = 0; row < 4; ++row)
+        if (signs & (1U << column)) coefficients[4 * column + row] *= -1.0;
+    require(cudaMemcpy(device_guess.get(), coefficients.data(),
+                       coefficients.size() * sizeof(double), cudaMemcpyHostToDevice) == cudaSuccess,
+            "core orbital upload failed");
+    dft::cuda_ks_detail::orient_core_guess_orbitals(stream.get(), 4, device_guess.get());
+    dft::cuda_ks_detail::orient_core_guess_orbitals(stream.get(), 4, device_guess.get());
+    require(
+        cudaStreamSynchronize(stream.get()) == cudaSuccess &&
+            cudaMemcpy(coefficients.data(), device_guess.get(),
+                       coefficients.size() * sizeof(double), cudaMemcpyDeviceToHost) == cudaSuccess,
+        "core orbital phase selection failed");
+    require(coefficients == oriented,
+            "core gauge depends on incoming column phases or a roundoff-level pivot tie");
+  }
 }
 std::size_t minao_reference_solves = 0;
 std::size_t observe_minao_reference(const char* name, std::size_t) noexcept {
@@ -2924,6 +3031,12 @@ int main(int argc, char** argv) {
       run_control("seed_product_case()", [&] { seed_product_case(); });
       return 0;
     }
+    if (argc == 2 && std::string(argv[1]) == "--recovery-controls") {
+      run_control("core_guess_gauge_case()", [&] { core_guess_gauge_case(); });
+      run_control("rejected_api_requests_revoke_tokens()",
+                  [&] { rejected_api_requests_revoke_tokens(); });
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--precision-census") {
       for (const auto* selection : std::array<const char*, 3>{nullptr, "0", "1"}) {
         run_control(
@@ -3057,6 +3170,7 @@ int main(int argc, char** argv) {
     run_control("public_wb97mv_cuda_case(true)", [&] { public_wb97mv_cuda_case(true); });
     run_control("rejected_api_requests_revoke_tokens()",
                 [&] { rejected_api_requests_revoke_tokens(); });
+    run_control("core_guess_gauge_case()", [&] { core_guess_gauge_case(); });
     run_control("run_exact_exchange_case(true)", [&] { run_exact_exchange_case(true); });
     run_control("run_exact_exchange_case(false)", [&] { run_exact_exchange_case(false); });
     run_control("ks_cold_factor_cases()", [&] { ks_cold_factor_cases(); });

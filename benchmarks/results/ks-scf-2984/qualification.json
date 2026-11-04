@@ -1,0 +1,276 @@
+{
+  "build": {
+    "compiler_launcher": "sccache 0.16.0",
+    "configuration": "Release",
+    "cublaslt": false,
+    "native_stationary_cuda": true,
+    "stationary_force_profiles": [
+      "b3lyp_rks",
+      "b3lyp_uks"
+    ]
+  },
+  "cases": [
+    {
+      "case": "alf2_doublet",
+      "endpoint_seconds": [
+        2.6012007258832455,
+        0.14586472883820534,
+        0.14540821313858032
+      ],
+      "energy_error_hartree": 6.252776074688882e-13,
+      "finite_difference_errors": [
+        2.534417075511497e-09,
+        9.213518791656439e-09
+      ],
+      "fock_builds": [
+        167,
+        1,
+        1
+      ],
+      "force_error_hartree_bohr": 4.61706922694205e-10,
+      "independent_physical_fock_ao_max": 2.567927627808962e-12,
+      "independent_stationarity_ao_max": 6.119790549969847e-10,
+      "iterations": [
+        167,
+        1,
+        1
+      ],
+      "preliminary_guess": [
+        null,
+        null,
+        null
+      ],
+      "reference_endpoint_seconds": 4.065204195678234,
+      "setup_seconds": 1.030150044709444
+    },
+    {
+      "case": "n2_minus_doublet",
+      "endpoint_seconds": [
+        0.41198794543743134,
+        0.09924071282148361,
+        0.09842272475361824
+      ],
+      "energy_error_hartree": 1.9895196601282805e-13,
+      "finite_difference_errors": [
+        1.4989005037158165e-09,
+        1.8541718715958666e-09
+      ],
+      "fock_builds": [
+        18,
+        1,
+        1
+      ],
+      "force_error_hartree_bohr": 3.537614645665599e-12,
+      "independent_physical_fock_ao_max": 1.2551071293387395e-13,
+      "independent_stationarity_ao_max": 4.4513267551116176e-10,
+      "iterations": [
+        18,
+        1,
+        1
+      ],
+      "preliminary_guess": [
+        null,
+        null,
+        null
+      ],
+      "reference_endpoint_seconds": 0.35980644822120667,
+      "setup_seconds": 0.9512288272380829
+    },
+    {
+      "case": "o2_minus_doublet",
+      "endpoint_seconds": [
+        0.42351965233683586,
+        0.0982181616127491,
+        0.09671037271618843
+      ],
+      "energy_error_hartree": 1.0800249583553523e-12,
+      "finite_difference_errors": [
+        4.073181472663556e-09,
+        4.073181472663556e-09
+      ],
+      "fock_builds": [
+        16,
+        1,
+        1
+      ],
+      "force_error_hartree_bohr": 8.354896011441162e-11,
+      "independent_physical_fock_ao_max": 3.339550858072471e-13,
+      "independent_stationarity_ao_max": 2.4011922839349177e-10,
+      "iterations": [
+        16,
+        1,
+        1
+      ],
+      "preliminary_guess": [
+        null,
+        null,
+        null
+      ],
+      "reference_endpoint_seconds": 0.40739308670163155,
+      "setup_seconds": 0.9371105059981346
+    },
+    {
+      "case": "o2_plus_doublet",
+      "endpoint_seconds": [
+        0.41075677797198296,
+        0.10039253532886505,
+        0.10568896308541298
+      ],
+      "energy_error_hartree": 2.5579538487363607e-13,
+      "finite_difference_errors": [
+        9.596431704839148e-10,
+        1.0298764896443657e-09
+      ],
+      "fock_builds": [
+        18,
+        1,
+        1
+      ],
+      "force_error_hartree_bohr": 7.914611430219465e-12,
+      "independent_physical_fock_ao_max": 1.7319479184152442e-13,
+      "independent_stationarity_ao_max": 7.402951029966687e-10,
+      "iterations": [
+        18,
+        1,
+        1
+      ],
+      "preliminary_guess": [
+        null,
+        null,
+        null
+      ],
+      "reference_endpoint_seconds": 0.4423668310046196,
+      "setup_seconds": 1.1176076009869576
+    },
+    {
+      "case": "o2_singlet",
+      "endpoint_seconds": [
+        0.45468994230031967,
+        0.0640861913561821,
+        0.06393534317612648
+      ],
+      "energy_error_hartree": 1.4210854715202004e-13,
+      "finite_difference_errors": [
+        1.1317352568984695e-08,
+        3.6040448819774085e-09
+      ],
+      "fock_builds": [
+        27,
+        1,
+        1
+      ],
+      "force_error_hartree_bohr": 4.192202140984591e-13,
+      "independent_physical_fock_ao_max": 6.071254610162669e-13,
+      "independent_stationarity_ao_max": 9.066539186086686e-12,
+      "iterations": [
+        27,
+        1,
+        1
+      ],
+      "preliminary_guess": [
+        {
+          "discarded_target_fock_builds": 0,
+          "discarded_target_iterations": 0,
+          "kind": "huckel",
+          "outcome": "used",
+          "preliminary_fock_builds": 7,
+          "preliminary_iterations": 7,
+          "preparation_numeric_capacity": 17193432,
+          "preparation_seconds": 0.001605697,
+          "target_attempts": 1,
+          "work_counters_complete": true
+        },
+        {
+          "discarded_target_fock_builds": 0,
+          "discarded_target_iterations": 0,
+          "kind": "huckel",
+          "outcome": "existing_density",
+          "preliminary_fock_builds": 0,
+          "preliminary_iterations": 0,
+          "preparation_numeric_capacity": 0,
+          "preparation_seconds": 0.0,
+          "target_attempts": 1,
+          "work_counters_complete": true
+        },
+        {
+          "discarded_target_fock_builds": 0,
+          "discarded_target_iterations": 0,
+          "kind": "huckel",
+          "outcome": "existing_density",
+          "preliminary_fock_builds": 0,
+          "preliminary_iterations": 0,
+          "preparation_numeric_capacity": 0,
+          "preparation_seconds": 0.0,
+          "target_attempts": 1,
+          "work_counters_complete": true
+        }
+      ],
+      "reference_endpoint_seconds": 0.2936397008597851,
+      "setup_seconds": 1.1561773717403412
+    }
+  ],
+  "date": "2026-11-05",
+  "hardware": {
+    "cuda_target": "sm_120",
+    "driver": "580.95.05",
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "gpus_per_allocation": 1,
+    "nvcc": "12.9.86",
+    "partition": "main",
+    "slurm_job_id": "15927",
+    "time_limit": "00:20:00",
+    "visibility_preserved": true
+  },
+  "input_provenance": "tests/reference_data/ks-scf-2984/provenance.json",
+  "issue": 2984,
+  "library_sha256": "b31de4539e6c05d7ec8cccae64ec6b85dd6ff9ae4eabdc06495efca1a6ec2295",
+  "other_validation": {
+    "broader_cuda_suite": {
+      "control": "run_fast_anchor_delta_case",
+      "detail": "CUDA KS force-memory handoff cannot capture",
+      "status": "known failure reproduced on earlier PR 2982 build"
+    },
+    "compiled_cuda_recovery_controls": "passed",
+    "focused_python": {
+      "passed": 297,
+      "skipped": 22
+    },
+    "native_cpu_ctest": {
+      "passed": 119
+    }
+  },
+  "qualification": {
+    "fresh_process_per_case": true,
+    "gates": {
+      "energy_error_hartree": 2e-08,
+      "finite_difference_error_hartree_bohr": 2e-05,
+      "finite_difference_steps_bohr": [
+        0.0002,
+        0.0001
+      ],
+      "force_ao_max_error_hartree_bohr": 2e-06,
+      "independent_physical_fock_ao_max_error": 5e-10,
+      "independent_stationarity_ao_max": 1e-09
+    },
+    "native_properties": [
+      "energy",
+      "forces"
+    ],
+    "prepared_replays": 3,
+    "reference": {
+      "auxbasis_response": true,
+      "dftd3": "1.2.1",
+      "grid_response": true,
+      "initial_density": "native density transformed independently to libcint AOs; matching-root density gate 2e-5",
+      "orbital_gradient_tolerance": 3e-07,
+      "pyscf": "2.14.0",
+      "quadrature": "exact native points and weights"
+    },
+    "successful_fresh_process_qualification_passes": 2,
+    "work_units": "fock_builds counts molecular target F[D] evaluations; preliminary_guess separately records atomic preparation and discarded attempts; endpoint_seconds includes the complete E/F execution, with setup_seconds retained separately"
+  },
+  "regression_sha256": "fbbfc44aba6380835b90b9df129cdafd2d6e5d1a2238b4c4db57bd28f4a3bfe1",
+  "schema_version": 1,
+  "source_base_commit": "40f126a74fcf527012f2f4b2a53b158a87334967",
+  "source_identity": "66c97c2c7753bef777fdc830a5981aed2c5eec085c32a8e7fd039f3eb952ea46"
+}
