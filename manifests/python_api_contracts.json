@@ -2,6 +2,10 @@
   "schema_version": 1,
   "debt": [],
   "exports": {
+    "generativeqc.HarmonicAnalysis": "generativeqc/vibrations.py:HarmonicAnalysis",
+    "generativeqc.analyze_harmonic_modes": "generativeqc/vibrations.py:analyze_harmonic_modes",
+    "generativeqc.vibrations.HarmonicAnalysis": "generativeqc/vibrations.py:HarmonicAnalysis",
+    "generativeqc.vibrations.analyze_harmonic_modes": "generativeqc/vibrations.py:analyze_harmonic_modes",
     "generativeqc.AccuracyAssessment": "generativeqc/accuracy.py:AccuracyAssessment",
     "generativeqc.AdaptiveNumericsPolicy": "generativeqc/force_aware_numerics.py:AdaptiveNumericsPolicy",
     "generativeqc.AdaptiveNumericsState": "generativeqc/force_aware_numerics.py:AdaptiveNumericsState",
@@ -445,6 +449,36 @@
     "generativeqc.torch.integral_energy": "generativeqc/torch.py:integral_energy"
   },
   "declarations": {
+    "generativeqc/vibrations.py:HarmonicAnalysis": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/vibrations.md#harmonic-analysis-modes",
+        "ownership": "docs/user/vibrations.md#harmonic-analysis-modes"
+      }
+    },
+    "generativeqc/vibrations.py:HarmonicAnalysis.xyz_animation": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/vibrations.md#harmonic-analysis-modes",
+        "errors": "docs/user/vibrations.md#harmonic-analysis-modes",
+        "ownership": "docs/user/vibrations.md#harmonic-analysis-modes"
+      }
+    },
+    "generativeqc/vibrations.py:analyze_harmonic_modes": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/vibrations.md#harmonic-analysis-inputs",
+        "errors": "docs/user/vibrations.md#harmonic-analysis-admission",
+        "ownership": "docs/user/vibrations.md#harmonic-analysis-modes",
+        "backends": "docs/user/vibrations.md#harmonic-analysis-inputs"
+      }
+    },
     "generativeqc/_electronic_properties.py:ElectronicDensity": {
       "kind": "class",
       "profile": "record",
