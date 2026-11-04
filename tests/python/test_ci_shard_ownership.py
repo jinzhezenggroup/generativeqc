@@ -272,6 +272,53 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
         assert f"tests/python/{filename}" in targets
 
 
+def test_mixed_rsh_force_matrix_preserves_one_tzvp_and_open_shell_in_routine() -> None:
+    """Guard the two expensive nightly def2-TZVP replays without importing PySCF."""
+    source = ROOT / "tests/python/test_mixed_rsh_df_forces.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    target = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "test_complete_mixed_df_forces_against_independent_energies"
+    )
+    basis_decorator = next(
+        decorator
+        for decorator in target.decorator_list
+        if isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Attribute)
+        and decorator.func.attr == "parametrize"
+        and ast.literal_eval(decorator.args[0])
+        == "spin,representation,basis_name"
+    )
+    retained = set()
+    nightly = set()
+    for case in basis_decorator.args[1].elts:
+        if isinstance(case, ast.Tuple):
+            values = ast.literal_eval(case)
+        else:
+            assert isinstance(case, ast.Call)
+            assert ast.unparse(case.func) == "pytest.param"
+            values = tuple(ast.literal_eval(value) for value in case.args)
+            assert len(case.keywords) == 1
+            assert case.keywords[0].arg == "marks"
+            assert ast.unparse(case.keywords[0].value) == "pytest.mark.ci_nightly"
+            nightly.add(values)
+        assert values not in retained
+        retained.add(values)
+    assert len(retained) == 11
+    assert nightly == {
+        (0, "cartesian", "def2-tzvp"),
+        (2, "spherical", "def2-tzvp"),
+    }
+    # Both the higher angular basis and each spin/representation route still
+    # receive independent full-component force checks on ordinary PR CI.
+    routine = retained - nightly
+    assert (0, "spherical", "def2-tzvp") in routine
+    assert (0, "cartesian", "def2-svp") in routine
+    assert (2, "spherical", "def2-svp") in routine
+
+
 @pytest.mark.parametrize(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
@@ -507,9 +554,13 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_df_cc_mixed_precision.py",
             "test_uccsd_solver.py",
         ),
-        "core-a": (
-            "test_cc_triples_tiles.py",
+        "core-a": ("test_cc_triples_tiles.py",),
+        "core-c": (
+            "test_integral_autodiff.py",
             "test_df_lambda_core_reuse.py",
+            "test_direct_exchange_queue.py",
+            "test_cc_canonical_denominators.py",
+            "test_direct_order5_sources.py",
         ),
         "core-b": (
             "test_native_stationary_shared_kernels.py",
@@ -521,11 +572,6 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_df_lambda_matrix_audit.py",
             "test_df_lambda_mixed_precision.py",
             "test_df_occupied_triples.py",
-        ),
-        "core-c": (
-            "test_direct_exchange_queue.py",
-            "test_cc_canonical_denominators.py",
-            "test_direct_order5_sources.py",
         ),
     }
     tracked = set(
@@ -576,7 +622,8 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_native_stationary_shared_kernels.py": "core-b",
         "tests/python/test_native_stationary_cuda_binding.py": "core-b",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
-        "tests/python/test_df_lambda_core_reuse.py": "core-a",
+        "tests/python/test_df_lambda_core_reuse.py": "core-c",
+        "tests/python/test_integral_autodiff.py": "core-c",
         "tests/python/test_correlation_convergence.py": "runtime-heavy",
         "tests/python/test_native_stationary_phased_budget.py": "runtime-heavy",
         "tests/python/test_cpu_semilocal_force_contract.py": "core-b",
@@ -598,6 +645,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             "test_native_stationary_phased_budget_next.py",
             "test_cpu_semilocal_force_contract_next.py",
             "test_df_lambda_core_reuse_next.py",
+            "test_integral_autodiff_next.py",
             "test_df_lambda_mixed_precision_next.py",
             "test_df_occupied_triples_next.py",
             "test_direct_exchange_queue_next.py",
