@@ -65,6 +65,14 @@ it is independent of the optional strict-tolerance early-probe control below.
 Range/nonlocal, budget/mixed, UKS, incremental, ECP, chunked and missing-resident
 owners retain their stricter physical policy.
 
+The canonical all-electron CUDA WB97M-V Standard owner is a separate admitted
+range/nonlocal exception. Its SCF candidate uses energy change and the physical
+MO orbital-gradient Frobenius norm, not density change or the reported AO RMS.
+It retains fresh full-target energy epochs and the complete canonical proof;
+explicit tighter requests restore its original strict AO/density gates. See
+[application precision](../user/application_precision.md) for the exact norms
+and retained final-state acceptance conditions.
+
 With strict energy/density requests, FP64 RKS also checks the maximum absolute AO commutator entry,
 which is distinct from the spin-RMS `physical_residual_max` above. Eligible
 single-iteration CUDA owners can stop before this conservative `1e-9` AO

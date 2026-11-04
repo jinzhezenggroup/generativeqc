@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 
 #include "dft/semilocal_family.hpp"
@@ -48,6 +49,20 @@ constexpr bool ordinary_ks_converged(const KsStoppingState& state) noexcept {
          state.density_change < state.density_tolerance &&
          state.residual < state.stationarity_tolerance &&
          state.maximum_residual < state.stationarity_tolerance;
+}
+
+/** Restricted molecular E/MO-gradient candidate, matching GPU4PySCF's norms.
+ * The transformed physical commutator has Frobenius norm sqrt(2)*||2 F_vo||.
+ * Density change is diagnostic here, not an additional SCF stopping condition.
+ * Full-target energy history and the owner's canonical publication proof are
+ * still mandatory; provisional/frozen VV10 operators cannot publish a state.
+ */
+inline bool orbital_ks_converged(const KsStoppingState& state, double orbital_gradient) noexcept {
+  const bool history =
+      state.iterations > 1 || (state.iterations == 1 && state.warm_energy_baseline);
+  return history && state.full_energy_history && state.target_ready &&
+         state.energy_change < state.energy_tolerance && orbital_gradient >= 0.0 &&
+         orbital_gradient < std::sqrt(state.energy_tolerance);
 }
 
 }  // namespace generativeqc::dft

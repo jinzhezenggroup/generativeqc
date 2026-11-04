@@ -439,7 +439,7 @@ Standard (or legacy `fp64`) without `target` reports `strict_fp64`, with `target
 errors. Native convergence/final-state checks are retained, but **no independent
 observable-budget audit is claimed**. Its CUDA solver defaults are `1e-9` energy change, `1e-5` density change and
 `1e-12` screening for all-electron RHF and canonical restricted PBE, PBE0,
-B3LYP, r2SCAN (including r2SCAN-3c), and M06-2X on the default grid. CPU,
+B3LYP, r2SCAN (including r2SCAN-3c), M06-2X, and WB97M-V on the default grid. CPU,
 unrestricted, correlated and other model/grid domains, and older native
 libraries, retain `1e-10` energy and `1e-8` density. `Calculator` and Fast's
 Standard fallback resolve the same defaults. Explicit tighter controls are
@@ -456,6 +456,21 @@ same-grid/same-fitted-model references. It does not remove quadrature or fitting
 error, and it does not turn a failed dense-reference comparison into a pass.
 For an explicit stringent request, use e.g. `energy_tolerance=1e-12` and
 `density_tolerance=1e-10`.
+
+Canonical restricted CUDA WB97M-V instead uses the molecular GPU4PySCF-style
+**energy AND orbital-gradient** SCF candidate test: `|delta E| < 1e-9` and
+`||2 C_vir^T F[D] C_occ||_F < sqrt(1e-9)`. Density change remains diagnostic,
+not an extra SCF candidate gate. The native owner evaluates this norm from
+`X^T(FDS-SDF)X/sqrt(2)` with `X^T S X = I`, without equating AO RMS or AO maximum
+thresholds to MO thresholds. Consecutive fresh full-target energy history,
+the complete canonical publication proof, electron trace/idempotency and force
+token checks still apply; frozen/provisional VV10 operators cannot publish.
+The final proof retains the Standard `1e-5` density/stationarity ceilings, so
+matching SCF candidate thresholds does not imply identical algorithms or cycle
+counts. Either explicit tighter energy/density request restores the historical
+strict WB97M-V gates and strict VV10 inner tolerances. CPU, UKS, custom models
+or grids, mixed arithmetic, chunked owners and missing validation resources
+retain the bounded conservative path.
 
 Supplying an explicit `TargetAccuracy`, including with Fast or FP64, requests a complete
 same-backend comparison. Balanced, Strict and `audit_auto` also request these
