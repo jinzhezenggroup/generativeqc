@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
     diagnostic_kernel(matrix, spins, density.data(), density.data(), residual.data(),
                     hcore.data(), overlap.data(), coulomb.data(), exchange.data(), -0.25,
                     range_exchange.data(), -0.5, totals, status, status, nullptr,
-                      nullptr, nullptr, status, nullptr, &output);
+                      nullptr, nullptr, status, nullptr, &output, false);
   });
   for (auto& lane : lanes) lane.join();
   if (argc > 3) {
