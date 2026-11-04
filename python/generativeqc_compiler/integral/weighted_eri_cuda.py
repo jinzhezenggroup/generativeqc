@@ -183,11 +183,19 @@ def emit_weighted_eri_function(
     ``scalar_type='float'`` narrows every external leaf before arithmetic and
     emits typed literals/temporaries. The caller still owns the output/local
     reduction type, scientific admission and any strict retry policy.
+    Exact pair-separable kernels consume ``bra_weights`` and ``ket_weights``
+    instead of one component array. This separate FP64 ABI cannot represent a
+    partial four-index mask or packed arbitrary component weights.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("weighted scalar emission supports cpu or cuda")
     if scalar_type not in ("double", "float"):
         raise ValueError("weighted scalar type must be double or float")
+    if kernel.pair_components is not None:
+        if packed_weights:
+            raise ValueError("packed component weights cannot describe separable pairs")
+        if scalar_type != "double":
+            raise ValueError("pair-separable weighted emission requires FP64")
     if not name.isascii() or not name.isidentifier():
         raise ValueError("CUDA helper name must be an ASCII identifier")
     if not result_type.isascii() or not result_type.isidentifier():
@@ -228,9 +236,18 @@ def emit_weighted_eri_function(
         variables[f"{prefix}_product_scale"] = f"geometry.product_scales[{center}]"
     for order in range(kernel.integral.maximum_coulomb_order + 1):
         variables[f"boys_{order}"] = f"geometry.boys[{order}]"
-    for packed, index in enumerate(kernel.component_indices):
-        offset = packed if packed_weights else index
-        variables[f"component_weight_{index}"] = f"component_weights[{offset}]"
+    weight_kind = "external-weight"
+    weight_arguments = "const double* component_weights"
+    if kernel.pair_components is None:
+        for packed, index in enumerate(kernel.component_indices):
+            offset = packed if packed_weights else index
+            variables[f"component_weight_{index}"] = f"component_weights[{offset}]"
+    else:
+        weight_kind = "pair-separable"
+        weight_arguments = "const double* bra_weights, const double* ket_weights"
+        for side, pair_name in enumerate(("bra_weights", "ket_weights")):
+            for index in range(len(kernel.pair_components[side])):
+                variables[f"pair_weight_{side}_{index}"] = f"{pair_name}[{index}]"
     # Cast leaves, not only temporaries: otherwise expressions with FP64
     # geometry/weights would still execute double products before assignment.
     # Geometry preparation and the Boys ladder deliberately stay FP64.
@@ -242,8 +259,8 @@ def emit_weighted_eri_function(
     emitter.emit(roots)
     output_kind = "derivatives" if include_value else "gradient-only"
     lines = [
-        f"/** Unscreened {kernel.spec.name} external-weight {output_kind}; {len(kernel.component_indices)} components. */",
-        f"{'__device__ __forceinline__' if backend == 'cuda' else 'inline'} {result_type} {name}(const Geometry& geometry, const double* component_weights) {{",
+        f"/** Unscreened {kernel.spec.name} {weight_kind} {output_kind}; {len(kernel.component_indices)} components. */",
+        f"{'__device__ __forceinline__' if backend == 'cuda' else 'inline'} {result_type} {name}(const Geometry& geometry, {weight_arguments}) {{",
         *emitter.lines,
         f"  {result_type} result{{}};",
     ]
@@ -471,8 +488,31 @@ def emit_order5_weighted_header() -> str:
     All three classes exceed the bounded 64-component scalar lowering domain.
     Additive partitions retain global component weights and the same shared
     scientific IR; no new recurrence or physical screening is introduced.
+    DPPP additionally exposes a complete pair-separable FP64 helper. Native
+    admission owns its pure-J, full-mask, no-seed domain and strict fallback;
+    the arbitrary-weight helpers and their differentiation choice remain intact.
     """
-    return _emit_weighted_force_classes(((2, 1, 1, 1), (2, 1, 2, 0), (2, 2, 1, 0)))
+    source = _emit_weighted_force_classes(
+        ((2, 1, 1, 1), (2, 1, 2, 0), (2, 2, 1, 0)),
+    )
+    kernel = build_weighted_eri_kernel(
+        build_weighted_eri_ir((2, 1, 1, 1)),
+        derivative_basis="relative",
+        pair_separable=True,
+    )
+    return (
+        source
+        + "\nnamespace generativeqc::scf::generated_weighted_eri {\n"
+        + emit_weighted_eri_function(
+            kernel,
+            "dppp_force_separable",
+            include_value=False,
+            gradient_centers=(0, 1, 2),
+            result_type="IndependentGradient",
+            ordering=AlgebraOrdering.PRESSURE_AWARE,
+        )
+        + "}  // namespace generativeqc::scf::generated_weighted_eri\n"
+    )
 
 
 def _emit_weighted_force_classes(classes: tuple[tuple[int, int, int, int], ...]) -> str:
