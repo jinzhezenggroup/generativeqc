@@ -794,6 +794,7 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
   // Invalidation mutates shared diagnostics even when validation rejects the
   // replay, so it belongs to the same serialized operation as execution.
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
+  batch->context->last_detail.clear();
   std::optional<generativeqc::runtime::DeviceResourceScope> resource_scope;
   generativeqc::api::PreparedPublication publication(*batch->plan);
   std::fill(batch->precision_work.begin(), batch->precision_work.end(), std::nullopt);
@@ -875,8 +876,12 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
     for (std::uint32_t i = 0; i < system_count; ++i) {
       generativeqc_batch_item_result_descriptor& output = results[i];
       generativeqc::methods::BatchItemResult& item = native[i];
+      if (!item.detail.empty() && batch->context->last_detail.empty())
+        batch->context->last_detail = "batch item " + std::to_string(i) + ": " + item.detail;
       if (item.status == GENERATIVEQC_STATUS_SUCCESS ||
-          item.status == GENERATIVEQC_STATUS_NOT_CONVERGED) {
+          item.status == GENERATIVEQC_STATUS_NOT_CONVERGED ||
+          (item.status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+           item.calculation.ks_diagnostic)) {
         batch->ks_diagnostics[i] = std::move(item.calculation.ks_diagnostic);
         if (item.calculation.preliminary_guess.requested_kind)
           batch->initial_guesses[i] = item.calculation.preliminary_guess;

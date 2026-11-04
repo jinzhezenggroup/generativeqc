@@ -6,6 +6,18 @@
 #include <cstdint>
 
 namespace generativeqc::dft::cuda_ks_detail {
+/** Detect numerical core-spectrum ties touching the beta frontier. The cold
+ * seed, not the physical Hamiltonian, may resolve this otherwise arbitrary
+ * gauge. Both adjacent occupied/virtual clusters participate in the check. */
+void core_guess_frontier_tie(cudaStream_t stream, std::size_t dimension, int occupied_beta,
+                             const double* energies, int* tied);
+/** Deterministic 1e-8-Eh diagonal tie-break in the orthogonal cold-guess basis.
+ * Never apply this to an SCF, DIIS, final-state or response Fock matrix. */
+void break_core_guess_ties(cudaStream_t stream, std::size_t dimension, double* core_guess);
+/** Fix each cold orbital's arbitrary sign before mixing distinct columns.
+ * The first AO among numerically tied largest components defines its phase. */
+void orient_core_guess_orbitals(cudaStream_t stream, std::size_t dimension, double* coefficients);
+
 struct Scalars {
   double one_electron{}, hartree{}, exact_exchange{}, xc{}, residual{}, density_change{};
   double residual_rms{}, density_rms{};
