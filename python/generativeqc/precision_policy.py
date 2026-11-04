@@ -16,12 +16,16 @@ from dataclasses import asdict, dataclass, replace
 from time import perf_counter
 
 from ._api_types import Atom, MethodCapabilities, Result
-from ._composite_precision import COMPOSITE_GRADIENT_QUALIFICATIONS
-from ._df_precision import DF_GRADIENT_QUALIFICATIONS
 from ._observable_comparison import (
     _observable_array,
     measure_observables,
     require_observable_comparison,
+)
+from ._precision_candidate import (
+    REASONS,
+    Disposition,
+    classify_candidate,
+    require_candidate_classification,
 )
 from ._precision_execution import (
     PrecisionEvent,
@@ -385,45 +389,6 @@ def _errors(
     )
 
 
-def _complete_gradient_admission(
-    calculator: Calculator, result: Result, electronic: str
-) -> str | None:
-    """Do not present an electronic proof as an arbitrary composite proof.
-
-    Canonical 3c has independent endpoint qualification with the unchanged
-    FP64 D4/native-CPU gCP owners. Its electronic precision record still describes
-    only the electronic sources; the facade binds the complete model here.
-    Other corrected graphs retain the explicit observable audit.
-    """
-    correction_model = getattr(calculator, "_dispersion_method_ir", None)
-    if correction_model is None:
-        return electronic
-    from generativeqc_compiler.method import resolve_method
-
-    from .dispersion import R2SCAN3CCorrectionResult
-
-    correction = result.dispersion
-    if (
-        electronic
-        in (
-            "r2scan-rks-budget-fp32-v1",
-            "r2scan-df-rks-budget-fp32-v1",
-            "r2scan-df-rks-treutler-budget-fp32-v1",
-            "r2scan-df-rks-treutler-xc-budget-fp32-v1",
-        )
-        and correction_model.identity
-        == resolve_method("R2SCAN-3c", spin="unpolarized").identity
-        and isinstance(correction, R2SCAN3CCorrectionResult)
-        and correction.ok
-        and correction.d4.ok
-        and correction.gcp.ok
-        and correction.backend == "cuda+cpu"
-        and correction.gradient is not None
-    ):
-        return electronic.replace("r2scan-", "r2scan-3c-", 1)
-    return None
-
-
 def _solve_record(
     calculator: Calculator,
     result: typing.Any,
@@ -656,6 +621,7 @@ class PrecisionCalculator:
                     self._route_reasons.append("auto_scf_unavailable_for_model")
         require_precision_schedule(self._candidate._library)
         require_observable_comparison(self._candidate._library)
+        require_candidate_classification(self._candidate._library)
 
     @property
     def policy(self) -> PrecisionPolicy:
@@ -933,6 +899,7 @@ class PrecisionCalculator:
         gradient_admission = "no-application-qualified-fp32-gradient-route"
         selected_library = candidate_calculator._library
         require_observable_comparison(selected_library)
+        require_candidate_classification(selected_library)
 
         def operation(event: PrecisionEvent) -> int:
             nonlocal candidate_calculator, candidate_precision, candidate, reference
@@ -1042,258 +1009,68 @@ class PrecisionCalculator:
         solves: list[PrecisionSolve],
         started: float,
     ) -> tuple[PrecisionValidation | None, TargetAccuracy | None, str]:
-        """Interpret qualification evidence without scheduling another endpoint.
-
-        This remains an explicit Python admission/presentation adapter for the
-        existing native predicates and qualified gradient owners. It cannot
-        bypass an explicit target or choose an audit/replacement solve order.
-        """
+        """Present the selected native owner's route without selecting policy."""
+        disposition, reasons, gradient_admission = classify_candidate(
+            candidate_calculator,
+            candidate,
+            profile=self.policy.profile,
+            target=self.policy.target,
+            fast_native=self._fast_native
+            and (candidate_calculator is self._candidate or self._fast_transport_v2),
+            fast_fock=self._fast_fock,
+            forces="forces" in requested,
+            precision=candidate_precision,
+            budget=self.policy.budget,
+        )
+        if reasons & 1:
+            route_reasons.remove("fp32_gradient_not_qualified")
+        route_reasons.extend(reason for bit, reason in REASONS if reasons & bit)
         target = self.policy.target
-        fast_native = self._fast_native and (
-            candidate_calculator is self._candidate or self._fast_transport_v2
-        )
-        gradient = (candidate.precision or {}).get("gradient") or {}
-        gradient_admission = "no-application-qualified-fp32-gradient-route"
-        qualification = gradient.get(
-            "qualification",
-            "pbe0-rks-budget-fp32-v1"
-            if gradient.get("schema_version") == 1
-            else "unknown",
-        )
-        qualified_gradient = gradient.get("complete") is True and (
-            (
-                gradient.get("schema_version") in (1, 2, 3)
-                and qualification
-                in (
-                    "pbe0-rks-budget-fp32-v1",
-                    "pbe-rks-budget-fp32-v1",
-                    "b3lyp-rks-budget-fp32-v1",
-                    "r2scan-rks-budget-fp32-v1",
-                    "rhf-budget-fp32-v1",
-                    "rhf-df-shell-budget-fp32-v1",
-                    "m06-2x-rks-budget-fp32-v1",
-                )
-            )
-            or (
-                gradient.get("schema_version") == 4
-                and (
-                    (
-                        gradient.get("owner") == "python-stationary-cuda"
-                        and qualification in DF_GRADIENT_QUALIFICATIONS
-                    )
-                    or (
-                        gradient.get("owner") == "python-composite-stationary-cuda"
-                        and qualification in COMPOSITE_GRADIENT_QUALIFICATIONS
-                    )
-                )
-            )
-        )
-        if qualified_gradient:
-            admitted = _complete_gradient_admission(
-                candidate_calculator, candidate, qualification
-            )
-            qualified_gradient = admitted is not None
-            if qualified_gradient:
-                gradient_admission = admitted
-                route_reasons.remove("fp32_gradient_not_qualified")
-                if gradient.get("capability_fallback"):
-                    route_reasons.append("fp32_geometry_capability_unavailable")
-            else:
-                route_reasons.append("geometry_correction_not_qualified")
-        if self.policy.profile == "fast" and target is None:
-            work = candidate.precision or {}
-            strict_warm = (
-                fast_native
-                and self._fast_fock
-                and _budget_fock_strict_warm_admitted(
-                    candidate_calculator,
-                    candidate,
-                    qualified_gradient=qualified_gradient,
-                )
-            )
-            if (
-                fast_native
-                and self._fast_fock
-                and (
-                    not gradient
-                    or gradient.get("returned_mode") == "fp64"
-                    or qualified_gradient
-                )
-                and (
-                    strict_warm
-                    or _budget_fock_work_admitted(candidate_calculator, work)
-                )
-            ):
-                validation = PrecisionValidation(
-                    self.policy.profile,
-                    None,
-                    model,
-                    "qualified_budget_fock_strict_warm"
-                    if strict_warm
-                    else "qualified_budget_fock",
-                    tuple(route_reasons),
-                    (),
-                    (),
-                    tuple(solves),
-                    perf_counter() - started,
-                    reference=(
-                        "df-xc-budget-v1/strict-j-shared-xc-qualification"
-                        if candidate_calculator._density_fitting_mode
-                        else "direct-fock-budget-v2/shared-module-qualification"
-                    ),
-                    gradient_admission=gradient_admission,
-                    scope="qualification_not_per_call_observable_audit",
-                    budget=self.policy.budget,
-                )
-                return (
-                    validation,
-                    target,
-                    gradient_admission,
-                )
-            if (
-                fast_native
-                and not self._fast_fock
-                and "forces" in requested
-                and qualified_gradient
-                # V2 is emitted only after the complete gradient consumer
-                # verifies its strict final-state token. Chunked SCF may
-                # lack detailed operator rows; do not fabricate that census.
-                and (
-                    gradient.get("schema_version") in (2, 3, 4)
-                    or (
-                        work.get("operator_work_counters_valid") is True
-                        and work.get("complete") is True
-                        and work.get("operator_inventory_complete") is True
-                        and work.get("strict_stage_fock_builds", 0) > 0
-                        and work.get("final_residual_audits", 0) > 0
-                    )
-                )
-                and (
-                    gradient.get("attempted_fp32_geometry_points", 0) > 0
-                    or (
-                        gradient.get("schema_version") == 3
-                        and gradient.get("weighted_task_counters_collected") is True
-                        and (gradient.get("attempted_fp32_weighted_tasks") or 0) > 0
-                        and (gradient.get("attempted_fp32_primitive_sources") or 0) > 0
-                    )
-                )
-                and gradient.get("returned_mode") in ("mixed", "fp64")
-            ):
-                if gradient.get("fp64_gradient_retries", 0):
-                    route_reasons.append("native_gradient_retried_fp64")
-                elif (
-                    gradient.get("schema_version") != 4
-                    and qualification
-                    not in ("rhf-budget-fp32-v1", "rhf-df-shell-budget-fp32-v1")
-                    and not gradient.get("attempted_fp32_grid_points", 0)
-                ):
-                    route_reasons.append("fp32_grid_storage_unavailable")
-                if work.get("execution_retries", 0):
-                    route_reasons.append("native_mixed_execution_retried_fp64")
-                validation = PrecisionValidation(
-                    self.policy.profile,
-                    None,
-                    model,
-                    "qualified_mixed_gradient"
-                    if gradient["returned_mode"] == "mixed"
-                    else "qualified_strict_final",
-                    tuple(route_reasons),
-                    (),
-                    (),
-                    tuple(solves),
-                    perf_counter() - started,
-                    reference=f"{gradient_admission}/independent-qualification-and-native-fp64-scf",
-                    gradient_admission=gradient_admission,
-                    scope="qualification_not_per_call_observable_audit",
-                    budget=self.policy.budget,
-                )
-                return (
-                    validation,
-                    target,
-                    gradient_admission,
-                )
-            if (
-                fast_native
-                and not self._fast_fock
-                and getattr(candidate_calculator, "_dispersion_method_ir", None) is None
-                and work.get("operator_work_counters_valid") is True
-                and work.get("complete") is True
-                and work.get("operator_inventory_complete") is True
-                and any(
-                    operator.get("name") == "xc"
-                    and operator.get("compute") == "fp32"
-                    and operator.get("accumulation") == "fp32"
-                    and operator.get("arithmetic_mode") == "mixed"
-                    and operator.get("count", 0) > 0
-                    for operator in work.get("operators", ())
-                )
-                and work.get("mixed_stage_fock_builds", 0) > 0
-                and work.get("strict_stage_fock_builds", 0) >= 2
-                and work.get("strict_refinement_applied") is True
-                and work.get("final_residual_audits", 0) > 0
-            ):
-                if work.get("execution_retries", 0):
-                    route_reasons.append("native_mixed_execution_retried_fp64")
-                validation = PrecisionValidation(
-                    self.policy.profile,
-                    None,
-                    model,
-                    "qualified_strict_final",
-                    tuple(route_reasons),
-                    (),
-                    (),
-                    tuple(solves),
-                    perf_counter() - started,
-                    reference="pbe-xc-warmup-v1/independent-qualification-and-native-fp64-final",
-                    scope="qualification_not_per_call_observable_audit",
-                    budget=self.policy.budget,
-                )
-                return (
-                    validation,
-                    target,
-                    gradient_admission,
-                )
-            if _standard_fallback_admitted(
-                candidate_calculator, candidate, candidate_precision, self.policy.budget
-            ):
-                validation = PrecisionValidation(
-                    self.policy.profile,
-                    None,
-                    model,
-                    "strict_standard_fallback",
-                    (*route_reasons, "fast_route_unavailable_using_standard"),
-                    (),
-                    (),
-                    tuple(solves),
-                    perf_counter() - started,
-                    reference="native-standard-fp64-final-state-checks-no-observable-audit",
-                    scope="native_fp64",
-                    budget=self.policy.budget,
-                )
-                return (
-                    validation,
-                    target,
-                    gradient_admission,
-                )
+        if reasons & 128:
             target = _budget_target(self.policy.budget, forces="forces" in requested)
-            route_reasons.append("budget_or_domain_requires_fp64_audit")
-        if target is None:
-            validation = PrecisionValidation(
-                self.policy.profile,
-                None,
-                model,
-                "strict_fp64",
-                tuple(route_reasons),
-                (),
-                (),
-                tuple(solves),
-                perf_counter() - started,
-                reference="native-fp64-final-state-checks-no-observable-audit",
-                scope="native_fp64",
-            )
-            return (
-                validation,
-                target,
-                gradient_admission,
-            )
-        return None, target, gradient_admission
+        if disposition == Disposition.AUDIT:
+            return None, target, gradient_admission
+        references = {
+            Disposition.STRICT: "native-fp64-final-state-checks-no-observable-audit",
+            Disposition.FOCK: (
+                "df-xc-budget-v1/strict-j-shared-xc-qualification"
+                if getattr(candidate_calculator, "_density_fitting_mode", None)
+                else "direct-fock-budget-v2/shared-module-qualification"
+            ),
+            Disposition.STRICT_XC: "pbe-xc-warmup-v1/independent-qualification-and-native-fp64-final",
+            Disposition.STANDARD: "native-standard-fp64-final-state-checks-no-observable-audit",
+        }
+        references[Disposition.WARM_FOCK] = references[Disposition.FOCK]
+        references[Disposition.MIXED_GRADIENT] = references[
+            Disposition.STRICT_GRADIENT
+        ] = f"{gradient_admission}/independent-qualification-and-native-fp64-scf"
+        statuses = {
+            Disposition.STRICT: "strict_fp64",
+            Disposition.FOCK: "qualified_budget_fock",
+            Disposition.WARM_FOCK: "qualified_budget_fock_strict_warm",
+            Disposition.MIXED_GRADIENT: "qualified_mixed_gradient",
+            Disposition.STRICT_GRADIENT: "qualified_strict_final",
+            Disposition.STRICT_XC: "qualified_strict_final",
+            Disposition.STANDARD: "strict_standard_fallback",
+        }
+        qualification = disposition not in (Disposition.STRICT, Disposition.STANDARD)
+        validation = PrecisionValidation(
+            self.policy.profile,
+            None,
+            model,
+            statuses[disposition],
+            tuple(route_reasons),
+            (),
+            (),
+            tuple(solves),
+            perf_counter() - started,
+            reference=references[disposition],
+            gradient_admission=gradient_admission
+            if qualification and disposition != Disposition.STRICT_XC
+            else "no-application-qualified-fp32-gradient-route",
+            scope="qualification_not_per_call_observable_audit"
+            if qualification
+            else "native_fp64",
+            budget=self.policy.budget if disposition != Disposition.STRICT else None,
+        )
+        return validation, target, gradient_admission

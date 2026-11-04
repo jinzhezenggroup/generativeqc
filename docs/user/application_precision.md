@@ -737,13 +737,23 @@ NumPy/platform summation bracket. Acceptance remains the inclusive declared
 `difference <= allowance`, without added slack. Nonfinite/overflowing inputs,
 differences or allowances reject instead of producing a successful report.
 
+The required native candidate classifier also interprets the incumbent gradient
+receipt schemas/owners, binds complete r2SCAN-3c correction evidence to its own
+canonical restricted model identity, and selects qualified Fock/gradient,
+strict-final, Standard fallback or independent-audit publication. Explicit
+targets always audit. Missing census is not zero work; a gradient qualification
+does not replace the required strict final-state or attempted-work evidence.
+Missing/refused classifier support is an installation error, not permission to
+choose a Python admission policy.
+
 Python adapts the existing electronic owners to these operations, validates array
-shape/representation, interprets qualification/gradient evidence and publishes
-detached native measurement receipts. Prepared fleet execution, eligibility and
-independent candidate/auditor
-seed history also retain their existing Python owners. This bounded stage-order
-contract is not a standalone native precision endpoint, SDK/CLI parity, or a new
-scientific qualification.
+shape/representation, transports detached diagnostics and publishes native
+classification/measurement receipts. Existing gradient producers still own
+their actual model/provider/basis/budget eligibility and physical state binding.
+Initial prepared fleet execution, eligibility and independent candidate/auditor
+seed history also retain their existing Python owners. These bounded native
+contracts are not a standalone native precision endpoint, SDK/CLI parity, or a
+new scientific qualification.
 
 Endpoint workspaces are released before starting the next audit owner, so a
 retained candidate does not double the resident resource budget. Returned

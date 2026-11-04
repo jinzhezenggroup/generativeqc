@@ -49,6 +49,7 @@ def policy_metadata(library: typing.Any, **capabilities: typing.Any) -> SimpleNa
         generativeqc_scf_defaults_query_v1=library.generativeqc_scf_defaults_query_v1,
         generativeqc_precision_execution_run_v1=library.generativeqc_precision_execution_run_v1,
         generativeqc_observable_comparison_query_v1=library.generativeqc_observable_comparison_query_v1,
+        generativeqc_precision_candidate_query_v1=library.generativeqc_precision_candidate_query_v1,
         **capabilities,
     )
 
@@ -75,6 +76,7 @@ def backend(
         missing_admission=False,
         missing_execution=False,
         missing_observable=False,
+        missing_candidate=False,
     )
 
     class Backend:
@@ -90,6 +92,8 @@ def backend(
                 self._library.generativeqc_precision_execution_run_v1 = None
             if state.missing_observable:
                 self._library.generativeqc_observable_comparison_query_v1 = None
+            if state.missing_candidate:
+                self._library.generativeqc_precision_candidate_query_v1 = None
             if state.standard_convergence:
                 self._device_name = options.get("device")
                 self._library.generativeqc_standard_scf_convergence_version_v1 = (
@@ -190,6 +194,32 @@ def test_all_profiles_require_native_observables_before_molecular_work(
     backend.missing_observable = True
     with pytest.raises(NotImplementedError, match="required observable comparison"):
         PrecisionCalculator(policy=profile)
+    assert backend.calls == []
+
+
+@pytest.mark.parametrize(
+    "profile", ("standard", "fp64", "balanced", "strict", "audit_auto", "fast")
+)
+def test_all_profiles_require_native_classification_before_molecular_work(
+    backend: SimpleNamespace, profile: str
+) -> None:
+    backend.missing_candidate = True
+    with pytest.raises(NotImplementedError, match="required precision-candidate query"):
+        PrecisionCalculator(policy=profile)
+    assert backend.calls == []
+
+
+def test_missing_selected_candidate_protocol_does_not_start_electronic_work(
+    backend: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calculator = PrecisionCalculator(policy="balanced")
+    monkeypatch.setattr(
+        calculator._candidate._library,
+        "generativeqc_precision_candidate_query_v1",
+        None,
+    )
+    with pytest.raises(NotImplementedError, match="required precision-candidate query"):
+        calculator.singlepoint(ATOMS)
     assert backend.calls == []
 
 
@@ -1519,6 +1549,7 @@ def test_nonlocal_fast_uses_real_strict_scf_policy(backend: SimpleNamespace) -> 
 )
 def test_composite_gradient_admission_requires_all_canonical_correction_sources(
     electronic: str,
+    policy_library: typing.Any,
 ) -> None:
     """A complete electronic record alone cannot certify another corrected graph."""
     from generativeqc.dispersion import (
@@ -1532,8 +1563,38 @@ def test_composite_gradient_admission_requires_all_canonical_correction_sources(
     d4 = D4CorrectionResult(0, 0.0, 0.0, 0.0, gradient, None, "cuda", "")
     gcp = GCPCorrectionResult(0, 0.0, gradient, "cpu", "", "native", "graph")
     correction = R2SCAN3CCorrectionResult(0, 0.0, gradient, "cuda+cpu", "", d4, gcp)
-    calculator = SimpleNamespace(_dispersion_method_ir=resolve_method("R2SCAN-3c"))
-    assert implementation._complete_gradient_admission(
+    calculator = SimpleNamespace(
+        _dispersion_method_ir=resolve_method("R2SCAN-3c"),
+        _library=policy_library,
+    )
+
+    def admitted(
+        calculator: typing.Any, observed: Result, qualification: str
+    ) -> str | None:
+        from generativeqc._precision_candidate import classify_candidate
+
+        precision = {
+            "gradient": {
+                "complete": True,
+                "qualification": qualification,
+                "schema_version": 4 if "-df-" in qualification else 2,
+                "owner": "python-stationary-cuda",
+            }
+        }
+        _, reasons, name = classify_candidate(
+            calculator,
+            replace(observed, precision=precision),
+            profile="fp64",
+            target=ENERGY,
+            fast_native=False,
+            fast_fock=False,
+            forces=True,
+            precision="fp64",
+            budget=None,
+        )
+        return name if reasons & 1 else None
+
+    assert admitted(
         calculator, result(dispersion=correction), electronic
     ) == electronic.replace("r2scan-", "r2scan-3c-", 1)
     for invalid in (
@@ -1544,25 +1605,13 @@ def test_composite_gradient_admission_requires_all_canonical_correction_sources(
         replace(correction, d4=replace(d4, status=1)),
         replace(correction, gcp=replace(gcp, status=1)),
     ):
-        assert (
-            implementation._complete_gradient_admission(
-                calculator, result(dispersion=invalid), electronic
-            )
-            is None
-        )
+        assert admitted(calculator, result(dispersion=invalid), electronic) is None
     assert (
-        implementation._complete_gradient_admission(
-            calculator, result(dispersion=correction), "pbe0-rks-budget-fp32-v1"
-        )
+        admitted(calculator, result(dispersion=correction), "pbe0-rks-budget-fp32-v1")
         is None
     )
     calculator._dispersion_method_ir = resolve_method("PBE0")
-    assert (
-        implementation._complete_gradient_admission(
-            calculator, result(dispersion=correction), electronic
-        )
-        is None
-    )
+    assert admitted(calculator, result(dispersion=correction), electronic) is None
 
 
 def test_uncertified_correction_cannot_bypass_audit_via_qualified_xc_warmup(

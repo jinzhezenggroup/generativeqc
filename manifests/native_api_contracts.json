@@ -3307,6 +3307,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_precision_candidate_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/precision_admission.h",
+      "signature_sha256": "f89749d2949179a6f621bd0fbc8703ce0d89c380a5eaf99d29341f267493a20f",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_precision_controls_query_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/precision_admission.h",

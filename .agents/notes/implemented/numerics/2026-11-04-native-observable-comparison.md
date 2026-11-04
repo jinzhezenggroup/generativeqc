@@ -61,6 +61,10 @@ to bypass the scheduler. Full #2227 R1–R6 remain incomplete.
 
 ## References
 
+The later [native candidate classifier](../architecture/2026-11-04-native-precision-candidate-classification.md)
+supersedes the Python receipt-interpretation boundary retained during this
+numerical reduction cutover, without changing these observable algorithms.
+
 - `docs/user/accuracy.md`
 - `docs/user/application_precision.md`
 - `tests/python/test_native_observable_comparison.py`

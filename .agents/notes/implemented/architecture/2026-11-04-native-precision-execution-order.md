@@ -63,6 +63,10 @@ numerical, lifetime, work/resource and endpoint performance gates. Keep the full
 
 ## References
 
+The later candidate-policy cutover supersedes the retained Python receipt
+interpretation boundary, not this historical execution-order decision:
+[native candidate classification](2026-11-04-native-precision-candidate-classification.md).
+
 - `docs/user/application_precision.md`
 - `include/generativeqc/precision_admission.h`
 - `manifests/maintenance/python_native_runtime_ownership.json`

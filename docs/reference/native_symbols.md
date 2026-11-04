@@ -226,6 +226,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::KsComposition::add_exact_exchange](#native-cpp-generativeqc-kscomposition-add-exact-exchange)
 - [generativeqc::KsComposition::prepare](#native-cpp-generativeqc-kscomposition-prepare)
 - [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
+- [generativeqc_precision_candidate_query_v1](#native-c-generativeqc-precision-candidate-query-v1)
 - [generativeqc_precision_controls_query_v1](#native-c-generativeqc-precision-controls-query-v1)
 - [generativeqc_precision_execution_callback_v1](#native-c-generativeqc-precision-execution-callback-v1)
 - [generativeqc_precision_execution_run_v1](#native-c-generativeqc-precision-execution-run-v1)
@@ -6014,6 +6015,42 @@ needed. Explicit observable targets still require their independent endpoint aud
 
 **Units.** Budgets use Eh and Eh/bohr; solver controls retain their existing native units;
 counts denote actual work, never inferred iterations or timings.
+
+(native-c-generativeqc-precision-candidate-query-v1)=
+## generativeqc_precision_candidate_query_v1
+
+Source: [precision_admission.h](../../include/generativeqc/precision_admission.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_precision_candidate_query_v1 ( const generativeqc_precision_candidate_context_v1 * candidate , const generativeqc_precision_admission_context_v1 * context , const generativeqc_precision_provenance * provenance , const generativeqc_precision_work_detail * detail , const generativeqc_precision_work_event * events , const generativeqc_precision_operator_record * operators , generativeqc_precision_candidate_v1 * output ) ;
+```
+
+**Behavior.** Classify completed precision candidates using shared native work
+predicates, incumbent gradient receipt domains and complete correction binding.
+Explicit observable targets always require an independent audit. No new
+method, derivative, provider or FP32 domain is qualified by this query.
+
+**Inputs.** Nonnull versioned candidate/admission contexts, provenance, detail
+and output. Event/operator arrays contain the counts declared by detail.
+Candidate facts override the admission context's gradient interpretation.
+Correction identity is compared to the selected library's canonical native
+r2SCAN-3c catalog entry; display names are not model identity.
+
+**Outputs.** Publish policy version 1, one disposition, reason bits and complete
+gradient admission name. AUDIT requires the existing independent observable
+endpoint; it does not mean a numerical failure or an unsupported protocol.
+
+**Errors.** INVALID_ARGUMENT for malformed facts, flags, strings or work records;
+ABI_MISMATCH for incompatible descriptors; NOT_IMPLEMENTED for unsupported
+work-detail versions. Failure leaves output unchanged.
+
+**Lifetime.** Borrow all inputs synchronously, retain nothing. Complete reads
+before publishing output, permitting input/output overlap.
+
+**Execution.** CPU metadata only, allocation-free and reentrant; no electronic
+solve, compiler, Python interpreter, resource allocation or fallback occurs.
+
+**Units.** Counts are semantic diagnostic work, not timings or inferred zeros.
 
 (native-c-generativeqc-precision-controls-query-v1)=
 ## generativeqc_precision_controls_query_v1

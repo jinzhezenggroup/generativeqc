@@ -211,7 +211,7 @@ def require_admission(calculator: Any) -> Any:
     return query
 
 
-def admission(
+def evidence(
     calculator: Any,
     work: dict,
     *,
@@ -219,15 +219,13 @@ def admission(
     qualified_gradient: bool = False,
     precision: str | None = None,
     budget: Any = None,
-) -> tuple[bool, bool, bool]:
-    """Query the selected library using its existing public precision records.
+) -> tuple[Any, ...]:
+    """Copy detached evidence to the existing public native precision records.
 
     Missing counters stay unknown. The adapter translates names and shapes; it
     does not infer work, compare budgets or identify a qualifying method itself.
     Explicit TargetAccuracy requests still use their independent audit path.
     """
-    library = getattr(calculator, "_library", None)
-    query = require_admission(calculator)
     context = _Context(ct.sizeof(_Context), _native.ABI_VERSION)
     options = getattr(calculator, "_ks_options", None)
     context.ks_model = (
@@ -312,6 +310,29 @@ def admission(
         _state(work.get("returned_state_identity"))
     )
     detail.event_count, detail.operator_count = len(events), len(operators)
+    return context, provenance, detail, events, operators
+
+
+def admission(
+    calculator: Any,
+    work: dict,
+    *,
+    result: Any = None,
+    qualified_gradient: bool = False,
+    precision: str | None = None,
+    budget: Any = None,
+) -> tuple[bool, bool, bool]:
+    """Consume the selected native policy without portable decision fallback."""
+    library = getattr(calculator, "_library", None)
+    query = require_admission(calculator)
+    context, provenance, detail, events, operators = evidence(
+        calculator,
+        work,
+        result=result,
+        qualified_gradient=qualified_gradient,
+        precision=precision,
+        budget=budget,
+    )
     output = _Decision(ct.sizeof(_Decision), _native.ABI_VERSION)
     query.argtypes = [
         ct.POINTER(_Context),

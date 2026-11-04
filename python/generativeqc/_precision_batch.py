@@ -14,6 +14,7 @@ import numpy as np
 from . import _native
 from ._api_types import Atom
 from ._observable_comparison import require_observable_comparison
+from ._precision_candidate import require_candidate_classification
 from ._precision_execution import require_precision_schedule
 from .batch import BatchResult
 from .checkpoint import _descriptor, _pointer, _resource_check, _restore_states
@@ -238,6 +239,7 @@ class PreparedPrecisionBatch:
         self._options = dict(options)
         require_precision_schedule(self._calculator._library)
         require_observable_comparison(self._calculator._library)
+        require_candidate_classification(self._calculator._library)
         self._signature = self._calculator._model_signature()
         self._owner = self._calculator.prepare_batch(self._systems, **self._options)
         try:
@@ -579,6 +581,7 @@ class PreparedPrecisionBatch:
             self._ensure_open()
             require_precision_schedule(self._calculator._library)
             require_observable_comparison(self._calculator._library)
+            require_candidate_classification(self._calculator._library)
             started = perf_counter()
             requested = self._facade._properties(properties)
             if requested - self.capabilities.supported_properties:

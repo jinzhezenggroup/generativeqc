@@ -59,6 +59,86 @@ GENERATIVEQC_API generativeqc_status generativeqc_precision_admission_query_v1(
     const generativeqc_precision_operator_record* operators,
     generativeqc_precision_admission_v1* output);
 
+enum {
+  GENERATIVEQC_PRECISION_CANDIDATE_AUDIT = 0,
+  GENERATIVEQC_PRECISION_CANDIDATE_STRICT = 1,
+  GENERATIVEQC_PRECISION_CANDIDATE_FOCK = 2,
+  GENERATIVEQC_PRECISION_CANDIDATE_WARM_FOCK = 3,
+  GENERATIVEQC_PRECISION_CANDIDATE_MIXED_GRADIENT = 4,
+  GENERATIVEQC_PRECISION_CANDIDATE_STRICT_GRADIENT = 5,
+  GENERATIVEQC_PRECISION_CANDIDATE_STRICT_XC = 6,
+  GENERATIVEQC_PRECISION_CANDIDATE_STANDARD = 7
+};
+enum {
+  GENERATIVEQC_PRECISION_CANDIDATE_GRADIENT_QUALIFIED = 1,
+  GENERATIVEQC_PRECISION_CANDIDATE_GEOMETRY_FALLBACK = 2,
+  GENERATIVEQC_PRECISION_CANDIDATE_CORRECTION_UNQUALIFIED = 4,
+  GENERATIVEQC_PRECISION_CANDIDATE_GRADIENT_RETRIED = 8,
+  GENERATIVEQC_PRECISION_CANDIDATE_GRID_UNAVAILABLE = 16,
+  GENERATIVEQC_PRECISION_CANDIDATE_EXECUTION_RETRIED = 32,
+  GENERATIVEQC_PRECISION_CANDIDATE_STANDARD_FALLBACK = 64,
+  GENERATIVEQC_PRECISION_CANDIDATE_BUDGET_AUDIT = 128
+};
+
+/** Detached facts for completed candidate classification, not new qualification.
+ * Boolean fields are 0/1. Gradient owner: 0 unknown, 1 stationary CUDA,
+ * 2 composite stationary CUDA. Returned mode: 0 unknown, 1 mixed, 2 FP64.
+ * correction_result_flags bits identify the typed complete correction, its
+ * success, D4 success, gCP success, cuda+cpu backend and present gradient.
+ * Strings must be NUL-terminated within their inline arrays. Missing gradient
+ * qualification is distinct from an explicitly unknown name. Counts describe
+ * actual attempted work; missing mixed Fock count is explicitly marked.
+ */
+typedef struct generativeqc_precision_candidate_context_v1 {
+  uint32_t struct_size, abi_version;
+  uint32_t fast_profile, explicit_target, fast_native, fast_fock, forces_requested;
+  uint32_t gradient_present, gradient_schema_version, gradient_complete;
+  uint32_t gradient_owner, gradient_returned_mode, qualification_present;
+  uint32_t gradient_capability_fallback, weighted_task_counters_collected;
+  uint32_t correction_present, correction_result_flags, mixed_fock_count_present, reserved;
+  uint64_t geometry_points, grid_points, weighted_tasks, primitive_sources;
+  uint64_t gradient_retries, execution_retries;
+  char qualification[96], correction_model_identity[65];
+} generativeqc_precision_candidate_context_v1;
+
+/** One native route and ordered presentation reasons, never an error estimate. */
+typedef struct generativeqc_precision_candidate_v1 {
+  uint32_t struct_size, abi_version, policy_version, disposition;
+  uint32_t qualified_gradient, reasons;
+  char gradient_admission[96];
+} generativeqc_precision_candidate_v1;
+
+/** @native-contract generativeqc_precision_candidate_query_v1
+ * @behavior Classify completed precision candidates using shared native work
+ * predicates, incumbent gradient receipt domains and complete correction binding.
+ * Explicit observable targets always require an independent audit. No new
+ * method, derivative, provider or FP32 domain is qualified by this query.
+ * @inputs Nonnull versioned candidate/admission contexts, provenance, detail
+ * and output. Event/operator arrays contain the counts declared by detail.
+ * Candidate facts override the admission context's gradient interpretation.
+ * Correction identity is compared to the selected library's canonical native
+ * r2SCAN-3c catalog entry; display names are not model identity.
+ * @outputs Publish policy version 1, one disposition, reason bits and complete
+ * gradient admission name. AUDIT requires the existing independent observable
+ * endpoint; it does not mean a numerical failure or an unsupported protocol.
+ * @errors INVALID_ARGUMENT for malformed facts, flags, strings or work records;
+ * ABI_MISMATCH for incompatible descriptors; NOT_IMPLEMENTED for unsupported
+ * work-detail versions. Failure leaves output unchanged.
+ * @lifetime Borrow all inputs synchronously, retain nothing. Complete reads
+ * before publishing output, permitting input/output overlap.
+ * @execution CPU metadata only, allocation-free and reentrant; no electronic
+ * solve, compiler, Python interpreter, resource allocation or fallback occurs.
+ * @units Counts are semantic diagnostic work, not timings or inferred zeros.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_precision_candidate_query_v1(
+    const generativeqc_precision_candidate_context_v1* candidate,
+    const generativeqc_precision_admission_context_v1* context,
+    const generativeqc_precision_provenance* provenance,
+    const generativeqc_precision_work_detail* detail,
+    const generativeqc_precision_work_event* events,
+    const generativeqc_precision_operator_record* operators,
+    generativeqc_precision_candidate_v1* output);
+
 /** Inputs for the incumbent budget-Fock SCF control policy. Boolean fields are
  * 0/1. modules_available is evidence from the selected Direct capability or the
  * fitted model's qualification owner; this query does not establish it. An

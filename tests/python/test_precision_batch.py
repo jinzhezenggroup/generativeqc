@@ -59,6 +59,40 @@ def test_missing_observable_protocol_rejects_before_candidate_fleet_work(
         assert fleet.executions == []
 
 
+def test_missing_candidate_protocol_rejects_before_fleet_execution(
+    fleet: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    facade = PrecisionCalculator(policy="balanced")
+    with facade.prepare_batch([ATOMS]) as batch:
+        monkeypatch.setattr(
+            facade._candidate._library,
+            "generativeqc_precision_candidate_query_v1",
+            None,
+        )
+        with pytest.raises(
+            NotImplementedError, match="required precision-candidate query"
+        ):
+            batch.execute()
+        assert fleet.executions == []
+
+
+def test_changed_candidate_owner_rejects_before_preparing_a_fleet(
+    fleet: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    facade = PrecisionCalculator(policy="balanced")
+    monkeypatch.setattr(
+        facade._candidate._library, "generativeqc_precision_candidate_query_v1", None
+    )
+
+    def forbidden_preparation(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("missing classifier started native fleet preparation")
+
+    monkeypatch.setattr(facade._candidate, "prepare_batch", forbidden_preparation)
+    with pytest.raises(NotImplementedError, match="required precision-candidate query"):
+        facade.prepare_batch([ATOMS])
+    assert fleet.executions == []
+
+
 def item(index: int = 0, energy: float = -1.0, **changes: Any) -> BatchItemResult:
     """Detach a converged result whose Fock total is not its iteration count."""
     return replace(
