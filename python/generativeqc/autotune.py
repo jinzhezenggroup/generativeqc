@@ -24,6 +24,7 @@ from pathlib import Path
 import numpy as np
 
 from . import _native
+from ._autotune_device import inspect_library
 from .profiles import (
     POLICY,
     PROFILE_SCHEMA,
@@ -35,8 +36,6 @@ from .profiles import (
     file_hash,
     find_nvcc,
     install_bundle,
-    probe_device,
-    select_library,
     toolchain_identity,
 )
 
@@ -545,7 +544,7 @@ def run(args: typing.Any) -> dict:
         raise ValueError("autotuning requires NVCC/PTXAS; set --nvcc or CUDA_PATH")
     nvcc = nvcc.resolve()
     base_library = _native.load_library()
-    probe = probe_device(base_library, args.device_id)
+    probe = inspect_library(Path(base_library._name), args.device_id)["probe"]
     if source_identity(source) != probe["source_identity"]:
         raise ValueError(
             "source checkout differs from the baseline native build; rebuild it before tuning"
@@ -654,7 +653,9 @@ def run(args: typing.Any) -> dict:
             )
             report["dirty"] = bool(status.stdout.strip())
     base_path = Path(base_library._name).resolve()
-    incumbent, incumbent_diagnostics = select_library(base_library, args.device_id)
+    selection = inspect_library(base_path, args.device_id, select=True)
+    incumbent = Path(selection["library"])
+    incumbent_diagnostics = selection["diagnostics"]
     report["incumbent_profile"] = incumbent_diagnostics
     generic = args.portable_baseline or bool(device["portable"])
     current_path = base_path
@@ -973,7 +974,7 @@ def run(args: typing.Any) -> dict:
                 comparison_directory = directory / "incumbent"
                 comparison_directory.mkdir()
                 comparison = _compare(
-                    Path(incumbent._name).resolve(),
+                    incumbent,
                     current_path,
                     workload_path,
                     comparison_directory,

@@ -414,6 +414,11 @@ class StationaryGridSecondOrder:
             self.program = XCProgram(
                 functional, graph, roots, outputs, "after", identity
             )
+        if point_provider is None:
+            assert self.program is not None
+            point_identity = self.program.expression_hash
+        else:
+            point_identity = point_provider.identity
         pair_identity = None
         if nonlocal_primitive is not None:
             pair_graph, pair_roots = _pair_program(nonlocal_primitive.spec)
@@ -439,9 +444,7 @@ class StationaryGridSecondOrder:
             {
                 "schema": "generativeqc.stationary-grid-second-order/v1",
                 "functional": functional.identity,
-                "point_program": self.program.expression_hash
-                if point_provider is None
-                else point_provider.identity,
+                "point_program": point_identity,
                 "pair_program": pair_identity,
                 "nonlocal": None
                 if nonlocal_primitive is None
@@ -461,6 +464,7 @@ class StationaryGridSecondOrder:
         """Return exact fixed-branch energy partials and their AD JVP."""
         if self.point_provider is not None:
             return self._provider_partials(fields, direction)
+        assert self.program is not None
         if self.spins == 2:
             return self._polarized_partials(fields, direction)
         if fields.shape != direction.shape or fields.shape[0] != FIELD_COUNT:
@@ -550,6 +554,7 @@ class StationaryGridSecondOrder:
         self, fields: np.ndarray, direction: np.ndarray
     ) -> GridPartials:
         """Keep native point numerics separate from shared grid-weight algebra."""
+        assert self.point_provider is not None
         if (
             fields.ndim != 2
             or fields.shape != direction.shape
@@ -688,6 +693,7 @@ class StationaryGridSecondOrder:
         self, fields: np.ndarray, direction: np.ndarray
     ) -> GridPartials:
         """Keep cross-spin feature curvature and total-density VV10 coupling."""
+        assert self.program is not None
         if fields.ndim != 2 or fields.shape != direction.shape or fields.shape[0] != 14:
             raise ValueError("polarized grid fields/directions require [14,point]")
         if not np.isfinite(fields).all() or not np.isfinite(direction).all():
