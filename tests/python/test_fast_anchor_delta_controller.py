@@ -20,6 +20,7 @@ def test_fast_anchor_admission(required_native_cxx: NativeCxx, tmp_path: Path) -
 #include "dft/application_precision.hpp"
 int main() {
   using generativeqc::dft::admit_fast_anchor_delta;
+  using generativeqc::dft::admit_strict_anchor_delta;
   using generativeqc::dft::admit_application_fock;
   using generativeqc::dft::default_fast_anchor_delta;
   using generativeqc::dft::SemilocalFamily;
@@ -44,6 +45,12 @@ int main() {
   assert(!admit_fast_anchor_delta(true, true, wb, true, 1, false, false, 1));
   assert(!admit_fast_anchor_delta(true, true, wb, true, 1, true, true, 1));
   assert(!admit_fast_anchor_delta(true, true, wb, true, 1, true, false, 2));
+  assert(admit_strict_anchor_delta(true, true, true, 1, true, false, 1));
+  for (unsigned guard = 0; guard < 7; ++guard) {
+    assert(!admit_strict_anchor_delta(guard != 0, guard != 1, guard != 2,
+                                     guard == 3 ? 2 : 1, guard != 4, guard == 5,
+                                     guard == 6 ? 2 : 1));
+  }
   for (const auto family : {SemilocalFamily::Lda, SemilocalFamily::Pbe,
                             SemilocalFamily::R2scan, SemilocalFamily::B3lyp})
     assert(!admit_fast_anchor_delta(true, true, semilocal_family_code(family),
