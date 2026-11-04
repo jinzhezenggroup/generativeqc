@@ -93,6 +93,14 @@ buffers before lending the remaining numeric budget, and retains the original
 bounded component lowering when the factorized lease cannot fit. Generated
 scalar stack temporaries, compiler processes and library mappings are excluded
 from this numeric lease; it is not a complete endpoint memory/time bound.
+The compiler owns the shared exact eightfold ERI permutation schedule. CPU
+directional sources reuse one canonical raw jet for full-range J and K, keeping
+their distinct density factors with the runtime consumer. Full-range weighted
+first/second sources sum each distinct ordered shell cotangent after transposing
+it into canonical component order; repeated shells do not imply a factor of
+eight. Second-order folding reserves the output and two weight blocks, or keeps
+the ordered bounded schedule if that additional storage does not fit. Every
+ordered weight is validated, including exact translation-zero quartets.
 Its admitted AO-jet reserve includes native basis storage and tile/publication
 buffers and is passed explicitly to the native evaluator. The remaining grid
 budget excludes that reserve; raising the grid allowance does not remove the

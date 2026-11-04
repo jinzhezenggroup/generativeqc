@@ -104,6 +104,16 @@ def test_one_center_f_sources_are_exact_translations_with_normal_guards(
                 )
                 np.testing.assert_array_equal(first, 0)
                 np.testing.assert_array_equal(second, 0)
+            bounded, bounded_diagnostics = generated_weighted_second_integral_hvp(
+                topology,
+                "coulomb",
+                direction,
+                eri_shell_weights=weights,
+                budget_bytes=32 << 10,
+                cache=tmp_path,
+            )
+            np.testing.assert_array_equal(bounded, 0)
+            assert bounded_diagnostics["peak_host_bytes"] <= 32 << 10
             with pytest.raises(MemoryError, match="output"):
                 generated_weighted_second_integral_hvp(
                     topology,
