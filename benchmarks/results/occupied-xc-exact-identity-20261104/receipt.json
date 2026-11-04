@@ -1,0 +1,169 @@
+{
+  "schema": "generativeqc.occupied-xc.exact-identity-restriction.v1",
+  "date": "2026-11-04",
+  "measured_source_commit": "0b9adb1a6dfcb7bae88f922235d247d52bf09bb9",
+  "source_dirty_during_measurement": true,
+  "source_reconstruction": "Measurements preceded the measured commit; measured scientific/test files are committed unchanged at that revision. No uncommitted runtime patch is required.",
+  "status": "draft; issue 2751 remains open pending native endpoint acceptance",
+  "contract": "Every published occupied feature is bitwise identical, including signed zero, to the retained built-in original-D consumer. The forward-error rule is only a prefilter. KS defaults to matrix products; only explicit control 1 requests occupied verification.",
+  "source_inputs_sha256": {
+    "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "3e9f35f5bb082933e600f207c94602d2761cdefd0857c12e191fcf5f634956cb",
+    "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py": "884621443809541c79edf6524d0e24e342ac7b2e7fa722c9ac64796d241ce388",
+    "python/generativeqc_compiler/dft/feature_policy.py": "0ae365b98c67d1a95acb97ed91354785762874a309b011f023f61df670451344",
+    "python/generativeqc_compiler/tensor/scf_cuda.py": "e50b4a64c2d7e164b27cec63ad51e9b3014e97319f285b4df9fcf44c917b6cf0",
+    "python/generativeqc_compiler/tensor/weighted_gram_emit.py": "e0551e16bd514afb22c5ebef342c82445f45ddd9a16d2383ec7580b7c053ee61",
+    "src/dft/cuda_xc.hpp": "d05969265c2df13501a434dcc893118216c4f1c682530dcbe83b3f50fde24f2a",
+    "src/dft/cuda_xc_tile.hpp": "7035e6bc07a1807344f3d3a06a0c776bcad507fc43488632c210ab9ca09773e6",
+    "src/dft/cuda_ks.cpp": "b8d6822450ac9902b284974a824511c1e332a427fa0c7ad7a18d6f2bbeacfc7f",
+    "tests/python/test_xc_occupied_features_cuda.py": "8ff54b4e9ae03564fc057cdc6156128eba21b8b00f319c3e96225233c12d7a10",
+    "tests/python/test_xc_occupied_certificate.py": "7f84bb6f4a0c109bfcae8d521ee20bf899b4853bc03860b1545b102dc8f46b4e",
+    "tests/python/test_xc_occupied_default_cuda.py": "ecedd8c86f07230f604ac3abb17a0b5bb591a695c73e10195dc544d57888d605"
+  },
+  "host": {
+    "node": "node3 (CPU only)",
+    "focused_passed": 162,
+    "focused_seconds": 26.92,
+    "additional_consumer_passed": 168,
+    "additional_consumer_skipped": 510,
+    "additional_consumer_seconds": 10.34,
+    "skips_are_not_gpu_qualification": true,
+    "compiler_structure_modules": 583,
+    "compiler_structure_dependency_errors": 0
+  },
+  "parent_negative_control": {
+    "source_commit": "9b17638b2b8cc49268eae37159fd1fe30c71cb16",
+    "scope": "Previous occupied template, with two new executable bitwise regressions; one-off local mutation check, not permanent implementation-spelling CI.",
+    "expected_failed": 2,
+    "observed_failed": 2,
+    "pytest_exit": 1
+  },
+  "gpu": {
+    "slurm_job": 15811,
+    "node": "node1",
+    "partition": "main",
+    "gres": "gpu:5090:1",
+    "time_limit": "00:10:00",
+    "assigned_cuda_visible_devices": "0",
+    "visibility_overridden": false,
+    "device": "NVIDIA GeForce RTX 5090",
+    "driver": "580.95.05",
+    "nvcc": "V12.9.86",
+    "verified_compiler_cache": "sccache 0.16.0",
+    "options": [
+      "-std=c++17",
+      "-O3",
+      "-arch=sm_120",
+      "-Xptxas=-v",
+      "--shared",
+      "-Xcompiler=-fPIC",
+      "--fmad=false",
+      "-lineinfo"
+    ],
+    "scope": "Emitted feature/Gram and actual compact batch kernels, not the full native CudaXcPlan/CudaKsPlan or complete E+F endpoint.",
+    "normal": {
+      "passed": 138,
+      "seconds": 3.95
+    },
+    "memcheck": {
+      "passed": 138,
+      "seconds": 6.16,
+      "errors": 0
+    },
+    "synccheck": {
+      "passed": 138,
+      "seconds": 5.52,
+      "errors": 0
+    },
+    "racecheck": {
+      "passed": 138,
+      "seconds": 13.71,
+      "errors": 0,
+      "warnings": 0,
+      "hazards": 0
+    },
+    "gpu_formed_gram_cases": 24,
+    "compact_batch_cases": 6,
+    "compact_scope": "Ragged mapped tiles with nonzero map/AO/work/point offsets, scalar/warp domains, capacity fallback in the same group, RKS/UKS/empty spins, original overflow errors and scratch/feature guard ownership.",
+    "emitted_cuda_sha256": "5611e9cffe7a219d63b471c34f4c8bc151b62ba92b9955ee30463af398e0d029",
+    "artifact_so_sha256": {
+      "normal": "0eda09d99482edc2a9f81b432e256ea9196183b35caafcfc4bca50dddc62ef46",
+      "memcheck": "f42a1aa48fec352ae03b3df31dd5787bcdef19c9963fe75be75b503a5d2bc889",
+      "synccheck": "d60d8c9c643515c5d1227391e141bbc991738aac3221eced97e2569d40aeefd0",
+      "racecheck": "2dc07c15bb9209325dea587cf607838201b29976a5b2559f04cd14fd061383b8"
+    },
+    "retained_binary_root_on_node1": "/tmp/qc-2751-exact-identity-retained-v3-20261104"
+  },
+  "standalone_resources": {
+    "occupied_features": {
+      "registers": 80,
+      "stack_bytes": 0,
+      "declared_local_bytes": 0
+    },
+    "occupied_products": {
+      "registers": 34,
+      "stack_bytes": 56,
+      "shared_bytes": 5376,
+      "declared_local_bytes": 0
+    },
+    "compact_features": {
+      "registers": 96,
+      "stack_bytes": 80,
+      "declared_local_bytes": 0
+    },
+    "compact_products": {
+      "registers": 38,
+      "stack_bytes": 56,
+      "shared_bytes": 9728,
+      "declared_local_bytes": 0
+    },
+    "scope": "Actual standalone test translation unit, not full-library resource qualification or a spill-free/no-cost claim."
+  },
+  "raw_streams": {
+    ".artifacts/occupied-xc-exact-identity-20261104/artifact-identities.txt": {
+      "bytes": 3289,
+      "sha256": "491cb545757947c5c8d432d4a7858be0213f8f54e1bf37dbfd0dff89c060f393"
+    },
+    ".artifacts/occupied-xc-exact-identity-20261104/qc-2751-exact-identity-cache-after-20261104.txt": {
+      "bytes": 2028,
+      "sha256": "e76bdb2a385363aad9a443f0ae5f3fb0264cff9b6d9fd8f5db72373b7d03c23a"
+    },
+    ".artifacts/occupied-xc-exact-identity-20261104/qc-2751-exact-identity-cache-before-20261104.txt": {
+      "bytes": 2028,
+      "sha256": "e76bdb2a385363aad9a443f0ae5f3fb0264cff9b6d9fd8f5db72373b7d03c23a"
+    },
+    ".artifacts/occupied-xc-exact-identity-20261104/qc-2751-exact-identity-consumers-20261104.log": {
+      "bytes": 834,
+      "sha256": "f09470329c8db64e1d0dd9272f5d4faf2feaad347b357dd475bd439482ce43f9"
+    },
+    ".artifacts/occupied-xc-exact-identity-20261104/qc-2751-exact-identity-gpu-v3-20261104.log": {
+      "bytes": 1045,
+      "sha256": "24efc49dea129f25847fa6baccfe9594bf139b34cf520c9681bda2e40839d724"
+    },
+    ".artifacts/occupied-xc-exact-identity-20261104/qc-2751-exact-identity-host-final-20261104.log": {
+      "bytes": 261,
+      "sha256": "b02f03e3b14cbffc20a8bb003c6775dd53cb5b9cb89b4ef1df4059ae5a992bed"
+    },
+    ".artifacts/occupied-xc-exact-identity-20261104/qc-2751-exact-identity-libxc-refresh-20261104.log": {
+      "bytes": 686,
+      "sha256": "a94bc36c3c53de09eceed13a4731679429e8f49a0f42033b2a922334ba204bcc"
+    },
+    ".artifacts/occupied-xc-exact-identity-20261104/qc-2751-exact-identity-parent-regression-20261104.log": {
+      "bytes": 6004,
+      "sha256": "52819b76e100423a5ab4c0441dce8479ddcff9717b51c56058d945389e0656ee"
+    },
+    ".artifacts/occupied-xc-exact-identity-20261104/qc-2751-exact-identity-resources-20261104.txt": {
+      "bytes": 2184,
+      "sha256": "1cb43499c2f838d14937ace7cd2be062673623efd8f03c73e4c6981317b2a4e3"
+    }
+  },
+  "retention": "Raw test/compiler streams remain ignored local artifacts; only compact observed counts/failures, identities, resources and reproduction instructions are tracked. Cache statistics are shared-server observations, not isolated hit-rate claims.",
+  "not_claimed": [
+    "full native owner/lifetime integration",
+    "independent molecular/default-grid energy and forces",
+    "full-runtime compiled resource admission",
+    "cold/warm complete endpoint cost",
+    "performance win or default promotion",
+    "causality for issue 2915",
+    "issue closure"
+  ]
+}

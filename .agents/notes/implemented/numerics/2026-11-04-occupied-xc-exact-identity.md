@@ -64,6 +64,12 @@ owner/batch integration, independent molecular/default-grid E+F, whole-runtime
 resources and complete admission-inclusive endpoint costs are still required
 before merge/issue closure; this note alone does not assert those gates passed.
 
+The [new restriction capsule](../../../../benchmarks/results/occupied-xc-exact-identity-20261104/README.md)
+records 162 focused host cases, 168 additional consumer cases and Slurm job
+15811: 138 real-device cases normally and under each of three zero-error
+sanitizer cohorts, including actual GPU Gram and compact batch kernels. The
+two new executable bitwise regressions fail against the preceding template.
+
 ## Rejected alternatives and revisit conditions
 
 Disabling only the default leaves explicit reuse unprotected. Accepting only
