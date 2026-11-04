@@ -174,6 +174,7 @@ struct PreparedFockPlan::Impl {
   FockOperator range_operator{FockOperator::FullRange};
   double range_omega{};
   std::optional<DensityFittingScfData> fitted;
+  bool metric_response_valid{};
   std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> cuda_exact{
       nullptr, &destroy_cuda_direct_jk_plan};
   std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)>
@@ -316,10 +317,11 @@ struct PreparedFockPlan::Impl {
           fitted->df_gradient_auxiliary = *auxiliary;
         }
         fitted->metric_relative_threshold = strategy.metric_relative_threshold;
-        fitted->three_center = orthonormalize_density_fitting_three_center(
-            fitted->raw.three_center, fitted->raw.nbf,
-            factor_density_fitting_metric(fitted->raw.metric, fitted->raw.naux,
-                                          strategy.metric_relative_threshold));
+        const auto metric = factor_density_fitting_metric(fitted->raw.metric, fitted->raw.naux,
+                                                          strategy.metric_relative_threshold);
+        metric_response_valid = metric.response_valid;
+        fitted->three_center = orthonormalize_density_fitting_three_center(fitted->raw.three_center,
+                                                                           fitted->raw.nbf, metric);
       } else
         exact = std::move(ints);
       const auto& data = one_electron();
@@ -498,14 +500,48 @@ struct PreparedFockPlan::Impl {
               ? method_owned_df_optional_value_capacity(resolved, nbf, naux, reserved_rank,
                                                         metadata_bytes, coulomb_only_packing)
               : plan_budget;
+      auto source_allowance = optional_ceiling > tiles.peak_workspace_bytes
+                                  ? optional_ceiling - tiles.peak_workspace_bytes
+                                  : 0;
+      bool rebalanced_source = false;
+      const auto source_tiles = [&](std::size_t extra_bytes) {
+        return plan_requested_density_fitting_tiles(
+            diagnostic.variant.df_pair_storage_request, 1, nbf, naux, nbf, reserved_rank,
+            plan_budget, add_size(metadata_bytes, extra_bytes), true, 0, true);
+      };
+      // LR response regenerates physical A even when forward B is resident.
+      // Let optional immutable E displace interchangeable value staging, not
+      // B/U, the response allowance, or any explicit resource/mapping choice.
+      // Reserving the finite ceiling first proves a successful smaller owner
+      // can be replanned inside this exact value budget without losing storage.
+      if (data.range_omega > 0.0 && reserved_rank &&
+          diagnostic.variant.df_pair_storage_request == DfPairStorageRequest::Automatic &&
+          source_policy.requested_value_mapping == 3U && !source_policy.value_math &&
+          tiles.stores_full_three_center && df_packed_pairs(tiles.value_storage.pairs) &&
+          source_allowance < kCudaDfMdRawPreparationLimit) {
+        try {
+          const auto reserved = source_tiles(kCudaDfMdRawPreparationLimit);
+          if (reserved.stores_full_three_center &&
+              reserved.value_storage.pairs == tiles.value_storage.pairs &&
+              reserved.value_storage.rank_capacity >= tiles.value_storage.rank_capacity) {
+            source_allowance = kCudaDfMdRawPreparationLimit;
+            rebalanced_source = true;
+          }
+        } catch (const DensityFittingBudgetError&) {
+          // Optional source reuse must not invalidate an admitted value plan.
+        }
+      }
       if (tiles.stores_full_three_center && df_packed_pairs(tiles.value_storage.pairs) &&
-          optional_ceiling > tiles.peak_workspace_bytes) {
-        const auto remaining = optional_ceiling - tiles.peak_workspace_bytes;
-        checked(try_prepare_cuda_df_md_raw_source(source.get(), system, *auxiliary, remaining,
-                                                  remaining, detail),
+          source_allowance) {
+        checked(try_prepare_cuda_df_md_raw_source(source.get(), system, *auxiliary,
+                                                  source_allowance, source_allowance, detail),
                 detail);
-        tiles.peak_workspace_bytes +=
+        const auto extra_source =
             cuda_density_fitting_integral_source_device_bytes(source.get()) - metadata_bytes;
+        if (rebalanced_source && extra_source)
+          tiles = source_tiles(extra_source);
+        else
+          tiles.peak_workspace_bytes += extra_source;
         if (tiles.peak_workspace_bytes > plan_budget) {
           plan_budget = tiles.peak_workspace_bytes;
           resolved.value_bytes = plan_budget;
@@ -549,6 +585,12 @@ struct PreparedFockPlan::Impl {
       runtime::df_progress::number("resolved_response_budget_bytes", resolved.response_bytes);
       runtime::df_progress::number("observed_free_device_bytes", resolved.observed_free_bytes);
       runtime::df_progress::number("value_peak_bytes", tiles.peak_workspace_bytes);
+#if GENERATIVEQC_HAS_CUDA
+      runtime::df_progress::number("optional_value_ceiling_bytes", optional_ceiling);
+      runtime::df_progress::number("optional_source_rebalanced", rebalanced_source);
+#endif
+      runtime::df_progress::label("value_source_mapping", diagnostic.fitted_source.value_mapping);
+      runtime::df_progress::number("long_range_operator", data.range_omega > 0.0);
       runtime::df_progress::number("requested_occupied_rank", reserved_rank);
       runtime::df_progress::number("retained_occupied_rank", tiles.value_storage.rank_capacity);
       runtime::df_progress::number("value_storage",
@@ -718,6 +760,14 @@ std::size_t PreparedFockPlan::cpu_observation_capacity() const noexcept {
 }
 const FockPreparationDiagnostic& PreparedFockPlan::diagnostic() const noexcept {
   return impl_->diagnostic;
+}
+
+bool PreparedFockPlan::density_fitting_response_valid() const noexcept {
+  if (!impl_->fitted) return false;
+  if (strategy().backend == FockBackend::Cpu) return impl_->metric_response_valid;
+  const auto& metrics = impl_->diagnostic.fitted;
+  return !metrics.empty() && std::all_of(metrics.begin(), metrics.end(),
+                                         [](const auto& metric) { return metric.response_valid; });
 }
 CudaDensityFittingJkPlan* PreparedFockPlan::cuda_fitted_source() const noexcept {
   return impl_->cuda_df.get();

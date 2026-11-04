@@ -538,19 +538,23 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     const auto correction_backend =
         backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
     const char* range_mode = std::getenv("GENERATIVEQC_DF_RANGE_EXCHANGE");
-    if (range_mode && std::string_view(range_mode) != "df" &&
-        std::string_view(range_mode) != "direct")
+    const std::string_view range_selection = range_mode ? range_mode : "auto";
+    if (range_selection != "auto" && range_selection != "df" && range_selection != "direct")
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                        "GENERATIVEQC_DF_RANGE_EXCHANGE must be df or direct");
-    if (range_mode && std::string_view(range_mode) == "df" &&
+                        "GENERATIVEQC_DF_RANGE_EXCHANGE must be auto, df or direct");
+    if (range_selection == "df" &&
         fock.coulomb.approximation != scf::FockApproximation::DensityFitted)
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "GENERATIVEQC_DF_RANGE_EXCHANGE=df requires density fitting");
-    // LR fitting changes the Hamiltonian and remains opt-in until complete
-    // endpoint promotion gates pass. Freeze this choice for energy and forces.
+    // Default LR fitting is admitted from the native prepared metric before
+    // the first energy, independently of properties. Explicit df never grants
+    // permission to replace its Hamiltonian when a response is unavailable.
+    execution_plan.automatic_density_fitted_range_exchange =
+        fock.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+        range_selection == "auto";
     execution_plan.density_fitted_range_exchange =
-        fock.coulomb.approximation == scf::FockApproximation::DensityFitted && range_mode &&
-        std::string_view(range_mode) == "df";
+        fock.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+        range_selection != "direct";
     const auto correction = scf::resolve_fock_build(
         scf::make_rsh_correction_fock_spec(
             fock.spin, execution_plan.short_range_exchange, execution_plan.long_range_exchange,

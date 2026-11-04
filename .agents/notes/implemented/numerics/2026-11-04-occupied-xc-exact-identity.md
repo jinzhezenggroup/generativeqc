@@ -4,6 +4,11 @@ Status: implemented and scoped native endpoints qualified in the repair branch;
 CI/review and merged delivery pending
 Date: 2026-11-04
 
+The production selector policy below is superseded by the
+[matrix-fallback decision](../performance/2026-11-04-occupied-xc-production-matrix-fallback.md).
+The exact-identity restriction and retained historical evidence remain intact
+for the lower-level experiment.
+
 ## Problem
 
 The [absolute-dot proposal](../../proposed/2026-11-04-occupied-xc-stored-density-certificate.md)

@@ -208,9 +208,16 @@ PYTHONPATH=.:python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
 `benchmarks.rccsd_cpu_compiled_endpoint` measures the **complete supplied-MO
 RCCSD solver call**, rather than an isolated tensor kernel. It runs NumPy
 reference, native cold compilation and native cached replay in separate
-processes; each process reports its own wall clock, peak RSS, energy/residual
-and resource budgets. It repeats at one and four BLAS threads, with the same
-scientific inputs. This scope excludes upstream HF and AO generation.
+processes; each process reports its own wall clock, solver-process peak RSS,
+energy/residual and resource budgets. RSS excludes compiler child processes.
+It repeats at one and four requested BLAS threads, with the same scientific
+inputs. When `threadpoolctl` is installed, receipts record the actual loaded
+thread pools; missing observations are not proof of the requested thread count.
+The v2 receipt also records pinned fixture hashes, native shared-library hashes
+before temporary cache cleanup, source identity and the harness hash. Workers
+have a finite `--worker-timeout` (300 seconds by default). This scope excludes
+upstream HF and AO generation; an artifact-cold run does not clear the compiler
+cache.
 
 ```bash
 PYTHONPATH=.:python python -m benchmarks.rccsd_cpu_compiled_endpoint \
@@ -221,7 +228,7 @@ PYTHONPATH=.:python python -m benchmarks.rccsd_cpu_compiled_endpoint \
 | --- | --- | --- |
 | RCCSD iterative E/R1/R2, native-selected | Optimized TensorIR -> native CPU compiler | Explicit compiled endpoint; qualify before any default promotion |
 | RCCSD expanded E/R1/R2 | Separate TensorIR NumPy interpreter | Independent final convergence oracle; deliberately retained |
-| RCCSD default reference iterations | TensorIR NumPy interpreter | Compatibility/performance exception until complete CPU endpoint qualification |
+| RCCSD default reference iterations | TensorIR NumPy interpreter | Measured performance exception; revisit after matched complete native endpoint improvements |
 | Restricted/unrestricted iteration control, DIIS and AO/MO providers | Native/Python runtime and shared providers | Not compiler-science debt; avoid generating solver control |
 | UCCSD iterative E/R | Shared native CPU TensorIR compiler | Existing compiler-first endpoint; not modified here |
 
@@ -232,6 +239,8 @@ endpoints, and process peak memory before considering default promotion.
 Retain the NumPy expanded equation as an independent oracle. CPU compiler
 source, the scientific TensorIR identity, runtime settings and artifact
 cache must remain versioned; no GPU performance is inferred from this path.
+The measured opt-in retention rationale is recorded in the
+[CPU RCCSD decision note](../../.agents/notes/implemented/performance/2026-11-04-rccsd-cpu-opt-in-evidence.md).
 
 ## Molecular evidence and reproduction
 

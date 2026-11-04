@@ -832,6 +832,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       return fail_plan(candidate, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     }
     candidate->metric_full_rank[system] = diagnostic.effective_rank == naux;
+    diagnostic.response_valid = candidate->metric_response_valid[system] != 0;
     diagnostic.condition_number = largest / smallest_retained;
   }
 

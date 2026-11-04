@@ -13,6 +13,54 @@ from generativeqc.response_solver import GMRESOptions
 from generativeqc_compiler.integral.df_second_execute import DFSecondEvaluator
 
 
+@pytest.fixture(autouse=True)
+def explicit_exact_lr_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Retain independent second-order coverage for its qualified Hamiltonian."""
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
+
+
+@pytest.mark.parametrize("selector", (None, "auto", "df"))
+@pytest.mark.parametrize("unrestricted", (False, True))
+@pytest.mark.parametrize("endpoint", ("hvp", "hessian"))
+def test_fitted_lr_second_order_rejects_exact_response_substitution(
+    selector: str | None,
+    unrestricted: bool,
+    endpoint: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fitted first-order owner cannot borrow the existing exact-LR Hessian."""
+    if selector is None:
+        monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", selector)
+    calculator = Calculator(
+        method="wb97m-v-uks" if unrestricted else "wb97m-v",
+        device="cpu",
+        density_fitting="cpu",
+        auxiliary_basis=(
+            Shell(0, 0, (Primitive(0.8, 1),)),
+            Shell(1, 0, (Primitive(0.65, 1),)),
+        ),
+        ks_options=KsOptions(grid=GridSpec(8, 4, 8)),
+    )
+    atoms = [("H", (0.13, -0.21, 0.17)), ("H", (0.43, 0.19, 2.1))]
+    context = {"charge": int(unrestricted), "multiplicity": 2 if unrestricted else 1}
+    try:
+        with pytest.raises(NotImplementedError, match="does not support fitted LR"):
+            if endpoint == "hvp":
+                calculator.hessian_vector_product(
+                    atoms,
+                    np.array([[0, 0, 0.1], [0, 0, -0.1]]),
+                    **context,
+                    cache=tmp_path,
+                )
+            else:
+                calculator.hessian(atoms, **context, cache=tmp_path)
+    finally:
+        calculator.clear_cache()
+
+
 @pytest.mark.parametrize(
     "family,angular",
     (

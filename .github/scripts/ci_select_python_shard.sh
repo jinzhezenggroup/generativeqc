@@ -346,10 +346,6 @@ nightly_hessian_paths=(
 # Keep all scientific tests and all existing nightly-only qualifications.
 # Dedicated UCCSD force and corrected-Lambda tests use the existing force lane.
 core_hotspots_a=(
-  # Runs 40123113539 / 40124170599 exhausted core-c while core-a
-  # completed in 20m49s in the latter. Keep the intact ~305-worker-second
-  # Lambda reuse module on core-a without removing its ordinary slot.
-  tests/python/test_df_lambda_core_reuse.py
   # Historical pins retain ordinary modulo slots. Dedicated complete-file
   # transfers above take precedence over these earlier core owners.
   tests/python/test_wb97mv_hessian.py
@@ -391,6 +387,14 @@ core_hotspots_b=(
   tests/python/test_df_occupied_triples.py
 )
 core_hotspots_c=(
+  # PR #2967 run 41699527342: core-a ran tests in 941.5 s, core-c in
+  # 597.6 s. Move two intact CPU oracles (129.6 s integral AD,
+  # 96.2 s DF Lambda codegen at the measured longest-case level) to
+  # core-c without changing their core enumeration slots or test selection.
+  # Earlier core-c overloads were on different CI inventories; let live
+  # CI reject this measured rebalance if the critical path shifts back.
+  tests/python/test_integral_autodiff.py
+  tests/python/test_df_lambda_core_reuse.py
   # Runs 40096730696 / 40100233070 exhausted core-a while core-c
   # finished in 19m16s / 25m46s. Preserve this complete ~250-worker-second
   # module and its ordinary slot; only give it a stable lighter owner.

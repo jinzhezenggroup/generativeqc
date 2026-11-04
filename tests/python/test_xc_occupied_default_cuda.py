@@ -1,4 +1,4 @@
-"""Exercise opt-in occupied-XC admission and safe defaults through complete SCF."""
+"""Exercise occupied-XC requests falling back to matrix through complete SCF."""
 
 from __future__ import annotations
 
@@ -19,14 +19,14 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize("unrestricted", (False, True))
-def test_automatic_frame_admission_rollback_and_geometry(
+def test_all_occupied_controls_use_matrix_across_geometry(
     unrestricted: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Validate the public default, explicit controls and density-frame lifetime.
+    """Validate matrix selection for default, explicit and invalid controls.
 
-    Trace counters prove admission without fixing iteration or internal call
-    counts. Cold and displaced solves have independently converged CPU oracles;
-    held warm density must not borrow a retired canonical proposal frame.
+    Trace counters prove no occupied frame is admitted without fixing iteration
+    or internal call counts. Cold and displaced solves have independently
+    converged CPU oracles; held warm and moved geometries retain matrix work.
     Analytic force and finite-difference coverage lives in test_dft_complete_cuda.
     """
     from generativeqc import Calculator
@@ -108,15 +108,7 @@ def test_automatic_frame_admission_rollback_and_geometry(
                             if row["operation"] == "cuda_ks_xc_shared"
                         ]
                         assert frames
-                        if selector != "1":
-                            assert not any(frames)
-                        elif phase == "warm":
-                            # The held input has no live proposal frame. UKS
-                            # may reconverge through another accepted proposal,
-                            # which can legitimately supply a later frame.
-                            assert frames[0] == 0
-                        else:
-                            assert any(frames)
+                        assert not any(frames)
                         if phase == "cold":
                             owner.set_warm_start_updates(False)
             finally:
@@ -124,16 +116,16 @@ def test_automatic_frame_admission_rollback_and_geometry(
 
 
 @pytest.mark.parametrize("unrestricted", (False, True))
-def test_explicit_frame_default_grid_energy_and_forces(
+def test_explicit_request_matrix_default_grid_energy_and_forces(
     unrestricted: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Compare complete native E+F with original D and independent PySCF.
 
-    Exact feature verification must survive native owners, force scratch and
-    geometry updates, not just the standalone feature kernels. Preserve the
-    existing complete-CUDA gates of 2e-9 Eh and 1e-7 Eh/Bohr. Pair the matrix
-    route at those same gates; parallel force reductions do not promise bitwise
-    endpoint reproducibility even though occupied feature inputs must match.
+    An explicit occupied request must retain matrix work through native owners,
+    force scratch and geometry updates. Preserve the complete-CUDA gates of
+    2e-9 Eh and 1e-7 Eh/Bohr and pair the ordinary matrix route at those same
+    gates. Parallel force reductions do not promise bitwise reproducibility.
+    Lower-level frame/certificate tests independently retain the experiment.
     """
     from generativeqc import Calculator
     from pyscf import dft, gto, lib
@@ -239,7 +231,7 @@ def test_explicit_frame_default_grid_energy_and_forces(
                         ).write_text(json.dumps(observations, indent=2) + "\n")
                         assert result.succeeded and result.converged
                         assert result.executed_backend == "cuda"
-                        assert frames and any(frames) == (selector == "1")
+                        assert frames and not any(frames)
                         assert result.energy == pytest.approx(energy, abs=2e-9, rel=0)
                         np.testing.assert_allclose(
                             result.forces, forces, atol=1e-7, rtol=0

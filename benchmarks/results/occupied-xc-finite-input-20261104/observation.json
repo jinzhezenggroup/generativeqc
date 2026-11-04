@@ -1,0 +1,73 @@
+{
+  "device": "NVIDIA GeForce RTX 5090",
+  "driver_version": 13000,
+  "runtime_version": 12090,
+  "scope": "emitted XC feature consumers, not molecular SCF",
+  "observations": [
+    {
+      "fixture": "ordinary-control",
+      "stored_D00": 2,
+      "witness_matches": true,
+      "error": 0,
+      "dense_features": [
+        0.125,
+        0,
+        0,
+        0,
+        0
+      ],
+      "occupied_features": [
+        0.125,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "fixture": "stored-density-underflow",
+      "stored_D00": 0,
+      "witness_matches": true,
+      "error": 0,
+      "dense_features": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "occupied_features": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "scientific_source_commit": "9cfb77727661cc64e47938d9d0ba65a157427439",
+  "slurm": {
+    "job_id": 15784,
+    "node": "node1",
+    "partition": "main",
+    "gres": "gpu:5090:1",
+    "time_limit": "00:02:00",
+    "assigned_cuda_visible_devices": "0",
+    "visibility_overridden": false
+  },
+  "compiler": {
+    "version": "nvcc V12.9.86",
+    "verified_launcher": "sccache 0.16.0",
+    "options": [
+      "-std=c++17",
+      "-O2",
+      "--fmad=false",
+      "-arch=sm_120"
+    ]
+  },
+  "cuda_source_sha256": "c9ddc45b091de3e48a52ac7140f90a6d77a2bacbc3d3c1059a07a2ff3bab1268",
+  "executable_sha256": "74a6c841cd7c151b96ae45f2b301855eedec1506ad7ef992a310e5f39f772d6c",
+  "scientific_equivalence": false,
+  "molecular_scf_reproduced": false,
+  "repair_qualified": false
+}

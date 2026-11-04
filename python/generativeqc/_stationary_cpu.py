@@ -444,15 +444,15 @@ def complete_rks_gradient_diagnostic(
     The consumer also executes
     range-separated exchange sources for validated stationary plans through d,
     and through f when the primary integrals are density fitted.
-    Mixed DF uses the shared native fitted primary and only one compiler-generated
-    exact LR correction traversal, never exact SR/full-range replacements;
+    DF uses the shared native fitted primary and its separately admitted fitted
+    or exact LR correction, never exact SR/full-range replacements;
     public RSH snapshot/capability admission remains a separate boundary. Uses a
     native fixed-topology grid, distinct nuclei and no
     point/center collisions. CPU is explicit; CUDA snapshots are rejected.
     Caller chooses an ignored/temporary compilation cache and may supply a
     CppCompilerAdapter; otherwise CXX (or c++) selects the executable. Scientific work is
     full ordered AO pairs/quartets for Direct primary sources, and the exact
-    eightfold quartet domain for SR/LR, without numerical screening. TensorIR
+    eightfold quartet domain for exact SR/LR, without numerical screening. TensorIR
     weights are summed over distinct permutations before differentiation.
     Working arrays scale with a point tile times (AO + atom), one primitive
     record tile, D/W, and bounded per-source atom gradients, never coordinate-grid-AO pairs.

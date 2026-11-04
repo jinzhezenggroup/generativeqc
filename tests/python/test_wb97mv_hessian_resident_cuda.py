@@ -36,6 +36,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def explicit_exact_lr_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resident second-order qualification retains its exact LR Hamiltonian."""
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
+
+
 @contextmanager
 def device_scope(execution: CudaHessianExecution) -> Iterator[None]:
     with execution.device, execution.stream, array_execution(execution):

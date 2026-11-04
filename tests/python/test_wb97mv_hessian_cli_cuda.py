@@ -24,6 +24,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def explicit_exact_lr_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The C++ CLI and Python reference must prepare the same exact LR model."""
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
+
+
 def invoke_cli(
     tmp_path: Path,
     atoms: list,

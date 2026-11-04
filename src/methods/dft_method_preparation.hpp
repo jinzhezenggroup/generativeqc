@@ -31,8 +31,10 @@ struct NativeKsExecutionPlan {
   dft::nlc::Vv10Parameters nonlocal_parameters{};
   std::uint64_t nonlocal_maximum_bytes{};
   bool range_exchange{};
-  /** Frozen at preparation: explicit legacy Direct LR versus operator-matched RI-K. */
+  /** Frozen per batch item before its first energy: Direct LR versus matched RI-K. */
   bool density_fitted_range_exchange{};
+  /** Initial optional admission only; never copied into a geometry rebuild. */
+  bool automatic_density_fitted_range_exchange{};
   double short_range_exchange{};
   double long_range_exchange{};
   double range_omega{};
