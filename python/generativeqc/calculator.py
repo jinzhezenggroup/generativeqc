@@ -200,7 +200,8 @@ class Calculator:
 
         Omitted SCF controls resolve to energy/density tolerances 1e-9/1e-5
         on qualified CUDA RHF and default-grid restricted local KS owners.
-        Other models/backends and older libraries retain 1e-10/1e-8. Explicit
+        Other admitted models/backends retain 1e-10/1e-8. A library without the
+        required native default-controls query must be updated. Explicit
         values are preserved. Convergence controls are solver conditions, not
         observable-error bounds; see the application precision guide.
 
@@ -1033,9 +1034,9 @@ class Calculator:
         self._capabilities = _native_method_capabilities(
             self._library, self._method_name, self._method
         )
-        from ._scf_convergence import default_scf_controls
+        from ._scf_defaults_native import default_controls
 
-        convergence_defaults = default_scf_controls(self)
+        convergence_defaults = default_controls(self)
         if energy_tolerance is None:
             self._energy_tolerance = convergence_defaults["energy_tolerance"]
         if density_tolerance is None:
