@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -98,19 +99,32 @@ def execution_record(
 
 
 def reference_workload(workload: dict) -> dict:
-    """Compute an independent PySCF/libxc E+F oracle, outside timed GPU samples.
+    """Compute an independent PySCF or GPU4PySCF oracle outside timed samples.
 
     The pinned Treutler/NWChem grid family and requested level match the native
     scientific model. Grid response is essential for molecular analytic forces.
     Explicit component selectors avoid user-configurable LDA/B3LYP aliases.
     The public workload currently repeats one geometry, so one independent solve
-    suffices for every batch item. CPU reference work is tuning-only.
+    suffices for every batch item. The explicit GPU engine runs both SCF and
+    gradient on the requested visible device, with no CPU-solver fallback.
+    PySCF molecule/basis construction is host setup, not a native runtime path.
     """
+    engine = workload.get("reference_engine", "pyscf")
+    if engine not in ("pyscf", "gpu4pyscf"):
+        raise ValueError("unsupported independent DFT reference engine")
+    if workload.get("kind") != "dft" or workload["method"] not in DFT_FUNCTIONALS:
+        raise ValueError("independent DFT reference requires a supported KS workload")
+
     import pyscf
     from pyscf import dft, gto, lib
 
-    if workload.get("kind") != "dft" or workload["method"] not in DFT_FUNCTIONALS:
-        raise ValueError("independent DFT reference requires a supported KS workload")
+    device = nullcontext()
+    solver_type = dft.UKS if workload["method"].endswith("-uks") else dft.RKS
+    if engine == "gpu4pyscf":
+        import cupy
+
+        device = cupy.cuda.Device(workload["device_id"])
+
     lib.num_threads(1)
     molecule = gto.M(
         atom=workload["atoms"],
@@ -121,26 +135,54 @@ def reference_workload(workload: dict) -> dict:
         cart=workload["representation"] == "cartesian",
         verbose=0,
     )
-    solver = (dft.UKS if workload["method"].endswith("-uks") else dft.RKS)(molecule)
-    solver.xc = DFT_FUNCTIONALS[workload["method"]]
-    solver.grids.level = workload["grid_level"]
-    solver.small_rho_cutoff = 0.0
-    solver.conv_tol, solver.conv_tol_grad = 1e-12, 1e-10
-    solver.direct_scf_tol = 1e-14
-    solver.max_cycle = 150
-    solver.kernel()
-    if not solver.converged:
-        solver = solver.newton()
+    with device:
+        if engine == "gpu4pyscf":
+            import gpu4pyscf
+            from gpu4pyscf.dft import rks, uks
+
+            solver_type = uks.UKS if workload["method"].endswith("-uks") else rks.RKS
+        solver = solver_type(molecule)
+        if engine == "gpu4pyscf" and not type(solver).__module__.startswith(
+            "gpu4pyscf."
+        ):
+            raise RuntimeError("GPU4PySCF reference requires a GPU SCF owner")
+        solver.xc = DFT_FUNCTIONALS[workload["method"]]
+        solver.grids.level = workload["grid_level"]
+        solver.small_rho_cutoff = 0.0
+        solver.conv_tol, solver.conv_tol_grad = 1e-12, 1e-10
+        solver.direct_scf_tol = 1e-14
         solver.max_cycle = 150
         solver.kernel()
-    if not solver.converged:
-        raise RuntimeError("independent PySCF DFT endpoint did not converge")
-    gradient = solver.nuc_grad_method()
-    gradient.grid_response = True
-    forces = -gradient.kernel()
+        if not solver.converged and engine == "pyscf":
+            solver = solver.newton()
+            solver.max_cycle = 150
+            solver.kernel()
+        if not solver.converged:
+            raise RuntimeError(f"independent {engine} DFT endpoint did not converge")
+        gradient = solver.nuc_grad_method()
+        if engine == "gpu4pyscf" and not type(gradient).__module__.startswith(
+            "gpu4pyscf."
+        ):
+            raise RuntimeError("GPU4PySCF reference requires a GPU gradient owner")
+        gradient.grid_response = True
+        forces = -gradient.kernel()
+        if engine == "gpu4pyscf":
+            forces = cupy.asnumpy(forces)
+            cupy.cuda.get_current_stream().synchronize()
+
     return {
-        "independent_reference": "PySCF/libxc energy and analytic gradient with grid response",
+        "independent_reference": (
+            "GPU4PySCF/PySCF/libxc energy and analytic gradient with grid response"
+            if engine == "gpu4pyscf"
+            else "PySCF/libxc energy and analytic gradient with grid response"
+        ),
+        "reference_engine": engine,
         "pyscf_version": pyscf.__version__,
+        **(
+            {"gpu4pyscf_version": gpu4pyscf.__version__}
+            if engine == "gpu4pyscf"
+            else {}
+        ),
         "energies": [float(solver.e_tot)] * workload["batch"],
         "forces": [forces.tolist() for _ in range(workload["batch"])],
     }
@@ -153,6 +195,24 @@ def numerical_gate(samples: list[dict], reference: dict) -> dict:
     much tighter baseline/candidate schedule-parity gate (1e-9 E / 1e-7 F).
     """
     import numpy as np
+
+    if "observations" in reference:
+        checked = [numerical_gate(samples, item) for item in reference["observations"]]
+        if not checked:
+            raise ValueError("independent reference observations are missing")
+        return {
+            **checked[0],
+            "passed": all(item["passed"] for item in checked),
+            "reference_observation_count": len(checked),
+            **{
+                key: max(item[key] for item in checked)
+                for key in (
+                    "maximum_energy_error_per_atom",
+                    "maximum_force_error",
+                    "maximum_force_rms",
+                )
+            },
+        }
 
     energies = np.asarray(reference["energies"], dtype=float)
     forces = np.asarray(reference["forces"], dtype=float)
@@ -275,7 +335,7 @@ def run_dft(
 
     from generativeqc_compiler.dft.xc_schedule import molecular_grid_xc_workload
 
-    from .autotune import _worker, read_xyz
+    from .autotune import _worker, inspect_library, read_xyz
     from .ks import GridSpec, KsOptions, resolve_ks_options
     from .profiles import (
         POLICY,
@@ -288,7 +348,6 @@ def run_dft(
         file_hash,
         install_bundle,
         select_dft_schedule,
-        select_library,
     )
 
     if args.method not in DFT_FUNCTIONALS or args.repeats < 5:
@@ -311,6 +370,11 @@ def run_dft(
         "grid_level": args.grid_level,
         "architecture": target.architecture,
         "source_identity": probe["source_identity"],
+        "reference_engine": (
+            "reused"
+            if getattr(args, "reference_file", None)
+            else getattr(args, "reference_engine", "pyscf")
+        ),
     }
     scientific = molecular_grid_xc_workload(
         architecture=target.architecture,
@@ -377,8 +441,14 @@ def run_dft(
                     check=True,
                 )
                 report["dirty"] = bool(status.stdout.strip())
-        incumbent, diagnostics = select_library(base_library, args.device_id)
-        library = Path(incumbent._name).resolve()
+        selection = inspect_library(
+            Path(base_library._name),
+            args.device_id,
+            select=True,
+            timeout=min(60, remaining()),
+        )
+        library = Path(selection["library"])
+        diagnostics = selection["diagnostics"]
         report["incumbent_profile"] = diagnostics
         active = select_dft_schedule(
             diagnostics, scientific.to_payload(), selection_context=selection_context
@@ -412,13 +482,18 @@ def run_dft(
         if not tiles:
             report["reason"] = "no distinct DFT XC tile candidates"
             return report
-        reference = _worker(
-            library,
-            baseline_path,
-            directory / "reference.json",
-            reference=True,
-            timeout=remaining(),
-        )
+        if getattr(args, "reference_file", None):
+            from ._dft_reference import load
+
+            reference = load(args.reference_file, args.reference_sha256, workload)
+        else:
+            reference = _worker(
+                library,
+                baseline_path,
+                directory / "reference.json",
+                reference=True,
+                timeout=remaining(),
+            )
         report["reference"] = reference
         report["baseline_numerical"] = numerical_gate([baseline], reference)
         if not report["baseline_numerical"]["passed"]:
@@ -586,7 +661,13 @@ def run_dft(
         report["installed"] = str(installed)
         if args.export:
             export_bundle(installed, args.export)
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+    except (
+        OSError,
+        TypeError,
+        ValueError,
+        RuntimeError,
+        subprocess.SubprocessError,
+    ) as error:
         report["failure"] = str(error)
     finally:
         atomic_json(directory / "report.json", report)

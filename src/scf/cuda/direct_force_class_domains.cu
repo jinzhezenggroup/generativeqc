@@ -94,11 +94,14 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
   __shared__ std::uint32_t class_offsets[kDirectSpdForceQueueClasses];
   __shared__ BoundedDirectQueuePage page;
   __shared__ bool available;
+  constexpr auto candidates_per_lane =
+      detail::kBoundedDirectQueueCapacity / kBoundedDirectForceThreads;
+  static_assert(detail::kBoundedDirectQueueCapacity % kBoundedDirectForceThreads == 0U);
   while (true) {
     __syncthreads();
     if (threadIdx.x == 0U)
-      available =
-          bounded_direct_queue_block_page(batch, block_domain, atomicAdd(cursor, 1ULL), page);
+      available = bounded_direct_queue_block_page<detail::kBoundedDirectQueueCapacity>(
+          batch, block_domain, atomicAdd(cursor, 1ULL), page);
     __syncthreads();
     if (!available) return;
     auto* traversal = batch.direct_force_work ? &batch.direct_force_work->traversal[0] : nullptr;
@@ -115,15 +118,23 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
       continue;
     }
     if (threadIdx.x == 0U)
-      bounded_direct_queue_candidate_page(batch, block_domain.prefix != nullptr, page);
+      bounded_direct_queue_candidate_page<detail::kBoundedDirectQueueCapacity>(
+          batch, block_domain.prefix != nullptr, page);
     __syncthreads();
-    for (auto packet = page.candidate_begin; packet < page.candidate_end; packet += blockDim.x) {
-      if (threadIdx.x == 0U) queue_count = 0U;
-      if (threadIdx.x < kDirectSpdForceQueueClasses) class_offsets[threadIdx.x] = 0U;
-      unsigned queued_class = kDirectSpdForceQueueClasses;
-      ActiveShellQuartetTile queued_task{};
-      __syncthreads();
-      const auto candidate = packet + threadIdx.x;
+    if (threadIdx.x == 0U) queue_count = 0U;
+    if (threadIdx.x < kDirectSpdForceQueueClasses) class_offsets[threadIdx.x] = 0U;
+    unsigned queued_classes[candidates_per_lane];
+    ActiveShellQuartetTile queued_tasks[candidates_per_lane];
+    __syncthreads();
+    // Retain both admission packets until one grouped drain. Screening often
+    // removes half a page: draining each 64/128-candidate packet separately
+    // leaves most scalar lanes idle despite the existing 256-task capacity.
+#pragma unroll
+    for (unsigned packet = 0; packet < candidates_per_lane; ++packet) {
+      auto& queued_class = queued_classes[packet];
+      auto& queued_task = queued_tasks[packet];
+      queued_class = kDirectSpdForceQueueClasses;
+      const auto candidate = page.candidate_begin + packet * blockDim.x + threadIdx.x;
       if (candidate < page.candidate_end) {
         std::size_t first_local{}, second_local{};
         if (page.same_block)
@@ -165,20 +176,24 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
           atomicAdd(&traversal->angular_rejected, 1ULL);
         }
       }
-      __syncthreads();
-      // Group already-admitted tasks so scalar recurrence callees in each
-      // warp see less class divergence without repeating the candidate scan.
-      // This bounded permutation depends on task classes, not GPU identity.
-      if (threadIdx.x == 0U) queue_count = direct_force_class_queue_offsets(class_offsets);
-      __syncthreads();
-      if (queued_class < kDirectSpdForceQueueClasses)
-        queue[atomicAdd(&class_offsets[queued_class], 1U)] = queued_task;
-      __syncthreads();
-      contract_bounded_spd_low_queue<Unrestricted, Mode, true, Partition>(
-          batch, queue, queue_count, screening_tolerance, schwarz_bounds, density, active, output,
-          coulomb_coefficient, exchange_coefficient);
-      __syncthreads();
     }
+    __syncthreads();
+    // Group already-admitted tasks so scalar recurrence callees in each
+    // warp see less class divergence without repeating the candidate scan.
+    // This bounded permutation depends on task classes, not GPU identity.
+    if (threadIdx.x == 0U) queue_count = direct_force_class_queue_offsets(class_offsets);
+    __syncthreads();
+#pragma unroll
+    for (unsigned packet = 0; packet < candidates_per_lane; ++packet) {
+      const auto queued_class = queued_classes[packet];
+      if (queued_class < kDirectSpdForceQueueClasses)
+        queue[atomicAdd(&class_offsets[queued_class], 1U)] = queued_tasks[packet];
+    }
+    __syncthreads();
+    contract_bounded_spd_low_queue<Unrestricted, Mode, true, Partition>(
+        batch, queue, queue_count, screening_tolerance, schwarz_bounds, density, active, output,
+        coulomb_coefficient, exchange_coefficient);
+    __syncthreads();
   }
 }
 
