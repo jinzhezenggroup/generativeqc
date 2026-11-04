@@ -1,6 +1,7 @@
 # Decision: require exact original-D features before occupied XC reuse
 
-Status: implemented in the repair branch; native endpoint acceptance pending
+Status: implemented and scoped native endpoints qualified in the repair branch;
+CI/review and merged delivery pending
 Date: 2026-11-04
 
 ## Problem
@@ -63,12 +64,29 @@ not inferred from test collection or the historical candidate. Full native
 owner/batch integration, independent molecular/default-grid E+F, whole-runtime
 resources and complete admission-inclusive endpoint costs are still required
 before merge/issue closure; this note alone does not assert those gates passed.
+The source-matched follow-up below records the subsequently executed gates.
 
 The [new restriction capsule](../../../../benchmarks/results/occupied-xc-exact-identity-20261104/README.md)
 records 162 focused host cases, 168 additional consumer cases and Slurm job
 15811: 138 real-device cases normally and under each of three zero-error
 sanitizer cohorts, including actual GPU Gram and compact batch kernels. The
 two new executable bitwise regressions fail against the preceding template.
+
+The follow-up at `def31af3f6c9b8476e8ff9d892f7f74589d168c7` builds and executes
+the actual native library after merging the required native SCF-default runtime.
+Slurm 15825 passes four full native lifetime/default/explicit E+F tests and 160
+alternating complete endpoints; Slurm 15827 passes the same four tests under
+zero-error memcheck. Independent default-grid PySCF energy/force vectors pass
+the unchanged 2e-9 Eh / 1e-7 Eh/Bohr gates. The capsule retains actual-library
+changed/fallback launch resources and all timed vectors/work counts. It does
+not infer whole-force-region profitability, achieved occupancy or allocator peak.
+
+The explicit verified route costs about 22% more for RKS cold/moved and 51–53%
+more for UKS cold/moved on this three-atom fixture; warm UKS costs about 16%
+more. These are complete, admission-inclusive endpoint comparisons, not kernel
+timings or universal performance bounds. They independently reinforce the
+decision to retain the matrix default. A future agent should not restore the
+unverified historical default merely because exact verification is slower.
 
 ## Rejected alternatives and revisit conditions
 

@@ -1,66 +1,72 @@
 # Occupied XC: exact original-D restriction
 
-This capsule measures source `0b9adb1a6dfcb7bae88f922235d247d52bf09bb9`,
-not the earlier roundoff-only candidate or historical force arrays. Scientific
-and test inputs were dirty during measurement and committed unchanged at that
-revision; `receipt.json` records their verified hashes and artifact identities.
+Only bitwise-original-D-identical finite features, including signed zero, may
+reuse the occupied candidate. Otherwise publish the entire original vector.
+The error bound is only a prefilter. KS defaults to matrix products; explicit
+`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` requests the verified experimental route.
 
-## Actual qualification
+## Source-bound evidence
 
-- 162 focused portable/compiled host cases passed; 168 additional consumer cases
-  passed. Another 510 opt-in mixed CUDA cases were skipped, not qualified.
-- Two new bitwise regressions both fail against the preceding occupied template
-  at `9b17638b2b8cc49268eae37159fd1fe30c71cb16` and pass with the restriction.
-- Slurm job **15811**, node1, main `gpu:5090:1`, finite ten-minute allocation:
-  **138 passed normally and 138 each under memcheck, synccheck and racecheck**,
-  zero reported errors/hazards/warnings. Assigned visibility `0` was preserved.
-- The real emitted GPU SCF Gram producer supplies 24 orthonormal-frame cases.
-  Six more cases execute actual compact batch specializations with ragged AO
-  maps, offsets, empty spins, overflow errors, capacity fallback and guards.
-- Comparisons require bitwise equality with the retained original-D CUDA
-  consumer, not merely an allclose threshold or unrounded factor identity.
-  Standalone resources and exact source/binary identities are in the receipt.
+- `receipt.json.xz`, source `0b9adb1a6dfcb7bae88f922235d247d52bf09bb9`:
+  **162 focused + 168 consumer host cases**; 510 optional CUDA skips are not
+  qualified. Two bitwise regressions fail against the prior template.
+  Slurm **15811**: **138 passed per normal/memcheck/synccheck/racecheck cohort**,
+  zero errors/hazards. Includes real GPU Gram and ragged compact batch kernels.
+- Supplemental **15819**, source `60faa4bac6afd8aee4d17f6eee473add8bd77e4b`:
+  again **138 per cohort**, zero errors/hazards; the actual GPU Gram producer
+  yields stored D00=0 and dense/verified rho=0; ordinary rho=.125 is unchanged.
+- `native-receipt.json.xz`, source **`def31af3f6c9b8476e8ff9d892f7f74589d168c7`**:
+  **212 host tests**, **four native tests** (Slurm **15825**) and **four native
+  memcheck tests, zero errors** (**15827**). Default/explicit/rollback/invalid
+  controls exercise cold/warm/moved lifetimes. Independent reconverged PySCF
+  2.14.0/Libxc 7.0.0 default-grid-3 energy/grid-response force oracles cover RKS
+  and charge-one-doublet UKS, original/displaced three-atom spherical def2-SVP
+  water (24 AO). CPU scientific derivative fallbacks are forbidden.
+- **160 complete E+F observations**, ten alternating pairs per spin/phase,
+  pass unchanged **2e-9 Eh / 1e-7 Eh/Bohr** independent/paired gates. Maximum
+  errors: **6.964e-13 Eh / 3.155e-10 Eh/Bohr**. Paired iterations, Fock builds
+  and complete semilocal J/K work match. All vectors/costs are retained.
 
-The contract now requires exact original-D features, including signed zero,
-before selecting a candidate. A small forward-error budget is only a prefilter.
-Because exact verification repeats dense work, KS defaults to ordinary matrix
-products; only explicit `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` requests the verified
-experimental route. No tolerance or acceptance gate is relaxed.
+Final native library SHA-256:
+`e0a208a73b832d314631280ad771b46bbd89ab25a92c6bbcd010d894614ff5a5`.
+Release/C++20/O3/sm_120/`--fmad=false`, verified sccache 0.16.0, caches retained.
+Actual-library cuobjdump admits all eight changed/fallback density launches;
+feature registers are 80/96, stacks 0/80 bytes. Declared local bytes are zero;
+spill counts, achieved occupancy, allocator peak and whole-force-region
+profitability are not measured. These facts are not standalone-probe proxies.
+
+Complete tracing-off costs include admission: verified cold/moved is about
+22% slower for RKS and 51–53% slower for UKS; warm UKS about 16% slower. Cold
+includes construction/preparation/E+F in a shared process/context with existing
+caches, not process startup/cache-miss compilation. No speedup/default promotion
+is claimed. All timing samples, vectors and resource identities are in the receipt.
 
 ## Reproduction
 
-From the measured checkout, portable checks:
-
-```bash
-CCACHE="$(command -v sccache)" PYTHONPATH=.:python python -m pytest -q \
-  tests/python/test_xc_occupied_certificate.py \
-  tests/python/test_xc_occupied_features.py tests/python/test_xc_compact_batches.py \
-  tests/python/test_xc_occupied_resources.py tests/python/test_dft_xc_compiled_resources.py \
-  tests/python/test_compiler_structure.py tests/python/test_dft_xc_schedule.py
-```
-
-On node1, verify `sccache --version`, then execute every real-device run through
-Slurm (do not override its visibility). The normal device command is:
+Decode receipts with standard-library `lzma.open`/`json.load`. Select the exact
+library with `GENERATIVEQC_LIBRARY`, set `GENERATIVEQC_PROFILE=off` and
+`PYTHONPATH=.:python:tests/python`. Run through finite Slurm:
 
 ```bash
 srun --input=none --partition=main --nodelist=node1 --gres=gpu:5090:1 \
-  --nodes=1 --ntasks=1 --time=00:10:00 bash -lc '
-    GENERATIVEQC_TEST_OCCUPIED_XC=1 PYTHONPATH=.:python \
-      python -m pytest -q tests/python/test_xc_occupied_features_cuda.py'
+  --nodes=1 --ntasks=1 --time=00:15:00 env GENERATIVEQC_TEST_OCCUPIED_XC=1 \
+  python -m pytest -q -x tests/python/test_xc_occupied_default_cuda.py
 ```
 
-Within the same finite allocation, prefix that Python command with
-`compute-sanitizer --tool TOOL --target-processes all --error-exitcode 99`
-for each of `memcheck`, `synccheck`, and `racecheck`. Diagnostic suite durations
-in the receipt are not molecular endpoint timings. Raw stdout/cache/resource
-streams remain ignored local artifacts with compact recorded byte/hash identity;
-they are not copied into tracked evidence as redundant test logs.
+Jobs 15825/15827 preserve assigned visibility 0/1. Inside the same scheduler
+contract, prefix pytest with `compute-sanitizer --tool memcheck
+--target-processes all --error-exitcode 99`. `readers/native_endpoint.py --help`
+describes cost reproduction; `independent_oracles` supplies its exact input
+vectors, never a production fallback. `native_resources.py` assesses demangled
+final-library cuobjdump. Offline:
 
-## Acceptance boundary
+```bash
+python benchmarks/results/occupied-xc-exact-identity-20261104/readers/replay_native.py
+```
 
-This is an exact-feature correctness restriction and compiled-batch device
-qualification, **not full native owner integration or molecular E+F acceptance**.
-The full native library's resource envelope, independent molecular/default-grid
-E+F and complete cold/warm endpoint cost remain required before merging/closing
-#2751. No speedup, default promotion or link to the cause of #2915 is claimed.
+This recomputes every retained vector/work gate and historical input hash.
+Raw compiler/cache/trace/sanitizer histories remain ignored, with byte/hash
+identities; initial setup, build-budget and reader mistakes are not hidden.
+CI/review and merged delivery remain required before closing #2751. No
+all-functional/planner qualification or cause for #2915 is inferred.
 See the [decision note](../../../.agents/notes/implemented/numerics/2026-11-04-occupied-xc-exact-identity.md).
