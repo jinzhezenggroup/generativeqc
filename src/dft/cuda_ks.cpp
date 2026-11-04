@@ -3374,8 +3374,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
       runtime::cuda_trace::trace_counter("xc_point_ao_square_sum",
                                          prepared_ao_work.point_ao_square_sum);
       CudaXcOccupiedDensity occupied_frame;
+      const auto occupied_rank = std::max(occupations[0], spins == 2 ? occupations[1] : 0);
+      // Do not start a provisional epoch without useful projection work and
+      // two strict submits for a fresh energy comparison inside the caller's budget.
       if (occupied_xc_requested && occupied_xc_frame_ready && !strict_refinement &&
-          output.physical_residual_rms > 1e-6 &&
+          output.iterations < options.max_iterations &&
+          options.max_iterations - output.iterations > 2 && occupied_rank &&
+          occupied_rank < prepared_ao_work.max_active && output.physical_residual_rms > 1e-6 &&
           phase == generativeqc::runtime::PrecisionPhase::Admitted && !device_chunk_mode &&
           !device_nonlocal && !precision_schedule.any_lower_precision() &&
           xc_layout.feature_terms == 5 && xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
@@ -4201,12 +4206,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // fresh energy epoch and unchanged publication gates. Old DIIS entries
     // may only predict new densities; six unsuccessful strict sweeps clear
     // them. No historical/provisional Fock can certify a physical state.
+    // The first strict Fock has no comparable prior target energy. Reserve
+    // two strict submits, while retaining the established 11-proposal cap.
     const MixedPrecisionWarmup occupied_warmup{1e-6, 12};
     const bool enter_occupied_audit =
         occupied_warmup.enter_refinement(occupied_stage, converged, output.iterations,
                                          options.max_iterations, physical.residual_rms) ||
         occupied_warmup.target_refresh_due(occupied_stage, output.iterations,
-                                           options.max_iterations);
+                                           options.max_iterations - 1);
     if (occupied_stage) converged = false;
     // The final contract admits a 1e-8 AO maximum but separately checks the
     // true F[D] canonical density. The 1e-9 spin-RMS and public E/D gates stay

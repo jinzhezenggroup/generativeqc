@@ -70,3 +70,25 @@ separate from the earlier explicit-1 measurements.
 The subsequent delivery merge retains the PR branch's existing upstream/CI
 integration and raw-output guards. It does not turn the pinned default image
 measurements into merged-target qualification or refresh scientific claims.
+
+
+## Bounded admission correction
+
+Source review found that first admission on the final permitted submit could
+consume the remaining budget without a strict target evaluation. The owner now
+requires two later strict submits inside the unchanged budget, because the
+first strict Fock starts a fresh energy epoch. The handoff reserves that same
+two-evaluation tail while preserving the existing eleven-proposal cap. It also requires a nonzero
+occupied rank below the maximum prepared active-AO count: if every tile retains
+matrix products, no provisional epoch or unnecessary target handoff is started.
+The executable lifecycle regression fails on the prior owner and passes with
+budgets 1, 2, 3, 4, 5, 12 and 200 and RKS/UKS capacity boundaries. No scientific gate or
+kernel arithmetic is relaxed. The original source-bound GPU receipts are reused,
+not relabeled as qualification of this bounded admission correction.
+
+The benchmark reader now rejects duplicate/missing oracle keys and jointly
+truncated oracle/observation force vectors. Historical v1/v2 receipts bind to the
+runner's fixed three-atom water case without rewriting retained bytes; new
+receipts also record the atom count. Streaming library hashing supports Python
+3.10 without changing the digest. Existing numerical and cost gates remain
+unchanged.

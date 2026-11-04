@@ -33,6 +33,15 @@ Those later integrations do not relabel the measurements as a merged-target
 native image qualification. Current catalog source identities are regenerated
 without upgrading any historical Libxc qualification claim.
 
+A later source-review correction reserves two strict target evaluations inside
+small caller iteration budgets and avoids provisional epochs when every AO
+domain falls back to matrix products. Compiled host regressions cover those
+bounds. The measurements above remain pinned to `ddadce1e2`; they are reused
+for the unchanged numerical kernels and measured workloads, not relabeled as a
+new GPU/performance run of that bounded admission correction. Receipt replay
+also rejects duplicate oracle keys and force vectors jointly truncated from
+the fixed three-atom small workload.
+
 ## Complete original 96-atom workload
 
 Three alternating fresh-process matrix/default pairs use the original Direct

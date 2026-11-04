@@ -46,6 +46,15 @@ def save(path: Path, record: dict) -> None:
         stream.write(serialized + "\n")
 
 
+def library_digest(path: Path) -> str:
+    """Stream the selected native image identity on every supported Python."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def replay(record: dict) -> dict:
     """Recompute all vector gates, paired gates, completeness and work summaries."""
     schema = record.get("schema")
@@ -73,7 +82,21 @@ def replay(record: dict) -> dict:
             raise ValueError(f"invalid {name}")
     if record["repeats"] < 3:
         raise ValueError("insufficient repetitions")
-    references = {(row["spin"], row["geometry"]): row for row in record["oracles"]}
+    # Historical v1/v2 receipts measured this fixed three-atom water case.
+    # Bind legacy records to that contract without rewriting retained bytes.
+    atoms = record.get("atoms", 3)
+    if type(atoms) is not int or atoms != 3:
+        raise ValueError("invalid water-3 atom count")
+    references = {}
+    for row in record["oracles"]:
+        key = row["spin"], row["geometry"]
+        if key in references:
+            raise ValueError(f"duplicate oracle reference: {key}")
+        references[key] = row
+    if set(references) != {
+        (spin, geometry) for spin in ("rks", "uks") for geometry in (0, 1)
+    }:
+        raise ValueError("incomplete or unexpected oracle population")
     rows = {}
     for row in record["observations"]:
         if schema == "generativeqc.occupied-proposals.v2" and (
@@ -87,7 +110,7 @@ def replay(record: dict) -> dict:
             raise ValueError(f"duplicate observation: {key}")
         rows[key] = row
         reference = references[row["spin"], int(row["phase"].startswith("moved"))]
-        check_vectors(row, reference)
+        check_vectors(row, reference, expected_atoms=atoms)
         if row["iterations"] < 1 or row["fock_builds"] < row["iterations"]:
             raise ValueError("invalid semantic work counts")
         if not math.isfinite(row["seconds"]) or row["seconds"] <= 0:
@@ -101,7 +124,7 @@ def replay(record: dict) -> dict:
                 baseline, proposal = (
                     rows[spin, repetition, selector, phase] for selector in selectors
                 )
-                check_vectors(proposal, baseline)
+                check_vectors(proposal, baseline, expected_atoms=atoms)
                 for row in (baseline, proposal):
                     cohorts[row["selector"]].append(row["seconds"])
                     work[row["selector"]].append(
@@ -122,11 +145,17 @@ def replay(record: dict) -> dict:
     return summary
 
 
-def check_vectors(actual: dict, reference: dict) -> None:
+def check_vectors(
+    actual: dict, reference: dict, *, expected_atoms: int | None = None
+) -> None:
     """Use explicit exceptions so optimized Python cannot disable acceptance."""
     energy_error = abs(actual["energy"] - reference["energy"])
     actual_forces, reference_forces = actual["forces"], reference["forces"]
-    if len(actual_forces) != len(reference_forces) or not actual_forces:
+    if (
+        len(actual_forces) != len(reference_forces)
+        or not actual_forces
+        or (expected_atoms is not None and len(actual_forces) != expected_atoms)
+    ):
         raise ValueError("incomplete force vector")
     errors = []
     for actual_row, reference_row in zip(actual_forces, reference_forces, strict=True):
@@ -182,10 +211,11 @@ def main() -> None:
     from benchmarks.readme_hf_scaling import scaling_cases
 
     library = Path(os.environ["GENERATIVEQC_LIBRARY"])
-    with library.open("rb") as stream:
-        library_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+    library_sha256 = library_digest(library)
+    atoms = scaling_cases()["water-3"].atoms
     record = {
         "schema": "generativeqc.occupied-proposals.v2",
+        "atoms": len(atoms),
         "completed": False,
         "proposal_selector": args.proposal_selector,
         "controls": {
@@ -202,7 +232,6 @@ def main() -> None:
         "oracles": load(args.oracle),
         "observations": [],
     }
-    atoms = scaling_cases()["water-3"].atoms
     moved = np.asarray([position for _, position in atoms]).copy()
     moved[1, 2] += 0.02
     args.output.parent.mkdir(parents=True, exist_ok=True)

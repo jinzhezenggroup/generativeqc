@@ -100,11 +100,13 @@ including an empty string, conservatively disable proposals as well.
 The [automatic-admission decision](../../.agents/notes/implemented/performance/2026-11-05-occupied-xc-automatic-admission.md)
 records the default-promotion rationale and rollback boundary.
 
-Near-stationary inputs (previous residual RMS at most `1e-6`) retain matrix
-work without paying for proposal admission. The owner switches permanently to
+Near-stationary inputs (previous residual RMS at most `1e-6`), the final two
+permitted iterations, and plans without any AO domain larger than the occupied
+rank retain matrix work without starting a provisional energy epoch. The owner switches permanently to
 the original matrix target at the proposal handoff and starts a fresh energy epoch. The switch
 uses the existing bounded warmup policy (residual RMS at most `1e-6`, or
-at most eleven proposal-stage iterations, with room for target evaluation).
+at most eleven proposal-stage iterations, with room for two strict target
+evaluations to establish a finite energy comparison).
 These are initializer scheduling controls, not scientific tolerances. No
 provisional energy, residual, warm seed or force can authorize publication.
 DIIS history may predict densities for at most six unsuccessful strict sweeps;

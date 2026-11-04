@@ -106,8 +106,9 @@ struct CudaXcLayout {
 
 /** Same-stream canonical frame that produced this exact density generation.
  * Explicit experimental callers must own the accepted structured density
- * proposal and its same-stream frame. Production KS does not supply a witness;
- * imported, held, mixed and response densities remain dense.
+ * proposal and its same-stream frame. Production KS supplies one only for
+ * admitted provisional initializer frames; imported, held, mixed and response
+ * densities remain dense.
  * Coefficients are column-major nao-by-nao frames, one per spin. This is an
  * ownership/generation witness, not equality between the stored rounded Gram
  * and a reassociated orbital contraction. The generated consumer must certify

@@ -61,7 +61,7 @@ def receipt() -> dict:
             "spin": spin,
             "geometry": geometry,
             "energy": -1.0,
-            "forces": [[0.0, 0.0, 0.0]],
+            "forces": [[0.0, 0.0, 0.0] for _ in range(3)],
         }
         for spin in ("rks", "uks")
         for geometry in (0, 1)
@@ -82,7 +82,7 @@ def receipt() -> dict:
                 "selector": selector,
                 "phase": phase,
                 "energy": -1.0,
-                "forces": [[0.0, 0.0, 0.0]],
+                "forces": [[0.0, 0.0, 0.0] for _ in range(3)],
                 "iterations": 4,
                 "fock_builds": 5,
                 "seconds": 2.0 if selector == "0" else 1.0,
@@ -164,3 +164,51 @@ def test_replay_rejects_corrupted_scientific_or_work_evidence(corruption: str) -
         record["completed"] = False
     with pytest.raises((ValueError, KeyError)):
         replay(record)
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    (
+        "duplicate_oracle",
+        "joint_truncation",
+        "empty",
+        "atom_count",
+        "missing_oracle",
+        "unexpected_oracle",
+    ),
+)
+def test_replay_rejects_incomplete_reference_population(corruption: str) -> None:
+    """Both sides cannot silently agree on a different physical system."""
+    record = receipt()
+    if corruption == "duplicate_oracle":
+        hidden = copy.deepcopy(record["oracles"][0])
+        hidden["energy"] += 1.0
+        record["oracles"].insert(0, hidden)
+    elif corruption == "joint_truncation":
+        for row in record["oracles"] + record["observations"]:
+            row["forces"] = row["forces"][:1]
+    elif corruption == "empty":
+        record["observations"][0]["forces"] = []
+    elif corruption == "atom_count":
+        record["atoms"] = 1
+    elif corruption == "missing_oracle":
+        record["oracles"].pop()
+    else:
+        record["oracles"].append({"spin": "invalid", "geometry": 0})
+    with pytest.raises(ValueError):
+        replay(record)
+
+
+def test_native_image_digest_supports_python_310(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Identity hashing must not require the Python 3.11 file_digest API."""
+    import hashlib
+
+    from benchmarks.occupied_xc_proposals import library_digest
+
+    monkeypatch.delattr(hashlib, "file_digest", raising=False)
+    payload = b"native-image" * 100000
+    path = tmp_path / "library.so"
+    path.write_bytes(payload)
+    assert library_digest(path) == hashlib.sha256(payload).hexdigest()

@@ -40,6 +40,10 @@ def retry_probe(
         cpp_function_definition(source, "stage_xc"),
         "if (options.xc_execution_schedule",
     )
+    finish = cpp_function_definition(source, "finish_legacy")
+    start = finish.index("const bool occupied_stage =")
+    end = finish.index("if (occupied_stage) converged = false;", start)
+    occupied_handoff = finish[start:end]
     history_retirement = _block(
         cpp_function_definition(source, "enqueue_legacy"),
         "if ((experimental_mixed_history",
@@ -47,7 +51,11 @@ def retry_probe(
     folder = tmp_path_factory.mktemp("ks-mixed-retry")
     cpp, binary = folder / "retry.cpp", folder / "retry"
     cpp.write_text(
-        PREFIX.replace(
+        '#include "'
+        + str(ROOT / "src/dft/mixed_precision_warmup.hpp")
+        + '"\n'
+        + "using generativeqc::dft::MixedPrecisionWarmup;\n"
+        + PREFIX.replace(
             "@OCCUPIED_DENSITY@",
             cpp_record_definition(
                 (ROOT / "src/dft/cuda_xc.hpp").read_text(), "CudaXcOccupiedDensity"
@@ -60,6 +68,10 @@ def retry_probe(
             )
             + ";",
         )
+        + "bool occupied_handoff() { bool converged = false;\n"
+        + "struct { double residual_rms = 1.0; } physical;\n"
+        + occupied_handoff
+        + "return enter_occupied_audit; }\n"
         + "bool retry() {\n"
         + retry
         + "\nreturn false;\n}\n"
@@ -114,6 +126,7 @@ def test_occupied_target_epoch_uses_finite_missing_history_sentinel(
     driver = tmp_path / "history.cpp"
     driver.write_text(
         r"""
+#include <algorithm>
 #include <cmath>
 #include <initializer_list>
 #include <limits>
@@ -147,6 +160,7 @@ int main() {
 
 
 PREFIX = r"""
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -240,7 +254,8 @@ struct Owner {
     double physical_residual_rms = 1.0;
   } output;
   struct { scf::ScfOptions::XcExecutionSchedule xc_execution_schedule =
-    scf::ScfOptions::XcExecutionSchedule::DeviceFused; } options;
+    scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+    unsigned max_iterations = 200; } options;
   unsigned retries{}, preparations{}, retirements{}, pairs{};
   bool last_pair_mixed = true;
   std::unique_ptr<Source> phase_source;
@@ -267,7 +282,7 @@ struct Owner {
   std::size_t elements = 1;
   struct { std::size_t npoint = 24, feature_terms = 5;
     CudaXcAoPrecision ao_precision = CudaXcAoPrecision::Fp64; } xc_layout;
-  struct { std::size_t point_ao_visits = 24, point_ao_square_sum = 24; } prepared_ao_work;
+  struct { std::size_t point_ao_visits = 24, point_ao_square_sum = 24, max_active = 8; } prepared_ao_work;
   struct { std::size_t point_count() const { return 12; } } nonlocal_grid;
   std::unique_ptr<Xc> nonlocal_xc;
   unsigned merges = 0;
@@ -342,6 +357,62 @@ int main(int argc, char** argv) {
   request.stage_xc(6, Phase::Admitted);
   require(!request.pending_occupied_xc && !request.xc->last_occupied.coefficients,
               "nearly stationary warm input paid for proposal admission");
+  // A new proposal needs two strict submits for a target energy comparison.
+  for (unsigned limit : {1U, 2U, 3U, 200U}) {
+    for (unsigned completed = 0; completed < limit; ++completed) {
+      Owner budget;
+      budget.device_nonlocal = false;
+      budget.occupied_xc_requested = budget.occupied_xc_frame_ready = true;
+      budget.tmp1 = budget.density;
+      budget.options.max_iterations = limit;
+      budget.output.iterations = completed;
+      expected_density = budget.density;
+      budget.stage_xc(7, Phase::Admitted);
+      const bool has_strict_tail = limit - completed > 2;
+      require(budget.pending_occupied_xc == has_strict_tail &&
+                  budget.occupied_xc_executed == has_strict_tail &&
+                  bool(budget.xc->last_occupied.coefficients) == has_strict_tail,
+              "proposal consumed the final strict iteration budget");
+      require(!budget.occupied_xc_frame_ready, "budget fallback retained a borrowed frame");
+    }
+  }
+  for (unsigned limit : {1U, 2U, 3U, 4U, 5U, 12U, 200U}) {
+    Owner solve;
+    solve.device_nonlocal = false;
+    solve.occupied_xc_requested = true;
+    solve.options.max_iterations = limit;
+    solve.output.iterations = 0;
+    solve.tmp1 = solve.density;
+    expected_density = solve.density;
+    unsigned strict_targets = 0;
+    while (solve.output.iterations < limit) {
+      solve.occupied_xc_frame_ready = solve.output.iterations != 0;
+      solve.stage_xc(9 + solve.output.iterations, Phase::Admitted);
+      if (solve.occupied_xc_executed && solve.strict_refinement) ++strict_targets;
+      ++solve.output.iterations;
+      if (solve.occupied_handoff()) solve.strict_refinement = true;
+    }
+    require(!solve.occupied_xc_executed || strict_targets >= 2,
+            "proposal handoff left no finite strict energy comparison");
+  }
+  for (unsigned spins : {1U, 2U}) {
+    for (unsigned active : {0U, 1U, 2U, 3U}) {
+      Owner capacity;
+      capacity.device_nonlocal = false;
+      capacity.occupied_xc_requested = capacity.occupied_xc_frame_ready = true;
+      capacity.tmp1 = capacity.density;
+      capacity.spins = spins;
+      capacity.occupations[0] = 1;
+      capacity.occupations[1] = spins == 2 ? 2 : 0;
+      capacity.prepared_ao_work.max_active = active;
+      expected_density = capacity.density;
+      capacity.stage_xc(8, Phase::Admitted);
+      const bool projection_fits = active > spins;
+      require(capacity.pending_occupied_xc == projection_fits &&
+                  capacity.occupied_xc_executed == projection_fits,
+              "matrix-only AO domains started a provisional energy epoch");
+    }
+  }
   Owner history;
   history.occupied_xc_executed = history.strict_refinement = true;
   for (unsigned sweep = 0; sweep <= 6; ++sweep) {
