@@ -54,7 +54,12 @@ def artifact_bytes(name: str) -> bytes:
         return path.read_bytes()
     check(
         not path.exists()
-        and name in {cohort + "-completed.tar.xz" for cohort in COHORTS},
+        and name
+        in {
+            cohort + suffix
+            for cohort in COHORTS
+            for suffix in ["-completed.tar.xz", "-download-manifest.json"]
+        },
         "Missing original public guard evidence",
     )
     try:

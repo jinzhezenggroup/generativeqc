@@ -19,3 +19,5 @@ The frozen DB36 original result is30science/180qualified/720EF/21wins/GM1.314955
 
 ## Revisit when
 A scientific/source/runtime defect is identified or the acceptance scope is intentionally changed. A platform restart or publication-only composition does not itself require repeating valid device evidence.
+
+Publication capacity follow-up: newer upstream evidence exceeded the unchanged global cap by8156bytes. The same nine historical packets now recover their original transport manifests from the same already-merged Git snapshot as well. No numerical reader, frozen result, original cohort binding or review record changes, and no experiment/CPU reproduction is repeated.

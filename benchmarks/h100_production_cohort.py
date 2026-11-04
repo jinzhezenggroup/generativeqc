@@ -134,6 +134,10 @@ def artifact_bytes(name: str) -> bytes:
         "reference-six-v5-completed.tar.xz",
         "standard-guards-v1-completed.tar.xz",
         "uks-fit-v1-completed.tar.xz",
+        "native-qualification-v1-download-manifest.json",
+        "reference-six-v5-download-manifest.json",
+        "standard-guards-v1-download-manifest.json",
+        "uks-fit-v1-download-manifest.json",
     }:
         raise ValueError("Support cohort bytes differ: " + name)
     try:
