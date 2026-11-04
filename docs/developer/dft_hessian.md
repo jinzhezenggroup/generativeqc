@@ -73,6 +73,28 @@ This is a provider-checked, synthetic-oracle-tested response contract only;
 `NativeRKSResponse` remains restricted to native LDA/PBE, and no native PBE0,
 B3LYP, user-composed or CUDA hybrid molecular Hessian endpoint is promoted.
 
+The shared `CompositeRKSResponse` low-level qualification owner also accepts
+CPU direct all-electron RKS full-range-exchange graphs with the native
+B88/VWN-RPA/LYP semilocal family. It binds the physical token-verified MethodIR,
+not the native carrier selector, to the mixed J/K/XC response, frozen K nuclear
+RHS and compiler-owned `exact_exchange` second-order source. Cartesian and
+real-spherical AOs reuse `HessianBasis`; the SCF, density and response remain in
+the original public variational space. This does not change public Calculator
+admission. Independent complete molecular references, real-spherical Ni,
+external def2-SVP records, installed endpoint/resource qualification and the
+production-scale gate remain necessary before promotion or issue closure.
+The low-level receipt explicitly reports `public_calculator_endpoint=False`.
+
+`StationaryGridSecondOrder` accepts an absent nonlocal primitive. In that case
+it allocates no VV10 pair program, executes zero pair evaluations and does not
+apply a VV10 pair-work cap to a semilocal calculation. The full-range
+B88/VWN-RPA/LYP feature Hessian differentiates the same production expression
+as native SCF, including its vacuum/tail convention; it does not inherit the
+different WB97M-V feature floors. Primitive fractions remain part of the graph
+and scientific identity. WB97M-V retains its existing work policy and VV10
+admission. Neither this grid source nor a complete small-molecule low-level
+HVP independently grants public B3LYP, UKS, ECP, DF, D3 or CUDA capabilities.
+
 The closed-shell nuclear-perturbation consumer follows the same rule. Its
 canonical installed owner is `generativeqc.stationary_nuclear`: metric-density
 RHS construction, occupied-orbital/density reconstruction and the single-/multi-

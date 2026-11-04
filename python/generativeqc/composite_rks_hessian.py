@@ -7,6 +7,10 @@ Cartesian/spherical AOs, full-rank DF and scalar ECPs in FP64. CUDA uses a
 device-resident numerical owner with no host derivative fallback. No
 displaced SCF or reference engine enters production; quadrature/active-set
 branches and occupations remain fixed during differentiation.
+
+CPU direct all-electron full-range RKS graphs can also enter the low-level
+qualification owner. They do not inherit WB97M-V's public capability admission:
+independent molecular, spherical/Ni and resource gates remain prerequisites.
 """
 
 from __future__ import annotations
@@ -24,7 +28,11 @@ from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.dft.ao import directional_ao_jets
 from generativeqc_compiler.integral.ir import four_center_eri_operator
 from generativeqc_compiler.integral.range_separation import CoulombKernel
-from generativeqc_compiler.method import StationaryHVPPlan, StationaryMeanField
+from generativeqc_compiler.method import (
+    StationaryHVPPlan,
+    StationaryMeanField,
+    compile_ks_execution_plan,
+)
 from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
 from generativeqc_compiler.method.stationary_grid_second import (
     GRID_FIELD_WORKSPACE_PANELS,
@@ -51,7 +59,7 @@ from .df_hessian import DFSecondOrder
 from .ecp_hessian import ECPSecondOrder
 from .fock import FockBuildSpec, FockPlan, FockTerm
 from .hessian_basis import HessianBasis
-from .ks import composite_stationary_second_order_eligible, resolve_ks_method
+from .ks import composite_stationary_second_order_eligible
 from .profiles import canonical_hash
 from .response_operator import CPKSResponseOperator
 from .response_solver import GMRESOptions, solve
@@ -95,7 +103,7 @@ class CompositeRKSHVPResult:
 
 
 class _CompositeJK:
-    """Native linear J/SR-K/LR-K map, including physical exchange coefficients."""
+    """Native linear J/K map, including physical primitive exchange coefficients."""
 
     def __init__(
         self,
@@ -142,13 +150,21 @@ class _CompositeJK:
                     charge=basis.charge,
                     multiplicity=basis.multiplicity,
                 )
+            exchange_terms = compile_ks_execution_plan(state._source.method_ir).exchange
             short_exchange = next(
-                primitive.coefficient
-                for primitive in state._source.method_ir.primitives
-                if primitive.kind == "range_separated_exchange"
-                and primitive.operator == "short-range"
+                (
+                    term.coefficient
+                    for term in exchange_terms
+                    if term.operator == "short-range"
+                ),
+                None,
             )
             if self.fitted:
+                if short_exchange is None:
+                    raise NotImplementedError(
+                        "composite fitted Hessian currently requires the qualified "
+                        "short-/long-range exchange decomposition"
+                    )
                 calculator = state._source._batch._calculator
                 auxiliary_spec = calculator._auxiliary_basis
                 auxiliary_shells = (
@@ -200,10 +216,8 @@ class _CompositeJK:
                         "DF Hessian requires a full-rank metric; "
                         "rank-truncated metric response is not qualified"
                     )
-            for primitive in state._source.method_ir.primitives:
-                if primitive.kind != "range_separated_exchange":
-                    continue
-                if self.fitted and primitive.operator != "long-range":
+            for term in exchange_terms:
+                if self.fitted and term.operator != "long-range":
                     continue
                 self.plans.append(
                     FockPlan(
@@ -215,12 +229,12 @@ class _CompositeJK:
                             exchange=FockTerm(
                                 coefficient=(-1 if self.spins == 2 else -0.5)
                                 * float(
-                                    primitive.coefficient - short_exchange
+                                    term.coefficient - short_exchange
                                     if self.fitted
-                                    else primitive.coefficient
+                                    else term.coefficient
                                 ),
-                                operator=primitive.operator.replace("-", "_"),
-                                omega=float(primitive.omega),
+                                operator=term.operator.replace("-", "_"),
+                                omega=float(term.omega),
                             ),
                         ),
                         device=self.device,
@@ -307,7 +321,11 @@ class _CompositeGrid:
                 "independent XC/VV10 grids do not yet support coupled response"
             )
         self.state, self.basis, self.grid = state, basis, state.grid
-        _, self.spec = resolve_ks_method(state.identity.method)
+        # The native carrier can be PBE even when the physical graph is B3LYP.
+        # Differentiate the token-bound MethodIR, never the carrier selector.
+        self.spec = compile_ks_execution_plan(
+            state._source.method_ir
+        ).semilocal.functional
         self.functional_identity = self.spec.identity
         self.grid_identity = self.grid.identity
         self.basis_identity = _basis_hash(basis)
@@ -328,9 +346,12 @@ class _CompositeGrid:
                 "composite Hessian requires retained native grid provenance"
             )
         nonlocal_primitive = next(
-            primitive
-            for primitive in state._source.method_ir.primitives
-            if primitive.kind == "nonlocal_correlation"
+            (
+                primitive
+                for primitive in state._source.method_ir.primitives
+                if primitive.kind == "nonlocal_correlation"
+            ),
+            None,
         )
         ao_bytes = len(self.grid.points) * basis.nao * 8 * 64
         if ao_bytes >= grid_budget_bytes:
@@ -591,9 +612,22 @@ class CompositeRKSResponse(CPKSResponseOperator):
                 raise NotImplementedError(
                     "composite Hessian requires native CPU/CUDA KS"
                 )
-            if not composite_stationary_second_order_eligible(state._source.method_ir):
+            method = state._source.method_ir
+            full_range_candidate = (
+                state._source.backend == "cpu"
+                and state.density.shape[0] == 1
+                and state._source.hamiltonian == "all-electron"
+                and state._source.fock_provider_proof()[:2] == ("exact", "exact")
+                and {primitive.kind for primitive in method.primitives}
+                == {"semilocal_xc", "exact_exchange"}
+            )
+            if not (
+                composite_stationary_second_order_eligible(method)
+                or full_range_candidate
+            ):
                 raise NotImplementedError(
-                    "composite molecular Hessian currently requires canonical WB97M-V"
+                    "composite molecular Hessian requires canonical WB97M-V or "
+                    "a CPU direct all-electron RKS full-range qualification candidate"
                 )
             if state._source.backend == "cuda":
                 from .cuda_composite_hessian import CudaCompositeResponse
@@ -906,29 +940,23 @@ def composite_rks_hvp(
             raise
     if operator.df is not None:
         operator.df.check_budget(integral_budget_bytes)
+    exchange_terms = compile_ks_execution_plan(operator.plan.method).exchange
     exchange = tuple(
         (
             four_center_eri_operator(
-                CoulombKernel(
-                    primitive.operator.replace("-", "_"), float(primitive.omega)
-                )
+                CoulombKernel(term.operator.replace("-", "_"), float(term.omega))
             ),
-            primitive.coefficient,
+            term.coefficient,
         )
-        for primitive in operator.plan.method.primitives
-        if primitive.kind == "range_separated_exchange"
+        for term in exchange_terms
     )
     exchange_sources = {
-        "exchange_" + primitive.operator.replace("-", "_"): entry[0]
-        for primitive, entry in zip(
-            (
-                primitive
-                for primitive in operator.plan.method.primitives
-                if primitive.kind == "range_separated_exchange"
-            ),
-            exchange,
-            strict=True,
-        )
+        (
+            "exact_exchange"
+            if term.operator == "full-range"
+            else "exchange_" + term.operator.replace("-", "_")
+        ): entry[0]
+        for term, entry in zip(exchange_terms, exchange, strict=True)
     }
     if operator.df is not None:
         short_fraction = next(
@@ -1089,7 +1117,9 @@ def composite_rks_hvp(
     diagnostics = {
         **executed.diagnostics,
         "derivative_method": "compiler-automatic-differentiation",
-        "public_calculator_endpoint": True,
+        "public_calculator_endpoint": composite_stationary_second_order_eligible(
+            operator.state._source.method_ir
+        ),
         "backend": operator.backend.device,
         "spin": operator.state.identity.spin,
         "representation": operator.basis.representation,

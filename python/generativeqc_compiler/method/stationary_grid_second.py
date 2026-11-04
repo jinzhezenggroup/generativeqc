@@ -35,7 +35,8 @@ from generativeqc_compiler.tensor import (
     linearize,
 )
 from generativeqc_compiler.xc.coefficients import coefficient_program
-from generativeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.program import XCProgram, build_program, output_set
+from generativeqc_compiler.xc.semilocal_codegen import build_roots
 from generativeqc_compiler.xc.wb97mv_maple import (
     DENSITY_THRESHOLD,
     SIGMA_THRESHOLD,
@@ -301,11 +302,16 @@ def _pair_program(spec: typing.Any) -> tuple:
 
 
 class StationaryGridSecondOrder:
-    """Bounded compiler-AD grid partials for a restricted meta-GGA/VV10 method.
+    """Bounded compiler-AD grid partials with an optional VV10 contribution.
 
     The Libxc work policy is applied outside functional differentiation, exactly
     as in SCF. The VV10 rho>=1e-8 mask is fixed on both legs. Work and temporary
     pair capacity have independent explicit limits; neither is a scaling claim.
+    Without VV10 no pair graph, pair work or pair-work admission is introduced.
+    The full-range B88/VWN-RPA/LYP family differentiates the shared native
+    production expression, including its density-tail continuation, rather
+    than borrowing WB97M-V's unrelated feature floors. This source-level
+    support does not qualify a molecular Hessian endpoint.
     The full-field reserve covers cached reference partials, current response
     partials, geometry directions and immutable-publication copies together;
     scalar AD tiles use only the remaining budget.
@@ -314,7 +320,7 @@ class StationaryGridSecondOrder:
     def __init__(
         self,
         functional: typing.Any,
-        nonlocal_primitive: typing.Any,
+        nonlocal_primitive: typing.Any = None,
         *,
         budget_bytes: int = 128 << 20,
         max_pair_evaluations: int = 16_777_216,
@@ -324,11 +330,13 @@ class StationaryGridSecondOrder:
         self.spins = 2 if functional.spin == "polarized" else 1
         self.feature_count = 5 * self.spins
         self.field_count = self.feature_count + 4
-        if {name for name, value in functional.components if value} != set(
-            WB97MV_COMPONENTS
-        ):
+        components = {name for name, value in functional.components if value}
+        self.libxc_work = components == set(WB97MV_COMPONENTS)
+        production_family = {"LDA_X", "GGA_X_B88", "LDA_C_VWN_RPA", "GGA_C_LYP"}
+        if not self.libxc_work and not components <= production_family:
             raise NotImplementedError(
-                "stationary grid work policy currently requires WB97M-V"
+                "stationary grid work policy requires WB97M-V or the native "
+                "full-range B88/VWN-RPA/LYP family"
             )
         if type(budget_bytes) is not int or budget_bytes < 1:
             raise ValueError("grid_budget_bytes must be a positive integer")
@@ -338,33 +346,44 @@ class StationaryGridSecondOrder:
         self.nonlocal_primitive = nonlocal_primitive
         self.budget_bytes = budget_bytes
         self.max_pair_evaluations = max_pair_evaluations
-        self.program = build_program(functional, order=2)
-        pair_graph, pair_roots = _pair_program(nonlocal_primitive.spec)
-        order = pair_graph.topological_order(pair_roots)
-        positions = {identifier: index for index, identifier in enumerate(order)}
-        pair_identity = canonical_hash(
-            {
-                "nodes": [
-                    (
-                        pair_graph.nodes[identifier].operation,
-                        tuple(
-                            positions[value]
-                            for value in pair_graph.nodes[identifier].arguments
-                        ),
-                        str(pair_graph.nodes[identifier].payload),
-                    )
-                    for identifier in order
-                ],
-                "roots": tuple(positions[root.identifier] for root in pair_roots),
-            }
-        )
+        if self.libxc_work:
+            self.program = build_program(functional, order=2)
+        else:
+            outputs = output_set(functional, 2)
+            graph, roots, identity = build_roots(functional, outputs, production=True)
+            self.program = XCProgram(
+                functional, graph, roots, outputs, "after", identity
+            )
+        pair_identity = None
+        if nonlocal_primitive is not None:
+            pair_graph, pair_roots = _pair_program(nonlocal_primitive.spec)
+            order = pair_graph.topological_order(pair_roots)
+            positions = {identifier: index for index, identifier in enumerate(order)}
+            pair_identity = canonical_hash(
+                {
+                    "nodes": [
+                        (
+                            pair_graph.nodes[identifier].operation,
+                            tuple(
+                                positions[value]
+                                for value in pair_graph.nodes[identifier].arguments
+                            ),
+                            str(pair_graph.nodes[identifier].payload),
+                        )
+                        for identifier in order
+                    ],
+                    "roots": tuple(positions[root.identifier] for root in pair_roots),
+                }
+            )
         self.identity = canonical_hash(
             {
                 "schema": "generativeqc.stationary-grid-second-order/v1",
                 "functional": functional.identity,
                 "point_program": self.program.expression_hash,
                 "pair_program": pair_identity,
-                "nonlocal": nonlocal_primitive.to_payload(),
+                "nonlocal": None
+                if nonlocal_primitive is None
+                else nonlocal_primitive.to_payload(),
                 "fields": FIELD_LAYOUT
                 if self.spins == 1
                 else tuple(
@@ -391,12 +410,15 @@ class StationaryGridSecondOrder:
             raise MemoryError("retained grid partials exceed grid_budget_bytes")
         base = np.zeros_like(fields)
         delta = np.zeros_like(fields)
-        indices = np.flatnonzero(fields[0] >= float(MOLECULAR_VV10_DENSITY_THRESHOLD))
-        count = len(indices)
-        pairs = count * count
-        if pairs > self.max_pair_evaluations:
-            raise ValueError("VV10 second-order work exceeds max_nonlocal_pairs")
-        active_indices = np.flatnonzero(fields[0] >= DENSITY_THRESHOLD)
+        if self.nonlocal_primitive is not None:
+            count = np.count_nonzero(
+                fields[0] >= float(MOLECULAR_VV10_DENSITY_THRESHOLD)
+            )
+            if count * count > self.max_pair_evaluations:
+                raise ValueError("VV10 second-order work exceeds max_nonlocal_pairs")
+        active_indices = np.flatnonzero(
+            fields[0] >= DENSITY_THRESHOLD if self.libxc_work else fields[0] > 1e-18
+        )
         point_nodes = len(self.program.graph.topological_order(self.program.roots))
         remaining = self.budget_bytes - retained_bytes
         point_tile = min(256, remaining // (32 * point_nodes))
@@ -411,20 +433,14 @@ class StationaryGridSecondOrder:
             sigma = np.sum(gradient * gradient, axis=1)
             dsigma = 2 * np.sum(gradient * dgradient, axis=1)
             sigma_floor = 4 * SIGMA_THRESHOLD**2
-            work = np.stack(
-                (
-                    np.maximum(rho, 2 * DENSITY_THRESHOLD),
-                    np.maximum(sigma, sigma_floor),
-                    np.maximum(tau, 2 * TAU_THRESHOLD),
-                )
-            )
-            dwork = np.stack(
-                (
-                    drho * (rho > 2 * DENSITY_THRESHOLD),
-                    dsigma * (sigma > sigma_floor),
-                    dtau * (tau > 2 * TAU_THRESHOLD),
-                )
-            )
+            work = np.stack((rho, sigma, tau))
+            dwork = np.stack((drho, dsigma, dtau))
+            if self.libxc_work:
+                floors = np.array(
+                    (2 * DENSITY_THRESHOLD, sigma_floor, 2 * TAU_THRESHOLD)
+                )[:, None]
+                dwork *= work > floors
+                work = np.maximum(work, floors)
             rows = np.asarray(
                 evaluate_array_graph(
                     self.program.graph,
@@ -470,6 +486,8 @@ class StationaryGridSecondOrder:
         self, fields: np.ndarray, direction: np.ndarray, remaining: int
     ) -> tuple:
         """Apply the one total-density VV10 graph for either spin convention."""
+        if self.nonlocal_primitive is None:
+            return 0.0, np.zeros_like(fields), np.zeros_like(fields), 0
         indices = np.flatnonzero(fields[0] >= float(MOLECULAR_VV10_DENSITY_THRESHOLD))
         count = len(indices)
         pairs = count * count
@@ -547,7 +565,10 @@ class StationaryGridSecondOrder:
         if remaining < 1:
             raise MemoryError("retained grid partials exceed grid_budget_bytes")
         base, delta = np.zeros_like(fields), np.zeros_like(fields)
-        active_indices = np.flatnonzero(fields[0] + fields[5] >= DENSITY_THRESHOLD)
+        density = fields[0] + fields[5]
+        active_indices = np.flatnonzero(
+            density >= DENSITY_THRESHOLD if self.libxc_work else density > 1e-18
+        )
         nodes = len(self.program.graph.topological_order(self.program.roots))
         tile = min(256, remaining // (32 * nodes))
         if len(active_indices) and tile < 1:
@@ -591,10 +612,11 @@ class StationaryGridSecondOrder:
                     TAU_THRESHOLD,
                 )
             )[:, None]
-            dwork *= work > floors
-            work = np.maximum(work, floors)
-            bound = (work[2] + work[4]) / 2
-            work[3] = np.clip(work[3], -bound, bound)
+            if self.libxc_work:
+                dwork *= work > floors
+                work = np.maximum(work, floors)
+                bound = (work[2] + work[4]) / 2
+                work[3] = np.clip(work[3], -bound, bound)
             rows = np.asarray(
                 evaluate_array_graph(
                     self.program.graph,
