@@ -4115,6 +4115,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     output.density_rms = physical.density_rms;
     const bool new_target_epoch =
         (mixed_precision_executed && refinement_iterations == 1) ||
+        (occupied_xc_executed && strict_refinement && occupied_xc_refinement_iterations == 1) ||
         (nonlocal_seed_iterations && nonlocal_exact_epoch_iterations == 1 &&
          !pending_nonlocal_seed && !pending_nonlocal_frozen);
     const bool first_strict_energy =

@@ -102,6 +102,50 @@ def test_failed_mixed_operator_retries_fresh_strict_target(
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_occupied_target_epoch_uses_finite_missing_history_sentinel(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """A fresh strict epoch has no prior target energy, not a nonfinite result."""
+    source = cpp_function_definition(
+        (ROOT / "src/dft/cuda_ks.cpp").read_text(), "finish_legacy"
+    )
+    beginning = source.index("const bool new_target_epoch =")
+    ending = source.index("diagnostic.history.push_back", beginning)
+    driver = tmp_path / "history.cpp"
+    driver.write_text(
+        r"""
+#include <cmath>
+#include <initializer_list>
+#include <limits>
+int main() {
+  for (bool occupied_xc_executed : {false, true})
+    for (bool strict_refinement : {false, true})
+      for (bool mixed_precision_executed : {false, true})
+        for (unsigned occupied_xc_refinement_iterations : {0U, 1U, 2U})
+          for (double change : {std::numeric_limits<double>::infinity(), 0.0, 1e-9}) {
+            struct { double energy_change; } output{change};
+            const unsigned refinement_iterations = 1, nonlocal_seed_iterations = 0;
+            const unsigned nonlocal_exact_epoch_iterations = 0;
+            const bool pending_nonlocal_seed = false, pending_nonlocal_frozen = false;
+"""
+        + source[beginning:ending]
+        + r"""
+            const bool fresh = mixed_precision_executed ||
+                (occupied_xc_executed && strict_refinement &&
+                 occupied_xc_refinement_iterations == 1);
+            const double expected = fresh && std::isinf(change) ? -1.0 : change;
+            if (history_energy_change != expected) return 1;
+          }
+  return 0;
+}
+"""
+    )
+    executable = native_cxx.build_executable(
+        [driver], tmp_path / "history", compile_args=["-std=c++20"]
+    )
+    subprocess.run([executable], check=True, timeout=10)
+
+
 PREFIX = r"""
 #include <cmath>
 #include <cstddef>
