@@ -101,6 +101,7 @@ namespace generativeqc::integrals {
 struct DensityFittingMetricFactor {
   std::size_t dimension{}, effective_rank{};
   double absolute_threshold{}, condition_number{};
+  bool response_valid{};
   std::vector<double> inverse_square_root;
 };
 }

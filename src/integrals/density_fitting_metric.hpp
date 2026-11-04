@@ -12,6 +12,10 @@ struct DensityFittingMetricFactor {
   std::size_t effective_rank{};
   double absolute_threshold{};
   double condition_number{};
+  /** False when the fixed cutoff cannot resolve the derivative's active branch.
+   * Values remain usable; callers must not silently change a fitted Hamiltonian
+   * after its initial preparation to recover a response. */
+  bool response_valid{};
   std::vector<double> inverse_square_root;
 };
 

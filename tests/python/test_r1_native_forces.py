@@ -110,6 +110,9 @@ def test_all_curated_native_force_routes(
     domain, including its independent exact LR owner in the mixed DF model.
     """
     require_backend(device)
+    if fitted and method == "wb97m-v":
+        # This fixture's independent oracle retains the mixed exact-LR model.
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
     if device == "cpu" and method in {"m06-2x", "mn15"}:
         pytest.skip("split-hybrid SCF programs currently have CUDA providers only")
     if device == "cuda" and method == "pbe50":
@@ -269,6 +272,9 @@ def test_wb97mv_force_above_old_atom_ceiling(
 ) -> None:
     """A nine-atom molecule must be governed by derivative providers and bytes."""
     require_backend(device)
+    if fitted:
+        # Keep the existing mixed-model oracle distinct from fitted-LR coverage.
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
     forbid_python_force(monkeypatch)
     from tools._pyscf_vv10_domain import vv10_density_domain
 

@@ -162,9 +162,10 @@ g in Cartesian or real-spherical representation. Integral through-g support
 does not admit orbital g grids. Direct ECP forces reuse the checked residual
 operator derivative and ionic nuclear charges; ECP+DF energy remains unavailable.
 
-WB97M-V differentiates its full semilocal, range and VV10 model. DF preserves
-the existing full-range fitted J/K plus independent exact LR convention;
-explicit fitted LR uses the matching retained metric derivative. No source is
+WB97M-V differentiates its full semilocal, range and VV10 model. DF automatically
+admits independently fitted full-range J/K and LR K, with a bounded initial
+exact-LR fallback; see [DF admission and explicit selectors](dft_density_fitting.md).
+Fitted LR uses the matching retained metric derivative. No source is
 replaced with a different approximation. CUDA requires strict FP64,
 device-fused XC and three partition iterations for this composite. Separate XC
 and nonlocal grids are supported. General CUDA FP64 profiles require three

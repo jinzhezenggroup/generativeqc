@@ -141,6 +141,10 @@ class PreparedFockPlan {
    */
   std::size_t cpu_observation_capacity() const noexcept;
   const FockPreparationDiagnostic& diagnostic() const noexcept;
+  /** Read the native prepared eigensystem's fixed-cutoff response admission.
+   * Does not evaluate forces, refactor a metric or invoke a reference backend.
+   * False for an exact-only owner. This is not a full-rank requirement. */
+  bool density_fitting_response_valid() const noexcept;
   /** Borrow the already selected exact CUDA source for an ordinary-stream
    * device consumer. Null means that this prepared strategy has no such
    * source. The PreparedFockPlan still owns selection, lifetime and resources. */

@@ -34,7 +34,8 @@ def composite_gradient_admission(calculator: Any, state: Any, basis: Any) -> str
     proof denies admission; a stale/invalid proof remains an execution error.
     Dense-grid qualification does not authorize changing VV10's density cutoff.
     The provider proof names full-range J/K. For the fitted canonical model the
-    composite owner separately retains exact long-range exchange and response.
+    composite owner separately retains the accepted LR approximation and its
+    strict integral response; grid precision never selects a different operator.
     """
     from generativeqc_compiler.dft.nonlocal_policy import (
         MOLECULAR_VV10_DENSITY_POLICY,
