@@ -168,15 +168,16 @@ inline bool admit_application_df_xc_budget(const std::array<double, 3>& allowanc
          (allowances[2] == 0.0 || allowances[2] >= 3e-5);
 }
 
-/** Fixed FP64 anchors are qualified only for the relaxed Fast WB97M-V outer
- * solve. The caller supplies already-admitted Fock/shape capabilities and an
- * exact full/range Direct provider; this never admits new mixed arithmetic.
- * Public resource-ledger and device-chunk owners keep their incumbent plan. */
-inline bool admit_fast_anchor_delta(bool budget_fock, bool budget_stationarity,
-                                    std::uint32_t functional, bool exact_direct, unsigned spins,
-                                    bool vv10, bool resource_ledger,
-                                    unsigned chunk_width) noexcept {
-  return budget_fock && budget_stationarity &&
+/** Share fixed FP64 linear-operator anchors independently of the public profile.
+ * Strict callers must explicitly opt in; budget-qualified outer solves keep
+ * their existing automatic floor. Neither route admits new mixed arithmetic.
+ * Complete targets still rebuild physical operators, and ledger/chunk owners
+ * retain their bounded incumbent storage plan. */
+inline bool admit_fixed_anchor_delta(bool strict_fp64, bool budget_fock, bool budget_stationarity,
+                                     std::uint32_t functional, bool exact_direct, unsigned spins,
+                                     bool vv10, bool resource_ledger,
+                                     unsigned chunk_width) noexcept {
+  return (strict_fp64 || (budget_fock && budget_stationarity)) &&
          functional == semilocal_family_code(SemilocalFamily::Wb97mv) && exact_direct &&
          spins == 1 && vv10 && !resource_ledger && chunk_width == 1;
 }
@@ -185,16 +186,9 @@ inline bool admit_fast_anchor_delta(bool budget_fock, bool budget_stationarity,
  * Retain the lower floor established by complete endpoints, not an upper bound
  * tied to measured sizes. Smaller eligible owners retain opt-in; membership is
  * no per-call speed or observable-error guarantee. */
-inline bool default_fast_anchor_delta(std::size_t aos) noexcept { return aos >= 192; }
-
-/** Explicit strict-FP64 reuse for provisional frozen-VV10 iterations.
- * Full targets and final closure still rebuild physical J/K. Ledger-backed
- * and multi-device owners retain their existing bounded resource policy. */
-inline bool admit_strict_anchor_delta(bool requested, bool strict_fp64, bool exact_direct,
-                                      unsigned spins, bool vv10, bool resource_ledger,
-                                      unsigned chunk_width) noexcept {
-  return requested && strict_fp64 && exact_direct && spins == 1 && vv10 && !resource_ledger &&
-         chunk_width == 1;
+inline bool default_fixed_anchor_delta(bool budget_fock, bool budget_stationarity,
+                                       std::size_t aos) noexcept {
+  return budget_fock && budget_stationarity && aos >= 192;
 }
 
 /** Independently qualified stationary RKS candidate at a strict final

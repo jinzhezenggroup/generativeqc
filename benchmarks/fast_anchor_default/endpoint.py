@@ -1,4 +1,4 @@
-"""Qualify one production Fast anchor cold E+force endpoint under Slurm."""
+"""Qualify one shared FP64-anchor cold E+force endpoint under Slurm."""
 
 from __future__ import annotations
 
@@ -132,8 +132,11 @@ def main() -> None:
     parser.add_argument("--atoms", type=int, choices=(12, 24, 48, 96), required=True)
     parser.add_argument("--policy", choices=("fp64", "fast"), required=True)
     parser.add_argument("--delta", choices=("0", "1", "auto"), required=True)
+    parser.add_argument("--warm-repeats", type=int, default=0)
     parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
+    if not 0 <= args.warm_repeats <= 16:
+        parser.error("--warm-repeats must be between 0 and 16")
     record = {
         "schema": 1,
         "atoms": args.atoms,
@@ -146,13 +149,15 @@ def main() -> None:
         "density_fitting": "none",
         "initial_guess_request": "native auto (no external seed)",
         "warm_owner": "fresh; export enabled but no previous execute or imported seed",
-        "timing_scope": "constructor+prepare+first synchronized E/F+host/density export+owner teardown+clear_cache; imports/basis parsing/provenance/oracle excluded",
+        "timing_scope": "cold component sum: constructor+prepare+first synchronized E/F+host/density export+owner teardown+clear_cache; intervening warm calls, imports/basis parsing/provenance/oracle excluded",
+        "warm_timing_scope": "same-owner synchronized E/F+host force/work export; no constructor, density export or teardown; counters are cumulative snapshots",
+        "warm_samples": [],
         "environment": {
             key: value
             for key, value in os.environ.items()
             if key.startswith("GENERATIVEQC_")
         },
-        "production_defaults_changed": True,
+        "production_defaults_changed": False,
     }
     calculator = None
     started = None
@@ -165,9 +170,9 @@ def main() -> None:
         for path in (args.output, args.output.with_suffix(".density.npy")):
             if os.path.lexists(path):
                 raise FileExistsError(path)
-        selected = os.environ.get("GENERATIVEQC_KS_FAST_ANCHOR_DELTA")
+        selected = os.environ.get("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA")
         if selected != (None if args.delta == "auto" else args.delta):
-            raise RuntimeError("Argument and native Fast anchor selection differ")
+            raise RuntimeError("Argument and native fixed-anchor selection differ")
         root = Path(os.environ["EXPERIMENT_ROOT"])
         case = scaling_cases()[f"water-{args.atoms}"]
         basis_path = root / "def2-svp.json"
@@ -208,6 +213,7 @@ def main() -> None:
                 "status_message",
                 "succeeded",
                 "converged",
+                "executed_backend",
                 "energy",
                 "iterations",
                 "fock_builds",
@@ -241,11 +247,42 @@ def main() -> None:
                 )
             cp.cuda.runtime.deviceSynchronize()
             record["export_seconds"] = perf_counter() - export_started
+            cold_before_warm = perf_counter() - started
+            for _ in range(args.warm_repeats):
+                warm_started = perf_counter()
+                warm = owner.execute(strict=False, properties=("energy", "forces"))
+                cp.cuda.runtime.deviceSynchronize()
+                item = warm.items[0]
+                sample = {
+                    name: payload(getattr(item, name, None))
+                    for name in (
+                        "succeeded",
+                        "converged",
+                        "executed_backend",
+                        "energy",
+                        "forces",
+                        "iterations",
+                        "fock_builds",
+                        "warm_start_used",
+                        "precision",
+                        "precision_validation",
+                        "ks_diagnostic",
+                        "incremental_direct_jk",
+                    )
+                }
+                sample["ks_transport_diagnostics"] = payload(
+                    owner.ks_transport_diagnostics
+                )
+                cp.cuda.runtime.deviceSynchronize()
+                sample["seconds"] = perf_counter() - warm_started
+                record["warm_samples"].append(sample)
+                if not sample["succeeded"] or not sample["converged"]:
+                    raise RuntimeError("Same-owner warm E/F endpoint failed")
             teardown_started = perf_counter()
         calculator.clear_cache()
         cp.cuda.runtime.deviceSynchronize()
         record["teardown_seconds"] = perf_counter() - teardown_started
-        record["cold_endpoint_seconds"] = perf_counter() - started
+        record["cold_endpoint_seconds"] = cold_before_warm + record["teardown_seconds"]
         record["native_build"] = native_build_metadata(calculator._candidate)
         record["candidate_controls"] = {
             name: payload(getattr(calculator._candidate, f"_{name}", None))
@@ -260,6 +297,13 @@ def main() -> None:
             record["independent_gate"] = reference_gate(
                 record, basis, case, root / f"reference{args.atoms}.json"
             )
+            for sample in record["warm_samples"]:
+                sample["independent_gate"] = reference_gate(
+                    {**sample, "policy": args.policy},
+                    basis,
+                    case,
+                    root / f"reference{args.atoms}.json",
+                )
     except Exception:  # noqa: BLE001 - Retain every failed endpoint and its traceback.
         record["error"] = traceback.format_exc()
         if started is not None:
@@ -310,9 +354,16 @@ def main() -> None:
         or record.get("nonfinite_fields")
         or not record.get("succeeded")
         or not record.get("converged")
+        or record.get("executed_backend") != "cuda"
         or not record.get("finite_forces")
         or record.get("warm_start_used")
         or not record.get("independent_gate", {}).get("gate")
+        or any(
+            not sample.get("warm_start_used")
+            or sample.get("executed_backend") != "cuda"
+            or not sample.get("independent_gate", {}).get("gate")
+            for sample in record["warm_samples"]
+        )
     ):
         raise SystemExit(1)
 

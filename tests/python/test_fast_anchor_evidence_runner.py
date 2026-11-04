@@ -85,6 +85,7 @@ def sample_record(atoms: int, policy: str, delta: str) -> dict[str, Any]:
         "forces": [[0.0, 0.0, 0.0]] * atoms,
         "finite_forces": True,
         "succeeded": True,
+        "executed_backend": "cuda",
         "converged": True,
         "warm_start_used": False,
         "cold_endpoint_seconds": 2.0,
@@ -397,18 +398,27 @@ def endpoint(
         ks_transport_diagnostics: ClassVar[dict[str, Any]] = {}
         resource_diagnostics: ClassVar[dict[str, Any]] = {}
 
+        def __init__(self) -> None:
+            self.executions = 0
+
         def __enter__(self) -> Self:
             state["entered"] = True
             return self
 
         def __exit__(self, *args: object) -> None:
-            return None
+            state["exited"] = True
 
         def execute(self, **kwargs: Any) -> Any:
             if state["execute_error"]:
                 raise RuntimeError("original execute failure")
+            self.executions += 1
+            if "clock" in state:
+                state["clock"][0] += 10.0 if self.executions == 1 else 100.0
+            if self.executions > 1 and state.get("warm_error"):
+                raise RuntimeError("warm execute failure")
             item = SimpleNamespace(**record)
             item.forces = np.asarray(item.forces)
+            item.warm_start_used = self.executions > 1
             return SimpleNamespace(items=[item], precision_validation={})
 
     class Calculator:
@@ -462,7 +472,7 @@ def endpoint(
     monkeypatch.setenv("SLURM_JOB_ID", "fixture-job")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "fixture-device")
     monkeypatch.setenv("EXPERIMENT_ROOT", str(tmp_path))
-    monkeypatch.delenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", raising=False)
     (tmp_path / "def2-svp.json").write_text("{}")
     output = tmp_path / "result.json"
     monkeypatch.setattr(
@@ -483,6 +493,71 @@ def endpoint(
     module = load_runner("endpoint")
     monkeypatch.setattr(module, "reference_gate", lambda *a: {"gate": True})
     return module, output, state
+
+
+@pytest.mark.parametrize("warm_repeats", [0, 3])
+def test_endpoint_retains_independently_gated_warm_observations(
+    monkeypatch: pytest.MonkeyPatch,
+    endpoint: tuple[Any, Path, dict[str, Any]],
+    warm_repeats: int,
+) -> None:
+    """Requested same-owner endpoints retain timings and actual warm provenance."""
+    module, output, state = endpoint
+    monkeypatch.setattr(sys, "argv", [*sys.argv, "--warm-repeats", str(warm_repeats)])
+    module.main()
+    record = json.loads(output.read_text())
+    assert state["exited"]
+    assert record["cold_endpoint_seconds"] > 0
+    assert len(record["warm_samples"]) == warm_repeats
+    for sample in record["warm_samples"]:
+        assert sample["warm_start_used"] and sample["independent_gate"]["gate"]
+        assert sample["seconds"] > 0
+
+
+def test_warm_failure_preserves_cold_result_and_closes_owner(
+    monkeypatch: pytest.MonkeyPatch, endpoint: tuple[Any, Path, dict[str, Any]]
+) -> None:
+    """A failed warm qualification cannot erase the completed cold observation."""
+    module, output, state = endpoint
+    state["warm_error"] = True
+    monkeypatch.setattr(sys, "argv", [*sys.argv, "--warm-repeats", "1"])
+    with pytest.raises(SystemExit):
+        module.main()
+    record = json.loads(output.read_text())
+    assert record["converged"] and state["exited"]
+    assert "warm execute failure" in record["error"]
+
+
+def test_cold_component_timing_excludes_intervening_warm_work(
+    monkeypatch: pytest.MonkeyPatch, endpoint: tuple[Any, Path, dict[str, Any]]
+) -> None:
+    """Warm observations must not masquerade as slower cold endpoint time."""
+    module, output, state = endpoint
+    state["clock"] = [0.0]
+    monkeypatch.setattr(module, "perf_counter", lambda: state["clock"][0])
+    monkeypatch.setattr(sys, "argv", [*sys.argv, "--warm-repeats", "3"])
+    module.main()
+    record = json.loads(output.read_text())
+    assert record["cold_endpoint_seconds"] == 10.0
+    assert [sample["seconds"] for sample in record["warm_samples"]] == [100.0] * 3
+
+
+def test_warm_oracle_failure_rejects_the_complete_receipt(
+    monkeypatch: pytest.MonkeyPatch, endpoint: tuple[Any, Path, dict[str, Any]]
+) -> None:
+    """A passing cold oracle cannot certify a numerically bad warm endpoint."""
+    module, output, _ = endpoint
+    monkeypatch.setattr(sys, "argv", [*sys.argv, "--warm-repeats", "1"])
+    monkeypatch.setattr(
+        module,
+        "reference_gate",
+        lambda record, *args: {"gate": not record.get("warm_start_used", False)},
+    )
+    with pytest.raises(SystemExit):
+        module.main()
+    record = json.loads(output.read_text())
+    assert record["independent_gate"]["gate"]
+    assert not record["warm_samples"][0]["independent_gate"]["gate"]
 
 
 def test_execution_and_cleanup_failures_both_survive(

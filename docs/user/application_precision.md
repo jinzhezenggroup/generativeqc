@@ -14,6 +14,14 @@ release candidate residency. Precision policy changes arithmetic admission and
 evidence, not this resource lifetime. Prepared batches likewise use the same
 policy owner and retain their independently managed `close()` lifetime.
 
+Shared drivers are not a dtype-only parity guarantee. Fast can also change SCF
+stopping and provisional screening, and its required fallback/audit work may add
+complete solves. Some native execution optimizations and resource admissions
+still depend on the application budget. The VV10 fixed-anchor implementation is
+shared, but its strict route remains explicitly selected rather than automatic.
+Equal FP64 arithmetic alone therefore does not establish identical
+internal schedules, work counts, memory requirements or endpoint cost.
+
 `policy="fp64"` remains a backward-compatible name for Standard: both use
 identical controls and execution, and the serialized `profile` preserves the
 name requested by the caller for compatibility. The native CLI
@@ -162,19 +170,28 @@ unchanged: this does not promise FP64-mode observable accuracy.
 
 The anchor lease is optional, allocated after mandatory preparation and included
 in the native state capacity. It requires five additional FP64 AO matrices and
-one scalar. Device allocation failure keeps the ordinary Fast path; host
+one scalar. Device allocation failure keeps the ordinary selected-precision path; host
 reservation and non-allocation errors remain explicit failures. At a pressured
 force handoff the idle anchor is retired before optional ERIs; density, stationary
 weights, XC, the final-state token and the warm seed remain valid. Subsequent
-warm and cold solves on that owner use ordinary Fast without reallocating anchors.
-Fixed anchors in strict FP64 remain off by default. Explicit `GENERATIVEQC_KS_FAST_ANCHOR_DELTA=1`
-also admits one-spin exact full/range Direct VV10 owners in FP64, without mixed
-arithmetic or changed convergence tolerances. AUTO alone does not admit this
-strict path. DF/UKS, public resource-ledger owners, device chunks and same-owner
-warm replays retain their incumbent path.
-`GENERATIVEQC_KS_FAST_ANCHOR_DELTA=0` disables the optimization before preparation;
-unset selects the Fast default at 192 or more AOs; `1` opts in within the scientific
-eligibility domain, including smaller owners, without forcing unsupported domains.
+warm and cold solves on that owner use the incumbent route without reallocating anchors.
+Both policies use the same FP64 anchor implementation and complete-model/provider
+guards. `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` also opts strict FP64 WB97M-V
+single-spin exact-Direct VV10 owners into provisional anchor reuse, without
+relaxing their tolerances, narrowing arithmetic or changing final physical closure.
+Strict AUTO requests alone are not admission. Other models, DF/UKS, public
+resource-ledger owners, device chunks and same-owner warm replays retain their
+incumbent path. The selector replaces `GENERATIVEQC_KS_FAST_ANCHOR_DELTA`; no
+compatibility alias is retained.
+`GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=0` disables the optimization before preparation;
+unset retains automatic admission only for the budget-qualified Fast domain at
+192 or more AOs. Strict owners remain default-off pending endpoint qualification.
+Explicit `1` never forces unsupported domains. The selector is part of new
+checkpoint execution identities.
+The native C++ transfer diagnostics retain their `fast_anchor_builds` and
+`fast_delta_builds` member names and count the shared strict route as well.
+These counters are not exposed by Python's public KS transport diagnostics;
+public-endpoint qualification must obtain separate execution-work evidence.
 There is no universal iteration-count or speed guarantee.
 
 The shared nonlocal initializer and frozen-potential proposal stages also admit
