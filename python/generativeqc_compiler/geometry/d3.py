@@ -21,6 +21,7 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
+    JVPProgram,
     Node,
     Program,
     TensorSpec,
@@ -30,6 +31,7 @@ from generativeqc_compiler.tensor import (
     divide,
     exp,
     gather,
+    linearize,
     multiply,
     power,
     reshape,
@@ -789,6 +791,30 @@ class D3GeometryProgram:
             self.program,
             ["energy"],
             inputs=[self.geometry.coordinate_name],
+        )
+
+    def coordinate_hvp(self) -> JVPProgram:
+        """Differentiate the complete generated gradient at a fixed BJ pair state.
+
+        The energy cotangent remains fixed at one; only Cartesian coordinates
+        receive a tangent. CN interpolation and every mixed distance/C6 term
+        therefore retain the same mathematical owner as the primal energy.
+        Finite-cutoff second-order domains are not yet independently qualified.
+        """
+        if self.spec.cn_cutoff is not None or self.spec.pair_cutoff is not None:
+            raise NotImplementedError(
+                "D3 second order currently requires uncut two-body BJ"
+            )
+        reverse = self.coordinate_vjp()
+        gradient_name = next(
+            name
+            for name, source in reverse.output_map.items()
+            if source == self.geometry.coordinate_name
+        )
+        return linearize(
+            reverse.program,
+            [self.geometry.coordinate_name],
+            outputs=[gradient_name],
         )
 
 

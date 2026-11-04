@@ -124,12 +124,16 @@ def test_native_public_mode_and_default_grid_selection(
         observations.append(kwargs)
         return kwargs
 
-    monkeypatch.setattr(generativeqc, "Calculator", constructor)
+    def bypass(**kwargs: Any) -> None:
+        raise AssertionError("benchmark bypassed the shared public policy owner")
+
+    monkeypatch.setattr(generativeqc, "Calculator", bypass)
     monkeypatch.setattr(generativeqc, "PrecisionCalculator", constructor)
     for mode in ("direct", "df"):
         for method in runner.METHODS:
             standard = runner.native_calculator(method, "standard", mode, tmp_path)
             fast = runner.native_calculator(method, "fast", mode, tmp_path)
+            assert standard["policy"] == "standard"
             assert "ks_options" not in standard and "ks_options" not in fast
             assert "precision" not in fast and fast["policy"] == "fast"
             assert "energy_tolerance" not in fast
@@ -140,6 +144,116 @@ def test_native_public_mode_and_default_grid_selection(
                 assert (
                     standard["auxiliary_basis"] == tmp_path / f"{method}-auxiliary.json"
                 )
+    with pytest.raises(ValueError, match="standard or fast"):
+        runner.native_calculator("pbe", "invented", "direct", tmp_path)
+
+
+@pytest.mark.parametrize("arm", ("standard", "fast"))
+@pytest.mark.parametrize("reported_profile", (None, "standard", "fast"))
+def test_native_campaign_shares_prepared_policy_and_requires_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    arm: str,
+    reported_profile: str | None,
+) -> None:
+    """Both arms include policy work and export metadata from its native owner."""
+    import sys
+
+    from benchmarks import readme_method_endpoints
+
+    state = SimpleNamespace(closed=False, cleared=False, updates=True)
+    native_owner = object()
+    candidate = SimpleNamespace(_density_tolerance=1e-5)
+    validation = (
+        SimpleNamespace(
+            profile=reported_profile,
+            to_dict=lambda: {"profile": reported_profile, "solve_count": 1},
+        )
+        if reported_profile is not None
+        else None
+    )
+    item = SimpleNamespace(
+        converged=True,
+        executed_backend="cuda",
+        energy=-1.0,
+        forces=np.zeros((1, 3)),
+        iterations=4,
+        fock_builds=5,
+        incremental_direct_jk=None,
+        warm_start_used=False,
+        warm_start_fallback=None,
+        energy_change=1e-12,
+        density_rms=1e-10,
+        physical_residual_rms=1e-10,
+        precision={},
+        precision_validation=validation,
+        ks_diagnostic=None,
+        initial_guess=None,
+        dispersion=None,
+    )
+    batch = SimpleNamespace(items=[item], precision_validation={"profile": arm})
+    owner = SimpleNamespace(
+        _calculator=candidate,
+        _owner=native_owner,
+        execute=lambda **kwargs: batch,
+        set_warm_start_updates=lambda updates: setattr(state, "updates", updates),
+        close=lambda: setattr(state, "closed", True),
+    )
+    facade = SimpleNamespace(
+        prepare_batch=lambda systems, **kwargs: owner,
+        clear_cache=lambda: setattr(state, "cleared", True),
+    )
+
+    def settings(selected: Any, result: Any) -> dict:
+        assert selected is candidate
+        return {"density_tolerance": selected._density_tolerance}
+
+    def identity(selected: Any) -> dict:
+        assert selected is candidate
+        return {"source_identity": "native-candidate"}
+
+    def force_tile(selected: Any) -> int:
+        assert selected is native_owner
+        return 512
+
+    monkeypatch.setitem(
+        sys.modules,
+        "cupy",
+        SimpleNamespace(
+            cuda=SimpleNamespace(
+                runtime=SimpleNamespace(deviceSynchronize=lambda: None)
+            )
+        ),
+    )
+    monkeypatch.setattr(runner, "native_calculator", lambda *args, **kwargs: facade)
+    monkeypatch.setattr(runner, "native_settings", settings)
+    monkeypatch.setattr(runner, "native_force_tile", force_tile)
+    monkeypatch.setattr(readme_method_endpoints, "binary_identity", identity)
+    args = SimpleNamespace(
+        arm=arm,
+        method="pbe",
+        mode="direct",
+        inputs=tmp_path,
+        force_tile_points=None,
+        warm_repeats=1,
+    )
+    record, samples = {}, []
+    if reported_profile != arm:
+        with pytest.raises(RuntimeError, match="precision policy provenance"):
+            runner.run_native(args, [("H", (0.0, 0.0, 0.0))], record, samples.append)
+        assert not samples
+    else:
+        runner.run_native(args, [("H", (0.0, 0.0, 0.0))], record, samples.append)
+        assert [sample["phase"] for sample in samples] == ["cold", "warm"]
+        assert all(
+            sample["precision_validation"]["profile"] == arm for sample in samples
+        )
+        assert all(
+            sample["settings"]["resolved_force_tile_points"] == 512
+            for sample in samples
+        )
+        assert state.updates is False
+    assert state.closed and state.cleared
 
 
 @pytest.mark.parametrize("method", ("hf", "pbe"))

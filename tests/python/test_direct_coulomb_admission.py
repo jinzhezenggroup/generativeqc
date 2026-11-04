@@ -27,7 +27,8 @@ def test_coulomb_admission_matches_complete_orbit(
     Coulomb contribution exists. Repeated indices exercise orbit degeneracy.
     """
     (tmp_path / "cuda_runtime.h").write_text(
-        "#pragma once\n#define __device__\n#define __host__\n"
+        "#pragma once\n#include <cmath>\nusing std::isfinite;\n"
+        "#define __device__\n#define __host__\n"
         "#define __forceinline__ inline\n"
         "template<class T> T atomicAdd(T* output,T value) { "
         "T previous=*output; *output+=value; return previous; }\n"
