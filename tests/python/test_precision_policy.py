@@ -64,13 +64,19 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             if state.block_auto and options["precision"] == "auto":
                 raise NotImplementedError("unavailable AUTO domain")
             self.options = options
+            from tools.generativeqc_validation.native_registry_stub import (
+                install_scf_defaults_stub,
+            )
+
+            self._library = SimpleNamespace()
+            install_scf_defaults_stub(self._library)
             if state.standard_convergence:
                 from generativeqc import _native
 
                 self._method = _native.METHOD_RHF
                 self._device_name = options.get("device")
-                self._library = SimpleNamespace(
-                    generativeqc_standard_scf_convergence_version_v1=lambda: 1
+                install_scf_defaults_stub(
+                    self._library, (1e-9, 1e-5, 1e-12), qualified=True
                 )
             self._basis = options.get("basis", ())
             self._auxiliary_basis = options.get("auxiliary_basis")
@@ -79,9 +85,7 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
                 "_application_precision_budget"
             )
             if state.transport_v2:
-                self._library = SimpleNamespace(
-                    generativeqc_application_precision_version_v2=lambda: 2
-                )
+                self._library.generativeqc_application_precision_version_v2 = lambda: 2
             if options.get("method") == "pbe0-rks" and self._ks_options is None:
                 from generativeqc import KsOptions
 

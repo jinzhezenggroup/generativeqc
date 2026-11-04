@@ -142,6 +142,25 @@ def validate(inventory: dict, root: Path = ROOT) -> None:
                 raise ValueError(
                     f"{identity}: Python runtime incorrectly marked retired"
                 )
+        for site in row.get("retired_python_sites", []):
+            historical_path = Path(site["path"])
+            if (
+                historical_path.is_absolute()
+                or ".." in historical_path.parts
+                or historical_path.suffix != ".py"
+            ):
+                raise ValueError(f"{identity}: retired Python path must be local")
+            if not re.fullmatch(
+                r"[0-9a-f]{40}", site.get("last_present_source_sha", "")
+            ):
+                raise ValueError(f"{identity}: retirement needs an exact source SHA")
+            if not site.get("symbols") or not all(
+                isinstance(symbol, str) and symbol for symbol in site["symbols"]
+            ):
+                raise ValueError(f"{identity}: retirement needs historical symbols")
+            if not isinstance(site.get("reason"), str) or not site["reason"].strip():
+                raise ValueError(f"{identity}: retirement needs a reason")
+            _anchor(root, site["replacement"])
     if classified != CLASSIFICATIONS:
         raise ValueError(
             "wrapper, compiler, compatibility, oracle and runtime must stay separate"
