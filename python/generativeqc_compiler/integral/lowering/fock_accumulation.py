@@ -258,6 +258,50 @@ def emit_direct_force_component_weight() -> str:
 """
 
 
+def emit_direct_force_pair_weight() -> str:
+    """Share directional pure-J pair policy between scalar and CTA consumers.
+
+    Bounded callers decline extreme regrouping inputs before publishing forces;
+    the original component consumer retains their arithmetic. The ordinary CTA
+    caller preserves its existing finite-weight admission and operation order.
+    """
+    return r"""/** One exact ordered-pair weight, not a rank-one density approximation. */
+template <bool Unrestricted, bool Bounded = false>
+__device__ __forceinline__ bool direct_force_pair_weight(
+    std::size_t dimension, std::size_t physical, std::size_t spin,
+    const double* density, const double* ao_coefficients, std::size_t ao_begin,
+    std::size_t first, std::size_t second, double scale, double& weight) {
+  const std::size_t matrix = dimension * dimension;
+  const auto direct = matrix_index(first, second, dimension);
+  const auto transpose = matrix_index(second, first, dimension);
+  if constexpr (Bounded) {
+    if (!direct_force_orbit_factor(scale) ||
+        !direct_force_orbit_factor(ao_coefficients[ao_begin + first]) ||
+        !direct_force_orbit_factor(ao_coefficients[ao_begin + second])) return false;
+    const auto offset = Unrestricted ? spin : physical;
+    if (!direct_force_orbit_factor(density[offset + direct]) ||
+        (first != second && !direct_force_orbit_factor(density[offset + transpose])))
+      return false;
+    if constexpr (Unrestricted) {
+      if (!direct_force_orbit_factor(density[spin + matrix + direct]) ||
+          (first != second && !direct_force_orbit_factor(density[spin + matrix + transpose])))
+        return false;
+    }
+  }
+  if constexpr (Unrestricted) {
+    weight = scale * (density[spin + direct] + density[spin + matrix + direct]);
+    if (first != second)
+      weight += scale * (density[spin + transpose] + density[spin + matrix + transpose]);
+  } else {
+    weight = scale * density[physical + direct];
+    if (first != second) weight += scale * density[physical + transpose];
+  }
+  weight *= ao_coefficients[ao_begin + first] * ao_coefficients[ao_begin + second];
+  return isfinite(weight);
+}
+"""
+
+
 def emit_generated_shell_fock_accumulation() -> str:
     """Emit the scatter helper embedded in compiler-generated shell kernels."""
 
@@ -399,6 +443,7 @@ namespace generativeqc::scf::cuda_execution {{
 {emit_direct_coulomb_density_admission()}
 {emit_direct_force_density_coefficient()}
 {emit_direct_force_component_weight()}
+{emit_direct_force_pair_weight()}
 {emit_direct_bilinear_density_coefficient()}
 }}  // namespace generativeqc::scf::cuda_execution
 """

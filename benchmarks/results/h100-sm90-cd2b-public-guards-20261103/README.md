@@ -74,3 +74,5 @@ contract remains 180 fresh processes and 720 complete E/F calls, three pairs per
 case, at least 20 wins with median speedup >1.05 and all three pairs >1, all 30
 scientific gates passing, and complete-set geometric mean >1. Final majority
 performance and current-main integration remain separate work.
+
+Historical storage: the original guard archives are recovered byte-exact from already merged Git using `historical-snapshot.json`. Existing cohort bindings, failures and CPU proof outputs remain unchanged. No additional scientific acceptance.

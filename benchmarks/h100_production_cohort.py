@@ -118,7 +118,10 @@ def artifact(name: str) -> Path:
 
 
 def artifact_bytes(name: str) -> bytes:
-    """Recover only the explicitly retained trace parts from local Git history."""
+    """Recover explicitly retained original support packets from local Git history."""
+    relative = Path(name)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError("Unsafe support evidence path")
     path = artifact(name)
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise ValueError("Support cohort bytes differ: " + name)
@@ -127,12 +130,25 @@ def artifact_bytes(name: str) -> bytes:
     if name not in {
         "nsys-v1-analysis.tar.xz.part00",
         "nsys-v1-analysis.tar.xz.part01",
+        "native-qualification-v1-completed.tar.xz",
+        "reference-six-v5-completed.tar.xz",
+        "standard-guards-v1-completed.tar.xz",
+        "uks-fit-v1-completed.tar.xz",
+        "native-qualification-v1-download-manifest.json",
+        "reference-six-v5-download-manifest.json",
+        "standard-guards-v1-download-manifest.json",
+        "uks-fit-v1-download-manifest.json",
     }:
         raise ValueError("Support cohort bytes differ: " + name)
     try:
         return read_evidence_bytes(
             REPO / "benchmarks/results/h100-sm90-cd2b-guards-20261102" / name,
-            manifest=DIRECTORY / "historical-snapshot.json",
+            manifest=DIRECTORY
+            / (
+                "historical-snapshot.json"
+                if name.startswith("nsys-")
+                else "retained-guards-v2.json"
+            ),
         )
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         raise ValueError(f"Support cohort bytes differ: {name}: {error}") from error
@@ -407,7 +423,8 @@ def replay(
                     copy_exact(artifact(name), task / name)
             else:
                 for suffix in ["-completed.tar.xz", "-download-manifest.json"]:
-                    copy_exact(artifact(cohort + suffix), task / (cohort + suffix))
+                    with (task / (cohort + suffix)).open("xb") as stream:
+                        stream.write(artifact_bytes(cohort + suffix))
                 reader(
                     artifact("unpack-cohort-v2.py"),
                     task,

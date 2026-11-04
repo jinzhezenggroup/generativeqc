@@ -2,32 +2,8 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "h100-sm90-cd2b-public-guards-20261103",
   "owner": "H100 frozen cd2b public guard delivery",
-  "reason": "Retain exact full vectors/failures, separate original native-only guard failure from actual public API/singleton fallback qualification; no quota waiver or benchmark denominator change.",
+  "reason": "Retain exact full vectors/failures, separate original native-only guard failure from actual public API/singleton fallback qualification; no quota waiver or benchmark denominator change. Exact owned original guard packets are now recovered from already merged Git; old proof bytes and negative results remain unchanged.",
   "review_document": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/facade-guards-v1-completed.tar.xz",
-      "bytes": 284704,
-      "sha256": "ff80506f497cc8a8156fbe2a69e45e36db6f878fcd9b193def1e5912d8ac923e",
-      "family": "h100-sm90-cd2b-public-guards-20261103",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Exact compressed measurements including original failures and typed unsupported paths. Accepted scope is explicit per receiver; no majority timing transfer."
-    },
-    {
-      "path": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/notebook-public-guards-v1-completed.tar.xz",
-      "bytes": 172280,
-      "sha256": "85dc9af1c10e6396fde0db9b1bb5b7b3f7caa8017824b3deab052bc9ff054394",
-      "family": "h100-sm90-cd2b-public-guards-20261103",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Exact compressed measurements including original failures and typed unsupported paths. Accepted scope is explicit per receiver; no majority timing transfer."
-    },
-    {
-      "path": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/public-budget-v9-completed.tar.xz",
-      "bytes": 131680,
-      "sha256": "bdaa53bcc2e5fd2c1e21a0cc75aad0aa45294192e67495798cf3be569008c8a2",
-      "family": "h100-sm90-cd2b-public-guards-20261103",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Exact compressed measurements including original failures and typed unsupported paths. Accepted scope is explicit per receiver; no majority timing transfer."
-    }
-  ]
+  "files": [],
+  "historical_snapshot": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/historical-snapshot.json"
 }

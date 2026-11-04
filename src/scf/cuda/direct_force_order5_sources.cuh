@@ -17,6 +17,16 @@ struct Order5SourceRoots {
   static_assert(weighted_order5_source_class(ShellClass));
   static constexpr unsigned angular_order = 5U;
   static constexpr unsigned component_count = ShellClass == kDpppShellClass ? 162U : 108U;
+  static constexpr unsigned bra_pair_components = ShellClass == kDdpsShellClass ? 36U : 18U;
+  static constexpr unsigned ket_pair_components = component_count / bra_pair_components;
+
+  /** Complete ordered DPPP pairs only; no arbitrary exchange/mask cotangent. */
+  __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate_separable(
+      const generated_weighted_eri::Geometry& geometry, const double* bra, const double* ket)
+    requires(ShellClass == kDpppShellClass)
+  {
+    return generated_weighted_eri::dppp_force_separable(geometry, bra, ket);
+  }
 
   __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate_relative(
       const generated_weighted_eri::Geometry& geometry, const double* weights) {
