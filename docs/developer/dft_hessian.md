@@ -101,6 +101,11 @@ it into canonical component order; repeated shells do not imply a factor of
 eight. Second-order folding reserves the output and two weight blocks, or keeps
 the ordered bounded schedule if that additional storage does not fit. Every
 ordered weight is validated, including exact translation-zero quartets.
+Each stationary source prepares its density/energy-weighted-density pullbacks
+once per response and reuses the compiler's weight/JVP programs by term count.
+Shell callbacks evaluate only the requested fixed or moving cotangent. They do
+not retain rank-four weights, integrals or a geometry-replay numeric cache;
+MethodIR/TensorIR still owns all spin factors and exchange coefficients.
 Its admitted AO-jet reserve includes native basis storage and tile/publication
 buffers and is passed explicitly to the native evaluator. The remaining grid
 budget excludes that reserve; raising the grid allowance does not remove the

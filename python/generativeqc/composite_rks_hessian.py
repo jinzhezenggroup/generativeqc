@@ -19,7 +19,6 @@ import time
 import typing
 from copy import deepcopy
 from dataclasses import dataclass, replace
-from itertools import product
 from types import MappingProxyType, SimpleNamespace
 
 from generativeqc_compiler.common.array_execution import arrays as np
@@ -870,6 +869,85 @@ class CompositeUKSResponse(SpinCPKSOperator, CompositeRKSResponse):
     """Coupled spin response sharing the composite integral/grid lifetime owner."""
 
 
+class _PreparedIntegralWeights:
+    """Borrow one response's fixed densities and reuse compiler weight programs.
+
+    Public-to-Cartesian density pullbacks are invariant across shell blocks.
+    Only mathematical programs, not shell weights or integral tensors, are
+    retained by term count. The factory expires with its source contribution;
+    it is never a geometry/state replay cache. MethodIR/TensorIR still owns
+    every coefficient, spin factor and density-response product rule.
+    """
+
+    def __init__(
+        self, operator: CompositeRKSResponse, response: typing.Any, source: str
+    ) -> None:
+        self.operator = operator
+        self.source = source
+        self.offsets = np.cumsum((0, *operator.topology.shell_sizes))
+        self.blocks: dict[int, typing.Any] = {}
+        overlap = source == "overlap_pulay"
+        self.density = operator.integral_basis.density(
+            operator.state.weighted_density if overlap else operator.state.density
+        )
+        self.moving = operator.integral_basis.density(
+            response.energy_weighted_density_derivative
+            if overlap
+            else response.density_derivative
+        )
+        if self.moving.ndim == 2:
+            self.moving = self.moving[None]
+
+    def _evaluate(self, slots: tuple | None, *, moving: bool) -> np.ndarray:
+        if slots is None:
+            shape = (self.operator.topology.nbf,) * 2
+            rows, columns = np.indices(shape).reshape(2, -1)
+            feeds = (
+                {
+                    "weighted_density": self.density[:, rows, columns],
+                    "d_weighted_density": self.moving[:, rows, columns],
+                }
+                if self.source == "overlap_pulay"
+                else {
+                    "density_left": self.density[:, rows, columns],
+                    "d_density_left": self.moving[:, rows, columns],
+                }
+            )
+        else:
+            shape = tuple(self.operator.topology.shell_sizes[slot] for slot in slots)
+            indices = np.indices(shape).reshape(4, -1)
+            indices += self.offsets[list(slots), None]
+            first, second, third, fourth = indices
+            left, right = (
+                ((first, second), (third, fourth))
+                if self.source == "coulomb"
+                else ((first, third), (second, fourth))
+            )
+            feeds = {
+                "density_left": self.density[:, left[0], left[1]],
+                "density_right": self.density[:, right[0], right[1]],
+                "d_density_left": self.moving[:, left[0], left[1]],
+                "d_density_right": self.moving[:, right[0], right[1]],
+            }
+        terms = int(np.prod(shape))
+        if terms not in self.blocks:
+            self.blocks[terms] = self.operator.plan.integral_block(
+                self.source, terms=terms, coordinates=1
+            )
+        block = self.blocks[terms]
+        program = block.response_weights if moving else block.weights
+        output = "response_weights" if moving else "weights"
+        return execute(program, feeds).outputs[output].reshape(shape)
+
+    def fixed(self, slots: tuple | None = None) -> np.ndarray:
+        """Evaluate only the fixed cotangent needed by the second-integral pass."""
+        return self._evaluate(slots, moving=False)
+
+    def moving_weights(self, slots: tuple | None = None) -> np.ndarray:
+        """Evaluate only its density-response JVP for the first-integral pass."""
+        return self._evaluate(slots, moving=True)
+
+
 def _composite_integral_hvp(
     operator: CompositeRKSResponse,
     response: typing.Any,
@@ -879,66 +957,13 @@ def _composite_integral_hvp(
     budget_bytes: int,
 ) -> np.ndarray:
     """Contract public-space stationary weights in a fixed Cartesian workspace."""
-    density = operator.integral_basis.density(operator.state.density)
-    moving = operator.integral_basis.density(response.density_derivative)
-    if moving.ndim == 2:
-        moving = moving[None]
-    weighted = operator.integral_basis.density(operator.state.weighted_density)
-    dweighted = operator.integral_basis.density(
-        response.energy_weighted_density_derivative
-    )
-    if dweighted.ndim == 2:
-        dweighted = dweighted[None]
-    offsets = np.cumsum((0, *operator.topology.shell_sizes))
-
-    def weights(slots: tuple | None = None) -> tuple:
-        if slots is None:
-            rows, columns = np.indices((operator.topology.nbf,) * 2).reshape(2, -1)
-            feeds = (
-                {
-                    "weighted_density": weighted[:, rows, columns],
-                    "d_weighted_density": dweighted[:, rows, columns],
-                }
-                if source == "overlap_pulay"
-                else {
-                    "density_left": density[:, rows, columns],
-                    "d_density_left": moving[:, rows, columns],
-                }
-            )
-            shape = (operator.topology.nbf,) * 2
-        else:
-            indices = np.asarray(
-                tuple(
-                    product(
-                        *(range(offsets[slot], offsets[slot + 1]) for slot in slots)
-                    )
-                )
-            )
-            first, second, third, fourth = indices.T
-            feeds = {
-                "density_left": density[:, first, second],
-                "density_right": density[:, third, fourth],
-                "d_density_left": moving[:, first, second],
-                "d_density_right": moving[:, third, fourth],
-            }
-            shape = tuple(operator.topology.shell_sizes[slot] for slot in slots)
-        block = operator.plan.integral_block(
-            source, terms=int(np.prod(shape)), coordinates=1
-        )
-        return (
-            execute(block.weights, feeds).outputs["weights"].reshape(shape),
-            execute(block.response_weights, feeds)
-            .outputs["response_weights"]
-            .reshape(shape),
-        )
-
+    weights = _PreparedIntegralWeights(operator, response, source)
     if source == "coulomb":
-        fixed_options = {"eri_shell_weights": lambda slots: weights(slots)[0]}
-        moving_options = {"eri_shell_weights": lambda slots: weights(slots)[1]}
+        fixed_options = {"eri_shell_weights": weights.fixed}
+        moving_options = {"eri_shell_weights": weights.moving_weights}
     else:
-        fixed, delta = weights()
-        fixed_options = {"pair_weights": fixed}
-        moving_options = {"pair_weights": delta}
+        fixed_options = {"pair_weights": weights.fixed()}
+        moving_options = {"pair_weights": weights.moving_weights()}
     first = generated_weighted_first_integral_gradient(
         operator.topology, source, cache=cache, **moving_options
     )
@@ -952,34 +977,6 @@ def _composite_integral_hvp(
         **fixed_options,
     )
     return immutable(first + second)
-
-
-def _exchange_weights(
-    operator: CompositeRKSResponse, response: typing.Any, source: str, slots: tuple
-) -> tuple:
-    offsets = np.cumsum((0, *operator.topology.shell_sizes))
-    indices = np.asarray(
-        tuple(product(*(range(offsets[slot], offsets[slot + 1]) for slot in slots)))
-    )
-    first, second, third, fourth = indices.T
-    density = operator.integral_basis.density(operator.state.density)
-    moving = operator.integral_basis.density(response.density_derivative)
-    if moving.ndim == 2:
-        moving = moving[None]
-    feeds = {
-        "density_left": density[:, first, third],
-        "density_right": density[:, second, fourth],
-        "d_density_left": moving[:, first, third],
-        "d_density_right": moving[:, second, fourth],
-    }
-    block = operator.plan.integral_block(source, terms=len(indices), coordinates=1)
-    shape = tuple(operator.topology.shell_sizes[slot] for slot in slots)
-    return (
-        execute(block.weights, feeds).outputs["weights"].reshape(shape),
-        execute(block.response_weights, feeds)
-        .outputs["response_weights"]
-        .reshape(shape),
-    )
 
 
 def composite_rks_hvp(
@@ -1148,17 +1145,11 @@ def composite_rks_hvp(
                 integral_budget_bytes,
             )
         if source in exchange_sources:
-
-            def fixed(slots: tuple) -> np.ndarray:
-                return _exchange_weights(operator, response, source, slots)[0]
-
-            def moving(slots: tuple) -> np.ndarray:
-                return _exchange_weights(operator, response, source, slots)[1]
-
+            weights = _PreparedIntegralWeights(operator, response, source)
             first = generated_weighted_first_integral_gradient(
                 operator.topology,
                 "coulomb",
-                eri_shell_weights=moving,
+                eri_shell_weights=weights.moving_weights,
                 eri_operator=exchange_sources[source],
                 cache=cache,
             )
@@ -1166,7 +1157,7 @@ def composite_rks_hvp(
                 operator.topology,
                 "coulomb",
                 context.direction,
-                eri_shell_weights=fixed,
+                eri_shell_weights=weights.fixed,
                 eri_operator=exchange_sources[source],
                 cache=cache,
                 budget_bytes=integral_budget_bytes,
