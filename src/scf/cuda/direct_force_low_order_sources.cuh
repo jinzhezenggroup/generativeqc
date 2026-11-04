@@ -67,7 +67,8 @@ __device__ inline bool direct_force_complete_schwarz_mask(
   if (work) atomicAdd(&work->screening_pair_fallbacks, 1ULL);
   for (std::size_t ordinal = 0; ordinal < layout.quartet_count; ++ordinal) {
     std::size_t raw_ao[4];
-    decode_shell_ao_quartet(batch, first_pair, second_pair, layout, ordinal, system_ao_begin, raw_ao);
+    decode_shell_ao_quartet(batch, first_pair, second_pair, layout, ordinal, system_ao_begin,
+                            raw_ao);
     if (work) atomicAdd(&work->checked_ao_quartets, 1ULL);
     if (schwarz_bounds[physical_offset + matrix_index(raw_ao[0], raw_ao[1], dimension)] *
             schwarz_bounds[physical_offset + matrix_index(raw_ao[2], raw_ao[3], dimension)] <
@@ -264,9 +265,9 @@ __device__ inline __noinline__ bool contract_two_electron_force_low_order_source
     if (pair_work) atomicAdd(&pair_work->attempted_shells, 1ULL);
     // A partial four-index mask is not separable. Prove its completeness before
     // either density projection; failure still retries the exact strict worker.
-    if (!direct_force_complete_schwarz_mask(batch, first_pair, second_pair, layout,
-                                           system_ao_begin, physical_offset, screening_tolerance,
-                                           schwarz_bounds, pair_work)) {
+    if (!direct_force_complete_schwarz_mask(batch, first_pair, second_pair, layout, system_ao_begin,
+                                            physical_offset, screening_tolerance, schwarz_bounds,
+                                            pair_work)) {
       if (pair_work) atomicAdd(&pair_work->mask_rejections, 1ULL);
       return false;
     }

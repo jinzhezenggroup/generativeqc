@@ -145,10 +145,11 @@ extern "C" void scalar_pair_probe(bool unrestricted, bool separate, bool enabled
 
 /** Exercise the real mask proof with arbitrary pair domains, independently of
  * the DPPP force adapter, including same-shell and same-pair triangles. */
-extern "C" bool scalar_pair_full_mask_probe(
-    unsigned dimension, unsigned system, const std::int64_t* offsets,
-    const std::int32_t* first, const std::int32_t* second, bool same_pair,
-    const double* bounds, double threshold, unsigned long long* counters) {
+extern "C" bool scalar_pair_full_mask_probe(unsigned dimension, unsigned system,
+                                            const std::int64_t* offsets, const std::int32_t* first,
+                                            const std::int32_t* second, bool same_pair,
+                                            const double* bounds, double threshold,
+                                            unsigned long long* counters) {
   DeviceBatch batch{};
   batch.direct_nbf = dimension;
   batch.shell_direct_ao_offsets = offsets;
