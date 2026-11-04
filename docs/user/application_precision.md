@@ -6,6 +6,14 @@ from an application error budget: supported routes can use FP32 arithmetic,
 relaxed stopping limits, or both, without asking users to select kernels.
 Fast need not execute approximate work or be faster on every input.
 
+Both profiles use the same candidate execution, native scheduling and publication
+pipeline. Successful unaudited scalar calls retain their candidate's native
+workspace for subsequent calls in either profile. `clear_cache()` releases it;
+execution/publication failures and transitions to an independent audit also
+release candidate residency. Precision policy changes arithmetic admission and
+evidence, not this resource lifetime. Prepared batches likewise use the same
+policy owner and retain their independently managed `close()` lifetime.
+
 `policy="fp64"` remains a backward-compatible name for Standard: both use
 identical controls and execution, and the serialized `profile` preserves the
 name requested by the caller for compatibility. The native CLI
@@ -159,10 +167,13 @@ reservation and non-allocation errors remain explicit failures. At a pressured
 force handoff the idle anchor is retired before optional ERIs; density, stationary
 weights, XC, the final-state token and the warm seed remain valid. Subsequent
 warm and cold solves on that owner use ordinary Fast without reallocating anchors.
-FP64 policy, strict caller controls, other models, DF/UKS, public resource-ledger owners,
-device chunks and same-owner warm replays retain their incumbent path.
+Fixed anchors in strict FP64 remain off by default. Explicit `GENERATIVEQC_KS_FAST_ANCHOR_DELTA=1`
+also admits one-spin exact full/range Direct VV10 owners in FP64, without mixed
+arithmetic or changed convergence tolerances. AUTO alone does not admit this
+strict path. DF/UKS, public resource-ledger owners, device chunks and same-owner
+warm replays retain their incumbent path.
 `GENERATIVEQC_KS_FAST_ANCHOR_DELTA=0` disables the optimization before preparation;
-unset selects the default at 192 or more AOs; `1` opts in within the scientific
+unset selects the Fast default at 192 or more AOs; `1` opts in within the scientific
 eligibility domain, including smaller owners, without forcing unsupported domains.
 There is no universal iteration-count or speed guarantee.
 

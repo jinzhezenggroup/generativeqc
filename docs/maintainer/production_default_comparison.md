@@ -13,14 +13,22 @@ quadrature, pruning, VV10 point domains and hardware execution optimizations.
 | Engine | Public API | Numerical settings passed by benchmark |
 | --- | --- | --- |
 | GPU4PySCF default | gpu4pyscf.dft.rks.RKS(mol) | None (functional selected) |
-| GenerativeQC Standard | generativeqc.Calculator(..., device="cuda") | None |
+| GenerativeQC Standard | generativeqc.PrecisionCalculator(policy="standard", ...) | No manually chosen SCF knobs |
 | GenerativeQC Fast | generativeqc.PrecisionCalculator(policy="fast", ...) | No manually chosen budget or SCF knobs |
 
 Fast uses its **own published default** application error budget and may
 execute mixed precision, strict FP64 or a measured strict fallback/audit.
-The *entire* public Fast call is timed, and its validation status, internal
-solve count, requested precision and selected controls are recorded. Calling
+Both native arms use the same public precision owner and time the *entire*
+constructor and endpoint. Their validation status, internal solve count,
+requested precision and selected controls are recorded. Standard retains its
+optimized FP64 controls and single-solve, non-observable-audit contract. Calling
 Calculator(precision="auto") would **not** represent this Fast mode.
+
+The cold/warm `benchmarks.readme_defaults` campaign also prepares both native
+arms through this owner, including policy validation, resource lifetime and
+complete prepared-batch timing. Historical receipts keep their original source
+and entry-point identity; this unification does not relabel old measurements or
+establish a speedup.
 
 **All native KS methods**, including PBE0,
 WB97M-V and r2SCAN-3c, resolve an omitted grid to native version-4,
