@@ -1,4 +1,4 @@
-"""MP2-assisted, all-electron canonical CCSD(T)/CBS energy and analytic forces.
+"""MP2-assisted canonical CCSD(T)/CBS energy and analytic forces.
 
 Only orchestration and geometry-independent linear combinations live here.
 Every electronic energy and force comes from the public native calculator;
@@ -20,6 +20,7 @@ from ._api_types import Atom, Result
 from ._model_resolution import snapshot_basis
 from .basis import BasisSet
 from .calculator import Calculator
+from .ecp import resolve_ecp
 from .elements import checked_integer, electron_state
 
 if typing.TYPE_CHECKING:
@@ -38,12 +39,9 @@ def _basis_snapshot(basis: BasisSet | str | Path) -> BasisSet:
     if not isinstance(record, BasisSet):
         raise TypeError("CBS requires a named basis, canonical basis file or BasisSet")
     if any(
-        element.ecp_core_electrons
-        or element.ecp_data is not None
-        or element.nuclear_charge != element.atomic_number
-        for element in record.elements
+        element.nuclear_charge != element.atomic_number for element in record.elements
     ):
-        raise NotImplementedError("CCSD(T)/CBS currently requires all-electron bases")
+        raise NotImplementedError("CCSD(T)/CBS requires standard nuclear charges")
     return record
 
 
@@ -62,7 +60,7 @@ class CBSBasis:
     cardinal: int
 
     def __post_init__(self) -> None:
-        """Validate the cardinal number and snapshot local all-electron data."""
+        """Validate the cardinal number and snapshot local orbital/ECP data."""
         cardinal = checked_integer(
             self.cardinal, "CBS cardinal number", low=2, high=100
         )
@@ -134,16 +132,20 @@ class CCSDTCBSCalculator:
     selecting ``hf_extrapolation="highest"``. Exponents are model inputs and
     are never fitted to the current geometry.
 
-    All components use FP64, all-electron RHF references. Explicit auxiliary
+    All components use FP64 references: RHF for singlets and
+    UHF for higher multiplicities. Open-shell energy and analytic-force endpoints
+    support CPU/CUDA and explicit fitted operators, within native resource admission.
+    Explicit auxiliary
     bases default to correlation-only DF-MP2 and DF-CCSD(T). ``hf_reference="df"``
     instead uses that same auxiliary basis for stationary RI-JK, its orbital
     response and its metric/center derivatives. Choose a basis suitable for
     both JK and correlation fitting; an MP2-fit label alone does not certify
     HF accuracy. This explicit model choice never changes on resource refusal.
-    Open-shell, ECP and frozen-core variants are not silently substituted.
+    Scalar ECPs must match across orbital bases for every atom in the geometry.
+    All remaining valence electrons are correlated; frozen core is not substituted.
     Native backend/basis/force and complete memory-admission checks still apply.
 
-    Same-basis components share one native RHF reference and correlation source.
+    Same-basis components share one native HF reference and correlation source.
     Native retained storage is released after each basis group, even on failure.
     Thus the workflow does not retain several basis-dependent CUDA owners at
     once. ``calculator_options`` supplies common SCF/CC/resource controls;
@@ -415,26 +417,35 @@ class CCSDTCBSCalculator:
             },
         }
 
-    def _terms(self) -> tuple:
+    def _terms(self, *, unrestricted: bool = False) -> tuple:
         """Use one set of component weights for composition and error allocation."""
         low, high = self.mp2_bases
+        hf = "uhf" if unrestricted else "rhf"
+        mp2 = "ump2" if unrestricted else "mp2"
+        ccsdt = (
+            "uccsd(t)"
+            if unrestricted
+            else "df-ccsd(t)"
+            if self._auxiliary_bases
+            else "ccsd(t)"
+        )
         return (
-            ("hf_low", "rhf", low.basis, self.hf_weights[0] - self.mp2_weights[0]),
+            ("hf_low", hf, low.basis, self.hf_weights[0] - self.mp2_weights[0]),
             (
                 "hf_high",
-                "rhf",
+                hf,
                 high.basis,
                 self.hf_weights[1] - self.mp2_weights[1],
             ),
-            ("mp2_low", "mp2", low.basis, self.mp2_weights[0]),
-            ("mp2_high", "mp2", high.basis, self.mp2_weights[1]),
+            ("mp2_low", mp2, low.basis, self.mp2_weights[0]),
+            ("mp2_high", mp2, high.basis, self.mp2_weights[1]),
             (
                 "correction_ccsdt",
-                "df-ccsd(t)" if self._auxiliary_bases else "ccsd(t)",
+                ccsdt,
                 self.correction_basis,
                 1.0,
             ),
-            ("correction_mp2", "mp2", self.correction_basis, -1.0),
+            ("correction_mp2", mp2, self.correction_basis, -1.0),
         )
 
     def singlepoint(
@@ -451,15 +462,15 @@ class CCSDTCBSCalculator:
         requests omit every analytic-force endpoint and all returned forces.
         HF and correction-basis MP2 companions are produced by the same native
         reference owner, without independent same-basis SCF endpoints.
+        Multiplicities above one select UHF/UMP2/UCCSD(T), with energy and
+        analytic forces on CPU/CUDA. Explicit auxiliary bases select fitted
+        correlation; ``hf_reference="df"`` also fits the UHF reference.
         """
         with self._lock:
             started = time.perf_counter()
             geometry = tuple(Atom.from_value(atom) for atom in atoms)
             checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
-            if multiplicity != 1:
-                raise NotImplementedError(
-                    "CCSD(T)/CBS currently requires a closed-shell singlet"
-                )
+            unrestricted = multiplicity != 1
             if isinstance(properties, (str, bytes)):
                 raise TypeError("properties must be an iterable of property names")
             requested = frozenset(properties)
@@ -468,11 +479,39 @@ class CCSDTCBSCalculator:
                     "CBS properties must include energy and optionally forces"
                 )
             forces_requested = "forces" in requested
+            options = self._options
+            convergence = self._convergence
+            if unrestricted:
+                from ._correlation_convergence import convergence_limits
+
+                # Unrestricted owners do not admit the relaxed-convergence
+                # transport. Preserve their strict gates and tighter inputs.
+                limits = convergence_limits(None)
+                options = dict(options)
+                options.pop("_correlation_convergence_budget", None)
+                for name in (
+                    "energy_tolerance",
+                    "density_tolerance",
+                    "ccsd_energy_tolerance",
+                    "ccsd_residual_tolerance",
+                ):
+                    options[name] = min(options[name], limits[name])
+                convergence = {
+                    **convergence,
+                    "selected": "strict_fp64",
+                    "reason": "unrestricted_strict_convergence",
+                    "scale": 0.0,
+                    "limits": {
+                        **limits,
+                        **{name: options[name] for name in limits if name in options},
+                    },
+                }
             expected_backend = "cuda" if self.device == "cuda" else "cpu_reference"
             native_properties = (
                 ("energy", "forces") if forces_requested else ("energy",)
             )
             low, high = self.mp2_bases
+            hamiltonians = []
             for record in (low.basis, high.basis, self.correction_basis):
                 electron_state(
                     geometry,
@@ -481,8 +520,30 @@ class CCSDTCBSCalculator:
                     element_metadata=record.by_element,
                 )
                 record.shells_for(geometry)
+                # Extrapolate basis error, never a change in the ionic operator.
+                # Compare the typed residual terms handed to the native owner,
+                # not JSON whitespace or decimal-number spellings.
+                cores, residual_terms = resolve_ecp(record, geometry)
+                hamiltonians.append(
+                    (
+                        tuple(
+                            record.by_element[atom.atomic_number].nuclear_charge
+                            for atom in geometry
+                        ),
+                        tuple(cores),
+                        tuple(sorted(residual_terms)),
+                    )
+                )
+            if any(identity != hamiltonians[0] for identity in hamiltonians[1:]):
+                raise ValueError(
+                    "all CBS orbital bases must use the same ECP Hamiltonian"
+                )
 
-            terms = self._terms()
+            terms = self._terms(unrestricted=unrestricted)
+            mp2_method = "ump2" if unrestricted else "mp2"
+            ccsdt_method = next(
+                method for role, method, _, _ in terms if role == "correction_ccsdt"
+            )
             completed: dict[tuple[str, str], tuple[Result, float]] = {}
             by_role: dict[str, Result] = {}
             groups = {basis.identity: basis for _, _, basis, _ in terms}
@@ -493,9 +554,9 @@ class CCSDTCBSCalculator:
             for identity, basis in groups.items():
                 component_started = time.perf_counter()
                 primary = (
-                    ("df-ccsd(t)" if self._auxiliary_bases else "ccsd(t)")
+                    ccsdt_method
                     if identity == self.correction_basis.identity
-                    else "mp2"
+                    else mp2_method
                 )
                 requested = {
                     method
@@ -528,7 +589,7 @@ class CCSDTCBSCalculator:
                         if self._auxiliary_bases
                         else {}
                     ),
-                    **self._options,
+                    **options,
                 )
                 if primary == "df-ccsd(t)":
                     selected_warmup = getattr(
@@ -536,7 +597,7 @@ class CCSDTCBSCalculator:
                     )
                     automatic_warmup = selected_warmup == "auto"
                     warmup_requested = selected_warmup == "mixed" or (
-                        selected_warmup is None and self._convergence["scale"] > 0
+                        selected_warmup is None and convergence["scale"] > 0
                     )
                     warmup_fallback = getattr(
                         calculator, "_correlation_preconvergence_fallback", None
@@ -721,8 +782,15 @@ class CCSDTCBSCalculator:
                     "hf_exponent": self.hf_exponent,
                     "correlation_exponent": self.correlation_exponent,
                     "frozen_core": 0,
+                    "ecp_core_electrons": tuple(
+                        low.basis.by_element[atom.atomic_number].ecp_core_electrons
+                        for atom in geometry
+                    ),
                     "density_fitting": bool(self._auxiliary_bases),
                     "hf_reference": self.hf_reference,
+                    "spin_reference": "uhf" if unrestricted else "rhf",
+                    "charge": charge,
+                    "multiplicity": multiplicity,
                     "auxiliary_basis_identities": {
                         identity: basis.identity
                         for identity, basis in self._auxiliary_bases.items()
@@ -731,10 +799,10 @@ class CCSDTCBSCalculator:
                 time.perf_counter() - started,
                 tuple(execution_groups),
                 {
-                    **self._convergence,
+                    **convergence,
                     "selected": "strict"
-                    if warmup_requested and not self._convergence["scale"]
-                    else self._convergence["selected"],
+                    if warmup_requested and not convergence["scale"]
+                    else convergence["selected"],
                     "arithmetic_request": "df_ccsd_fp32_preconvergence"
                     if warmup_requested
                     else "fp64",
@@ -743,12 +811,12 @@ class CCSDTCBSCalculator:
                     "arithmetic": arithmetic,
                     "lambda_arithmetic_request": lambda_request,
                     "lambda_arithmetic": lambda_arithmetic,
-                    "limits": dict(self._convergence["limits"]),
-                    "budget": dict(self._convergence["budget"])
-                    if self._convergence["budget"]
+                    "limits": dict(convergence["limits"]),
+                    "budget": dict(convergence["budget"])
+                    if convergence["budget"]
                     else None,
-                    "component_budget": dict(self._convergence["component_budget"])
-                    if self._convergence["component_budget"]
+                    "component_budget": dict(convergence["component_budget"])
+                    if convergence["component_budget"]
                     else None,
                 },
             )

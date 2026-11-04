@@ -66,6 +66,14 @@ inline bool valid_system_roles(const generativeqc_system& orbital,
            descriptor.ks_options && cuda_df;
   }
   if (!auxiliary || !auxiliary->correlation_auxiliary) return true;
+  const bool unrestricted_correlated = descriptor.method == GENERATIVEQC_METHOD_UMP2 ||
+                                       descriptor.method == GENERATIVEQC_METHOD_UCCSD ||
+                                       descriptor.method == GENERATIVEQC_METHOD_UCCSD_T;
+  if (unrestricted_correlated)
+    return backend == core::kCudaBackend &&
+           (cuda_df ||
+            descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA ||
+            descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_FULL_CUDA);
   return descriptor.method == GENERATIVEQC_METHOD_DF_RCCSD_T ||
          (descriptor.method == GENERATIVEQC_METHOD_MP2 &&
           (descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA ||

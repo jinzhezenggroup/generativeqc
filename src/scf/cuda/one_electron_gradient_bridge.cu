@@ -234,6 +234,15 @@ generativeqc_status execute_cuda_one_electron_gradient(
     check(launch_generated_one_electron_gradient(view, first, second, host.pair_first.size(),
                                                  weights, nullptr, schedule, 1.0, output,
                                                  arena.stream));
+    // The potential cotangent also weights the residual ECP, not just -Q/r.
+    // The ECP sink has force sign; -1 requests a positive nuclear derivative.
+    if (!system.ecp_terms.empty() && weights.attraction &&
+        std::any_of(wv.begin(), wv.end(), [](double value) { return value != 0; })) {
+      const auto status =
+          integrals::add_ecp_cuda(device_id, system, reinterpret_cast<void*>(arena.stream), nullptr,
+                                  weights.attraction, output, detail, -1.0);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    }
     derivatives.finish();
     runtime::cuda_trace::TraceRegion output_transfer("one_electron_output_and_synchronization",
                                                      arena.stream);

@@ -103,8 +103,8 @@ def selector_source() -> str:
 
 
 class CuMetalWorkflowTests(unittest.TestCase):
-    def test_cold_merge_queue_build_has_finite_extended_job_budget(self) -> None:
-        """A cache-cold queue build must reach the unchanged scientific gate."""
+    def test_cold_build_has_finite_job_budget_for_every_event(self) -> None:
+        """Cache-cold PR and queue builds must reach the unchanged scientific gate."""
         matches = re.findall(
             r"^    timeout-minutes: (.+)$", job("cuda-tests"), re.MULTILINE
         )
@@ -113,8 +113,8 @@ class CuMetalWorkflowTests(unittest.TestCase):
             ("merge_group", 75),
             ("schedule", 75),
             ("workflow_dispatch", 75),
-            ("pull_request", 30),
-            ("push", 30),
+            ("pull_request", 75),
+            ("push", 75),
         ):
             with self.subTest(event=event):
                 self.assertEqual(

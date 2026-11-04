@@ -13,9 +13,12 @@ if TYPE_CHECKING:
 
 import pytest
 from generativeqc import Calculator, GridSpec, KsOptions, PrecisionCalculator, _native
-from generativeqc._scf_convergence import default_scf_controls
+from generativeqc._scf_defaults_native import default_controls
 
-from tools.generativeqc_validation.native_registry_stub import install_registry_stub
+from tools.generativeqc_validation.native_registry_stub import (
+    install_registry_stub,
+    install_scf_defaults_stub,
+)
 
 
 @pytest.fixture
@@ -28,10 +31,10 @@ def library(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
 
     native = SimpleNamespace(
         generativeqc_ks_options_version=lambda: 1,
-        generativeqc_standard_scf_convergence_version_v1=lambda: 1,
         generativeqc_method_available=available,
     )
     install_registry_stub(native, frozenset({"energy"}))
+    install_scf_defaults_stub(native, (1e-9, 1e-5, 1e-12), qualified=True)
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: native)
     return native
 
@@ -63,26 +66,32 @@ def test_default_controls_and_explicit_tight_overrides(
         ("pbe-rks", "cuda", {"ks_options": KsOptions(grid=GridSpec.treutler(4))}),
     ],
 )
-def test_other_models_and_grids_keep_strict_controls(
+def test_calculator_copies_strict_native_controls_for_contexts(
     library: SimpleNamespace, method: str, device: str, options: dict[str, Any]
 ) -> None:
+    install_scf_defaults_stub(library)
     calculator = Calculator(method=method, device=device, **options)
     assert calculator._energy_tolerance == 1e-10
     assert calculator._density_tolerance == 1e-8
 
 
-@pytest.mark.parametrize("version", [None, 0, 2])
-def test_missing_or_unknown_native_capability_is_strict(
-    library: SimpleNamespace, version: int | None
+@pytest.mark.parametrize("legacy_version", [None, 1, 2])
+def test_missing_required_query_cannot_use_the_legacy_capability(
+    library: SimpleNamespace, legacy_version: int | None
 ) -> None:
-    if version is None:
-        del library.generativeqc_standard_scf_convergence_version_v1
-    else:
-        library.generativeqc_standard_scf_convergence_version_v1 = lambda: version
-    calculator = Calculator(method="pbe-rks", device="cuda")
-    assert default_scf_controls(calculator)["density_tolerance"] == 1e-8
-    assert calculator._energy_tolerance == 1e-10
-    assert calculator._density_tolerance == 1e-8
+    del library.generativeqc_scf_defaults_query_v1
+    if legacy_version is not None:
+        library.generativeqc_standard_scf_convergence_version_v1 = lambda: (
+            legacy_version
+        )
+    with pytest.raises(
+        NotImplementedError, match="required SCF default-controls query"
+    ):
+        Calculator(method="pbe-rks", device="cuda")
+    with pytest.raises(
+        NotImplementedError, match="required SCF default-controls query"
+    ):
+        default_controls(SimpleNamespace(_library=library))
 
 
 @pytest.mark.parametrize("profile", ["standard", "fp64", "fast"])

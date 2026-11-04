@@ -1,0 +1,10 @@
+{
+  "name": "native_uccsd_response",
+  "outputs": [
+    "generated/generated_uccsd_cpu.hpp",
+    "generated/generated_uccsd_response.hpp",
+    "generated/generated_uccsd_cuda.cu"
+  ],
+  "owner": "tools/generate_uccsd_native.py",
+  "scope": "Shared unrestricted TensorIR CCSD and standard (T) energies, amplitude and Hamiltonian adjoints, full same-space triples Fock response, and separate exact-reference/fitted-correlation Lagrangians. Native response composition uses the same programs on CPU/CUDA; packed DIIS/Krylov control and MO-to-AO transport remain explicit host consumers, not fully resident CUDA execution. Empty spin outputs skip zero-grid launches while empty scalar reductions still execute."
+}

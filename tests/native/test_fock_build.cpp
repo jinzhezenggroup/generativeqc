@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "scf/fleet.hpp"
 #include "scf/fock_build.hpp"
@@ -452,7 +453,9 @@ void verify_unrestricted_coefficients_and_capabilities() {
   std::string unavailable_detail;
   try {
     require_fock_provider_executable(FockApproximation::Exact, FockBackend::Cuda);
-  } catch (const std::runtime_error& error) {
+  } catch (const generativeqc::Error& error) {
+    require(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+            "not-built CUDA provider lost its public status");
     unavailable_detail = error.what();
   }
   require(unavailable_detail.find("cuda.exact") != std::string::npos &&
@@ -700,7 +703,9 @@ void verify_cosx_provider_semantics() {
   std::string unavailable;
   try {
     require_fock_provider_executable(FockApproximation::SeminumericalCosx, FockBackend::Cuda);
-  } catch (const std::runtime_error& error) {
+  } catch (const generativeqc::Error& error) {
+    require(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+            "not-built CUDA COSX provider lost its public status");
     unavailable = error.what();
   }
   require(unavailable.find("cuda.cosx") != std::string::npos &&

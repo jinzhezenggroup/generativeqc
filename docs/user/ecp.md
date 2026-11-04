@@ -171,10 +171,15 @@ raises. The f budget/replay gate uses a 16-AO spherical fixture; larger f
 endpoint measurements qualify numerical execution only.
 
 Direct RHF/UHF and the bounded Python CUDA semilocal DFT path below provide
-complete first forces. ECP density fitting is
-explicitly rejected pending its own complete force/budget gates. Complete
-canonical MP2 with ECP is also rejected until its reference/provider gates are
-validated. The all-electron accuracy-model schema cannot represent an ECP
+complete first forces. Standalone HF ECP density fitting remains explicitly
+rejected. Native MP2/UMP2 and restricted/unrestricted CCSD/(T), including
+same-reference HF/MP2 companions and the [CBS workflow](ccsdt_cbs.md#scalar-ecp-references),
+accept supported scalar ECPs for energies and analytic first forces on CPU/CUDA.
+Explicit fitted correlation and fitted correlated-reference policies retain
+the same ECP one-electron operator and its derivatives; their method-specific
+backend, angular and resource limits still apply. Correlation qualification uses
+compact Na/H valence records, not an unrestricted heavy-element accuracy claim.
+The all-electron accuracy-model schema cannot represent an ECP
 Hamiltonian, so ECP `resolved_model()` requests fail explicitly. Complete
 LDA/PBE RKS/UKS energy-only calculations use the same ECP Hamiltonian, as
 described below. Public CPU/CUDA DFT/ECP forces have their own

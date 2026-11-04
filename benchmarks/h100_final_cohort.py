@@ -8,9 +8,17 @@ import sys
 from pathlib import Path
 
 from benchmarks import h100_public_guards as guards
+from tools.restore_retained_evidence import read_evidence_bytes
 
 support = guards.support
 DIRECTORY = support.ROOT / "benchmarks/results/h100-sm90-cd2b-final-20261103"
+HISTORICAL = {
+    "final-pairs-v3-completed.tar.xz.part00",
+    "final-pairs-v3-completed.tar.xz.part01",
+    "final-pairs-v3-download-manifest.json.xz",
+    "precompute-failures-v1.tar.xz",
+    "actual-result-audit.json.xz",
+}
 REQUIRED = {
     "final-pairs-v3-completed.tar.xz.part00",
     "final-pairs-v3-completed.tar.xz.part01",
@@ -25,6 +33,30 @@ REQUIRED = {
 def check(value: bool, message: str) -> None:
     if not value:
         raise ValueError(message)
+
+
+def artifact_bytes(name: str) -> bytes:
+    """Authenticate current or explicitly retained original final-cohort bytes."""
+    relative = Path(name)
+    path = DIRECTORY / relative
+    check(
+        not relative.is_absolute()
+        and ".." not in relative.parts
+        and not path.is_symlink(),
+        "Unsafe final evidence path",
+    )
+    if path.is_file():
+        return path.read_bytes()
+    check(not path.exists() and name in HISTORICAL, "Missing original final evidence")
+    original = (
+        support.ROOT / "benchmarks/results/h100-sm90-cd2b-final-20261103" / relative
+    )
+    try:
+        return read_evidence_bytes(
+            original, manifest=DIRECTORY / "historical-snapshot.json"
+        )
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise ValueError("Missing historical final evidence: " + name) from error
 
 
 def checked_publication() -> dict:
@@ -45,14 +77,12 @@ def checked_publication() -> dict:
     )
     for binding in entries:
         relative = Path(binding["path"])
-        path = DIRECTORY / relative
+        data = artifact_bytes(binding["path"])
         check(
             not relative.is_absolute()
             and ".." not in relative.parts
-            and path.is_file()
-            and not path.is_symlink()
-            and path.stat().st_size == binding["bytes"]
-            and support.sha(path) == binding["sha256"],
+            and len(data) == binding["bytes"]
+            and hashlib.sha256(data).hexdigest() == binding["sha256"],
             "Final evidence bytes differ: " + str(relative),
         )
     parts = publication["parts"]
@@ -75,7 +105,7 @@ def extend(task: Path, native: Path, reference: Path) -> list[dict]:
     check(publication["archive"]["name"] == archive.name, "Final archive name differs")
     with archive.open("xb") as stream:
         for binding in publication["parts"]:
-            stream.write((DIRECTORY / binding["path"]).read_bytes())
+            stream.write(artifact_bytes(binding["path"]))
     check(
         archive.stat().st_size == publication["archive"]["bytes"]
         and support.sha(archive) == publication["archive"]["sha256"],
@@ -87,7 +117,7 @@ def extend(task: Path, native: Path, reference: Path) -> list[dict]:
         and binding["stored"] == binding["name"] + ".xz",
         "Final manifest identity differs",
     )
-    raw = lzma.decompress((DIRECTORY / binding["stored"]).read_bytes())
+    raw = lzma.decompress(artifact_bytes(binding["stored"]))
     check(
         len(raw) == binding["decoded_bytes"]
         and hashlib.sha256(raw).hexdigest() == binding["decoded_sha256"],
