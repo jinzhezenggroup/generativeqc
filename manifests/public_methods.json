@@ -7,7 +7,7 @@
       "abi_id": 21,
       "family": "coupled_cluster",
       "provider": "uccsd",
-      "properties": ["energy"],
+      "properties": ["energy", "forces"],
       "supports_batch": false
     },
     {
@@ -16,7 +16,7 @@
       "abi_id": 22,
       "family": "coupled_cluster",
       "provider": "uccsd",
-      "properties": ["energy"],
+      "properties": ["energy", "forces"],
       "supports_batch": false
     },
     {

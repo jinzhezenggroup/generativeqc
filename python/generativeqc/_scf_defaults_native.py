@@ -79,18 +79,23 @@ def _grid_options(grid: Any, schedule: str) -> Any:
     return descriptor
 
 
-def default_controls(calculator: Any) -> dict[str, float] | None:
+def default_controls(calculator: Any) -> dict[str, float]:
     """Use native defaults, retaining one immutable metadata answer per owner.
 
     Repeated precision decisions need not allocate fresh ctypes descriptors.
     The key includes the selected query and every consumed scientific fact;
     replacing a backend, model, grid or library invalidates the copied answer.
-    This cache holds no geometry, seed or device resource.
+    This cache holds no geometry, seed or device resource. The selected native
+    library must implement this policy; an absent query is an installation
+    mismatch, never permission to select scientific defaults in Python.
     """
     library = getattr(calculator, "_library", None)
     query = bind(library, "generativeqc_scf_defaults_query_v1", _QUERY_TYPE)
     if query is None:
-        return None
+        raise NotImplementedError(
+            "native library lacks required SCF default-controls query "
+            "generativeqc_scf_defaults_query_v1; rebuild or install a current library"
+        )
     cuda = getattr(calculator, "_device_name", None) == "cuda"
     method = getattr(calculator, "_method", -1)
     basis = getattr(calculator, "_basis", None)

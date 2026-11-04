@@ -154,8 +154,20 @@ work, and the exact baseline source SHA. Wrapper, compiler/AD, compatibility,
 reference-oracle and scientific-runtime sites have separate classifications.
 `python tools/check_native_runtime_ownership.py` checks those source anchors;
 it does not establish native endpoint parity or numerical qualification.
-In particular, native integral/XC/response actions do not make the Python
-stationary force or molecular HVP controller a complete native SDK endpoint.
+The separate
+[`python_native_runtime_delivery.json`](../../manifests/maintenance/python_native_runtime_delivery.json)
+accounts for every baseline row at its own explicit audit revision. It records
+scoped native delivery, retired Python work, remaining production controllers
+and unmet acceptance, including intentionally retained compiler/oracle work.
+Historical row names are identities, not claims about current dispatch:
+admitted native CPU/CUDA force items and the dedicated native WB97M-V CUDA
+second-order endpoint no longer use the historical Python controllers.
+Other stationary force and general molecular HVP consumers still do.
+The checker validates both inventories without pinning production function
+bodies or requiring that the audit revision equal HEAD. Source/test pointers
+are not execution receipts, newer-head qualification, or a second capability
+registry; use the [capability authorities](../reference/capabilities.md) and
+source-matched independent endpoint evidence for admission.
 Automatic cold-start selection is queried from the native owner; its precise
 domain and older-library behavior are documented in
 [cold-start initial guesses](../user/initial_guesses.md).
@@ -610,9 +622,11 @@ Default SCF convergence controls are queried through
 method layer uses the generated complete-model catalog and the existing default-grid
 owner for its scoped CUDA policy. Python transports the already selected model,
 backend, ECP and grid metadata; it does not repeat model qualification. Explicit
-caller controls and native physical final-state checks are unchanged. Missing
-additive support retains the explicit older-library policy; a selected native
-failure cannot retry Python selection. This query does not move the precision
+caller controls and native physical final-state checks are unchanged. This query
+is required: a missing protocol, native failure or invalid receipt rejects the
+selected installation rather than selecting Python defaults. The duplicate
+Python model/grid policy and its legacy version-only admission are removed.
+This query does not move the precision
 candidate/auditor execution or their independent seed lifetimes.
 Each Calculator may retain one copied metadata answer keyed by every consumed
 input and the selected native query; returned control dictionaries are detached.

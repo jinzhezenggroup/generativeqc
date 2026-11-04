@@ -31,7 +31,7 @@ class RHFFrameResponseRecycle {
    */
   bool prepare(const core::System& system, const PhysicalReference& ref, int device,
                bool matrix_blas, const char* operator_hash, std::size_t maximum_bytes) {
-    if (!ref.nocc || ref.nbf <= ref.nocc || !system.ecp_terms.empty()) {
+    if (!ref.nocc || ref.nbf <= ref.nocc) {
       clear();
       return false;
     }

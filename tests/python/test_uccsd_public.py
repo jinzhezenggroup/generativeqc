@@ -45,17 +45,17 @@ def _calculator(
 
 @pytest.mark.parametrize("method", ("uccsd", "uccsd(t)"))
 def test_native_unrestricted_capabilities_and_model(method: str) -> None:
-    """Keep unrestricted names, identities and energy-only capabilities distinct."""
+    """Keep unrestricted names, identities and qualified capabilities distinct."""
     capabilities = method_capabilities(method)
     assert capabilities.available and capabilities.family == "coupled_cluster"
-    assert capabilities.supported_properties == frozenset({"energy"})
+    assert capabilities.supported_properties == frozenset({"energy", "forces"})
     assert not capabilities.supports_batch
     model = _calculator(method).resolved_model(
         [("Li", (0.0, 0.0, 0.0))], multiplicity=2
     )
     assert model.method == method and model.multiplicity == 2
     assert ResolvedModel.from_dict(model.to_dict()) == model
-    with pytest.raises(ValueError, match="conventional integrals"):
+    with pytest.raises(ValueError, match="approximation identity"):
         replace(model, approximation="density-fitting")
 
 
@@ -68,6 +68,8 @@ def test_native_unrestricted_capabilities_and_model(method: str) -> None:
         ([("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.83))], 1, "sp-polarized"),
         ([("He", (0.0, 0.0, 0.0))], 0, "spd-custom"),
         ([("He", (0.0, 0.0, 0.0))], 0, "spd-spherical"),
+        ([("He", (0.0, 0.0, 0.0))], 0, "spd-13-spherical"),
+        ([("Li", (0.0, 0.0, 0.0))], 1, "spd-13-spherical"),
     ],
 )
 def test_native_unrestricted_endpoint_matches_independent_pyscf(
@@ -84,12 +86,14 @@ def test_native_unrestricted_endpoint_matches_independent_pyscf(
 
     labels = [f"{symbol}{index}" for index, (symbol, _) in enumerate(atoms)]
     matched_basis: dict[str, list] = {label: [] for label in labels}
-    representation = "spherical" if basis == "spd-spherical" else "cartesian"
+    representation = "spherical" if basis.endswith("spherical") else "cartesian"
     if basis.startswith("spd-"):
         actual_basis = tuple(
             Shell(0, angular, (Primitive(exponent, 1.0),))
             for angular, exponent in ((0, 2.3), (0, 0.4), (1, 0.8), (2, 0.7))
         )
+        if basis == "spd-13-spherical":
+            actual_basis = (*actual_basis, Shell(0, 1, (Primitive(0.16, 1.0),)))
     else:
         with NativeAO(atoms, basis="sto-3g", multiplicity=spin + 1) as source:
             actual_basis = tuple(source.shells)
@@ -190,11 +194,9 @@ def test_native_unrestricted_restricted_limit(
 
 @pytest.mark.parametrize("method", ("uccsd", "uccsd(t)"))
 def test_native_unrestricted_rejects_unqualified_requests(method: str) -> None:
-    """Do not advertise prototype forces or silently reroute unsupported work."""
+    """Do not silently reroute unsupported work or exceed admitted resources."""
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
     calculator = _calculator(method)
-    with pytest.raises((ValueError, NotImplementedError), match="forces"):
-        calculator.singlepoint(atoms, properties=("energy", "forces"))
     with pytest.raises(NotImplementedError):
         calculator.prepare_batch([atoms])
     with pytest.raises(RuntimeError, match="budget"):
@@ -325,11 +327,15 @@ def test_native_unrestricted_cli_without_interpreters(
 
 
 @pytest.mark.parametrize("method", ("uccsd", "uccsd(t)"))
-def test_native_unrestricted_rejects_large_domain(method: str) -> None:
-    """The public twelve-AO admission is explicit, before solving UHF."""
+def test_native_unrestricted_large_domain_retains_resource_admission(
+    method: str,
+) -> None:
+    """Removing the AO cutoff must not bypass complete endpoint memory checks."""
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, -1.43, 1.1)), ("H", (0.0, 1.43, 1.1))]
-    with pytest.raises(NotImplementedError, match="twelve AOs"):
-        _calculator(method, basis="def2-svp").singlepoint(atoms)
+    with pytest.raises(RuntimeError, match="budget"):
+        _calculator(
+            method, basis="def2-svp", correlation_memory_budget_bytes=1024
+        ).singlepoint(atoms)
 
 
 @pytest.mark.parametrize("method", ("uccsd", "uccsd(t)"))
