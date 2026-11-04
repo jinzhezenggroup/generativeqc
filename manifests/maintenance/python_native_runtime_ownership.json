@@ -365,6 +365,16 @@
           "path": "python/generativeqc/batch.py",
           "symbol": "PreparedBatch.execute",
           "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_cbs_plan.py",
+          "symbol": "native_cbs_plan",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/cbs.py",
+          "symbol": "CCSDTCBSCalculator",
+          "classification": "scientific-runtime"
         }
       ],
       "native_scientific_sources": [
@@ -372,17 +382,24 @@
         "src/methods/ump2_method.cpp",
         "src/methods/rccsd_method.cpp",
         "src/methods/rccsdt_method.cpp",
-        "src/methods/df_rccsdt_method.cpp"
+        "src/methods/df_rccsdt_method.cpp",
+        "src/core/cbs_extrapolation.hpp"
       ],
       "native_callers": [
         "src/api/c_api_calculation.cpp",
         "src/api/c_api_batch.cpp",
-        "src/cli/main.cpp"
+        "src/cli/main.cpp",
+        "src/api/c_api_correlation_convergence.cpp"
       ],
-      "remaining_python_runtime": [],
+      "remaining_python_runtime": [
+        "CBS extrapolation weights and focal-point coefficients require the selected native host plan, with no Python arithmetic fallback. Python still owns basis-family/identity validation, grouping, coefficient-L1 budget allocation, sequential component execution and observable composition/publication. This is not a complete native CBS endpoint or CLI method."
+      ],
       "tests": [
         "tests/python/test_calculator.py",
-        "tests/python/test_df_ccsdt_capability_ownership.py"
+        "tests/python/test_df_ccsdt_capability_ownership.py",
+        "tests/python/test_cbs_extrapolation.py",
+        "tests/python/test_ccsdt_cbs.py",
+        "tests/python/test_ccsdt_cbs_native.py"
       ],
       "trackers": [
         "#926",
@@ -392,6 +409,15 @@
       "method_selectors": [
         "catalog-family:perturbation",
         "catalog-family:coupled_cluster"
+      ],
+      "retired_python_sites": [
+        {
+          "path": "python/generativeqc/cbs.py",
+          "symbols": ["_limit_weights"],
+          "last_present_source_sha": "4e71eafdfd612ae977105e8555d2d0be3f8531ea",
+          "replacement": "python/generativeqc/_cbs_plan.py",
+          "reason": "Required selected-library extrapolation planning replaces Python inverse-power/exponential weight arithmetic. Component grouping, convergence-budget allocation and complete endpoint execution remain Python-owned."
+        }
       ]
     },
     {

@@ -417,6 +417,20 @@ DF MP2/CCSD(T).
 (python-cbs-ownership)=
 ## Ownership and concurrency
 
+The installed native runtime owns extrapolation weights and the six focal-point
+coefficients through
+{ref}`generativeqc_cbs_extrapolation_query_v1 <native-c-generativeqc-cbs-extrapolation-query-v1>`.
+Construction queries this geometry-independent plan and the convergence policy
+from the same normally selected host library, including for CUDA workflows.
+Missing support, a native refusal or a malformed receipt rejects construction
+before electronic execution; Python does not reconstruct a fallback plan.
+This host metadata query neither executes nor admits a molecular backend.
+
+Python still owns basis-family/identity validation, method/basis grouping,
+coefficient-L1 budget allocation, sequential component execution and observable
+composition/publication. The native coefficient plan is not a complete native
+CBS endpoint or CLI method, a basis-error estimate, or a performance certificate.
+
 `CBSBasis` snapshots local records at construction. Modifying a file or the
 caller-owned options dictionary does not change an existing workflow. Keep the
 workflow's configuration fixed during use. One workflow serializes its calls;

@@ -28,6 +28,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_scf_effort_decide_v1](#native-c-generativeqc-scf-effort-decide-v1)
 - [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
 - [generativeqc_correlation_convergence_query_v1](#native-c-generativeqc-correlation-convergence-query-v1)
+- [generativeqc_cbs_extrapolation_query_v1](#native-c-generativeqc-cbs-extrapolation-query-v1)
 - [generativeqc_hf_plan_query_v1](#native-c-generativeqc-hf-plan-query-v1)
 - [generativeqc_hf_verify_final_v1](#native-c-generativeqc-hf-verify-final-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
@@ -691,6 +692,40 @@ callback or implicit retry. Input and output storage may overlap.
 
 **Units.** Energy allowances/tolerances are Hartree; force allowances are
 Hartree/Bohr. Density, amplitude and response gates retain their solver units.
+
+(native-c-generativeqc-cbs-extrapolation-query-v1)=
+## generativeqc_cbs_extrapolation_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_cbs_extrapolation_query_v1 ( const generativeqc_cbs_extrapolation_descriptor_v1 * descriptor , generativeqc_cbs_extrapolation_plan_v1 * output ) ;
+```
+
+**Behavior.** Plan the shared geometry-independent MP2-assisted CCSD(T)/CBS
+extrapolation, using exponential or highest-basis HF and inverse-power MP2.
+This does not certify basis completeness, observable errors or an endpoint.
+
+**Inputs.** Required complete current-ABI descriptors, increasing cardinal numbers
+in [2,100], finite positive exponents, hf_extrapolation=0/1 and reserved=0.
+Caller owns actual basis-family, identity, representation and execution admission.
+
+**Outputs.** Atomically publishes two weight pairs and six ordered coefficients.
+Singular or nonfinite weights reject; finite-input underflow of the decaying
+exponential is its valid limiting weight pair. Errors leave output unchanged.
+
+**Errors.** INVALID_ARGUMENT for null or malformed inputs and singular weights;
+ABI_MISMATCH for incompatible headers. Other mapped C-boundary failures return
+INTERNAL_ERROR without publishing a partial plan.
+
+**Lifetime.** Borrows input/output only during the call and retains no storage.
+Input/output buffers may overlap; all inputs are consumed before publication.
+
+**Execution.** Synchronous constant-storage host planning; no context, electronic
+solve, basis lookup, Python/compiler, device work, callback or implicit retry.
+
+**Units.** Exponents, cardinal numbers, weights and coefficients are dimensionless.
+Complete component energies/forces retain Hartree and Hartree/Bohr units.
 
 (native-c-generativeqc-hf-plan-query-v1)=
 ## generativeqc_hf_plan_query_v1

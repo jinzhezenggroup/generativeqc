@@ -1764,6 +1764,49 @@ GENERATIVEQC_API generativeqc_status
 generativeqc_correlation_convergence_query_v1(const generativeqc_correlation_budget_v1* descriptor,
                                               generativeqc_correlation_limits_v1* output);
 
+/** Geometry-independent two-point CBS inputs. Cardinal numbers are scientific
+ * inputs in [2,100], strictly increasing; exponents are finite and positive.
+ * hf_extrapolation is 0 for exponential and 1 for highest-basis HF; reserved=0.
+ * Distinct, compatible all-electron basis snapshots remain a caller contract. */
+typedef struct generativeqc_cbs_extrapolation_descriptor_v1 {
+  uint32_t struct_size, abi_version;
+  uint32_t low_cardinal, high_cardinal, hf_extrapolation, reserved;
+  double correlation_exponent, hf_exponent;
+} generativeqc_cbs_extrapolation_descriptor_v1;
+
+/** Stable coefficient ordering: HF(low), HF(high), MP2(low), MP2(high),
+ * CCSD(T)(correction), MP2(correction). Repeated method/basis roles may share one
+ * completed endpoint, but every energy and force uses these same coefficients.
+ * Weight arrays retain low/high order. No component execution is implied. */
+typedef struct generativeqc_cbs_extrapolation_plan_v1 {
+  uint32_t struct_size, abi_version;
+  double hf_weights[2], mp2_weights[2], coefficients[6];
+} generativeqc_cbs_extrapolation_plan_v1;
+
+/** @native-contract generativeqc_cbs_extrapolation_query_v1
+ * @behavior Plan the shared geometry-independent MP2-assisted CCSD(T)/CBS
+ * extrapolation, using exponential or highest-basis HF and inverse-power MP2.
+ * This does not certify basis completeness, observable errors or an endpoint.
+ * @inputs Required complete current-ABI descriptors, increasing cardinal numbers
+ * in [2,100], finite positive exponents, hf_extrapolation=0/1 and reserved=0.
+ * Caller owns actual basis-family, identity, representation and execution admission.
+ * @outputs Atomically publishes two weight pairs and six ordered coefficients.
+ * Singular or nonfinite weights reject; finite-input underflow of the decaying
+ * exponential is its valid limiting weight pair. Errors leave output unchanged.
+ * @errors INVALID_ARGUMENT for null or malformed inputs and singular weights;
+ * ABI_MISMATCH for incompatible headers. Other mapped C-boundary failures return
+ * INTERNAL_ERROR without publishing a partial plan.
+ * @lifetime Borrows input/output only during the call and retains no storage.
+ * Input/output buffers may overlap; all inputs are consumed before publication.
+ * @execution Synchronous constant-storage host planning; no context, electronic
+ * solve, basis lookup, Python/compiler, device work, callback or implicit retry.
+ * @units Exponents, cardinal numbers, weights and coefficients are dimensionless.
+ * Complete component energies/forces retain Hartree and Hartree/Bohr units.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_cbs_extrapolation_query_v1(
+    const generativeqc_cbs_extrapolation_descriptor_v1* descriptor,
+    generativeqc_cbs_extrapolation_plan_v1* output);
+
 /** Optional cost metadata for numerical two-stage HF plan admission. */
 enum {
   GENERATIVEQC_HF_PLAN_SOURCE_COST_PRESENT = 1u << 0,

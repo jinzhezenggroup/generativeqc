@@ -80,15 +80,15 @@
     },
     {
       "id": "posthf-energy-force",
-      "state": "native-dispatch",
-      "slices": ["R2", "R3", "R6"],
-      "python_roles": ["wrapper"],
-      "delivered_scope": ["Registered executable MP2/UMP2 and coupled-cluster domains use native method owners. Energy-only versus analytic-force support remains method/context-specific; the shared registry must not acquire blanket force or Hessian capability."],
-      "retired_python_runtime": ["Production energy/force scientific assembly within admitted native post-HF method endpoints."],
-      "remaining_python_runtime": [],
-      "remaining_acceptance": ["General response migration must preserve nonsymmetric CC Lambda/Z equations, not substitute HF/KS response; resource and contextual property completeness remain separate gates."],
-      "source_anchors": ["python/generativeqc/calculator.py", "src/methods/mp2_method.cpp", "src/methods/ump2_method.cpp", "src/methods/rccsd_method.cpp", "src/methods/df_rccsdt_method.cpp"],
-      "tests": ["tests/python/test_mp2_batch.py", "tests/python/test_df_cc_batched_replay.py", "tests/python/test_ccsd_t_force_publication.py"]
+      "state": "partial-cutover",
+      "slices": ["R2", "R3", "R4", "R6"],
+      "python_roles": ["wrapper", "scientific-runtime"],
+      "delivered_scope": ["Registered executable MP2/UMP2 and coupled-cluster domains use native method owners. Energy-only versus analytic-force support remains method/context-specific; the shared registry must not acquire blanket force or Hessian capability.", "CBS weights and focal-point coefficients require the shared native extrapolation plan. Missing support or selected refusal fails before electronic execution; the same selected host library supplies convergence metadata."],
+      "retired_python_runtime": ["Production energy/force scientific assembly within admitted native post-HF method endpoints.", "Python inverse-power/exponential CBS extrapolation-weight arithmetic."],
+      "remaining_python_runtime": ["CBS basis-family/identity validation, method/basis grouping, coefficient-L1 budget allocation, sequential component execution and observable composition/publication remain Python-owned."],
+      "remaining_acceptance": ["General response migration must preserve nonsymmetric CC Lambda/Z equations, not substitute HF/KS response; resource and contextual property completeness remain separate gates.", "A complete shared native CBS endpoint and SDK/CLI parity still require independent physical E/F gates, failure-atomic lifetime behavior and whole-endpoint work/resource/performance qualification."],
+      "source_anchors": ["python/generativeqc/calculator.py", "python/generativeqc/cbs.py", "python/generativeqc/_cbs_plan.py", "src/core/cbs_extrapolation.hpp", "src/api/c_api_correlation_convergence.cpp", "src/methods/mp2_method.cpp", "src/methods/ump2_method.cpp", "src/methods/rccsd_method.cpp", "src/methods/df_rccsdt_method.cpp"],
+      "tests": ["tests/python/test_mp2_batch.py", "tests/python/test_df_cc_batched_replay.py", "tests/python/test_ccsd_t_force_publication.py", "tests/python/test_cbs_extrapolation.py", "tests/python/test_ccsdt_cbs.py", "tests/python/test_ccsdt_cbs_native.py"]
     },
     {
       "id": "gfn2-energy-force",

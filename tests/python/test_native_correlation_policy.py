@@ -117,7 +117,7 @@ def test_cbs_production_planning_uses_native(
     basis = snapshot_basis("sto-3g")
     arguments = ((CBSBasis(basis, 2), CBSBasis(snapshot_basis("def2-svp"), 3)),)
     options = {"energy_tolerance": 1e-13, "ccsd_residual_tolerance": 1e-10}
-    monkeypatch.setattr(_native, "load_library", lambda: library)
+    monkeypatch.setattr(_native, "load_library", lambda **options: library)
     actual = CCSDTCBSCalculator(*arguments, calculator_options=options)._convergence
     budget = TargetErrorBudget(**actual["component_budget"])
     expected_scale, expected_limits = reference_policy(budget)
@@ -193,8 +193,13 @@ def test_missing_protocol_rejects_discovered_library(
         policy.convergence_policy(budget)
 
 
-def test_cbs_planning_rejects_missing_protocol(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_native, "load_library", lambda: SimpleNamespace())
+def test_cbs_planning_rejects_missing_protocol(
+    library: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    selected = SimpleNamespace(
+        generativeqc_cbs_extrapolation_query_v1=library.generativeqc_cbs_extrapolation_query_v1
+    )
+    monkeypatch.setattr(_native, "load_library", lambda **options: selected)
     bases = (
         CBSBasis(snapshot_basis("sto-3g"), 2),
         CBSBasis(snapshot_basis("def2-svp"), 3),

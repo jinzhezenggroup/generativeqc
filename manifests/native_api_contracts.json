@@ -3259,6 +3259,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_cbs_extrapolation_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "46d64aadd4eaa26613cc7aec5564baef25f87757dc3b0354d62330f12ea32c09",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_precision_admission_query_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/precision_admission.h",
