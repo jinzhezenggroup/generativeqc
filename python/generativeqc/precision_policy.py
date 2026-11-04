@@ -463,6 +463,8 @@ class PrecisionCalculator:
     Prepared batches reuse native candidate plans and engine-local warm seeds.
     Audits release candidate GPU resources first and never seed candidates from
     reference densities. Correlated methods, Hessians and MD are not promoted.
+    Standard and Fast retain successful unaudited scalar candidates alike;
+    explicit cache clearing, audit transitions and failures release residency.
     Calls on an instance serialize.
     """
 
@@ -817,6 +819,18 @@ class PrecisionCalculator:
                         multiplicity=multiplicity,
                         properties=requested,
                     )
+                    record = _solve_record(
+                        calculator,
+                        result,
+                        role=role,
+                        precision=precision,
+                        seconds=None,
+                        requested=requested,
+                        atom_count=len(native_atoms),
+                        backend="cpu_reference"
+                        if self._options["device"] == "cpu"
+                        else "cuda",
+                    )
                 except BaseException as error:
                     calculator.clear_cache()
                     if self._fast_fock and calculator is self._candidate:
@@ -839,38 +853,27 @@ class PrecisionCalculator:
                 finally:
                     # Audit owners run sequentially within the same resource
                     # budget; a retained candidate must not double residency.
-                    if not (
-                        calculator is self._candidate
-                        and self.policy.profile == "fast"
-                        and target is None
-                    ):
+                    if not (calculator is self._candidate and target is None):
                         calculator.clear_cache()
-                solves.append(
-                    _solve_record(
-                        calculator,
-                        result,
-                        role=role,
-                        precision=precision,
-                        seconds=perf_counter() - solve_started,
-                        requested=requested,
-                        atom_count=len(native_atoms),
-                        backend="cpu_reference"
-                        if self._options["device"] == "cpu"
-                        else "cuda",
-                    )
-                )
+                solves.append(replace(record, seconds=perf_counter() - solve_started))
                 return result
 
-            return self._validate_endpoint(
-                candidate_calculator=candidate_calculator,
-                candidate_precision=candidate_precision,
-                requested=requested,
-                route_reasons=route_reasons,
-                model=model,
-                solves=solves,
-                solve=solve,
-                started=started,
-            )
+            try:
+                return self._validate_endpoint(
+                    candidate_calculator=candidate_calculator,
+                    candidate_precision=candidate_precision,
+                    requested=requested,
+                    route_reasons=route_reasons,
+                    model=model,
+                    solves=solves,
+                    solve=solve,
+                    started=started,
+                )
+            except BaseException:
+                # Classification can fail after a successful solve. Neither
+                # profile may retain an unpublished candidate's workspace.
+                self._candidate.clear_cache()
+                raise
 
     def _validate_endpoint(
         self,

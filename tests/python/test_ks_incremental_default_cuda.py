@@ -254,9 +254,12 @@ def test_imported_seed_does_not_claim_native_cold_provenance(
                 0
             ]
             assert cold.incremental_direct_jk["active"]
-            snapshot = warm_snapshot(original, 0)
+            snapshot = warm_snapshot(original._owner, 0)
         with calculator.prepare_batch([atoms], warm_start=True) as restored:
-            _native.check(restored._library, restore_snapshots(restored, [snapshot]))
+            native_owner = restored._owner
+            _native.check(
+                native_owner._library, restore_snapshots(native_owner, [snapshot])
+            )
             imported = restored.execute(
                 strict=True, properties=("energy", "forces")
             ).items[0]
