@@ -22,16 +22,29 @@ from tools.generativeqc_validation.native_registry_stub import (
 
 
 @pytest.fixture
-def library(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
-    """Resolve real model identities without allocating a CUDA context."""
+def library(monkeypatch: pytest.MonkeyPatch, policy_library: Any) -> SimpleNamespace:
+    """Borrow real model/policy queries without allocating a CUDA context."""
 
     def available(method: int, pointer: object) -> int:
         ctypes.cast(pointer, ctypes.POINTER(ctypes.c_int32))[0] = 1
         return _native.STATUS_SUCCESS
 
     native = SimpleNamespace(
+        generativeqc_precision_controls_query_v1=policy_library.generativeqc_precision_controls_query_v1,
         generativeqc_ks_options_version=lambda: 1,
         generativeqc_method_available=available,
+        generativeqc_precision_admission_query_v1=(
+            policy_library.generativeqc_precision_admission_query_v1
+        ),
+        generativeqc_precision_execution_run_v1=(
+            policy_library.generativeqc_precision_execution_run_v1
+        ),
+        generativeqc_observable_comparison_query_v1=(
+            policy_library.generativeqc_observable_comparison_query_v1
+        ),
+        generativeqc_precision_candidate_query_v1=(
+            policy_library.generativeqc_precision_candidate_query_v1
+        ),
     )
     install_registry_stub(native, frozenset({"energy"}))
     install_scf_defaults_stub(native, (1e-9, 1e-5, 1e-12), qualified=True)

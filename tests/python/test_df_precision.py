@@ -28,7 +28,7 @@ from generativeqc_compiler.method import ExactExchangePrimitive, resolve_method
     ),
 )
 def test_df_xc_proposals_have_independent_capability_and_model_gates(
-    method: str, admitted: bool
+    method: str, admitted: bool, policy_library: Any
 ) -> None:
     """A Direct capability cannot authorize nonexistent mixed DF integrals."""
     from generativeqc.ks import KsOptions, resolve_ks_options
@@ -36,7 +36,8 @@ def test_df_xc_proposals_have_independent_capability_and_model_gates(
 
     calculator = SimpleNamespace(
         _library=SimpleNamespace(
-            generativeqc_application_df_xc_precision_version_v1=lambda: 1
+            generativeqc_precision_controls_query_v1=policy_library.generativeqc_precision_controls_query_v1,
+            generativeqc_application_df_xc_precision_version_v1=lambda: 1,
         ),
         _device_name="cuda",
         _density_fitting_mode=_native.DENSITY_FITTING_CUDA,

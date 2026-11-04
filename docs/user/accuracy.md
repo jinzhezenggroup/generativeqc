@@ -9,6 +9,19 @@ audit with bounded FP64 fallback, use
 [application precision policies](application_precision.md). FP64 without an
 explicit target does not claim an independently measured observable budget.
 
+`compare_observables` and application-precision audits share the selected native
+observable-comparison owner. A current native library is required to measure
+arrays; missing/refused support never selects a Python norm implementation.
+Energy absolute, force maximum-component and force RMS reductions and runtime
+relative allowances belong to that owner; see the
+{ref}`python-precision-ownership`.
+No new model, backend or derivative qualification follows from comparing arrays.
+
+Typed targets, `ObservableTarget.allowance` and the scalar evidence/status views
+in `AccuracyAssessment` remain portable offline metadata, including validation
+when loading a report. They neither execute an electronic solve nor replace the
+native runtime array reduction or choose precision retry/audit order.
+
 `Calculator.resolved_model(atoms, charge=..., multiplicity=...)` hashes the
 actual ordered geometry, basis/representation, electron populations and
 Hamiltonian. It reuses the existing basis mathematical identity and canonical

@@ -137,6 +137,14 @@ enum class WeightedEriDerivativeExecution { Reference, PackagedCpu };
  * never initiates JIT or falls back silently to the reference recurrence. */
 bool has_packaged_cpu_eri_shell_derivatives() noexcept;
 
+/** Query complete shell-component coverage in the compiled derivative artifact.
+ * Invalid shell indices and unavailable/unsupported artifacts return false.
+ * This does not validate geometry or weights, initiate JIT, or certify a result;
+ * explicit PackagedCpu execution still validates inputs and never falls back.
+ */
+bool supports_packaged_cpu_eri_shell_derivatives(
+    const core::System& system, const std::array<std::size_t, 4>& shell_indices) noexcept;
+
 /** Contract several independent weights through one shell primitive traversal.
  * Results retain input-channel and independent shell-slot ordering. Reuses the
  * default reference recurrence's single-channel accumulation order without molecular AO-rank-four

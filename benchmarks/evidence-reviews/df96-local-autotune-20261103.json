@@ -7,8 +7,8 @@
   "files": [
     {
       "path": "benchmarks/results/df96-local-autotune-20261103/receipts.json.xz",
-      "bytes": 134752,
-      "sha256": "9ac5dd4982c286e456d0e078387220d7ac14350638c665b9759226a9ff6e060e",
+      "bytes": 132976,
+      "sha256": "d7403670a2ceb1ddb24685dd19229d365348617236ec6df9410e520ee668165e",
       "family": "df96-local-autotune-20261103",
       "classification": "required-compact-accepted-evidence",
       "role": "Exact-workload Calculator/Python-frontend resource-domain acceptance, independent native default replay and fully retained negative policy search. No winner, automatic application, practical finite-host/RSS, large native-CLI, composed KS/DF or DF cold-speedup claim; startup retirement is not a numerical or timed-performance result. No native or checkpoint binaries are published."

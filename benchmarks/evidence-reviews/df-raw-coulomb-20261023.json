@@ -10,8 +10,8 @@
       "family": "df-raw-coulomb-20261023",
       "classification": "required-compact-accepted-evidence",
       "role": "exact-original-receipt-text-with-authenticated-restoration",
-      "bytes": 485212,
-      "sha256": "7499b9bbc47f0b824f8bb27a76436322edd0ac4cff1239cfd906e37afeb214f7"
+      "bytes": 478368,
+      "sha256": "38d4f3bbaae7329014792746e6494e666a61c3c8f3f18dd7bc50de001214c407"
     },
     {
       "path": "benchmarks/results/df-raw-coulomb-20261023/stage2-default-source-inputs.json.xz",

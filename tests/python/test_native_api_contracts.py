@@ -86,8 +86,8 @@ class NativeContractTests(unittest.TestCase):
     def test_repository_coverage_and_reference(self) -> None:
         declarations = validate(ROOT)
         # Exact current inventory is a reviewed audit, not a wildcard allowance.
-        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 157)
-        self.assertEqual(sum(d.kind == "c-callback" for d in declarations), 3)
+        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 161)
+        self.assertEqual(sum(d.kind == "c-callback" for d in declarations), 4)
         self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 12)
         self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 57)
         self.assertEqual(
@@ -182,7 +182,7 @@ class NativeContractTests(unittest.TestCase):
 
     def test_nested_or_unmarked_callback_forms_remain_rejected(self) -> None:
         for declaration in (
-            "typedef int (*generativeqc_action)(void*);",
+            "typedef float (*generativeqc_action)(void*);",
             "typedef generativeqc_status (*generativeqc_action)(void (*nested)(void));",
             "generativeqc_status (*generativeqc_action)(void*);",
         ):
@@ -191,6 +191,21 @@ class NativeContractTests(unittest.TestCase):
                 self.assertRaises(ContractError),
             ):
                 scan_c(declaration)
+
+    def test_integer_execution_callback_still_requires_explicit_contract_review(
+        self,
+    ) -> None:
+        callback = "typedef int (*generativeqc_execution)(void* state, uint32_t event, uint32_t* decision);"
+        declarations = scan_c(callback)
+        self.assertEqual(len(declarations), 1)
+        self.assertEqual(declarations[0].kind, "c-callback")
+        with self.assertRaisesRegex(ContractError, "missing exact.*native-contract"):
+            contract_facets(declarations[0])
+        self.mutate("include/generativeqc/generativeqc.h", C, C + callback)
+        with self.assertRaisesRegex(
+            ContractError, "inventory drift.*generativeqc_execution"
+        ):
+            validate(self.root)
 
     def test_new_undocumented_cpp_operation_fails(self) -> None:
         self.mutate(

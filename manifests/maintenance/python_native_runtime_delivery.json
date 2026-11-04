@@ -80,15 +80,15 @@
     },
     {
       "id": "posthf-energy-force",
-      "state": "native-dispatch",
-      "slices": ["R2", "R3", "R6"],
-      "python_roles": ["wrapper"],
-      "delivered_scope": ["Registered executable MP2/UMP2 and coupled-cluster domains use native method owners. Energy-only versus analytic-force support remains method/context-specific; the shared registry must not acquire blanket force or Hessian capability."],
-      "retired_python_runtime": ["Production energy/force scientific assembly within admitted native post-HF method endpoints."],
-      "remaining_python_runtime": [],
-      "remaining_acceptance": ["General response migration must preserve nonsymmetric CC Lambda/Z equations, not substitute HF/KS response; resource and contextual property completeness remain separate gates."],
-      "source_anchors": ["python/generativeqc/calculator.py", "src/methods/mp2_method.cpp", "src/methods/ump2_method.cpp", "src/methods/rccsd_method.cpp", "src/methods/df_rccsdt_method.cpp"],
-      "tests": ["tests/python/test_mp2_batch.py", "tests/python/test_df_cc_batched_replay.py", "tests/python/test_ccsd_t_force_publication.py"]
+      "state": "partial-cutover",
+      "slices": ["R2", "R3", "R4", "R6"],
+      "python_roles": ["wrapper", "scientific-runtime"],
+      "delivered_scope": ["Registered executable MP2/UMP2 and coupled-cluster domains use native method owners. Energy-only versus analytic-force support remains method/context-specific; the shared registry must not acquire blanket force or Hessian capability.", "CBS weights and focal-point coefficients require the shared native extrapolation plan. Missing support or selected refusal fails before electronic execution; the same selected host library supplies convergence metadata."],
+      "retired_python_runtime": ["Production energy/force scientific assembly within admitted native post-HF method endpoints.", "Python inverse-power/exponential CBS extrapolation-weight arithmetic."],
+      "remaining_python_runtime": ["CBS basis-family/identity validation, method/basis grouping, coefficient-L1 budget allocation, sequential component execution and observable composition/publication remain Python-owned."],
+      "remaining_acceptance": ["General response migration must preserve nonsymmetric CC Lambda/Z equations, not substitute HF/KS response; resource and contextual property completeness remain separate gates.", "A complete shared native CBS endpoint and SDK/CLI parity still require independent physical E/F gates, failure-atomic lifetime behavior and whole-endpoint work/resource/performance qualification."],
+      "source_anchors": ["python/generativeqc/calculator.py", "python/generativeqc/cbs.py", "python/generativeqc/_cbs_plan.py", "src/core/cbs_extrapolation.hpp", "src/api/c_api_correlation_convergence.cpp", "src/methods/mp2_method.cpp", "src/methods/ump2_method.cpp", "src/methods/rccsd_method.cpp", "src/methods/df_rccsdt_method.cpp"],
+      "tests": ["tests/python/test_mp2_batch.py", "tests/python/test_df_cc_batched_replay.py", "tests/python/test_ccsd_t_force_publication.py", "tests/python/test_cbs_extrapolation.py", "tests/python/test_ccsdt_cbs.py", "tests/python/test_ccsdt_cbs_native.py"]
     },
     {
       "id": "gfn2-energy-force",
@@ -155,12 +155,12 @@
       "state": "partial-cutover",
       "slices": ["R2", "R4", "R6"],
       "python_roles": ["wrapper", "scientific-runtime"],
-      "delivered_scope": ["Shared native policies own admitted automatic MINAO/Huckel selection, progressive HF decisions, final verification, CPU fixed-density physical audits/projection, precision admission/control decisions, SCF defaults and warm seed storage. Explicit caller controls remain unchanged; a native query failure does not become a compatibility decision."],
-      "retired_python_runtime": ["Duplicated policy arithmetic and seed storage for those positively selected native policy contracts."],
-      "remaining_python_runtime": ["Application-precision candidate/auditor/fallback execution, observable comparison, force-aware/coarse-to-fine progression and cross-model eligibility/seed history still have Python production controllers."],
+      "delivered_scope": ["Shared native policies own admitted automatic MINAO/Huckel selection, progressive HF decisions, final verification, CPU fixed-density physical audits/projection, precision admission/control decisions, SCF defaults and warm seed storage. Required native precision execution owns bounded per-item candidate/retry/classification/release/audit/verification order with checked progress receipts. The required native observable owner supplies energy absolute/force maximum/scaled compensated RMS errors, reference norms, relative allowances and inclusive budget decisions. Explicit caller controls remain unchanged; a native query/controller failure does not become a compatibility decision. Required native completed-candidate classification owns gradient receipt interpretation, complete correction binding against the native canonical catalog, and qualified/strict/fallback/audit route selection; explicit targets always audit."],
+      "retired_python_runtime": ["Duplicated policy arithmetic and seed storage for those positively selected native policy contracts, per-item application-precision stage-order selection, and production NumPy observable norms for precision/public array comparisons. Completed-candidate shortcut predicates, gradient receipt tables and runtime compiler resolution for correction identity are retired from the Python classifier."],
+      "remaining_python_runtime": ["Actual gradient producer model/provider/basis/budget eligibility, initial prepared fleet execution, independent candidate/auditor seed eligibility/history, force-aware/coarse-to-fine progression and cross-model eligibility still have their existing production owners. Typed offline targets/evidence/status are portable metadata, not an electronic execution fallback. Native scheduling/classification/comparison are not an autonomous native precision endpoint or SDK/CLI parity."],
       "remaining_acceptance": ["Finish complete native precision/progressive/strict-closure execution and remaining CUDA/ECP audits, with independent observable-error and complete-endpoint work/resource/performance gates, not just policy-query parity."],
-      "source_anchors": ["python/generativeqc/initial_guess.py", "python/generativeqc/precision_policy.py", "python/generativeqc/force_aware_scf.py", "python/generativeqc/progressive_controller.py", "src/scf/preliminary_guess.cpp", "src/runtime/precision_admission.hpp", "src/methods/scf_defaults.hpp", "src/methods/warm_seed_snapshot.hpp"],
-      "tests": ["tests/python/test_native_initial_guess_policy.py", "tests/python/test_native_precision_admission.py", "tests/python/test_native_precision_controls.py", "tests/python/test_native_scf_defaults.py", "tests/python/test_native_scf_effort.py", "tests/python/test_force_aware_scf.py"]
+      "source_anchors": ["python/generativeqc/initial_guess.py", "python/generativeqc/precision_policy.py", "python/generativeqc/_precision_execution.py", "python/generativeqc/_precision_candidate.py", "python/generativeqc/_observable_comparison.py", "python/generativeqc/accuracy.py", "python/generativeqc/force_aware_scf.py", "python/generativeqc/progressive_controller.py", "src/scf/preliminary_guess.cpp", "src/runtime/precision_admission.hpp", "src/runtime/precision_execution.hpp", "src/runtime/precision_candidate.hpp", "src/runtime/observable_comparison.hpp", "src/methods/scf_defaults.hpp", "src/methods/warm_seed_snapshot.hpp"],
+      "tests": ["tests/python/test_native_initial_guess_policy.py", "tests/python/test_native_precision_admission.py", "tests/python/test_native_precision_controls.py", "tests/native/test_precision_candidate.cpp", "tests/python/test_native_precision_candidate.py", "tests/native/test_precision_execution.cpp", "tests/python/test_native_precision_execution.py", "tests/native/test_observable_comparison.cpp", "tests/python/test_native_observable_comparison.py", "tests/python/test_accuracy.py", "tests/python/test_native_scf_defaults.py", "tests/python/test_native_scf_effort.py", "tests/python/test_force_aware_scf.py"]
     },
     {
       "id": "prepared-snapshot-grid-ao-lifetime",

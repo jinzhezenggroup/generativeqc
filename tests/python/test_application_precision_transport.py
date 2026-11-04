@@ -74,6 +74,7 @@ extern "C" double allowance(unsigned index) {
 @pytest.fixture
 def constructor(monkeypatch: pytest.MonkeyPatch) -> Any:
     """Mock availability only; retain the actual public scientific constructor."""
+    native = _native.load_library()
 
     def available(method: int, pointer: object) -> int:
         ctypes.cast(pointer, ctypes.POINTER(ctypes.c_int32))[0] = 1
@@ -84,6 +85,11 @@ def constructor(monkeypatch: pytest.MonkeyPatch) -> Any:
         generativeqc_application_precision_version_v1=lambda: 1,
         generativeqc_application_precision_version_v2=lambda: 2,
         generativeqc_method_available=available,
+        generativeqc_precision_controls_query_v1=native.generativeqc_precision_controls_query_v1,
+        generativeqc_precision_admission_query_v1=native.generativeqc_precision_admission_query_v1,
+        generativeqc_precision_execution_run_v1=native.generativeqc_precision_execution_run_v1,
+        generativeqc_observable_comparison_query_v1=native.generativeqc_observable_comparison_query_v1,
+        generativeqc_precision_candidate_query_v1=native.generativeqc_precision_candidate_query_v1,
     )
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
     install_registry_stub(library, frozenset({"energy", "forces"}))

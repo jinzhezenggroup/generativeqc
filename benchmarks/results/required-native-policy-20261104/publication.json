@@ -1,0 +1,69 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "CBS timeout leaves full endpoint qualification incomplete; no promotion.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 4987,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "983c727e80bcd55505cedbb7a493512ef20ea24894f57c8e400d54e594143f47"
+    },
+    {
+      "bytes": 3484,
+      "path": "diagnosis.json.xz",
+      "role": "summary",
+      "sha256": "92581057b9b4010a9bbcb2f3e997551fef82bf76856656aaa9e366652e9a8761"
+    },
+    {
+      "bytes": 1832,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "95b467966dc8a33685cc274c6dffa97dbb8b90c16f79133e4fc2a7cb28098fb0"
+    },
+    {
+      "bytes": 7240,
+      "path": "frozen-sources.json.xz",
+      "role": "reproduction",
+      "sha256": "083c9131ecc9beb89f23894fd3f162da9f7a000874d2b5c2c33a2ccebc44e12f"
+    },
+    {
+      "bytes": 1624,
+      "path": "provenance.json.xz",
+      "role": "summary",
+      "sha256": "5707134e1143c4d8e7a17ff0ec235f8873e2e3c867c5f7c67da2d0d62ba4c11a"
+    },
+    {
+      "bytes": 4945,
+      "path": "replay.py",
+      "role": "reproduction",
+      "sha256": "cc762df28b3052f8433e529a61bdfd55fce42119e56f733c0cbf6ae7c3d961b0"
+    },
+    {
+      "bytes": 38288,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "ef80dbb8765917a8be72a86c6f54cbe2eab0571310e877796e89f3a4ece83f9e"
+    },
+    {
+      "bytes": 1340,
+      "path": "summary.json.xz",
+      "role": "summary",
+      "sha256": "d512ff7869d33c26910cc17d8914e327b0b07f2121bea335ecffce8df4c6e135"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "replay.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "93361973fecdb82c66226c3f155ba7f1e8f532c9"
+  }
+}

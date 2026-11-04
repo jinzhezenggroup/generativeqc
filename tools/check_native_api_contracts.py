@@ -191,7 +191,7 @@ def scan_c(source: str) -> list[Declaration]:
             end += 1
         text = signature(ts[i:end])
         callback = re.fullmatch(
-            r"typedef generativeqc_status \( \* (generativeqc_\w+) \) \( ([^(){};]*) \)",
+            r"typedef (?:generativeqc_status|int) \( \* (generativeqc_\w+) \) \( ([^(){};]*) \)",
             text,
         )
         if callback and end < len(ts) and ts[end].text == ";":
