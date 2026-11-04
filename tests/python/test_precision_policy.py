@@ -26,7 +26,10 @@ from generativeqc import (
 from generativeqc import precision_policy as implementation
 from generativeqc.batch import BatchItemResult
 
-from tools.generativeqc_validation.native_registry_stub import install_registry_stub
+from tools.generativeqc_validation.native_registry_stub import (
+    install_registry_stub,
+    install_scf_defaults_stub,
+)
 
 ATOMS = (("H", (0, 0, -0.7)), ("H", (0, 0, 0.7)))
 ENERGY = TargetAccuracy((ObservableTarget("energy", "absolute", "Eh", absolute=1e-6),))
@@ -96,8 +99,8 @@ def backend(
                 self._library.generativeqc_precision_candidate_query_v1 = None
             if state.standard_convergence:
                 self._device_name = options.get("device")
-                self._library.generativeqc_standard_scf_convergence_version_v1 = (
-                    lambda: 1
+                install_scf_defaults_stub(
+                    self._library, (1e-9, 1e-5, 1e-12), qualified=True
                 )
             self._basis = options.get("basis", ())
             self._auxiliary_basis = options.get("auxiliary_basis")

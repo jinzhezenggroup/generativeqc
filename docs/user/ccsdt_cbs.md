@@ -41,7 +41,91 @@ supplied correction record has either MP2 basis's full identity.
 
 Set `properties=("energy",)` to omit all analytic forces. The default requests
 both energy and forces. Ionic charge is passed identically to every component;
-only a closed-shell singlet is currently admitted.
+singlets use RHF/MP2/CCSD(T), while higher multiplicities select
+UHF/UMP2/UCCSD(T). See the open-shell limits below before requesting radicals
+or high-spin ions.
+
+## Open-shell energy and forces
+
+Set `multiplicity` to the spin multiplicity (`2S + 1`). The default includes
+analytic forces; energy-only execution remains available. A hydrogen doublet can use:
+
+```python
+workflow = CCSDTCBSCalculator(
+    (CBSBasis("sto-3g", 2), CBSBasis("def2-svp", 3)),
+    device="cpu",
+)
+result = workflow.singlepoint(
+    [("H", (0.0, 0.0, 0.0))], multiplicity=2, properties=("energy",)
+)
+```
+
+This small named-basis pair demonstrates the API, **not** a systematic CBS
+sequence. Use a consistent basis family and suitable cardinals for scientific
+extrapolation. Charge and multiplicity are validated and passed unchanged to
+every basis group; `basis_metadata` records them and the selected
+`spin_reference`. A singlet still selects the restricted model; multiplicity
+alone does not request a broken-symmetry open-shell singlet.
+
+Open-shell CBS supports conventional or explicitly fitted,
+real-FP64 energy and analytic-force endpoints on CPU/CUDA. Explicit CBS
+auxiliary bases require CUDA. The correction basis inherits native UCCSD(T)'s s/p/d,
+numeric memory and scalar-work admission, without a fixed AO-count cutoff.
+The larger UMP2 bases retain their own native limits. Scalar ECPs follow the
+Hamiltonian contract below; frozen core is not substituted or silently
+downgraded. Unsupported native initial-guess
+or screening controls also remain errors.
+
+## Scalar ECP references
+
+Orbital `BasisSet` snapshots may contain supported scalar semilocal Gaussian
+ECPs on CPU/CUDA, for restricted singlets and unrestricted higher multiplicities.
+The removed core sets valence occupations and ionic charges; nuclear repulsion
+uses those same charges. The local/nonlocal residual enters the reference
+Hamiltonian and every correlated one-electron response exactly once. First
+forces include basis-center and ECP-center motion, orbital response and Pulay
+terms; they are analytic, not production numerical differences.
+
+Every atom must have identical core counts and scalar potential parameters in
+the low, high and correction orbital bases. Mixing all-electron and ECP records,
+different removed cores or different potentials raises `ValueError` before any
+native endpoint starts. JSON formatting and unused element records do not change
+this comparison. `basis_metadata["ecp_core_electrons"]` records the per-atom
+removed core. All **remaining valence electrons** are correlated: the ECP core
+is not an additional frozen-core approximation.
+
+Explicit CUDA auxiliary bases retain the same correlation-only/full-DF policy;
+they approximate the electron interaction, never the ECP operator. The checked
+two-grid ECP convergence gate, angular limits and conservative numeric-workspace
+reservation remain mandatory. An unsupported potential, unconverged reference,
+response failure or resource refusal returns no partial composite. Standalone
+HF/DF and other method-specific ECP admission is not enlarged by this workflow.
+See [scalar ECP conventions and qualification](ecp.md).
+
+The independent correlation qualification uses the physical LANL2DZ Na potential
+with compact test-only Na/H valence bases, including nonzero unrestricted triples,
+charged singlets and empty-beta triplets. These records qualify implementation,
+not a systematic CBS family or arbitrary heavy-element accuracy. Supply a
+consistent ECP/basis family and scientifically meaningful cardinals yourself.
+
+Native unrestricted owners retain strict stopping ceilings even under
+`policy="standard"` or `"fast"`; they do not admit the restricted relaxed
+convergence transport. Explicit tighter tolerances are preserved.
+`convergence` records `selected="strict_fp64"` and
+`reason="unrestricted_strict_convergence"` for this path rather than claiming
+relaxed native execution.
+
+The model is `UHF(limit) + UMP2-correlation(limit) + [UCCSD(T)-UMP2](small)`,
+with the same geometry-independent weights as the restricted workflow.
+Each basis group shares one converged physical UHF reference and selected
+interaction owner. Fitted correlation retains a conventional reference by
+default; `hf_reference="df"` selects fitted UHF J/K as well. Integral, metric,
+orbital and CC responses match that choice. See the explicit CUDA hybrid and
+dense fitted-resource contract in [unrestricted CC](unrestricted_cc.md).
+The correction-basis UMP2 phase finishes before the CC
+workspace is allocated; it currently performs its own bounded transformation
+rather than borrowing restricted CC MO blocks. All requested components must
+succeed before any group or complete `CBSResult` is published.
 
 <a id="fast-convergence"></a>
 
@@ -66,6 +150,9 @@ triples and analytic force response use FP64. The selected Hamiltonian, basis
 groups and complete analytic-force work are preserved. Budget-scaled stopping
 applies to conventional CPU/CUDA CBS and both CUDA DF reference models;
 CPU and conventional CCSD keep FP64 arithmetic.
+Unrestricted CBS also retains its strict FP64 owner, including explicit mixed
+preconvergence requests: result metadata records the request separately from
+`preconvergence_selection="fp64"`; it never invokes the restricted mixed owner.
 
 | Request | Final convergence | Auxiliary preconvergence |
 | --- | --- | --- |
@@ -301,8 +388,12 @@ Standalone full-DF analytic E+F uses
 `Calculator(method="mp2", density_fitting="full_cuda", device="cuda",
 auxiliary_basis=..., correlation_memory_budget_bytes=2 << 30)`;
 `method="df-ccsd(t)"` accepts the same selector. This is distinct from legacy
-`density_fitting="cuda"` RI-MP2. Full DF currently supports single points and
-same-basis groups, not prepared batches, CPU fallback, or open-shell variants.
+`density_fitting="cuda"` RI-MP2. Full DF currently supports restricted and
+unrestricted single points and same-basis groups, not prepared batches or CPU fallback.
+The unrestricted UMP2/UCCSD owners also admit an explicitly requested native
+CPU-reference context with these fitting selectors; results report
+`cpu_reference`. This separate reference domain never substitutes CPU work for
+a requested CUDA context. The restricted full-DF owners remain CUDA-only.
 
 The positive `correlation_memory_budget_bytes` bounds complete numeric
 capacity, including simultaneous host/device owners and a conservative retained
@@ -341,14 +432,14 @@ These are conventional extrapolation forms, not universal error guarantees;
 see Helgaker et al., *J. Chem. Phys.* **106**, 9639 (1997), and the
 [Psi4 CBS scheme definitions](https://psicode.org/psi4manual/master/cbs.html).
 
-Every component uses the same geometry, charge, spin, nonrelativistic
-all-electron reference and full correlated occupied space. The default uses
+Every component uses the same geometry, charge, spin and all-electron or matching
+scalar-ECP Hamiltonian, with the full remaining occupied space correlated. The default uses
 exact correlation integrals; explicit auxiliaries select correlation DF, while
 `hf_reference` selects exact or RI-JK reference response. Final physical checks
 and response use FP64; the [preconvergence policy](#convergence-profiles) can
 select bounded FP32 DF-CCSD/Lambda warmup independently of stopping limits.
-Frozen-core, ECP and unrestricted
-variants are not admitted. Cardinals must be increasing integers, the larger
+Additional frozen-core variants are not admitted. Open-shell energies use the
+unrestricted model and limits described above. Cardinals must be increasing integers, the larger
 bases must have distinct identities, and all bases must have the same AO
 representation. Cardinal numbers are explicit declarations; an arbitrary
 record is not certified as a systematic CBS family merely by labeling it TZ.
@@ -365,8 +456,8 @@ Do not use extrapolated energy with only the larger MP2 force. Do not refit
 exponents at each geometry without their derivatives. Same-basis components
 execute as one native group: MP2 supplies an HF companion, and CCSD(T) supplies
 MP2 and, when needed, HF companions. Each group shares its converged canonical
-RHF reference and orbitals. In the conventional model they also share the exact
-AO interaction owner. The correction-basis
+RHF or UHF reference and orbitals. In the conventional model they also share the exact
+AO interaction owner. In the restricted model, the correction-basis
 MP2 energy and initial force adjoint also borrow the already transformed CC
 OVOV block. Its remaining orbital-RHS, relaxed-weight and response-operator
 reads borrow a complete six-block CC ERI symmetry cover when admitted, rather
@@ -412,7 +503,10 @@ density tolerances to `1e-12`/`1e-10`, CC energy/residual tolerances to
 methods/bases, precision, frozen core or density fitting. Native admissibility
 checks still apply to these controls. `Calculator.singlepoint_components` also
 exposes same-reference groups directly for conventional, full and correlation-only
-DF MP2/CCSD(T).
+DF MP2/CCSD(T), and native CPU/CUDA UMP2/UCCSD(T) energy/force endpoints.
+An unrestricted owner defaults to a `uhf` companion; UCCSD(T) also accepts
+`companions=("uhf", "ump2")`. Restricted companion names are not aliases for
+unrestricted methods.
 
 (python-cbs-ownership)=
 ## Ownership and concurrency
@@ -472,6 +566,14 @@ correlation-only DF owner is separate from conventional force admission. This or
 does not remove remaining host staging or improve the asymptotic MP2 response
 algorithm. Optional MO caching reduces repeated transformations, not the
 method-specific response work or its domain limits.
+
+`tests/python/test_cbs_open_shell_native.py` independently reconstructs the
+input basis shells in PySCF and qualifies every unrestricted component and
+the full composite for neutral doublets and charged, empty-beta triplets.
+Its compact synthetic basis pair qualifies composition, not CBS predictive
+accuracy. Energy acceptance is `1e-8` Hartree for Tight and `1e-7` Hartree for
+Standard. Separate tests retain atomic all-or-nothing publication on CC or
+UMP2-companion failure and reject spin-incompatible companion names.
 
 Independent reference data live under `tests/reference_data/cbs/`. H2 uses the
 physical spherical cc-pVDZ/cc-pVTZ sequence. A separate water **synthetic pair**

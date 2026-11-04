@@ -10,8 +10,8 @@
       "family": "cbs-routine-standard-20261025",
       "classification": "required-compact-accepted-evidence",
       "role": "full-observables-independent-oracles-work-and-negative-trials",
-      "bytes": 339296,
-      "sha256": "5eaac46759bc3893485c7f57c5cf4fcbf00c556f47aa3dfe20fc3bb58929dc0d"
+      "bytes": 302332,
+      "sha256": "03b2722d016c13daaf6025a021de18e0ac333ebbb6efe94943c57748a57f5d3a"
     }
   ]
 }

@@ -15,6 +15,8 @@ from generativeqc import TargetErrorBudget
 from generativeqc import _precision_native as transport
 from generativeqc import precision_policy as policy
 
+from tools.generativeqc_validation.native_registry_stub import install_scf_defaults_stub
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -35,6 +37,7 @@ def library(required_native_cxx: Any, tmp_path_factory: pytest.TempPathFactory) 
     )
     value = ctypes.CDLL(str(path))
     value.generativeqc_status_message = lambda status: b"policy rejected"
+    install_scf_defaults_stub(value)
     return value
 
 

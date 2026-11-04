@@ -33,7 +33,7 @@ from ._precision_execution import (
     require_precision_schedule,
     run_precision_schedule,
 )
-from ._scf_convergence import default_scf_controls
+from ._scf_defaults_native import default_controls
 from .accuracy import (
     ObservableTarget,
     TargetAccuracy,
@@ -514,9 +514,10 @@ class PrecisionCalculator:
         if policy.profile in ("standard", "fp64", "fast"):
             # Select the same qualified Standard controls as Calculator after
             # resolving the native library and complete model. Unsupported
-            # owners and older libraries keep their strict defaults. Tight
+            # native owners keep their strict defaults. Missing policy support
+            # rejects the installation instead of choosing Python defaults. Tight
             # caller values survive both Standard and Fast fallback paths.
-            for name, ceiling in default_scf_controls(self._candidate).items():
+            for name, ceiling in default_controls(self._candidate).items():
                 requested = self._options.get(name)
                 value = min(ceiling, ceiling if requested is None else float(requested))
                 self._options[name] = value

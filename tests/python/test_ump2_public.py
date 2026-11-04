@@ -74,13 +74,17 @@ def test_ump2_public_model_preserves_two_spin_identity(
         atoms, multiplicity=multiplicity
     )
     assert model.identity != restricted_or_uhf.identity
-    with pytest.raises(ValueError, match="UMP2 model requires conventional"):
-        replace(
-            model,
-            approximation="density_fitting",
-            auxiliary_basis_hash="aux",
-            metric_relative_threshold=1e-10,
-        )
+    fitted = replace(
+        model,
+        approximation="density_fitting",
+        auxiliary_basis_hash="aux",
+        metric_relative_threshold=1e-10,
+    )
+    assert fitted.identity != model.identity
+    assert (
+        replace(fitted, reference_approximation="conventional").identity
+        != replace(fitted, reference_approximation="density_fitting").identity
+    )
 
 
 @pytest.mark.parametrize(
@@ -328,7 +332,7 @@ def test_public_ump2_unsupported_requests_fail_closed() -> None:
         Calculator(method="ump2", precision="auto")
     with pytest.raises(NotImplementedError, match="UMP2 frozen-core"):
         Calculator(method="ump2", ccsd_frozen_core=1)
-    with pytest.raises(Exception, match="RI/DF"):
+    with pytest.raises(Exception, match="auxiliary basis"):
         Calculator(
             method="ump2", density_fitting="cpu", initial_guess=None
         ).singlepoint(atoms, multiplicity=2)

@@ -72,6 +72,14 @@ PLAN_STANDINS = r"""
 #include <vector>
 #include "methods/correlated_cuda_reference.hpp"
 #include "core/correlation_convergence.hpp"
+#include "core/types.hpp"
+namespace generativeqc::integrals {
+std::size_t ecp_workspace_capacity(const core::System& system) {
+  if (!system.ecp_terms.empty())
+    throw std::logic_error("shape-only retirement probe cannot admit ECP work");
+  return 0;
+}
+}
 int live_phase_owners = 0;
 int destroyed_plans = 0;
 struct PhaseOwner {
