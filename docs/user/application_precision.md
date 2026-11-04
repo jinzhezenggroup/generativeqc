@@ -14,6 +14,13 @@ release candidate residency. Precision policy changes arithmetic admission and
 evidence, not this resource lifetime. Prepared batches likewise use the same
 policy owner and retain their independently managed `close()` lifetime.
 
+Shared drivers are not a dtype-only parity guarantee. Fast can also change SCF
+stopping and provisional screening, and its required fallback/audit work may add
+complete solves. Some native execution optimizations and resource admissions
+still depend on the application budget, including the qualified VV10 fixed-anchor
+route. Equal FP64 arithmetic alone therefore does not establish identical
+internal schedules, work counts, memory requirements or endpoint cost.
+
 `policy="fp64"` remains a backward-compatible name for Standard: both use
 identical controls and execution, and the serialized `profile` preserves the
 name requested by the caller for compatibility. The native CLI

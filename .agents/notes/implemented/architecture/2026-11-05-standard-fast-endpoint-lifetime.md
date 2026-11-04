@@ -61,3 +61,10 @@ Making Fast discard its workspace would unify the wrong behavior and lose
 qualified reuse. Bypassing the facade for Standard would keep benchmark control
 and timing paths different. Collapsing Standard and Fast tolerances or removing
 Fast audits would change scientific contracts and is not part of unification.
+
+## Follow-up scope audit
+
+The [execution-parity audit](../../proposed/2026-11-05-standard-fast-execution-parity.md)
+records remaining construction, fixed-anchor, tile and resource-admission
+differences. Shared ownership must not be described as precision-only execution
+parity or as qualification of those remaining native optimizations.
