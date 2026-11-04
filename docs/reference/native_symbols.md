@@ -2497,13 +2497,15 @@ Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_execute_components_v1 ( generativeqc_calculation * calculation , generativeqc_result_descriptor * result , generativeqc_result_descriptor * hf , generativeqc_result_descriptor * mp2 ) ;
 ```
 
-**Behavior.** Execute conventional MP2 or RCCSD(T) with optional same-reference companions.
+**Behavior.** Execute MP2 or CCSD(T) with optional same-reference companions.
 
 **Inputs.** Initialize every supplied result with its full struct_size and GENERATIVEQC_ABI_VERSION.
-MP2 supports HF; RCCSD(T) supports HF and MP2. NULL companion descriptors omit
+MP2/UMP2 support HF; RCCSD(T)/UCCSD(T) support HF and MP2. Unrestricted
+companions use UHF/UMP2 on the selected CPU/CUDA backend and conventional or
+explicitly fitted operator. NULL companion descriptors omit
 that work. All supplied descriptors must request the same energy/force mode,
 have disjoint output storage, and satisfy calculation_execute's buffer rules.
-One converged RHF state and exact interaction owner serve the complete group.
+One converged RHF/UHF state and interaction owner serve the complete group.
 Force companions are analytic, not finite differences or reference-oracle work.
 
 **Outputs.** With companions requested, outputs are published together only after every

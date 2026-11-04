@@ -132,3 +132,5 @@ same-family/provisional (requested gpt-6.1-sol, actual backend model unverified)
 This packet establishes the bounded frozen-CD2B matrix result; it does not
 certify universal chemistry, other GPUs, current-main performance or the whole
 project's unrelated electronic-property methods.
+
+The five large original archive/manifest/review/failure members now use authenticated offline recovery from already merged `5efc730f4c6d809cc4a31d23db4cdb5f87dae6e3`, declared in `historical-snapshot.json`. Original720 E/F/180 processes/20 wins, all10 nonwins and both zero-E/F failures retain exact bytes. The existing CPU final entrypoint reconstructs these originals before its unchanged scientific replay. This storage migration creates room for later source-labelled data; it does not change any historical acceptance or claim DB36 performance.

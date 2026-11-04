@@ -235,8 +235,9 @@ jobs:
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
     # Cold GCC coverage can spend 6 minutes compiling and 13 minutes in CTest.
-    # Leave room for lcov and artifacts without enlarging plain-build budgets.
-    timeout-minutes: ${{ matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 25 || 15 }}
+    # Leave room for lcov and artifacts. Cold Clang can spend 13.5 minutes
+    # compiling plus 1.5 minutes in CTest; retain a bounded 20-minute job.
+    timeout-minutes: ${{ matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 25 || matrix.compiler == 'clang' && 20 || 15 }}
     strategy:
       fail-fast: false
       matrix:
@@ -1625,7 +1626,9 @@ jobs:
               --native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"
             )
           fi
-          .venv/bin/python -m pytest "${collection_targets[@]}" -v \
+          # Keep failing node IDs, slowest-case timings, and full JUnit artifacts,
+          # without emitting one log line for each of ~20k core tests.
+          .venv/bin/python -m pytest "${collection_targets[@]}" -q \
             -o faulthandler_timeout=0 \
             -p tools.pytest_safe_diagnostics --diagnostic-timeout=900 \
             --diagnostics-dir="$PWD/.artifacts/python-diagnostics" \

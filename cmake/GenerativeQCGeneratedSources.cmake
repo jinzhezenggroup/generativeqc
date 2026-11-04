@@ -758,9 +758,20 @@ macro(generativeqc_register_host_generated_sources target)
     TARGET ${target}
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_uccsd_native.py"
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_uccsd_cpu.hpp"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_uccsd_response.hpp"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_uccsd_native.py"
-    ARGS --cpu-header "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_uccsd_cpu.hpp")
+    ARGS --cpu-header "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_uccsd_cpu.hpp"
+      --response-header "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_uccsd_response.hpp")
+
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_ao_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ao_native.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.hpp"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_ao_source.py"
+    ARGS --cpu-header "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.hpp")
 
   # The DF families share the existing RCCSD emitter. Their CPU queries
   # also own exact admission sizes for CUDA; generate once for both backends.
@@ -1490,6 +1501,26 @@ macro(generativeqc_register_cuda_generated_sources target)
 
   set(GENERATIVEQC_RCCSD_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsd_cuda.cu")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_ao_cuda_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ao_native.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.cu"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_ao_source.py"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.hpp"
+    ARGS --cuda-source "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.cu")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_uccsd_cuda_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_uccsd_native.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_uccsd_cuda.cu"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_uccsd_native.py"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_uccsd_response.hpp"
+    ARGS --cuda-source "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_uccsd_cuda.cu")
   generativeqc_register_generated_sources(
     NAME generativeqc_rccsd_cuda_codegen
     TARGET ${target}
