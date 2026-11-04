@@ -768,7 +768,8 @@ def emit_native_xc_matrix_schedule(
 def _emit_occupied_features(schedule: XcMatrixSchedule) -> str:
     """Project a witness for exact certificates or bounded SCF initialization.
 
-    Projection and bound panels must both fit the dead matrix-product scratch.
+    Exact mode needs projection and bound panels in dead matrix-product scratch;
+    provisional mode needs only the projection and must reduce contraction work.
     Potential construction retains the original AO jets; refused points consume
     the still-live stored density rather than an unrounded factor oracle.
     """
@@ -952,7 +953,8 @@ __global__ void occupied_density_features(const double* work, I rank, I count,
 inline void launch_occupied_density(cudaStream_t stream, CudaXcOccupiedDensity occupied,
     const double* ao, I active, I count, double* work, double* features,
     I terms, int* error, const size_t* ids) {
-  const bool projection_fits = occupied.rank() <= std::size_t(active / 2);
+  const bool projection_fits = occupied.provisional ? occupied.rank() < std::size_t(active)
+                                                   : occupied.rank() <= std::size_t(active / 2);
   if (projection_fits) {
     occupied_density_products<<<dim3((occupied.rank() + @TILE@ - 1) / @TILE@,
         (count + @TILE@ - 1) / @TILE@, occupied.spins * 4), dim3(@TILE@, @TILE@), 0, stream>>>(
@@ -962,7 +964,8 @@ inline void launch_occupied_density(cudaStream_t stream, CudaXcOccupiedDensity o
   occupied_density_features<<<generativeqc_tensor::blocks(occupied.spins * count * 32, 128),
       128, 0, stream>>>(work, occupied.rank(), count, occupied.spins, terms, features, error,
                         occupied.density, ao, active, occupied.nao, ids,
-                        projection_fits ? work + occupied.spins * 4 * count * occupied.rank() : nullptr,
+                        projection_fits && !occupied.provisional ?
+                            work + occupied.spins * 4 * count * occupied.rank() : nullptr,
                         occupied.provisional && projection_fits);
   generativeqc_tensor::cuda_check(cudaGetLastError());
 }

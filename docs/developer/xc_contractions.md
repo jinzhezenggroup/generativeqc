@@ -92,6 +92,8 @@ formed the current D may supply strict-FP64 meta-GGA features in the admitted
 phase. Finite projection/feature, coefficient-range and capacity checks guard
 initializer work; admitted proposals skip both the dense original-D
 contraction and the unused absolute-dot certificate altogether.
+Their single scratch panel fits whenever the occupied rank is below the active
+AO count; exact mode retains its separate two-panel capacity requirement.
 The control is opt-in; unset, `0`, and malformed values retain matrix work.
 
 Near-stationary inputs (previous residual RMS at most `1e-6`) retain matrix

@@ -50,8 +50,10 @@ global scratch allocation, scientific kernel launch or synchronization.
   convergence. Final-state and derivative consumers use original matrix work.
 - Frame ownership/generation, stream ordering and one-use tmp1 lease survive.
   Failed/rejected proposals and new solves revoke that lease.
-- Both orbital and absolute-bound panels fit existing dead scratch only when
-  `2 * rank <= active`; compact AO mapping and original-D fallbacks remain.
+- Exact-mode orbital and absolute-bound panels require `2 * rank <= active`.
+  Proposals use only the orbital panel and require `rank < active`, reducing
+  contraction work without reserving an unused second panel. Compact AO mapping
+  and original-D fallbacks remain.
 - FP64 reassociation is not reported as FP32 arithmetic. Traces expose the
   provisional frame generations; final traces must return to matrix work.
 - Performance evidence must include handoff, dense refusals and strict
@@ -72,6 +74,9 @@ unhelpful: it incurs directed-rounding work but does not replace strict target
 acceptance. A finite proposal is never treated as an energy/force certificate.
 Adding interval derivatives for every supported Libxc point program is a much
 larger project; initializer auditing avoids requiring that contract at all.
+Retaining the two-panel rank gate after removing absolute bounds would reject
+valid one-panel proposals on localized AO tiles. Capacity and work admission
+must follow the storage actually consumed, not the exact-mode scratch layout.
 
 ## Evidence and promotion boundary
 

@@ -106,6 +106,9 @@ physical accuracy. Admitted points skip original-D evaluation and absolute-dot
 certificate work; refused points still consume the live matrix. The original
 exact-mode `2^-45` prefilter and bitwise verification
 remain unchanged for lower-level nonprovisional calls.
+Provisional projection needs only one scratch panel and requires
+`occupied_rank < active_ao_count`, so its work is smaller than the dense route.
+It neither reserves nor forms a pointer to the unused absolute-bound panel.
 
 `StrictAudit` rejects provisional frames before submission. The KS owner
 retires the provisional stage before it can publish convergence, resets the

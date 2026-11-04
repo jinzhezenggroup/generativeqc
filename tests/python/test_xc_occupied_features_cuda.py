@@ -282,7 +282,7 @@ class CompactTile(ct.Structure):
     ]
 
 
-@pytest.mark.parametrize("occupations", [(3,), (3, 2), (0, 3)])
+@pytest.mark.parametrize("occupations", [(3,), (3, 2), (0, 3), (7,)])
 @pytest.mark.parametrize("scale", [1e-4, 1e165])
 @pytest.mark.parametrize("provisional", [False, True])
 def test_compact_gpu_batches_preserve_original_features_and_scratch_owners(
@@ -378,8 +378,13 @@ def test_compact_gpu_batches_preserve_original_features_and_scratch_owners(
 @pytest.mark.parametrize("active", [17, 32, 41])
 @pytest.mark.parametrize("mapped", [False, True])
 @pytest.mark.parametrize("occupations", [(1,), (1, 1), (0, 1), (1, 0)])
+@pytest.mark.parametrize("large_rank", [False, True])
 def test_provisional_gpu_path_does_not_read_dense_matrix(
-    occupied_probe: ct.CDLL, active: int, mapped: bool, occupations: tuple[int, ...]
+    occupied_probe: ct.CDLL,
+    active: int,
+    mapped: bool,
+    occupations: tuple[int, ...],
+    large_rank: bool,
 ) -> None:
     """Poison D to distinguish work avoidance from exact verification on device.
 
@@ -387,11 +392,13 @@ def test_provisional_gpu_path_does_not_read_dense_matrix(
     physical SCF publication must instead use the independent strict target.
     """
     nao, points, spins = active + 3 * mapped, 3, len(occupations)
+    if large_rank:
+        occupations = tuple(active // 2 + 1 if count else 0 for count in occupations)
     ids = np.arange(active, dtype=np.uintp) + int(mapped)
     coefficients = np.zeros((spins, nao, nao))
     for spin, occupied in enumerate(occupations):
         if occupied:
-            coefficients[spin, 0, ids[0]] = 1.0
+            coefficients[spin, :occupied, ids[0]] = 1.0
     ao = np.full((4, points, active), 0.125)
     density = np.full((spins, nao, nao), np.nan)
     actual = np.zeros((spins, 5, points))
@@ -406,7 +413,7 @@ def test_provisional_gpu_path_does_not_read_dense_matrix(
         spins,
         occupations[0],
         occupations[1] if spins == 2 else 0,
-        1,
+        max(occupations),
         actual.ctypes.data,
     )
     assert occupied_probe.proposal_probe(*arguments) == 0
