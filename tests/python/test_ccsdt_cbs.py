@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import replace
 from typing import TYPE_CHECKING
@@ -345,9 +346,182 @@ def test_basis_contracts(bases: tuple[CBSBasis, CBSBasis]) -> None:
         )
     with pytest.raises(ValueError, match="cardinal"):
         CBSBasis("sto-3g", True)
-    with pytest.raises(NotImplementedError, match="all-electron"):
+    with pytest.raises(NotImplementedError, match="nuclear charges"):
         element = replace(bases[0].basis.elements[0], nuclear_charge=2)
         CBSBasis(replace(bases[0].basis, elements=(element,)), 2)
+
+
+@pytest.fixture
+def ecp_model_bases(bases: tuple[CBSBasis, CBSBasis]) -> tuple[CBSBasis, CBSBasis]:
+    """Synthetic scalar records exercise orchestration without a reference package."""
+    potentials = [
+        {
+            "ecp_type": "scalar_ecp",
+            "angular_momentum": [0],
+            "r_exponents": [2],
+            "gaussian_exponents": ["0.5"],
+            "coefficients": [["0.2"]],
+        }
+    ]
+    return tuple(
+        CBSBasis(
+            replace(
+                item.basis,
+                elements=(
+                    replace(
+                        item.basis.by_element[1],
+                        atomic_number=11,
+                        nuclear_charge=11,
+                        ecp_core_electrons=10,
+                        ecp_data=json.dumps(potentials, indent=item.cardinal),
+                    ),
+                ),
+            ),
+            item.cardinal,
+        )
+        for item in bases
+    )
+
+
+def test_ecp_hamiltonian_ignores_serialization_whitespace(
+    ecp_model_bases: tuple[CBSBasis, CBSBasis], fake_native: list[dict]
+) -> None:
+    """One valence Hamiltonian survives snapshotting and every grouped endpoint."""
+    low, high = ecp_model_bases
+    unused = replace(
+        high.basis.by_element[11],
+        atomic_number=3,
+        nuclear_charge=3,
+        ecp_core_electrons=2,
+    )
+    high = CBSBasis(replace(high.basis, elements=(*high.basis.elements, unused)), 3)
+    result = CCSDTCBSCalculator((low, high)).singlepoint(
+        (("Na", (0, 0, 0)), ("Na", (0, 0, 3)))
+    )
+    assert result.basis_metadata["ecp_core_electrons"] == (10, 10)
+    assert len(fake_native) == 2
+    assert all(event["closed"] for event in fake_native)
+
+
+@pytest.mark.parametrize("role", ("high", "correction"))
+@pytest.mark.parametrize(
+    "exponent,coefficient", (("0.50", "0.200"), ("5e-1", "2e-1"), (0.5, 0.2))
+)
+def test_ecp_hamiltonian_uses_native_numeric_parameters(
+    ecp_model_bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    role: str,
+    exponent: str | float,
+    coefficient: str | float,
+) -> None:
+    """Equivalent BSE number encodings cannot change the native Hamiltonian."""
+    low, high = ecp_model_bases
+    element = high.basis.by_element[11]
+    potentials = json.loads(element.ecp_data)
+    potentials[0]["gaussian_exponents"][0] = exponent
+    potentials[0]["coefficients"][0][0] = coefficient
+    changed = replace(
+        high.basis, elements=(replace(element, ecp_data=json.dumps(potentials)),)
+    )
+    workflow = (
+        CCSDTCBSCalculator((low, CBSBasis(changed, 3)))
+        if role == "high"
+        else CCSDTCBSCalculator((low, high), correction_basis=changed)
+    )
+    result = workflow.singlepoint((("Na", (0, 0, 0)), ("Na", (0, 0, 3))))
+    assert result.converged
+    assert fake_native and all(event["closed"] for event in fake_native)
+
+
+@pytest.mark.parametrize("role", ("high", "correction"))
+@pytest.mark.parametrize("change", ("channels", "primitives", "duplicate"))
+def test_ecp_hamiltonian_term_order_and_multiplicity(
+    ecp_model_bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    role: str,
+    change: str,
+) -> None:
+    """Term order is irrelevant, but repeated terms remain part of the operator."""
+    low, high = ecp_model_bases
+    potentials = [
+        {
+            "ecp_type": "scalar_ecp",
+            "angular_momentum": [channel],
+            "r_exponents": [2, 2],
+            "gaussian_exponents": ["0.5", "0.8"],
+            "coefficients": [["0.2", "0.3"]],
+        }
+        for channel in (0, 1)
+    ]
+
+    def with_potentials(item: CBSBasis, records: list[dict]) -> CBSBasis:
+        element = item.basis.by_element[11]
+        return CBSBasis(
+            replace(
+                item.basis,
+                elements=(replace(element, ecp_data=json.dumps(records)),),
+            ),
+            item.cardinal,
+        )
+
+    low, high = (with_potentials(item, potentials) for item in (low, high))
+    if change == "channels":
+        potentials.reverse()
+    elif change == "primitives":
+        for potential in potentials:
+            potential["r_exponents"].reverse()
+            potential["gaussian_exponents"].reverse()
+            potential["coefficients"][0].reverse()
+    else:
+        potential = potentials[0]
+        potential["r_exponents"].append(potential["r_exponents"][0])
+        potential["gaussian_exponents"].append(potential["gaussian_exponents"][0])
+        potential["coefficients"][0].append(potential["coefficients"][0][0])
+    changed = with_potentials(high, potentials)
+    workflow = (
+        CCSDTCBSCalculator((low, changed))
+        if role == "high"
+        else CCSDTCBSCalculator((low, high), correction_basis=changed.basis)
+    )
+    atoms = (("Na", (0, 0, 0)), ("Na", (0, 0, 3)))
+    if change == "duplicate":
+        with pytest.raises(ValueError, match="same ECP Hamiltonian"):
+            workflow.singlepoint(atoms)
+        assert not fake_native
+    else:
+        result = workflow.singlepoint(atoms)
+        assert result.converged
+        assert fake_native and all(event["closed"] for event in fake_native)
+
+
+@pytest.mark.parametrize("change", ("potential", "core", "all-electron"))
+@pytest.mark.parametrize("role", ("high", "correction"))
+def test_cbs_rejects_inconsistent_ecp_hamiltonians(
+    ecp_model_bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    change: str,
+    role: str,
+) -> None:
+    """Basis extrapolation cannot hide a core-count or potential substitution."""
+    low, high = ecp_model_bases
+    element = high.basis.by_element[11]
+    if change == "potential":
+        potentials = json.loads(element.ecp_data)
+        potentials[0]["coefficients"][0][0] = "0.3"
+        element = replace(element, ecp_data=json.dumps(potentials))
+    elif change == "core":
+        element = replace(element, ecp_core_electrons=8)
+    else:
+        element = replace(element, ecp_core_electrons=0, ecp_data=None)
+    changed = replace(high.basis, elements=(element,))
+    workflow = (
+        CCSDTCBSCalculator((low, CBSBasis(changed, 3)))
+        if role == "high"
+        else CCSDTCBSCalculator((low, high), correction_basis=changed)
+    )
+    with pytest.raises(ValueError, match="same ECP Hamiltonian"):
+        workflow.singlepoint((("Na", (0, 0, 0)), ("Na", (0, 0, 3))))
+    assert not fake_native
 
 
 @pytest.mark.parametrize(

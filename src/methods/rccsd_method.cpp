@@ -1057,17 +1057,13 @@ RccsdNativeState run_rccsd_native_state(
 
 generativeqc_status validate_rccsd_system(generativeqc_method, const core::System& system,
                                           std::string& detail) {
-  if (!system.ecp_terms.empty()) {
-    detail = "RCCSD with ECP is not implemented";
-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  }
   if (std::any_of(system.shells.begin(), system.shells.end(),
                   [](const auto& shell) { return shell.angular_momentum > 3; })) {
     detail = "RCCSD reference/provider validation supports shells through f";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2) {
-    detail = "RCCSD supports real closed-shell all-electron RHF references only";
+    detail = "RCCSD supports real closed-shell RHF references only";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (static_cast<std::size_t>(system.electron_count / 2) >= molecule::ao_count(system)) {

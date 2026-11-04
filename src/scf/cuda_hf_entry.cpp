@@ -404,10 +404,9 @@ ScfResult run_rhf_cuda_cached(
         exact_reference_source_identity(*plan, system, options, device_id, true)) {
       try {
         auto& source_system = systems.front();
-        const auto source_host = posthf::checked_add(
-            posthf::source_capacity(source_system),
-            posthf::checked_add(runtime::vector_bytes(source_system.ecp_terms),
-                                sizeof(PendingRhfReferenceInteractionSource) + 128));
+        const auto source_host =
+            posthf::checked_add(posthf::source_capacity(source_system),
+                                sizeof(PendingRhfReferenceInteractionSource) + 128);
         const auto peak = posthf::checked_add(scf.reference->numeric_capacity_bytes, source_host);
         if (peak <= options.reference_memory_budget_bytes) {
           const auto retained =
@@ -438,9 +437,6 @@ ScfResult run_rhf_cuda_cached(
       auto& source_system = systems.front();
       auto retained = posthf::checked_add(hf_cuda_retained_numeric_bytes(*plan),
                                           posthf::source_capacity(source_system));
-      // The generic source allowance covers atoms/shells/primitive data, but
-      // this additional normalized system also owns its ECP scalar payload.
-      retained = posthf::checked_add(retained, runtime::vector_bytes(source_system.ecp_terms));
       // The cached slot and the source are mutually exclusive owners. Moving
       // out before publication also leaves allocation failure exception-safe.
       RhfPlanOwner owner(std::exchange(*plan, nullptr), destroy_rhf_cuda_bucket_plan);

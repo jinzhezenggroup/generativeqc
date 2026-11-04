@@ -1,6 +1,6 @@
 # Native unrestricted coupled cluster
 
-Use `uccsd` or `uccsd(t)` for all-electron UHF-based energies and analytic forces.
+Use `uccsd` or `uccsd(t)` for all-electron or scalar-ECP UHF-based energies and analytic forces.
 The C ABI, C++ SDK, native CLI and Python `Calculator` select the same C++
 method owner. Python is a source-build generation dependency, not a native
 runtime computation dependency. Method names and declared properties come
@@ -42,11 +42,11 @@ layout changes are needed. See the [native C++ guide](native_cpp.md).
 
 ## Current admission and failure behavior
 
-On the conventional path, this native owner requires real FP64, unscreened
-integrals and all-electron s/p/d shells, including supplied
+This native owner requires real FP64 and s/p/d shells, including supplied
 Cartesian or real-spherical bases. Each spin retains its own occupied and
 virtual dimensions and all five amplitude blocks remain independent. A singlet
 still runs through UHF/UCCSD rather than selecting a restricted CC owner.
+Conventional integral paths must be unscreened; the fitted modes are described below.
 There is no fixed AO-count cutoff. A lower-bound check uses checked dimensions
 and storage/work limits before the reference starts. For force jobs, complete
 storage admission repeats after actual fitted and reference storage is known,
@@ -79,7 +79,13 @@ are included, including auxiliary-center motion and retained/discarded metric
 cross terms. CUDA fitted response currently materializes bounded coordinate
 derivative tensors and does not claim the conventional shell-streaming flags.
 
-Prepared CC batches, ECP, frozen core, KS references, mixed precision and
+Scalar ECPs retain the checked local/nonlocal provider and its physical-center
+derivatives. Occupations and nuclear repulsion use ionic charges; all remaining
+valence electrons are correlated. Their staging is reserved in the complete
+correlation memory admission. See the [ECP conventions](ecp.md) and
+[CBS Hamiltonian identity contract](ccsdt_cbs.md#scalar-ecp-references).
+
+Prepared CC batches, frozen core, KS references, mixed precision and
 preliminary initial-guess controls remain unsupported. Internal prototypes
 are not production fallbacks.
 

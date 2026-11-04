@@ -101,8 +101,7 @@ CudaRhfSourceHandoff detach_rhf_cuda_source(const CudaRhfBucketPlan& owner, core
   // The moved system and provider control headers are included conservatively;
   // no public one-electron matrix, J/K scratch or AO^4 tensor is allocated.
   const auto retained = checked_add(
-      allocation_bytes, checked_add(checked_add(posthf::source_capacity(orbital),
-                                                runtime::vector_bytes(orbital.ecp_terms)),
+      allocation_bytes, checked_add(posthf::source_capacity(orbital),
                                     sizeof(RhfInteractionSource) + sizeof(CudaDirectJkPlan) + 128));
   result.required_peak_bytes = checked_add(reference_peak_bytes, retained);
   if (result.required_peak_bytes > numeric_budget) {

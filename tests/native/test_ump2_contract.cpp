@@ -99,6 +99,15 @@ void one_electron_response_admission() {
           "large response fixture does not exceed the old fixed scratch allowance");
   require(generativeqc::posthf::one_electron_response_capacity(system) > two_weights,
           "one-electron response admission omits the two device weight matrices");
+  auto ecp_system = h2();
+  const auto ordinary = generativeqc::posthf::one_electron_response_capacity(ecp_system);
+  ecp_system.ecp_terms.reserve(32);
+  ecp_system.ecp_terms.push_back({0, -1, 2, 0.5, 0.2});
+  const auto ecp_workspace = generativeqc::integrals::ecp_workspace_capacity(ecp_system);
+  const auto metadata = 2 * sizeof(generativeqc::core::EcpTerm) * ecp_system.ecp_terms.capacity();
+  require(ecp_workspace > 0 && generativeqc::posthf::one_electron_response_capacity(ecp_system) ==
+                                   ordinary + metadata + ecp_workspace,
+          "one-electron response admission omits ECP quadrature or retained metadata");
 }
 
 // Query a synthetic topology only: no AO tensor or physical endpoint is evaluated.
