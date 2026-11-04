@@ -1,0 +1,13 @@
+{
+  "electronic_xc": "0.20*HF + 0.08*LDA_X + 0.72*GGA_X_B88, 0.19*LDA_C_VWN_RPA + 0.81*GGA_C_LYP",
+  "gist": "d405581add8df48169812e7172dfe591",
+  "issue": 2984,
+  "original_file_sha256": {
+    "auxbasis.json": "89c75ed82978ab0eb3345122d2be1d637b943b38cb821ce05fb5a1963bf6392b",
+    "basis.json": "b40d9d048e4ead75596c0393bf4dee70eb786ac629c3a31af5e5430fc6544ce4",
+    "cases.json": "a9a12578fd6a13636e8df8e5d82df2ea44a355e8776446c540ede2740056bb07"
+  },
+  "reported_source_commit": "c776b6cc12855b68195e4be27d0604b1b524690e",
+  "revision": "b96d5fce58fd047c0762c3c092eae0d8b0125270",
+  "selection": "N, O, F and Al records; the orbital snapshot also retains unused ECP-bearing Sr to reproduce automatic-guess admission. Original exponents, coefficients, ECP records and provenance unchanged."
+}

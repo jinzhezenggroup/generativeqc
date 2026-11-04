@@ -25,10 +25,10 @@
       "sha256": "97e21c15b7a16531fbf5eaaa62212e81753bbce0bdc827301723a84910bac1f6"
     },
     {
-      "bytes": 2737,
-      "path": "benchmark-remote.sh",
+      "bytes": 1368,
+      "path": "benchmark-remote.sh.xz",
       "role": "reproduction",
-      "sha256": "3ecbeb5462eca8125dc34821491cea50624606a3da74969764e133a313f11ffb"
+      "sha256": "1119fba5dd1282cf9673bbb8b5375471a213a76e890feff74eb80281360818e1"
     },
     {
       "bytes": 940,
@@ -139,10 +139,10 @@
       "sha256": "06c32f369d63196187c50a9b8b86b316576267b83e590ccc4b8235cbe3ebcc8d"
     },
     {
-      "bytes": 4740,
+      "bytes": 4736,
       "path": "validation.json.xz",
       "role": "evidence",
-      "sha256": "80eb7b9a54d6d1d145262263c7e8ff96058dba7882ff0ab3ba7fd8c93b7ed089"
+      "sha256": "9d1d8361b3c3360c28af7b077e255482759df8ae15e047308018673655584481"
     }
   ],
   "reproduction": {
