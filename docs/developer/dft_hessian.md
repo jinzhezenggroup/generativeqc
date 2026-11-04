@@ -98,6 +98,15 @@ buffers before lending the remaining numeric budget, and retains the original
 bounded component lowering when the factorized lease cannot fit. Generated
 scalar stack temporaries, compiler processes and library mappings are excluded
 from this numeric lease; it is not a complete endpoint memory/time bound.
+The compiler owns disjoint AO-component partitions for expanded second-source
+lowering. CPU scalar lowering uses at most eight components per artifact,
+independently of coordinate-output tiles, to bound the optimizer's CSE dimension
+for high-angular S/T/V and resource-fallback ERIs. The shared factorized host
+program retains 64-component pages; CUDA's existing 64-component schedule is
+unchanged. Every component is accumulated exactly once for each output tile.
+Artifact identities already bind both subsets; smaller tiles do not relax
+finite compiler deadlines, arithmetic or numeric-budget checks. Diagnostics
+report the scalar-lowering component limit separately from semantic work counts.
 The compiler owns the shared exact eightfold ERI permutation schedule. CPU
 directional sources reuse one canonical raw jet for full-range J and K, keeping
 their distinct density factors with the runtime consumer. Full-range weighted

@@ -70,6 +70,7 @@ from generativeqc_compiler.integral.second_derivatives_inputs import (
 )
 from generativeqc_compiler.integral.second_order_layout import (
     SecondAtomMap,
+    second_component_tiles,
     second_coordinate_tiles,
 )
 from generativeqc_compiler.integral.shell_spec import cartesian_components
@@ -903,11 +904,6 @@ def _compile_cached(
     return artifact
 
 
-def _component_tiles(count: int, chunk: int = 64) -> typing.Iterator[tuple[int, ...]]:
-    for start in range(0, count, chunk):
-        yield tuple(range(start, min(start + chunk, count)))
-
-
 def _scatter_hvp(
     full: np.ndarray,
     center_indices: tuple[int, ...],
@@ -977,7 +973,7 @@ def _run_kernel_hvp(
         coefficient = (
             consumer.output_sign * consumer.weights.sign * consumer.weights.prefactor
         )
-        for ao_chunk in _component_tiles(component_count):
+        for ao_chunk in second_component_tiles(component_count, tile_size=64):
             selection = list(ao_chunk)
             values, diagnostic = data["factorized_provider"].weighted_hvp(
                 signature.angular,
@@ -994,7 +990,9 @@ def _run_kernel_hvp(
     # The public shell-stream adapter freezes its weight tile before the
     # next AO chunk: one FP64 backing buffer can be reset and reused.
     weights = np.zeros(component_count)
-    for ao_chunk in _component_tiles(component_count):
+    for ao_chunk in second_component_tiles(
+        component_count, tile_size=8 if data["backend"] == "cpu" else 64
+    ):
         weights.fill(0.0)
         weights[list(ao_chunk)] = weight_flat[list(ao_chunk)]
         for output_indices in second_coordinate_tiles(
@@ -1155,6 +1153,7 @@ def _second_diagnostics(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
             sorted({item["native_artifact"] for item in executions})
         ),
         "executions": len(executions),
+        "scalar_lowering_component_tile_limit": 64 if cuda else 8,
         "primitive_records": sum(item["records"] for item in executions),
         "factorized_primitive_component_evaluations": sum(
             item.get("component_evaluations", 0) for item in executions

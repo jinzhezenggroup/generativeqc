@@ -245,6 +245,27 @@ def second_center_recovery(
     return CenterRecovery(centers, independent, rows)
 
 
+def second_component_tiles(
+    component_count: int, *, tile_size: int = 8
+) -> typing.Iterator[tuple[int, ...]]:
+    """Lazily cover AO components with bounded, disjoint lowering subsets.
+
+    Expanded scalar second derivatives can overburden the optimizer even when
+    their runtime numeric payload fits. The default eight-component selection
+    bounds that independent CSE dimension without changing the scalar algebra.
+    Consumers with a shared factorized program may explicitly use the native
+    ABI's larger 64-component pages. Validation precedes lazy iteration.
+    """
+    checked_index(component_count, "component count", minimum=1)
+    checked_index(tile_size, "component tile size", minimum=1)
+    if tile_size > 64:
+        raise ValueError("second component tiles require at most 64 components")
+    return (
+        tuple(range(begin, min(component_count, begin + tile_size)))
+        for begin in range(0, component_count, tile_size)
+    )
+
+
 def second_coordinate_tiles(
     centers: typing.Any,
     *,
