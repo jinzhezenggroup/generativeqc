@@ -23,15 +23,17 @@ def test_class_queue_is_a_bounded_permutation(
 #include <cstdint>
 #include <random>
 #include "scf/cuda/direct_force_queue_order.hpp"
+#include "scf/direct_task_layout.hpp"
 
 using namespace generativeqc::scf::cuda_execution;
 int main() {
+  constexpr auto capacity = generativeqc::scf::detail::kBoundedDirectQueueCapacity;
   std::mt19937 generator(42);
-  for (unsigned size = 0; size <= 128; ++size) {
+  for (unsigned size = 0; size <= capacity; ++size) {
     for (unsigned trial = 0; trial < 20; ++trial) {
       std::uint32_t counts[kDirectSpdForceQueueClasses]{};
-      std::array<unsigned, 128> classes{}, output{};
-      output.fill(128);
+      std::array<unsigned, capacity> classes{}, output{};
+      output.fill(capacity);
       for (unsigned task = 0; task < size; ++task) {
         classes[task] = trial == 0 ? 0 : trial == 1 ? 20 : generator() % 21;
         ++counts[classes[task]];
@@ -39,14 +41,14 @@ int main() {
       assert(direct_force_class_queue_offsets(counts) == size);
       for (unsigned task = 0; task < size; ++task) {
         const auto slot = counts[classes[task]]++;
-        assert(slot < size && output[slot] == 128);
+        assert(slot < size && output[slot] == capacity);
         output[slot] = task;
       }
       for (unsigned slot = 1; slot < size; ++slot)
         assert(classes[output[slot - 1]] <= classes[output[slot]]);
       std::sort(output.begin(), output.begin() + size);
       for (unsigned slot = 0; slot < size; ++slot) assert(output[slot] == slot);
-      for (unsigned slot = size; slot < output.size(); ++slot) assert(output[slot] == 128);
+      for (unsigned slot = size; slot < output.size(); ++slot) assert(output[slot] == capacity);
     }
   }
 }
