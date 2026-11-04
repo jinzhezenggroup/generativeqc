@@ -833,10 +833,18 @@ __device__ void tiled_occupied_product_body(CudaXcOccupiedDensity occupied,
   // A compact batch does not pay for a second statically allocated panel.
   // The strict-target handoff controls initializer error. An unused absolute
   // bound would add cost without certifying a published physical result.
+  if (occupied.provisional) {
+    // Compile out directed-rounding instructions, not just their stores. This
+    // reuses the compact matrix fallback's specialization and shared panels.
+    tiled_density_product_body<false, true, double>(occupied.coefficients, ao, active, count, 4,
+        work, error, ids, occupied.nao, spin_jet, occupied.coefficients,
+        occupied.occupations[spin_jet / 4], occupied.rank());
+    return;
+  }
   tiled_density_product_body<false, true, double, true>(occupied.coefficients, ao, active, count, 4,
       work, error, ids, occupied.nao, spin_jet, occupied.coefficients,
       occupied.occupations[spin_jet / 4], occupied.rank(),
-      occupied.provisional ? nullptr : work + occupied.spins * 4 * count * occupied.rank());
+      work + occupied.spins * 4 * count * occupied.rank());
 }
 
 __global__ void occupied_density_products(CudaXcOccupiedDensity occupied,
