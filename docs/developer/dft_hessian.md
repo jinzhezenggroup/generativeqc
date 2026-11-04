@@ -222,9 +222,12 @@ moments and fixed omega, not a full-Coulomb substitution.
 
 Public `Calculator.hessian_vector_product()` and `Calculator.hessian()` admit
 the canonical WB97M-V graph with RKS or UKS, CPU or CUDA, direct or full-rank
-DF, all-electron or scalar semilocal ECP Hamiltonians, and Cartesian or real
-spherical AOs through f in strict FP64. Combinations use the same stationary
-endpoint. The full-matrix owner uses scalar columns
+DF with exact LR exchange, all-electron or scalar semilocal ECP Hamiltonians,
+and Cartesian or real spherical AOs through f in strict FP64. Combinations use the same stationary
+endpoint. For DF, explicitly set `GENERATIVEQC_DF_RANGE_EXCHANGE=direct` before
+preparation: default/automatic LR fitting qualifies energy and first derivatives,
+not fitted-LR Hessians. A fitted LR source is rejected rather than substituted
+by exact-LR second-order equations. The full-matrix owner uses scalar columns
 (`block_size=None` or `1`). The default `strategy=None` resolves to native
 `"scalar"` on CUDA and `"recycled"` on CPU. Explicit recycling/block requests
 on CUDA fail rather than mislabeling independent solves. The raw matrix is

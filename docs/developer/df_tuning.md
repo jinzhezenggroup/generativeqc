@@ -62,8 +62,17 @@ python tools/benchmark_df_values.py \
 | `GENERATIVEQC_DF_VALUE_RAW_MAPPING` | Existing scalar raw export | `scalar`, `subgroup`, `warp`, `candidate` |
 | `GENERATIVEQC_DF_PACKED_PROJECTION` | `auto`: bounded FP64 BLAS in the admitted capability/work domain, otherwise generated projection | `generated`, `blas` |
 | `GENERATIVEQC_DF_FORCE_SCREEN_ABS` | Off | Nonnegative finite absolute force budget, or `off` |
-| `GENERATIVEQC_DF_SHELL_SCREEN_ABS` | `1e-10 Eh/Bohr` on a work-qualified automatic shell domain on any probed CUDA target; strict otherwise | Nonnegative finite absolute force-component budget, or `off` |
+| `GENERATIVEQC_DF_SHELL_SCREEN_ABS` | `1e-10 Eh/Bohr` on a work-qualified automatic full-range shell domain on any probed CUDA target; strict otherwise, including LR | Nonnegative finite absolute force-component budget, or `off`; an explicit budget also applies to the LR shell consumer |
 | `GENERATIVEQC_DF_FINAL_PROJECTION` | Reuse under the shared resident RHF work/capacity policy | `off`, `reuse` |
+
+Work-qualified fitted-LR source responses automatically select shell execution
+with symmetric AO-pair folding when the existing response allowance admits its
+metadata. This includes rank-truncated metrics and auxiliary g. The LR policy
+keeps FP64 spectral response, the warp schedule and no automatic shell screening;
+it does not inherit the full-range occupied/compact profile. Small, unprobed or
+capacity-refused workloads retain generic response. Explicit execution and pair
+controls continue to override the policy. This execution choice does not itself
+authorize fitted LR; the method owner freezes that scientific admission.
 
 The portable derivative manifest chooses cooperative Rys/compact for its 18
 s/p/d entries and auxiliary-f `003/103/113/203/213` on every probed CUDA target.

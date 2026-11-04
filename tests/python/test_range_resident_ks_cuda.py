@@ -8,6 +8,12 @@ from typing import Any
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def explicit_direct_range_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Qualify retained exact-LR residency, independently of the fitted default."""
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
+
+
 def _auxiliary_basis(fitted: bool) -> Any:
     """Load the same pinned JK-fit inputs used by independent fitted E/F gates.
 

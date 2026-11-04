@@ -19,12 +19,61 @@ from benchmarks._retained_basis import load_retained_basis
 
 
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
-@pytest.mark.parametrize("derivative_execution", ("generic", "shell"))
+@pytest.mark.parametrize(
+    "derivative_execution,derivative_pairs",
+    (
+        ("generic", "full"),
+        ("generic", "symmetric"),
+        ("shell", "full"),
+        ("shell", "symmetric"),
+        ("auto", "auto"),
+    ),
+)
+@pytest.mark.parametrize("shell_budget", ("off", "1e-10"))
 def test_readme_g_auxiliary_fitted_range_endpoint(
     representation: str,
     derivative_execution: str,
+    derivative_pairs: str,
+    shell_budget: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+) -> None:
+    _check_readme_g_auxiliary_endpoint(
+        representation,
+        derivative_execution,
+        derivative_pairs,
+        shell_budget,
+        monkeypatch,
+        tmp_path,
+        spin=0,
+    )
+
+
+@pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+def test_automatic_uks_g_auxiliary_range_endpoint(
+    representation: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A radical crosses the shell work gate with two independent spin adjoints."""
+    _check_readme_g_auxiliary_endpoint(
+        representation,
+        "auto",
+        "auto",
+        "off",
+        monkeypatch,
+        tmp_path,
+        spin=1,
+    )
+
+
+def _check_readme_g_auxiliary_endpoint(
+    representation: str,
+    derivative_execution: str,
+    derivative_pairs: str,
+    shell_budget: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    spin: int,
 ) -> None:
     """The actual GPU4PySCF JKFIT basis must support native E/F and rebinding."""
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
@@ -43,8 +92,25 @@ def test_readme_g_auxiliary_fitted_range_endpoint(
     auxiliary.write_text(json.dumps(payload))
     basis = load_basis(auxiliary)  # Includes checksum validation.
     assert max(s.angular_momentum for e in basis.elements for s in e.shells) == 4
-    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
-    monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", derivative_execution)
+    automatic = derivative_execution == "auto"
+    if automatic:
+        monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
+    if automatic:
+        monkeypatch.delenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", derivative_execution)
+    # Fold the actual two ordered adjoints, not an assumed symmetric weight.
+    # The independent energy/force checks include a truncated LR metric and g.
+    if automatic:
+        monkeypatch.delenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", derivative_pairs)
+    if automatic and shell_budget == "off":
+        monkeypatch.delenv("GENERATIVEQC_DF_SHELL_SCREEN_ABS", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_DF_SHELL_SCREEN_ABS", shell_budget)
     trace = tmp_path / "range-shell.jsonl"
     monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
     # Even a forced exact-ERI cache cannot replace the selected fitted operator.
@@ -55,8 +121,17 @@ def test_readme_g_auxiliary_fitted_range_endpoint(
         ("H", (0.1, 1.43, 1.1)),
         ("H", (-0.15, -1.45, 1.12)),
     ]
+    if automatic:
+        # A second fragment crosses the public work gate without using a
+        # benchmark-specific shape or changing the independent force oracle.
+        atoms += [
+            (symbol, (position[0] + 7, position[1], position[2]))
+            for symbol, position in list(atoms)
+        ]
+    if spin:
+        atoms.append(("H", (3.4, 0.7, -0.4)))
     calculator = Calculator(
-        method="wb97m-v-rks",
+        method="wb97m-v-uks" if spin else "wb97m-v-rks",
         basis="def2-svp",
         auxiliary_basis=basis,
         basis_representation=representation,
@@ -64,7 +139,9 @@ def test_readme_g_auxiliary_fitted_range_endpoint(
         density_fitting="auto",
         initial_guess=None,
         ks_options=KsOptions(
-            grid=GridSpec(radial_points=24, angular_polar=6, angular_azimuth=12)
+            # The added policy cases cross an integral-work gate, independent
+            # of XC point count; keep their independent FD oracles bounded.
+            grid=GridSpec(12, 4, 8) if automatic else GridSpec(24, 6, 12)
         ),
         energy_tolerance=1e-10,
         density_tolerance=1e-8,
@@ -73,7 +150,9 @@ def test_readme_g_auxiliary_fitted_range_endpoint(
     )
     moved = list(atoms)
     moved[1] = ("H", (0.13, 1.41, 1.14))
-    with calculator.prepare_batch([atoms], warm_start=True) as batch:
+    with calculator.prepare_batch(
+        [atoms], multiplicities=[spin + 1], warm_start=True
+    ) as batch:
 
         def forbidden_python_force(*args: Any, **kwargs: Any) -> None:
             pytest.fail("fitted LR native force entered Python orchestration")
@@ -99,21 +178,32 @@ def test_readme_g_auxiliary_fitted_range_endpoint(
         if row["counters"].get("response_long_range_operator")
     ]
     assert range_responses, "the fitted LR derivative must execute"
+    if automatic:
+        assert all(
+            row["counters"].get("response_range_shell_promoted") == 1
+            for row in range_responses
+        )
     assert all(
         row["counters"]["response_derivative_shell_execution"]
-        == (derivative_execution == "shell")
+        == (derivative_execution != "generic")
+        for row in range_responses
+    )
+    assert all(
+        bool(row["counters"].get("screening_shell_enabled", 0))
+        == (derivative_execution != "generic" and shell_budget != "off")
         for row in range_responses
     )
     assert results[1].energy == pytest.approx(results[0].energy, abs=2e-10)
     np.testing.assert_allclose(results[1].forces, results[0].forces, atol=2e-8, rtol=0)
-    direction = np.array(
-        ((0.17, -0.11, 0.07), (-0.09, 0.06, 0.13), (0.04, -0.03, 0.08))
+    direction = np.resize(
+        np.array(((0.17, -0.11, 0.07), (-0.09, 0.06, 0.13), (0.04, -0.03, 0.08))),
+        (len(atoms), 3),
     )
     for geometry, result in ((atoms, results[0]), (moved, results[2])):
         assert result.energy == pytest.approx(
-            _mixed_pyscf_energy(calculator, geometry, 0, fitted_range=True), abs=2e-8
+            _mixed_pyscf_energy(calculator, geometry, spin, fitted_range=True), abs=2e-8
         )
-        for displacement in (np.eye(9)[5].reshape(3, 3), direction):
+        for displacement in (np.eye(3 * len(atoms))[5].reshape(-1, 3), direction):
             step = 2e-4
             energies = []
             for sign in (1, -1):
@@ -124,11 +214,98 @@ def test_readme_g_auxiliary_fitted_range_endpoint(
                     )
                 ]
                 energies.append(
-                    _mixed_pyscf_energy(calculator, displaced, 0, fitted_range=True)
+                    _mixed_pyscf_energy(calculator, displaced, spin, fitted_range=True)
                 )
             assert -np.sum(np.asarray(result.forces) * displacement) == pytest.approx(
                 (energies[0] - energies[1]) / (2 * step), abs=3e-7
             )
+
+
+@pytest.mark.parametrize("pairs", ("full", "symmetric"))
+def test_lr_shell_screen_budget_preserves_frozen_forces(
+    pairs: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Separated fragments expose real LR skips, replay and bounded force error."""
+    if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+        pytest.skip("requires an explicitly allocated CUDA device")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
+    from test_dft_complete_cuda import no_cpu_derivatives
+
+    from benchmarks.df_component_ledger import read_trace
+
+    for control, value in {
+        "RANGE_EXCHANGE": "df",
+        "WEIGHTED_EXECUTION": "shell",
+        "DERIVATIVE_PAIRS": pairs,
+        "SHELL_COUNTERS": "1",
+        "SHELL_SCREEN_ABS": "off",
+    }.items():
+        monkeypatch.setenv("GENERATIVEQC_DF_" + control, value)
+    water = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.7, 0.0, -0.6))]
+    atoms = water + [
+        (symbol, (position[0] + 24, position[1], position[2]))
+        for symbol, position in water
+    ]
+    calculator = Calculator(
+        method="wb97m-v-rks",
+        basis="def2-svp",
+        auxiliary_basis="def2-svp",
+        basis_representation="spherical",
+        device="cuda",
+        density_fitting="cuda",
+        initial_guess=None,
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+        ),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        max_iterations=200,
+    )
+    answers, skipped = [], []
+    with calculator.prepare_batch([atoms], warm_start=True) as batch:
+        batch.execute(strict=True, properties=("energy",))
+        batch.set_warm_start_updates(False)
+        for index, budget in enumerate((0.0, 1e-10, 1e-8, 0.0)):
+            monkeypatch.setenv("GENERATIVEQC_DF_SHELL_SCREEN_ABS", str(budget))
+            trace = tmp_path / f"lr-screen-{index}.jsonl"
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
+            with no_cpu_derivatives():
+                result = batch.execute(
+                    strict=True, properties=("energy", "forces")
+                ).items[0]
+            with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+                assert snapshot.range_density_fitted
+            answers.append(result)
+            responses = [
+                row
+                for row in read_trace(trace)
+                if row["counters"].get("response_long_range_operator")
+            ]
+            assert responses
+            skipped.append(
+                sum(
+                    row["counters"].get("screening_shell_tasks_skipped", 0)
+                    for row in responses
+                )
+            )
+    assert skipped[0] == skipped[3] == 0
+    assert skipped[1] > 0 and skipped[2] >= skipped[1]
+    for result, budget in zip(answers, (0.0, 1e-10, 1e-8, 0.0), strict=True):
+        assert result.energy == pytest.approx(answers[0].energy, abs=1e-12, rel=0)
+        np.testing.assert_allclose(
+            result.forces, answers[0].forces, atol=budget + 1e-10, rtol=0
+        )
+    step = 2e-4
+    energies = []
+    for sign in (1, -1):
+        displaced = list(atoms)
+        displaced[1] = ("H", (0.0, 0.0, 1.8 + sign * step))
+        energies.append(
+            _mixed_pyscf_energy(calculator, displaced, 0, fitted_range=True)
+        )
+    assert -answers[1].forces[1][2] == pytest.approx(
+        (energies[0] - energies[1]) / (2 * step), abs=3e-7, rel=0
+    )
 
 
 def _practical_auxiliary() -> Any:
@@ -231,7 +408,7 @@ def test_cuda_packed_lr_values_preserve_the_radial_operator(
 @pytest.mark.parametrize("device", ("cpu", "cuda"))
 @pytest.mark.parametrize("spin", (0, 1))
 @pytest.mark.parametrize(
-    "selector", (None, "direct", "df"), ids=("default", "direct", "df")
+    "selector", (None, "auto", "direct", "df"), ids=("default", "auto", "direct", "df")
 )
 def test_range_exchange_selection_is_frozen_for_all_endpoints(
     device: str,
@@ -239,7 +416,7 @@ def test_range_exchange_selection_is_frozen_for_all_endpoints(
     selector: str | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Opt-in LR fitting cannot change with properties, replay or geometry."""
+    """LR admission cannot change with properties, replay or geometry."""
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly scheduled CUDA device")
     if device == "cuda":
@@ -248,7 +425,7 @@ def test_range_exchange_selection_is_frozen_for_all_endpoints(
         monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
     else:
         monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", selector)
-    fitted_range = selector == "df"
+    fitted_range = selector != "direct"
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
     if spin:
         atoms.append(("H", (1.8, -0.1, -0.3)))

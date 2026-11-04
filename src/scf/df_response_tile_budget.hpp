@@ -53,6 +53,46 @@ inline std::size_t df_spectral_occupied_workspace(std::size_t n, std::size_t a, 
   return count + tile * n * n;
 }
 
+/** Fixed source-response storage, including the uploaded densities but no AO
+ * panels. Use the selected spectral layout for optional schedule admission as
+ * well as allocation: shell metadata must not displace a viable generic path.
+ * A nonzero spectral rank selects the one-term truncated occupied response.
+ */
+inline std::size_t df_source_response_fixed_workspace(std::size_t n, std::size_t a,
+                                                      std::size_t terms, bool truncated,
+                                                      std::size_t spectral_rank = 0) noexcept {
+  const auto maximum = std::numeric_limits<std::size_t>::max();
+  if (spectral_rank) {
+    if (!truncated || terms != 1) return 0;
+    const auto spectral = df_spectral_occupied_workspace(n, a, spectral_rank, 0);
+    if (!spectral || n * n > maximum - spectral) return 0;
+    return spectral + n * n;
+  }
+  const auto layout = df_occupied_response_workspace(n, a, terms);
+  if (!layout.elements || terms > (maximum - layout.elements) / (n * n)) return 0;
+  auto count = layout.elements + terms * n * n;
+  if (truncated) {
+    if (a > (maximum - count) / (n * n)) return 0;
+    count += a * n * n;
+  }
+  return count;
+}
+
+/** Admit optional device storage only beside the mandatory selected layout.
+ * All arguments are bytes. Free memory is advisory; the declared allowance and
+ * active-owner ledger remain independent ceilings, not extra allocations.
+ */
+inline bool df_response_optional_storage_fits(long double mandatory_bytes,
+                                              long double optional_bytes,
+                                              std::size_t declared_bytes, std::size_t free_bytes,
+                                              std::size_t ledger_bytes) noexcept {
+  const auto fits = [&](std::size_t available) {
+    return mandatory_bytes >= 0 && optional_bytes >= 0 && optional_bytes <= available &&
+           mandatory_bytes <= available - optional_bytes;
+  };
+  return fits(declared_bytes) && fits(free_bytes) && fits(ledger_bytes);
+}
+
 /** Recycle an authenticated dead projection only under response pressure.
  * Independent owned scratch is faster when its preferred panel already fits.
  * The retained factors must always fit separately, and the borrowed interval

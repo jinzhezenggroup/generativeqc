@@ -6,21 +6,6 @@
 
 namespace generativeqc::dft {
 
-/** Admit the A100-class SM80 FP64 capability domain, not a GPU model name.
- * The exact architecture/throughput gate stays narrower than generic FP64
- * acceleration: other GPU generations need independent endpoint qualification.
- * The enclosing owner additionally checks shape, precision, native execution
- * and unpromised memory headroom before either tile may grow.
- */
-constexpr bool automatic_direct_ks_tiles_eligible(bool full_range_rks_fp64, bool strict_budget,
-                                                  bool all_electron, std::size_t maximum_angular,
-                                                  std::size_t atoms, int compute_major,
-                                                  int compute_minor, int fp32_fp64_ratio) noexcept {
-  return full_range_rks_fp64 && strict_budget && all_electron && maximum_angular <= 2 &&
-         atoms >= 48 && atoms <= 128 && compute_major == 8 && compute_minor == 0 &&
-         fp32_fp64_ratio == 2;
-}
-
 /** Resolve the public automatic CUDA SCF tile without changing an explicit request.
  * Semilocal XC defaults to 1024 points, including direct/hybrid and consumer-GPU
  * execution. Numeric resource promises retain their quoted 256-point owner.

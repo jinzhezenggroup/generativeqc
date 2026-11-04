@@ -685,6 +685,11 @@ def test_rccsd_cpu_accepts_scratch_output_without_changing_stages(
         return SimpleNamespace(returncode=0, stdout='{"energy": -1.0}', stderr="")
 
     monkeypatch.setattr(rccsd_cpu_compiled_endpoint.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        rccsd_cpu_compiled_endpoint,
+        "_source_identity",
+        lambda root: {"kind": "unavailable", "commit": None},
+    )
     destination = tmp_path / ".artifacts/benchmarks/rccsd.json"
     monkeypatch.setattr(
         sys,
@@ -695,7 +700,7 @@ def test_rccsd_cpu_accepts_scratch_output_without_changing_stages(
     payload = destination.read_text(encoding="utf-8")
     assert capsys.readouterr().out == payload
     record = json.loads(payload)
-    assert record["schema"] == "generativeqc.rccsd.native-cpu-endpoint.v1"
+    assert record["schema"] == "generativeqc.rccsd.native-cpu-endpoint.v2"
     assert [row["stage"] for row in record["observations"]] == [
         "reference",
         "native_cold",
