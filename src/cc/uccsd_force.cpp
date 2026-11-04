@@ -81,12 +81,14 @@ class Runtime {
     for (const auto& [name, count] : input_sizes(program)) result[name].resize(count);
     return result;
   }
-  Values run(const std::string& program, const Values& inputs) {
+  Values run(const std::string& program, const Values& inputs,
+             unsigned phase_iteration_ceiling = 0) {
     const auto phase = "uccsd_graph/" + program;
     runtime::df_progress::Scope trace(phase.c_str(), cuda ? "cuda" : "host");
     executed_work = add(executed_work, work(program));
-    core::admit_correlation_work("uccsd_response/" + program, executed_work, numeric_capacity_bytes,
-                                 nbf, sizes[0], sizes[1], iteration_ceiling);
+    core::admit_correlation_work(
+        "uccsd_response/" + program, executed_work, numeric_capacity_bytes, nbf, sizes[0], sizes[1],
+        phase_iteration_ceiling ? phase_iteration_ceiling : iteration_ceiling);
     for (const auto& [name, count] : input_sizes(program)) {
       const auto found = inputs.find(name);
       if (found == inputs.end() || found->second.size() != count || !finite(found->second))
@@ -628,19 +630,20 @@ UnrestrictedForce unrestricted_force(
   }
   std::optional<runtime::df_progress::Scope> lambda_trace;
   lambda_trace.emplace("uccsd_lambda", cuda ? "cuda" : "host");
-  auto bars = runtime.run("lambda", lambda_inputs);
-  accumulate(bars, amplitude_bars);
-  const auto entries = excitations(runtime);
-  auto rhs = pullback(bars, entries);
-  for (auto& value : rhs) value = -value;
   response::GmresOptions controls;
   controls.absolute_tolerance = 1e-11;
   controls.relative_tolerance = 1e-11;
   controls.max_iterations = 300;
+  auto bars = runtime.run("lambda", lambda_inputs, controls.max_iterations);
+  accumulate(bars, amplitude_bars);
+  const auto entries = excitations(runtime);
+  auto rhs = pullback(bars, entries);
+  for (auto& value : rhs) value = -value;
   const auto action = [&](std::span<const double> input, std::span<double> output) {
     lambda_inputs.at("bar_correlation_energy")[0] = 0.0;
     lift(lambda_inputs, input, entries);
-    const auto values = pullback(runtime.run("lambda", lambda_inputs), entries);
+    const auto values =
+        pullback(runtime.run("lambda", lambda_inputs, controls.max_iterations), entries);
     std::copy(values.begin(), values.end(), output.begin());
   };
   result.lambda.status = response::GmresStatus::initial_residual;
@@ -652,7 +655,7 @@ UnrestrictedForce unrestricted_force(
   }
   lambda_inputs.at("bar_correlation_energy")[0] = 1.0;
   lift(lambda_inputs, result.lambda.solution, entries);
-  bars = runtime.run("lambda", lambda_inputs);
+  bars = runtime.run("lambda", lambda_inputs, controls.max_iterations);
   accumulate(bars, amplitude_bars);
   if (response::stable_norm(pullback(bars, entries)) > 1e-9)
     throw std::runtime_error("fresh unrestricted Lagrangian amplitude stationarity failed");
@@ -697,6 +700,22 @@ UnrestrictedForce unrestricted_force(
       result.stationarity_residual = std::max(result.stationarity_residual, std::abs(value));
   if (!std::isfinite(result.stationarity_residual) || result.stationarity_residual > 1e-7)
     throw std::runtime_error("fresh unrestricted full orbital stationarity failed");
+  if (fitted) {
+    std::size_t nonzero_seeds = 0;
+    for (const auto* name : {"g_aa", "g_ab", "g_bb"}) {
+      const auto& values = weights.at(name);
+      nonzero_seeds =
+          add(nonzero_seeds,
+              static_cast<std::size_t>(std::count_if(values.begin(), values.end(),
+                                                     [](double value) { return value != 0; })));
+    }
+    // Each Gram seed updates both factor legs with one FMA per auxiliary.
+    // Admit cumulatively before derivative() can start traversing the seeds.
+    runtime.executed_work = add(runtime.executed_work, mul(mul(2, fitted->naux()), nonzero_seeds));
+    core::admit_correlation_work("uccsd_response/df_pair_cotangent", runtime.executed_work,
+                                 result.numeric_capacity_bytes, reference.nbf, reference.nocc[0],
+                                 reference.nocc[1], options.max_iterations);
+  }
   runtime::df_progress::Scope derivative_trace("uccsd_nuclear_response", cuda ? "cuda" : "host");
   result.forces =
       derivative(reference, source.orbital(), weights, cuda, device, derivative_capacity, fitted,

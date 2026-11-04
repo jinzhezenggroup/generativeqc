@@ -3321,8 +3321,10 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_impl(
           cuda_df_iteration_diis_history(options));
     });
     if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
-      for (const auto source : source_indices)
+      for (const auto source : source_indices) {
         outputs[source].status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+        outputs[source].detail = device_detail;
+      }
       return outputs;
     }
     runtime::df_progress::number("compact_dispatch_status", device_status);
@@ -3387,7 +3389,10 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_impl(
         plan, batch_alpha, batch_beta, coulomb, alpha_exchange, beta_exchange, detail);
     if (jk_status != GENERATIVEQC_STATUS_SUCCESS) {
       for (std::size_t slot = 0; slot < source_indices.size(); ++slot) {
-        if (active[slot]) outputs[source_indices[slot]].status = jk_status;
+        if (active[slot]) {
+          outputs[source_indices[slot]].status = jk_status;
+          outputs[source_indices[slot]].detail = detail;
+        }
         active[slot] = false;
       }
       break;

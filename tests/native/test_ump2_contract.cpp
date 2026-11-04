@@ -1,14 +1,18 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "api/handles.hpp"
+#include "cc/uccsd_force.hpp"
 #include "cc/uccsd_solver.hpp"
+#include "core/work_budget.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "methods/ump2_method.hpp"
 #include "methods/unrestricted_df.hpp"
@@ -29,6 +33,81 @@ namespace {
 
 void require(bool valid, const char* detail) {
   if (!valid) throw std::runtime_error(detail);
+}
+
+/** Keep the process work policy unchanged after failure-injection replays. */
+class WorkPolicy {
+ public:
+  WorkPolicy() {
+    if (const auto* value = std::getenv(variable)) previous_ = value;
+    unsetenv(variable);
+  }
+  ~WorkPolicy() {
+    if (previous_)
+      setenv(variable, previous_->c_str(), 1);
+    else
+      unsetenv(variable);
+  }
+  void set(std::size_t allowed) { setenv(variable, std::to_string(allowed).c_str(), 1); }
+
+ private:
+  static constexpr const char* variable = "GENERATIVEQC_CORRELATION_MAX_SCALAR_WORK";
+  std::optional<std::string> previous_;
+};
+
+/** Raise a finite policy only to each observed refusal boundary. No generated
+ * program/action counts are pinned: the complete force must admit its final
+ * fitted seeds, report the actual Lambda ceiling, and recover after refusal. */
+template <class Source>
+void fitted_uccsd_response_admission(
+    const generativeqc::hf::UnrestrictedPhysicalReference& reference,
+    const generativeqc::posthf::DensityFittedInteractionSource& fitted, Source& conventional,
+    generativeqc::scf::PreparedFockPlan& plan) {
+  WorkPolicy policy;
+  generativeqc::cc::SolverOptions options;
+  options.max_iterations = 200;
+  options.energy_tolerance = 1e-13;
+  options.residual_tolerance = 1e-11;
+  const auto parent =
+      generativeqc::cc::solve_unrestricted(reference, fitted, options, true, 0, true);
+  require(parent.converged, "fitted UCCSD response parent did not converge");
+  auto problem = generativeqc::methods::detail::unrestricted_response_problem(reference, plan);
+  const auto evaluate = [&] {
+    return generativeqc::cc::unrestricted_force(reference, fitted, parent, options, true, 0,
+                                                &problem, false, 0, &fitted, &conventional);
+  };
+  const auto baseline = evaluate();
+  bool seed_refusal = false, lambda_refusal = false, recovered = false;
+  std::size_t allowed = 1;
+  for (unsigned attempt = 0; attempt < 1000; ++attempt) {
+    // Narrow the policy after preflight so its conservative primal estimate
+    // cannot mask an independently executed response-phase refusal.
+    policy.set(100000000000ULL);
+    conventional.response_work_limit = allowed;
+    try {
+      const auto actual = evaluate();
+      require(actual.forces == baseline.forces, "work refusal poisoned fitted force replay");
+      recovered = true;
+      break;
+    } catch (const generativeqc::core::WorkLimitError& error) {
+      const std::string message(error.what());
+      if (message.find("phase=uccsd_response/lambda ") != std::string::npos) {
+        lambda_refusal = true;
+        require(message.find("iteration_ceiling=300 ") != std::string::npos,
+                "Lambda refusal reports the primal iteration ceiling");
+      }
+      seed_refusal |= message.find("phase=uccsd_response/df_pair_cotangent ") != std::string::npos;
+      const auto position = message.find("estimated_work=");
+      require(position != std::string::npos, "work refusal lost its estimated work");
+      const auto required = std::stoull(message.substr(position + 15));
+      require(required > allowed, "work refusal did not advance its finite boundary");
+      allowed = required;
+    }
+  }
+  conventional.response_work_limit.reset();
+  require(seed_refusal, "fitted UCCSD response omitted fitted-seed work admission");
+  require(lambda_refusal, "fitted UCCSD fixture did not exercise Lambda refusal");
+  require(recovered, "fitted UCCSD response did not recover under a sufficient finite policy");
 }
 
 generativeqc_method_descriptor ump2_descriptor() {
@@ -152,10 +231,14 @@ class CountingSource final : public generativeqc::integrals::ElectronInteraction
             const std::array<std::size_t, 4>& count, double* output,
             std::size_t elements) const override {
     ++reads;
+    if (response_work_limit)
+      setenv("GENERATIVEQC_CORRELATION_MAX_SCALAR_WORK",
+             std::to_string(*response_work_limit).c_str(), 1);
     if (fail) throw std::runtime_error("injected source failure");
     raw_.read(op, begin, count, output, elements);
   }
   mutable std::size_t reads{};
+  std::optional<std::size_t> response_work_limit;
   bool fail{};
 
  private:
@@ -479,6 +562,7 @@ void force_contract() {
       stale_rejected = true;
     }
     require(stale_rejected, "three-index cache replayed in a stale orbital frame");
+    fitted_uccsd_response_admission(ref, fitted, source, plan);
   }
   require(first.response.converged() && first.stationarity_residual < 1e-8,
           "UMP2 force did not qualify full response");
