@@ -361,6 +361,20 @@ def test_finite_orthonormal_underflow_uses_original_stored_density(
         coefficients = np.ascontiguousarray(
             frame[:, np.r_[int(ids[0]), np.delete(np.arange(nao), ids[0])]].T
         )
+        counts = np.array([1], dtype=np.int32)
+        gpu_stored = np.zeros_like(stored)
+        assert (
+            occupied_probe.form_density(
+                coefficients.ctypes.data,
+                counts.ctypes.data,
+                nao,
+                spins,
+                gpu_stored.ctypes.data,
+            )
+            == 0
+        )
+        np.testing.assert_array_equal(gpu_stored, stored)
+        stored = gpu_stored
         ao = np.zeros((4, points, active))
         ao[0, 0, 0] = ao_scale
         if all_jets:
