@@ -80,6 +80,33 @@ must follow the storage actually consumed, not the exact-mode scratch layout.
 
 ## Evidence and promotion boundary
 
+The complete 96-atom r2SCAN-3c regression at
+`6918c4584b85a5571dc69cbab35fde77fade09d7` isolated another cost: passing null
+absolute storage to the certified tiled specialization still retained costly
+runtime-predicated directed-rounding instructions. Its occupied producer took
+5.158219 GPU seconds for 231 launches, plus 132 matrix launches, versus
+5.212594 seconds for all 363 matrix launches. Compile proposals through the
+existing non-certifying specialization instead. Compact matrix fallback shares
+that specialization's panels; exact callers retain their certified producer.
+
+At `07ec901f833c584518a6cc8481efef5649ba90ab`, three fresh-process alternating
+pairs on the original 96-atom Direct Standard workload give complete cold E+F
+medians 30.500666 → 28.909603 seconds (5.22% less time, above the retained 2%
+variability floor), with 10 iterations/Fock builds on both routes. Frozen warm
+11.139000 → 11.232632 seconds is below the floor and is not a speedup. The
+independent default-grid small cases and audited dense-grid scaling oracles
+retain their original gates. A separate same-image profile gives combined
+density-product device time 5.216700 → 3.674313 seconds across cold+warm,
+including matrix refusals and the strict tail, not just an isolated proposal.
+Source-bound vectors, all rejected populations, work, sanitizer/resource data
+and offline readers are retained in the
+[qualification capsule](../../../../benchmarks/results/occupied-xc-audited-proposals-20261104/README.md).
+The superseded October 23 full report is byte-verifiably recoverable from
+published `ffa6936968d5c5a33194bd9bc09435a9f2ee0d05`; current synthetic profile
+tests do not require its payload. This keeps new full-precision qualification
+inside the unchanged checkout budget without an external archive or lost
+historical observations.
+
 Executable host/device poison-D probes distinguish actual work avoidance from
 exact verification; ordinary exact calls must still read and reject poison D.
 Device tests retain independent stored-D comparisons, Gram underflow,
