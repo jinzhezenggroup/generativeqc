@@ -27,6 +27,7 @@ from .shell_signature import BasisConvention, ShellSignature
 from .shell_spec import AXES, ShellClassSpec
 
 CENTERS = ("first", "second", "third", "fourth")
+ShellPairComponents = tuple[tuple[str, str], ...]
 
 
 def build_weighted_eri_ir(
@@ -89,7 +90,12 @@ def canonical_range_weighted_eri_ir(integral: typing.Any) -> typing.Any:
 
 @dataclass(frozen=True)
 class WeightedEriKernel:
-    """One explicit component subset with no raw four-index derivative buffer."""
+    """A weighted scalar, with either component or exact separable-pair inputs.
+
+    ``pair_components`` describes two independently packed pair arrays. Their
+    outer product covers the complete ordered shell, not an AO screening mask
+    or an approximation to arbitrary four-index weights.
+    """
 
     integral: IntegralIR
     spec: ShellClassSpec
@@ -98,6 +104,52 @@ class WeightedEriKernel:
     value: Expr
     gradients: tuple[tuple[Expr, Expr, Expr], ...]
     coulomb_states: tuple[tuple[int, int, int], ...]
+    pair_components: tuple[ShellPairComponents, ShellPairComponents] | None = None
+
+
+def _separable_weighted_eri_coefficients(
+    graph: Graph,
+    spec: ShellClassSpec,
+    shifts: dict[str, dict[str, Expr]],
+    inverse_p: Expr,
+    inverse_q: Expr,
+) -> tuple[
+    dict[tuple[int, int, int], list[Expr]],
+    tuple[ShellPairComponents, ShellPairComponents],
+]:
+    """Project each pair before the shared Coulomb contraction and physical AD.
+
+    Pair weights remain fixed cotangents. Reusing the existing pair expansion
+    keeps Gaussian decay and coincident-center behavior in the canonical
+    algebra; no rank assumption about an underlying density matrix is made.
+    """
+    pair_components = (
+        tuple(dict.fromkeys(component[:2] for component in spec.components)),
+        tuple(dict.fromkeys(component[2:] for component in spec.components)),
+    )
+    projected = []
+    for side, prefixes, inverse in (
+        (0, ("pa", "pb"), inverse_p),
+        (1, ("qc", "qd"), inverse_q),
+    ):
+        terms = defaultdict(list)
+        for index, pair in enumerate(pair_components[side]):
+            expansion = _pair_expansion(
+                graph,
+                _component_quantums(*pair, shifts[prefixes[0]], shifts[prefixes[1]]),
+                inverse,
+            )
+            weight = graph.variable(f"pair_weight_{side}_{index}")
+            for state, coefficient in expansion:
+                terms[state].append(weight * coefficient)
+        projected.append({state: graph.sum(values) for state, values in terms.items()})
+    coefficients = defaultdict(list)
+    for (left, bra), (right, ket) in product(
+        projected[0].items(), projected[1].items()
+    ):
+        state = tuple(first + second for first, second in zip(left, right, strict=True))
+        coefficients[state].append(bra * ket * (-1 if sum(right) % 2 else 1))
+    return coefficients, pair_components
 
 
 def build_weighted_eri_kernel(
@@ -106,6 +158,7 @@ def build_weighted_eri_kernel(
     *,
     primal_form: AlgebraForm = AlgebraForm.FACTORED_NARY,
     derivative_basis: typing.Literal["nuclear", "relative"] = "nuclear",
+    pair_separable: bool = False,
 ) -> WeightedEriKernel:
     """Precontract Hermite coefficients, then differentiate the weighted scalar.
 
@@ -121,7 +174,16 @@ def build_weighted_eri_kernel(
     the Gaussian pair-separation/product-center frame before recovering nuclear
     derivatives. Positive exponent fractions define this frame; external weights
     stay fixed. The default retains the arbitrary-leaf nuclear response graph.
+    ``pair_separable=True`` instead consumes two complete ordered pair arrays
+    whose outer product is the external weight tensor. Their exact projection
+    precedes the same AD, without the arbitrary-weight 64-component partition.
+    Partial component masks cannot use this representation; admission, orbit
+    folding and bounded fallback remain the caller's responsibility.
     """
+    if type(pair_separable) is not bool:
+        raise TypeError("pair-separable weighted inputs require a boolean flag")
+    if pair_separable and component_indices is not None:
+        raise ValueError("pair-separable inputs require complete ordered pairs")
     if derivative_basis not in ("nuclear", "relative"):
         raise ValueError("weighted derivative basis must be nuclear or relative")
     if (
@@ -166,7 +228,7 @@ def build_weighted_eri_kernel(
         if component_indices is None
         else tuple(component_indices)
     )
-    if not indices or len(indices) > 64:
+    if not indices or (not pair_separable and len(indices) > 64):
         raise ValueError(
             "select between one and 64 explicit weighted components per lowering"
         )
@@ -189,33 +251,43 @@ def build_weighted_eri_kernel(
     boys = tuple(
         graph.variable(f"boys_{n}") for n in range(integral.maximum_coulomb_order + 1)
     )
-    coefficients = defaultdict(list)
-    first_cache, second_cache = {}, {}
-    for index in indices:
-        a, b, c, d = spec.components[index]
-        if (a, b) not in first_cache:
-            first_cache[a, b] = _pair_expansion(
-                graph, _component_quantums(a, b, shifts["pa"], shifts["pb"]), inverse_p
-            )
-        if (c, d) not in second_cache:
-            second_cache[c, d] = _pair_expansion(
-                graph, _component_quantums(c, d, shifts["qc"], shifts["qd"]), inverse_q
-            )
-        weight = graph.variable(f"component_weight_{index}")
-        for (left, left_coefficient), (right, right_coefficient) in product(
-            first_cache[a, b], second_cache[c, d]
-        ):
-            orders = (
-                left[0] + right[0],
-                left[1] + right[1],
-                left[2] + right[2],
-            )
-            coefficients[orders].append(
-                weight
-                * left_coefficient
-                * right_coefficient
-                * (-1 if sum(right) % 2 else 1)
-            )
+    pair_components = None
+    if pair_separable:
+        coefficients, pair_components = _separable_weighted_eri_coefficients(
+            graph, spec, shifts, inverse_p, inverse_q
+        )
+    else:
+        coefficients = defaultdict(list)
+        first_cache, second_cache = {}, {}
+        for index in indices:
+            a, b, c, d = spec.components[index]
+            if (a, b) not in first_cache:
+                first_cache[a, b] = _pair_expansion(
+                    graph,
+                    _component_quantums(a, b, shifts["pa"], shifts["pb"]),
+                    inverse_p,
+                )
+            if (c, d) not in second_cache:
+                second_cache[c, d] = _pair_expansion(
+                    graph,
+                    _component_quantums(c, d, shifts["qc"], shifts["qd"]),
+                    inverse_q,
+                )
+            weight = graph.variable(f"component_weight_{index}")
+            for (left, left_coefficient), (right, right_coefficient) in product(
+                first_cache[a, b], second_cache[c, d]
+            ):
+                orders = (
+                    left[0] + right[0],
+                    left[1] + right[1],
+                    left[2] + right[2],
+                )
+                coefficients[orders].append(
+                    weight
+                    * left_coefficient
+                    * right_coefficient
+                    * (-1 if sum(right) % 2 else 1)
+                )
     value = graph.variable("prefactor") * graph.sum(
         graph.sum(terms) * _coulomb_derivative(graph, orders, rho, difference, boys)
         for orders, terms in sorted(coefficients.items())
@@ -291,7 +363,14 @@ def build_weighted_eri_kernel(
     zero_gradient = (zero, zero, zero)
     result = tuple(gradients[c] if c in requested else zero_gradient for c in range(4))
     return WeightedEriKernel(
-        integral, spec, indices, graph, value, result, tuple(sorted(coefficients))
+        integral,
+        spec,
+        indices,
+        graph,
+        value,
+        result,
+        tuple(sorted(coefficients)),
+        pair_components=pair_components,
     )
 
 
