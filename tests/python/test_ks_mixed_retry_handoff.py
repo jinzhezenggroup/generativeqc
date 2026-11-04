@@ -70,7 +70,9 @@ def retry_probe(
 
 @pytest.mark.parametrize("independent", (False, True))
 @pytest.mark.parametrize(
-    "component", range(7), ids=["j", "density", "xc", "range", "nlc", "all", "matrix"]
+    "component",
+    range(8),
+    ids=["j", "density", "xc", "range", "nlc", "all", "matrix", "occupied"],
 )
 @pytest.mark.parametrize("stage", range(3), ids=["seed", "frozen", "target"])
 @pytest.mark.parametrize("source", range(3), ids=["absent", "mixed", "strict"])
@@ -104,6 +106,7 @@ PREFIX = r"""
 #include <stdexcept>
 #include <string>
 using cudaStream_t = void*;
+enum class CudaXcAoPrecision { Fp64 };
 @OCCUPIED_DENSITY@
 void require(bool ok, const char* why) { if (!ok) throw std::runtime_error(why); }
 int cudaMemsetAsync(void* p, int value, std::size_t n, void*) {
@@ -135,9 +138,14 @@ template<class... T> void enqueue_vv10_molecular_domain_cuda(T...) { ++domains; 
 const double* expected_density = nullptr;
 struct Xc {
   int semilocal = 0, features = 0, potentials = 0;
+  CudaXcOccupiedDensity last_occupied{};
   struct PointBatch { std::size_t tiles = 1, device_bytes = 0; };
   PointBatch point_batch_plan() const { return {}; }
-  template<class... T> void enqueue(const double* density, T...) {
+  void enqueue(const double* density, std::size_t, std::uint64_t, Phase phase,
+               CudaXcOccupiedDensity occupied = {}) {
+    require(!occupied.provisional || phase == Phase::Admitted,
+            "strict target received a provisional frame");
+    last_occupied = occupied;
     require(density == expected_density, "XC received a delta density"); ++semilocal;
   }
   template<class... T> void enqueue_density_features(const double* density, T...) {
@@ -150,6 +158,7 @@ struct Xc {
 };
 struct Source { bool mixed; bool mixed_recurrence() const { return mixed; } };
 struct Owner {
+  bool occupied_xc_requested{}, occupied_xc_frame_ready{}, pending_occupied_xc{}, occupied_xc_executed{};
   bool is_failed = true, pending_incremental_delta = true;
   bool pending_mixed_coulomb{}, pending_mixed_density{}, pending_mixed_point{};
   bool pending_mixed_contractions{};
@@ -202,7 +211,8 @@ struct Owner {
   double *nonlocal_vrho{}, *nonlocal_vsigma{}, *nonlocal_energy{};
   int *nonlocal_domain_error{};
   std::size_t elements = 1;
-  struct { std::size_t npoint = 24; } xc_layout;
+  struct { std::size_t npoint = 24, feature_terms = 5;
+    CudaXcAoPrecision ao_precision = CudaXcAoPrecision::Fp64; } xc_layout;
   struct { std::size_t point_ao_visits = 24, point_ao_square_sum = 24; } prepared_ao_work;
   struct { std::size_t point_count() const { return 12; } } nonlocal_grid;
   std::unique_ptr<Xc> nonlocal_xc;
@@ -230,6 +240,7 @@ int main(int argc, char** argv) {
   p.pending_mixed_range_exchange = component == 3 || component == 5;
   p.pending_mixed_nonlocal = component == 4 || component == 5;
   p.pending_mixed_contractions = component == 5 || component == 6;
+  p.pending_occupied_xc = component == 7;
   p.nonlocal_seed_stage = stage == 0; p.nonlocal_frozen_stage = stage == 1;
   if (source) p.phase_source = std::make_unique<Source>(Source{source == 1});
   require(p.retry() && p.is_active && !p.is_failed && p.strict_refinement, "strict retry was not selected");
@@ -255,6 +266,22 @@ int main(int argc, char** argv) {
   require(!strict.occupied_fitted_factor_ready && !strict.pending_fitted_occupied &&
               !strict.final_fitted_projection_ready && !strict.final_occupied_factor_ready,
               "failed strict state remained reusable");
+  Owner request;
+  request.device_nonlocal = false;
+  request.occupied_xc_requested = request.occupied_xc_frame_ready = true;
+  request.tmp1 = request.density;
+  expected_density = request.density;
+  request.stage_xc(3, Phase::Admitted);
+  require(request.pending_occupied_xc && request.xc->last_occupied.provisional &&
+              !request.occupied_xc_frame_ready, "proposal did not consume its one-use frame");
+  request.occupied_xc_frame_ready = true;
+  request.stage_xc(4, Phase::StrictAudit);
+  require(!request.pending_occupied_xc && !request.xc->last_occupied.coefficients &&
+              !request.occupied_xc_frame_ready, "strict audit admitted an occupied proposal");
+  request.occupied_xc_frame_ready = request.strict_refinement = true;
+  request.stage_xc(5, Phase::Admitted);
+  require(!request.pending_occupied_xc && !request.xc->last_occupied.coefficients,
+              "strict refinement restarted provisional XC");
  } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
 """

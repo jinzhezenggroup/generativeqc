@@ -85,20 +85,34 @@ arithmetic contract.
 
 ## Explicit native execution
 
-The CUDA KS owner uses ordinary matrix features for all requests, including
-`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1`. This control does not select a production
-occupied shortcut. The exact certificate repeats original-D feature work after
-projection, so KS does not supply an occupied frame. Cold, warm and moved owners
-retain the same matrix route without candidate projection or verification work.
+The CUDA KS owner defaults to ordinary matrix features. The exact value
+`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` enables bounded occupied-feature **SCF
+proposals**, not a different convergence certificate. A canonical frame which
+formed the current D may supply strict-FP64 meta-GGA features in the admitted
+phase. An outward-rounded forward-error prefilter rejects ill-conditioned
+points; admitted proposals skip the dense original-D contraction altogether.
+The control is opt-in; unset, `0`, and malformed values retain matrix work.
+
+The owner switches permanently to the original matrix target at the proposal
+handoff, clears nonlinear history and starts a fresh energy epoch. The switch
+uses the existing bounded warmup policy (maximum residual at most `1e-4`, or
+at most eleven proposal-stage iterations, with room for target evaluation).
+These are initializer scheduling controls, not scientific tolerances. No
+provisional energy, residual, warm seed or force can authorize publication.
+Strict matrix refinement, canonical validation and analytic force acceptance
+retain their original gates. A failed provisional numerical evaluation retries
+the same density using the strict target, without a CPU scientific fallback.
 
 Lower-level `CudaXcPlan` experiments retain the explicit borrowed-frame API and
 [native certificate contract](xc_native_cuda.md#occupied-density-certificates).
-They require eligible strict-FP64 meta-GGA inputs, exact original-D identity,
+Their default exact mode still requires original-D identity. Explicit
+provisional witnesses are rejected in `StrictAudit`; their caller owns the
+strict target handoff. Both modes require eligible strict-FP64 meta-GGA inputs,
 a matching canonical generation and bounded scratch capacity. The feature,
 compact-batch and native-plan tests continue to exercise these contracts.
-Re-enabling production admission requires both numerical and complete-endpoint
-cost qualification; see the
-[matrix-fallback decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-production-matrix-fallback.md).
+Default promotion requires source-matched complete-endpoint numerical and cost
+qualification, including handoff/refinement and refusal work. See the
+[proposal decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-audited-proposals.md).
 
 The CUDA density-feature reduction uses one warp per spin/grid point for
 32 or more AOs. Lanes traverse adjacent AO components and reduce the existing

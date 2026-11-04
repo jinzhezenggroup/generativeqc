@@ -793,7 +793,7 @@ _OCCUPIED_TEMPLATE = r"""
 // dot panels and their squared norms are rounded outward, never RN estimates.
 // The full derivation and gradual-underflow envelope are in the Agent Note.
 __device__ bool occupied_feature_certificate(const double* features, const double* squared_norms,
-    I active, I rank, I spins) {
+    I active, I rank, I spins, bool provisional = false) {
   if (active < 1 || rank < 1 || active > I(0x1p50) || rank > I(0x1p50)) return false;
   const double steps = __dadd_ru(__dmul_ru(8.0,
       __dadd_ru(static_cast<double>(active), static_cast<double>(rank))), 128.0);
@@ -816,9 +816,10 @@ __device__ bool occupied_feature_certificate(const double* features, const doubl
     const double candidate = weight * features[term];
     const double error_bound = __dadd_ru(underflow,
         __dmul_ru(__dmul_ru(2.0, gamma), __dmul_ru(weight, magnitudes[term])));
-    // This is a stricter, pointwise FP64 admission budget, not a relaxation
-    // of any XC, SCF, force or endpoint acceptance tolerance.
-    const double roundoff_budget = 0x1p-45 * fmax(1.0, fabs(candidate));
+    // Proposal admission only controls initializer quality. It cannot certify
+    // a published XC value; the KS owner must rebuild the strict target.
+    const double roundoff_budget = (provisional ? 0x1p-32 : 0x1p-45) *
+        fmax(1.0, fabs(candidate));
     if (!isfinite(candidate) || !isfinite(error_bound) || error_bound > roundoff_budget)
       return false;
   }
@@ -845,7 +846,7 @@ template<bool Cooperative = true>
 __device__ void occupied_density_features_body(const double* work, I rank, I count,
     I spins, I terms, double* features, int* error, const double* density,
     const double* ao, I active, I full_n, const size_t* ids,
-    const double* absolute_work) {
+    const double* absolute_work, bool provisional = false) {
   constexpr I width = Cooperative ? 32 : 1;
   const I lane = threadIdx.x % width, stride = count * rank;
   for (I item = (I(blockIdx.x) * blockDim.x + threadIdx.x) / width;
@@ -878,11 +879,12 @@ __device__ void occupied_density_features_body(const double* work, I rank, I cou
       }
     }
     if (lane == 0 && !unsafe)
-      unsafe = !occupied_feature_certificate(accum, squared_norms, active, rank, spins);
+      unsafe = !occupied_feature_certificate(accum, squared_norms, active, rank, spins, provisional);
     if constexpr (Cooperative) unsafe = __any_sync(0xffffffffu, unsafe);
     const bool original_available = density && ao && active && full_n && terms == 5;
+    const bool use_proposal = provisional && original_available && !unsafe;
     double original[5]{};
-    if (original_available) {
+    if (original_available && !use_proposal) {
       // A feature-error budget is not an XC E/Vxc/force sensitivity contract.
       // Until such a contract exists, require exact original-D feature identity
       // even when the forward-error prefilter passes. Keep the reference in
@@ -923,16 +925,18 @@ __device__ void occupied_density_features_body(const double* work, I rank, I cou
       }
       for (I term = 0; term < terms; ++term)
         features[(spin * terms + term) * count + point] =
-            finite(!original_available ? NAN : (identical ? accum[term] : original[term]), error, 1);
+            finite(!original_available ? NAN :
+                ((use_proposal || identical) ? accum[term] : original[term]), error, 1);
     }
   }
 }
 
 __global__ void occupied_density_features(const double* work, I rank, I count,
     I spins, I terms, double* features, int* error, const double* density,
-    const double* ao, I active, I full_n, const size_t* ids, const double* absolute_work) {
+    const double* ao, I active, I full_n, const size_t* ids, const double* absolute_work,
+    bool provisional = false) {
   occupied_density_features_body(work, rank, count, spins, terms, features, error,
-                                 density, ao, active, full_n, ids, absolute_work);
+                                 density, ao, active, full_n, ids, absolute_work, provisional);
 }
 
 inline void launch_occupied_density(cudaStream_t stream, CudaXcOccupiedDensity occupied,
@@ -948,7 +952,8 @@ inline void launch_occupied_density(cudaStream_t stream, CudaXcOccupiedDensity o
   occupied_density_features<<<generativeqc_tensor::blocks(occupied.spins * count * 32, 128),
       128, 0, stream>>>(work, occupied.rank(), count, occupied.spins, terms, features, error,
                         occupied.density, ao, active, occupied.nao, ids,
-                        projection_fits ? work + occupied.spins * 4 * count * occupied.rank() : nullptr);
+                        projection_fits ? work + occupied.spins * 4 * count * occupied.rank() : nullptr,
+                        occupied.provisional);
   generativeqc_tensor::cuda_check(cudaGetLastError());
 }
 """

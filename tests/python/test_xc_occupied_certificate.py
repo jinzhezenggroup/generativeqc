@@ -46,6 +46,8 @@ def certificate_probe(tmp_path: Path, native_cxx: "NativeCxx") -> ct.CDLL:
     native.admitted.restype = ct.c_int
     native.evaluate.argtypes = [ct.c_void_p] * 4 + [ct.c_int64] * 5 + [ct.c_void_p] * 2
     native.evaluate.restype = ct.c_int
+    native.evaluate_proposal.argtypes = native.evaluate.argtypes
+    native.evaluate_proposal.restype = ct.c_int
     return native
 
 
@@ -256,6 +258,73 @@ def test_passing_feature_budget_cannot_replace_a_point_program_contract(
 
 
 @pytest.mark.parametrize("spins", [1, 2])
+@pytest.mark.parametrize("mapped", [False, True])
+def test_proposals_skip_dense_verification_but_exact_calls_do_not(
+    certificate_probe: ct.CDLL, spins: int, mapped: bool
+) -> None:
+    """An admitted proposal may differ; only the strict consumer is a certificate.
+
+    Poison unused stored-D entries to make accidental dense reevaluation fail.
+    This intentionally synthetic witness tests work avoidance, not admission of
+    a malformed physical frame through the native owner.
+    """
+    active, rank, points = 17, 1, 2
+    full_n = active + int(mapped) * 3
+    ids = np.arange(active, dtype=np.uintp) + int(mapped)
+    ao = np.zeros((4, points, active))
+    ao[:, :, 0] = 0.25
+    projections = np.full((spins, 4, points, rank), 0.25)
+    absolute = projections.copy()
+    density = np.full((spins, full_n, full_n), np.nan)
+    actual = np.zeros((spins, 5, points))
+    arguments = (
+        density.ctypes.data,
+        projections.ctypes.data,
+        absolute.ctypes.data,
+        ao.ctypes.data,
+        active,
+        points,
+        rank,
+        spins,
+        full_n,
+        ids.ctypes.data if mapped else None,
+        actual.ctypes.data,
+    )
+    assert certificate_probe.evaluate_proposal(*arguments) == 0
+    weight = 2.0 if spins == 1 else 1.0
+    expected = weight * np.array([0.0625, 0.125, 0.125, 0.125, 0.09375])
+    np.testing.assert_array_equal(
+        actual, np.broadcast_to(expected[None, :, None], actual.shape)
+    )
+    assert certificate_probe.evaluate(*arguments) != 0
+    absolute[:] = np.inf
+    assert certificate_probe.evaluate_proposal(*arguments) != 0
+
+
+def test_proposal_with_missing_original_source_still_fails_closed(
+    certificate_probe: ct.CDLL,
+) -> None:
+    values = np.zeros((1, 4, 1, 1))
+    output = np.zeros((1, 5, 1))
+    assert (
+        certificate_probe.evaluate_proposal(
+            None,
+            values.ctypes.data,
+            values.ctypes.data,
+            values.ctypes.data,
+            1,
+            1,
+            1,
+            1,
+            1,
+            None,
+            output.ctypes.data,
+        )
+        != 0
+    )
+
+
+@pytest.mark.parametrize("spins", [1, 2])
 @pytest.mark.parametrize("exponent", [-250, -40, 0, 40, 250])
 def test_certificate_encloses_both_routes_against_exact_decimal_features(
     certificate_probe: ct.CDLL, spins: int, exponent: int
@@ -425,6 +494,14 @@ extern "C" int evaluate(const double* density, const double* work, const double*
   int error = 0;
   occupied_density_features_body<false>(work, rank, count, spins, 5, output, &error,
                                         density, ao, active, full_n, ids, absolute);
+  return error;
+}
+extern "C" int evaluate_proposal(const double* density, const double* work, const double* absolute,
+    const double* ao, I active, I count, I rank, I spins, I full_n, const size_t* ids,
+    double* output) {
+  int error = 0;
+  occupied_density_features_body<false>(work, rank, count, spins, 5, output, &error,
+                                        density, ao, active, full_n, ids, absolute, true);
   return error;
 }
 """

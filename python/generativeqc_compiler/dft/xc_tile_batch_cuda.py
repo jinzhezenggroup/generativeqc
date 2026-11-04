@@ -65,7 +65,8 @@ __global__ void batch_density_features(const CudaXcCompactTile* tiles, const dou
       occupied_density_features_body(work + tile.work_offset, occupied.rank(), tile.count,
           spins, terms, target, error, occupied.density, ao + tile.ao_offset, tile.active,
           occupied.nao, compact_tile_ids(tile, ids, occupied.nao),
-          work + tile.work_offset + occupied.spins * 4 * tile.count * occupied.rank());
+          work + tile.work_offset + occupied.spins * 4 * tile.count * occupied.rank(),
+          occupied.provisional);
       return;
     }
   }

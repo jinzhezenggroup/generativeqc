@@ -1,0 +1,79 @@
+# Decision: recover occupied XC work avoidance through audited SCF proposals
+
+Status: implemented, opt-in; qualification is source-bound separately
+Date: 2026-11-04
+
+## Problem
+
+PR #2971 correctly observed that a small feature discrepancy alone is not an
+XC energy/potential/force certificate. Its exact-mode repair necessarily does
+both orbital projection and dense original-D work. Merely removing the exact
+comparison would revive the scientific problem, not recover a safe fast path.
+
+## Decision
+
+Change the consumer contract, not the scientific acceptance tolerance. Treat
+occupied contractions as a bounded nonlinear SCF initializer. The explicit
+`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` route may borrow the current canonical frame
+and use an admitted, finite, forward-error-bounded feature proposal without
+reading the original matrix at that point. Unsupported points recompute the
+same live D. Default/unset/invalid controls remain matrix-only.
+
+The proposal budget `2^-32 * max(1, abs(feature))` is a quality/performance
+heuristic, not a downstream sensitivity assertion. The coefficient, jet and
+outward absolute-dot proof envelope remains intact. Exact-mode callers retain
+the old stricter prefilter followed by complete bitwise verification.
+
+Reuse the existing bounded initializer handoff and strict target machinery.
+The proposal stage ends on residual at most 1e-4, apparent convergence, or the
+finite warmup cap (at most eleven iterations, leaving a fresh target build).
+These switches schedule work; they never authorize a result. Before any
+publication, clear provisional DIIS, reset the energy epoch and run the
+original stored-D target under the original physical and canonical gates.
+Numerical proposal failure retries that same D strictly and never retries
+another proposal. The overall SCF iteration limit remains finite.
+
+`CudaXcOccupiedDensity.provisional` is explicit and defaults false. The native
+plan refuses it in `StrictAudit`, response and unsupported precision/layout
+contexts. There is no new C/Python public method, CPU oracle in production,
+global scratch allocation, scientific kernel launch or synchronization.
+
+## Invariants
+
+- No provisional E, Fock residual, warm seed, final density or force certifies
+  convergence. Final-state and derivative consumers use original matrix work.
+- Frame ownership/generation, stream ordering and one-use tmp1 lease survive.
+  Failed/rejected proposals and new solves revoke that lease.
+- Both orbital and absolute-bound panels fit existing dead scratch only when
+  `2 * rank <= active`; compact AO mapping and original-D fallbacks remain.
+- FP64 reassociation is not reported as FP32 arithmetic. Traces expose the
+  provisional frame generations; final traces must return to matrix work.
+- Performance evidence must include handoff, dense refusals and strict
+  refinement in complete cold/warm/moved E+F, not just projection throughput.
+
+## Rejected alternatives
+
+Do not invent a universal XC Lipschitz constant from the feature bound, relax
+scientific gates, sample a few original points as a proof, restore the old
+unverified default, or call full per-point dense verification an acceleration.
+Adding interval derivatives for every supported Libxc point program is a much
+larger project; initializer auditing avoids requiring that contract at all.
+
+## Evidence and promotion boundary
+
+Executable host/device poison-D probes distinguish actual work avoidance from
+exact verification; ordinary exact calls must still read and reject poison D.
+Device tests retain independent stored-D comparisons, Gram underflow,
+cancellation, RKS/UKS/empty spins, mapped/tail/scalar/warp domains and compact
+scratch/capacity fallback. Native tests require a strict matrix tail before
+publication and independent original/displaced default-grid E+F gates of
+2e-9 Eh and 1e-7 Eh/Bohr, without production CPU derivatives.
+
+No default promotion or all-functional speedup is implied. Retain source,
+binary, scheduler, complete endpoint/work and sanitizer evidence with any
+measured claim; historical #2971 receipts are not new-source evidence.
+
+Supersedes the production exclusion in the
+[matrix-fallback decision](2026-11-04-occupied-xc-production-matrix-fallback.md),
+not the lower-level
+[exact-identity contract](../numerics/2026-11-04-occupied-xc-exact-identity.md).

@@ -1,0 +1,26 @@
+{
+  "id": "ks.occupied-xc-density-features",
+  "classification": "retained-opt-in",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
+  ],
+  "owner_issues": [
+    2751
+  ],
+  "sources": [
+    "src/dft/cuda_ks.cpp",
+    "src/dft/cuda_xc.cpp",
+    "python/generativeqc_compiler/dft/xc_contraction_cuda.py",
+    "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py"
+  ],
+  "rationale": "Only exact 1 requests bounded occupied-feature SCF proposals. Admitted points avoid dense verification, while unsupported points retain live original-D fallback. The initializer permanently hands off to the original matrix target, clears DIIS and resets the energy epoch before unchanged strict physical/canonical acceptance. StrictAudit never receives provisional features. Unset, 0 and malformed controls remain matrix-only; no universal XC sensitivity certificate or global default promotion is claimed.",
+  "revisit_condition": "Consider automatic admission only with source-matched complete native cold/warm/moved E+F timing, semantic work and independent scientific gates, including refusals and strict refinement, showing a profitable bounded domain without credible regressions.",
+  "evidence": [
+    "tests/python/test_xc_occupied_certificate.py",
+    "tests/python/test_xc_occupied_features_cuda.py",
+    "tests/python/test_xc_occupied_default_cuda.py",
+    "tests/python/test_ks_mixed_retry_handoff.py",
+    "docs:docs/developer/xc_contractions.md",
+    "note:.agents/notes/implemented/performance/2026-11-04-occupied-xc-audited-proposals.md"
+  ]
+}

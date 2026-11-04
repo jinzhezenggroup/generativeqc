@@ -111,14 +111,19 @@ struct CudaXcLayout {
  * Coefficients are column-major nao-by-nao frames, one per spin. This is an
  * ownership/generation witness, not equality between the stored rounded Gram
  * and a reassociated orbital contraction. The generated consumer must certify
- * each point or fall back to this same live stored density. Until a qualified
- * XC sensitivity contract exists, certification requires bitwise-identical
- * original-D features, not merely a small per-feature error estimate. */
+ * each point or fall back to this same live stored density. Exact mode requires
+ * bitwise-identical original-D features. Provisional mode instead lends bounded
+ * initializer features to an SCF owner which must independently certify the
+ * strict stored-D target; it is not a point-functional sensitivity contract. */
 struct CudaXcOccupiedDensity {
   const double* density{};
   const double* coefficients{};
   std::size_t nao{}, spins{}, occupations[2]{};
   std::uint64_t generation{};
+  /** Bounded SCF initializer only, never an energy/residual/force certificate.
+   * StrictAudit rejects this mode. The owner must retire provisional history
+   * and rebuild the original stored-D target before publishing convergence. */
+  bool provisional{};
 
 #if defined(__CUDACC__)
   __host__ __device__

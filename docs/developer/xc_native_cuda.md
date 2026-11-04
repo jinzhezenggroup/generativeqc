@@ -81,7 +81,7 @@ does not authorize a nonzero feature discrepancy: there is no qualified
 point-program/domain sensitivity contract that turns its internal budget into
 an XC energy, potential or force bound.
 
-Every explicit occupied invocation also evaluates the original stored-D
+Every exact-mode occupied invocation also evaluates the original stored-D
 features in registers with the retained built-in matrix arithmetic. A candidate
 is used only when all five finite features are bitwise identical, including
 the sign of zero. Otherwise the original-D vector is used. Identical inputs
@@ -98,14 +98,24 @@ applies the RKS occupation factor a second time. Missing bounds fail closed;
 genuine original-matrix errors are still reported. No extra global allocation
 or host oracle is introduced.
 
-Because exact verification repeats dense feature work, every CUDA KS request
-uses the ordinary matrix route, including `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1`.
-KS does not publish a candidate frame, so it avoids both projection and dense
-verification overhead. The lower-level explicit `CudaXcPlan` experiment and its
-identity, precision, generation, mapping, capacity and lifetime checks remain.
-It is not an available production acceleration option. Restoring production
-admission requires a cheaper numerically qualified contract and complete
-admission-inclusive endpoint cost evidence. See the
+Exact verification is not the production acceleration mechanism. With
+`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1`, the native owner may lend a **provisional**
+frame during a bounded initializer stage. The proposal-only prefilter allows
+an absolute/relative feature envelope of `2^-32 * max(1, abs(feature))`; this
+controls initializer quality and is not an XC sensitivity or acceptance bound.
+Admitted points skip original-D evaluation; refused points still consume the
+live matrix. The original exact-mode `2^-45` prefilter and bitwise verification
+remain unchanged for lower-level nonprovisional calls.
+
+`StrictAudit` rejects provisional frames before submission. The KS owner
+retires the provisional stage before it can publish convergence, resets
+energy/DIIS history and rebuilds the original stored-D target under the
+unchanged energy, density, residual and final canonical gates. A failed
+proposal retries the same D strictly. Final-state and force consumers never
+receive provisional features. Canonical frame generations, scratch lifetimes,
+AO maps, capacity fallback and strict precision admission remain mandatory.
+See [execution and handoff](xc_contractions.md#explicit-native-execution), the
+[audited-proposal decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-audited-proposals.md), the superseded
 [matrix-fallback decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-production-matrix-fallback.md),
 [exact-identity restriction decision](../../.agents/notes/implemented/numerics/2026-11-04-occupied-xc-exact-identity.md)
 and earlier [roundoff-certificate proposal](../../.agents/notes/proposed/2026-11-04-occupied-xc-stored-density-certificate.md).

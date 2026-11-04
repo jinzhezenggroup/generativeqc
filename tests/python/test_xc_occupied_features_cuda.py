@@ -70,6 +70,12 @@ def occupied_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
             batches, "batch_density_features", include_template=True
         )
         + DRIVER
+        + cpp_function_definition(DRIVER, "occupied_probe")
+        .replace("occupied_probe(", "proposal_probe(")
+        .replace("{alpha, beta}, 1};", "{alpha, beta}, 1, true};")
+        + cpp_function_definition(DRIVER, "compact_probe")
+        .replace("compact_probe(", "compact_proposal_probe(")
+        .replace("{alpha,beta},1};", "{alpha,beta},1,true};")
     )
     result = CudaCompilerAdapter(
         Path(
@@ -82,6 +88,8 @@ def occupied_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     function = native.occupied_probe
     function.argtypes = [ct.c_void_p] * 4 + [ct.c_size_t] * 7 + [ct.c_void_p]
     function.restype = ct.c_int
+    native.proposal_probe.argtypes = function.argtypes
+    native.proposal_probe.restype = ct.c_int
     native.matrix_probe.argtypes = [ct.c_void_p] * 3 + [ct.c_size_t] * 4 + [ct.c_void_p]
     native.matrix_probe.restype = ct.c_int
     native.form_density.argtypes = [ct.c_void_p] * 2 + [ct.c_size_t] * 2 + [ct.c_void_p]
@@ -93,14 +101,21 @@ def occupied_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         + [ct.c_void_p] * 2
     )
     native.compact_probe.restype = ct.c_int
+    native.compact_proposal_probe.argtypes = native.compact_probe.argtypes
+    native.compact_proposal_probe.restype = ct.c_int
     return native
 
 
 @pytest.mark.parametrize("occupations", [(1,), (5,), (33,), (5, 3), (0, 7)])
 @pytest.mark.parametrize("mapped", [False, True])
 @pytest.mark.parametrize("scale", [1.0, 1e-308, 1e-155, 1e90])
+@pytest.mark.parametrize("provisional", [False, True])
 def test_projection_and_features_match_independent_density(
-    occupied_probe: ct.CDLL, occupations: tuple[int, ...], mapped: bool, scale: float
+    occupied_probe: ct.CDLL,
+    occupations: tuple[int, ...],
+    mapped: bool,
+    scale: float,
+    provisional: bool,
 ) -> None:
     rng = np.random.default_rng(20261017)
     active, points, spins = 41, 19, len(occupations)
@@ -137,7 +152,10 @@ def test_projection_and_features_match_independent_density(
         frames[spin, :, count:] = np.nan
     coefficients = np.ascontiguousarray(frames.transpose(0, 2, 1))
     actual = np.zeros_like(reference)
-    status = occupied_probe.occupied_probe(
+    function = (
+        occupied_probe.proposal_probe if provisional else occupied_probe.occupied_probe
+    )
+    status = function(
         matrices.ctypes.data,
         coefficients.ctypes.data,
         ao.ctypes.data,
@@ -167,9 +185,12 @@ def test_projection_and_features_match_independent_density(
         )
         == 0
     )
-    np.testing.assert_array_equal(
-        actual.view(np.uint64), dense_features.view(np.uint64)
-    )
+    if provisional:
+        np.testing.assert_allclose(actual, dense_features, rtol=5e-13, atol=5e-14)
+    else:
+        np.testing.assert_array_equal(
+            actual.view(np.uint64), dense_features.view(np.uint64)
+        )
 
 
 @pytest.mark.parametrize("active", [17, 31, 32, 41])
@@ -263,8 +284,12 @@ class CompactTile(ct.Structure):
 
 @pytest.mark.parametrize("occupations", [(3,), (3, 2), (0, 3)])
 @pytest.mark.parametrize("scale", [1e-4, 1e165])
+@pytest.mark.parametrize("provisional", [False, True])
 def test_compact_gpu_batches_preserve_original_features_and_scratch_owners(
-    occupied_probe: ct.CDLL, occupations: tuple[int, ...], scale: float
+    occupied_probe: ct.CDLL,
+    occupations: tuple[int, ...],
+    scale: float,
+    provisional: bool,
 ) -> None:
     """Run actual batch specializations, including capacity fallback in one group."""
     nao, spins = 48, len(occupations)
@@ -319,7 +344,12 @@ def test_compact_gpu_batches_preserve_original_features_and_scratch_owners(
         protected_work[
             tile.work_offset : tile.work_offset + spins * 4 * tile.count * tile.active
         ] = False
-    status = occupied_probe.compact_probe(
+    function = (
+        occupied_probe.compact_proposal_probe
+        if provisional
+        else occupied_probe.compact_probe
+    )
+    status = function(
         tiles,
         len(tiles),
         density.ctypes.data,
@@ -336,11 +366,59 @@ def test_compact_gpu_batches_preserve_original_features_and_scratch_owners(
     assert status == (1 if scale == 1e165 else 0)
     if scale == 1e165:
         np.testing.assert_array_equal(np.isfinite(features), np.isfinite(expected))
+    elif provisional:
+        np.testing.assert_allclose(features, expected, rtol=5e-13, atol=5e-14)
     else:
         np.testing.assert_array_equal(
             features.view(np.uint64), expected.view(np.uint64)
         )
     np.testing.assert_array_equal(work[protected_work], -123.0)
+
+
+@pytest.mark.parametrize("active", [17, 32, 41])
+@pytest.mark.parametrize("mapped", [False, True])
+@pytest.mark.parametrize("occupations", [(1,), (1, 1), (0, 1), (1, 0)])
+def test_provisional_gpu_path_does_not_read_dense_matrix(
+    occupied_probe: ct.CDLL, active: int, mapped: bool, occupations: tuple[int, ...]
+) -> None:
+    """Poison D to distinguish work avoidance from exact verification on device.
+
+    This synthetic low-level witness deliberately violates Gram provenance;
+    physical SCF publication must instead use the independent strict target.
+    """
+    nao, points, spins = active + 3 * mapped, 3, len(occupations)
+    ids = np.arange(active, dtype=np.uintp) + int(mapped)
+    coefficients = np.zeros((spins, nao, nao))
+    for spin, occupied in enumerate(occupations):
+        if occupied:
+            coefficients[spin, 0, ids[0]] = 1.0
+    ao = np.full((4, points, active), 0.125)
+    density = np.full((spins, nao, nao), np.nan)
+    actual = np.zeros((spins, 5, points))
+    arguments = (
+        density.ctypes.data,
+        coefficients.ctypes.data,
+        ao.ctypes.data,
+        ids.ctypes.data if mapped else None,
+        nao,
+        active,
+        points,
+        spins,
+        occupations[0],
+        occupations[1] if spins == 2 else 0,
+        1,
+        actual.ctypes.data,
+    )
+    assert occupied_probe.proposal_probe(*arguments) == 0
+    expected = np.zeros_like(actual)
+    for spin, occupied in enumerate(occupations):
+        expected[spin] = (
+            (2.0 if spins == 1 else 1.0)
+            * occupied
+            * np.array([0.015625, 0.03125, 0.03125, 0.03125, 0.0234375])[:, None]
+        )
+    np.testing.assert_array_equal(actual, expected)
+    assert occupied_probe.occupied_probe(*arguments) == 1
 
 
 @pytest.mark.parametrize("mapped", [False, True])

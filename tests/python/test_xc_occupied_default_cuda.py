@@ -1,4 +1,4 @@
-"""Exercise occupied-XC requests falling back to matrix through complete SCF."""
+"""Exercise provisional occupied XC and strict matrix publication through SCF."""
 
 from __future__ import annotations
 
@@ -19,10 +19,10 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize("unrestricted", (False, True))
-def test_all_occupied_controls_use_matrix_across_geometry(
+def test_occupied_controls_and_strict_handoff_across_geometry(
     unrestricted: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Validate matrix selection for default, explicit and invalid controls.
+    """Validate opt-in proposals and matrix publication for every control.
 
     Trace counters prove no occupied frame is admitted without fixing iteration
     or internal call counts. Cold and displaced solves have independently
@@ -108,7 +108,15 @@ def test_all_occupied_controls_use_matrix_across_geometry(
                             if row["operation"] == "cuda_ks_xc_shared"
                         ]
                         assert frames
-                        assert not any(frames)
+                        if selector == "1" and phase != "warm":
+                            assert any(frames)
+                            last_proposal = max(
+                                index for index, value in enumerate(frames) if value
+                            )
+                            assert last_proposal < len(frames) - 1
+                            assert not any(frames[last_proposal + 1 :])
+                        else:
+                            assert not any(frames)
                         if phase == "cold":
                             owner.set_warm_start_updates(False)
             finally:
@@ -231,7 +239,8 @@ def test_explicit_request_matrix_default_grid_energy_and_forces(
                         ).write_text(json.dumps(observations, indent=2) + "\n")
                         assert result.succeeded and result.converged
                         assert result.executed_backend == "cuda"
-                        assert frames and not any(frames)
+                        assert frames and not frames[-1]
+                        assert any(frames) == (selector == "1")
                         assert result.energy == pytest.approx(energy, abs=2e-9, rel=0)
                         np.testing.assert_allclose(
                             result.forces, forces, atol=1e-7, rtol=0
