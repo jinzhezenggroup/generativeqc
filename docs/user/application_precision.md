@@ -547,10 +547,16 @@ checked conservatively for all prepared slots **before** the native query can
 materialize resident densities. Staging and validation scratch must also fit
 the current `ResourcePlan`'s host headroom; auditors reserve that host storage
 from the same budget, including an explicitly supplied resource plan.
+Prepared precision requires the selected native runtime's complete warm-seed
+capacity, capture, restore, read and destroy protocol. Missing support rejects
+preparation or execution; Python does not reconstruct AO/spin bounds or copy
+legacy descriptors as an older-library fallback.
 Unavailable candidate seed transport or insufficient candidate headroom fails
 the affected audited items. Optional audit history falls back to a complete
-cold audit when its storage cannot fit. `warm_start=False` needs no seed
-transport. `clear_warm_starts()` clears both suspended histories.
+cold audit when its storage cannot fit or the supported runtime refuses that
+optional seed domain; an incomplete installation is not such a refusal.
+`warm_start=False` still requires the current protocol but materializes no seed
+storage. `clear_warm_starts()` clears both suspended histories.
 
 Each item carries a schema-2 `PrecisionValidation`. Shared candidate time and
 per-item endpoint time are `None`, not an invented division of fleet latency.
@@ -675,6 +681,15 @@ Two rules matter when reading this page's guarantees:
 (python-precision-errors)=
 ## Failure behavior
 
+The selected runtime must provide the shared precision-controls and
+precision-admission queries used by Fast, and the precision execution and
+observable-comparison owners used by every profile. Missing required support is an
+installation error with an update/rebuild diagnostic; it does not authorize
+Python selection or an implicit FP64 audit. Unsupported numerical domains with
+a current policy still retain their explicit strict/audit paths. This protocol
+requirement does not qualify a model, provider or derivative domain, and explicit
+observable targets continue to incur their independent endpoint audit.
+
 Invalid policy types, requirements, properties or molecular inputs raise
 `TypeError`/`ValueError`; unsupported scientific domains raise
 `NotImplementedError`. Native nonconvergence, allocation/execution failures,
@@ -709,6 +724,42 @@ Policies and report records are frozen. Targets own immutable requirements;
 `to_dict()` returns detached data. Calculator inputs are snapshotted through the
 native facade, including resolved local basis and KS settings. Calls on one
 instance serialize; use independent instances for concurrent execution.
+
+The selected native library owns the bounded per-item candidate, eligible FP64
+retry, classification, release, independent audit and tighter verification order.
+Its synchronous callback protocol is documented in the
+[native API reference](../reference/native_symbols.md). A missing or refused
+controller does not select a Python schedule. Only an eligible initial numerical
+candidate failure can request the single FP64 retry; cancellation, input,
+allocation and audit failures do not request it. A completed controller receipt
+is not evidence that an observable budget passed: an unmet tighter verification
+still raises `PrecisionBudgetError`.
+
+The selected native observable-comparison owner measures energy absolute error,
+maximum Cartesian force error and RMS over all 3N force components, including
+reference norms and absolute-plus-relative allowances. The RMS reduction scales
+before squaring and compensates accumulation; it does not reproduce a particular
+NumPy/platform summation bracket. Acceptance remains the inclusive declared
+`difference <= allowance`, without added slack. Nonfinite/overflowing inputs,
+differences or allowances reject instead of producing a successful report.
+
+The required native candidate classifier also interprets the incumbent gradient
+receipt schemas/owners, binds complete r2SCAN-3c correction evidence to its own
+canonical restricted model identity, and selects qualified Fock/gradient,
+strict-final, Standard fallback or independent-audit publication. Explicit
+targets always audit. Missing census is not zero work; a gradient qualification
+does not replace the required strict final-state or attempted-work evidence.
+Missing/refused classifier support is an installation error, not permission to
+choose a Python admission policy.
+
+Python adapts the existing electronic owners to these operations, validates array
+shape/representation, transports detached diagnostics and publishes native
+classification/measurement receipts. Existing gradient producers still own
+their actual model/provider/basis/budget eligibility and physical state binding.
+Initial prepared fleet execution, eligibility and independent candidate/auditor
+seed history also retain their existing Python owners. These bounded native
+contracts are not a standalone native precision endpoint, SDK/CLI parity, or a
+new scientific qualification.
 
 Endpoint workspaces are released before starting the next audit owner, so a
 retained candidate does not double the resident resource budget. Returned

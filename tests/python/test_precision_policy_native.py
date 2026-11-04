@@ -26,19 +26,8 @@ H2 = tuple(
 
 
 @pytest.mark.parametrize("name", ("h2", "h2o", "hf-plus-uhf"))
-def test_fast_cpu_uses_native_admission_and_keeps_independent_audit(
-    name: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_fast_cpu_uses_native_admission_and_keeps_independent_audit(name: str) -> None:
     """Unsupported Fast arithmetic still queries policy before its FP64 audit."""
-    from generativeqc import precision_policy
-
-    def forbidden(*args: object, **kwargs: object) -> None:
-        raise AssertionError("current library retried Python admission")
-
-    for suffix in ("budget_fock_work", "budget_fock_strict_warm", "standard_fallback"):
-        monkeypatch.setattr(
-            precision_policy, f"_compatibility_{suffix}_admitted", forbidden
-        )
     fixture = next(
         record for record in load_fixtures() if record["inputs"]["name"] == name
     )

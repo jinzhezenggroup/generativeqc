@@ -1,0 +1,45 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All five physical component and composite E/F gates pass; no performance/production qualification.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 1408,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "faa89f6848b86b78b6082a8aa877b08fe6fd5f77510bb111a7ed73efa7194429"
+    },
+    {
+      "bytes": 4931,
+      "path": "replay.py",
+      "role": "reproduction",
+      "sha256": "665a0aa1578588d5146e02f1b4372a420bc2d1893942017531ff26fe481d0848"
+    },
+    {
+      "bytes": 4832,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "c8cfcc0a22820a8cd6d6fbbc693a98b63041918eebd96b7e2ba3407aa82e3e83"
+    },
+    {
+      "bytes": 1904,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "f261d9a6d86139e10edb79c56f3fce6b0e82b09ab5f6b14fadee9dc0993451ba"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "replay.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "f8c78a3700cb8eca6b49128842546990613d9c7d"
+  }
+}

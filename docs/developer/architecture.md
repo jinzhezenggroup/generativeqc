@@ -614,8 +614,11 @@ incumbent budget-Fock SCF controls from qualified model traits and preserves
 explicit caller ceilings. Availability still comes from the Direct capability
 or the fitted model qualification owner. Python retains model-gradient
 qualification, candidate/auditor execution and independent seed-history
-selection. Missing additive symbols retain
-compatibility; a selected native query failure propagates.
+selection. The selected library must implement both policy queries; missing
+support is an actionable installation error, not a Python numerical-policy
+fallback. Fast verifies admission support before any molecular solve and checks
+the selected owner again when consuming evidence. A selected native query
+failure propagates.
 
 Default SCF convergence controls are queried through
 `generativeqc_scf_defaults_query_v1` in `<generativeqc/scf_defaults.h>`. The native
@@ -642,10 +645,14 @@ host density/coordinate arrays independently of the supplying batch and context.
 materialization; `generativeqc_batch_restore_warm_seeds_v1` reuses the target's
 physical overlap/occupation validator without running SCF or changing updates.
 Borrowed diagnostic views expire with the snapshot; Python exposes only detached
-diagnostic copies. Missing capture support alone retains descriptor compatibility.
+diagnostic copies. Prepared precision requires this complete capacity/snapshot
+protocol on the selected calculator and prepared owner before molecular work.
+Missing support rejects the installation instead of reconstructing topology or
+copying legacy descriptors in Python.
 
 Python retains same-model eligibility, validation reservations, metadata and
 separate candidate/auditor history selection. A snapshot is not a cross-model
 projection or admission token, and no auditor seed enters candidate history.
 Numeric bounds exclude descriptor/allocator overhead, validation scratch and
-opaque provider memory. Only absent capacity support uses topology compatibility.
+opaque provider memory. Optional auditor retention may fall back to a complete
+cold audit on bounded resource/domain refusal, never on an incomplete runtime.

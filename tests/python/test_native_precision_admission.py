@@ -122,14 +122,6 @@ def result(evidence: dict) -> Any:
     )
 
 
-def forbid_compatibility(monkeypatch: pytest.MonkeyPatch) -> None:
-    def forbidden(*args: Any, **kwargs: Any) -> None:
-        raise AssertionError("selected native policy retried Python decisions")
-
-    for name in ("budget_fock_work", "budget_fock_strict_warm", "standard_fallback"):
-        monkeypatch.setattr(policy, f"_compatibility_{name}_admitted", forbidden)
-
-
 @pytest.mark.parametrize(
     "missing",
     (
@@ -145,7 +137,6 @@ def forbid_compatibility(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_warm_requires_complete_returned_state(
     library: Any, monkeypatch: Any, missing: str | None
 ) -> None:
-    forbid_compatibility(monkeypatch)
     evidence = work()
     if missing:
         evidence.pop(missing)
@@ -193,7 +184,6 @@ def test_complete_model_requires_its_executed_operators(
 def test_budget_fock_requires_observed_mixed_work(
     library: Any, monkeypatch: Any
 ) -> None:
-    forbid_compatibility(monkeypatch)
     calculator, evidence = context(library), work()
     assert not policy._budget_fock_work_admitted(calculator, evidence)
     evidence["operators"][1].update(compute="fp32", arithmetic_mode="mixed")
@@ -211,7 +201,6 @@ def test_budget_fock_requires_observed_mixed_work(
 def test_fitted_hf_preserves_unknown_counter_boundary(
     library: Any, monkeypatch: Any, valid: Any
 ) -> None:
-    forbid_compatibility(monkeypatch)
     calculator, evidence = context(library), work()
     calculator._ks_options = None
     calculator.capabilities.family = "hartree_fock"
@@ -248,7 +237,6 @@ def test_standard_budget_neighbours(library: Any, field: str, limit: float) -> N
 def test_selected_failure_and_malformed_receipt_cannot_retry(
     library: Any, monkeypatch: Any
 ) -> None:
-    forbid_compatibility(monkeypatch)
     evidence = work()
     evidence["detail_version"] = 999
     with pytest.raises(NotImplementedError):
@@ -258,10 +246,20 @@ def test_selected_failure_and_malformed_receipt_cannot_retry(
         policy._budget_fock_work_admitted(context(query), work())
 
 
-def test_missing_protocol_retains_compatibility() -> None:
+@pytest.mark.parametrize("consumer", ("transport", "work", "warm", "fallback"))
+def test_missing_protocol_rejects_selected_library(consumer: str) -> None:
     calculator = context(SimpleNamespace())
-    assert transport.admission(calculator, work()) is None
-    assert policy._budget_fock_strict_warm_admitted(calculator, result(work()))
+    with pytest.raises(NotImplementedError, match="required precision-admission query"):
+        if consumer == "transport":
+            transport.admission(calculator, work())
+        elif consumer == "work":
+            policy._budget_fock_work_admitted(calculator, work())
+        elif consumer == "warm":
+            policy._budget_fock_strict_warm_admitted(calculator, result(work()))
+        else:
+            policy._standard_fallback_admitted(
+                calculator, result(work()), "fp64", TargetErrorBudget(1e-5, 1e-4)
+            )
 
 
 def test_policy_queries_do_not_mutate_evidence(library: Any) -> None:

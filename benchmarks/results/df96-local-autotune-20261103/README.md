@@ -143,8 +143,8 @@ hint cannot fit the required 4-GiB force envelope; the corrected 16-GiB fixture
 passes. Initial failure and final success logs are retained. This is not a
 16-GiB GPU execution claim; the real campaign stays at 4 GiB and rejects packed.
 
-`receipts.json.xz`: **134,752 bytes**, SHA-256
-`9ac5dd4982c286e456d0e078387220d7ac14350638c665b9759226a9ff6e060e`.
+`receipts.json.xz`: **132,976 bytes**, SHA-256
+`d7403670a2ceb1ddb24685dd19229d365348617236ec6df9410e520ee668165e`.
 The separately reviewed compact archive retains full E/F observations, metric
 and actual Fock counts, native resource admission, oracle, refusal/intervention
 logs, source/binary identities and executed controllers. Native libraries and
