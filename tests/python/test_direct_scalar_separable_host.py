@@ -33,7 +33,7 @@ SHIM = r"""
 #define __host__
 #define __device__
 #define __forceinline__ inline
-#define __noinline__ __attribute__((noinline))
+#define __noinline__
 using std::isfinite;
 using std::min;
 using std::max;

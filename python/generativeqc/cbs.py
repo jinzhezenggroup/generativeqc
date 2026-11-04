@@ -1,6 +1,6 @@
 """MP2-assisted canonical CCSD(T)/CBS energy and analytic forces.
 
-Only orchestration and geometry-independent linear combinations live here.
+Only component orchestration and application of native-owned coefficients live here.
 Every electronic energy and force comes from the public native calculator;
 reference packages and numerical differentiation are not production consumers.
 """
@@ -16,7 +16,9 @@ from types import MappingProxyType
 
 import numpy as np
 
+from . import _native
 from ._api_types import Atom, Result
+from ._cbs_plan import native_cbs_plan
 from ._model_resolution import snapshot_basis
 from .basis import BasisSet
 from .calculator import Calculator
@@ -109,18 +111,6 @@ class CBSResult:
     endpoint_seconds: float
     execution_groups: tuple[dict[str, typing.Any], ...]
     convergence: dict[str, typing.Any] = field(default_factory=dict)
-
-
-def _limit_weights(log_ratio: float) -> tuple[float, float]:
-    """Stable two-point limit for a decaying basis-error model."""
-    denominator = -math.expm1(log_ratio)
-    if denominator <= 0 or not math.isfinite(denominator):
-        raise ValueError("CBS extrapolation parameters produce singular weights")
-    high = 1.0 / denominator
-    low = -math.exp(log_ratio) / denominator
-    if not all(math.isfinite(value) for value in (low, high)):
-        raise ValueError("CBS extrapolation parameters produce nonfinite weights")
-    return low, high
 
 
 class CCSDTCBSCalculator:
@@ -325,14 +315,17 @@ class CCSDTCBSCalculator:
         self.hf_exponent = float(hf_exponent)
         self._options = options
         self._lock = threading.Lock()
-        self.mp2_weights = _limit_weights(
-            -self.correlation_exponent * math.log(high.cardinal / low.cardinal)
+        policy_library = _native.load_library(device="cpu", device_id=0)
+        self._plan = native_cbs_plan(
+            policy_library,
+            low.cardinal,
+            high.cardinal,
+            self.correlation_exponent,
+            self.hf_exponent,
+            hf_extrapolation,
         )
-        self.hf_weights = (
-            _limit_weights(-self.hf_exponent * (high.cardinal - low.cardinal))
-            if hf_extrapolation == "exponential"
-            else (0.0, 1.0)
-        )
+        self.mp2_weights = self._plan.mp2_weights
+        self.hf_weights = self._plan.hf_weights
 
         from ._correlation_convergence import convergence_policy
         from .force_aware_numerics import TargetErrorBudget
@@ -361,7 +354,7 @@ class CCSDTCBSCalculator:
             if budget is not None
             else None
         )
-        scale, limits = convergence_policy(component_budget)
+        scale, limits = convergence_policy(component_budget, library=policy_library)
         if scale:
             for name in (
                 "energy_tolerance",
@@ -420,6 +413,7 @@ class CCSDTCBSCalculator:
     def _terms(self, *, unrestricted: bool = False) -> tuple:
         """Use one set of component weights for composition and error allocation."""
         low, high = self.mp2_bases
+        coefficients = self._plan.coefficients
         hf = "uhf" if unrestricted else "rhf"
         mp2 = "ump2" if unrestricted else "mp2"
         ccsdt = (
@@ -430,22 +424,22 @@ class CCSDTCBSCalculator:
             else "ccsd(t)"
         )
         return (
-            ("hf_low", hf, low.basis, self.hf_weights[0] - self.mp2_weights[0]),
+            ("hf_low", hf, low.basis, coefficients[0]),
             (
                 "hf_high",
                 hf,
                 high.basis,
-                self.hf_weights[1] - self.mp2_weights[1],
+                coefficients[1],
             ),
-            ("mp2_low", mp2, low.basis, self.mp2_weights[0]),
-            ("mp2_high", mp2, high.basis, self.mp2_weights[1]),
+            ("mp2_low", mp2, low.basis, coefficients[2]),
+            ("mp2_high", mp2, high.basis, coefficients[3]),
             (
                 "correction_ccsdt",
                 ccsdt,
                 self.correction_basis,
-                1.0,
+                coefficients[4],
             ),
-            ("correction_mp2", mp2, self.correction_basis, -1.0),
+            ("correction_mp2", mp2, self.correction_basis, coefficients[5]),
         )
 
     def singlepoint(

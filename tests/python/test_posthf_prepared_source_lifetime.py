@@ -170,7 +170,7 @@ def source_probe(
         PREFIX
         + helper
         + r"""
-int mp2_case(bool prepared,bool compute_forces) {
+int mp2_case(bool prepared,bool compute_forces,bool share_reference_source=false) {
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
   if (prepared) cpu_exact_plan_=std::make_unique<scf::PreparedFockPlan>();
   auto* prepared_exact=cpu_exact_plan_.get();
@@ -190,7 +190,10 @@ int mp2_case(bool prepared,bool compute_forces) {
         + force_prefix
         + r"""
     prepare_source();
-    if (plan_live || view_live || raw_live != 1 || !raw_source) return 3;
+    if (prepared && share_reference_source) {
+      if (plan_live != 1 || view_live != 1 || raw_live || raw_source) return 3;
+      if (conventional_source->retained_numeric_bytes() != plan_bytes) return 19;
+    } else if (plan_live || view_live || raw_live != 1 || !raw_source) return 3;
   } else if (prepared && (!plan_live || raw_live)) return 4;
   return 0;
 }
@@ -259,7 +262,8 @@ int main(int argc,char** argv) {
     }
   }
   else if (mode==16) result=cc_case(false,true,0,false,true,true);
-  else result=cc_case(false,true,0,false,true,mode==18,true);
+  else if(mode<19) result=cc_case(false,true,0,false,true,mode==18,true);
+  else result=mp2_case(mode==19,true,true);
   if (plan_live || view_live || raw_live || fitted_live) return 10;
   return result;
 }
@@ -288,7 +292,7 @@ int main(int argc,char** argv) {
 
 
 def test_posthf_source_lifetime_matches_retained_budget(source_probe: Path) -> None:
-    for mode in range(19):
+    for mode in range(21):
         process = subprocess.run(
             [str(source_probe), str(mode)],
             capture_output=True,

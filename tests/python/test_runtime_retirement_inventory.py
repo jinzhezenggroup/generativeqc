@@ -22,6 +22,7 @@ def retirement(inventory: dict) -> dict:
 
 
 def test_retirement_does_not_require_the_removed_file(inventory: dict) -> None:
+    retirement(inventory)["path"] = "python/generativeqc/retired_policy_source.py"
     assert not (ROOT / retirement(inventory)["path"]).exists()
     validate(inventory)
 

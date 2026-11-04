@@ -24,7 +24,13 @@ This advances **#762 gate B**, not gate A or closure of the whole issue.
 - RSS is the solver process's Linux high-water RSS, **not** the sum of compiler
   child processes, all physical allocations, or a validated resource envelope.
 
-`evidence.json` retains the initial campaign and the identity-enriched rerun:
+The lossless XZ transport decodes to every original byte of `evidence.json` at
+commit `3c077bdbd6e11ff1c9d2d62a7da6752faa485e9c` (Git blob
+`51b10eb45c82e2f168202413c4b86765a189bcd7`). No scientific value, numerical
+token, observation, original timing or negative disposition is reserialized.
+The offline replay uses the existing shared compressed-JSON reader.
+
+`evidence.json.xz` retains the initial campaign and the identity-enriched rerun:
 24 observations total, including reference and cold stages. The enriched
 records include pinned input hashes and exact JIT binary SHA-256 values before
 the temporary artifact cache is removed. Metadata collection is outside the

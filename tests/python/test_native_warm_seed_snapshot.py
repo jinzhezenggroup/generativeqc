@@ -45,8 +45,11 @@ def test_snapshot_outlives_source_and_replays_moved_frozen_seeds(
         method=method, device=backend, initial_guess=None, **options
     )
     assert hasattr(calculator._library, "generativeqc_batch_capture_warm_seeds_v1")
-    monkeypatch.setattr(precision._SeedLease, "_capture_compatibility", forbidden)
-    monkeypatch.setattr(precision, "_restore_states", forbidden)
+    for symbol in (
+        "generativeqc_batch_get_hf_warm_state",
+        "generativeqc_batch_restore_hf_warm_states",
+    ):
+        monkeypatch.setattr(calculator._library, symbol, forbidden)
     moved = np.array([[0, 0, -0.7], [0.1, 0, 0.7]])
     with calculator.prepare_batch(SYSTEMS) as source:
         bound, largest = precision._seed_capacity(source)
@@ -71,6 +74,11 @@ def test_snapshot_outlives_source_and_replays_moved_frozen_seeds(
     target_calculator = Calculator(
         method=method, device=backend, initial_guess=None, **options
     )
+    for symbol in (
+        "generativeqc_batch_get_hf_warm_state",
+        "generativeqc_batch_restore_hf_warm_states",
+    ):
+        monkeypatch.setattr(target_calculator._library, symbol, forbidden)
     with target_calculator.prepare_batch(SYSTEMS) as target:
         for _ in range(2):
             lease.restore(target, updates=False)
@@ -99,12 +107,11 @@ def test_snapshot_outlives_source_and_replays_moved_frozen_seeds(
     assert arrays[0].shape == ((8,) if method in ("uhf", "pbe-uks") else (4,))
 
 
-def test_missing_capture_is_the_only_compatibility_boundary() -> None:
-    assert (
-        native.capture_snapshot(SimpleNamespace(_library=SimpleNamespace()), 0) is None
-    )
+def test_missing_snapshot_protocol_rejects_the_selected_installation() -> None:
+    with pytest.raises(RuntimeError, match="required warm-seed protocol"):
+        native.capture_snapshot(SimpleNamespace(_library=SimpleNamespace()), 0)
     library = SimpleNamespace(generativeqc_batch_capture_warm_seeds_v1=lambda *args: 0)
-    with pytest.raises(RuntimeError, match="incomplete"):
+    with pytest.raises(RuntimeError, match="required warm-seed protocol"):
         native.capture_snapshot(SimpleNamespace(_library=library), 0)
 
 

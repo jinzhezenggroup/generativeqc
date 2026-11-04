@@ -1,4 +1,4 @@
-"""Shared cached native compiler fixture for Python tests."""
+"""Cached native probes and shared numerical-policy owners for Python tests."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
+    import ctypes
     from collections.abc import Iterable, Sequence
 
 
@@ -193,3 +194,15 @@ def native_cxx(tmp_path_factory: pytest.TempPathFactory) -> NativeCxx:
 def required_native_cxx(tmp_path_factory: pytest.TempPathFactory) -> NativeCxx:
     """Fail mandatory native gates when compiler/cache prerequisites are absent."""
     return _native_cxx(tmp_path_factory, required=True)
+
+
+@pytest.fixture(scope="module")
+def policy_library() -> ctypes.CDLL:
+    """Borrow actual host policy queries without executing molecular work.
+
+    Molecular doubles are shared across test modules, so their native owner
+    must remain visible when a consumer is collected or sharded independently.
+    """
+    from generativeqc import _native
+
+    return _native.load_library(device="cpu", device_id=0)
