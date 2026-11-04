@@ -1865,9 +1865,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // The catalog specifies a*SR+b*LR, while the resident owner executes
         // a*full+(b-a)*LR. Reuse production lowering rather than comparing
         // coefficients belonging to different operator representations.
-        const auto correction = scf::make_rsh_correction_fock_spec(
-            scf::FockSpin::Restricted, short_range->coefficient, long_range->coefficient,
-            short_range->omega);
+        const auto correction =
+            scf::make_rsh_correction_fock_spec(scf::FockSpin::Restricted, short_range->coefficient,
+                                               long_range->coefficient, short_range->omega);
         standard_nonlocal_model =
             standard_nonlocal_model && short_range->omega == long_range->omega &&
             strategy.spec.exchange.coefficient == short_range->fock_coefficient &&
