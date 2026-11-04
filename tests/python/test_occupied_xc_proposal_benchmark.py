@@ -1,10 +1,57 @@
 """Offline benchmark gates must remain effective without native/CUDA imports."""
 
 import copy
+import sys
+from pathlib import Path
 
 import pytest
 
 from benchmarks.occupied_xc_proposals import replay
+
+
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_retained_outputs_reject_before_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    destination_kind: str,
+) -> None:
+    from benchmarks import _retention, occupied_xc_proposals
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "existing.json"
+    original.write_text("original evidence")
+    destination = retained / "new/result.json"
+    if destination_kind == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / "new/result.json"
+    elif destination_kind == "traversal":
+        destination = Path(".artifacts/../benchmarks/results/new/result.json")
+    monkeypatch.setattr(
+        sys, "argv", ["occupied_xc_proposals", "--output", str(destination)]
+    )
+    with pytest.raises(SystemExit) as error:
+        occupied_xc_proposals.main()
+    assert error.value.code == 2
+    assert "invalid raw_output_path value" in capsys.readouterr().err
+    with pytest.raises(ValueError, match="raw benchmark output"):
+        occupied_xc_proposals.save(original, {"overwrite": True})
+    assert original.read_text() == "original evidence"
+    assert not (retained / "new").exists()
+    assert not (tmp_path / ".artifacts").exists()
+
+
+def test_scratch_output_round_trips(tmp_path: Path) -> None:
+    from benchmarks.occupied_xc_proposals import load, save
+
+    destination = tmp_path / "endpoint.json.xz"
+    record = {"energy": -1.0, "previous_energy": float("inf")}
+    save(destination, record)
+    assert load(destination) == record
 
 
 def receipt() -> dict:

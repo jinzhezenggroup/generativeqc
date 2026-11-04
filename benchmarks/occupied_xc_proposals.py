@@ -19,6 +19,11 @@ from dataclasses import asdict
 from pathlib import Path
 from time import perf_counter
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 
 def load(path: Path) -> dict | list:
     """Read a losslessly compacted receipt or independent oracle input."""
@@ -34,6 +39,7 @@ def save(path: Path, record: dict) -> None:
     extension for a missing previous energy. Replay independently rejects every
     nonfinite physical observable; diagnostic sentinels are not observables.
     """
+    path = raw_output_path(path)
     serialized = json.dumps(record, separators=(",", ":"))
     opener = lzma.open if path.suffix == ".xz" else open
     with opener(path, "wt") as stream:
@@ -124,7 +130,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--replay", type=Path)
     parser.add_argument("--oracle", type=Path)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=raw_output_path)
     parser.add_argument("--source-commit")
     parser.add_argument("--repeats", type=int, default=10)
     args = parser.parse_args()
