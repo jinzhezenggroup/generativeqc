@@ -1899,22 +1899,43 @@ struct CudaKsPlan::Impl : KsStateStorage {
             "GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING requires 0 or 1");
       mixed_source_coarse_screening_requested = std::strcmp(setting, "1") == 0;
     }
-    fast_anchor_eligible = admit_fast_anchor_delta(
-        budget_fock, budget_stationarity, functional,
+    const bool exact_anchor_direct =
         static_cast<bool>(fock_binding) && !fitted_coulomb && !fitted_exchange && has_exchange &&
             has_range_correction && scf::direct_jk_incremental_exact_eligible(strategy) &&
-            range_incremental_eligible && !incremental_direct_jk,
-        spins,
-        nonlocal_correlation &&
-            nonlocal_correlation->parameters().variant == nlc::Vv10Variant::vv10,
-        runtime::active_device_resource_ledger != nullptr, configured_chunk_width());
+            range_incremental_eligible && !incremental_direct_jk;
+    const bool vv10_anchor = nonlocal_correlation &&
+                            nonlocal_correlation->parameters().variant == nlc::Vv10Variant::vv10;
+    const auto* anchor_selection = std::getenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA");
+    const bool strict_anchor_requested = anchor_selection && std::strcmp(anchor_selection, "1") == 0;
+    const bool strict_anchor_fp64 = !budget_fock && !budget_stationarity &&
+                                   !precision_schedule.any_lower_precision() &&
+                                   options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
+                                       GENERATIVEQC_PRECISION_FP64;
+    fast_anchor_eligible =
+        admit_fast_anchor_delta(budget_fock, budget_stationarity, functional, exact_anchor_direct,
+                                spins, vv10_anchor, runtime::active_device_resource_ledger != nullptr,
+                                configured_chunk_width()) ||
+        admit_strict_anchor_delta(strict_anchor_requested, strict_anchor_fp64, exact_anchor_direct,
+                                  spins, vv10_anchor, runtime::active_device_resource_ledger != nullptr,
+                                  configured_chunk_width());
     if (fast_anchor_eligible) {
-      if (const auto* selected = std::getenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA")) {
+      if (const auto* selected = anchor_selection) {
         if (std::strcmp(selected, "0") != 0 && std::strcmp(selected, "1") != 0)
           throw std::invalid_argument("Fast anchor delta accepts 0 or 1");
         fast_anchor_eligible = std::strcmp(selected, "1") == 0;
       } else {
         fast_anchor_eligible = default_fast_anchor_delta(n);
+      }
+    }
+    if (anchor_selection) {
+      runtime::df_progress::Scope trace("cuda_ks_anchor_admission", "host_decision");
+      if (trace.enabled()) {
+        runtime::df_progress::Scope::number("strict_requested", strict_anchor_requested);
+        runtime::df_progress::Scope::number("strict_fp64", strict_anchor_fp64);
+        runtime::df_progress::Scope::number("exact_direct", exact_anchor_direct);
+        runtime::df_progress::Scope::number("ledger", !!runtime::active_device_resource_ledger);
+        runtime::df_progress::Scope::number("chunk_width", configured_chunk_width());
+        runtime::df_progress::Scope::number("eligible", fast_anchor_eligible);
       }
     }
     const bool host_unfused =
@@ -3638,6 +3659,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
       ++movement.fast_delta_builds;
     else
       ++movement.fast_anchor_builds;
+    runtime::df_progress::Scope trace("cuda_ks_anchor_validation", "cuda_device");
+    if (trace.enabled()) {
+      runtime::df_progress::Scope::number("anchor_builds", movement.fast_anchor_builds);
+      runtime::df_progress::Scope::number("delta_builds", movement.fast_delta_builds);
+      runtime::df_progress::Scope::number("invalidations", movement.fast_anchor_invalidations);
+      runtime::df_progress::Scope::number("provisional_delta", pending_fast_delta);
+      trace.finish(is_failed ? "invalidated" : "validated");
+    }
   }
 
   bool incremental_delta_admitted() const noexcept {
