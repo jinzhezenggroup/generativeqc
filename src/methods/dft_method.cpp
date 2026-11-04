@@ -2823,8 +2823,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                           execution_options, seed, nonlocal_.get());
     } else if (execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp)
       native = ks_is_unrestricted(execution_plan_)
-                   ? scf::run_b3lyp_uks(fock_, basis_, grid_, execution_options, seed)
-                   : scf::run_b3lyp_rks(fock_, basis_, grid_, execution_options, seed);
+                   ? scf::run_b3lyp_uks(fock_, basis_, grid_, execution_options,
+                                        execution_plan_.full_range_exchange, seed)
+                   : scf::run_b3lyp_rks(fock_, basis_, grid_, execution_options,
+                                        execution_plan_.full_range_exchange, seed);
     else if (execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe && nonlocal_)
       native =
           ks_is_unrestricted(execution_plan_)

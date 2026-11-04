@@ -70,6 +70,12 @@ bool valid_model(const KsFinalStateIdentity& identity) {
   const bool molecular_nonlocal = family_metadata && family_metadata->molecular_nonlocal_domain;
   const auto hybrid = global_hybrid_composition(model.functional);
   const bool canonical_global_hybrid = hybrid.present && hybrid.fixed_semilocal;
+  // CPU authenticates the physical K coefficient in the determinant's immutable
+  // Fock identity. The fixed semilocal graph does not require a named fraction.
+  // CUDA retains its independently qualified matched-composition restriction.
+  const bool cpu_composed_global_hybrid = canonical_global_hybrid && family_metadata &&
+                                          fock.backend == scf::FockBackend::Cpu &&
+                                          !model.range_correction && !model.nonlocal_correlation;
   const bool cuda_matched_global_hybrid =
       fock.backend == scf::FockBackend::Cuda && !model.range_correction &&
       !model.nonlocal_correlation &&
@@ -151,8 +157,10 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       (canonical_global_hybrid &&
        (model.semilocal_exchange_scale != hybrid.semilocal_exchange_scale ||
         model.semilocal_correlation_scale != hybrid.semilocal_correlation_scale ||
-        !fock.spec.exchange.present ||
-        fock.spec.exchange.coefficient != -hybrid.exact_exchange / (model.spins == 1 ? 2.0 : 1.0) ||
+        (!cpu_composed_global_hybrid &&
+         (!fock.spec.exchange.present ||
+          fock.spec.exchange.coefficient !=
+              -hybrid.exact_exchange / (model.spins == 1 ? 2.0 : 1.0))) ||
         (fock.backend == scf::FockBackend::Cuda && !cuda_matched_global_hybrid))))
     return false;
   try {

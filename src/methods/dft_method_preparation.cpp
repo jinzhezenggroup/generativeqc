@@ -377,6 +377,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "full-range exchange requires one contribution");
     if (full_range) {
+      execution_plan.full_range_exchange = full_range->coefficient;
       fock.exchange.present = full_range->coefficient != 0.0;
       fock.exchange.coefficient = full_range->fock_coefficient;
     } else if (short_range) {

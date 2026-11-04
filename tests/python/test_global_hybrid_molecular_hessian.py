@@ -126,18 +126,35 @@ def test_custom_exchange_does_not_inherit_public_molecular_qualification() -> No
         calculator.hessian(ATOMS)
 
 
+@pytest.mark.parametrize("exchange", (Fraction(1, 5), Fraction(37, 100)))
+@pytest.mark.parametrize("case", ("h2", "heh+"))
 def test_complete_hvp_has_matched_state_independent_energy_curvature(
+    case: str,
+    exchange: Fraction,
     tmp_path: Path,
+    record_property: object,
 ) -> None:
     """Independent displaced energies are an oracle, never a derivative provider.
 
     Match raw contractions, the explicit moving quadrature and the VWN-RPA
     definition. Freeze a 1e-6 Hartree/Bohr² directional-curvature gate; this
-    small s-shell sentinel does not qualify a Ni or default-grid endpoint.
+    Full raw-matrix gates use three independent energy-difference steps and
+    1e-5 Hartree/Bohr² maximum error. HeH+ exercises a nontrivial asymmetric
+    response; these s-shell sentinels do not qualify Ni or default-grid work.
     """
     gto = pytest.importorskip("pyscf.gto")
     dft = pytest.importorskip("pyscf.dft")
     method = resolve_method("B3LYP")
+    method = replace(
+        method,
+        identifier="independent-composed-full-range-reference",
+        primitives=(
+            method.primitives[0],
+            replace(method.primitives[1], coefficient=exchange),
+        ),
+    )
+    fixture_atoms = ATOMS if case == "h2" else [("He", ATOMS[0][1]), ATOMS[1]]
+    charge = int(case == "heh+")
     calculator = Calculator(
         method=method,
         device="cpu",
@@ -146,14 +163,26 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
         density_tolerance=1e-11,
         max_iterations=240,
     )
-    with calculator.prepare_batch([ATOMS], warm_start=False) as batch:
+    with calculator.prepare_batch(
+        [fixture_atoms], charges=[charge], warm_start=False
+    ) as batch:
         batch.execute(strict=True, properties=("energy",))
         with (
-            NativeAO(ATOMS, basis="sto-3g") as basis,
+            NativeAO(fixture_atoms, basis="sto-3g", charge=charge) as basis,
             CompositeRKSResponse.from_native(batch, basis) as operator,
         ):
             native = composite_rks_hvp(
                 operator, DIRECTION, cache=tmp_path, solver_options=SOLVER
+            )
+            matrix = composite_rks_hessian(
+                operator, cache=tmp_path, solver_options=SOLVER
+            ).matrix
+            np.testing.assert_allclose(matrix, matrix.T, atol=2e-8, rtol=0)
+            np.testing.assert_allclose(
+                matrix @ DIRECTION.reshape(-1),
+                native.value.reshape(-1),
+                atol=2e-8,
+                rtol=0,
             )
             native_energy = operator.state._source.energy()
             native_density = operator.state.density[0]
@@ -161,7 +190,9 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
             shells = basis.shells
             center_points = operator.state.grid.points.copy()
             center_weights = operator.state.grid.weights.copy()
-    labels = ("H0", "H1")
+    labels = tuple(
+        f"{element}{index}" for index, (element, _) in enumerate(fixture_atoms)
+    )
     records = {label: [] for label in labels}
     for shell in shells:
         records[labels[shell.atom_index]].append(
@@ -175,25 +206,28 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
     code = "+".join(f"{float(weight)}*{name}" for name, weight in components)
     code += f"+{float(method.primitives[1].coefficient)}*HF"
 
-    def reference(displacement: float) -> tuple:
+    def reference(offset: np.ndarray) -> tuple:
         atoms = [
-            (element, np.asarray(position) + displacement * motion)
-            for (element, position), motion in zip(ATOMS, DIRECTION, strict=True)
+            (element, np.asarray(position) + motion)
+            for (element, position), motion in zip(fixture_atoms, offset, strict=True)
         ]
         molecule = gto.M(
             atom=list(zip(labels, [position for _, position in atoms], strict=True)),
             basis=records,
             unit="Bohr",
             cart=True,
+            charge=charge,
             verbose=0,
         )
         points, weights = center_points, center_weights
-        if displacement:
+        if np.any(offset):
             # Match the exact numerical quadrature as an input, not an oracle
             # density or derivative. Independent SCFs never consume its state.
             with (
-                calculator.prepare_batch([atoms], warm_start=False) as displaced,
-                NativeAO(atoms, basis=shells) as displaced_basis,
+                calculator.prepare_batch(
+                    [atoms], charges=[charge], warm_start=False
+                ) as displaced,
+                NativeAO(atoms, basis=shells, charge=charge) as displaced_basis,
             ):
                 displaced.execute(strict=True, properties=("energy",))
                 state = StationaryKsState.from_native(displaced, displaced_basis)
@@ -212,11 +246,40 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
         assert solver.converged
         return energy, solver.make_rdm1(), molecule.intor("int1e_ovlp")
 
-    center, density, overlap = reference(0)
+    center, density, overlap = reference(np.zeros_like(DIRECTION))
     assert native_energy == pytest.approx(center, abs=2e-10)
     np.testing.assert_allclose(native_overlap, overlap, atol=2e-12, rtol=0)
     np.testing.assert_allclose(native_density, density, atol=2e-9, rtol=0)
     curvature = float(np.sum(DIRECTION * native.value))
+    energies = {tuple(np.zeros(DIRECTION.size)): center}
+
+    def energy(offset: np.ndarray) -> float:
+        key = tuple(offset.reshape(-1))
+        if key not in energies:
+            energies[key] = reference(offset)[0]
+        return energies[key]
+
     for step in (3e-3, 1e-3, 3e-4):
-        finite = (reference(step)[0] - 2 * center + reference(-step)[0]) / step**2
+        finite = (
+            energy(step * DIRECTION) - 2 * center + energy(-step * DIRECTION)
+        ) / step**2
         assert curvature == pytest.approx(finite, abs=1e-6)
+    directions = np.eye(DIRECTION.size).reshape(DIRECTION.size, *DIRECTION.shape)
+    for step in (1e-3, 5e-4, 3e-4):
+        independent = np.empty_like(matrix)
+        for row, left in enumerate(directions):
+            independent[row, row] = (
+                energy(step * left) - 2 * center + energy(-step * left)
+            ) / step**2
+            for column in range(row):
+                right = directions[column]
+                mixed = (
+                    energy(step * (left + right))
+                    - energy(step * (left - right))
+                    - energy(step * (-left + right))
+                    + energy(-step * (left + right))
+                ) / (4 * step**2)
+                independent[row, column] = independent[column, row] = mixed
+        error = float(np.max(abs(matrix - independent)))
+        record_property(f"raw_hessian_max_error_step_{step:g}", error)
+        np.testing.assert_allclose(matrix, independent, atol=1e-5, rtol=0)

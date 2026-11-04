@@ -174,7 +174,7 @@ void run_b3lyp_global_case() {
   const auto rks_strategy = scf::resolve_fock_build(
       scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.2), scf::FockBackend::Cpu);
   const scf::PreparedFockPlan rks_plan(system, nullptr, rks_strategy);
-  const auto rks = scf::run_b3lyp_rks(rks_plan, basis, grid, options);
+  const auto rks = scf::run_b3lyp_rks(rks_plan, basis, grid, options, 0.2);
   require(rks.converged && std::isfinite(rks.energy) && rks.physical_residual_rms < 1e-9,
           "B3LYP native RKS did not converge on the audited interior grid");
   const auto rks_jk = rks_plan.build(rks.density);
@@ -185,7 +185,7 @@ void run_b3lyp_global_case() {
           std::abs(rks.dft_diagnostic.components.exact_exchange - rks_jk_energy.exchange) < 1e-12,
       "B3LYP diagnostics disagree with the common full-range J/K provider");
 
-  const auto warm = scf::run_b3lyp_rks(rks_plan, basis, grid, options, &rks.density);
+  const auto warm = scf::run_b3lyp_rks(rks_plan, basis, grid, options, 0.2, &rks.density);
   require(warm.converged && warm.initial_density_used && std::abs(warm.energy - rks.energy) < 1e-10,
           "B3LYP RKS warm replay changed the physical endpoint");
 
@@ -195,18 +195,34 @@ void run_b3lyp_global_case() {
   const std::size_t n2 = basis.nao * basis.nao;
   std::vector<double> uks_seed(2 * n2);
   for (std::size_t i = 0; i < n2; ++i) uks_seed[i] = uks_seed[n2 + i] = 0.5 * rks.density[i];
-  const auto uks = scf::run_b3lyp_uks(uks_plan, basis, grid, options, &uks_seed);
+  const auto uks = scf::run_b3lyp_uks(uks_plan, basis, grid, options, 0.2, &uks_seed);
   require(uks.converged && std::isfinite(uks.energy) && uks.physical_residual_rms < 1e-9,
           "B3LYP native UKS did not converge on the audited interior grid");
   require(std::abs(uks.energy - rks.energy) < 2e-10,
           "B3LYP closed-shell RKS/UKS spin accounting disagrees");
+
+  const auto composed_rks_strategy = scf::resolve_fock_build(
+      scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.37), scf::FockBackend::Cpu);
+  const auto composed_uks_strategy = scf::resolve_fock_build(
+      scf::make_global_hybrid_fock_spec(scf::FockSpin::Unrestricted, 0.37), scf::FockBackend::Cpu);
+  const scf::PreparedFockPlan composed_rks_plan(system, nullptr, composed_rks_strategy);
+  const scf::PreparedFockPlan composed_uks_plan(system, nullptr, composed_uks_strategy);
+  const auto composed_rks =
+      scf::run_b3lyp_rks(composed_rks_plan, basis, grid, options, 0.37, &rks.density);
+  const auto composed_uks =
+      scf::run_b3lyp_uks(composed_uks_plan, basis, grid, options, 0.37, &uks_seed);
+  require(composed_rks.converged && composed_uks.converged &&
+              std::abs(composed_rks.energy - composed_uks.energy) < 2e-10,
+          "composed full-range RKS/UKS lost the physical spin exchange factor");
+  require(std::abs(composed_rks.energy - rks.energy) > 1e-4,
+          "composed full-range SCF ignored its supplied exchange coefficient");
 
   const auto wrong_strategy = scf::resolve_fock_build(
       scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.25), scf::FockBackend::Cpu);
   const scf::PreparedFockPlan wrong_plan(system, nullptr, wrong_strategy);
   bool rejected = false;
   try {
-    (void)scf::run_b3lyp_rks(wrong_plan, basis, grid, options);
+    (void)scf::run_b3lyp_rks(wrong_plan, basis, grid, options, 0.2);
   } catch (const std::invalid_argument&) {
     rejected = true;
   }
@@ -215,7 +231,7 @@ void run_b3lyp_global_case() {
   options.compute_forces = true;
   rejected = false;
   try {
-    (void)scf::run_b3lyp_rks(rks_plan, basis, grid, options);
+    (void)scf::run_b3lyp_rks(rks_plan, basis, grid, options, 0.2);
   } catch (const std::invalid_argument&) {
     rejected = true;
   }

@@ -85,6 +85,19 @@ external def2-SVP records, installed endpoint/resource qualification and the
 production-scale gate remain necessary before promotion or issue closure.
 The low-level receipt explicitly reports `public_calculator_endpoint=False`.
 
+The native CPU preparation freezes the actual full-range coefficient from the
+physical execution plan and passes it to the shared RKS/UKS SCF wrappers. The
+wrapper still authenticates the complete prepared Fock strategy; it does not
+substitute a named functional's canonical fraction. Final-state validation
+binds the same coefficient through the immutable determinant, physical Fock
+and eigenframe identities while retaining the fixed semilocal graph/scales.
+This permits the low-level B3-family qualification with a noncanonical
+coefficient without widening CUDA's matched-composition restriction or public
+second-order admission. Molecular tests compare canonical and 37/100 exchange
+on H2 and asymmetric HeH+ against independently converged reference energies,
+densities and complete energy-difference Hessians at three steps. These small
+all-s fixtures do not qualify PBE0, real-spherical Ni or installed endpoints.
+
 `StationaryGridSecondOrder` accepts an absent nonlocal primitive. In that case
 it allocates no VV10 pair program, executes zero pair evaluations and does not
 apply a VV10 pair-work cap to a semilocal calculation. The full-range

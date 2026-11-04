@@ -33,6 +33,8 @@ struct NativeKsExecutionPlan {
   bool range_exchange{};
   /** Frozen at preparation: explicit legacy Direct LR versus operator-matched RI-K. */
   bool density_fitted_range_exchange{};
+  /** Physical coefficient from the compiler-resolved full-range contribution. */
+  double full_range_exchange{};
   double short_range_exchange{};
   double long_range_exchange{};
   double range_omega{};

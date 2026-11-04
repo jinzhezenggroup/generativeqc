@@ -74,6 +74,15 @@ that identity check or claim custom-coefficient molecular qualification from
 the independent compiler grid tests. Extending the shared native composition
 contract and its final-state/force proof remains part of #2224's prerequisite.
 
+### Follow-up to the initial native coefficient failure
+
+The initial wrapper limitation recorded above is superseded by
+[CPU hybrid coefficient provenance](2026-11-04-cpu-hybrid-coefficient-provenance.md).
+The follow-up passes the authenticated physical coefficient into the shared
+SCF wrappers, preserves prepared-strategy and final-state identity checks, and
+adds independent full-matrix H2/HeH+ evidence for 1/5 and 37/100 exchange.
+It does not supersede the remaining #2224, Ni or public-admission gates.
+
 ## Revisit when
 
 The independent matched-state and matched-grid molecular checks required by
