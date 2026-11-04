@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-29
 
+The [required native transport follow-up](../compatibility/2026-11-04-required-native-precision-seeds.md)
+supersedes the older-library missing-symbol fallback described here. The original
+capacity and resource-bound rationale remains historical evidence.
+
 ## Problem
 
 Precision audit staging reconstructed AO and spin dimensions in Python. The

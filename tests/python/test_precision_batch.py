@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 import pytest
 from generativeqc import PrecisionCalculator, PrecisionPolicy, ResourceBudget, _native
+from generativeqc import _warm_seed_native as native_seeds
 from generativeqc._precision_batch import _SeedLease
 from generativeqc._warm_state import WarmStartState
 from generativeqc.batch import BatchItemResult, BatchResult
@@ -27,6 +28,43 @@ from test_precision_policy import (
 from test_precision_policy import backend as _scalar_backend
 
 backend = _scalar_backend
+
+SEED_PROTOCOL = (
+    "generativeqc_batch_query_warm_seed_capacity_v1",
+    "generativeqc_batch_capture_warm_seeds_v1",
+    "generativeqc_batch_restore_warm_seeds_v1",
+    "generativeqc_warm_seed_snapshot_read_v1",
+    "generativeqc_warm_seed_snapshot_destroy",
+)
+
+
+@pytest.mark.parametrize("symbol", SEED_PROTOCOL)
+def test_missing_seed_protocol_rejects_before_fleet_preparation(
+    fleet: Any, monkeypatch: pytest.MonkeyPatch, symbol: str
+) -> None:
+    facade = PrecisionCalculator(policy="balanced")
+    monkeypatch.setattr(facade._candidate._library, symbol, None)
+    with pytest.raises(RuntimeError, match="required warm-seed protocol"):
+        facade.prepare_batch([ATOMS], warm_start=False)
+    assert fleet.fleets == [] and fleet.exports == 0
+
+
+@pytest.mark.parametrize("symbol", SEED_PROTOCOL)
+@pytest.mark.parametrize("selected_owner", ("calculator", "fleet"))
+def test_changed_seed_protocol_rejects_before_fleet_execution(
+    fleet: Any, monkeypatch: pytest.MonkeyPatch, symbol: str, selected_owner: str
+) -> None:
+    facade = PrecisionCalculator(policy="balanced")
+    with facade.prepare_batch([ATOMS]) as batch:
+        library = (
+            facade._candidate._library
+            if selected_owner == "calculator"
+            else fleet.live._library
+        )
+        monkeypatch.setattr(library, symbol, None)
+        with pytest.raises(RuntimeError, match="required warm-seed protocol"):
+            batch.execute()
+        assert fleet.executions == [] and fleet.exports == 0
 
 
 def test_missing_execution_protocol_rejects_before_candidate_fleet_work(
@@ -118,7 +156,7 @@ def item(index: int = 0, energy: float = -1.0, **changes: Any) -> BatchItemResul
 
 @pytest.fixture
 def fleet(backend: Any, monkeypatch: Any) -> Any:
-    """Enforce one live native owner and copy warm states through the actual ABI."""
+    """Model the snapshot ABI, retaining detached seeds after source teardown."""
     from generativeqc.precision_policy import Calculator
 
     state = backend
@@ -131,49 +169,97 @@ def fleet(backend: Any, monkeypatch: Any) -> Any:
     state.on_prepare = None
     state.signature = "same-model"
     state.seed_failure = None
+    state.snapshots = {}
+    state.next_snapshot = 1
 
     class Library:
-        def generativeqc_batch_get_hf_warm_state(
-            self, owner: Any, index: int, pointer: Any
+        @staticmethod
+        def generativeqc_batch_query_warm_seed_capacity_v1(
+            owner: Any, pointer: Any
+        ) -> int:
+            output = ctypes.cast(
+                pointer, ctypes.POINTER(native_seeds.Capacity)
+            ).contents
+            output.density_bytes = 32 * owner.system_count
+            output.coordinate_bytes = sum(24 * len(atoms) for atoms in owner._systems)
+            output.total_bytes = output.density_bytes + output.coordinate_bytes
+            output.largest_density_bytes = 32 if owner.system_count else 0
+            return 0
+
+        @staticmethod
+        def generativeqc_batch_capture_warm_seeds_v1(
+            owner: Any, maximum: int, pointer: Any, handle: Any
         ) -> int:
             if state.seed_failure is not None:
                 raise state.seed_failure
             state.exports += 1
-            descriptor = ctypes.cast(
-                pointer, ctypes.POINTER(_native.HfWarmState)
+            seeds = [
+                None if seed is None else tuple(array.copy() for array in seed)
+                for seed in owner.seeds
+            ]
+            output = ctypes.cast(
+                pointer, ctypes.POINTER(native_seeds._SnapshotInfo)
             ).contents
-            seed = owner.seeds[index]
-            descriptor.present = int(seed is not None)
-            if seed is None:
-                return 0
-            density, coordinates = seed
-            descriptor.density_count = density.size
-            descriptor.coordinate_count = coordinates.size
-            if descriptor.density:
-                np.ctypeslib.as_array(descriptor.density, shape=(density.size,))[:] = (
-                    density
-                )
-                np.ctypeslib.as_array(
-                    descriptor.coordinates, shape=(coordinates.size,)
-                )[:] = coordinates
+            output.system_count = owner.system_count
+            output.numeric_bytes = sum(
+                array.nbytes for seed in seeds if seed is not None for array in seed
+            )
+            output.largest_density_bytes = max(
+                (seed[0].nbytes for seed in seeds if seed is not None), default=0
+            )
+            assert output.numeric_bytes <= maximum
+            identifier = state.next_snapshot
+            state.next_snapshot += 1
+            state.snapshots[identifier] = seeds
+            ctypes.cast(handle, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(
+                identifier
+            )
             return 0
 
-        def generativeqc_batch_restore_hf_warm_states(
-            self, owner: Any, descriptors: Any, count: int
-        ) -> int:
-            for index in range(count):
-                descriptor = descriptors[index]
-                if descriptor.present:
-                    owner.seeds[index] = (
-                        np.ctypeslib.as_array(
-                            descriptor.density, shape=(descriptor.density_count,)
-                        ).copy(),
-                        np.ctypeslib.as_array(
-                            descriptor.coordinates, shape=(descriptor.coordinate_count,)
-                        ).copy(),
-                    )
+        @staticmethod
+        def generativeqc_batch_restore_warm_seeds_v1(owner: Any, handle: Any) -> int:
+            owner.seeds = [
+                None if seed is None else tuple(array.copy() for array in seed)
+                for seed in state.snapshots[handle.value]
+            ]
             state.restored.append(owner.seeds.copy())
             return 0
+
+        @staticmethod
+        def generativeqc_warm_seed_snapshot_read_v1(
+            handle: Any, index: int, pointer: Any
+        ) -> int:
+            descriptor = ctypes.cast(
+                pointer, ctypes.POINTER(native_seeds._SeedView)
+            ).contents
+            seed = state.snapshots[handle.value][index]
+            descriptor.present = int(seed is not None)
+            if seed is not None:
+                density, coordinates = seed
+                descriptor.density_count = density.size
+                descriptor.coordinate_count = coordinates.size
+                descriptor.density = density.ctypes.data_as(
+                    ctypes.POINTER(ctypes.c_double)
+                )
+                descriptor.coordinates = coordinates.ctypes.data_as(
+                    ctypes.POINTER(ctypes.c_double)
+                )
+            return 0
+
+        @staticmethod
+        def generativeqc_warm_seed_snapshot_destroy(handle: Any) -> None:
+            del state.snapshots[handle.value]
+
+    library = Library()
+    original_init = Calculator.__init__
+
+    def initialize(calculator: Any, **options: Any) -> None:
+        """Preflight fake work symbols, never real native work on fake pointers."""
+        original_init(calculator, **options)
+        for symbol in SEED_PROTOCOL:
+            setattr(calculator._library, symbol, getattr(library, symbol))
+
+    monkeypatch.setattr(Calculator, "__init__", initialize)
 
     class Fleet:
         def __init__(self, calculator: Any, systems: Any, **options: Any) -> None:
@@ -186,7 +272,7 @@ def fleet(backend: Any, monkeypatch: Any) -> Any:
             self._warm_state = WarmStartState(
                 self.system_count, enabled=options.get("warm_start", True)
             )
-            self._library = Library()
+            self._library = library
             self._context = None
             self._batch = self
             self.charges = tuple(options.get("charges") or [0] * self.system_count)
@@ -626,23 +712,23 @@ def test_audit_transport_includes_resident_seed_exports(
             KsTransportDiagnostic(0, 0, 0, 0, 0, 0, 0),
         ) * 2
         exported = set()
-        library_type = type(owner._library)
-        get = library_type.generativeqc_batch_get_hf_warm_state
+        capture = owner._library.generativeqc_batch_capture_warm_seeds_v1
 
-        def export(library: Any, batch: Any, index: int, pointer: Any) -> int:
-            if partial_failure and index == 1:
-                raise RuntimeError("second resident export failed")
-            if index not in exported:
-                rows = list(batch.ks_transport_diagnostics)
-                rows[index] = replace(
-                    rows[index], matrix_d2h_bytes=32, synchronizations=1
-                )
-                batch.ks_transport_diagnostics = tuple(rows)
-                exported.add(index)
-            return get(library, batch, index, pointer)
+        def export(batch: Any, maximum: int, pointer: Any, handle: Any) -> int:
+            for index in range(batch.system_count):
+                if partial_failure and index == 1:
+                    raise RuntimeError("second resident export failed")
+                if index not in exported:
+                    rows = list(batch.ks_transport_diagnostics)
+                    rows[index] = replace(
+                        rows[index], matrix_d2h_bytes=32, synchronizations=1
+                    )
+                    batch.ks_transport_diagnostics = tuple(rows)
+                    exported.add(index)
+            return capture(batch, maximum, pointer, handle)
 
         monkeypatch.setattr(
-            library_type, "generativeqc_batch_get_hf_warm_state", export
+            owner._library, "generativeqc_batch_capture_warm_seeds_v1", export
         )
         output = prepared.execute()
         transport = prepared.ks_transport_diagnostics
@@ -689,7 +775,7 @@ def test_failed_seed_export_transport_query_preserves_original_error(
             raising=False,
         )
         monkeypatch.setattr(
-            type(owner._library), "generativeqc_batch_get_hf_warm_state", fail_export
+            owner._library, "generativeqc_batch_capture_warm_seeds_v1", fail_export
         )
         output = prepared.execute()
         assert output.items[0].status == _native.STATUS_OUT_OF_MEMORY
@@ -770,7 +856,7 @@ def test_explicit_resource_plan_is_charged_to_auditors(fleet: Any) -> None:
         assert auditor._resource_budget.host_bytes == budget.host_bytes
 
 
-def test_disabled_warm_start_needs_no_optional_seed_abi(fleet: Any) -> None:
+def test_disabled_warm_start_materializes_no_seeds(fleet: Any) -> None:
     fleet.seed_failure = RuntimeError("not available")
     fleet.fleet_outputs = [[item()], [item()]]
     with PrecisionCalculator(policy="balanced").prepare_batch(
@@ -779,6 +865,48 @@ def test_disabled_warm_start_needs_no_optional_seed_abi(fleet: Any) -> None:
         output = prepared.execute(strict=True)
         assert output.precision_validation["seed_bytes_retained"] == 0
         assert fleet.exports == 0
+
+
+def test_incomplete_auditor_protocol_is_not_an_optional_cold_fallback(
+    fleet: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fleet.fleet_outputs = [[item()], [item()]]
+
+    def remove_protocol(owner: Any, coordinates: Any) -> None:
+        if owner is not fleet.fleets[0]:
+            monkeypatch.setattr(
+                owner._library, "generativeqc_warm_seed_snapshot_read_v1", None
+            )
+
+    with PrecisionCalculator(policy="balanced").prepare_batch([ATOMS]) as prepared:
+        fleet.on_execute = remove_protocol
+        output = prepared.execute()
+        assert output.failure_indices == (0,)
+        attempt = output.precision_validation["audit_calls"][0]
+        assert not attempt["completed"]
+        assert "required warm-seed protocol" in attempt["error"]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [MemoryError("optional seed headroom"), NotImplementedError("seed domain")],
+)
+def test_supported_auditor_seed_refusal_keeps_complete_cold_audits(
+    fleet: Any, failure: Exception
+) -> None:
+    facade = PrecisionCalculator(policy="balanced")
+    fleet.fleet_outputs = [[item()], [item()], [item()], [item()]]
+
+    def refuse_optional_seed(owner: Any, coordinates: Any) -> None:
+        fleet.seed_failure = None if owner._calculator is facade._candidate else failure
+
+    fleet.on_execute = refuse_optional_seed
+    with facade.prepare_batch([ATOMS]) as prepared:
+        for _ in range(2):
+            output = prepared.execute(strict=True)
+            assert output.items[0].precision_validation.solve_count == 2
+            assert output.precision_validation["audit_calls"][0]["completed"]
+            assert output.precision_validation["audit_seed_bytes_retained"] == 0
 
 
 def test_audit_setup_failure_releases_candidate_and_is_recorded(fleet: Any) -> None:

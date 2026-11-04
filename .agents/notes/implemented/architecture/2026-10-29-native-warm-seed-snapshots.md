@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-29
 
+The [required native transport follow-up](../compatibility/2026-11-04-required-native-precision-seeds.md)
+supersedes the missing-capture descriptor fallback described here. Snapshot
+lifetime, physical validation and resource invariants remain unchanged.
+
 ## Problem
 
 The prepared capacity query bounds numeric seed export before it can materialize

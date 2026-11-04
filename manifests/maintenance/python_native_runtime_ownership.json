@@ -1049,19 +1049,9 @@
           "classification": "wrapper"
         },
         {
-          "path": "python/generativeqc/_precision_batch.py",
-          "symbol": "_compatibility_seed_capacity",
-          "classification": "compatibility"
-        },
-        {
           "path": "python/generativeqc/_warm_seed_native.py",
           "symbol": "seed_capacity",
           "classification": "wrapper"
-        },
-        {
-          "path": "python/generativeqc/_precision_batch.py",
-          "symbol": "_SeedLease._capture_compatibility",
-          "classification": "compatibility"
         },
         {
           "path": "python/generativeqc/_warm_seed_native.py",
@@ -1108,7 +1098,7 @@
         "Admitted all-electron CPU HF system projection owns overlap preparation and every spin projection natively. Python retains per-item eligibility, immutable source transport, reports and transactional seed installation. Old/custom/unsupported domains retain explicit preparation compatibility; native execution failure never retries it. The composed capacity remains a numeric-matrix envelope rather than complete memory authority.",
         "The required selected-library application-precision evidence policy owns budget-Fock operator admission, exact returned-state strict warm proof, and the Standard fallback decision. The native execution controller additionally owns bounded per-item candidate/retry/classification/release/audit/verification order. The shared native observable owner measures absolute energy, maximum/RMS force errors and reference norms, resolves relative allowances and compares declared gates. Completed receipts are checked before publication and an unmet verification still rejects the observable budget. Python adapts electronic owners, validates array shape/representation, transports typed model traits and diagnostics; missing execution/query support rejects the installation and selected failures never retry Python policy/reductions. Typed offline evidence/status views remain portable metadata, not a replacement array norm or electronic scheduler. Completed-candidate routing, gradient receipt interpretation and complete correction binding now belong to the required native classifier, reusing the same native work predicates and canonical model catalog. Actual gradient producer eligibility, initial prepared fleet execution and bounded independent seed eligibility/history retain their existing owners. This is not an autonomous native precision endpoint, SDK/CLI parity or new numerical qualification.",
         "Default SCF controls require the selected library's shared native catalog/grid policy. Python copies model/backend/ECP and immutable grid facts, while explicit caller overrides remain unchanged. Missing support, native failures and invalid receipts reject the installation rather than selecting a Python policy. The removed Python selectors are retained as historical retirement metadata, not live source anchors. This neither qualifies new methods nor transfers precision execution or custom MethodIR resolution.",
-        "Precision seed staging queries immutable native prepared dimensions before resident export. Native immutable host snapshots own density/coordinate arrays, copying and release independently of source batch/context lifetime; restore reuses existing physical validation. Python retains same-model eligibility, validation reservations, metadata, update policy and independent candidate/auditor history selection. Only absent capacity/capture symbols permit topology/descriptor compatibility. Numeric bounds and snapshots do not establish complete host/provider memory authority or cross-model admission.",
+        "Precision seed staging requires the complete selected native capacity/snapshot protocol before prepared molecular work. Immutable native prepared dimensions bound resident export; native host snapshots own density/coordinate arrays, copying and release independently of source batch/context lifetime. Restore reuses existing physical validation. Python topology sizing and legacy descriptor-copy compatibility are retired. Python retains same-model eligibility, validation reservations, metadata, update policy and independent candidate/auditor history selection. Optional auditor retention may cold-fallback on supported-runtime resource/domain refusal, never missing installation support. Numeric bounds and snapshots do not establish complete host/provider memory authority or cross-model admission.",
         "Budget-Fock SCF control selection requires the shared native policy for qualified restricted self-consistent device-fused models. Python transports Direct/fitted qualification facts and caller ceilings; missing query support rejects the installation instead of selecting thresholds in Python. General solver defaults and full method/gradient qualification remain separate owners. No new numerical domain is admitted.",
         "Correlated stopping ceilings require the selected Calculator library's native query, while standalone CBS metadata uses the normal native loader. Missing query support rejects the installation; no parallel optional discovery or Python budget arithmetic remains. Python still owns CBS composition, component execution and observable publication; stopping metadata does not establish endpoint or derivative qualification."
       ],
@@ -1158,6 +1148,13 @@
         "catalog-family:density_functional"
       ],
       "retired_python_sites": [
+        {
+          "path": "python/generativeqc/_precision_batch.py",
+          "symbols": ["_compatibility_seed_capacity", "_SeedLease._capture_compatibility"],
+          "last_present_source_sha": "64e14180a06b89a1d555aed97f5df338148bff2e",
+          "replacement": "python/generativeqc/_warm_seed_native.py",
+          "reason": "Prepared precision requires current native capacity and snapshot ownership; missing support rejects the installation instead of reconstructing AO/spin bounds or copying descriptor arrays. Optional resource/domain cold-audit fallback and independent Python seed/history eligibility remain unchanged."
+        },
         {
           "path": "python/generativeqc/_scf_convergence.py",
           "symbols": ["default_scf_controls", "_compatibility_default_scf_controls", "_standard_models"],

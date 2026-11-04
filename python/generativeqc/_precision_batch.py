@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ctypes
 from contextlib import ExitStack, suppress
 from copy import deepcopy
 from dataclasses import replace
@@ -16,8 +15,9 @@ from ._api_types import Atom
 from ._observable_comparison import require_observable_comparison
 from ._precision_candidate import require_candidate_classification
 from ._precision_execution import require_precision_schedule
+from ._warm_seed_native import require_seed_protocol
 from .batch import BatchResult
-from .checkpoint import _descriptor, _pointer, _resource_check, _restore_states
+from .checkpoint import _resource_check
 from .precision_policy import (
     PrecisionBudgetError,
     PrecisionSolve,
@@ -30,48 +30,14 @@ def _seed_capacity(batch: Any) -> tuple[int, int]:
     """Ask the prepared owner for bounds before any seed materialization."""
     from ._warm_seed_native import seed_capacity
 
-    capacity = seed_capacity(batch)
-    return _compatibility_seed_capacity(batch) if capacity is None else capacity
-
-
-def _compatibility_seed_capacity(batch: Any) -> tuple[int, int]:
-    """Bound export before the native size query materializes resident densities.
-
-    The old query ABI can itself perform D2H allocation. Use prepared topology
-    for a conservative all-slot bound instead of allocating first and checking
-    afterward. This does not execute integrals or inspect a reference density.
-    """
-    calculator = batch._calculator
-    options = calculator._ks_options
-    spins = (
-        2
-        if (
-            calculator._method == _native.METHOD_UHF
-            or (options is not None and options.method_ir.spin == "polarized")
-        )
-        else 1
-    )
-    numeric = largest = 0
-    for atoms, metadata in zip(batch._systems, batch._basis_metadata, strict=True):
-        spherical = metadata["orbital"]["representation"] == "spherical"
-        aos = sum(
-            2 * shell.angular_momentum + 1
-            if spherical
-            else (shell.angular_momentum + 1) * (shell.angular_momentum + 2) // 2
-            for shell in calculator._shells_for_atoms(atoms)
-        )
-        density = 8 * spins * aos * aos
-        numeric += density + 24 * len(atoms)
-        largest = max(largest, density)
-    return numeric, largest
+    return seed_capacity(batch)
 
 
 class _SeedLease:
     """Detach only the supplying solver's seeds before releasing its device owner.
 
     Native snapshots own numeric storage independently of the source context.
-    The older HF-named descriptor ABI remains missing-symbol compatibility for
-    HF and KS. This is same-model transport, never candidate-to-auditor transport.
+    This is same-model transport, never candidate-to-auditor transport.
     Native restoration validates source overlap/occupations and target SCF still
     executes. Numeric staging and its validation scratch remain bounded.
     """
@@ -80,8 +46,6 @@ class _SeedLease:
         self.signature = batch._calculator._model_signature()
         self.systems = batch._systems
         self.metadata = deepcopy(batch._warm_state)
-        self.states = None
-        self._storage = []
         self._snapshot = None
         self.numeric_bytes = 0
         self.largest_density_bytes = 0
@@ -95,79 +59,21 @@ class _SeedLease:
         from ._warm_seed_native import capture_snapshot
 
         snapshot = capture_snapshot(batch, bound)
-        if snapshot is not None:
-            try:
-                self.numeric_bytes = snapshot.numeric_bytes
-                self.largest_density_bytes = snapshot.largest_density_bytes
-                self.reserved_host_bytes = _resource_check(
-                    batch, self.numeric_bytes, self.largest_density_bytes
-                )
-            except BaseException:
-                snapshot.close()
-                raise
-            self._snapshot = snapshot
-            return
-        self._capture_compatibility(batch, bound, largest_bound)
-
-    def _capture_compatibility(
-        self, batch: Any, bound: int, largest_bound: int
-    ) -> None:
-        """Copy descriptor arrays only for a library without native snapshots."""
-        if not all(
-            hasattr(batch._library, name)
-            for name in (
-                "generativeqc_batch_get_hf_warm_state",
-                "generativeqc_batch_restore_hf_warm_states",
+        try:
+            self.numeric_bytes = snapshot.numeric_bytes
+            self.largest_density_bytes = snapshot.largest_density_bytes
+            self.reserved_host_bytes = _resource_check(
+                batch, self.numeric_bytes, self.largest_density_bytes
             )
-        ):
-            raise NotImplementedError(
-                "native precision audit seed transport unavailable"
-            )
-        descriptors = [_descriptor() for _ in range(batch.system_count)]
-        largest = 0
-        for index, state in enumerate(descriptors):
-            _native.check(
-                batch._library,
-                batch._library.generativeqc_batch_get_hf_warm_state(
-                    batch._batch, index, ctypes.byref(state)
-                ),
-                context=batch._context,
-            )
-            self.numeric_bytes += 8 * (state.density_count + state.coordinate_count)
-            largest = max(largest, 8 * state.density_count)
-        if self.numeric_bytes > bound or largest > largest_bound:
-            raise RuntimeError("native seed dimensions exceed prepared topology")
-        self.reserved_host_bytes = _resource_check(batch, self.numeric_bytes, largest)
-        self.largest_density_bytes = largest
-        self.states = (_native.HfWarmState * batch.system_count)()
-        for index, state in enumerate(descriptors):
-            if state.present:
-                density = np.empty(state.density_count, dtype=np.float64)
-                coordinates = np.empty(state.coordinate_count, dtype=np.float64)
-                state.density, state.coordinates = (
-                    _pointer(density),
-                    _pointer(coordinates),
-                )
-                _native.check(
-                    batch._library,
-                    batch._library.generativeqc_batch_get_hf_warm_state(
-                        batch._batch, index, ctypes.byref(state)
-                    ),
-                    context=batch._context,
-                )
-                density.setflags(write=False)
-                coordinates.setflags(write=False)
-                self._storage.extend((density, coordinates))
-            self.states[index] = state
+        except BaseException:
+            snapshot.close()
+            raise
+        self._snapshot = snapshot
 
     @property
     def storage(self) -> list[np.ndarray]:
         """Expose detached diagnostic arrays without shifting production ownership."""
-        return (
-            self._snapshot.diagnostic_arrays()
-            if self._snapshot is not None
-            else self._storage
-        )
+        return self._snapshot.diagnostic_arrays() if self._snapshot is not None else []
 
     def restore(self, batch: Any, *, updates: bool) -> None:
         """Rebind the same model, retaining frozen source geometry and metadata."""
@@ -179,13 +85,6 @@ class _SeedLease:
         if self._snapshot is not None:
             _resource_check(batch, self.numeric_bytes, self.largest_density_bytes)
             self._snapshot.restore(batch)
-        elif self.states is not None:
-            _resource_check(batch, self.numeric_bytes, self.largest_density_bytes)
-            _native.check(
-                batch._library,
-                _restore_states(batch, self.states),
-                context=batch._context,
-            )
         batch._warm_state = deepcopy(self.metadata)
         batch.set_warm_start_updates(updates)
 
@@ -240,9 +139,11 @@ class PreparedPrecisionBatch:
         require_precision_schedule(self._calculator._library)
         require_observable_comparison(self._calculator._library)
         require_candidate_classification(self._calculator._library)
+        require_seed_protocol(self._calculator._library)
         self._signature = self._calculator._model_signature()
         self._owner = self._calculator.prepare_batch(self._systems, **self._options)
         try:
+            require_seed_protocol(self._owner._library)
             self._charges = self._owner.charges
             self._multiplicities = self._owner.multiplicities
             self._options.update(
@@ -319,6 +220,7 @@ class PreparedPrecisionBatch:
                 self._audit_seeds = [None] * self.system_count
         owner = self._calculator.prepare_batch(self._systems, **self._options)
         try:
+            require_seed_protocol(owner._library)
             if self._seeds is not None:
                 self._seeds.restore(owner, updates=self._updates)
             else:
@@ -430,12 +332,14 @@ class PreparedPrecisionBatch:
                             raise ValueError(
                                 "precision audit cannot change the scientific model"
                             )
+                        require_seed_protocol(calculator._library)
                         with calculator.prepare_batch(
                             [atoms],
                             charges=[self._charges[index]],
                             multiplicities=[self._multiplicities[index]],
                             warm_start=self._options.get("warm_start", True),
                         ) as owner:
+                            require_seed_protocol(owner._library)
                             lease = self._audit_seeds[index]
                             reusable = role == "fp64_audit"
                             if lease is not None and (
@@ -582,6 +486,9 @@ class PreparedPrecisionBatch:
             require_precision_schedule(self._calculator._library)
             require_observable_comparison(self._calculator._library)
             require_candidate_classification(self._calculator._library)
+            require_seed_protocol(self._calculator._library)
+            if self._owner is not None:
+                require_seed_protocol(self._owner._library)
             started = perf_counter()
             requested = self._facade._properties(properties)
             if requested - self.capabilities.supported_properties:

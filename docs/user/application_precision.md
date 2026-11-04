@@ -547,10 +547,16 @@ checked conservatively for all prepared slots **before** the native query can
 materialize resident densities. Staging and validation scratch must also fit
 the current `ResourcePlan`'s host headroom; auditors reserve that host storage
 from the same budget, including an explicitly supplied resource plan.
+Prepared precision requires the selected native runtime's complete warm-seed
+capacity, capture, restore, read and destroy protocol. Missing support rejects
+preparation or execution; Python does not reconstruct AO/spin bounds or copy
+legacy descriptors as an older-library fallback.
 Unavailable candidate seed transport or insufficient candidate headroom fails
 the affected audited items. Optional audit history falls back to a complete
-cold audit when its storage cannot fit. `warm_start=False` needs no seed
-transport. `clear_warm_starts()` clears both suspended histories.
+cold audit when its storage cannot fit or the supported runtime refuses that
+optional seed domain; an incomplete installation is not such a refusal.
+`warm_start=False` still requires the current protocol but materializes no seed
+storage. `clear_warm_starts()` clears both suspended histories.
 
 Each item carries a schema-2 `PrecisionValidation`. Shared candidate time and
 per-item endpoint time are `None`, not an invented division of fleet latency.

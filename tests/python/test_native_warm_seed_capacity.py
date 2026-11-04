@@ -30,15 +30,14 @@ def test_prepared_capacity_covers_cold_and_retained_ragged_seeds(
         {"ks_options": KsOptions(grid=GridSpec(8, 4, 8))} if "pbe" in method else {}
     )
     calculator = Calculator(method=method, initial_guess=None, **options)
-    if not hasattr(
-        calculator._library, "generativeqc_batch_query_warm_seed_capacity_v1"
-    ):
-        pytest.skip("requires native warm-seed capacity protocol")
-    monkeypatch.setattr(precision, "_compatibility_seed_capacity", forbidden)
     spin_count = 2 if method in ("uhf", "pbe-uks") else 1
     density = 8 * spin_count * (2**2 + 1**2)
     expected = (density + 24 * 3, 8 * spin_count * 2**2)
     with calculator.prepare_batch(SYSTEMS) as owner:
+        monkeypatch.setattr(calculator, "_shells_for_atoms", forbidden)
+        monkeypatch.setattr(
+            calculator._library, "generativeqc_batch_get_hf_warm_state", forbidden
+        )
         assert precision._seed_capacity(owner) == expected
         # Counts bound export before any retained density exists. A deficient
         # numeric staging budget must reject before materializing a seed.
@@ -67,23 +66,18 @@ def test_prepared_representation_matches_independent_ao_count(
         atom=atoms, basis="def2-svp", cart=representation == "cartesian", verbose=0
     )
     calculator = Calculator(basis="def2-svp", basis_representation=representation)
-    if not hasattr(
-        calculator._library, "generativeqc_batch_query_warm_seed_capacity_v1"
-    ):
-        pytest.skip("requires native warm-seed capacity protocol")
     density_bytes = 8 * reference.nao_nr() ** 2
     with calculator.prepare_batch([atoms]) as owner:
         assert native.seed_capacity(owner) == (density_bytes + 24, density_bytes)
     calculator.clear_cache()
 
 
-def test_missing_symbol_is_the_only_compatibility_boundary() -> None:
-    assert native.seed_capacity(SimpleNamespace(_library=SimpleNamespace())) is None
+def test_missing_capacity_rejects_the_selected_installation() -> None:
+    with pytest.raises(RuntimeError, match="required warm-seed protocol"):
+        native.seed_capacity(SimpleNamespace(_library=SimpleNamespace()))
 
 
-def test_selected_native_refusal_never_retries_topology(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_selected_native_refusal_never_retries_topology() -> None:
     def refuse(*args: Any) -> int:
         return _native.STATUS_NOT_IMPLEMENTED
 
@@ -95,7 +89,6 @@ def test_selected_native_refusal_never_retries_topology(
         _batch=None,
         _context=None,
     )
-    monkeypatch.setattr(precision, "_compatibility_seed_capacity", forbidden)
     with pytest.raises(NotImplementedError):
         precision._seed_capacity(batch)
 
