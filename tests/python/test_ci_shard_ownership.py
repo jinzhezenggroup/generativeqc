@@ -288,8 +288,7 @@ def test_mixed_rsh_force_matrix_preserves_one_tzvp_and_open_shell_in_routine() -
         if isinstance(decorator, ast.Call)
         and isinstance(decorator.func, ast.Attribute)
         and decorator.func.attr == "parametrize"
-        and ast.literal_eval(decorator.args[0])
-        == "spin,representation,basis_name"
+        and ast.literal_eval(decorator.args[0]) == "spin,representation,basis_name"
     )
     retained = set()
     nightly = set()
