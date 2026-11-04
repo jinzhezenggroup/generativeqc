@@ -75,6 +75,7 @@ def test_full_range_shared_owner_matches_reconverged_native_gradients(
             assert np.linalg.norm(result.components["exact_exchange"]) > 1e-10
             assert not any(name.startswith("nonlocal_") for name in result.components)
             assert not result.diagnostics["public_calculator_endpoint"]
+            assert not hessian.diagnostics["public_calculator_endpoint"]
             assert result.diagnostics["pair_evaluations"] == 0
             assert result.diagnostics["response_residual_norm"] < 2e-10
             assert result.diagnostics["nuclear_response_solves"] == 1

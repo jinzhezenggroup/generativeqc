@@ -17,15 +17,19 @@ from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize("functional", ("B3LYP", "PBE0", "CAM-B3LYP", "WB97M-V"))
+@pytest.mark.parametrize("sizes", ((1, 3, 6), (91, 3, 10)))
 def test_prepared_integral_weights_match_independent_density_products(
-    functional: str, spin: str
+    functional: str, spin: str, sizes: tuple[int, ...]
 ) -> None:
-    """Keep source coefficients, same-spin exchange and Cartesian pullbacks fixed."""
+    """Check signed pullbacks and density products below/above one block's cap.
+
+    The larger case crosses the ordinary compiler budget for both all-AO pair
+    weights and a Cartesian ffff quartet, without changing any admission limit.
+    """
     method = resolve_method(functional, spin=spin)
     plan = StationaryHVPPlan(method, StationaryMeanField(SCF_POINT_MODEL))
     generator = np.random.default_rng(2843)
     spins = 2 if spin == "polarized" else 1
-    sizes = (1, 3, 6)
     offsets = np.cumsum((0, *sizes))
     transform = generator.normal(size=(sum(sizes), 9)) * 0.2
     inputs = generator.normal(size=(4, spins, 9, 9))

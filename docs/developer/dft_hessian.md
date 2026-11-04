@@ -120,6 +120,10 @@ once per response and reuses the compiler's weight/JVP programs by term count.
 Shell callbacks evaluate only the requested fixed or moving cotangent. They do
 not retain rank-four weights, integrals or a geometry-replay numeric cache;
 MethodIR/TensorIR still owns all spin factors and exchange coefficients.
+The compiler partitions ordered terms under the same per-block symbolic element
+budget for both pair and quartet weights. Runtime gathers only each tile's
+indices and density feeds, preserving flattened component order and the complete
+shell-local output; a large shell does not raise the compiler admission cap.
 Its admitted AO-jet reserve includes native basis storage and tile/publication
 buffers and is passed explicitly to the native evaluator. The remaining grid
 budget excludes that reserve; raising the grid allowance does not remove the

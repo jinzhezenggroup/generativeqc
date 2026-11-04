@@ -415,6 +415,36 @@ class StationaryHVPPlan:
             "assembly": "matrix-free-directional",
         }
 
+    def _integral_term_capacity(self, coordinates: int, max_elements: int) -> int:
+        """Share the symbolic feed bound between planning and block admission."""
+        _positive(coordinates, "coordinates")
+        _positive(max_elements, "max_elements")
+        spin_blocks = 2 if self.method.spin == "polarized" else 1
+        capacity = max_elements // (coordinates + 2 * spin_blocks + 4)
+        if capacity == 0:
+            raise ValueError("stationary-HVP integral block exceeds element budget")
+        return capacity
+
+    def integral_term_tiles(
+        self,
+        terms: int,
+        *,
+        coordinates: int = 3,
+        max_elements: int = 65536,
+    ) -> typing.Iterator[slice]:
+        """Lazily cover ordered terms without relaxing the block element budget.
+
+        Validation is eager, even though the disjoint cover is lazy. Consumers
+        gather only each slice's density feeds and scatter its weights back in
+        the original flattened order; spin and source algebra stays in TensorIR.
+        """
+        _positive(terms, "terms")
+        capacity = self._integral_term_capacity(coordinates, max_elements)
+        return (
+            slice(start, min(start + capacity, terms))
+            for start in range(0, terms, capacity)
+        )
+
     def integral_block(
         self,
         source: str,
@@ -450,13 +480,10 @@ class StationaryHVPPlan:
         ):
             raise ValueError("source is not a stationary-HVP integral primitive")
         _positive(terms, "terms")
-        _positive(coordinates, "coordinates")
-        _positive(max_elements, "max_elements")
         # Two bounded vectors plus the spin-resolved response fields are the
         # largest symbolic feeds. Keep generation fail-closed before creating
         # any dense constants or identity projections.
-        spin_blocks = 2 if self.method.spin == "polarized" else 1
-        if terms * (coordinates + 2 * spin_blocks + 4) > max_elements:
+        if terms > self._integral_term_capacity(coordinates, max_elements):
             raise ValueError("stationary-HVP integral block exceeds element budget")
 
         t = Index("t", IndexSpace("ordered_terms", "batch", terms))

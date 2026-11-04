@@ -900,45 +900,55 @@ class _PreparedIntegralWeights:
             self.moving = self.moving[None]
 
     def _evaluate(self, slots: tuple | None, *, moving: bool) -> np.ndarray:
-        if slots is None:
-            shape = (self.operator.topology.nbf,) * 2
-            rows, columns = np.indices(shape).reshape(2, -1)
-            feeds = (
-                {
-                    "weighted_density": self.density[:, rows, columns],
-                    "d_weighted_density": self.moving[:, rows, columns],
-                }
-                if self.source == "overlap_pulay"
-                else {
-                    "density_left": self.density[:, rows, columns],
-                    "d_density_left": self.moving[:, rows, columns],
-                }
-            )
-        else:
-            shape = tuple(self.operator.topology.shell_sizes[slot] for slot in slots)
-            indices = np.indices(shape).reshape(4, -1)
-            indices += self.offsets[list(slots), None]
-            first, second, third, fourth = indices
-            left, right = (
-                ((first, second), (third, fourth))
-                if self.source == "coulomb"
-                else ((first, third), (second, fourth))
-            )
-            feeds = {
-                "density_left": self.density[:, left[0], left[1]],
-                "density_right": self.density[:, right[0], right[1]],
-                "d_density_left": self.moving[:, left[0], left[1]],
-                "d_density_right": self.moving[:, right[0], right[1]],
-            }
-        terms = int(np.prod(shape))
-        if terms not in self.blocks:
-            self.blocks[terms] = self.operator.plan.integral_block(
-                self.source, terms=terms, coordinates=1
-            )
-        block = self.blocks[terms]
-        program = block.response_weights if moving else block.weights
+        shape = (
+            (self.operator.topology.nbf,) * 2
+            if slots is None
+            else tuple(self.operator.topology.shell_sizes[slot] for slot in slots)
+        )
+        weights = np.empty(int(np.prod(shape)))
         output = "response_weights" if moving else "weights"
-        return execute(program, feeds).outputs[output].reshape(shape)
+        for tile in self.operator.plan.integral_term_tiles(weights.size, coordinates=1):
+            # A Cartesian ffff shell already exceeds one symbolic block. Gather
+            # only this tile's indices/feeds; the shell-local output is ephemeral.
+            indices = np.array(
+                np.unravel_index(np.arange(tile.start, tile.stop), shape)
+            )
+            if slots is None:
+                rows, columns = indices
+                feeds = (
+                    {
+                        "weighted_density": self.density[:, rows, columns],
+                        "d_weighted_density": self.moving[:, rows, columns],
+                    }
+                    if self.source == "overlap_pulay"
+                    else {
+                        "density_left": self.density[:, rows, columns],
+                        "d_density_left": self.moving[:, rows, columns],
+                    }
+                )
+            else:
+                indices += self.offsets[list(slots), None]
+                first, second, third, fourth = indices
+                left, right = (
+                    ((first, second), (third, fourth))
+                    if self.source == "coulomb"
+                    else ((first, third), (second, fourth))
+                )
+                feeds = {
+                    "density_left": self.density[:, left[0], left[1]],
+                    "density_right": self.density[:, right[0], right[1]],
+                    "d_density_left": self.moving[:, left[0], left[1]],
+                    "d_density_right": self.moving[:, right[0], right[1]],
+                }
+            terms = tile.stop - tile.start
+            if terms not in self.blocks:
+                self.blocks[terms] = self.operator.plan.integral_block(
+                    self.source, terms=terms, coordinates=1
+                )
+            block = self.blocks[terms]
+            program = block.response_weights if moving else block.weights
+            weights[tile] = execute(program, feeds).outputs[output]
+        return weights.reshape(shape)
 
     def fixed(self, slots: tuple | None = None) -> np.ndarray:
         """Evaluate only the fixed cotangent needed by the second-integral pass."""
@@ -1297,7 +1307,9 @@ def composite_rks_hessian(
         residuals.append(result.diagnostics["response_residual_norm"])
     diagnostics = {
         "derivative_method": "compiler-automatic-differentiation",
-        "public_calculator_endpoint": True,
+        "public_calculator_endpoint": composite_stationary_second_order_eligible(
+            operator.state._source.method_ir
+        ),
         "backend": operator.backend.device,
         "spin": operator.state.identity.spin,
         "representation": operator.basis.representation,
