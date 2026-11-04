@@ -98,6 +98,20 @@ receipts, not installed-artifact or production-scale claims.
 
 ## Boundaries
 
+A subsequent unchanged native common-assembler experiment at commit
+`82efe3c390e1a9b9c63cf54ab0bc4dfa32be112b` has **failed**, not merely remained
+unrun. Its separate ECP-center HVP passed again, but the first raw unit
+Cartesian column triggered `ECP Hessian quadrature convergence gate failed`
+inside the retained coarse/fine ECP source check. No native raw column or
+complete matrix was accepted; the second native action/bilinear stage was not
+reached. Whole exit status is 1 after 398.74 s, peak process RSS 546,760 KiB.
+The finite 3600-second guard was not reached. Retain
+`def2-cs-native-raw-qualification.log` and the exact script
+`qualify-def2-cs-native-raw.py`; do not infer a matrix from the passing direction
+or the reference-only complete matrices. The fixed absolute ECP source gate
+is not changed, unit columns are not rescaled to bypass it, and no posthoc
+symmetrization or reference fallback is introduced.
+
 This is low-level electronic-only candidate admission, not completion of #2847.
 IH molecular HVPs, every native raw Hessian column, independent bilinear
 and rotation checks, failure/lifetime/resource gates, mixed Ni/ECP and UKS
