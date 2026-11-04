@@ -9,30 +9,70 @@ import time
 from typing import TYPE_CHECKING
 
 import pytest
+from generativeqc_compiler.common import compiler_process
 from generativeqc_compiler.xc import bulk_aot
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from subprocess import Popen
+    from typing import Any
 
 
 @pytest.mark.skipif(os.name != "posix", reason="requires POSIX compiler process groups")
 @pytest.mark.parametrize("phase", ("identification", "compilation"))
-def test_aot_timeout_stops_real_compiler_children(tmp_path: Path, phase: str) -> None:
+@pytest.mark.parametrize("startup_delay", (0.0, 0.5))
+def test_aot_timeout_stops_real_compiler_children(
+    tmp_path: Path, phase: str, startup_delay: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
     shell = shutil.which("sh")
     if shell is None:
         pytest.skip("requires a POSIX shell")
     started, escaped = tmp_path / "started", tmp_path / "escaped"
+    release = tmp_path / "release"
     compiler = tmp_path / "compiler"
     compiler.write_text(
         f"#!{shell}\n"
         f'if [ "$1" = "--version" ] && [ "{phase}" = "compilation" ]; then\n'
         '  echo "fake cc"; exit 0\n'
         "fi\n"
-        f"(: > {shlex.quote(str(started))}; sleep 0.8; "
+        f"(sleep {startup_delay}; : > {shlex.quote(str(started))}; "
+        f"while [ ! -f {shlex.quote(str(release))} ]; do sleep 0.01; done; "
+        "sleep 0.8; "
         f": > {shlex.quote(str(escaped))}) &\n"
         "exec sleep 30\n"
     )
     compiler.chmod(0o700)
+    # This is a process-tree cancellation test, not a wall-clock budget test.
+    # Synchronize fault injection before real communicate() starts its timeout;
+    # a busy CI host may otherwise exhaust 0.3 s before the child is scheduled.
+    # Forward the production timeout unchanged and exercise real group cleanup.
+    start_process = compiler_process.start_owned_process
+
+    def start_ready_process(command: list[str], **options: Any) -> Popen[str]:
+        process = start_process(command, **options)
+        if phase == "compilation" and command[-1] == "--version":
+            return process
+        communicate = process.communicate
+        first = True
+
+        def communicate_ready(*args: Any, **kwargs: Any) -> tuple[str, str]:
+            nonlocal first
+            if first:
+                first = False
+                deadline = time.monotonic() + 10.0
+                while not started.exists() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                if not started.exists():
+                    compiler_process.kill_compiler_group(process)
+                    communicate()
+                    pytest.fail("fault fixture child did not become ready within 10 s")
+                release.touch()
+            return communicate(*args, **kwargs)
+
+        monkeypatch.setattr(process, "communicate", communicate_ready)
+        return process
+
+    monkeypatch.setattr(compiler_process, "start_owned_process", start_ready_process)
     item = bulk_aot.SourceVariant(
         name="TIMEOUT_PROBE",
         family="lda",

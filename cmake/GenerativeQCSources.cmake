@@ -411,11 +411,13 @@ function(generativeqc_add_cpu_component_object_targets target)
       src/cc/triples_fock_response.cpp
       src/cc/rccsdt_force.cpp
       src/cc/uccsd_solver.cpp
+      src/cc/uccsd_force.cpp
       src/posthf/mp2_derivative_common.cpp
       src/posthf/mp2_derivative_cpu.cpp
       src/posthf/mp2_energy.cpp
       src/posthf/ump2_energy.cpp
       src/posthf/ump2_force.cpp
+      src/posthf/df_interaction_source.cpp
       src/posthf/mp2_force.cpp
       src/posthf/mp2_gradient.cpp
       src/posthf/native_provider.cpp
@@ -424,6 +426,7 @@ function(generativeqc_add_cpu_component_object_targets target)
     CODEGEN
       generativeqc_rccsd_cpu_codegen
       generativeqc_uccsd_cpu_codegen
+      generativeqc_df_ao_codegen
       # df_plan.hpp -> hoisted -> core -> native generated headers.
       generativeqc_df_ccsd_native_codegen
       generativeqc_df_ccsd_core_codegen

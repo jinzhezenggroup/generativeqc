@@ -36,6 +36,33 @@ def install_correlation_policy_stub(library: Any) -> None:
     library.generativeqc_correlation_convergence_query_v1 = query
 
 
+def install_scf_defaults_stub(
+    library: Any,
+    controls: tuple[float, float, float] = (1e-10, 1e-8, 1e-12),
+    *,
+    qualified: bool = False,
+) -> None:
+    """Inject a fixed metadata receipt, not a second model/grid selection policy.
+
+    Facade tests choose their answer explicitly. Real native policy admission
+    and numerical endpoints are exercised by the compiled companion tests.
+    """
+    from generativeqc._scf_defaults_native import _Controls
+
+    def query(context: Any, options: Any, identity: Any, size: int, output: Any) -> int:
+        record = ctypes.cast(output, ctypes.POINTER(_Controls)).contents
+        record.policy_version = 1
+        record.qualified_defaults = int(qualified)
+        (
+            record.energy_tolerance,
+            record.density_tolerance,
+            record.screening_tolerance,
+        ) = controls
+        return _native.STATUS_SUCCESS
+
+    library.generativeqc_scf_defaults_query_v1 = query
+
+
 def install_registry_stub(
     library: Any, properties: Any, *, supports_batch: bool = True
 ) -> None:
@@ -73,3 +100,5 @@ def install_registry_stub(
     library.generativeqc_method_get_capabilities = query
     if not hasattr(library, "generativeqc_correlation_convergence_query_v1"):
         install_correlation_policy_stub(library)
+    if not hasattr(library, "generativeqc_scf_defaults_query_v1"):
+        install_scf_defaults_stub(library)

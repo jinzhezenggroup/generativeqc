@@ -76,6 +76,18 @@ void test() {
   require(!recycle.capture(x, bad) && !recycle.populated(), "nonfinite exact image published");
   bad.fill(std::numeric_limits<double>::max());
   require(!recycle.capture(x, bad) && !recycle.populated(), "overflowing image norm published");
+  system.atoms = {{11, {0., 0., 0.}, 10}};
+  system.charge = -1;
+  system.ecp_terms = {{0, -1, 2, .5, .2}};
+  const auto ecp_bytes =
+      hf::RHFFrameIdentity::required_storage_bytes(system, ref) + 9 * sizeof(double);
+  require(recycle.prepare(system, ref, 0, true, "hash", ecp_bytes), "ECP recycle refused");
+  require(recycle.capture(x, ax), "ECP solved direction refused");
+  auto changed_ecp = system;
+  changed_ecp.ecp_terms[0].coefficient = std::nextafter(.2, 1.);
+  require(!recycle.matches(changed_ecp, ref, 0, true, "hash"), "stale ECP image admitted");
+  require(recycle.prepare(changed_ecp, ref, 0, true, "hash", ecp_bytes) && !recycle.populated(),
+          "ECP parameter change retained an old solved direction");
 }
 }  // namespace
 int main() {

@@ -617,19 +617,13 @@ generativeqc_status validate_mp2_system(generativeqc_method, const core::System&
     detail = "canonical MP2 requires an explicit Gaussian orbital basis";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  // The canonical reference/provider gates cover all-electron systems only.
-  // Enabling ECP HF must not silently extend that correlated-method domain.
-  if (!system.ecp_terms.empty()) {
-    detail = "canonical MP2 with ECP is not implemented";
-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  }
   if (std::any_of(system.shells.begin(), system.shells.end(),
                   [](const auto& shell) { return shell.angular_momentum > 3; })) {
     detail = "canonical MP2 reference/provider validation supports shells through f";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2) {
-    detail = "MP2 supports real closed-shell all-electron RHF only";
+    detail = "MP2 supports real closed-shell RHF only";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (static_cast<std::size_t>(system.electron_count / 2) >= molecule::ao_count(system)) {

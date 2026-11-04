@@ -128,11 +128,17 @@ ConventionalForceResult conventional_force_impl(
           return peak - candidate.provider_bytes();
         });
   };
+  // ECP host/device quadrature coexists with the generic derivative staging.
+  // Keep it reserved in every source-tile candidate and the final force plan.
+  const auto ecp_staging_bytes = cuda ? integrals::ecp_workspace_capacity(source.orbital()) : 0;
+  const auto retained_for = [&](const posthf::NativeBlockProvider& candidate) {
+    return posthf::checked_add(candidate.provider_bytes(), ecp_staging_bytes);
+  };
   auto streamed_workspace = workspace_for(*provider);
   const auto legacy_budget = detail::remaining_force_budget(budget_bytes, streamed_workspace);
   const auto legacy_resources = conventional_gradient_plan(
-      reference.nbf, reference.nocc, provider->provider_bytes(), plan, maximum_shell,
-      coordinate_count, posthf::checked_mul(coordinate_count, sizeof(double)), legacy_budget);
+      reference.nbf, reference.nocc, retained_for(*provider), plan, maximum_shell, coordinate_count,
+      posthf::checked_mul(coordinate_count, sizeof(double)), legacy_budget);
   const auto* tile_override = std::getenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
   const bool readable_source =
       cuda ? source.supports_device_read(integrals::ElectronInteractionOperator::eri, device_id)
@@ -152,7 +158,7 @@ ConventionalForceResult conventional_force_impl(
         const auto workspace = workspace_for(candidate);
         const auto remaining = detail::remaining_force_budget(budget_bytes, workspace);
         const auto resources = conventional_gradient_plan(
-            reference.nbf, reference.nocc, candidate.provider_bytes(), plan, maximum_shell,
+            reference.nbf, reference.nocc, retained_for(candidate), plan, maximum_shell,
             coordinate_count, posthf::checked_mul(coordinate_count, sizeof(double)), remaining,
             derivative_reserve);
         candidates.push_back({axis, 1, posthf::checked_add(resources.peak_bytes, workspace)});
@@ -172,7 +178,7 @@ ConventionalForceResult conventional_force_impl(
   }
   runtime::df_progress::Scope::number("mp2_force_source_axis_tile", provider->tile_shape()[0]);
   if (!blocks.empty()) provider->bind_borrowed_blocks(blocks);
-  const auto provider_bytes = provider->provider_bytes();
+  const auto provider_bytes = retained_for(*provider);
   const auto endpoint_budget = detail::remaining_force_budget(budget_bytes, streamed_workspace);
   const auto base_resources = conventional_gradient_plan(
       reference.nbf, reference.nocc, provider_bytes, plan, maximum_shell, coordinate_count,
@@ -268,7 +274,9 @@ ConventionalForceResult reference_force(const hf::PhysicalReference& reference,
         &reference.orbital_energies, &reference.density, &reference.weighted_density})
     reference_bytes = posthf::checked_add(reference_bytes,
                                           posthf::checked_mul(values->capacity(), sizeof(double)));
-  const auto retained = posthf::checked_add(reference_bytes, source.retained_numeric_bytes());
+  const auto ecp_staging_bytes = cuda ? integrals::ecp_workspace_capacity(source.orbital()) : 0;
+  const auto retained = posthf::checked_add(
+      posthf::checked_add(reference_bytes, source.retained_numeric_bytes()), ecp_staging_bytes);
   const auto resources = conventional_gradient_plan(
       orbitals, occupied, retained, conservative_response, maximum_shell, coordinates,
       posthf::checked_mul(coordinates, sizeof(double)), budget_bytes);

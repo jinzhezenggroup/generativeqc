@@ -1,0 +1,44 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "5efc730f4c6d809cc4a31d23db4cdb5f87dae6e3",
+  "file_count": 5,
+  "total_bytes": 1344476,
+  "purpose": "Exact older CD2B final720EF/180process/20win and original zero-EF failures remain recoverable from already merged Git. New DB36 profile/baseline data fit existing caps; no external backup, final-rule change or transferred-source claim.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-completed.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "9954b73488a24c9b8f5c080066602e9062889aff5771c774e66bd7d158c198a5",
+      "git_blob_sha1": "3cf45030289bcf9be7454c5f85aad40ad1f07454",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-completed.tar.xz.part01",
+      "bytes": 453404,
+      "sha256": "f920881d29a149d3ef460503b53bb014b8881b0c1ea1b9685ed0ef4e959c2ecf",
+      "git_blob_sha1": "e804a54f3e619dfbcf886175fce4935561de2bd9",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-download-manifest.json.xz",
+      "bytes": 35932,
+      "sha256": "8f6cfed046a0bb5d966601eac7a880ca381dc18cd890be64d59189d58aae6aa9",
+      "git_blob_sha1": "ec148f5b6804853a7d65d848836b2935de5146f8",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-final-20261103/precompute-failures-v1.tar.xz",
+      "bytes": 26560,
+      "sha256": "a95df8789c09adf7ad0f0f3aeffd6feafc1f6349f771b0a5311d7cbef64e60b8",
+      "git_blob_sha1": "457d4e0b17152825d7ec1db438b30b8500ec1c4d",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-final-20261103/actual-result-audit.json.xz",
+      "bytes": 42148,
+      "sha256": "ba70ef611e6ff4cbe49671005011e6306627cbc07c4995eeddb1d266ccf216ed",
+      "git_blob_sha1": "e0cb7cd6218ce7c70e6ca7fa393b1571687941b3",
+      "git_mode": "100644"
+    }
+  ]
+}

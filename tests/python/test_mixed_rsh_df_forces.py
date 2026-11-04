@@ -443,11 +443,16 @@ def test_cpu_mixed_dense_limit_rejects_before_snapshot_export(
         (1, "spherical", "sto-3g"),
         (0, "spherical", "sto-3g-water"),
         (0, "spherical", "def2-svp"),
+        # Keep the spherical def2-TZVP full-component oracle routine.
+        # The Cartesian and higher-spin def2-TZVP replays cost 234/203 s
+        # each in PR #2967 and repeat the full 3N displaced SCF matrix.
+        # Cartesian and open-shell def2-SVP remain routine; run the full
+        # high-basis combinations scheduled/manual instead of dropping them.
         (0, "spherical", "def2-tzvp"),
         (0, "cartesian", "def2-svp"),
-        (0, "cartesian", "def2-tzvp"),
+        pytest.param(0, "cartesian", "def2-tzvp", marks=pytest.mark.ci_nightly),
         (2, "spherical", "def2-svp"),
-        (2, "spherical", "def2-tzvp"),
+        pytest.param(2, "spherical", "def2-tzvp", marks=pytest.mark.ci_nightly),
     ),
 )
 @pytest.mark.parametrize(

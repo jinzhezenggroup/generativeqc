@@ -1,19 +1,24 @@
 # Canonical RHF-MP2 energy and analytic forces
 
-GenerativeQC exposes real FP64, closed-shell, all-electron conventional canonical RHF-MP2
+GenerativeQC exposes real FP64, closed-shell conventional canonical RHF-MP2
 on CPU and CUDA, plus RI-MP2 on CPU. Conventional four-centre execution provides
 total energies and analytic nuclear forces on both backends. CPU RI-MP2 analytic
 forces use the same fitted RHF/correlation Hamiltonian, fixed-rank metric branch,
 native response solver, and bounded generated DF derivative consumers. CUDA
 RI-MP2 currently provides energy only; a CUDA force request fails explicitly
 instead of falling back to the host. The separate `ump2` method provides
-conventional CPU FP64 energy and analytic forces on validated UHF references, using the same
+CPU/CUDA FP64 energy and analytic forces on validated UHF references, using the same
 compiler-owned spin-labelled equation inventory as the bounded UMP2 core.
 Internal [fixed-orbital UMP2 cotangents](ump2_adjoints.md) provide unrelaxed MO
 integral/orbital-energy weights. The native complete UMP2 force path adds the
 shared spin-response, relaxed overlap and shell-local derivative consumers; see
 [UMP2 derivatives](ump2_adjoints.md#complete-native-nuclear-forces).
-Neither method includes ROHF-MP2, frozen core, ECP, complex orbitals, screened or approximate
+All-electron and supported scalar-ECP references share the checked one-electron
+operator and physical-center derivatives. ECP cores set valence occupations and
+ionic nuclear charges; all remaining electrons are correlated. Their workspace
+is reserved before reference preparation. See the [ECP contract](../user/ecp.md)
+and [unrestricted fitted policies](../user/unrestricted_cc.md).
+Neither method includes ROHF-MP2, frozen core, complex orbitals, screened or undeclared approximate
 correlation, Hessians, or mixed precision. No performance replacement is implied
 by the numerical qualification.
 
@@ -153,9 +158,9 @@ profiling flags, all RI batch requests, invalid coordinates, and unknown flags.
 
 ## Fixed mathematical contract
 
-References are real FP64, canonical closed-shell RHF with every electron
+References are real FP64, canonical closed-shell RHF with every remaining electron
 correlated, occupied spatial columns first, 2/0 occupation, and a nonempty
-virtual space. The existing all-electron Cartesian/real-spherical basis
+virtual space. The existing all-electron/scalar-ECP Cartesian/real-spherical basis
 support through f is used. Input geometries are Bohr; energies and orbital
 energies are Hartree, gradients and forces are Hartree/Bohr, and
 `force = -gradient`. Conventional reference and correlation use unscreened

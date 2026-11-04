@@ -8,7 +8,10 @@
 #include <vector>
 
 #include "api/handles.hpp"
+#include "cc/uccsd_solver.hpp"
+#include "generativeqc/generativeqc.hpp"
 #include "methods/ump2_method.hpp"
+#include "methods/unrestricted_df.hpp"
 #include "methods/unrestricted_response.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
@@ -65,7 +68,7 @@ generativeqc::core::System h14() {
 
 void energy_only_reference_admission() {
   const auto system = h14();
-  const auto spec = generativeqc::methods::detail::ump2_reference_fock_spec();
+  const auto spec = generativeqc::methods::detail::UnrestrictedFitting{}.reference_spec(false);
   const auto strategy =
       generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu, 0);
   const generativeqc::scf::PreparedFockPlan plan(system, nullptr, strategy);
@@ -77,6 +80,63 @@ void energy_only_reference_admission() {
   std::cout << "14-H energy-only Fock capacity " << plan.cpu_observation_capacity()
             << " <= admitted " << budget << '\n';
   require(spec.derivative_order == 0, "UMP2 energy-only reference retained derivative order");
+  for (const bool full_reference : {false, true}) {
+    generativeqc::methods::detail::UnrestrictedFitting fitting;
+    fitting.full_reference = full_reference;
+    require(fitting.reference_spec(false).derivative_order == 0,
+            "energy-only fitted policy retained derivative resources");
+    require(fitting.reference_spec(true).derivative_order == 1,
+            "force fitted policy lost derivative resources");
+  }
+}
+
+void one_electron_response_admission() {
+  auto system = h2();
+  system.shells.resize(1024, system.shells.front());
+  const auto basis_count = generativeqc::molecule::ao_count(system);
+  const auto two_weights = 2 * basis_count * basis_count * sizeof(double);
+  require(two_weights > generativeqc::posthf::source_scratch_bytes,
+          "large response fixture does not exceed the old fixed scratch allowance");
+  require(generativeqc::posthf::one_electron_response_capacity(system) > two_weights,
+          "one-electron response admission omits the two device weight matrices");
+  auto ecp_system = h2();
+  const auto ordinary = generativeqc::posthf::one_electron_response_capacity(ecp_system);
+  ecp_system.ecp_terms.reserve(32);
+  ecp_system.ecp_terms.push_back({0, -1, 2, 0.5, 0.2});
+  const auto ecp_workspace = generativeqc::integrals::ecp_workspace_capacity(ecp_system);
+  const auto metadata = 2 * sizeof(generativeqc::core::EcpTerm) * ecp_system.ecp_terms.capacity();
+  require(ecp_workspace > 0 && generativeqc::posthf::one_electron_response_capacity(ecp_system) ==
+                                   ordinary + metadata + ecp_workspace,
+          "one-electron response admission omits ECP quadrature or retained metadata");
+}
+
+// Query a synthetic topology only: no AO tensor or physical endpoint is evaluated.
+void full_fitted_reference_admission() {
+  auto system = h2();
+  system.shells.resize(1024, system.shells.front());
+  generativeqc::methods::detail::UnrestrictedFitting full;
+  full.full_reference = true;
+  full.auxiliary = h2();
+  full.budget = 4ULL << 30;
+  const auto fitted_capacity = full.reference_capacity(system, 8);
+  const auto conventional_capacity =
+      generativeqc::methods::detail::UnrestrictedFitting{}.reference_capacity(system, 8);
+  require(fitted_capacity < full.budget,
+          "full DF reference reserves a nonexistent dense four-index tensor");
+  require(conventional_capacity > full.budget,
+          "conventional reference lost its dense ERI reservation");
+  auto correlation_only = full;
+  correlation_only.full_reference = false;
+  require(correlation_only.reference_capacity(system, 8) == conventional_capacity,
+          "correlation-only fitting changed conventional reference admission");
+  full.budget = 1024;
+  bool rejected = false;
+  try {
+    full.reference_capacity(system, 8);
+  } catch (const std::length_error&) {
+    rejected = true;
+  }
+  require(rejected, "full DF reference stopped enforcing fitted storage admission");
 }
 
 class CountingSource final : public generativeqc::integrals::ElectronInteractionSource {
@@ -100,6 +160,64 @@ class CountingSource final : public generativeqc::integrals::ElectronInteraction
  private:
   generativeqc::posthf::RawSource raw_;
 };
+
+void cuda_channel_admission() {
+  auto system = h2();
+  system.shells.resize(64, system.shells.front());
+  generativeqc::hf::UnrestrictedPhysicalReference reference;
+  reference.nbf = 64;
+  reference.overlap.resize(64 * 64);
+  reference.hcore.resize(64 * 64);
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    reference.coefficients[spin].resize(64 * 64);
+    reference.fock[spin].resize(64 * 64);
+    reference.density[spin].resize(64 * 64);
+    reference.orbital_energies[spin].resize(64);
+  }
+  reference.source_identity.emplace(system);
+  reference.source_charge = system.charge;
+  reference.source_electrons = system.electron_count;
+  reference.source_multiplicity = system.multiplicity;
+  CountingSource source(system);
+  for (const auto occupations :
+       std::array<std::array<std::size_t, 2>, 3>{{{1, 1}, {1, 0}, {2, 1}}}) {
+    reference.nocc = occupations;
+    generativeqc::posthf::NativeBlockProvider provider(source, reference, 1ULL << 30, 8,
+                                                       generativeqc::posthf::AOTileDomain::Basis);
+    auto expected = provider.batch_bytes({1, 1, 1, 1}, 1, true);
+    for (const auto spins : std::array<std::array<unsigned, 2>, 3>{{{0, 0}, {1, 1}, {0, 1}}}) {
+      const auto occupied_left = occupations[spins[0]], occupied_right = occupations[spins[1]];
+      if (!occupied_left || !occupied_right) continue;
+      const std::array<std::size_t, 4> shape{occupied_left, 64 - occupied_left, occupied_right,
+                                             64 - occupied_right};
+      const auto count = shape[0] * shape[1] * shape[2] * shape[3];
+      const auto feeds = (spins[0] == spins[1] ? 2 : 1) * count + 2 * 64 + 1;
+      expected = std::max(expected, provider.batch_bytes(shape, 1, true) + sizeof(double) * feeds);
+    }
+    const auto actual =
+        generativeqc::mp2::unrestricted_cuda_energy_host_capacity(reference, provider);
+    require(actual == expected, "CUDA UMP2 admission does not match active channel payloads");
+    bool dense_rejected = false;
+    try {
+      (void)provider.batch_bytes({64, 64, 64, 64}, 1, true);
+    } catch (const std::length_error&) {
+      dense_rejected = true;
+    }
+    require(dense_rejected,
+            "synthetic budget does not distinguish active channels from a dense molecular block");
+  }
+  for (const auto occupations : std::array<std::array<std::size_t, 2>, 2>{{{32, 32}, {31, 33}}}) {
+    reference.nocc = occupations;
+    generativeqc::posthf::NativeBlockProvider provider(source, reference, 1ULL << 30, 8,
+                                                       generativeqc::posthf::AOTileDomain::Basis);
+    const auto maximum = std::max(occupations[0], occupations[1]);
+    const auto expected = provider.batch_bytes({maximum, maximum, maximum, maximum}, 1, true);
+    require(generativeqc::cc::unrestricted_cuda_solver_provider_capacity(reference, provider) ==
+                expected,
+            "CUDA UCCSD admission charges an unexecuted full molecular MO block");
+  }
+  require(source.reads == 0, "shape-only CUDA admission read AO integrals");
+}
 
 void native_equations() {
   constexpr double g = 0.7, x = 0.2, ei = -1.1, ej = -0.8, ea = 0.3, eb = 0.5;
@@ -167,8 +285,8 @@ void degenerate_occupied_gauge() {
   std::string detail;
   require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
           "degenerate H6 setup failed");
-  const auto strategy = scf::resolve_fock_build(methods::detail::ump2_reference_fock_spec(),
-                                                scf::FockBackend::Cpu, 0);
+  const auto strategy = scf::resolve_fock_build(
+      methods::detail::UnrestrictedFitting{}.reference_spec(false), scf::FockBackend::Cpu, 0);
   scf::PreparedFockPlan plan(system, nullptr, strategy);
   scf::ScfOptions options;
   options.export_physical_reference = true;
@@ -291,7 +409,7 @@ void force_contract() {
       generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
       "open-shell force fixture setup failed");
   const auto strategy = generativeqc::scf::resolve_fock_build(
-      generativeqc::methods::detail::ump2_reference_fock_spec(),
+      generativeqc::methods::detail::UnrestrictedFitting{}.reference_spec(false),
       generativeqc::scf::FockBackend::Cpu, 0);
   generativeqc::scf::PreparedFockPlan plan(system, nullptr, strategy);
   generativeqc::scf::ScfOptions options;
@@ -305,6 +423,21 @@ void force_contract() {
   auto solved = generativeqc::scf::run_prepared_fock_strategy(plan, options);
   require(solved.converged && solved.unrestricted_reference, "force UHF did not converge");
   auto ref = *solved.unrestricted_reference;
+  const auto hf_force =
+      generativeqc::methods::detail::unrestricted_reference_force_cpu(ref, plan, 256ULL << 20);
+  require(generativeqc::methods::detail::unrestricted_reference_force_cpu(ref, plan, 256ULL << 20,
+                                                                          32ULL << 20) == hf_force,
+          "reserving a live fitted source changes the UHF component force");
+  for (const auto retained : {256ULL << 20, 257ULL << 20}) {
+    bool refused = false;
+    try {
+      (void)generativeqc::methods::detail::unrestricted_reference_force_cpu(ref, plan, 256ULL << 20,
+                                                                            retained);
+    } catch (const std::length_error&) {
+      refused = true;
+    }
+    require(refused, "UHF component ignores retained fitted source or underflows its budget");
+  }
   CountingSource source(system);
   const auto evaluate = [&](const auto& state, std::size_t budget) {
     auto problem = generativeqc::methods::detail::unrestricted_response_problem(state, plan);
@@ -378,7 +511,7 @@ void force_contract() {
 
 void unsupported_requests() {
   generativeqc::core::ContextState context;
-  context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
+  context.requested_backend = GENERATIVEQC_BACKEND_HYBRID_CUDA;
   generativeqc::methods::Capabilities capabilities;
   capabilities.method = GENERATIVEQC_METHOD_UMP2;
   auto descriptor = ump2_descriptor();
@@ -389,7 +522,26 @@ void unsupported_requests() {
   } catch (const generativeqc::methods::MethodError& error) {
     rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
-  require(rejected, "native UMP2 silently admitted CUDA backend");
+  require(rejected, "native UMP2 silently admitted an unsupported hybrid backend");
+
+  // CUDA is an admitted request, not a promise of a device in this host test.
+  context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
+  context.device_id = 0;
+  auto cuda_calculation = generativeqc::methods::detail::prepare_ump2_calculation(
+      capabilities, context, h2(), descriptor);
+  require(static_cast<bool>(cuda_calculation), "native UMP2 rejected CUDA preparation");
+#if !GENERATIVEQC_HAS_CUDA
+  for (bool forces : {false, true}) {
+    rejected = false;
+    try {
+      (void)cuda_calculation->execute(forces);
+    } catch (const generativeqc::Error& error) {
+      rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    require(rejected && !cuda_calculation->correlation_diagnostic(),
+            "CPU-only UMP2 executed CUDA or published a failed diagnostic");
+  }
+#endif
 
   context.requested_backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
   descriptor.energy_tolerance = std::numeric_limits<double>::quiet_NaN();
@@ -420,10 +572,10 @@ void unsupported_requests() {
   try {
     (void)generativeqc::methods::detail::prepare_ump2_calculation(capabilities, context, h2(),
                                                                   descriptor);
-  } catch (const generativeqc::methods::MethodError& error) {
-    rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  } catch (const std::invalid_argument&) {
+    rejected = true;
   }
-  require(rejected, "native UMP2 silently ignored a DF memory request");
+  require(rejected, "native UMP2 silently ignored a DF budget without density fitting");
 
   descriptor = ump2_descriptor();
   generativeqc_system auxiliary{};
@@ -584,6 +736,9 @@ int main() {
     degenerate_occupied_gauge();
     sparse_coordinate_admission();
     energy_only_reference_admission();
+    one_electron_response_admission();
+    full_fitted_reference_admission();
+    cuda_channel_admission();
     unsupported_requests();
     source_and_slots();
     force_contract();
