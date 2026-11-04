@@ -86,6 +86,14 @@ Triangular ownership uses `W[ij]+W[ji]` off the diagonal and `W[ii]` once on the
 diagonal. Consequently nonsymmetric and non-HF weights have the same full-dot
 semantics. There is no implicit factor of two in the generic consumer.
 
+For scalar-ECP systems, the generated attraction uses ionic charges. The generic
+host bridge also contracts `W_V` with the checked local/nonlocal ECP residual
+derivatives on the same device stream. The existing ECP force sink receives
+scale `-1` to return positive nuclear gradients. Empty or zero potential weights
+skip that quadrature; overlap-only Pulay never adds an ECP source. The stationary
+paired bridge retains its own single residual contribution. Nuclear repulsion
+remains separate, and correlation response must not add the ECP again.
+
 The stationary HF adapter supplies density for T/V and negative energy-weighted
 density for S. RHF matrices already contain their double-occupation factors.
 UHF sums alpha and beta matrices before calling the same consumer. API forces

@@ -9,6 +9,7 @@
 #include "dft/ao_grid.hpp"
 #include "generated_native_range_force.hpp"
 #include "generated_stationary_integral_weights.hpp"
+#include "integrals/ecp.hpp"
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
@@ -104,8 +105,13 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
       runtime::size_add(runtime::size_add(runtime::size_mul(matrix, unrestricted ? 7 : 3),
                                           runtime::size_mul(ncoord, 6)),
                         runtime::size_mul(runtime::size_add(largest_quartet, 12), hybrid ? 2 : 1));
-  const auto capacity = runtime::size_add(runtime::size_mul(elements, sizeof(double)),
-                                          runtime::vector_bytes(offsets));
+  // The checked ECP derivative owns coarse/fine grids inside the hcore call.
+  // Admit their peak together with retained weights before that allocation.
+  const auto ecp_workspace = integrals::ecp_workspace_capacity(system);
+  const auto capacity =
+      runtime::size_add(runtime::size_add(runtime::size_mul(elements, sizeof(double)),
+                                          runtime::vector_bytes(offsets)),
+                        ecp_workspace);
   if (capacity > maximum_numeric_bytes) throw std::bad_alloc();
   CpuStationaryIntegralGradient result;
   result.numeric_capacity = capacity;
@@ -153,8 +159,9 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
   const auto retained_capacity = runtime::vector_capacities(
       offsets, result.sources, hcore_weights, pulay_weights, zeros, hcore, pulay, coulomb_weights,
       exchange_weights, flattened_density, flattened_weighted_density);
-  result.numeric_capacity =
-      runtime::size_add(retained_capacity, runtime::size_mul(hybrid ? 24 : 12, sizeof(double)));
+  result.numeric_capacity = std::max(
+      result.numeric_capacity,
+      runtime::size_add(retained_capacity, runtime::size_mul(hybrid ? 24 : 12, sizeof(double))));
   if (result.numeric_capacity > maximum_numeric_bytes) throw std::bad_alloc();
   for (std::size_t first = 0; first < system.shells.size(); ++first)
     for (std::size_t second = 0; second < system.shells.size(); ++second)

@@ -228,11 +228,19 @@ def test_ecp_cannot_be_labeled_as_an_all_electron_accuracy_model() -> None:
         Calculator(basis=basis).resolved_model(atoms)
 
 
-def test_ecp_does_not_enable_unvalidated_canonical_mp2() -> None:
-    """The native method validator must preserve MP2's all-electron domain."""
-    atoms, basis, _ = fixture()
-    with pytest.raises(NotImplementedError, match="canonical MP2 with ECP"):
-        Calculator(method="mp2", basis=basis).singlepoint(atoms)
+def test_ecp_canonical_mp2_matches_independent_valence_reference() -> None:
+    """MP2 correlates the ECP valence reference, never the removed core."""
+    from pyscf import mp, scf
+
+    atoms, basis, molecule = fixture()
+    reference = scf.RHF(molecule).run(conv_tol=1e-13)
+    expected = mp.MP2(reference).run().e_tot
+    calculator = Calculator(method="mp2", basis=basis, initial_guess=None)
+    try:
+        result = calculator.singlepoint(atoms, properties=("energy",))
+    finally:
+        calculator.clear_cache()
+    assert result.energy == pytest.approx(expected, abs=2e-8)
 
 
 def test_parameters_invalidate_identity_and_malformed_channels_fail() -> None:

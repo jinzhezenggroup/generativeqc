@@ -1,0 +1,262 @@
+{
+  "schema": "generativeqc.python-native-runtime-delivery.v1",
+  "source_sha": "9cfb77727661cc64e47938d9d0ba65a157427439",
+  "audited_on": "2026-11-04",
+  "baseline": "manifests/maintenance/python_native_runtime_ownership.json",
+  "coverage": "source-delivery-not-qualification",
+  "interpretation": "A source-reviewed delivery/retirement snapshot for all 20 baseline domains, not a capability registry, executed-test receipt, numerical qualification, performance result or assertion about a newer HEAD. Each delivered scope is conditional on the selected installed build and native prepared context. Listed tests are evidence locations, not claims that they ran in this audit. Original baseline IDs remain stable even when their historical names describe Python owners that have since migrated. Capability admission and independent source-matched qualification remain separate authorities.",
+  "required_slices": ["R0", "R1", "R2", "R3", "R4", "R5", "R6"],
+  "rows": [
+    {
+      "id": "hf-energy-force",
+      "state": "native-dispatch",
+      "slices": ["R2", "R4", "R6"],
+      "python_roles": ["wrapper"],
+      "delivered_scope": [
+        "Calculator and PreparedBatch marshal admitted RHF/UHF energy/force execution to the shared native method and batch owners; the native CLI uses the same method registry."
+      ],
+      "retired_python_runtime": ["SCF iterations and analytic HF force assembly in this prepared energy/force dispatch."],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": ["Cross-cutting precision/progressive scheduling and whole-resource authority are tracked in their own rows; this dispatch does not complete R2/R4."],
+      "source_anchors": ["python/generativeqc/calculator.py", "python/generativeqc/batch.py", "src/methods/hf_method.cpp", "src/api/c_api_batch.cpp", "src/cli/main.cpp"],
+      "tests": ["tests/native/test_rhf.cpp", "tests/native/test_uhf_final_state.cpp", "tests/python/test_calculator.py"]
+    },
+    {
+      "id": "ks-energy",
+      "state": "native-dispatch",
+      "slices": ["R1", "R5", "R6"],
+      "python_roles": ["wrapper"],
+      "delivered_scope": [
+        "Named KS and built automatic Libxc energy programs execute through the prepared native DFT method. The method catalog and selected native build, not this row, determine admitted model/backend domains."
+      ],
+      "retired_python_runtime": ["Electronic SCF/XC energy iteration for admitted prepared native KS programs."],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": ["Energy registration is not molecular-force or second-derivative qualification; construction/model-resolution work is tracked separately."],
+      "source_anchors": ["python/generativeqc/calculator.py", "python/generativeqc/batch.py", "src/methods/dft_method.cpp", "src/methods/named_ks_catalog.cpp"],
+      "tests": ["tests/python/test_native_ks_catalog.py", "tests/python/test_libxc_automatic_cpu_ks.py", "tests/python/test_libxc_automatic_cuda_ks.py"]
+    },
+    {
+      "id": "ks-native-df-force",
+      "state": "native-dispatch",
+      "slices": ["R1", "R2", "R6"],
+      "python_roles": ["wrapper"],
+      "delivered_scope": [
+        "The historical CPU-DF PBE/PBE0 force row is a subset of the current per-prepared-item native force consumer. Python queries that item's supported properties instead of using a method-name whitelist; selected execution failures do not invoke a second scientific owner."
+      ],
+      "retired_python_runtime": ["Stationary force assembly for contexts positively admitted by the native prepared force query."],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": ["Do not extrapolate admitted DF force contexts to arbitrary custom models, mixed precision or every backend; non-admitted stationary consumers remain in the CPU/CUDA force rows."],
+      "source_anchors": ["python/generativeqc/batch.py", "src/api/c_api_batch.cpp", "src/methods/dft_method.cpp", "src/dft/ks_final_state.cpp"],
+      "tests": ["tests/python/test_batch_properties.py", "tests/native/test_cli_dft_df.py"]
+    },
+    {
+      "id": "ks-python-cpu-force",
+      "state": "partial-cutover",
+      "slices": ["R1", "R2", "R6"],
+      "python_roles": ["wrapper", "scientific-runtime"],
+      "delivered_scope": [
+        "PreparedBatch routes CPU items with native force capability to native publication, including admitted Direct and DF contexts. The historical Python-owner row no longer describes every public CPU DFT force."
+      ],
+      "retired_python_runtime": ["Python snapshot/gradient orchestration for CPU items positively admitted by the prepared native force query."],
+      "remaining_python_runtime": ["Non-admitted public CPU force contexts still prepare stationary sources and assemble gradients through _stationary_cpu; native source actions alone do not retire that controller."],
+      "remaining_acceptance": ["Migrate remaining model/spin/ECP/approximation domains only with native prepared admission, independent full-gradient and matched complete-endpoint resource/performance evidence."],
+      "source_anchors": ["python/generativeqc/batch.py", "python/generativeqc/_stationary_cpu.py", "src/methods/dft_method.cpp", "src/api/c_api_ecp.cpp"],
+      "tests": ["tests/python/test_batch_properties.py", "tests/python/test_cpu_semilocal_force_contract.py", "tests/native/test_cli_dft_df.py"]
+    },
+    {
+      "id": "ks-python-cuda-force",
+      "state": "partial-cutover",
+      "slices": ["R1", "R2", "R6"],
+      "python_roles": ["wrapper", "scientific-runtime"],
+      "delivered_scope": [
+        "Named and automatic Libxc CUDA force items with linked AOT/provider closure and positive native prepared admission execute the native stationary force owner. Automatic Libxc CUDA force refusal is explicit before replay and cannot select Python stationary/JIT compatibility.",
+        "Mixed named fleets use selective per-item native force execution when the installed ABI supplies it, rather than demoting qualified neighbors wholesale."
+      ],
+      "retired_python_runtime": ["AO/Becke/XC/task scheduling and complete force assembly for positively admitted native CUDA force items."],
+      "remaining_python_runtime": ["Named non-admitted compatibility contexts still use the Python _stationary_cuda source/grid/AO/force controller; older whole-fleet ABIs retain their separate compatibility behavior."],
+      "remaining_acceptance": ["Compiled Libxc energy registrations are not all molecular-gradient qualifications. Remaining custom, unsupported, mixed-precision and other non-admitted contexts require independent native endpoint evidence; first derivatives do not admit HVP."],
+      "source_anchors": ["python/generativeqc/batch.py", "python/generativeqc/_stationary_cuda.py", "src/methods/dft_method.cpp", "src/dft/native_stationary_runtime.cuh"],
+      "tests": ["tests/python/test_batch_properties.py", "tests/python/test_libxc_native_cuda_forces.py", "tests/python/test_libxc_automatic_forces.py"]
+    },
+    {
+      "id": "posthf-energy-force",
+      "state": "native-dispatch",
+      "slices": ["R2", "R3", "R6"],
+      "python_roles": ["wrapper"],
+      "delivered_scope": ["Registered executable MP2/UMP2 and coupled-cluster domains use native method owners. Energy-only versus analytic-force support remains method/context-specific; the shared registry must not acquire blanket force or Hessian capability."],
+      "retired_python_runtime": ["Production energy/force scientific assembly within admitted native post-HF method endpoints."],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": ["General response migration must preserve nonsymmetric CC Lambda/Z equations, not substitute HF/KS response; resource and contextual property completeness remain separate gates."],
+      "source_anchors": ["python/generativeqc/calculator.py", "src/methods/mp2_method.cpp", "src/methods/ump2_method.cpp", "src/methods/rccsd_method.cpp", "src/methods/df_rccsdt_method.cpp"],
+      "tests": ["tests/python/test_mp2_batch.py", "tests/python/test_df_cc_batched_replay.py", "tests/python/test_ccsd_t_force_publication.py"]
+    },
+    {
+      "id": "gfn2-energy-force",
+      "state": "native-dispatch",
+      "slices": ["R2", "R6"],
+      "python_roles": ["wrapper"],
+      "delivered_scope": ["Admitted GFN2-xTB energy/force endpoints use the native method/runtime and native CPU/CUDA scientific owners; Python presents results."],
+      "retired_python_runtime": ["Scientific energy/force control in the public prepared GFN2 endpoint."],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": ["This row does not promote unsupported backend/property combinations or establish whole-process memory authority."],
+      "source_anchors": ["python/generativeqc/calculator.py", "src/methods/xtb_method.cpp", "src/xtb/native/src/model/gfn2/force.cpp", "src/xtb/native/src/runtime/gfn2_cuda_execution.cu"],
+      "tests": ["tests/python/test_calculator.py", "tests/native/test_cli_runtime.py"]
+    },
+    {
+      "id": "wb97mv-native-cuda-second-order",
+      "state": "native-dispatch",
+      "slices": ["R2", "R3", "R6"],
+      "python_roles": ["wrapper", "compiler-ad"],
+      "delivered_scope": ["The dedicated WB97M-V CUDA Hessian/HVP frontend marshals to a linked native second-order endpoint under native preparation, with detached results. Missing AOT/version/provider closure is a refusal, not a Python/CuPy/JIT fallback; native admission retains the precise supported context."],
+      "retired_python_runtime": ["Python response, AO/snapshot and seven-source numerical control inside this dedicated native endpoint."],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": ["Global ResourceBudget is explicitly not admitted by this endpoint: integral/grid/response/output limits remain explicit. This scoped native implementation is not general KS/UKS multi-RHS or Hessian completeness; current-source independent device qualification remains separate."],
+      "source_anchors": ["python/generativeqc/_native_hessian.py", "python/generativeqc/calculator.py", "src/dft/cuda_ks_wb97mv_hessian.cu", "src/dft/cuda_ks_wb97mv_df_nuclear.cu", "src/dft/cuda_ks_wb97mv_response.cu"],
+      "tests": ["tests/python/test_native_hessian_frontend.py", "tests/python/test_wb97mv_hessian_cli_cuda.py", "tests/python/test_native_wb97mv_stationary.py"]
+    },
+    {
+      "id": "ks-molecular-second-order",
+      "state": "partial-cutover",
+      "slices": ["R2", "R3", "R6"],
+      "python_roles": ["wrapper", "scientific-runtime"],
+      "delivered_scope": ["Native response/source actions and the separately tracked dedicated WB97M-V CUDA endpoint exist. Their presence does not retire the remaining general molecular second-order controller."],
+      "retired_python_runtime": [],
+      "remaining_python_runtime": ["General RKS Hessian/directional preparation, stationary nuclear RHS/response schedules and complete molecular assembly still have Python production controllers."],
+      "remaining_acceptance": ["Complete the remaining native seven-source molecular Hessian/HVP and actual device-resident response domains under #932/#1905/#2224, with independent full-molecule derivatives and failure-atomic bounded lifetimes."],
+      "source_anchors": ["python/generativeqc/rks_hessian.py", "python/generativeqc/rks_hessian_directional.py", "python/generativeqc/stationary_nuclear.py", "src/integrals/hvp_assembly_runtime.cu", "src/response/native_gmres.cpp"],
+      "tests": ["tests/python/test_rks_hessian_production_owner.py", "tests/python/test_stationary_hvp_plan.py", "tests/python/test_hessian_public_rks.py"]
+    },
+    {
+      "id": "shared-response-control",
+      "state": "partial-cutover",
+      "slices": ["R3", "R6"],
+      "python_roles": ["wrapper", "scientific-runtime"],
+      "delivered_scope": ["Admitted host GMRES/recycle/sequential multi-RHS control and bounded resident RKS response use existing native solver owners; Python transports callbacks and diagnostics where admitted."],
+      "retired_python_runtime": ["Krylov/recycle/sequence scheduling for the specifically selected native host solver domains."],
+      "remaining_python_runtime": ["Generic/block/device response scheduling, method-specific RHS/source orchestration and response-XC composition retain Python owners outside those native domains."],
+      "remaining_acceptance": ["General device-resident multi-RHS and UKS coverage, complete RHS/source closure and HF/KS versus CC operator distinctions require independent endpoint evidence; native BLAS actions alone are not a controller cutover."],
+      "source_anchors": ["python/generativeqc/response_solver.py", "python/generativeqc/response_xc.py", "python/generativeqc/_response_native.py", "src/response/native_gmres.cpp", "src/response/resident_gmres.cpp", "src/api/c_api_response.cpp"],
+      "tests": ["tests/python/test_native_response_solver.py", "tests/python/test_native_response_sequence.py", "tests/python/test_native_response_recycle.py", "tests/python/test_response_native_rks.py", "tests/python/test_response_native_uks.py"]
+    },
+    {
+      "id": "resource-planning",
+      "state": "partial-cutover",
+      "slices": ["R2", "R6"],
+      "python_roles": ["wrapper", "scientific-runtime"],
+      "delivered_scope": ["Native capacity/composition, prepared host/device ledgers, requested-byte accounting and scoped D3/D4/electronic planning are authoritative in their admitted domains. Native prepared ownership does not require frontend observation/binding; selected native refusals never retry unbudgeted creation."],
+      "retired_python_runtime": ["Capacity arithmetic, composition and prepared ledger lifetime covered by admitted native resource APIs."],
+      "remaining_python_runtime": ["Python resource modules retain cross-owner plan selection/presentation, compatibility inventories and domain-specific stationary/resource composition outside positively admitted native plans."],
+      "remaining_acceptance": ["Universal native resource-plan authority, full provider/lease lifetime coverage, whole-process RSS and opaque vendor/device allocations remain unproved. Preserve exact/below-capacity refusal, requested versus physical-byte honesty and bounded cleanup."],
+      "source_anchors": ["python/generativeqc/resources_planning.py", "python/generativeqc/resources_native.py", "python/generativeqc/resources_ks.py", "src/runtime/resource_planning.cpp", "src/runtime/resource_ledger_plan.cpp", "src/runtime/prepared_device_resources.hpp", "src/api/c_api_resource_planning.cpp"],
+      "tests": ["tests/python/test_native_resource_planning.py", "tests/python/test_native_prepared_resources.py", "tests/python/test_named_ks_resources.py", "tests/python/test_named_d4_resources.py", "tests/native/test_ks_capacity_cuda.cpp"]
+    },
+    {
+      "id": "automatic-and-progressive-policy",
+      "state": "partial-cutover",
+      "slices": ["R2", "R4", "R6"],
+      "python_roles": ["wrapper", "scientific-runtime"],
+      "delivered_scope": ["Shared native policies own admitted automatic MINAO/Huckel selection, progressive HF decisions, final verification, CPU fixed-density physical audits/projection, precision admission/control decisions, SCF defaults and warm seed storage. Explicit caller controls remain unchanged; a native query failure does not become a compatibility decision."],
+      "retired_python_runtime": ["Duplicated policy arithmetic and seed storage for those positively selected native policy contracts."],
+      "remaining_python_runtime": ["Application-precision candidate/auditor/fallback execution, observable comparison, force-aware/coarse-to-fine progression and cross-model eligibility/seed history still have Python production controllers."],
+      "remaining_acceptance": ["Finish complete native precision/progressive/strict-closure execution and remaining CUDA/ECP audits, with independent observable-error and complete-endpoint work/resource/performance gates, not just policy-query parity."],
+      "source_anchors": ["python/generativeqc/initial_guess.py", "python/generativeqc/precision_policy.py", "python/generativeqc/force_aware_scf.py", "python/generativeqc/progressive_controller.py", "src/scf/preliminary_guess.cpp", "src/runtime/precision_admission.hpp", "src/methods/scf_defaults.hpp", "src/methods/warm_seed_snapshot.hpp"],
+      "tests": ["tests/python/test_native_initial_guess_policy.py", "tests/python/test_native_precision_admission.py", "tests/python/test_native_precision_controls.py", "tests/python/test_native_scf_defaults.py", "tests/python/test_native_scf_effort.py", "tests/python/test_force_aware_scf.py"]
+    },
+    {
+      "id": "prepared-snapshot-grid-ao-lifetime",
+      "state": "partial-cutover",
+      "slices": ["R1", "R2", "R3", "R6"],
+      "python_roles": ["wrapper", "scientific-runtime"],
+      "delivered_scope": ["The native final-state token and prepared native force/second-order owners retain their admitted scientific state and lifetimes; their endpoints no longer require Python snapshot/grid/AO staging."],
+      "retired_python_runtime": ["Python snapshot/grid/AO task orchestration inside positively admitted native force and dedicated second-order endpoints."],
+      "remaining_python_runtime": ["NativeKsSnapshot, SnapshotGridCache and resident AO-map Python owners still schedule cross-endpoint state/grid/AO work for compatibility and general response/HVP consumers."],
+      "remaining_acceptance": ["Share remaining typed prepared leases across force/HVP with generation/device/budget validation, explicit bounded storage fallback and failure-atomic publication; do not infer universal lifetime ownership from a native token."],
+      "source_anchors": ["python/generativeqc/_ks_snapshot.py", "python/generativeqc/_snapshot_grid_cache.py", "python/generativeqc/_resident_ao_maps.py", "src/api/ks_snapshot.hpp", "src/api/c_api_ks_snapshot.cpp", "src/methods/dft_method.cpp"],
+      "tests": ["tests/python/test_nonlocal_resident_force_owner.py", "tests/python/test_native_hessian_frontend.py", "tests/python/test_rks_hessian_production_owner.py"]
+    },
+    {
+      "id": "method-and-basis-resolution",
+      "state": "partial-cutover",
+      "slices": ["R5", "R6"],
+      "python_roles": ["wrapper", "compiler-ad", "scientific-runtime"],
+      "delivered_scope": ["Generated native method/basis catalogs, shared template expansion/ECP mapping and matching native KS scientific wire programs serve admitted Python/SDK/CLI contexts. Selected native refusal never retries an older constructor or compiler lowering; same-name custom graphs are not mistaken for catalog identity."],
+      "retired_python_runtime": ["Bundled native basis construction and matching catalog scientific component/exchange lowering in their admitted contexts."],
+      "remaining_python_runtime": ["Calculator construction retains compiler/model alias/composition preflight, metadata/provenance adapters and explicit custom/unrepresented MethodIR lowering; complete built-in construction is not compiler-import-free."],
+      "remaining_acceptance": ["Finish native built-in model/alias/basis resolution and full installed SDK/CLI/Python identity; preserve explicit custom compiler work, validated custom-system descriptors and fail-closed native refusal."],
+      "source_anchors": ["python/generativeqc/calculator.py", "python/generativeqc/_model_resolution.py", "python/generativeqc/ks.py", "python/generativeqc/_basis_builtin.py", "src/methods/named_ks_catalog.cpp", "src/molecule/basis_catalog.cpp", "src/molecule/basis_template.cpp", "src/cli/native_basis.cpp"],
+      "tests": ["tests/python/test_native_ks_catalog.py", "tests/python/test_native_basis_catalog.py", "tests/python/test_native_basis_builtin.py", "tests/python/test_selected_native_method_capabilities.py", "tests/native/test_basis_catalog_sdk.cpp"]
+    },
+    {
+      "id": "native-cli-resource-profile",
+      "state": "native-dispatch",
+      "slices": ["R2", "R5", "R6"],
+      "python_roles": ["wrapper"],
+      "delivered_scope": ["The installed C++ CLI, including resources and supported profile operations, is Python-free. Its native resource command uses shared native capacity/composition owners and explicitly reports unsupported inventory domains; the historical missing-resources claim is no longer current."],
+      "retired_python_runtime": ["Installed runtime CLI orchestration; compiler-dependent tuning remains a separate explicit command."],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": ["Native resources command presence is not universal ResourcePlan inventory or CLI/SDK/Python context identity; unsupported methods/properties/providers still need per-domain admission and parity evidence."],
+      "source_anchors": ["src/cli/main.cpp", "src/cli/resources.cpp", "src/cli/profiles.cpp"],
+      "tests": ["tests/native/test_cli_runtime.py", "tests/native/test_cli_profile_cache.py", "tests/python/test_native_cli_dispatch.py"]
+    },
+    {
+      "id": "explicit-tuning-compiler",
+      "state": "intentional-python",
+      "slices": ["R5", "R6"],
+      "python_roles": ["compiler-ad"],
+      "delivered_scope": ["Explicit generativeqc-tune/compiler tooling is separate from installed native production execution; source-generating work is intentionally not a hidden runtime dependency."],
+      "retired_python_runtime": [],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": [],
+      "source_anchors": ["python/generativeqc/tune_cli.py", "src/api/c_api_tuning.cpp"],
+      "tests": ["tests/python/test_native_tune_cli.py", "tests/python/test_compiler_cli_ownership.py"]
+    },
+    {
+      "id": "prepared-corrections-and-nonlocal",
+      "state": "partial-cutover",
+      "slices": ["R1", "R2", "R3", "R5", "R6"],
+      "python_roles": ["wrapper", "scientific-runtime"],
+      "delivered_scope": ["Native D3/D4/gCP/nonlocal scientific owners and admitted named correction programs execute complete native compositions. Scoped strict-FP64 D3/individual-D4 resource programs use native electronic/correction plan ownership; selected native preparation failures do not retry external corrections."],
+      "retired_python_runtime": ["Correction composition/publication for positively selected complete native named programs."],
+      "remaining_python_runtime": ["Other standalone/custom correction composition, nonlocal source schedules and general second-order derivative publication retain Python orchestration."],
+      "remaining_acceptance": ["Complete admitted model/property/resource composition and second-derivative source publication without changing D3/D4/gCP/VV10 semantics; individual D4 capacity is not gCP-composite or general nonlocal capacity."],
+      "source_anchors": ["python/generativeqc/dispersion.py", "python/generativeqc/nonlocal_runtime.py", "src/methods/named_ks_catalog.cpp", "src/api/c_api_d3.cpp", "src/api/c_api_d4.cpp", "src/api/c_api_gcp.cpp", "src/api/c_api_nonlocal.cpp"],
+      "tests": ["tests/python/test_native_ks_catalog.py", "tests/python/test_named_ks_resources.py", "tests/python/test_named_d4_resources.py", "tests/python/test_nonlocal_python_compatibility.py"]
+    },
+    {
+      "id": "explicit-symbolic-compiler",
+      "state": "intentional-python",
+      "slices": ["R3", "R6"],
+      "python_roles": ["compiler-ad"],
+      "delivered_scope": ["Python symbolic IR/AD and explicit code generation remain the scientific compiler authority; generated native artifacts execute in production. Moving runtime ownership does not authorize copying equations into handwritten native controllers."],
+      "retired_python_runtime": [],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": [],
+      "source_anchors": ["python/generativeqc_compiler/method/stationary_hvp.py", "src/integrals/hvp_assembly_runtime.cu"],
+      "tests": ["tests/python/test_stationary_hvp_plan.py"]
+    },
+    {
+      "id": "independent-oracles",
+      "state": "intentional-python",
+      "slices": ["R0", "R1", "R3", "R6"],
+      "python_roles": ["reference-oracle"],
+      "delivered_scope": ["Independent Python/PySCF/reconverged finite-difference oracles remain qualification tools, not silent production consumers. Their existence or a saved test path is not a new execution receipt."],
+      "retired_python_runtime": [],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": [],
+      "source_anchors": ["tests/native/test_cli_dft_df.py", "tests/python/test_hessian_public_rks.py"],
+      "tests": ["tests/native/test_cli_dft_df.py", "tests/python/test_hessian_public_rks.py"]
+    },
+    {
+      "id": "old-native-library-compatibility",
+      "state": "compatibility",
+      "slices": ["R2", "R4", "R6"],
+      "python_roles": ["compatibility"],
+      "delivered_scope": ["Missing additive ABI symbols can still select bounded older-library preparation/observation or initial-guess adapters. Once native admission is selected, query/create/prepare/execution errors remain visible and never retry unbudgeted or alternate scientific execution."],
+      "retired_python_runtime": [],
+      "remaining_python_runtime": [],
+      "remaining_acceptance": ["Remove obsolete ABI compatibility under the pre-release direct-migration policy once consumers are migrated; separately qualified resource/scientific fallback domains are not obsolete ABI aliases and cannot be removed without replacement qualification."],
+      "source_anchors": ["python/generativeqc/initial_guess.py", "python/generativeqc/batch.py", "python/generativeqc/resources_native.py", "src/api/c_api_batch.cpp"],
+      "tests": ["tests/python/test_initial_guess_capabilities.py", "tests/python/test_native_prepared_resources.py", "tests/python/test_batch_properties.py"]
+    }
+  ]
+}

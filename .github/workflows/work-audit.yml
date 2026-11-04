@@ -6,6 +6,11 @@ on:
 permissions:
   contents: read
 
+# The advisory report is keyed to the PR head and becomes stale on a push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   report:
     name: Source work inventory (advisory)

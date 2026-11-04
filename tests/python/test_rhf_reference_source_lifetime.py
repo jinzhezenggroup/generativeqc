@@ -2,6 +2,8 @@
 
 Only CUDA submission/completion and the bucket solver are replaced. Deferred
 streams expose ownership errors without a GPU, integrals, or SCF execution.
+The capacity stand-in includes the retained ECP allocation owned by the common
+source contract; real numeric bounds remain covered by compiled capacity probes.
 """
 
 from __future__ import annotations
@@ -172,7 +174,9 @@ std::size_t checked_add(std::size_t a,std::size_t b) {
  if(b>std::numeric_limits<std::size_t>::max()-a) throw std::overflow_error("capacity overflow");
  return a+b;
 }
-std::size_t source_capacity(const core::System&) { return 256; }
+std::size_t source_capacity(const core::System& system) {
+ return checked_add(256,runtime::vector_bytes(system.ecp_terms));
+}
 }
 namespace integrals {
 enum class ElectronInteractionOperator { eri };

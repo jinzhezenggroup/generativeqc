@@ -135,6 +135,9 @@ const FockProviderRegistration& fock_provider_registration(FockApproximation app
                                                            FockBackend backend);
 FockProviderCapabilities fock_provider_capabilities(FockApproximation approximation,
                                                     FockBackend backend);
+/** Reject a registered but unavailable execution provider with NOT_IMPLEMENTED.
+ * Preserve its diagnostic and typed status across method and public API layers;
+ * an unbuilt backend is not an internal numerical or execution failure. */
 void require_fock_provider_executable(FockApproximation approximation, FockBackend backend);
 /** Build the explicit COSX v1 model identity independently of XC GridSpec. */
 FockCosxSpec make_cosx_v1_spec(std::size_t radial_points = 48, std::size_t angular_polar = 16,

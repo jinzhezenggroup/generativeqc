@@ -6,9 +6,90 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from test_ci_prose_workflow import expression
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
+PR_WORKFLOWS = (
+    "array-api",
+    "cumetal-cuda",
+    "docs",
+    "pre-commit",
+    "pr-overlap",
+    "work-audit",
+)
+
+
+def _policy(workflow: str, context: dict[str, str]) -> tuple[str, bool]:
+    source = (WORKFLOWS / f"{workflow}.yml").read_text()
+    match = re.search(r"^concurrency:\n((?:[ \t]+[^\n]*\n)+)", source, re.MULTILINE)
+    assert match, f"Missing concurrency policy for {workflow}"
+    fields = dict(re.findall(r"^  ([\w-]+): (.+)$", match[1], re.MULTILINE))
+    group = re.sub(
+        r"\$\{\{.*?\}\}",
+        lambda value: str(expression(value[0], context)),
+        fields["group"],
+    )
+    cancel = fields["cancel-in-progress"]
+    return group, cancel == "true" or (
+        cancel != "false" and bool(expression(cancel, context))
+    )
+
+
+def _context(event: str, run_id: str, *, pull: str = "17") -> dict[str, str]:
+    return {
+        "github.workflow": "qualification",
+        "github.event_name": event,
+        "github.event.pull_request.number": pull if event == "pull_request" else "",
+        "github.ref": "refs/pull/17/merge"
+        if event == "pull_request"
+        else "refs/heads/master",
+        "github.run_id": run_id,
+    }
+
+
+@pytest.mark.parametrize("workflow", PR_WORKFLOWS)
+def test_only_revisions_of_the_same_pr_share_a_preemptible_group(workflow: str) -> None:
+    first = _policy(workflow, _context("pull_request", "101"))
+    replacement = _policy(workflow, _context("pull_request", "102"))
+    unrelated = _policy(workflow, _context("pull_request", "103", pull="18"))
+    assert first == replacement
+    assert first[0] != unrelated[0]
+    assert first[1] and replacement[1] and unrelated[1]
+
+
+@pytest.mark.parametrize("workflow", ("array-api", "cumetal-cuda", "docs"))
+@pytest.mark.parametrize(
+    "event", ("push", "merge_group", "workflow_dispatch", "schedule")
+)
+def test_non_pr_qualification_never_preempts_a_running_check(
+    workflow: str, event: str
+) -> None:
+    group, cancel = _policy(workflow, _context(event, "101"))
+    assert not cancel
+    assert group != _policy(workflow, _context("pull_request", "101"))[0]
+
+
+@pytest.mark.parametrize("event", ("push", "merge_group"))
+def test_array_api_keeps_pending_non_pr_checks_independent(event: str) -> None:
+    # cancel-in-progress=false alone still replaces an older pending run.
+    first = _context(event, "101")
+    second = _context(event, "102")
+    assert _policy("array-api", first)[0] != _policy("array-api", second)[0]
+
+
+@pytest.mark.parametrize("workflow", ("cumetal-cuda", "docs"))
+def test_existing_merge_queue_ref_groups_remain_nonpreemptible(workflow: str) -> None:
+    first = _context("merge_group", "101")
+    first["github.ref"] = "refs/heads/gh-readonly-queue/master/pr-17-first"
+    second = {**first, "github.run_id": "102"}
+    different = {
+        **second,
+        "github.ref": "refs/heads/gh-readonly-queue/master/pr-18-second",
+    }
+    assert _policy(workflow, first) == _policy(workflow, second)
+    assert _policy(workflow, first)[0] != _policy(workflow, different)[0]
+    assert not _policy(workflow, first)[1]
 
 
 def _job(source: str, name: str) -> str:
@@ -51,36 +132,37 @@ def test_merge_group_concurrency_preserves_running_same_ref_runs() -> None:
         concurrency = source.split("concurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
         assert "github.event_name == 'merge_group'" in concurrency
         assert "&& github.ref" in concurrency
-        # CI cancels only superseded PRs; merge-group verification stays live.
-        if filename == "ci.yml":
-            assert (
-                "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
-                in concurrency
-            )
-        else:
-            assert "cancel-in-progress: false" in concurrency
+        # Both workflows only cancel superseded PR revisions, never running
+        # merge-group qualification for an existing synthetic queue ref.
+        assert (
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+            in concurrency
+        )
 
 
-def test_pr_concurrency_cancels_superseded_ci_but_preserves_other_workflows() -> None:
-    for filename in (
-        "ci.yml",
-        "cumetal-cuda.yml",
-        "pre-commit.yml",
-        "pr-overlap.yml",
-        "wheels.yml",
-    ):
+def test_pr_concurrency_cancels_only_superseded_nonrelease_checks() -> None:
+    # The wheel build intentionally finishes its in-flight package/cache work.
+    # All other PR-scoped checks may preempt stale heads while their merge
+    # groups and master cache producers retain their protected run identities.
+    expected = {
+        "ci.yml": "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+        "cumetal-cuda.yml": (
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+        ),
+        "docs.yml": "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+        "array-api.yml": (
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+        ),
+        "pre-commit.yml": "cancel-in-progress: true",
+        "pr-overlap.yml": "cancel-in-progress: true",
+        "work-audit.yml": "cancel-in-progress: true",
+        "wheels.yml": "cancel-in-progress: false",
+    }
+    for filename, policy in expected.items():
         source = (WORKFLOWS / filename).read_text(encoding="utf-8")
         concurrency = source.split("concurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
         assert "github.event.pull_request.number" in concurrency
-        # The expensive primary CI prioritizes fresh commits; the independent
-        # wheel/lint/CuMetal workflows keep their existing in-flight policy.
-        if filename == "ci.yml":
-            assert (
-                "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
-                in concurrency
-            )
-        else:
-            assert "cancel-in-progress: false" in concurrency
+        assert policy in concurrency
 
 
 def test_ci_aggregate_accepts_only_explicitly_confirmed_orphans() -> None:

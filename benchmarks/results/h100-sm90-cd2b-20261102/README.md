@@ -52,3 +52,5 @@ fresh dense-reference corroboration, or three-independent-pair final gates.
 The final majority target remains at least 20/30 wins, with each winning case
 faster in every pair and a median speedup above 1.05. No A100/RTX5090, CBS,
 universal MD, or whole-molecule custom-RSH UKS qualification is claimed.
+
+The three original build/DF/screen archives and the JSON audit now use exact offline Git recovery from already merged revision `5efc730f4c6d809cc4a31d23db4cdb5f87dae6e3`, declared in `historical-snapshot.json`. Both H100 replay entrypoints authenticate the original inventory and bytes before use. Scientific source, original full vectors, unfavorable observations and acceptance scope are unchanged. This storage migration makes room for separately qualified DB36 evidence under the existing limits; it adds no new device or timing acceptance.

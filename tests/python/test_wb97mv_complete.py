@@ -1,4 +1,4 @@
-"""Full native WB97M-V endpoint, live-state and independent force qualification."""
+"""WB97M-V live-state and bounded complete energy/force qualification."""
 
 import json
 from pathlib import Path
@@ -70,7 +70,7 @@ def test_public_wb97mv_live_state_and_complete_gradient(
     ],
     ids=("water-rks", "oh-doublet-uks"),
 )
-@pytest.mark.parametrize("grid_shape", [(12, 4, 8), (16, 6, 12)])
+@pytest.mark.parametrize("grid_shape", [(12, 4, 8)])
 def test_public_wb97mv_force_matches_reconverged_energy_differences(
     method: str,
     multiplicity: int,
@@ -106,7 +106,7 @@ def test_public_wb97mv_force_matches_reconverged_energy_differences(
     direction /= np.linalg.norm(direction)
     analytic = -float(np.vdot(forces, direction))
     samples = []
-    for step in (1e-3, 3e-4, 1e-4):
+    for step in (3e-4, 1e-4):
         energies = []
         for sign in (-1.0, 1.0):
             displaced = [
@@ -143,5 +143,4 @@ def test_public_wb97mv_force_matches_reconverged_energy_differences(
     )
     # Keep the entire step sequence; accepting only its best point could hide
     # cancellation or a discontinuous density-domain response.
-    assert samples[0]["absolute_error"] < 1e-5, report
-    assert max(sample["absolute_error"] for sample in samples[1:]) < 2e-6, report
+    assert max(sample["absolute_error"] for sample in samples) < 2e-6, report

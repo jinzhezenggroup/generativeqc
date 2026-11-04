@@ -6,8 +6,10 @@
 #include <stdexcept>
 #include <string>
 
+#include "integrals/ecp.hpp"
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
+#include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/stationary_integral_gradient.hpp"
 
@@ -83,6 +85,58 @@ void one_atom_capacity() {
       rejected = true;
     }
     require(rejected, "one-atom source ignored its below-limit capacity gate");
+  }
+}
+
+/** Checked ECP grids are transient but coexist with the stationary weights.
+ * A one-byte-short request must fail before either integral provider runs. */
+void ecp_workspace_admission() {
+  if (!generativeqc::integrals::has_packaged_cpu_eri_shell_derivatives()) return;
+  generativeqc::core::System system;
+  system.atoms = {{12, {0.1, -0.2, 0.3}, 10}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}};
+  system.ecp_terms = {{0, -1, 2, 0.5, 0.2}};
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "stationary ECP capacity fixture is invalid");
+  const auto workspace = generativeqc::integrals::ecp_workspace_capacity(system);
+  for (const auto spin :
+       {generativeqc::scf::FockSpin::Restricted, generativeqc::scf::FockSpin::Unrestricted}) {
+    auto spec = generativeqc::scf::make_hf_fock_spec(spin);
+    spec.derivative_order = 0;
+    const generativeqc::scf::PreparedFockPlan target(
+        system, nullptr,
+        generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu));
+    const std::vector<double> density{0.8}, weighted{-0.2}, beta{0.3}, beta_weighted{-0.1};
+    const bool unrestricted = spin == generativeqc::scf::FockSpin::Unrestricted;
+    const auto evaluate = [&](std::size_t budget) {
+      return generativeqc::scf::cpu_stationary_integral_gradient(
+          target, density, weighted, budget,
+          unrestricted ? std::span<const double>(beta) : std::span<const double>{},
+          unrestricted ? std::span<const double>(beta_weighted) : std::span<const double>{});
+    };
+    const auto result = evaluate(256ULL << 20);
+    require(result.numeric_capacity > workspace,
+            "stationary ECP capacity omitted the checked-grid workspace");
+    require(evaluate(result.numeric_capacity).sources == result.sources,
+            "exact ECP budget changed the stationary derivative");
+    auto& observation = generativeqc::runtime::cpu_resource_observation;
+    const auto previous = observation;
+    observation = {};
+    observation.active = true;
+    bool refused = false;
+    try {
+      (void)evaluate(result.numeric_capacity - 1);
+    } catch (const std::bad_alloc&) {
+      refused = true;
+    }
+    const auto samples = observation.samples;
+    observation = previous;
+    require(refused && samples == 0,
+            "short ECP budget reached derivative allocation before refusal");
+    require(evaluate(result.numeric_capacity).sources == result.sources,
+            "ECP budget refusal poisoned the next derivative");
   }
 }
 
@@ -191,6 +245,7 @@ int main() {
   try {
     work_admission();
     one_atom_capacity();
+    ecp_workspace_admission();
     unrestricted_sources();
     std::cout << "Native Direct stationary admission/capacity: PASS\n";
     return 0;
