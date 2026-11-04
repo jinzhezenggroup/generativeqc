@@ -1318,7 +1318,13 @@ def _run_eri_hvp(
                 else (slots,)
             )
             for orientation in ordered:
-                weights = np.asarray(shell_weights(orientation), dtype=np.float64)
+                weights = np.asarray(shell_weights(orientation))
+                if weights.dtype.kind not in "iuf":
+                    raise ValueError(
+                        "four-center shell weights must be finite real with the "
+                        "ordered Cartesian shell shape"
+                    )
+                weights = np.asarray(weights, dtype=np.float64)
                 data["ordered_eri_shell_weight_blocks"] += 1
                 contract(orientation, weights)
                 del weights

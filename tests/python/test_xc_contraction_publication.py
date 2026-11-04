@@ -22,7 +22,9 @@ def run() -> typing.Any:
 def test_retained_xc_publication_is_complete_and_reconstructs(
     run: typing.Any,
 ) -> None:
-    assert summarize(run) == json.loads((ROOT / "summary.json").read_text())
+    assert summarize(run) == load_publication_record(
+        ROOT, role="summary", name="summary.json"
+    )
     manifest = json.loads((ROOT / "publication.json").read_text())
     validate_publication(
         manifest,

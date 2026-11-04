@@ -74,6 +74,30 @@ def test_noncanonical_invalid_weight_is_not_hidden(failure: str) -> None:
         fold_eri_shell_weights((1, 0, 0, 0), (1,) * 4, block)
 
 
+@pytest.mark.parametrize("budget_bytes", (32 << 10, 64 << 20))
+def test_complex_weights_reject_before_zero_translation_or_budget_fallback(
+    tmp_path: Path, budget_bytes: int
+) -> None:
+    """Both schedules reject complex f-shell weights without discarding their phase."""
+    record = BasisSet(
+        "one-center-f-weight-validation",
+        (ElementBasis(2, (BasisShell(3, ("0.83",), (("1.0",),)),)),),
+        BasisProvenance("synthetic-test", "1", "test", "0" * 64),
+        representation="cartesian",
+    )
+    with NativeAO([("He", (0.0, 0.0, 0.0))], basis=record) as basis:
+        topology = RKSIntegralTopology.from_basis(basis)
+        with pytest.raises(ValueError, match="finite real.*ordered"):
+            generated_weighted_second_integral_hvp(
+                topology,
+                "coulomb",
+                np.ones((1, 3)),
+                eri_shell_weights=lambda slots: np.full((10,) * 4, 1j),
+                budget_bytes=budget_bytes,
+                cache=tmp_path,
+            )
+
+
 def test_spherical_df_ordered_weights_match_independent_first_and_second_jets(
     tmp_path: Path,
 ) -> None:

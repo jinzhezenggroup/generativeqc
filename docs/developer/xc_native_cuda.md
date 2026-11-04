@@ -70,6 +70,46 @@ reduction. Existing FP32 contraction schedules keep their original accumulation.
 The point algebra, Vxc matrix and SCF convergence thresholds are unchanged;
 this is an accuracy improvement, not a bitwise-reproducible SCF contract.
 
+### Occupied density certificates
+
+An authenticated occupied-frame lease identifies the canonical coefficients
+that formed the stored density; it does not prove floating-point equality of
+the matrix and reassociated factor contractions. The generated strict-FP64
+four-jet consumer accumulates outward-rounded absolute dot bounds as a
+roundoff prefilter for rho, each gradient and tau separately. This prefilter
+does not authorize a nonzero feature discrepancy: there is no qualified
+point-program/domain sensitivity contract that turns its internal budget into
+an XC energy, potential or force bound.
+
+Every explicit occupied invocation also evaluates the original stored-D
+features in registers with the retained built-in matrix arithmetic. A candidate
+is used only when all five finite features are bitwise identical, including
+the sign of zero. Otherwise the original-D vector is used. Identical inputs
+to the unchanged point program require no Lipschitz assumption, including at
+branches, small densities and singular boundaries. This is a conservative
+restriction, not an accelerated sensitivity certificate.
+
+Projection and absolute-bound panels share dead matrix-product scratch only
+when `2 * occupied_rank <= active_ao_count`. Other tiles retain the existing
+matrix schedule. A refused point consumes the original stored density with
+the current half-before-add symmetrization, ordered explicit FP64 FMA and
+scalar/warp feature reduction. It neither reconstructs D from coefficients nor
+applies the RKS occupation factor a second time. Missing bounds fail closed;
+genuine original-matrix errors are still reported. No extra global allocation
+or host oracle is introduced.
+
+Because exact verification repeats dense feature work, every CUDA KS request
+uses the ordinary matrix route, including `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1`.
+KS does not publish a candidate frame, so it avoids both projection and dense
+verification overhead. The lower-level explicit `CudaXcPlan` experiment and its
+identity, precision, generation, mapping, capacity and lifetime checks remain.
+It is not an available production acceleration option. Restoring production
+admission requires a cheaper numerically qualified contract and complete
+admission-inclusive endpoint cost evidence. See the
+[matrix-fallback decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-production-matrix-fallback.md),
+[exact-identity restriction decision](../../.agents/notes/implemented/numerics/2026-11-04-occupied-xc-exact-identity.md)
+and earlier [roundoff-certificate proposal](../../.agents/notes/proposed/2026-11-04-occupied-xc-stored-density-certificate.md).
+
 ### Budget-Fock matrix products
 
 The shared physical density/potential consumer can select FP32 inner products
