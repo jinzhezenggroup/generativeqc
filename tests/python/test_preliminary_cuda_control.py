@@ -304,6 +304,7 @@ class BatchWarmStarts {
 // FAILURE_CLASSIFICATION
 struct Owner : PreparedBatch, BatchWarmStarts {
   struct Item {
+    bool density_fitted_range_exchange{};
     generativeqc_property_flags prepared_properties{};
     std::exception_ptr failure;
     std::unique_ptr<Plan> plan = std::make_unique<Plan>();
@@ -321,7 +322,8 @@ struct Owner : PreparedBatch, BatchWarmStarts {
   std::size_t size() const noexcept override { return items_.size(); }
   std::size_t host_numeric_capacity(std::size_t = 0) { return 0; }
   void materialize_warm(std::size_t) {}
-  std::unique_ptr<Plan> make_plan(const System&, std::optional<std::size_t>) {
+  std::unique_ptr<Plan> make_plan(const System&, std::optional<std::size_t>,
+                                  std::optional<bool>) {
     return std::make_unique<Plan>();
   }
   // SHARED_OWNER_CONTROL
