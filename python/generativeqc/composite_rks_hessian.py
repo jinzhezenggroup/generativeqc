@@ -25,6 +25,9 @@ from types import MappingProxyType, SimpleNamespace
 from generativeqc_compiler.common.array_execution import arrays as np
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft._generated_native_semilocal import (
+    SEMILOCAL_FAMILY_BY_CODE,
+)
 from generativeqc_compiler.dft.ao import directional_ao_jets
 from generativeqc_compiler.integral.ir import four_center_eri_operator
 from generativeqc_compiler.integral.range_separation import CoulombKernel
@@ -36,6 +39,7 @@ from generativeqc_compiler.method import (
 from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
 from generativeqc_compiler.method.stationary_grid_second import (
     GRID_FIELD_WORKSPACE_PANELS,
+    SemilocalPointPartials,
     StationaryGridSecondOrder,
     features,
     nuclear_repulsion_hvp,
@@ -305,6 +309,81 @@ def _ao_coefficients(values: np.ndarray) -> dict:
     }
 
 
+class _NativeSemilocalGridPoints:
+    """Reuse the token-bound scaled LDA/PBE SCF and response point workers.
+
+    The compiler grid owner still owns feature and grid-weight pullbacks. This
+    provider only supplies native physical potentials/JVPs, preserving the
+    scaled tail arithmetic and C2 spin policy of the actual converged SCF.
+    """
+
+    # Conservatively include tile copies and the streamed native jet stack.
+    workspace_bytes_per_point = 32768
+
+    def __init__(self, state: StationaryKsState, functional: typing.Any) -> None:
+        record = SEMILOCAL_FAMILY_BY_CODE.get(state._source.functional_code)
+        if (
+            state._source.backend != "cpu"
+            or record is None
+            or record["legacy_cpu_point_response_slot"] is None
+            or "tau" in functional.ingredients
+            or state._source.functional.identity != functional.identity
+        ):
+            raise NotImplementedError(
+                "native grid points require a matching CPU LDA/PBE state"
+            )
+        self.state, self.functional = state, functional
+        self.spins = 2 if functional.spin == "polarized" else 1
+        self.pbe = bool(record["legacy_cpu_point_response_slot"])
+        self.functional_identity = functional.identity
+        self.identity = canonical_hash(
+            {
+                "native_point_model": state.identity.regularization_identity,
+                "functional": functional.identity,
+                "semilocal_scales": state._source.coefficients[:2],
+                "response": "native-scaled-cartesian-direction-v2",
+            }
+        )
+
+    def evaluate(
+        self, fields: np.ndarray, direction: np.ndarray
+    ) -> SemilocalPointPartials:
+        """Evaluate one bounded feature tile without a different XC expression."""
+        values = fields.reshape(self.spins, 5, -1)
+        moving = direction.reshape(self.spins, 5, -1)
+        rho, gradient = values[:, 0], values[:, 1:4].transpose(0, 2, 1)
+        drho, dgradient = moving[:, 0], moving[:, 1:4].transpose(0, 2, 1)
+        if self.spins == 1:
+            spin_rho = np.repeat(rho * 0.5, 2, axis=0)
+            spin_gradient = np.repeat(gradient * 0.5, 2, axis=0)
+            response = self.state._source.evaluate_rks_response_points(
+                self.pbe, rho[0], gradient[0], drho[0], dgradient[0]
+            )
+        else:
+            spin_rho, spin_gradient = rho, gradient
+            response = self.state._source.evaluate_uks_response_points(
+                self.pbe, rho, gradient, drho, dgradient
+            )
+        primal = self.state._source.evaluate_xc_points(
+            self.functional, spin_rho, spin_gradient
+        )
+        potential = np.zeros_like(values)
+        if self.spins == 1:
+            potential[0, 0] = primal["rho"].mean(axis=0)
+            potential[0, 1:4] = primal["gradient"].mean(axis=0).T
+        else:
+            potential[:, 0] = primal["rho"]
+            potential[:, 1:4] = primal["gradient"].transpose(0, 2, 1)
+        delta = np.zeros_like(values)
+        delta[:, 0] = response["rho"]
+        delta[:, 1:4] = response["gradient"].transpose(0, 2, 1)
+        return SemilocalPointPartials(
+            primal["energy"],
+            potential.reshape(fields.shape),
+            delta.reshape(fields.shape),
+        )
+
+
 class _CompositeGrid:
     """Bind compiler grid partials to native AO jets and moving Becke weights."""
 
@@ -361,6 +440,14 @@ class _CompositeGrid:
             nonlocal_primitive,
             budget_bytes=grid_budget_bytes - ao_bytes,
             max_pair_evaluations=max_nonlocal_pairs,
+            point_provider=(
+                _NativeSemilocalGridPoints(state, self.spec)
+                if SEMILOCAL_FAMILY_BY_CODE.get(state._source.functional_code, {}).get(
+                    "legacy_cpu_point_response_slot"
+                )
+                is not None
+                else None
+            ),
         )
         self.host_workspace_bytes = grid_budget_bytes
         self.feature_budget_bytes = (

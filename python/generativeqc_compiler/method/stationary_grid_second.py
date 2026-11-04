@@ -301,6 +301,33 @@ def _pair_program(spec: typing.Any) -> tuple:
     return graph, (energy, *gradients, *directional)
 
 
+@dataclass(frozen=True)
+class SemilocalPointPartials:
+    """Physical energy density and feature potential/JVP before grid weights.
+
+    Coefficients follow spin-major ``rho,gx,gy,gz,2*tau`` fields. A provider
+    differentiates its actual SCF point model, not an interior-only surrogate.
+    """
+
+    energy_density: np.ndarray
+    coefficients: np.ndarray
+    directional_coefficients: np.ndarray
+
+
+class SemilocalPointProvider(typing.Protocol):
+    """Identity-bound, tile-bounded point derivative contract for native owners."""
+
+    functional_identity: str
+    identity: str
+    workspace_bytes_per_point: int
+
+    def evaluate(
+        self, fields: np.ndarray, direction: np.ndarray
+    ) -> SemilocalPointPartials:
+        """Evaluate unweighted physical features and their potential JVP."""
+        ...
+
+
 class StationaryGridSecondOrder:
     """Bounded compiler-AD grid partials with an optional VV10 contribution.
 
@@ -315,6 +342,12 @@ class StationaryGridSecondOrder:
     The full-field reserve covers cached reference partials, current response
     partials, geometry directions and immutable-publication copies together;
     scalar AD tiles use only the remaining budget.
+
+    A token-bound runtime point provider may instead supply physical potentials
+    and their JVP from an already qualified SCF numerical domain. This compiler
+    owner does not import that runtime or reinterpret its functional equations.
+    Provider tiles, output validation and grid-weight algebra remain bounded
+    here; native-point/nonlocal combinations require separate qualification.
     """
 
     def __init__(
@@ -324,6 +357,7 @@ class StationaryGridSecondOrder:
         *,
         budget_bytes: int = 128 << 20,
         max_pair_evaluations: int = 16_777_216,
+        point_provider: SemilocalPointProvider | None = None,
     ) -> None:
         if functional.spin not in ("unpolarized", "polarized"):
             raise NotImplementedError("stationary grid second order requires RKS/UKS")
@@ -333,7 +367,11 @@ class StationaryGridSecondOrder:
         components = {name for name, value in functional.components if value}
         self.libxc_work = components == set(WB97MV_COMPONENTS)
         production_family = {"LDA_X", "GGA_X_B88", "LDA_C_VWN_RPA", "GGA_C_LYP"}
-        if not self.libxc_work and not components <= production_family:
+        if (
+            point_provider is None
+            and not self.libxc_work
+            and not components <= production_family
+        ):
             raise NotImplementedError(
                 "stationary grid work policy requires WB97M-V or the native "
                 "full-range B88/VWN-RPA/LYP family"
@@ -346,7 +384,29 @@ class StationaryGridSecondOrder:
         self.nonlocal_primitive = nonlocal_primitive
         self.budget_bytes = budget_bytes
         self.max_pair_evaluations = max_pair_evaluations
-        if self.libxc_work:
+        self.point_provider = point_provider
+        if point_provider is not None:
+            if (
+                point_provider.functional_identity != functional.identity
+                or not isinstance(point_provider.identity, str)
+                or not point_provider.identity
+            ):
+                raise ValueError(
+                    "stationary point provider functional identity mismatch"
+                )
+            if (
+                type(point_provider.workspace_bytes_per_point) is not int
+                or point_provider.workspace_bytes_per_point < 1
+            ):
+                raise ValueError(
+                    "stationary point provider requires a finite tile budget"
+                )
+            if nonlocal_primitive is not None:
+                raise NotImplementedError(
+                    "native point provider has no nonlocal qualification"
+                )
+            self.program = None
+        elif self.libxc_work:
             self.program = build_program(functional, order=2)
         else:
             outputs = output_set(functional, 2)
@@ -379,7 +439,9 @@ class StationaryGridSecondOrder:
             {
                 "schema": "generativeqc.stationary-grid-second-order/v1",
                 "functional": functional.identity,
-                "point_program": self.program.expression_hash,
+                "point_program": self.program.expression_hash
+                if point_provider is None
+                else point_provider.identity,
                 "pair_program": pair_identity,
                 "nonlocal": None
                 if nonlocal_primitive is None
@@ -397,6 +459,8 @@ class StationaryGridSecondOrder:
 
     def evaluate(self, fields: np.ndarray, direction: np.ndarray) -> GridPartials:
         """Return exact fixed-branch energy partials and their AD JVP."""
+        if self.point_provider is not None:
+            return self._provider_partials(fields, direction)
         if self.spins == 2:
             return self._polarized_partials(fields, direction)
         if fields.shape != direction.shape or fields.shape[0] != FIELD_COUNT:
@@ -480,6 +544,75 @@ class StationaryGridSecondOrder:
             pairs,
             (base, delta),
             (pair_base, pair_delta),
+        )
+
+    def _provider_partials(
+        self, fields: np.ndarray, direction: np.ndarray
+    ) -> GridPartials:
+        """Keep native point numerics separate from shared grid-weight algebra."""
+        if (
+            fields.ndim != 2
+            or fields.shape != direction.shape
+            or fields.shape[0] != self.field_count
+        ):
+            raise ValueError("native grid fields/directions have an invalid layout")
+        if not np.isfinite(fields).all() or not np.isfinite(direction).all():
+            raise ValueError("grid fields/directions must be finite")
+        nonnegative = [
+            5 * spin + offset for spin in range(self.spins) for offset in (0, 4)
+        ]
+        if np.any(fields[nonnegative] < 0):
+            raise ValueError("grid rho/tau must be nonnegative")
+        remaining = self.budget_bytes - fields.nbytes * GRID_FIELD_WORKSPACE_PANELS
+        if remaining < 1:
+            raise MemoryError("retained grid partials exceed grid_budget_bytes")
+        tile = min(256, remaining // self.point_provider.workspace_bytes_per_point)
+        if fields.shape[1] and tile < 1:
+            raise MemoryError("native point tile exceeds grid_budget_bytes")
+        base, delta = np.zeros_like(fields), np.zeros_like(fields)
+        energy = 0.0
+        for begin in range(0, fields.shape[1], max(1, tile)):
+            section = slice(begin, begin + tile)
+            values, moving = fields[:, section], direction[:, section]
+            point = self.point_provider.evaluate(
+                values[: self.feature_count], moving[: self.feature_count]
+            )
+            shape = (self.feature_count, values.shape[1])
+            if (
+                not isinstance(point, SemilocalPointPartials)
+                or point.energy_density.shape != (values.shape[1],)
+                or point.coefficients.shape != shape
+                or point.directional_coefficients.shape != shape
+            ):
+                raise ValueError("native point partials have an invalid layout")
+            if not all(
+                np.isfinite(value).all()
+                for value in (
+                    point.energy_density,
+                    point.coefficients,
+                    point.directional_coefficients,
+                )
+            ):
+                raise FloatingPointError("nonfinite native point partials")
+            weight, dweight = values[self.feature_count], moving[self.feature_count]
+            base[: self.feature_count, section] = point.coefficients * weight
+            delta[: self.feature_count, section] = (
+                point.directional_coefficients * weight + point.coefficients * dweight
+            )
+            base[self.feature_count, section] = point.energy_density
+            delta[self.feature_count, section] = np.sum(
+                point.coefficients * moving[: self.feature_count], axis=0
+            )
+            energy += np.dot(weight, point.energy_density)
+        if (
+            not np.isfinite(energy)
+            or not np.isfinite(base).all()
+            or not np.isfinite(delta).all()
+        ):
+            raise FloatingPointError("nonfinite weighted native grid partials")
+        absent = np.zeros_like(fields), np.zeros_like(fields)
+        return GridPartials(
+            energy, base, delta, self.identity, 0, (base, delta), absent
         )
 
     def _nonlocal_partials(

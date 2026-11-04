@@ -75,7 +75,7 @@ B3LYP, user-composed or CUDA hybrid molecular Hessian endpoint is promoted.
 
 The shared `CompositeRKSResponse` low-level qualification owner also accepts
 CPU direct all-electron RKS full-range-exchange graphs with the native
-B88/VWN-RPA/LYP semilocal family. It binds the physical token-verified MethodIR,
+LDA/PBE or B88/VWN-RPA/LYP semilocal families. It binds the physical token-verified MethodIR,
 not the native carrier selector, to the mixed J/K/XC response, frozen K nuclear
 RHS and compiler-owned `exact_exchange` second-order source. Cartesian and
 real-spherical AOs reuse `HessianBasis`; the SCF, density and response remain in
@@ -96,7 +96,7 @@ coefficient without widening CUDA's matched-composition restriction or public
 second-order admission. Molecular tests compare canonical and 37/100 exchange
 on H2 and asymmetric HeH+ against independently converged reference energies,
 densities and complete energy-difference Hessians at three steps. These small
-all-s fixtures do not qualify PBE0, real-spherical Ni or installed endpoints.
+all-s fixtures do not qualify real-spherical Ni or installed endpoints.
 
 `StationaryGridSecondOrder` accepts an absent nonlocal primitive. In that case
 it allocates no VV10 pair program, executes zero pair evaluations and does not
@@ -107,6 +107,21 @@ different WB97M-V feature floors. Primitive fractions remain part of the graph
 and scientific identity. WB97M-V retains its existing work policy and VV10
 admission. Neither this grid source nor a complete small-molecule low-level
 HVP independently grants public B3LYP, UKS, ECP, DF, D3 or CUDA capabilities.
+
+Native LDA/PBE grid partials use a separate identity-bound point-provider
+contract inside the same grid/weight and molecular orchestration. The runtime
+provider executes the actual SCF point worker and its directional potential
+worker, including native scaled tail arithmetic and C2 spin continuation;
+it does not replace that numerical domain with the interior PBE Maple graph.
+The compiler remains independent of the runtime and reference engines. It
+tiles the injected provider under an explicit workspace reserve, checks every
+returned shape/value and composes grid-weight derivatives once. This provider
+does not admit a nonlocal primitive. The private scaled CPU response ABI carries
+the authenticated semilocal X/C weights; full-range K remains a separate source.
+Frozen unscaled ABI contracts are preserved. PBE0 and changed-fraction molecular
+tests use this same mixed J/K/XC path, not a named-functional Hessian solver.
+Independent point/grid tests exercise both spins and changed X/C scales; this
+does not promote a public PBE0 endpoint or complete #2224's remaining gates.
 
 The closed-shell nuclear-perturbation consumer follows the same rule. Its
 canonical installed owner is `generativeqc.stationary_nuclear`: metric-density

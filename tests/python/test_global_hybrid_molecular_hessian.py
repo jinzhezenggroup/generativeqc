@@ -25,11 +25,12 @@ SOLVER = GMRESOptions(atol=1e-12, rtol=1e-11)
 
 
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+@pytest.mark.parametrize("functional", ("B3LYP", "PBE0"))
 def test_full_range_shared_owner_matches_reconverged_native_gradients(
-    representation: str, tmp_path: Path
+    representation: str, functional: str, tmp_path: Path
 ) -> None:
     """Freeze source/HVP and raw-matrix gates separately from endpoint promotion."""
-    method = resolve_method("B3LYP")
+    method = resolve_method(functional)
     method = replace(
         method,
         identifier="full-range-stationary-qualification",
@@ -126,10 +127,19 @@ def test_custom_exchange_does_not_inherit_public_molecular_qualification() -> No
         calculator.hessian(ATOMS)
 
 
-@pytest.mark.parametrize("exchange", (Fraction(1, 5), Fraction(37, 100)))
+@pytest.mark.parametrize(
+    ("functional", "exchange"),
+    (
+        ("B3LYP", Fraction(1, 5)),
+        ("B3LYP", Fraction(37, 100)),
+        ("PBE0", Fraction(1, 4)),
+        ("PBE0", Fraction(37, 100)),
+    ),
+)
 @pytest.mark.parametrize("case", ("h2", "heh+"))
 def test_complete_hvp_has_matched_state_independent_energy_curvature(
     case: str,
+    functional: str,
     exchange: Fraction,
     tmp_path: Path,
     record_property: object,
@@ -137,14 +147,14 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
     """Independent displaced energies are an oracle, never a derivative provider.
 
     Match raw contractions, the explicit moving quadrature and the VWN-RPA
-    definition. Freeze a 1e-6 Hartree/Bohr² directional-curvature gate; this
+    definition. Freeze a 1e-6 Hartree/Bohr² directional-curvature gate.
     Full raw-matrix gates use three independent energy-difference steps and
     1e-5 Hartree/Bohr² maximum error. HeH+ exercises a nontrivial asymmetric
     response; these s-shell sentinels do not qualify Ni or default-grid work.
     """
     gto = pytest.importorskip("pyscf.gto")
     dft = pytest.importorskip("pyscf.dft")
-    method = resolve_method("B3LYP")
+    method = resolve_method(functional)
     method = replace(
         method,
         identifier="independent-composed-full-range-reference",

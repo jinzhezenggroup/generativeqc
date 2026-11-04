@@ -61,6 +61,44 @@ void independent_point_response() {
   require(count == 30, "incomplete independent RKS response table");
 }
 
+void scaled_response_batch() {
+  const double rho[2]{0.7, 1.1}, gradient[6]{0.2, -0.1, 0.3, -0.4, 0.2, 0.1};
+  const double direction[2]{0.13, -0.07}, delta_gradient[6]{0.03, 0.01, -0.02, 0.04, -0.03, 0.01};
+  for (const bool unrestricted : {false, true}) {
+    const auto bridge = unrestricted ? generativeqc_xc_uks_response_batch_v2
+                                     : generativeqc_xc_rks_response_batch_v2;
+    const auto legacy = unrestricted ? generativeqc_xc_uks_response_batch_v1
+                                     : generativeqc_xc_rks_response_batch_v1;
+    const std::size_t points = unrestricted ? 1 : 2;
+    for (const std::uint32_t method : {0U, 1U}) {
+      std::array<double, 8> exchange{}, correlation{}, scaled{}, unit{}, old{};
+      const auto call = [&](double x, double c, auto& output) {
+        return bridge(method, x, c, rho, gradient, direction, delta_gradient, points, output.data(),
+                      output.size());
+      };
+      require(call(1.0, 0.0, exchange) == GENERATIVEQC_STATUS_SUCCESS &&
+                  call(0.0, 1.0, correlation) == GENERATIVEQC_STATUS_SUCCESS &&
+                  call(0.75, 0.81, scaled) == GENERATIVEQC_STATUS_SUCCESS &&
+                  call(1.0, 1.0, unit) == GENERATIVEQC_STATUS_SUCCESS,
+              "valid scaled LDA/PBE response rejected");
+      require(legacy(method, rho, gradient, direction, delta_gradient, points, old.data(),
+                     old.size()) == GENERATIVEQC_STATUS_SUCCESS,
+              "frozen unscaled response ABI failed");
+      for (std::size_t component = 0; component < scaled.size(); ++component) {
+        require(old[component] == unit[component], "scaled response changed the frozen v1 ABI");
+        require(std::abs(scaled[component] - 0.75 * exchange[component] -
+                         0.81 * correlation[component]) < 1e-13,
+                "scaled response lost physical semilocal component weights");
+      }
+      for (const double invalid : {-1.0, std::numeric_limits<double>::infinity(),
+                                   std::numeric_limits<double>::quiet_NaN()})
+        require(call(invalid, 1.0, scaled) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                    call(1.0, invalid, scaled) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                "scaled response accepted an invalid component coefficient");
+    }
+  }
+}
+
 void response_batch_boundaries() {
   // Distinct points/directions detect transposed or broadcast ABI layouts.
   const double rho[2]{0.7, 1.1}, gradient[6]{0.2, -0.1, 0.3, -0.4, 0.2, 0.1};
@@ -262,6 +300,7 @@ void snapshot_energy_lifetime() {
 int main() {
   try {
     independent_point_response();
+    scaled_response_batch();
     response_batch_boundaries();
     snapshot_energy_lifetime();
     std::cout
