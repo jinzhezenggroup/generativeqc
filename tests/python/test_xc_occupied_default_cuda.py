@@ -1,4 +1,4 @@
-"""Exercise automatic occupied-XC admission and rollback through complete SCF."""
+"""Exercise opt-in occupied-XC admission and safe defaults through complete SCF."""
 
 from __future__ import annotations
 
@@ -108,7 +108,7 @@ def test_automatic_frame_admission_rollback_and_geometry(
                             if row["operation"] == "cuda_ks_xc_shared"
                         ]
                         assert frames
-                        if selector not in (None, "1"):
+                        if selector != "1":
                             assert not any(frames)
                         elif phase == "warm":
                             # The held input has no live proposal frame. UKS

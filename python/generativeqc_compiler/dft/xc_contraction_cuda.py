@@ -880,12 +880,13 @@ __device__ void occupied_density_features_body(const double* work, I rank, I cou
     if (lane == 0 && !unsafe)
       unsafe = !occupied_feature_certificate(accum, squared_norms, active, rank, spins);
     if constexpr (Cooperative) unsafe = __any_sync(0xffffffffu, unsafe);
-    const bool fallback = unsafe && density && ao && active && full_n;
-    if (fallback) {
-      // The original matrix and AO jets are still live. Recompute this point
-      // directly into registers: rewriting the compact projection panels here
-      // would race other points with a different AO/occupied stride.
-      for (I term = 0; term < 5; ++term) accum[term] = 0.0;
+    const bool original_available = density && ao && active && full_n && terms == 5;
+    double original[5]{};
+    if (original_available) {
+      // A feature-error budget is not an XC E/Vxc/force sensitivity contract.
+      // Until such a contract exists, require exact original-D feature identity
+      // even when the forward-error prefilter passes. Keep the reference in
+      // registers: replacing compact scratch would race other point owners.
       const auto* matrix = density + spin*full_n*full_n;
       const I ao_stride = count*active;
       const I matrix_width = active >= 32 ? width : 1;
@@ -903,17 +904,26 @@ __device__ void occupied_density_features_body(const double* work, I rank, I cou
         const I index = point*active+row;
         const double derivatives[3]{ao[ao_stride+index], ao[2*ao_stride+index],
                                     ao[3*ao_stride+index]};
-        generativeqc_grid_policy::add_features(ao[index], derivatives, products, accum, 15U);
+        generativeqc_grid_policy::add_features(ao[index], derivatives, products, original, 15U);
       }
       if constexpr (Cooperative)
         for (int offset = 16; offset > 0; offset >>= 1)
           for (I term = 0; term < 5; ++term)
-            accum[term] += __shfl_down_sync(0xffffffffu, accum[term], offset);
+            original[term] += __shfl_down_sync(0xffffffffu, original[term], offset);
     }
-    for (I term = 0; term < terms; ++term) {
-      if (lane == 0)
+    if (lane == 0) {
+      const double weight = spins == 1 ? 2.0 : 1.0;
+      bool identical = original_available && !unsafe;
+      for (I term = 0; term < 5; ++term) {
+        accum[term] *= weight;
+        // Signed zero is part of the point-program input, not a tolerance.
+        identical = identical && isfinite(original[term]) &&
+            accum[term] == original[term] &&
+            copysign(1.0, accum[term]) == copysign(1.0, original[term]);
+      }
+      for (I term = 0; term < terms; ++term)
         features[(spin * terms + term) * count + point] =
-            finite(unsafe && !fallback ? NAN : (!fallback && spins == 1 ? 2.0 : 1.0) * accum[term], error, 1);
+            finite(!original_available ? NAN : (identical ? accum[term] : original[term]), error, 1);
     }
   }
 }

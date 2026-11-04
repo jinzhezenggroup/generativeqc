@@ -75,10 +75,19 @@ this is an accuracy improvement, not a bitwise-reproducible SCF contract.
 An authenticated occupied-frame lease identifies the canonical coefficients
 that formed the stored density; it does not prove floating-point equality of
 the matrix and reassociated factor contractions. The generated strict-FP64
-four-jet consumer therefore accumulates outward-rounded absolute dot bounds
-and certifies rho, each gradient and tau separately. Coefficient, AO and bound
-exponents outside the derived representability envelope refuse reuse rather
-than relying on finite candidate outputs alone.
+four-jet consumer accumulates outward-rounded absolute dot bounds as a
+roundoff prefilter for rho, each gradient and tau separately. This prefilter
+does not authorize a nonzero feature discrepancy: there is no qualified
+point-program/domain sensitivity contract that turns its internal budget into
+an XC energy, potential or force bound.
+
+Every explicit occupied invocation also evaluates the original stored-D
+features in registers with the retained built-in matrix arithmetic. A candidate
+is used only when all five finite features are bitwise identical, including
+the sign of zero. Otherwise the original-D vector is used. Identical inputs
+to the unchanged point program require no Lipschitz assumption, including at
+branches, small densities and singular boundaries. This is a conservative
+restriction, not an accelerated sensitivity certificate.
 
 Projection and absolute-bound panels share dead matrix-product scratch only
 when `2 * occupied_rank <= active_ao_count`. Other tiles retain the existing
@@ -89,11 +98,15 @@ applies the RKS occupation factor a second time. Missing bounds fail closed;
 genuine original-matrix errors are still reported. No extra global allocation
 or host oracle is introduced.
 
-The internal feature bound is not a substitute for independent whole XC
-energy/potential/force and complete-endpoint qualification. Prior default-route
-performance receipts do not qualify the extra certificate or fallback work.
-The derivation and outstanding acceptance boundary are preserved in the
-[stored-density certificate candidate note](../../.agents/notes/proposed/2026-11-04-occupied-xc-stored-density-certificate.md).
+Because exact verification repeats dense feature work, the KS default uses
+the ordinary matrix route. Only `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` requests
+the verified experimental route; unset, `0` and invalid values use matrix
+products. Explicit requests do not bypass identity, precision, generation,
+mapping, capacity or lifetime checks. Prior default-route performance receipts
+do not qualify the added work or justify re-enabling the default. Complete
+native endpoint/resource qualification remains separate from feature tests.
+See the [exact-identity restriction decision](../../.agents/notes/implemented/numerics/2026-11-04-occupied-xc-exact-identity.md)
+and the earlier [roundoff-certificate proposal](../../.agents/notes/proposed/2026-11-04-occupied-xc-stored-density-certificate.md).
 
 ### Budget-Fock matrix products
 

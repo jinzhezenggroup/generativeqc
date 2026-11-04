@@ -212,9 +212,47 @@ def test_well_conditioned_small_features_are_admitted_and_accurate(
         )
         == 0
     )
-    np.testing.assert_allclose(
-        actual, _stored_density_features(density, ao), rtol=5e-13, atol=5e-14
+    expected = _stored_density_features(density, ao)
+    np.testing.assert_array_equal(actual.view(np.uint64), expected.view(np.uint64))
+
+
+def test_passing_feature_budget_cannot_replace_a_point_program_contract(
+    certificate_probe: ct.CDLL,
+) -> None:
+    """Even a tiny, admitted feature error can cross a point-program branch."""
+    active, rank, points = 2, 1, 1
+    ao = np.zeros((4, points, active))
+    ao[0, 0, 0] = 0.25
+    density = np.zeros((1, active, active))
+    density[0, 0, 0] = np.nextafter(2.0, np.inf)
+    projections = np.zeros((1, 4, points, rank))
+    projections[0, 0, 0, 0] = 0.25
+    absolute = projections.copy()
+    features = np.array([0.0625, 0.0, 0.0, 0.0, 0.0])
+    norms = np.array([0.0625, 0.0, 0.0, 0.0])
+    assert certificate_probe.admitted(
+        features.ctypes.data, norms.ctypes.data, active, rank, 1
     )
+    actual = np.zeros((1, 5, points))
+    assert (
+        certificate_probe.evaluate(
+            density.ctypes.data,
+            projections.ctypes.data,
+            absolute.ctypes.data,
+            ao.ctypes.data,
+            active,
+            points,
+            rank,
+            1,
+            active,
+            None,
+            actual.ctypes.data,
+        )
+        == 0
+    )
+    expected = _stored_density_features(density, ao)
+    assert expected[0, 0, 0] > 0.125
+    np.testing.assert_array_equal(actual.view(np.uint64), expected.view(np.uint64))
 
 
 @pytest.mark.parametrize("spins", [1, 2])
@@ -324,20 +362,28 @@ def test_certificate_encloses_both_routes_against_exact_decimal_features(
                 assert abs(candidate_value - stored_value) <= bounds[term]
 
 
+@pytest.mark.parametrize("with_certificate", [False, True])
+@pytest.mark.parametrize("original", ["nan", "infinity", "missing"])
 def test_missing_certificate_and_original_matrix_failures_are_not_hidden(
-    certificate_probe: ct.CDLL,
+    certificate_probe: ct.CDLL, with_certificate: bool, original: str
 ) -> None:
+    """A passing candidate budget cannot mask missing or invalid original D."""
     active, points = 17, 1
     density = np.zeros((1, active, active))
-    density[0, 0, 0] = np.nan
-    ao = np.ones((4, points, active))
+    density[0, 0, 0] = np.inf if original == "infinity" else np.nan
+    ao = np.full((4, points, active), 1e-4)
     projections = np.zeros((1, 4, points, 1))
+    absolute = np.zeros_like(projections)
+    features, norms = np.zeros(5), np.zeros(4)
+    assert certificate_probe.admitted(
+        features.ctypes.data, norms.ctypes.data, active, 1, 1
+    )
     actual = np.zeros((1, 5, points))
     assert (
         certificate_probe.evaluate(
-            density.ctypes.data,
+            None if original == "missing" else density.ctypes.data,
             projections.ctypes.data,
-            None,
+            absolute.ctypes.data if with_certificate else None,
             ao.ctypes.data,
             active,
             points,

@@ -3,6 +3,15 @@
 Status: proposed; feature/device qualification does not close #2751
 Date: 2026-11-04
 
+## Superseding conservative restriction
+
+The [exact-identity decision](../implemented/numerics/2026-11-04-occupied-xc-exact-identity.md)
+supersedes the candidate's numerical admission and unchanged-default proposal.
+The roundoff rule below remains a prefilter, not an XC sensitivity contract:
+explicit reuse now requires exact original-D feature identity, and automatic
+KS requests are disabled pending a cheaper qualified contract. Earlier results
+below retain their historical source scope; they are not new endpoint evidence.
+
 ## Problem and provenance
 
 The existing owner witness authenticates D/C pointers, generation, strict-FP64

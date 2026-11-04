@@ -16,6 +16,8 @@ from generativeqc_compiler.dft.xc_contraction_cuda import (
     _emit_occupied_features,
     _emit_tiled,
 )
+from generativeqc_compiler.dft.xc_tile_batch_cuda import emit_native_xc_tile_batches
+from generativeqc_compiler.tensor.scf_cuda import emit_density_cuda
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_TEST_OCCUPIED_XC") != "1",
@@ -32,8 +34,10 @@ def occupied_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     declaration = cpp_record_definition(
         (ROOT / "src/dft/cuda_xc.hpp").read_text(), "CudaXcOccupiedDensity"
     )
+    batches = emit_native_xc_tile_batches()
     source.write_text(
         PREAMBLE
+        + emit_density_cuda()
         + declaration
         + ";\nnamespace generativeqc_grid_policy {\n"
         + emit_feature_policy(device=True)
@@ -54,6 +58,17 @@ def occupied_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
             "density_features_body",
             include_template=True,
         )
+        + cpp_record_definition(
+            (ROOT / "src/dft/cuda_xc_tile.hpp").read_text(), "CudaXcCompactTile"
+        )
+        + ";\n"
+        + cpp_function_definition(batches, "compact_tile_ids")
+        + cpp_function_definition(
+            batches, "batch_density_products", include_template=True
+        )
+        + cpp_function_definition(
+            batches, "batch_density_features", include_template=True
+        )
         + DRIVER
     )
     result = CudaCompilerAdapter(
@@ -69,6 +84,15 @@ def occupied_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     function.restype = ct.c_int
     native.matrix_probe.argtypes = [ct.c_void_p] * 3 + [ct.c_size_t] * 4 + [ct.c_void_p]
     native.matrix_probe.restype = ct.c_int
+    native.form_density.argtypes = [ct.c_void_p] * 2 + [ct.c_size_t] * 2 + [ct.c_void_p]
+    native.form_density.restype = ct.c_int
+    native.compact_probe.argtypes = (
+        [ct.c_void_p, ct.c_size_t]
+        + [ct.c_void_p] * 4
+        + [ct.c_size_t] * 4
+        + [ct.c_void_p] * 2
+    )
+    native.compact_probe.restype = ct.c_int
     return native
 
 
@@ -129,6 +153,194 @@ def test_projection_and_features_match_independent_density(
     )
     assert status == 0
     np.testing.assert_allclose(actual, reference, rtol=5e-13, atol=5e-14)
+    dense_features = np.zeros_like(actual)
+    assert (
+        occupied_probe.matrix_probe(
+            matrices.ctypes.data,
+            ao.ctypes.data,
+            None if ids is None else ids.ctypes.data,
+            nao,
+            active,
+            points,
+            spins,
+            dense_features.ctypes.data,
+        )
+        == 0
+    )
+    np.testing.assert_array_equal(
+        actual.view(np.uint64), dense_features.view(np.uint64)
+    )
+
+
+@pytest.mark.parametrize("active", [17, 31, 32, 41])
+@pytest.mark.parametrize("mapped", [False, True])
+@pytest.mark.parametrize("occupations", [(3,), (3, 2), (0, 3)])
+def test_gpu_formed_gram_has_exact_original_density_features(
+    occupied_probe: ct.CDLL,
+    active: int,
+    mapped: bool,
+    occupations: tuple[int, ...],
+) -> None:
+    """A real GPU Gram producer and orthonormal frames feed both consumers."""
+    rng = np.random.default_rng(20261104)
+    nao, points, spins = active + 7 if mapped else active, 3, len(occupations)
+    ids = np.arange(active, dtype=np.uintp) + (2 if mapped else 0)
+    coefficients = np.ascontiguousarray(
+        np.stack([np.linalg.qr(rng.normal(size=(nao, nao)))[0].T for _ in occupations])
+    )
+    counts = np.ascontiguousarray(occupations, dtype=np.int32)
+    density = np.zeros((spins, nao, nao))
+    assert (
+        occupied_probe.form_density(
+            coefficients.ctypes.data,
+            counts.ctypes.data,
+            nao,
+            spins,
+            density.ctypes.data,
+        )
+        == 0
+    )
+    for spin, count in enumerate(occupations):
+        frame = coefficients[spin, :count].T
+        np.testing.assert_allclose(
+            density[spin],
+            ((2.0 if spins == 1 else 1.0) * frame) @ frame.T,
+            rtol=5e-15,
+            atol=5e-16,
+        )
+    ao = np.ascontiguousarray(rng.normal(size=(4, points, active)) * 1e-4)
+    actual, expected = np.zeros((spins, 5, points)), np.zeros((spins, 5, points))
+    mapping = ids.ctypes.data if mapped else None
+    assert (
+        occupied_probe.occupied_probe(
+            density.ctypes.data,
+            coefficients.ctypes.data,
+            ao.ctypes.data,
+            mapping,
+            nao,
+            active,
+            points,
+            spins,
+            occupations[0],
+            occupations[1] if spins == 2 else 0,
+            max(occupations),
+            actual.ctypes.data,
+        )
+        == 0
+    )
+    assert (
+        occupied_probe.matrix_probe(
+            density.ctypes.data,
+            ao.ctypes.data,
+            mapping,
+            nao,
+            active,
+            points,
+            spins,
+            expected.ctypes.data,
+        )
+        == 0
+    )
+    np.testing.assert_array_equal(actual.view(np.uint64), expected.view(np.uint64))
+
+
+class CompactTile(ct.Structure):
+    """Native batch ABI; each tile retains its own point/AO/scratch strides."""
+
+    _fields_ = [
+        (name, ct.c_size_t)
+        for name in (
+            "begin",
+            "count",
+            "active",
+            "map_offset",
+            "ao_offset",
+            "work_offset",
+            "potential_offset",
+        )
+    ]
+
+
+@pytest.mark.parametrize("occupations", [(3,), (3, 2), (0, 3)])
+@pytest.mark.parametrize("scale", [1e-4, 1e165])
+def test_compact_gpu_batches_preserve_original_features_and_scratch_owners(
+    occupied_probe: ct.CDLL, occupations: tuple[int, ...], scale: float
+) -> None:
+    """Run actual batch specializations, including capacity fallback in one group."""
+    nao, spins = 48, len(occupations)
+    rng = np.random.default_rng(20261105)
+    coefficients = np.ascontiguousarray(
+        np.stack([np.linalg.qr(rng.normal(size=(nao, nao)))[0].T for _ in occupations])
+    )
+    counts = np.ascontiguousarray(occupations, dtype=np.int32)
+    density = np.zeros((spins, nao, nao))
+    assert (
+        occupied_probe.form_density(
+            coefficients.ctypes.data,
+            counts.ctypes.data,
+            nao,
+            spins,
+            density.ctypes.data,
+        )
+        == 0
+    )
+    tiles = (CompactTile * 3)(
+        CompactTile(11, 3, 17, 5, 7, 11, 0),
+        CompactTile(14, 2, 33, 27, 218, spins * 204 + 22, 0),
+        CompactTile(16, 4, 5, 65, 489, spins * 468 + 33, 0),
+    )
+    ao = np.zeros(569)
+    ids = np.zeros(70, dtype=np.uintp)
+    work = np.zeros(spins * 548 + 44)
+    features = np.zeros(spins * 45 + 7)
+    expected = np.full_like(features, -456.0)
+    protected_work = np.ones(len(work), dtype=bool)
+    for tile in tiles:
+        mapping = np.sort(rng.choice(nao, tile.active, replace=False)).astype(np.uintp)
+        ids[tile.map_offset : tile.map_offset + tile.active] = mapping
+        panel = np.ascontiguousarray(
+            rng.normal(size=(4, tile.count, tile.active)) * scale
+        )
+        ao[tile.ao_offset : tile.ao_offset + panel.size] = panel.ravel()
+        dense = np.zeros((spins, 5, tile.count))
+        status = occupied_probe.matrix_probe(
+            density.ctypes.data,
+            panel.ctypes.data,
+            mapping.ctypes.data,
+            nao,
+            tile.active,
+            tile.count,
+            spins,
+            dense.ctypes.data,
+        )
+        assert status == (1 if scale == 1e165 else 0)
+        offset = (tile.begin - tiles[0].begin) * spins * 5
+        expected[offset : offset + dense.size] = dense.ravel()
+        protected_work[
+            tile.work_offset : tile.work_offset + spins * 4 * tile.count * tile.active
+        ] = False
+    status = occupied_probe.compact_probe(
+        tiles,
+        len(tiles),
+        density.ctypes.data,
+        coefficients.ctypes.data,
+        ao.ctypes.data,
+        ids.ctypes.data,
+        nao,
+        spins,
+        occupations[0],
+        occupations[1] if spins == 2 else 0,
+        features.ctypes.data,
+        work.ctypes.data,
+    )
+    assert status == (1 if scale == 1e165 else 0)
+    if scale == 1e165:
+        np.testing.assert_array_equal(np.isfinite(features), np.isfinite(expected))
+    else:
+        np.testing.assert_array_equal(
+            features.view(np.uint64), expected.view(np.uint64)
+        )
+    np.testing.assert_array_equal(work[protected_work], -123.0)
 
 
 @pytest.mark.parametrize("mapped", [False, True])
@@ -256,7 +468,7 @@ def test_finite_cancellation_and_overflow_match_original_cuda_consumer(
         assert np.any(~np.isfinite(actual))
     else:
         assert reference_status == 0
-        np.testing.assert_allclose(actual, expected, rtol=5e-13, atol=5e-14)
+        np.testing.assert_array_equal(actual.view(np.uint64), expected.view(np.uint64))
         if scale == 1e6:
             assert np.max(np.abs(actual)) > 0.001
 
@@ -267,6 +479,8 @@ PREAMBLE = r"""
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <algorithm>
+#include <vector>
 using I = std::int64_t;
 namespace generativeqc_tensor {
 inline unsigned blocks(I count, unsigned width) { return (count + width - 1) / width; }
@@ -293,6 +507,94 @@ struct Stream {
   Stream() { generativeqc_tensor::cuda_check(cudaStreamCreate(&value)); }
   ~Stream() { if (value) cudaStreamDestroy(value); }
 };
+extern "C" int form_density(const double* coefficients, const std::int32_t* occupations,
+    size_t nao, size_t spins, double* output) {
+  try {
+    using generativeqc_tensor::cuda_check;
+    Stream stream;
+    DeviceBuffer<double> frame(spins * nao * nao), density(spins * nao * nao);
+    DeviceBuffer<std::int32_t> counts(spins);
+    cuda_check(cudaMemcpyAsync(frame.value, coefficients, spins * nao * nao * sizeof(double),
+                               cudaMemcpyHostToDevice, stream.value));
+    cuda_check(cudaMemcpyAsync(counts.value, occupations, spins * sizeof(std::int32_t),
+                               cudaMemcpyHostToDevice, stream.value));
+    const auto blocks = generativeqc_tensor::blocks(spins * nao * nao, 128);
+    if (spins == 1)
+      generativeqc::scf::generated::occupied_density_kernel<2><<<blocks, 128, 0, stream.value>>>(
+          1, spins, nao, counts.value, frame.value, nullptr, density.value);
+    else
+      generativeqc::scf::generated::occupied_density_kernel<1><<<blocks, 128, 0, stream.value>>>(
+          1, spins, nao, counts.value, frame.value, nullptr, density.value);
+    cuda_check(cudaGetLastError());
+    cuda_check(cudaMemcpyAsync(output, density.value, spins * nao * nao * sizeof(double),
+                               cudaMemcpyDeviceToHost, stream.value));
+    cuda_check(cudaStreamSynchronize(stream.value));
+    return 0;
+  } catch (...) {
+    return 99;
+  }
+}
+extern "C" int compact_probe(const CudaXcCompactTile* tiles, size_t tile_count,
+    const double* density, const double* coefficients, const double* ao, const size_t* ids,
+    size_t nao, size_t spins, size_t alpha, size_t beta, double* output, double* scratch) {
+  try {
+    using generativeqc_tensor::cuda_check;
+    size_t ao_count=0, work_count=0, map_count=0, feature_count=0, max_active=0, max_points=0;
+    const size_t begin=tiles[0].begin;
+    for (size_t index=0; index<tile_count; ++index) {
+      const auto& tile=tiles[index];
+      ao_count=std::max(ao_count,tile.ao_offset+4*tile.count*tile.active);
+      work_count=std::max(work_count,tile.work_offset+spins*4*tile.count*tile.active);
+      map_count=std::max(map_count,tile.map_offset+tile.active);
+      feature_count=std::max(feature_count,(tile.begin+tile.count-begin)*spins*5);
+      max_active=std::max(max_active,tile.active);
+      max_points=std::max(max_points,tile.count);
+    }
+    work_count+=11;
+    feature_count+=7;
+    Stream stream;
+    DeviceBuffer<CudaXcCompactTile> metadata(tile_count);
+    DeviceBuffer<double> matrix(spins*nao*nao), frame(spins*nao*nao), orbitals(ao_count),
+        work(work_count), features(feature_count);
+    DeviceBuffer<size_t> map(map_count);
+    DeviceBuffer<int> error(1);
+    std::vector<double> work_initial(work_count,-123.0), feature_initial(feature_count,-456.0);
+    cuda_check(cudaMemsetAsync(error.value,0,sizeof(int),stream.value));
+    cuda_check(cudaMemcpyAsync(metadata.value,tiles,tile_count*sizeof(CudaXcCompactTile),
+                               cudaMemcpyHostToDevice,stream.value));
+    cuda_check(cudaMemcpyAsync(matrix.value,density,spins*nao*nao*sizeof(double),
+                               cudaMemcpyHostToDevice,stream.value));
+    cuda_check(cudaMemcpyAsync(frame.value,coefficients,spins*nao*nao*sizeof(double),
+                               cudaMemcpyHostToDevice,stream.value));
+    cuda_check(cudaMemcpyAsync(orbitals.value,ao,ao_count*sizeof(double),
+                               cudaMemcpyHostToDevice,stream.value));
+    cuda_check(cudaMemcpyAsync(map.value,ids,map_count*sizeof(size_t),
+                               cudaMemcpyHostToDevice,stream.value));
+    cuda_check(cudaMemcpyAsync(work.value,work_initial.data(),work_count*sizeof(double),
+                               cudaMemcpyHostToDevice,stream.value));
+    cuda_check(cudaMemcpyAsync(features.value,feature_initial.data(),feature_count*sizeof(double),
+                               cudaMemcpyHostToDevice,stream.value));
+    CudaXcOccupiedDensity witness{matrix.value,frame.value,nao,spins,{alpha,beta},1};
+    batch_density_products<double,true><<<dim3((max_active+15)/16,(max_points+15)/16,
+        tile_count*spins*4),dim3(16,16),0,stream.value>>>(metadata.value,matrix.value,
+            orbitals.value,work.value,nao,spins,4,map.value,error.value,witness);
+    cuda_check(cudaGetLastError());
+    batch_density_features<true><<<dim3((spins*max_points*32+127)/128,tile_count),
+        128,0,stream.value>>>(metadata.value,orbitals.value,work.value,features.value,
+            begin,spins,4,4,5,2,map.value,error.value,witness);
+    cuda_check(cudaGetLastError());
+    int failure=0;
+    cuda_check(cudaMemcpyAsync(output,features.value,feature_count*sizeof(double),
+                               cudaMemcpyDeviceToHost,stream.value));
+    cuda_check(cudaMemcpyAsync(scratch,work.value,work_count*sizeof(double),
+                               cudaMemcpyDeviceToHost,stream.value));
+    cuda_check(cudaMemcpyAsync(&failure,error.value,sizeof(int),cudaMemcpyDeviceToHost,stream.value));
+    cuda_check(cudaStreamSynchronize(stream.value));
+    return failure;
+  } catch (...) {
+    return 99;
+  }
+}
 extern "C" int occupied_probe(const double* density, const double* coefficients, const double* ao,
     const size_t* ids, size_t nao, size_t active, size_t points, size_t spins,
     size_t alpha, size_t beta, size_t rank, double* output) {

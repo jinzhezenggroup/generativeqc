@@ -110,7 +110,9 @@ struct CudaXcLayout {
  * Coefficients are column-major nao-by-nao frames, one per spin. This is an
  * ownership/generation witness, not equality between the stored rounded Gram
  * and a reassociated orbital contraction. The generated consumer must certify
- * each point or fall back to this same live stored density. */
+ * each point or fall back to this same live stored density. Until a qualified
+ * XC sensitivity contract exists, certification requires bitwise-identical
+ * original-D features, not merely a small per-feature error estimate. */
 struct CudaXcOccupiedDensity {
   const double* density{};
   const double* coefficients{};
