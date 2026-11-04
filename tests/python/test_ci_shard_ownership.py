@@ -272,50 +272,77 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
         assert f"tests/python/{filename}" in targets
 
 
-def test_mixed_rsh_force_matrix_preserves_one_tzvp_and_open_shell_in_routine() -> None:
-    """Guard the two expensive nightly def2-TZVP replays without importing PySCF."""
-    source = ROOT / "tests/python/test_mixed_rsh_df_forces.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"))
-    target = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef)
-        and node.name == "test_complete_mixed_df_forces_against_independent_energies"
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+def test_mixed_rsh_force_matrix_preserves_one_tzvp_and_open_shell_in_routine(
+    event: str, tmp_path: Path
+) -> None:
+    """Collect the real parameter matrix with the actual CI marker selection."""
+    source = "tests/python/test_mixed_rsh_df_forces.py"
+    _, targets, extra = _selection(event, "ecp-forces")
+    assert source in targets
+    output = tmp_path / "mixed-rsh-collection.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+class Probe:
+    def pytest_collection_finish(self, session):
+        fields = ("device", "force_route", "spin", "representation", "basis_name")
+        rows = []
+        for item in session.items:
+            params = getattr(getattr(item, "callspec", None), "params", {})
+            if all(field in params for field in fields):
+                rows.append([params[field] for field in fields])
+        Path(sys.argv[1]).write_text(json.dumps(rows), encoding="utf-8")
+
+raise SystemExit(pytest.main(["--collect-only", "-q", *sys.argv[2:]], plugins=[Probe()]))
+""",
+            str(output),
+            source,
+            *extra,
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
-    basis_decorator = next(
-        decorator
-        for decorator in target.decorator_list
-        if isinstance(decorator, ast.Call)
-        and isinstance(decorator.func, ast.Attribute)
-        and decorator.func.attr == "parametrize"
-        and ast.literal_eval(decorator.args[0]) == "spin,representation,basis_name"
-    )
-    retained = set()
-    nightly = set()
-    for case in basis_decorator.args[1].elts:
-        if isinstance(case, ast.Tuple):
-            values = ast.literal_eval(case)
-        else:
-            assert isinstance(case, ast.Call)
-            assert ast.unparse(case.func) == "pytest.param"
-            values = tuple(ast.literal_eval(value) for value in case.args)
-            assert len(case.keywords) == 1
-            assert case.keywords[0].arg == "marks"
-            assert ast.unparse(case.keywords[0].value) == "pytest.mark.ci_nightly"
-            nightly.add(values)
-        assert values not in retained
-        retained.add(values)
-    assert len(retained) == 11
-    assert nightly == {
+    assert result.returncode == 0, result.stdout + result.stderr
+    rows = [tuple(row) for row in json.loads(output.read_text(encoding="utf-8"))]
+    assert len(rows) == len(set(rows))
+    retained = {
+        (0, "cartesian", "sto-3g"),
+        (0, "spherical", "sto-3g"),
+        (1, "cartesian", "sto-3g"),
+        (1, "spherical", "sto-3g"),
+        (0, "spherical", "sto-3g-water"),
+        (0, "spherical", "def2-svp"),
+        (0, "spherical", "def2-tzvp"),
+        (0, "cartesian", "def2-svp"),
         (0, "cartesian", "def2-tzvp"),
+        (2, "spherical", "def2-svp"),
         (2, "spherical", "def2-tzvp"),
     }
-    # Both the higher angular basis and each spin/representation route still
-    # receive independent full-component force checks on ordinary PR CI.
-    routine = retained - nightly
-    assert (0, "spherical", "def2-tzvp") in routine
-    assert (0, "cartesian", "def2-svp") in routine
-    assert (2, "spherical", "def2-svp") in routine
+    if event not in ("schedule", "workflow_dispatch"):
+        retained -= {(0, "cartesian", "def2-tzvp"), (2, "spherical", "def2-tzvp")}
+    assert set(rows) == {
+        (device, route, *case)
+        for device, route in (
+            ("cpu", "reference"),
+            ("cuda", "native"),
+            ("cuda", "compatibility"),
+        )
+        for case in retained
+    }
 
 
 @pytest.mark.parametrize(
