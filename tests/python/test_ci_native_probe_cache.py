@@ -304,7 +304,9 @@ def test_core_a_probe_cache_diagnostics_preserve_compile_and_scientific_gates() 
     assert "ccache --show-stats --verbose" in report
     assert "ccache --show-log-stats --verbose" in report
     assert "ccache --print-log-stats --format=json" in report
-    assert 'if [[ "${{ matrix.shard }}" == "core-a" && -s "$CCACHE_STATSLOG" ]]' in report
+    assert (
+        'if [[ "${{ matrix.shard }}" == "core-a" && -s "$CCACHE_STATSLOG" ]]' in report
+    )
     assert "ccache --zero-stats" in steps["Reset native probe ccache statistics"]
     assert '-n 4 --dist="$dist_mode"' in test
     # Diagnostics must not turn a failed test step into a successful one.
