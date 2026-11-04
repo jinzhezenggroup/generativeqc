@@ -87,8 +87,150 @@ and zero-beta factors. Physical endpoint qualification uses independent PySCF
 energies and two-step reconverged force differences, never native finite
 differences as their own oracle.
 
-Source-matched final endpoint receipts and limitations are recorded below after
-the complete-library qualification.
+### Final source-matched qualification
+
+The [compact accepted measurement record](../../../../benchmarks/results/unrestricted-df-20261104/qualification-summary.json)
+retains numerical gates, all endpoint timing populations, capacity, source-reuse,
+transfer and separated response-phase results. Its column-labelled arrays use
+H2/H3/H4 row order, seconds rounded to six decimals, and per-endpoint phase/work
+counts; force errors correspond to steps 1e-3 and 3e-4 Bohr. Phase times are
+instrumented except the first endpoint's primal CC/(T) metadata. It also binds
+the full summary and provenance manifest by SHA-256. The full summary includes
+native forces, independent reconverged directional derivatives and individual
+generated graph action counts. The manifest binds input snapshots, source
+inventory, executed library, build/cache logs and compressed raw traces. Full
+artifacts remain in the ignored local `build/issues-2978-2980-factor-evidence/`
+directory and source-matched n1 checkout. This retains a compact accepted record
+within the repository's evidence budget, not raw traces in Git or a new external
+publication.
+
+All 2076 scientific inputs match implementation commit
+`8316b370cc092d3a9675d939deab5ec289966e2e` on base
+`c776b6cc12855b68195e4be27d0604b1b524690e`, with embedded input identity
+`c416b12e1a28d1fd10392670b692c78fdada284d063c6b54a3f340cf3a3913df`.
+Executed CUDA library SHA-256:
+`81efdc6026c6e8b3c25048be0e3ec551b9c3affc02babc6ba0c026cc81d4fd81`.
+The qualification checkout is the base plus byte-matched implementation inputs,
+not a claim that its Git HEAD is the implementation commit. Subsequent catalog,
+test-harness and evidence changes do not change the scientific input identity.
+
+The complete-library Slurm run on RTX 5090 passed resident and bounded-panel
+execution, eight compact/physical CUDA force cases, four original Br RHF/MP2
+energy/force cases and the full physical H2/H3/H4 DZ/TZ CBS ladder. Separate
+PySCF 2.14.0 processes passed the complete CBS energy gate of 3e-8 Eh and both
+independent directional-force gates of 5e-7 Eh/Bohr. Trace modes and repeated
+endpoints agree. These are complete new-library observations, not the historical
+intermediate patch's timings or a mixed-object diagnostic executable.
+
+The measured native H4 endpoint takes about 350 s untraced; its single traced
+endpoint takes about 451 s, of which the triples-response parent scope accounts
+for 430 s. The virtual-axis `moment_aaa` programs each execute over a million
+observed ordered graph actions. This is a demonstrated residual UCC response
+cost, not the removed fitted UMP2 singleton-transform problem. Preserve the
+finite work policy and do not advertise large-system scalability or an L20/RCC
+speed ratio from the fitted-source improvement. Detailed tracing materially
+perturbs this execution schedule; phase times are nested and are not additive
+with complete endpoint timings.
+
+The final CI exercise also exposed extracted host probes missing newly required
+SCF/exception dependencies and the optional fitted-planner boundary. Updating
+those numerical test doubles preserves their status/lifetime controls without
+weakening production admission or changing the scientific source. Full GCC and
+Clang native CI passed on the same scientific inputs; the targeted updated
+controls pass locally. The Libxc snapshot refresh updates checked input
+identities only: its stale historical measurements and all capability stages
+remain unchanged.
+
+### Measurement detail and interpretation
+
+Qualification used RTX 5090 (32607 MiB), driver 580.95.05, Release, GCC 13.3.0,
+nvcc 12.9.86 from the CUDA 12.9.1 installation, `sm_120`, verified sccache 0.16.0,
+scalar host linear algebra and one native host thread. AOT shell/stationary
+artifacts were disabled. Shared before/after cache statistics cannot establish
+exclusive cache-hit deltas for this build. Slurm job 15846 used `main`, node1,
+`--gres=gpu:5090:1`, a finite one-hour allocation and unchanged scheduler device
+visibility. The harness set no scalar-work override.
+
+Full CBS requested energy and analytic forces with spherical cc-pV(D,T)Z/JKFIT,
+full DF-HF, `standard`, `preconvergence="auto"`, 32 GiB numeric budget and SCF
+ceiling 200. H2/H3 use the original #2980 input and basis snapshots; H4 uses the
+physical triplet ladder geometry and exact PySCF 2.14.0 basis snapshots. No
+reference oracle runs inside a production endpoint. Executed CUDA backend does
+not imply that host orchestration, metric conditioning, factor transport or
+every UCC provider contraction is device resident.
+
+Setup includes local input/basis reads and calculator construction, not imports
+or compilation. Warm calls compute the requested complete endpoint again. H2/H3
+have three endpoints per trace mode; H4 has two trace-off and one trace-on call,
+so H4 has no trace-on warm median.
+
+| Case | Setup + first, trace off (s) | Warm median, trace off (s) | Warm median, trace on (s) | Sampled device peak (MiB) | Maximum planned numeric bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| H2 triplet | 1.45928 | 0.18745 | 0.28195 | 6175 | 11,594,937,039 |
+| H3 doublet | 20.29199 | 18.94008 | 25.08417 | 6207 | 11,864,888,440 |
+| H4 triplet | 350.79100 | 349.97163 | not measured | 6263 | 12,486,832,661 |
+
+Device peaks are 200 ms whole-device `nvidia-smi memory.used` samples, not
+allocator-exact or process-RSS peaks. Planned numeric capacity is a separate
+conservative admission quantity. All repeats have identical reported energies;
+their largest force-component difference is below 9e-16 Eh/Bohr.
+
+| Case | Maximum independent energy error (Eh) | Maximum checked directional-force error (Eh/Bohr) |
+| --- | ---: | ---: |
+| H2 | 5.01e-12 | 7.67e-8 |
+| H3 | 2.99e-11 | 2.37e-8 |
+| H4 | 2.67e-11 | 2.80e-7 |
+
+These UMP2 initial-weight counters cover both cardinal components of one CBS
+endpoint, excluding factor preparation, pullbacks and other endpoint transfers.
+They are semantic work, not measured FLOPs or kernel counts. Zero provider AO
+scans means reuse after factor preparation, not zero initial integral work.
+
+| Case | Factor-block reuses | Provider AO scans/values | `transform_fmas` | H2D bytes | D2H bytes |
+| --- | ---: | --- | ---: | ---: | ---: |
+| H2 | 8 | 0 / 0 | 174,016 | 2,304 | 23,712 |
+| H3 | 14 | 0 / 0 | 1,107,774 | 6,224 | 100,832 |
+| H4 | 26 | 0 / 0 | 4,807,772 | 15,136 | 327,960 |
+
+The following seconds are per traced CBS endpoint, averaged over its recorded
+population, except primal solver/(T) metadata from the first untraced endpoint.
+Nested graph durations must not be added to their parent response phase.
+
+| Case | Primal CC solver | Primal (T) | Lambda | Triples response | Orbital response | Nuclear response |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| H2 | 0.01294 | 0.000004 | 0.03333 | 0.000011 | 0.00347 | 0.00556 |
+| H3 | 0.07225 | 1.03521 | 0.78909 | 22.54484 | 0.02564 | 0.01673 |
+| H4 | 0.11039 | 15.72394 | 1.78043 | 430.33813 | 0.02188 | 0.04016 |
+
+H4's three `moment_aaa` virtual-axis programs each execute 1,193,859 observed
+graph actions. UMP2 initial weights across both bases take
+0.00116/0.00266/0.00624 s for H2/H3/H4 in these traces; orbital-gradient scopes
+take 0.00867/0.01356/0.04147 s. This distinguishes the remaining UCC response
+schedule from the removed UMP2 singleton/full-axis source-transform cost.
+
+CPU scientific selection passed 74 tests with eight device cases skipped;
+catalog tests passed 63; additional SCF/status/retirement controls passed 74.
+The four original Br cases passed complete native CUDA RHF/MP2 energies and
+forces with both independent displacement steps in 133.65 s. The three-case
+physical ladder suite took 1007.24 s including independent oracle work; that
+suite duration is not a native endpoint latency. Permanent real-device gates
+can be repeated after configuring the documented cached CUDA build:
+
+```bash
+srun --partition=main --nodelist=node1 --gres=gpu:5090:1 \
+  --nodes=1 --ntasks=1 --time=00:45:00 bash -lc '
+    export GENERATIVEQC_LIBRARY="$PWD/build/cbs-open-shell-cuda/libgenerativeqc.so"
+    export PYTHONPATH="$PWD/python:$PWD:$PWD/tests/python"
+    export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+    export GENERATIVEQC_OPEN_SHELL_CUDA_TEST=1
+    export GENERATIVEQC_OPEN_SHELL_CUDA_LADDER_TEST=1
+    export GENERATIVEQC_FULL_DF_CUDA_TEST=1
+    build/cbs-open-shell-cuda/generativeqc_df_factor_cuda_tests &&
+    python -m pytest -q tests/python/test_cbs_open_shell_native.py \
+      -k "(df_analytic_components and cuda) or physical_hydrogen_df_ump2_force or physical_df_cbs_size_ladder" &&
+    python -m pytest -q tests/python/test_df_bromine_reference.py
+  '
+```
 
 ## Revisit when
 

@@ -152,6 +152,7 @@ PREFIX = r"""
 #include <string>
 #include <utility>
 #include <vector>
+#include "core/work_budget.hpp"
 #include "generativeqc/generativeqc.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown, cudaErrorInvalidDevice };
