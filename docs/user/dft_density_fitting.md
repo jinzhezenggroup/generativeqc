@@ -31,10 +31,14 @@ CPU and CUDA support local/semilocal RKS/UKS density-fitted energies and
 analytic forces. Full-range global hybrids use matching DF-JK on both backends;
 the CUDA path reuses the prepared fitted J/K provider and its occupied-RI-K
 trajectory optimization. For the qualified molecular range-exchange/VV10
-composition (including WB97M-V), the default retains **full-range DF J/K plus
-exact Direct LR K**. Setting `GENERATIVEQC_DF_RANGE_EXCHANGE=df` before preparing
-a calculation explicitly selects **complete RI-J/K**: the full-range J/K owner
-and the long-range K owner are both fitted. The latter uses
+composition (including WB97M-V), the default automatically admits **complete
+RI-J/K**: the full-range J/K owner and the long-range K owner are both fitted
+when the native LR metric has a resolved fixed-cutoff response and the initial
+owner fits its bounded resources. An unresolved cutoff or optional
+resource/capability refusal retains full-range DF J/K plus exact Direct LR K,
+as described below. Setting
+`GENERATIVEQC_DF_RANGE_EXCHANGE=df` explicitly requires complete RI-J/K.
+The fitted LR owner uses
 its own `erf(omega*r)/r` three-center integrals and auxiliary metric, with the
 same auxiliary basis and relative rank cutoff as the full-range owner. It does
 not reuse Coulomb-whitened factors for a different radial operator. CUDA orders
@@ -53,16 +57,42 @@ continue to differentiate the same auxiliary basis and Coulomb metric used by
 the energy, including auxiliary-center and metric response. This interface does not change
 the selected functional or grid.
 
-`GENERATIVEQC_DF_RANGE_EXCHANGE=direct` explicitly selects the default mixed
-scheme: full-range DF J/K plus exact Direct LR. Only `df` and `direct` are
-accepted when the variable is set. Complete RI-J/K is an opt-in scientific
-approximation, not an automatically promoted performance policy. Energy-only
-and energy-plus-force requests use the same preparation-time selection, including
+`GENERATIVEQC_DF_RANGE_EXCHANGE=direct` explicitly selects the mixed
+scheme: full-range DF J/K plus exact Direct LR. `auto`, `df` and `direct` are
+accepted when the variable is set; unset is `auto`. Complete RI-J/K is a
+scientific approximation, not exact LR with a different execution schedule.
+Energy-only and energy-plus-force requests use the same preparation-time selection, including
 warm replay and geometry rebinding; requesting forces never changes the
 Hamiltonian. For an explicit `df` request, missing LR fitting capability or
 insufficient memory is an error, not permission to silently switch Hamiltonians.
 Native snapshots authenticate the actual LR approximation, so derivatives never
 infer it from the current environment.
+
+Default or explicit `auto` asks the native LR metric owner to admit its
+fixed-cutoff response before the first energy, independently of the requested
+properties. An unresolved cutoff, optional allocation refusal or unsupported
+native LR provider selects exact LR at this initial boundary only. Invalid
+controls, eigensolver failures and other CUDA errors still propagate. The
+resolved approximation is frozen per prepared batch item, including geometry
+rebuilding and retries: an initially fitted item fails if a later geometry has
+an unresolved cutoff, rather than silently changing its Hamiltonian. No trial
+force or reference eigensystem participates in this decision. Use explicit `df`
+or `direct` when reproducibility requires the same approximation across separate
+preparations with different initial geometries or resource availability.
+
+This automatic LR admission qualifies energies and analytic first derivatives,
+not fitted-LR second-order response. WB97M-V Hessians and HVPs still require
+`GENERATIVEQC_DF_RANGE_EXCHANGE=direct` with a full-rank primary fitting metric.
+A fitted LR owner is rejected by those consumers, never differentiated with the
+exact-LR response equations. See [DF Hessian contracts](../developer/dft_hessian.md).
+
+For automatic CUDA packed storage, the fitted LR owner may rebalance bounded
+value staging to retain immutable Hermite geometry for its raw three-center
+integrals. This preserves the admitted fitted tensor and occupied capacity,
+the response allowance and all explicit memory caps. Unsupported mappings,
+insufficient capacity or optional allocation refusal keep the bounded generic
+source; they do not select exact LR or change the fitted metric.
+
 Range-fitted orbital shells support s/p/d/f and auxiliary shells support
 s/p/d/f/g. The generated g adapter uses the same omega-dependent value and
 center-response algebra; unsupported higher angular momenta fail at admission.
@@ -98,8 +128,8 @@ derivative compositions are qualified. This does not admit ECP or unsupported
 auxiliary/basis domains, nor does admission alone establish a successful
 source-matched independent CUDA qualification.
 
-In default or explicit mixed mode, the CUDA force planner dry-queries the native
-LR derivative capacity under the live final-state token before AO/Becke tile
+For an initially exact fallback or explicit mixed mode, the CUDA force planner
+dry-queries the native LR derivative capacity under the live final-state token before AO/Becke tile
 admission. It charges that independent owner alongside the complete nonlocal/grid
 inventory, with the same conservative
 bound on cold creation and warm reuse; a smaller AO tile cannot hide its storage.

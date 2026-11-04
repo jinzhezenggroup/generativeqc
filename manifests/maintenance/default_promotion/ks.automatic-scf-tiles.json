@@ -19,11 +19,13 @@
     "docs/user/ks_options.md",
     "tests/python/test_ks_tile_policy.py",
     "tests/python/test_ks_options.py",
+    "tests/python/test_force_tile_options.py",
     "tests/python/test_ks_diagnostics.py",
     "benchmarks/results/automatic-ks-tiles-20261102/README.md",
     "benchmarks/results/dft96-local-autotune-20261103/README.md",
     "benchmarks/results/dft96-cold-autotune-20261103/README.md",
     "benchmarks/results/default-cuda-xc-1024-20261103/README.md",
-    ".agents/notes/implemented/performance/2026-11-03-default-cuda-xc-1024.md"
+    ".agents/notes/implemented/performance/2026-11-03-default-cuda-xc-1024.md",
+    ".agents/notes/implemented/performance/2026-11-04-portable-direct-ks-tiles.md"
   ]
 }

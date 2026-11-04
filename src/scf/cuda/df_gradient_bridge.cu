@@ -1228,8 +1228,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // the generic route. Packed response has a separate qualification boundary.
     bool promoted_default = false;
     bool promoted_source_coulomb = false;
-    const long double fixed_response_elements =
-        4.0L * a * a + (3.0L + terms.size()) * n * n + 2.0L * terms.size() * a;
+    bool promoted_range = false;
+    const auto source_fixed_elements = df_source_response_fixed_workspace(
+        n, a, terms.size(), device_metric && !device_metric->full_rank,
+        spectral_occupied ? occupied->factors[0].rank : 0);
+    if (!source_fixed_elements) throw std::bad_alloc();
     unsigned derivative_architecture = 0;
     const char* upload_diagnostic = std::getenv("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE");
     const char* scatter_diagnostic = std::getenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE");
@@ -1256,15 +1259,22 @@ generativeqc_status execute_cuda_df_hf_gradient(
          std::string_view(source_coulomb_policy) == "slices") &&
         std::all_of(terms.begin(), terms.end(),
                     [](const auto& term) { return term.exchange_coefficient == 0; });
+    // The independent LR spectral response already carries both ordered AO
+    // adjoints. Shell folding does not require a full-rank metric or an occupied
+    // lease; retain its existing FP64 algebra, warp schedule and strict screen.
+    const bool range_shell_eligible =
+        range_omega > 0.0 && source && device_metric && !borrowed && !packed_raw && !whitened &&
+        (!source_algebra || std::string_view(source_algebra) == "blas");
     runtime::cuda_trace::trace_counter("response_source_derivative_qualification_requested",
                                        source_schedule == "qualify");
-    if (device_metric && schedule == 0 && (source_schedule_eligible || source_coulomb_eligible) &&
+    if (device_metric && schedule == 0 &&
+        (source_schedule_eligible || source_coulomb_eligible || range_shell_eligible) &&
         !(upload_diagnostic && *upload_diagnostic) &&
         !(scatter_diagnostic && *scatter_diagnostic) &&
         !(serial_diagnostic && std::string_view(serial_diagnostic) == "1")) {
       check(runtime::cuda_architecture(device, derivative_architecture));
       const bool sufficient_work = df_shell_execution_preferred(n, a, derivative_architecture);
-      promoted_default = source_schedule_eligible && sufficient_work;
+      promoted_default = range_omega == 0.0 && source_schedule_eligible && sufficient_work;
       // Ordinary shell metadata owns one ID and one AO offset per shell, plus
       // two terminal offsets. Reserve it together with positions/output and
       // the existing minimum response tile before changing the default route.
@@ -1273,9 +1283,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
           (static_cast<long double>(orbital.shells.size()) + auxiliary.shells.size()) *
               (sizeof(std::int32_t) + sizeof(std::int64_t)) +
           2 * sizeof(std::int64_t);
-      const long double pending_device_bytes =
-          shell_metadata_bytes + 6.0L * atoms * sizeof(double) +
-          (fixed_response_elements + 2.0L * n * n) * sizeof(double);
+      const long double mandatory_device_bytes =
+          6.0L * atoms * sizeof(double) +
+          (static_cast<long double>(source_fixed_elements) + 2.0L * n * n) * sizeof(double);
+      const auto pending_device_bytes = shell_metadata_bytes + mandatory_device_bytes;
       const long double pending_host_bytes =
           shell_metadata_bytes +
           (static_cast<long double>(positions.capacity()) + result.capacity()) * sizeof(double);
@@ -1283,6 +1294,17 @@ generativeqc_status execute_cuda_df_hf_gradient(
           pending_device_bytes <= maximum_bytes - arena.stats.device_bytes &&
           pending_host_bytes < maximum_bytes - arena.stats.host_bytes;
       promoted_source_coulomb = source_coulomb_eligible && sufficient_work && source_shell_fits;
+      promoted_range = range_shell_eligible && sufficient_work && source_shell_fits;
+      if (promoted_range) {
+        // Optional shell metadata must not consume the last generic-response
+        // bytes under physical or owner-ledger pressure either. This snapshot
+        // is advisory; concurrent allocations can still refuse later storage.
+        std::size_t free_bytes{}, total_bytes{};
+        check(cudaMemGetInfo(&free_bytes, &total_bytes));
+        promoted_range = df_response_optional_storage_fits(
+            mandatory_device_bytes, shell_metadata_bytes, maximum_bytes - arena.stats.device_bytes,
+            free_bytes, runtime::device_resource_available(device));
+      }
       runtime::cuda_trace::trace_counter(
           "response_source_coulomb_shell_budget_refused",
           source_coulomb_eligible && sufficient_work && !source_shell_fits);
@@ -1292,16 +1314,17 @@ generativeqc_status execute_cuda_df_hf_gradient(
     }
     const char* execution_control = std::getenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION");
     const std::string_view execution =
-        execution_control ? execution_control
-                          : (promoted_default || promoted_source_coulomb ? "shell" : "generic");
+        execution_control
+            ? execution_control
+            : (promoted_default || promoted_source_coulomb || promoted_range ? "shell" : "generic");
     if (execution != "generic" && execution != "shell-sp" && execution != "shell")
       throw std::invalid_argument("unknown DF weighted execution (use generic, shell-sp or shell)");
     // Shell reuse includes auxiliary g using the compiler's raised polynomial
     // domain. Metric response retains its independent complete contraction.
     // LR reuses the same generated radial geometry as the generic derivative.
-    // Its shell path remains an explicit candidate until complete endpoints
-    // qualify it; Coulomb screening and mixed precision do not apply to LR.
-    const bool shell_execution = (range_omega == 0.0 || execution_control) &&
+    // A work/capacity-admitted LR source uses the qualified shell path without
+    // enabling its full-range screening, compact schedule or mixed precision.
+    const bool shell_execution = (range_omega == 0.0 || execution_control || promoted_range) &&
                                  execution != "generic" && device_metric && schedule == 0;
     mixed_shell = mixed_shell && shell_execution && !auxiliary_g && range_omega == 0.0;
     if (mixed_shell) {
@@ -1312,6 +1335,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     }
     runtime::cuda_trace::trace_counter("response_derivative_shell_execution", shell_execution);
     runtime::cuda_trace::trace_counter("response_long_range_operator", range_omega > 0.0);
+    runtime::cuda_trace::trace_counter("response_range_shell_promoted",
+                                       promoted_range && !execution_control);
     runtime::cuda_trace::trace_counter("response_derivative_profile_promoted", promoted_default);
     runtime::cuda_trace::trace_counter("response_source_coulomb_shell_promoted",
                                        promoted_source_coulomb && !execution_control);
@@ -1320,7 +1345,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // force-component screen on every CUDA architecture. Small or diagnostic
     // workloads stay strict; explicit controls remain independent.
     if (!shell_screen_control && promoted_default) shell_target = 1e-10;
-    if (range_omega != 0.0) shell_target = 0;
+    // The envelopes bound positive Gaussian majorants in the Coulomb norm.
+    // Since 0 <= erf(omega*r)/r <= 1/r, they also bound every LR derivative
+    // contraction after absolute weights. Honor an explicit LR shell budget;
+    // LR remains unscreened by default until complete endpoints qualify it.
     const char* pair_control = std::getenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS");
     const std::string_view pair_policy = pair_control ? pair_control : "auto";
     if (pair_policy != "auto" && pair_policy != "full" && pair_policy != "symmetric" &&
@@ -1333,11 +1361,12 @@ generativeqc_status execute_cuda_df_hf_gradient(
     const bool packed_pairs = (!device_metric || device_metric->full_rank) &&
                               pair_policy == "packed" && shell_execution && full_shell_domain &&
                               !auxiliary_g && borrowed && borrowed->occupied_response;
-    const auto derivative_pairs = packed_pairs ? DfDerivativePairs::packed
-                                  : pair_policy == "symmetric" || pair_policy == "packed" ||
-                                          (pair_policy == "auto" && promoted_default)
-                                      ? DfDerivativePairs::symmetric
-                                      : DfDerivativePairs::full;
+    const auto derivative_pairs =
+        packed_pairs ? DfDerivativePairs::packed
+        : pair_policy == "symmetric" || pair_policy == "packed" ||
+                (pair_policy == "auto" && (promoted_default || promoted_range))
+            ? DfDerivativePairs::symmetric
+            : DfDerivativePairs::full;
     const char* screening_feature_control = std::getenv("GENERATIVEQC_DF_SCREENING_FEATURES");
     const std::string_view screening_feature_policy =
         screening_feature_control ? screening_feature_control : "off";
@@ -1518,17 +1547,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
           n, a, terms.size(), compact_fitted_metric_workspace,
           whitened && whitened->spectral_basis && !whitened->factor_response_root);
       if (!occupied_layout.elements) throw std::bad_alloc();
-      const auto spectral_fixed =
-          spectral_occupied ? df_spectral_occupied_workspace(n, a, occupied->factors[0].rank, 0)
-                            : 0;
-      if (spectral_occupied && !spectral_fixed) throw std::bad_alloc();
       const long double fixed_elements =
-          spectral_occupied ? static_cast<long double>(spectral_fixed) + n * n
-                            : (compact_fitted_metric_workspace
-                                   ? static_cast<long double>(occupied_layout.elements) +
-                                         1.0L * terms.size() * n * n
-                                   : fixed_response_elements) +
-                                  (whitened_response ? 1.0L * a * n * n : 0.0L);
+          compact_fitted_metric_workspace
+              ? static_cast<long double>(occupied_layout.elements) + 1.0L * terms.size() * n * n
+              : static_cast<long double>(source_fixed_elements);
       // The prepared allowance is a ceiling, not a reservation of physical
       // memory. Other retained consumers (notably a nonlocal XC force owner)
       // may grow after the cold call. Replan the bounded auxiliary tile from
@@ -2254,7 +2276,9 @@ generativeqc_status execute_cuda_df_hf_gradient(
               // Generate a bounded panel once, then unpack each requested Q
               // into the disjoint raw AO slice used by C^T*A*C. Auxiliary
               // columns remain contiguous per packed pair, including tails.
-              auto* packed = workspace + spectral_fixed;
+              // The admitted fixed count includes the separately allocated density.
+              // The packed panel begins after the spectral workspace alone.
+              auto* packed = workspace + (source_fixed_elements - n * n);
               if (p < spectral_raw_begin || p - spectral_raw_begin >= spectral_raw_count) {
                 spectral_raw_begin = p;
                 spectral_raw_count = std::min(tile, a - p);

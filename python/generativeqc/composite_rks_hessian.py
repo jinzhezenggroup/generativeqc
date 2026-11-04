@@ -701,6 +701,12 @@ class CompositeRKSResponse(CPKSResponseOperator):
         backend = None
         integral_basis = None
         try:
+            if state._source.range_density_fitted:
+                raise NotImplementedError(
+                    "WB97M-V Hessian/HVP response does not support fitted LR exchange; "
+                    "prepare with GENERATIVEQC_DF_RANGE_EXCHANGE=direct for the "
+                    "qualified fitted-primary/exact-LR model"
+                )
             if state._source.backend not in ("cpu", "cuda"):
                 raise NotImplementedError(
                     "composite Hessian requires native CPU/CUDA KS"
