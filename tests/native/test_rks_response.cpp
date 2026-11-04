@@ -72,9 +72,9 @@ void scaled_response_batch() {
     const std::size_t points = unrestricted ? 1 : 2;
     for (const std::uint32_t method : {0U, 1U}) {
       std::array<double, 8> exchange{}, correlation{}, scaled{}, unit{}, old{};
-      const auto call = [&](double x, double c, auto& output) {
-        return bridge(method, x, c, rho, gradient, direction, delta_gradient, points, output.data(),
-                      output.size());
+      const auto call = [&](double exchange_scale, double correlation_scale, auto& output) {
+        return bridge(method, exchange_scale, correlation_scale, rho, gradient, direction,
+                      delta_gradient, points, output.data(), output.size());
       };
       require(call(1.0, 0.0, exchange) == GENERATIVEQC_STATUS_SUCCESS &&
                   call(0.0, 1.0, correlation) == GENERATIVEQC_STATUS_SUCCESS &&

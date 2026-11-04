@@ -84,6 +84,10 @@ admission. Independent complete molecular references, real-spherical Ni,
 external def2-SVP records, installed endpoint/resource qualification and the
 production-scale gate remain necessary before promotion or issue closure.
 The low-level receipt explicitly reports `public_calculator_endpoint=False`.
+Its admitted AO-jet reserve includes native basis storage and tile/publication
+buffers and is passed explicitly to the native evaluator. The remaining grid
+budget excludes that reserve; raising the grid allowance does not remove the
+independent point/integral work or capacity checks.
 
 The native CPU preparation freezes the actual full-range coefficient from the
 physical execution plan and passes it to the shared RKS/UKS SCF wrappers. The

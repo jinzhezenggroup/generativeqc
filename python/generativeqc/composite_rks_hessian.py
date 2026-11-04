@@ -432,7 +432,11 @@ class _CompositeGrid:
             ),
             None,
         )
-        ao_bytes = len(self.grid.points) * basis.nao * 8 * 64
+        ao_bytes = (
+            basis.numeric_bytes
+            + len(self.grid.points) * (basis.nao * 8 * 64 + 64)
+            + 4096
+        )
         if ao_bytes >= grid_budget_bytes:
             raise MemoryError("AO jet/motion workspace exceeds grid_budget_bytes")
         self.model = StationaryGridSecondOrder(
@@ -459,7 +463,9 @@ class _CompositeGrid:
         )
         if self.feature_budget_bytes < 1:
             raise MemoryError("retained grid partials exceed grid_budget_bytes")
-        self.jets = basis.evaluate(self.grid.points, 3)
+        # The native tile must consume the admitted reserve, not its unrelated
+        # default cap; keep that reserve excluded from the scalar-grid budget.
+        self.jets = basis.evaluate(self.grid.points, 3, budget_bytes=ao_bytes)
         self.fields = np.vstack(
             (
                 self.feature_fields(),

@@ -8,7 +8,10 @@ import numpy as np
 import pytest
 from generativeqc import Calculator, GridSpec, KsOptions
 from generativeqc._dft_gradient import StationaryKsState
-from generativeqc.composite_rks_hessian import _NativeSemilocalGridPoints
+from generativeqc.composite_rks_hessian import (
+    _CompositeGrid,
+    _NativeSemilocalGridPoints,
+)
 from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.method import resolve_method
 from generativeqc_compiler.method.stationary_grid_second import (
@@ -112,6 +115,64 @@ def test_point_provider_failure_never_publishes_grid_partials(defect: str) -> No
     model = StationaryGridSecondOrder(functional, point_provider=provider)
     with np.errstate(over="ignore", invalid="ignore"), pytest.raises(expected):
         model.evaluate(fields, np.zeros_like(fields))
+
+
+def test_composite_grid_lends_its_reserved_capacity_to_native_ao() -> None:
+    """A sufficiently funded grid must not inherit an unrelated 64 MiB AO cap.
+
+    Exercise the native point/grid result with a conservative synthetic basis
+    capacity, without allocating a large fixture just to test the byte lease.
+    """
+    calculator = Calculator(
+        method=resolve_method("PBE0"), device="cpu", ks_options=KsOptions(grid=GRID)
+    )
+    with (
+        calculator.prepare_batch([ATOMS], warm_start=False) as batch,
+        NativeAO(ATOMS) as basis,
+    ):
+        batch.execute(strict=True, properties=("energy",))
+        state = StationaryKsState.from_native(batch, basis)
+        try:
+
+            class BudgetedBasis:
+                numeric_bytes = 70 << 20
+
+                def __getattr__(self, name: str) -> object:
+                    return getattr(basis, name)
+
+                def evaluate(
+                    self,
+                    points: np.ndarray,
+                    order: int,
+                    *,
+                    budget_bytes: int = 64 << 20,
+                ) -> np.ndarray:
+                    if budget_bytes < self.numeric_bytes:
+                        raise ValueError("AO tile exceeds its numeric capacity")
+                    return basis.evaluate(points, order, budget_bytes=budget_bytes)
+
+            reference = _CompositeGrid(
+                state, basis, grid_budget_bytes=128 << 20, max_nonlocal_pairs=1
+            )
+            funded = _CompositeGrid(
+                state,
+                BudgetedBasis(),
+                grid_budget_bytes=128 << 20,
+                max_nonlocal_pairs=1,
+            )
+            assert funded.reference.energy == reference.reference.energy
+            np.testing.assert_array_equal(
+                funded.reference.coefficients, reference.reference.coefficients
+            )
+            with pytest.raises(MemoryError, match="AO jet/motion"):
+                _CompositeGrid(
+                    state,
+                    BudgetedBasis(),
+                    grid_budget_bytes=64 << 20,
+                    max_nonlocal_pairs=1,
+                )
+        finally:
+            state._source.close()
 
 
 def test_native_pbe_grid_rejects_identity_budget_and_closed_owner() -> None:

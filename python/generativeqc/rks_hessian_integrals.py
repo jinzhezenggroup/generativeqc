@@ -274,14 +274,18 @@ def _contract_directional_first_order(
         angular = (shells[a].angular_momentum, shells[b].angular_momentum)
         atoms = (shells[a].atom_index, shells[b].atom_index)
         for family, out in (("overlap", overlap), ("kinetic", frozen)):
+            if atoms[0] == atoms[1]:
+                continue
             ir = build_one_electron_derivative_ir(family, angular)
             for (u, v), gradient in provider.raw_tiles(ir, (a, b), atoms):
                 accumulate(out, atoms, gradient, offsets[a] + u, offsets[b] + v)
         for nucleus, charge in enumerate(charges):
+            centers = (*atoms, nucleus)
+            if len(set(centers)) == 1:
+                continue
             ir = build_one_electron_derivative_ir(
                 "nuclear_attraction", angular, charge=float(charge)
             )
-            centers = (*atoms, nucleus)
             for (u, v), gradient in provider.raw_tiles(ir, (a, b), centers):
                 accumulate(
                     frozen,
@@ -294,6 +298,10 @@ def _contract_directional_first_order(
     for slots in product(range(len(shells)), repeat=4):
         angular = tuple(shells[i].angular_momentum for i in slots)
         atoms = tuple(shells[i].atom_index for i in slots)
+        # All physical centers translate together, so the molecular derivative
+        # is exactly zero. Raw independent-slot derivative providers stay intact.
+        if len(set(atoms)) == 1:
+            continue
         ir = build_weighted_eri_ir(angular)
         for component, gradient in (
             provider.raw_tiles(ir, slots, atoms) if include_coulomb else ()
@@ -768,15 +776,19 @@ def generated_weighted_first_integral_gradient(
                 ("overlap",),
             )[source_name == "overlap_pulay"]
             for family in families:
+                if atoms[0] == atoms[1]:
+                    continue
                 ir = build_one_electron_derivative_ir(family, angular)
                 for (u, v), gradient in provider.raw_tiles(ir, (a, b), atoms):
                     accumulate(atoms, gradient, block[u, v])
             if source_name == "one_electron":
                 for nucleus, charge in enumerate(charges):
+                    centers = (*atoms, nucleus)
+                    if len(set(centers)) == 1:
+                        continue
                     ir = build_one_electron_derivative_ir(
                         "nuclear_attraction", angular, charge=float(charge)
                     )
-                    centers = (*atoms, nucleus)
                     for (u, v), gradient in provider.raw_tiles(ir, (a, b), centers):
                         accumulate(centers, gradient, block[u, v])
     else:
@@ -793,6 +805,8 @@ def generated_weighted_first_integral_gradient(
                 raise ValueError(
                     "ERI shell weights must be finite with the ordered shell shape"
                 )
+            if len(set(atoms)) == 1:
+                continue
             ir = build_weighted_eri_ir(angular, operator=eri_operator)
             for component, gradient in provider.raw_tiles(ir, slots, atoms):
                 accumulate(atoms, gradient, weights[component])
@@ -863,6 +877,10 @@ def _run_kernel_hvp(
     direction: np.ndarray,
 ) -> np.ndarray:
     center_atoms = typing.cast("tuple[int, ...]", ir_extra["_center_atoms"])
+    # Elide only physical molecular translations after outer budget/weight
+    # validation. Do not change primitive independent-slot or CUDA execution.
+    if data["backend"] == "cpu" and len(set(center_atoms)) == 1:
+        return np.zeros((data["state"].nat, 3))
     extra = {k: v for k, v in ir_extra.items() if k != "_center_atoms"}
     ir = build_ir(**extra)
     center_indices = ir.requested_derivative_centers

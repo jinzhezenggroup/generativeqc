@@ -1,0 +1,24 @@
+{
+  "basis_name": "def2-SVP",
+  "basis_version": 1,
+  "elements": [
+    1,
+    28
+  ],
+  "file": "def2-svp-ni-h.json",
+  "license": "BSD-3-Clause",
+  "license_file": "../external_basis/BSE-LICENSE",
+  "license_sha256": "14b5a1c21a9e0966e295b9e3d66c0cee9475ffe5931e74d063c3713e2ae9a496",
+  "representation": "real-spherical",
+  "schema": "generativeqc.global-hybrid-basis-reference/v1",
+  "sha256": "a90855656d14a33001bf722e4c393a72f1bff29e6be295d53b6973b8c247a348",
+  "source_commit": "4adaf1372c7101620ca1a9f3130be9ae97fb8f30",
+  "source_repository": "https://github.com/MolSSI-BSE/basis_set_exchange.git",
+  "source_sha256": {
+    "ahlrichs/SV/def2-SV-base.1.json": "9a83096a009c034a18c4e5fffa93e9022e8a2ff2e2f1ea17621dad86ec01a5a8",
+    "ahlrichs/SV/def2-SVP-add.1.json": "2206794676d13abcb4df8a778b9a4a1f3c7cc7c2345622aca6937b01dfde5722",
+    "ahlrichs/def2-SVP.1.element.json": "809185107d1ad063e55a13117dba23b4e8a3b53406c0259f88d9cbc81c32587f",
+    "def2-SVP.1.table.json": "f5785281f477069def945358872208c8f8c1c6fe589b5ec42eeee6568726588a",
+    "def2-SVP.metadata.json": "2e979d9f915f397e4e3cc8e2b73c859836c420bce1e4e059dc0defc4571b12ff"
+  }
+}

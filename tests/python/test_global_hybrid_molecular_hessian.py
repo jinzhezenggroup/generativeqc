@@ -14,7 +14,12 @@ from generativeqc.composite_rks_hessian import (
     composite_rks_hvp,
 )
 from generativeqc.response_solver import GMRESOptions
+from generativeqc.rks_hessian_integrals import (
+    generated_directional_semilocal_rks_integral_first_order,
+)
 from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.integral.ir import four_center_eri_operator
+from generativeqc_compiler.integral.range_separation import CoulombKernel
 from generativeqc_compiler.method import resolve_method
 from test_integral_autodiff_second import require_native_library  # noqa: F401
 
@@ -197,6 +202,25 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
             native_energy = operator.state._source.energy()
             native_density = operator.state.density[0]
             native_overlap = operator.state.overlap
+            generator = np.random.default_rng(2224)
+            density_directions = generator.normal(size=(3, basis.nao, basis.nao)) * 0.03
+            density_directions += density_directions.transpose(0, 2, 1)
+            native_actions = [
+                operator.induced_fock(delta) for delta in density_directions
+            ]
+            pure, _ = generated_directional_semilocal_rks_integral_first_order(
+                operator.topology, native_density, DIRECTION, cache=tmp_path
+            )
+            mixed, _ = generated_directional_semilocal_rks_integral_first_order(
+                operator.topology,
+                native_density,
+                DIRECTION,
+                cache=tmp_path,
+                exchange_operators=(
+                    (four_center_eri_operator(CoulombKernel("full_range")), exchange),
+                ),
+            )
+            native_frozen_exchange = mixed - pure
             shells = basis.shells
             center_points = operator.state.grid.points.copy()
             center_weights = operator.state.grid.weights.copy()
@@ -254,12 +278,34 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
         solver.conv_tol, solver.conv_tol_grad, solver.max_cycle = 1e-13, 1e-10, 240
         energy = solver.kernel()
         assert solver.converged
-        return energy, solver.make_rdm1(), molecule.intor("int1e_ovlp")
+        return energy, solver.make_rdm1(), molecule.intor("int1e_ovlp"), solver
 
-    center, density, overlap = reference(np.zeros_like(DIRECTION))
+    center, density, overlap, solver = reference(np.zeros_like(DIRECTION))
     assert native_energy == pytest.approx(center, abs=2e-10)
     np.testing.assert_allclose(native_overlap, overlap, atol=2e-12, rtol=0)
     np.testing.assert_allclose(native_density, density, atol=2e-9, rtol=0)
+    response = solver.gen_response(hermi=1)
+    for delta, actual in zip(density_directions, native_actions, strict=True):
+        np.testing.assert_allclose(actual, response(delta), atol=2e-9, rtol=1e-10)
+    molecule = solver.mol
+    ao_owners = np.repeat(
+        np.arange(molecule.natm),
+        np.diff(molecule.aoslice_by_atom()[:, 2:4], axis=1).reshape(-1),
+    )
+    motion = DIRECTION[ao_owners].T
+    # Libcint differentiates electron coordinates on its first AO leg. Negate
+    # and permute all four legs to obtain the physical nuclear K' source.
+    derivative = molecule.intor("int2e_ip1", comp=3)
+    eri_direction = -np.einsum("xp,xpqrs->pqrs", motion, derivative)
+    eri_direction -= np.einsum("xq,xqprs->pqrs", motion, derivative)
+    eri_direction -= np.einsum("xr,xrspq->pqrs", motion, derivative)
+    eri_direction -= np.einsum("xs,xsrpq->pqrs", motion, derivative)
+    reference_exchange = (
+        -float(exchange) / 2 * np.einsum("ikjl,kl->ij", eri_direction, native_density)
+    )
+    np.testing.assert_allclose(
+        native_frozen_exchange, reference_exchange, atol=2e-10, rtol=0
+    )
     curvature = float(np.sum(DIRECTION * native.value))
     energies = {tuple(np.zeros(DIRECTION.size)): center}
 
