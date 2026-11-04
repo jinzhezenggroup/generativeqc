@@ -8,9 +8,11 @@ device-resident numerical owner with no host derivative fallback. No
 displaced SCF or reference engine enters production; quadrature/active-set
 branches and occupations remain fixed during differentiation.
 
-CPU direct all-electron full-range RKS graphs can also enter the low-level
-qualification owner. They do not inherit WB97M-V's public capability admission:
-independent molecular, spherical/Ni and resource gates remain prerequisites.
+CPU direct full-range RKS graphs with all-electron or scalar-ECP Hamiltonians
+can also enter the low-level qualification owner. Scalar ECPs reuse the existing
+effective-charge, perturbation and two-grid second-order sources. These graphs
+do not inherit WB97M-V's public capability admission: independent molecular,
+spherical/Ni and resource gates remain prerequisites.
 """
 
 from __future__ import annotations
@@ -715,7 +717,8 @@ class CompositeRKSResponse(CPKSResponseOperator):
             full_range_candidate = (
                 state._source.backend == "cpu"
                 and state.density.shape[0] == 1
-                and state._source.hamiltonian == "all-electron"
+                and state._source.hamiltonian
+                in ("all-electron", "scalar-semilocal-ecp")
                 and state._source.fock_provider_proof()[:2] == ("exact", "exact")
                 and {primitive.kind for primitive in method.primitives}
                 == {"semilocal_xc", "exact_exchange"}
@@ -726,7 +729,7 @@ class CompositeRKSResponse(CPKSResponseOperator):
             ):
                 raise NotImplementedError(
                     "composite molecular Hessian requires canonical WB97M-V or "
-                    "a CPU direct all-electron RKS full-range qualification candidate"
+                    "a CPU direct RKS full-range qualification candidate"
                 )
             if state._source.backend == "cuda":
                 from .cuda_composite_hessian import CudaCompositeResponse
