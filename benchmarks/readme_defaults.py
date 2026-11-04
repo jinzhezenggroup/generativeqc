@@ -200,8 +200,11 @@ def native_calculator(
     *,
     force_tile_points: int | None = None,
 ) -> Any:
-    """Use public owners; an explicit force tile preserves scientific defaults."""
-    from generativeqc import Calculator, KsOptions, PrecisionCalculator
+    """Use one public policy owner for both arms, without numerical overrides."""
+    from generativeqc import KsOptions, PrecisionCalculator
+
+    if arm not in ("standard", "fast"):
+        raise ValueError("native arm must be standard or fast")
 
     options = {
         "method": METHODS[method][0],
@@ -218,11 +221,7 @@ def native_calculator(
         options.update(
             density_fitting="cuda", auxiliary_basis=inputs / f"{method}-auxiliary.json"
         )
-    return (
-        PrecisionCalculator(policy="fast", **options)
-        if arm == "fast"
-        else Calculator(**options)
-    )
+    return PrecisionCalculator(policy=arm, **options)
 
 
 def grid_settings(grid: Any) -> dict | None:
@@ -327,7 +326,7 @@ def run_native(args: Any, atoms: Any, record: dict, retain: Any) -> None:
             forces = _finite_endpoint(
                 float(item.energy), item.forces, len(atoms), seconds
             )
-            candidate = calculator if args.arm == "standard" else owner._calculator
+            candidate = owner._calculator
             if not record.get("native_build"):
                 record["native_build"] = binary_identity(candidate)
             dispersion = item.dispersion
@@ -336,10 +335,8 @@ def run_native(args: Any, atoms: Any, record: dict, retain: Any) -> None:
             ):
                 raise RuntimeError("incomplete native D4/gCP endpoint")
             validation = item.precision_validation
-            if args.arm == "fast" and (
-                validation is None or validation.profile != "fast"
-            ):
-                raise RuntimeError("missing actual Fast precision provenance")
+            if validation is None or validation.profile != args.arm:
+                raise RuntimeError("missing actual precision policy provenance")
             retain(
                 {
                     "phase": "cold" if repeat == 0 else "warm",
@@ -360,7 +357,7 @@ def run_native(args: Any, atoms: Any, record: dict, retain: Any) -> None:
                     "physical_residual_rms": item.physical_residual_rms,
                     "settings": {
                         **native_settings(candidate, item),
-                        "resolved_force_tile_points": native_force_tile(owner)
+                        "resolved_force_tile_points": native_force_tile(owner._owner)
                         if args.method != "hf"
                         else None,
                     },

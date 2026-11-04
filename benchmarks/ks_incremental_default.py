@@ -160,7 +160,7 @@ def main() -> None:
                 seconds = perf_counter() - started
                 if not item.converged or item.executed_backend != "cuda":
                     raise RuntimeError("native complete CUDA endpoint failed")
-                candidate = calculator if args.arm == "standard" else owner._calculator
+                candidate = owner._calculator
                 if "native_build" not in record:
                     record["native_build"] = binary_identity(candidate)
                 requested = (
