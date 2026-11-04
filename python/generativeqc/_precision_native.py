@@ -237,14 +237,14 @@ def admission(
     context.cuda_execution = getattr(result, "executed_backend", None) == "cuda"
     context.fp64_candidate = precision == "fp64"
     if budget is not None:
-        from ._scf_convergence import default_scf_controls
+        from ._scf_defaults_native import default_controls
 
         context.energy_abs, context.force_max_abs = (
             budget.energy_abs,
             budget.force_max_abs,
         )
         context.force_rms = 0 if budget.force_rms is None else budget.force_rms
-        for index, (name, value) in enumerate(default_scf_controls(calculator).items()):
+        for index, (name, value) in enumerate(default_controls(calculator).items()):
             context.standard_controls[index] = value
             context.requested_controls[index] = getattr(calculator, "_" + name, 0)
 

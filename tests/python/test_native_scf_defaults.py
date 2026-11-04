@@ -14,7 +14,6 @@ from typing import Any
 
 import pytest
 from generativeqc import Calculator, GridSpec, _native
-from generativeqc import _scf_convergence as policy
 from generativeqc import _scf_defaults_native as transport
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -52,11 +51,6 @@ def library(query_library: Any, monkeypatch: pytest.MonkeyPatch) -> Any:
         raising=False,
     )
 
-    def forbidden(*args: Any, **kwargs: Any) -> None:
-        raise AssertionError("selected policy retried Python default selection")
-
-    monkeypatch.setattr(policy, "_compatibility_default_scf_controls", forbidden)
-    monkeypatch.setattr(policy, "_standard_models", forbidden)
     return native
 
 
@@ -79,19 +73,19 @@ def test_native_defaults_use_complete_catalog_and_grid(
     library: Any, method: str
 ) -> None:
     calculator = metadata(library, method)
-    assert policy.default_scf_controls(calculator) == {
+    assert transport.default_controls(calculator) == {
         "energy_tolerance": 1e-9,
         "density_tolerance": 1e-5,
         "screening_tolerance": 1e-12,
     }
     calculator._device_name = "cpu"
-    assert policy.default_scf_controls(calculator)["density_tolerance"] == 1e-8
+    assert transport.default_controls(calculator)["density_tolerance"] == 1e-8
 
 
 @pytest.mark.parametrize("method", ("uhf", "mp2", "pbe-uks", "wb97m-v-rks"))
 def test_unqualified_models_keep_strict_defaults(library: Any, method: str) -> None:
     assert (
-        policy.default_scf_controls(metadata(library, method))["density_tolerance"]
+        transport.default_controls(metadata(library, method))["density_tolerance"]
         == 1e-8
     )
 
@@ -103,7 +97,7 @@ def test_altered_model_or_grid_cannot_reuse_qualified_defaults(
     library: Any, change: str
 ) -> None:
     calculator = metadata(library, "pbe-rks")
-    assert policy.default_scf_controls(calculator)["density_tolerance"] == 1e-5
+    assert transport.default_controls(calculator)["density_tolerance"] == 1e-5
     options = calculator._ks_options
     grid = options.grid
     if change == "level":
@@ -127,7 +121,7 @@ def test_altered_model_or_grid_cannot_reuse_qualified_defaults(
         if change == "identity"
         else options.method_ir,
     )
-    assert policy.default_scf_controls(calculator)["density_tolerance"] == 1e-8
+    assert transport.default_controls(calculator)["density_tolerance"] == 1e-8
 
 
 def test_native_failure_and_malformed_receipts_are_authoritative(library: Any) -> None:
@@ -138,44 +132,72 @@ def test_native_failure_and_malformed_receipts_are_authoritative(library: Any) -
         method_ir=SimpleNamespace(identity="not-a-model-identity"),
     )
     with pytest.raises(RuntimeError, match="invalid argument"):
-        policy.default_scf_controls(calculator)
+        transport.default_controls(calculator)
     calculator._library = SimpleNamespace(
         generativeqc_scf_defaults_query_v1=lambda *args: 0
     )
     with pytest.raises(RuntimeError, match="invalid receipt"):
-        policy.default_scf_controls(calculator)
+        transport.default_controls(calculator)
 
 
-def test_absent_protocol_retains_the_explicit_compatibility_boundary() -> None:
+def test_absent_protocol_rejects_the_selected_installation() -> None:
     calculator = SimpleNamespace(_library=SimpleNamespace())
-    assert transport.default_controls(calculator) is None
-    assert policy.default_scf_controls(calculator)["density_tolerance"] == 1e-8
+    with pytest.raises(
+        NotImplementedError, match="required SCF default-controls query"
+    ):
+        transport.default_controls(calculator)
+
+
+def test_selected_native_defaults_do_not_resolve_models_in_python(
+    library: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import generativeqc_compiler.method
+
+    calculator = metadata(library, "pbe-rks")
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("default selection reentered the Python model compiler")
+
+    monkeypatch.setattr(generativeqc_compiler.method, "resolve_method", forbidden)
+    assert transport.default_controls(calculator)["density_tolerance"] == 1e-5
+
+
+def test_missing_query_cannot_reuse_another_librarys_cached_answer(
+    library: Any,
+) -> None:
+    calculator = metadata(library, "pbe-rks")
+    assert transport.default_controls(calculator)["density_tolerance"] == 1e-5
+    calculator._library = SimpleNamespace()
+    with pytest.raises(
+        NotImplementedError, match="required SCF default-controls query"
+    ):
+        transport.default_controls(calculator)
 
 
 def test_cached_metadata_is_detached_and_tracks_selected_query(library: Any) -> None:
     calculator = metadata(library, "pbe-rks")
-    controls = policy.default_scf_controls(calculator)
+    controls = transport.default_controls(calculator)
     controls["density_tolerance"] = 17.0
-    assert policy.default_scf_controls(calculator)["density_tolerance"] == 1e-5
+    assert transport.default_controls(calculator)["density_tolerance"] == 1e-5
     calculator._library = SimpleNamespace(
         generativeqc_scf_defaults_query_v1=lambda *args: 0
     )
     with pytest.raises(RuntimeError, match="invalid receipt"):
-        policy.default_scf_controls(calculator)
+        transport.default_controls(calculator)
 
 
 def test_shared_binding_retains_library_and_honors_explicit_replacement(
     query_library: Any,
 ) -> None:
     first = metadata(ctypes.CDLL(query_library._name), "pbe-rks")
-    assert policy.default_scf_controls(first)["density_tolerance"] == 1e-5
+    assert transport.default_controls(first)["density_tolerance"] == 1e-5
     del first
     gc.collect()
     second = metadata(ctypes.CDLL(query_library._name), "pbe-rks")
-    assert policy.default_scf_controls(second)["density_tolerance"] == 1e-5
+    assert transport.default_controls(second)["density_tolerance"] == 1e-5
     second._library.generativeqc_scf_defaults_query_v1 = lambda *args: 0
     with pytest.raises(RuntimeError, match="invalid receipt"):
-        policy.default_scf_controls(second)
+        transport.default_controls(second)
 
 
 def test_concurrent_queries_survive_binding_retirement(
@@ -191,7 +213,7 @@ def test_concurrent_queries_survive_binding_retirement(
 
     def check(index: int) -> None:
         calculator = calculators[index % len(calculators)]
-        assert policy.default_scf_controls(calculator)["density_tolerance"] == 1e-5
+        assert transport.default_controls(calculator)["density_tolerance"] == 1e-5
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(check, range(240)))
