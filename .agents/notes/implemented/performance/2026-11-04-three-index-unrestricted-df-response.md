@@ -87,10 +87,11 @@ and zero-beta factors. Physical endpoint qualification uses independent PySCF
 energies and two-step reconverged force differences, never native finite
 differences as their own oracle.
 
-### Final source-matched qualification
+### Implementation-base qualification (historical)
 
-The [compact accepted measurement record](../../../../benchmarks/results/unrestricted-df-20261104/qualification-summary.json)
-retains numerical gates, all endpoint timing populations, capacity, source-reuse,
+The implementation-base compact record at commit
+`365915f59ea7e53f5da39af9784626707125addf` retains numerical gates, all endpoint
+timing populations, capacity, source-reuse,
 transfer and separated response-phase results. Its column-labelled arrays use
 H2/H3/H4 row order, seconds rounded to six decimals, and per-endpoint phase/work
 counts; force errors correspond to steps 1e-3 and 3e-4 Bohr. Phase times are
@@ -132,8 +133,8 @@ speed ratio from the fitted-source improvement. Detailed tracing materially
 perturbs this execution schedule; phase times are nested and are not additive
 with complete endpoint timings.
 
-The final CI exercise also exposed extracted host probes missing newly required
-SCF/exception dependencies and the optional fitted-planner boundary. Updating
+The implementation-base CI exercise also exposed extracted host probes missing
+newly required SCF/exception dependencies and the optional fitted-planner boundary. Updating
 those numerical test doubles preserves their status/lifetime controls without
 weakening production admission or changing the scientific source. Full GCC and
 Clang native CI passed on the same scientific inputs; the targeted updated
@@ -141,7 +142,7 @@ controls pass locally. The Libxc snapshot refresh updates checked input
 identities only: its stale historical measurements and all capability stages
 remain unchanged.
 
-### Measurement detail and interpretation
+### Implementation-base measurement detail and interpretation
 
 Qualification used RTX 5090 (32607 MiB), driver 580.95.05, Release, GCC 13.3.0,
 nvcc 12.9.86 from the CUDA 12.9.1 installation, `sm_120`, verified sccache 0.16.0,
@@ -231,6 +232,101 @@ srun --partition=main --nodelist=node1 --gres=gpu:5090:1 \
     python -m pytest -q tests/python/test_df_bromine_reference.py
   '
 ```
+
+### Final post-native-policy integration qualification
+
+The accepted record now refers to the combined upstream native-policy/CBS
+implementation at base `ffa6936968d5c5a33194bd9bc09435a9f2ee0d05` and the
+review follow-up `174ebaa936321ff4dedc2804c2981c0a05e5b9cb`, not the historical
+2076-input population above. All **2085 scientific inputs** match the final
+qualification checkout. Both the CPU library and the CUDA library loaded
+inside Slurm report source identity
+`e73041c5d9cfaf573e4dbbfe17e7fdf317457ab15b54b724834876d844791554`.
+Executed CUDA library SHA-256:
+`7bd78bb3e65eb2d88ed900f4548358d71d72271be2be017d575e0169b42f1fd0`.
+The remote checkout's Git HEAD is not asserted to be the PR commit; the complete
+input inventory and embedded library queries establish the source match.
+
+The follow-up admits both fitted Gram cotangent legs cumulatively before the
+UCC nuclear-response seed traversal, reports the actual 300-iteration Lambda
+GMRES ceiling, and preserves source-indexed UHF device JK/allocation failure
+details. The executable response control narrows a finite policy after
+preflight, exercises Lambda and final fitted-seed refusals, and verifies exact
+force recovery after refusal. Four compiled UHF failure-injection controls pass;
+all four correctly fail against the pre-fix parent implementation.
+
+Final-source local qualification passes **121/121 configured native CPU tests**
+and **363 Python tests**, with eight device cases skipped and 70 cases
+deselected in that CPU selection. All applicable pre-commit checks pass. Slurm
+job **15853**, `main`, node1, `gpu:5090:1`, uses the same verified Release/GCC
+13.3.0/nvcc 12.9.86/sccache 0.16.0 toolchain, an explicit one-hour limit and
+unchanged scheduler visibility. Its captured runtime environment confirms one
+host thread and no scalar-work override. It passes the native resident and
+zero-residency panel contract, eight compact/physical CUDA force tests (74.25 s),
+and all four original Br RHF/MP2 energy/force cases (132.74 s).
+
+All **15 complete CBS energy/analytic-force endpoints** finish on this final
+library: three trace-off and three trace-on calls each for original H2/H3, and
+two trace-off plus one trace-on call for physical H4. Fresh separate PySCF
+2.14.0 calculations pass the matched full-CBS energy and both reconverged
+directional-force gates. The duplicate three-case `physical_df_cbs_size_ladder`
+pytest block was not rerun on this final source; the complete receipt population
+and fresh independent oracle qualify that ladder instead. Its earlier pytest
+pass belongs only to the implementation-base population documented above.
+
+| Case | Energy error (Eh) | Force error, 1e-3 Bohr (Eh/Bohr) | Force error, 3e-4 Bohr (Eh/Bohr) |
+| --- | ---: | ---: | ---: |
+| H2 | 5.00533e-12 | 7.66302e-8 | 2.16240e-8 |
+| H3 | 2.99054e-11 | 2.36880e-8 | 2.32613e-9 |
+| H4 | 2.66325e-11 | 6.99610e-8 | 2.79390e-7 |
+
+Acceptance remains 3e-8 Eh and 5e-7 Eh/Bohr; no gate was relaxed. The streaming
+auditor passes trace/repeat parity, finite forces and the 2e-8 force-translation
+gate. Repeat energies are identical; maximum force differences are below
+4.4e-16 Eh/Bohr. Timing requests and basis/input snapshots match the contract
+described above, including full DF-HF, `standard`, `preconvergence="auto"`, a
+32 GiB numeric budget and SCF ceiling 200.
+
+| Case | Setup + first, trace off (s) | Warm median, trace off (s) | Warm median, trace on (s) | Sampled device peak (MiB) | Maximum planned numeric bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| H2 triplet | 1.37373 | 0.18332 | 0.29506 | 6171 | 11,594,937,039 |
+| H3 doublet | 20.48090 | 19.03769 | 23.46868 | 6207 | 11,864,888,440 |
+| H4 triplet | 320.71717 | 321.71369 | not measured | 6263 | 12,486,832,661 |
+
+Setup excludes imports and compilation. Memory remains 200 ms whole-device
+sampling, not allocator-exact peak or process RSS; planned numeric capacity is
+a distinct conservative admission quantity. The separate CPU oracle starts
+after the trace-off population and can overlap trace-on calls. These populations
+do not isolate tracing overhead or establish a hardware/implementation speedup.
+
+| Case | Primal CC solver | Primal (T) | Lambda | Triples response | Orbital response | Nuclear response |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| H2 | 0.01251 | 0.000003 | 0.03548 | 0.000011 | 0.00340 | 0.00556 |
+| H3 | 0.07256 | 1.04373 | 0.79031 | 20.98009 | 0.02503 | 0.01691 |
+| H4 | 0.11214 | 15.15166 | 1.78842 | 401.80824 | 0.02115 | 0.04019 |
+
+Phase seconds use the same per-endpoint normalization and nested-scope caveats
+as the historical table. The H4 traced complete endpoint is 421.09588 s; its
+three virtual-axis `moment_aaa` programs still execute 1,193,859 actions each.
+Ordered triples/moment response remains expensive and finitely bounded, not an
+all-size scalability success. Final traces again observe 8/14/26 factor-block
+reuses, zero provider AO scans/values after factor preparation,
+174,016/1,107,774/4,807,772 initial-weight transform FMAs,
+2,304/6,224/15,136 H2D bytes and 23,712/100,832/327,960 D2H bytes across the two
+cardinal components. These are semantic UMP2 initial-weight counters, not total
+endpoint FLOPs or transfers. No controlled L20 speedup, RCC/UCC ratio or
+hundreds-of-AO qualification is inferred.
+
+The [current compact accepted record](../../../../benchmarks/results/unrestricted-df-20261104/qualification-summary.json)
+retains these final-source populations and hashes of their full summary and
+provenance. Complete inputs, scripts, endpoint receipts, independent oracles,
+source inventories, actual library queries, cache/compiler/build logs, device
+samples and losslessly compressed traces remain in the ignored
+`build/issues-2978-2980-integration-evidence/` directory and source-matched n1
+`evidence-integrated-policy` directory. The old `factor-evidence` population is
+retained as historical evidence, not substituted for this integration run.
+Fresh PR CI is separate from these source-matched local/device qualifications;
+no final merged-source GitHub CI pass is claimed here.
 
 ## Revisit when
 
