@@ -105,9 +105,15 @@ struct CudaXcLayout {
 };
 
 /** Same-stream canonical frame that produced this exact density generation.
- * Only the SCF owner supplies this witness, after accepting its structured
- * density proposal. Imported, held, mixed and response densities remain dense.
- * Coefficients are column-major nao-by-nao frames, one per spin. */
+ * Explicit experimental callers must own the accepted structured density
+ * proposal and its same-stream frame. Production KS does not supply a witness;
+ * imported, held, mixed and response densities remain dense.
+ * Coefficients are column-major nao-by-nao frames, one per spin. This is an
+ * ownership/generation witness, not equality between the stored rounded Gram
+ * and a reassociated orbital contraction. The generated consumer must certify
+ * each point or fall back to this same live stored density. Until a qualified
+ * XC sensitivity contract exists, certification requires bitwise-identical
+ * original-D features, not merely a small per-feature error estimate. */
 struct CudaXcOccupiedDensity {
   const double* density{};
   const double* coefficients{};
