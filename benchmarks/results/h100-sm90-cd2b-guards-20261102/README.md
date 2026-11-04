@@ -61,3 +61,5 @@ The replay command reads only these explicit entries through the offline history
 loader; no network, Release or external backup is used. Full Git history is
 required. All three SQLite databases and twelve intrusive E/F remain available;
 this storage change adds no timing votes and changes no scientific proof.
+
+Historical storage: the original guard archives are recovered byte-exact from already merged Git using `retained-guards-v2.json`. Existing cohort bindings, failures and CPU proof outputs remain unchanged. No additional scientific acceptance.

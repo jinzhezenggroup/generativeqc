@@ -1,0 +1,65 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "5efc730f4c6d809cc4a31d23db4cdb5f87dae6e3",
+  "file_count": 8,
+  "total_bytes": 565264,
+  "purpose": "Exact owned historical source-bound guard observations retained in already merged Git. Original failures, negative outcomes and all fourteen proof files remain replayable. No external backup or storage-limit relaxation. Original transport manifests are also recovered exactly to accommodate newer-main evidence within unchanged limits.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/native-qualification-v1-completed.tar.xz",
+      "bytes": 118280,
+      "sha256": "f57c575df7f708b6c175a2cbc490ca680fca6fd0bc65e629f9416403fcfb791c",
+      "git_blob_sha1": "c72a5be1a93149f296260098e98cd3f87ae03225",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/reference-six-v5-completed.tar.xz",
+      "bytes": 165456,
+      "sha256": "de4e8473cd247f59fa9a3e7b27ddffa9645471dfedd0877437967113058f3678",
+      "git_blob_sha1": "6b9ebde16482723420e4d98789e347b2897d5a1e",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/standard-guards-v1-completed.tar.xz",
+      "bytes": 183616,
+      "sha256": "bde51c8931560635d38a16f0027fab08e85ebc9a3d063c8b5265e022c4114564",
+      "git_blob_sha1": "1fbcbbe5b155fb97a296a132f56308728e2868fb",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/uks-fit-v1-completed.tar.xz",
+      "bytes": 57372,
+      "sha256": "e32a78dbf630340fe8442b8c3553a2c4fe2f7830cffa17a6a7c1a47ee731af43",
+      "git_blob_sha1": "20a7dfecced17c4b9f70a5bb37e6de2a6d7bad8c",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/native-qualification-v1-download-manifest.json",
+      "bytes": 7193,
+      "sha256": "77c20c4e989465ca2d7087f72479ad1b59585a8c974fe6bb7676e4250537c7a8",
+      "git_blob_sha1": "8d5cb31730d96d4b75bdaf1029b0f2a54148160a",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/reference-six-v5-download-manifest.json",
+      "bytes": 12992,
+      "sha256": "06ac5e9ee5965fa8ef0ab79d577a57e17a005710de86602dbf8ea4de38c2efa6",
+      "git_blob_sha1": "47e7199c8070cfdf98b9e6344b4594f083d929e1",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/standard-guards-v1-download-manifest.json",
+      "bytes": 14708,
+      "sha256": "f1abf39e6371cee77494f981cac40ad95d90aee9e5a58200cd7a19ca73532d09",
+      "git_blob_sha1": "6a37aa9ff2af142a30499e02c51f88bf374e567e",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/uks-fit-v1-download-manifest.json",
+      "bytes": 5647,
+      "sha256": "b3f1ecaa82bdff0da4a4376047dddf0c80faf313ab4a61816daa341ee7026794",
+      "git_blob_sha1": "8ccae245a9fa4dad0f2f67eb13fd052680906e5f",
+      "git_mode": "100644"
+    }
+  ]
+}

@@ -27,6 +27,12 @@ in `src/dft/cuda_ks.cpp`. The source patch is retained. Earlier emitted-kernel
 normal/memcheck/synccheck/racecheck results remain explicitly attributed to that
 earlier source, not newly claimed for this selector commit.
 
+Delivery also preserves the PR branch's independent integration of upstream
+`0a214362fa9d762cf0a3a6be821d7cb5d185f257` and raw-output retention guards.
+Those later integrations do not relabel the measurements as a merged-target
+native image qualification. Current catalog source identities are regenerated
+without upgrading any historical Libxc qualification claim.
+
 ## Complete original 96-atom workload
 
 Three alternating fresh-process matrix/default pairs use the original Direct

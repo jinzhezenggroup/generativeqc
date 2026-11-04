@@ -2,25 +2,8 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "h100-sm90-cd2b-guards-20261102",
   "owner": "H100 cd2b supporting qualification delivery",
-  "reason": "CPU-only replay of native4/unfilteredMC,12intrusiveEF/3actualSQLite,originalStandard84 failure+independentCPU12attribution+explicitrefined9,andfreshknownsource6/12. Exact compressed originals retained. Parts reconstruct unchangedNsightarchive; no storage-limit waiver or final-vote/later-source transfer. Exact original Nsight archive parts are now recovered through the explicit local-Git snapshot; all existing CPU SQLite proofs remain byte-identical.",
+  "reason": "CPU-only replay of native4/unfilteredMC,12intrusiveEF/3actualSQLite,originalStandard84 failure+independentCPU12attribution+explicitrefined9,andfreshknownsource6/12. Exact compressed originals retained. Parts reconstruct unchangedNsightarchive; no storage-limit waiver or final-vote/later-source transfer. Exact original Nsight archive parts are now recovered through the explicit local-Git snapshot; all existing CPU SQLite proofs remain byte-identical. Exact owned original guard packets are now recovered from already merged Git; old proof bytes and negative results remain unchanged.",
   "review_document": "benchmarks/results/h100-sm90-cd2b-guards-20261102/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/reference-six-v5-completed.tar.xz",
-      "bytes": 165456,
-      "sha256": "de4e8473cd247f59fa9a3e7b27ddffa9645471dfedd0877437967113058f3678",
-      "family": "h100-sm90-cd2b-guards-20261102",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Exact source-bound completed supporting-phase originals and authenticated Nsight archive parts; full vectors, original Standard84 failure and all traces preserved. No final majority or later-source qualification."
-    },
-    {
-      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/standard-guards-v1-completed.tar.xz",
-      "bytes": 183616,
-      "sha256": "bde51c8931560635d38a16f0027fab08e85ebc9a3d063c8b5265e022c4114564",
-      "family": "h100-sm90-cd2b-guards-20261102",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Exact source-bound completed supporting-phase originals and authenticated Nsight archive parts; full vectors, original Standard84 failure and all traces preserved. No final majority or later-source qualification."
-    }
-  ],
-  "historical_snapshot": "benchmarks/results/h100-sm90-cd2b-guards-20261102/historical-snapshot.json"
+  "files": [],
+  "historical_snapshot": "benchmarks/results/h100-sm90-cd2b-guards-20261102/retained-guards-v2.json"
 }

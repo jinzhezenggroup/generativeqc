@@ -67,3 +67,6 @@ large reference/paired endpoints retain their original scientific gates.
 The [default qualification capsule](../../../../benchmarks/results/occupied-xc-default-proposals-20261105/README.md)
 keeps actual absent controls, full vectors, work and source/binary provenance
 separate from the earlier explicit-1 measurements.
+The subsequent delivery merge retains the PR branch's existing upstream/CI
+integration and raw-output guards. It does not turn the pinned default image
+measurements into merged-target qualification or refresh scientific claims.

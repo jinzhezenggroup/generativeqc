@@ -1,0 +1,218 @@
+{
+  "schema": "generativeqc.h100-db36-fixed30-final.v1",
+  "source_revision": "db3657f08d983791c45b7d949cb9028fe0055e3f",
+  "source_tree": "681cefe8bd066a3fb973ab38e0ef856280625ed1",
+  "core_sha256": "472bd0f9bceaa7917f7137c2cb543f0ebfc6c0b728ed024aeacc81b92c8c83a4",
+  "original_final_protocol_sha256": "2391b71fb49660f682f1b60056b2892d5516f01871d7479319f0be2cf925fdaa",
+  "expected_proof_sha256": "dcc1bb5ab96f5c97e0a17dbb2878e16560b8d5c964165a82f82c29404bfd50e2",
+  "archive": {
+    "name": "final-pairs-v1-completed.tar.xz",
+    "bytes": 1225848,
+    "sha256": "edd023ea51c70fc2c8b314af2524e205a76586796003a212c78234181f78c093"
+  },
+  "parts": [
+    {
+      "path": "final-pairs-v1-completed.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "fd3cb8cd8c38682c2751b948a12c1268db5bc1b049477fd749861ff9825b2ebf"
+    },
+    {
+      "path": "final-pairs-v1-completed.tar.xz.part01",
+      "bytes": 439416,
+      "sha256": "0c6cbf0801e81028a230091abaabe1a79c21ab7ba7717923cc271e29b2ad407a"
+    }
+  ],
+  "manifest": {
+    "path": "final-pairs-v1-download-manifest.json.xz",
+    "bytes": 35620,
+    "sha256": "218ef169df2b0566c2d4edb2a3c42b719d603a2e46cd0bcbc119b7a7db37be8c",
+    "decoded_name": "final-pairs-v1-download-manifest.json",
+    "decoded_bytes": 196070,
+    "decoded_sha256": "195cc9adce9d720113be82873555b57ffbbef43a5e7e809eab40b33ca1411225"
+  },
+  "files": [
+    {
+      "path": "final-pairs-v1-completed.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "fd3cb8cd8c38682c2751b948a12c1268db5bc1b049477fd749861ff9825b2ebf"
+    },
+    {
+      "path": "final-pairs-v1-completed.tar.xz.part01",
+      "bytes": 439416,
+      "sha256": "0c6cbf0801e81028a230091abaabe1a79c21ab7ba7717923cc271e29b2ad407a"
+    },
+    {
+      "path": "final-pairs-v1-download-manifest.json.xz",
+      "bytes": 35620,
+      "sha256": "218ef169df2b0566c2d4edb2a3c42b719d603a2e46cd0bcbc119b7a7db37be8c"
+    },
+    {
+      "path": "readers/unpack-final-v1.py",
+      "bytes": 2263,
+      "sha256": "6020c153105f087de14e6db02a57e6e174f5a69ceb4b0278a5d61eb24231ab18"
+    },
+    {
+      "path": "readers/replay-final-pairs-v3.py",
+      "bytes": 25355,
+      "sha256": "934fb1e9f64c5c0666a677355bd2353d127add12c1e47a35c1ddadbe7c9740f0"
+    },
+    {
+      "path": "actual-result-audit.tar.xz",
+      "bytes": 72404,
+      "sha256": "54e2b44155c4fb030d36bae14d298c9dfacfc3a239898438cf4fdeed7ba4b779"
+    }
+  ],
+  "actual_result_audit": {
+    "archive": {
+      "path": "actual-result-audit.tar.xz",
+      "bytes": 72404,
+      "sha256": "54e2b44155c4fb030d36bae14d298c9dfacfc3a239898438cf4fdeed7ba4b779"
+    },
+    "members": [
+      {
+        "path": "input-seal-v1.json",
+        "bytes": 3888,
+        "sha256": "de223fd0691e428c6385b607cf913d5b9ddfdf2a89e9e456c6d7ce87e5829212"
+      },
+      {
+        "path": "host-completion-trace-v1.json",
+        "bytes": 710,
+        "sha256": "a0fccd66b16e74f4f3f641921171f3404b30cf3c8e4539f457205eb875e6880e"
+      },
+      {
+        "path": "host-received-final-response-v1.txt",
+        "bytes": 594,
+        "sha256": "e48b7cb3951d7902b65952f268003a936c3fee03bfdf1e4bbcfa8b931267d2c8"
+      },
+      {
+        "path": "reviewer/audit-report.json",
+        "bytes": 594771,
+        "sha256": "ccc263820117665fc7e288c3255a9d99bb073bb1ed52e25edde4f70efd12a99e"
+      },
+      {
+        "path": "reviewer/audit-report.md",
+        "bytes": 19313,
+        "sha256": "70459ce3db5271e5d35ea44f900d22f7d43cfab476c51b361159d23a857efcb7"
+      },
+      {
+        "path": "reviewer/remaining-slow-items.json",
+        "bytes": 290671,
+        "sha256": "725a8c5337963518b27cc4c62e51ffafcdcaf05cc62efb571ed318a792716266"
+      },
+      {
+        "path": "reviewer/report-output-seal.json",
+        "bytes": 5495,
+        "sha256": "ef48174f7b722756ebc9e208e7bcc7a8c868e042539aece8161b2d040c4fa282"
+      },
+      {
+        "path": "reviewer/audit-attempts.json",
+        "bytes": 504,
+        "sha256": "0fbd6bf085d437989603c344d9abf729ecb3f507e24863f5e10f073973810585"
+      },
+      {
+        "path": "reviewer/audit_cpu.py",
+        "bytes": 18834,
+        "sha256": "701bb19c46519dc5614f3de438b2938a0c49b33cdb7bceb1d8bedb90a924f68b"
+      },
+      {
+        "path": "reviewer/audit_cpu.py.attempt1",
+        "bytes": 17920,
+        "sha256": "38b4a96fc890afef0e94aa62bd6fac73934ad6e260992df4a0de7851ef683081"
+      },
+      {
+        "path": "reviewer/audit-cpu.stderr.attempt1",
+        "bytes": 2226,
+        "sha256": "080c2df15307fe67647cdbbc8ee5da5ae112c1f9beb78507031233c1840ce8ca"
+      },
+      {
+        "path": "reviewer/audit-cpu-command.json",
+        "bytes": 581,
+        "sha256": "9e01f65e93c3ce63b4aafe9562338878e1db94fbc6a5a3c3210ef980b77effe1"
+      },
+      {
+        "path": "reviewer/audit-cpu-command.json.attempt1",
+        "bytes": 581,
+        "sha256": "65d125dfbd425442d2d1122e2be44e66165379ea827f18db1f5679040014cdb9"
+      },
+      {
+        "path": "reviewer/audit-cpu.stdout",
+        "bytes": 3145,
+        "sha256": "e8ec81bb6a348013c4a0c73e166bcb7a2ad13b6afae2c29bfa9ce3fe1920f5e4"
+      },
+      {
+        "path": "reviewer/replay-execution-contract.json",
+        "bytes": 576,
+        "sha256": "51537ee403981b88a59e7e9dd4f5d874633af432828d0814f742e85503ee8060"
+      },
+      {
+        "path": "reviewer/nonwin_diagnostics.py",
+        "bytes": 5158,
+        "sha256": "5bbc867d88c092007149979e6c148437de43d6c683031356a38e1742403ec3fe"
+      },
+      {
+        "path": "reviewer/nonwin-diagnostics-command.json",
+        "bytes": 521,
+        "sha256": "f862a3de9f5a444676b7c1c83900fad0fe6e96bcdf0cd35d0d9652ecd21c09c3"
+      },
+      {
+        "path": "reviewer/nonwin-diagnostics.stdout",
+        "bytes": 2135,
+        "sha256": "e695458f06ee5e41985807cbe40eee037e3d56f29670b0345be3b8dfc285450a"
+      },
+      {
+        "path": "reviewer/trace/001-actual-final-audit.meta.json",
+        "bytes": 1294,
+        "sha256": "d993b921599c74bba1d60351c357b8900e1782d75fbb90bf2207668751e5a711"
+      },
+      {
+        "path": "reviewer/trace/001-actual-final-audit.request.json",
+        "bytes": 7681,
+        "sha256": "dc30fd5caf0a5226eb69e55a0becf6c2381cbbf3f165599dd2c8f9f4f2dfc163"
+      },
+      {
+        "path": "reviewer/trace/001-actual-final-audit.response.md",
+        "bytes": 19313,
+        "sha256": "70459ce3db5271e5d35ea44f900d22f7d43cfab476c51b361159d23a857efcb7"
+      },
+      {
+        "path": "reviewer/trace/002-clean-nonwin-supplement.meta.json",
+        "bytes": 1118,
+        "sha256": "4b6adcc6c240a4e5c0078cd412b6c870f6d57a6999ed629a6aa8cc711e3bd83c"
+      },
+      {
+        "path": "reviewer/trace/002-clean-nonwin-supplement.request.json",
+        "bytes": 1525,
+        "sha256": "9dd72859772843423819a3ebb024e8c6e6d688cb43c80a8892a20bd1d028a1cc"
+      },
+      {
+        "path": "reviewer/trace/002-clean-nonwin-supplement.response.md",
+        "bytes": 3508,
+        "sha256": "9d8ed0d4512f813e44bb772d0693ec36656f3ba5f14ed8a075928b6f3de95b39"
+      },
+      {
+        "path": "reviewer/trace/events.jsonl",
+        "bytes": 289,
+        "sha256": "af0088b587d793e472153cdd66c8326289874486c81b6ad1cfecf9953aa6e719"
+      },
+      {
+        "path": "reviewer/trace/run.meta.json",
+        "bytes": 400,
+        "sha256": "e145345e7f12c1d6111f10f3b182fa10c55ceac53ee2e3a134723bb0ebdf22b2"
+      }
+    ],
+    "report_sha256": "ccc263820117665fc7e288c3255a9d99bb073bb1ed52e25edde4f70efd12a99e",
+    "review_independence": "same-family",
+    "acceptance_status": "provisional"
+  },
+  "acceptance": {
+    "majority_accepted": true,
+    "all30_scientifically_qualified": true,
+    "physical_cases": 30,
+    "wins": 21,
+    "complete_set_geomean": 1.314955687500442,
+    "attempted_populations": 180,
+    "qualified_populations": 180,
+    "returned_EF": 720
+  },
+  "scope": "Frozen DB36 original fixed30 only; all30 science,180 qualified,720 full EF,21 wins. No later-main, cross-GPU or broader chemistry claim. Historical pre-dispatch and result reviews retain their original publication-pending fields."
+}
