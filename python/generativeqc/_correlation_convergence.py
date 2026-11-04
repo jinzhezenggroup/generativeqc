@@ -8,41 +8,12 @@ from __future__ import annotations
 
 import ctypes
 import math
-from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from . import _native
 
 if TYPE_CHECKING:
     from .force_aware_numerics import TargetErrorBudget
-
-
-def _compatibility_scale(budget: TargetErrorBudget | None) -> float:
-    """Retain strict convergence below the supported relaxation bracket."""
-    if budget is None:
-        return 0.0
-    scale = min(
-        1.0,
-        budget.energy_abs / 1e-5,
-        budget.force_max_abs / 1e-4,
-        budget.force_rms / 3e-5 if budget.force_rms is not None else 1.0,
-    )
-    return scale if scale >= 1e-3 else 0.0
-
-
-def _compatibility_limits(budget: TargetErrorBudget | None) -> dict[str, float]:
-    """Return native ceilings; explicit tighter SCF/CC controls still win."""
-    scale = _compatibility_scale(budget)
-    return {
-        "energy_tolerance": max(1e-11, scale * 1e-8),
-        "density_tolerance": max(1e-11, scale * 1e-9),
-        "ccsd_energy_tolerance": 1e-8,
-        "ccsd_residual_tolerance": max(1e-9, scale * 1e-6),
-        "lambda_residual_tolerance": max(1e-9, scale * 1e-7),
-        "response_absolute_tolerance": max(1e-12, scale * 1e-8),
-        "orbital_residual_tolerance": max(1e-10, scale * 1e-7),
-        "stationarity_tolerance": max(1e-8, scale * 1e-6),
-    }
 
 
 _LIMIT_NAMES = (
@@ -73,42 +44,22 @@ class _Limits(ctypes.Structure):
     ]
 
 
-@lru_cache(maxsize=8)
-def _load(path: str) -> Any:
-    """Discover one selected library; do not search beyond a missing protocol."""
-    library = ctypes.CDLL(path)
-    if getattr(library, "generativeqc_correlation_convergence_query_v1", None) is None:
-        return None
-    library.generativeqc_get_abi_version.argtypes = []
-    library.generativeqc_get_abi_version.restype = ctypes.c_uint32
-    if library.generativeqc_get_abi_version() != _native.ABI_VERSION:
-        raise RuntimeError("GENERATIVEQC Python/native ABI version mismatch")
-    library.generativeqc_status_message.argtypes = [ctypes.c_int]
-    library.generativeqc_status_message.restype = ctypes.c_char_p
-    return library
-
-
-def _optional_library() -> Any:
-    """Allow native-free typed CBS construction when no library is installed."""
-    for candidate in _native._candidate_paths():
-        if candidate.exists():
-            return _load(str(candidate.resolve()))
-    return None
-
-
 def convergence_policy(
     budget: TargetErrorBudget | None, *, library: Any = None
 ) -> tuple[float, dict[str, float]]:
-    """Query one shared policy, retaining only missing-library/protocol compatibility.
+    """Require one shared native policy, including during standalone CBS planning.
 
     Calculator admission supplies its selected library. Standalone CBS metadata
-    uses the first configured path. A refused query or malformed receipt is an
+    uses the normal native loader. A refused query or malformed receipt is an
     error, never authorization to retry Python stopping-limit arithmetic.
     """
-    selected = _optional_library() if library is None else library
+    selected = _native.load_library() if library is None else library
     operation = getattr(selected, "generativeqc_correlation_convergence_query_v1", None)
     if operation is None:
-        return _compatibility_scale(budget), _compatibility_limits(budget)
+        raise NotImplementedError(
+            "native library lacks required correlated-convergence query "
+            "generativeqc_correlation_convergence_query_v1; rebuild or install a current library"
+        )
     descriptor = _Budget(
         ctypes.sizeof(_Budget),
         _native.ABI_VERSION,

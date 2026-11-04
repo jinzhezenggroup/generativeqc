@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 
 from tools.cc_endpoint_fixtures import load
+from tools.generativeqc_validation.record import load_json
 
 HERE = Path(__file__).resolve().parent
 
@@ -18,7 +19,7 @@ def require(condition: bool, message: str) -> None:
 
 
 def main() -> None:
-    evidence = json.loads((HERE / "evidence.json").read_text())
+    evidence = load_json(HERE / "evidence.json.xz")
     observations = 0
     for campaign in evidence["campaigns"]:
         record = campaign["record"]

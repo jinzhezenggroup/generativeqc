@@ -1,3 +1,6 @@
+#include <algorithm>
+
+#include "core/cbs_extrapolation.hpp"
 #include "core/correlation_convergence.hpp"
 #include "generativeqc/generativeqc.h"
 
@@ -23,6 +26,35 @@ extern "C" generativeqc_status generativeqc_correlation_convergence_query_v1(
   } catch (...) {
     // No C++ exception may escape the public C boundary, including allocation
     // failure while the shared validator constructs an invalid-input diagnostic.
+    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+  }
+}
+
+extern "C" generativeqc_status generativeqc_cbs_extrapolation_query_v1(
+    const generativeqc_cbs_extrapolation_descriptor_v1* descriptor,
+    generativeqc_cbs_extrapolation_plan_v1* output) {
+  if (!descriptor || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (descriptor->struct_size < sizeof(*descriptor) ||
+      descriptor->abi_version != GENERATIVEQC_ABI_VERSION ||
+      output->struct_size < sizeof(*output) || output->abi_version != GENERATIVEQC_ABI_VERSION)
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (descriptor->reserved || descriptor->hf_extrapolation > 1)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  try {
+    const auto plan = generativeqc::core::CbsExtrapolation::make(
+        descriptor->low_cardinal, descriptor->high_cardinal, descriptor->correlation_exponent,
+        descriptor->hf_exponent, descriptor->hf_extrapolation == 0);
+    generativeqc_cbs_extrapolation_plan_v1 result{};
+    result.struct_size = sizeof(result);
+    result.abi_version = GENERATIVEQC_ABI_VERSION;
+    std::copy(plan.hf_weights.begin(), plan.hf_weights.end(), result.hf_weights);
+    std::copy(plan.mp2_weights.begin(), plan.mp2_weights.end(), result.mp2_weights);
+    std::copy(plan.coefficients.begin(), plan.coefficients.end(), result.coefficients);
+    *output = result;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::invalid_argument&) {
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (...) {
     return GENERATIVEQC_STATUS_INTERNAL_ERROR;
   }
 }

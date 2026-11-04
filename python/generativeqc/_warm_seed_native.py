@@ -1,4 +1,4 @@
-"""Typed metadata transport for prepared warm-seed numeric capacity."""
+"""Required native transport for prepared warm-seed capacity and snapshots."""
 
 from __future__ import annotations
 
@@ -28,15 +28,23 @@ _QUERY_ARGUMENTS = (ct.c_void_p, ct.POINTER(Capacity))
 _QUERY_TYPE = ct.CFUNCTYPE(ct.c_int, *_QUERY_ARGUMENTS)
 
 
-def seed_capacity(batch: Any) -> tuple[int, int] | None:
-    """Return native bounds; only a missing protocol permits compatibility."""
-    query = bind(
+def _required(library: Any, name: str, prototype: Any) -> Any:
+    """Distinguish an incomplete installation from an optional seed refusal."""
+    function = bind(library, name, prototype)
+    if function is None:
+        raise RuntimeError(
+            f"selected native library lacks required warm-seed protocol: {name}; "
+            "rebuild or reinstall the current native runtime"
+        )
+    function.argtypes, function.restype = prototype._argtypes_, prototype._restype_
+    return function
+
+
+def seed_capacity(batch: Any) -> tuple[int, int]:
+    """Return authoritative prepared bounds without materializing any seeds."""
+    query = _required(
         batch._library, "generativeqc_batch_query_warm_seed_capacity_v1", _QUERY_TYPE
     )
-    if query is None:
-        return None
-    query.argtypes = _QUERY_ARGUMENTS
-    query.restype = ct.c_int
     output = Capacity(ct.sizeof(Capacity), _native.ABI_VERSION)
     _native.check(
         batch._library,
@@ -91,6 +99,23 @@ _READ = ct.CFUNCTYPE(ct.c_int, ct.c_void_p, ct.c_uint32, ct.POINTER(_SeedView))
 _DESTROY = ct.CFUNCTYPE(None, ct.c_void_p)
 
 
+def require_seed_protocol(library: Any) -> None:
+    """Preflight the complete selected protocol without allocating a seed owner.
+
+    Installation errors are RuntimeError, not the NotImplementedError used for
+    supported-runtime domain refusals that may allow optional cold audit history.
+    Disabled warm starts still require a current runtime, but materialize nothing.
+    """
+    for name, prototype in (
+        ("generativeqc_batch_query_warm_seed_capacity_v1", _QUERY_TYPE),
+        ("generativeqc_batch_capture_warm_seeds_v1", _CAPTURE),
+        ("generativeqc_batch_restore_warm_seeds_v1", _RESTORE),
+        ("generativeqc_warm_seed_snapshot_read_v1", _READ),
+        ("generativeqc_warm_seed_snapshot_destroy", _DESTROY),
+    ):
+        _required(library, name, prototype)
+
+
 class SeedSnapshot:
     """Own one immutable native seed snapshot, independent of its source context.
 
@@ -108,14 +133,7 @@ class SeedSnapshot:
             ("generativeqc_warm_seed_snapshot_read_v1", _READ),
             ("generativeqc_warm_seed_snapshot_destroy", _DESTROY),
         ):
-            function = bind(self._library, name, prototype)
-            if function is None:
-                raise RuntimeError("native seed snapshot protocol is incomplete")
-            function.argtypes, function.restype = (
-                prototype._argtypes_,
-                prototype._restype_,
-            )
-            functions.append(function)
+            functions.append(_required(self._library, name, prototype))
         self._restore, self._read, self._destroy = functions
         info = _SnapshotInfo(ct.sizeof(_SnapshotInfo), _native.ABI_VERSION)
         _native.check(
@@ -158,6 +176,7 @@ class SeedSnapshot:
             batch._library, "_handle", id(batch._library)
         ):
             raise ValueError("seed snapshot belongs to a different native library")
+        require_seed_protocol(batch._library)
         from .checkpoint import _restore_seed_call
 
         status = _restore_seed_call(
@@ -193,12 +212,9 @@ class SeedSnapshot:
         return arrays
 
 
-def capture_snapshot(batch: Any, maximum_bytes: int) -> SeedSnapshot | None:
-    """Use descriptor compatibility only when the capture protocol is absent."""
-    capture = bind(batch._library, "generativeqc_batch_capture_warm_seeds_v1", _CAPTURE)
-    if capture is None:
-        return None
-    # An explicitly looked-up CDLL symbol may have ctypes' default C-int
-    # signature. Preserve its selection while declaring the uint64 limit ABI.
-    capture.argtypes, capture.restype = _CAPTURE._argtypes_, _CAPTURE._restype_
+def capture_snapshot(batch: Any, maximum_bytes: int) -> SeedSnapshot:
+    """Capture through the selected runtime; never reconstruct descriptor arrays."""
+    capture = _required(
+        batch._library, "generativeqc_batch_capture_warm_seeds_v1", _CAPTURE
+    )
     return SeedSnapshot(batch, maximum_bytes, capture)

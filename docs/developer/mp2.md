@@ -318,7 +318,34 @@ source described in [CUDA E+F source reuse](#cuda-ef-source-reuse). The bounded
 compatibility fallback uses the existing CPU values-only source and uploads
 its AO tiles. Both routes perform four cyclic CUDA MO transforms, download
 bounded MO tiles, reorder exchange on the host, and upload energy tiles through
-CG09's host-input ABI. CPU force execution retains its original source route.
+CG09's host-input ABI.
+
+Conventional CPU correlation borrows the existing prepared RHF interaction
+source through force execution when optional reference sharing is enabled.
+The provider charges its actual retained numeric capacity. Memory admission or
+allocation failure unwinds the phase, destroys the borrowing view before its
+prepared owner, and retries once with the bounded raw source. Scientific errors
+do not trigger this retry. `GENERATIVEQC_MP2_REFERENCE_SOURCE=0` explicitly
+retires that optional source before forces; it does not change the Hamiltonian.
+Force-local allocation telemetry does not certify the complete endpoint peak
+while retained reference or warm-state owners are live.
+
+The shared conventional CPU derivative consumer used by MP2 and RCCSD(T)
+queries the integral owner's compiled shell-component capability for each
+quartet. Covered components use the packaged CPU derivative artifact; an
+unavailable artifact or unsupported shell uses the existing reference
+contraction. This is a native reference recurrence, not a Python/PySCF
+production dependency. Neither route initiates JIT or changes normalization,
+the derivative equations, or the early contraction with relaxed weights.
+Explicit packaged execution rejects unsupported input rather than silently
+falling back. The single-channel reference wrapper remains independently
+selectable for validation.
+
+Optional `GENERATIVEQC_DF_PROGRESS_TRACE` records the `mp2_cpu_derivative`
+scope's artifact availability, successfully contracted packaged/reference
+quartets and integral-owner primitive evaluations. Counters are published only
+after a successful derivative return. They are scoped diagnostic work, not
+kernel-launch counts or complete-endpoint work/allocation certification.
 
 RI mode builds the RHF reference and correlation integrals from the same
 orbital/auxiliary systems and metric threshold. `density_fitting="cpu"` selects

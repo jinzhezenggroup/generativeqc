@@ -365,6 +365,16 @@
           "path": "python/generativeqc/batch.py",
           "symbol": "PreparedBatch.execute",
           "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_cbs_plan.py",
+          "symbol": "native_cbs_plan",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/cbs.py",
+          "symbol": "CCSDTCBSCalculator",
+          "classification": "scientific-runtime"
         }
       ],
       "native_scientific_sources": [
@@ -372,17 +382,24 @@
         "src/methods/ump2_method.cpp",
         "src/methods/rccsd_method.cpp",
         "src/methods/rccsdt_method.cpp",
-        "src/methods/df_rccsdt_method.cpp"
+        "src/methods/df_rccsdt_method.cpp",
+        "src/core/cbs_extrapolation.hpp"
       ],
       "native_callers": [
         "src/api/c_api_calculation.cpp",
         "src/api/c_api_batch.cpp",
-        "src/cli/main.cpp"
+        "src/cli/main.cpp",
+        "src/api/c_api_correlation_convergence.cpp"
       ],
-      "remaining_python_runtime": [],
+      "remaining_python_runtime": [
+        "CBS extrapolation weights and focal-point coefficients require the selected native host plan, with no Python arithmetic fallback. Python still owns basis-family/identity validation, grouping, coefficient-L1 budget allocation, sequential component execution and observable composition/publication. This is not a complete native CBS endpoint or CLI method."
+      ],
       "tests": [
         "tests/python/test_calculator.py",
-        "tests/python/test_df_ccsdt_capability_ownership.py"
+        "tests/python/test_df_ccsdt_capability_ownership.py",
+        "tests/python/test_cbs_extrapolation.py",
+        "tests/python/test_ccsdt_cbs.py",
+        "tests/python/test_ccsdt_cbs_native.py"
       ],
       "trackers": [
         "#926",
@@ -392,6 +409,15 @@
       "method_selectors": [
         "catalog-family:perturbation",
         "catalog-family:coupled_cluster"
+      ],
+      "retired_python_sites": [
+        {
+          "path": "python/generativeqc/cbs.py",
+          "symbols": ["_limit_weights"],
+          "last_present_source_sha": "4e71eafdfd612ae977105e8555d2d0be3f8531ea",
+          "replacement": "python/generativeqc/_cbs_plan.py",
+          "reason": "Required selected-library extrapolation planning replaces Python inverse-power/exponential weight arithmetic. Component grouping, convergence-budget allocation and complete endpoint execution remain Python-owned."
+        }
       ]
     },
     {
@@ -954,28 +980,13 @@
         },
         {
           "path": "python/generativeqc/precision_policy.py",
-          "symbol": "_compatibility_budget_fock_work_admitted",
-          "classification": "compatibility"
-        },
-        {
-          "path": "python/generativeqc/precision_policy.py",
           "symbol": "_budget_fock_strict_warm_admitted",
           "classification": "wrapper"
         },
         {
           "path": "python/generativeqc/precision_policy.py",
-          "symbol": "_compatibility_budget_fock_strict_warm_admitted",
-          "classification": "compatibility"
-        },
-        {
-          "path": "python/generativeqc/precision_policy.py",
           "symbol": "_standard_fallback_admitted",
           "classification": "wrapper"
-        },
-        {
-          "path": "python/generativeqc/precision_policy.py",
-          "symbol": "_compatibility_standard_fallback_admitted",
-          "classification": "compatibility"
         },
         {
           "path": "python/generativeqc/_precision_native.py",
@@ -985,7 +996,42 @@
         {
           "path": "python/generativeqc/precision_policy.py",
           "symbol": "PrecisionCalculator._validate_endpoint",
-          "classification": "scientific-runtime"
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_precision_execution.py",
+          "symbol": "run_precision_schedule",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbol": "PrecisionCalculator._classify_candidate",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_precision_candidate.py",
+          "symbol": "classify_candidate",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbol": "_errors",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_observable_comparison.py",
+          "symbol": "measure_observables",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/accuracy.py",
+          "symbol": "compare_observables",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/accuracy.py",
+          "symbol": "AccuracyAssessment",
+          "classification": "wrapper"
         },
         {
           "path": "python/generativeqc/_precision_batch.py",
@@ -1003,33 +1049,14 @@
           "classification": "wrapper"
         },
         {
-          "path": "python/generativeqc/_precision_batch.py",
-          "symbol": "_compatibility_seed_capacity",
-          "classification": "compatibility"
-        },
-        {
           "path": "python/generativeqc/_warm_seed_native.py",
           "symbol": "seed_capacity",
           "classification": "wrapper"
         },
         {
-          "path": "python/generativeqc/_precision_batch.py",
-          "symbol": "_SeedLease._capture_compatibility",
-          "classification": "compatibility"
-        },
-        {
           "path": "python/generativeqc/_warm_seed_native.py",
           "symbol": "capture_snapshot",
           "classification": "wrapper"
-        }
-      ],
-      "retired_python_sites": [
-        {
-          "path": "python/generativeqc/_scf_convergence.py",
-          "symbols": ["default_scf_controls", "_compatibility_default_scf_controls", "_standard_models"],
-          "last_present_source_sha": "9cfb77727661cc64e47938d9d0ba65a157427439",
-          "replacement": "python/generativeqc/_scf_defaults_native.py",
-          "reason": "All Calculator and precision consumers require the selected native defaults query. No Python model/grid/default-threshold policy or absent-ABI selection remains."
         }
       ],
       "native_scientific_sources": [
@@ -1044,6 +1071,11 @@
         "src/scf/progressive_verification.hpp",
         "src/scf/system_projection.hpp",
         "src/runtime/precision_admission.hpp",
+        "src/runtime/precision_candidate.hpp",
+        "src/runtime/precision_execution.hpp",
+        "src/runtime/observable_comparison.hpp",
+        "src/core/correlation_convergence.hpp",
+        "src/methods/correlation_convergence.hpp",
         "src/methods/scf_defaults.hpp",
         "src/methods/warm_seed_capacity.hpp",
         "src/methods/warm_seed_snapshot.hpp"
@@ -1056,16 +1088,19 @@
         "src/api/c_api_hf_physical_audit.cpp",
         "src/api/c_api_hf_verification.cpp",
         "src/api/c_api_precision_admission.cpp",
+        "src/api/c_api_precision_candidate.cpp",
+        "src/api/c_api_correlation_convergence.cpp",
         "src/api/c_api_scf_defaults.cpp",
         "src/api/c_api_warm_seed.cpp"
       ],
       "remaining_python_runtime": [
         "The bounded two-stage HF execution schedule uses the selected native callback controller: stage order, source-success projection, target-success/convergence density export, reverse-order cleanup and post-cleanup audit scheduling. For all-electron CPU RHF/UHF Direct/DF, the physical fixed-density audit uses one native scope for preparation, Fock/overlap, shared residual reduction and cleanup. The selected native final-verification policy owns scalar target/physical/precision/accuracy/work-budget disposition. Python retains typed planning, resource preflight, audit transport/presentation, typed identity/observable validation and diagnostic presentation, with explicit old-protocol/out-of-range-integer compatibility; unsupported audit domains and missing protocols retain explicit compatibility, never a retry after admitted native refusal; general coarse-to-fine and force-aware physical execution remain Python-owned. Missing-symbol scheduling is explicit compatibility, never a retry after native refusal. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance and custom types remain explicit Python work. Plain-policy occupied-basis projection and pure-density reconstruction share the existing native transport and ordinary CPU eigen provider; old-protocol/custom/unbounded policy domains retain explicit compatibility. Numeric working-capacity admission is not full physical/provider memory authority or target convergence.",
         "Admitted all-electron CPU HF system projection owns overlap preparation and every spin projection natively. Python retains per-item eligibility, immutable source transport, reports and transactional seed installation. Old/custom/unsupported domains retain explicit preparation compatibility; native execution failure never retries it. The composed capacity remains a numeric-matrix envelope rather than complete memory authority.",
-        "The public native application-precision evidence policy owns budget-Fock operator admission, exact returned-state strict warm proof, and the Standard fallback decision. Python transports typed model traits and completed diagnostics; missing additive support retains explicit compatibility and selected failures never retry it. Complete-gradient qualification, candidate/audit/fallback execution, observable comparison and bounded independent seed lifetimes remain Python production owners; this query does not claim a native precision endpoint or new numerical qualification.",
+        "The required selected-library application-precision evidence policy owns budget-Fock operator admission, exact returned-state strict warm proof, and the Standard fallback decision. The native execution controller additionally owns bounded per-item candidate/retry/classification/release/audit/verification order. The shared native observable owner measures absolute energy, maximum/RMS force errors and reference norms, resolves relative allowances and compares declared gates. Completed receipts are checked before publication and an unmet verification still rejects the observable budget. Python adapts electronic owners, validates array shape/representation, transports typed model traits and diagnostics; missing execution/query support rejects the installation and selected failures never retry Python policy/reductions. Typed offline evidence/status views remain portable metadata, not a replacement array norm or electronic scheduler. Completed-candidate routing, gradient receipt interpretation and complete correction binding now belong to the required native classifier, reusing the same native work predicates and canonical model catalog. Actual gradient producer eligibility, initial prepared fleet execution and bounded independent seed eligibility/history retain their existing owners. This is not an autonomous native precision endpoint, SDK/CLI parity or new numerical qualification.",
         "Default SCF controls require the selected library's shared native catalog/grid policy. Python copies model/backend/ECP and immutable grid facts, while explicit caller overrides remain unchanged. Missing support, native failures and invalid receipts reject the installation rather than selecting a Python policy. The removed Python selectors are retained as historical retirement metadata, not live source anchors. This neither qualifies new methods nor transfers precision execution or custom MethodIR resolution.",
-        "Precision seed staging queries immutable native prepared dimensions before resident export. Native immutable host snapshots own density/coordinate arrays, copying and release independently of source batch/context lifetime; restore reuses existing physical validation. Python retains same-model eligibility, validation reservations, metadata, update policy and independent candidate/auditor history selection. Only absent capacity/capture symbols permit topology/descriptor compatibility. Numeric bounds and snapshots do not establish complete host/provider memory authority or cross-model admission.",
-        "Budget-Fock SCF control selection queries the shared native policy for qualified restricted self-consistent device-fused models. Python transports Direct/fitted qualification facts and caller ceilings; only absent protocols retain the old threshold selection. General solver defaults, full method/gradient qualification and candidate/auditor scheduling remain separate owners. No new numerical domain is admitted."
+        "Precision seed staging requires the complete selected native capacity/snapshot protocol before prepared molecular work. Immutable native prepared dimensions bound resident export; native host snapshots own density/coordinate arrays, copying and release independently of source batch/context lifetime. Restore reuses existing physical validation. Python topology sizing and legacy descriptor-copy compatibility are retired. Python retains same-model eligibility, validation reservations, metadata, update policy and independent candidate/auditor history selection. Optional auditor retention may cold-fallback on supported-runtime resource/domain refusal, never missing installation support. Numeric bounds and snapshots do not establish complete host/provider memory authority or cross-model admission.",
+        "Budget-Fock SCF control selection requires the shared native policy for qualified restricted self-consistent device-fused models. Python transports Direct/fitted qualification facts and caller ceilings; missing query support rejects the installation instead of selecting thresholds in Python. General solver defaults and full method/gradient qualification remain separate owners. No new numerical domain is admitted.",
+        "Correlated stopping ceilings require the selected Calculator library's native query, while standalone CBS metadata uses the normal native loader. Missing query support rejects the installation; no parallel optional discovery or Python budget arithmetic remains. Python still owns CBS composition, component execution and observable publication; stopping metadata does not establish endpoint or derivative qualification."
       ],
       "tests": [
         "tests/python/test_minao_default.py",
@@ -1083,8 +1118,16 @@
         "tests/native/test_system_projection_sdk.cpp",
         "tests/native/test_precision_admission.cpp",
         "tests/python/test_native_precision_admission.py",
+        "tests/native/test_precision_candidate.cpp",
+        "tests/python/test_native_precision_candidate.py",
+        "tests/native/test_precision_execution.cpp",
+        "tests/python/test_native_precision_execution.py",
+        "tests/native/test_observable_comparison.cpp",
+        "tests/python/test_native_observable_comparison.py",
         "tests/python/test_precision_policy_native.py",
         "tests/python/test_precision_batch_cuda.py",
+        "tests/python/test_native_correlation_policy.py",
+        "tests/python/test_correlation_convergence.py",
         "tests/native/test_scf_defaults.cpp",
         "tests/python/test_native_scf_defaults.py",
         "tests/python/test_scf_convergence_defaults.py",
@@ -1103,6 +1146,58 @@
       "method_selectors": [
         "catalog-family:hartree_fock",
         "catalog-family:density_functional"
+      ],
+      "retired_python_sites": [
+        {
+          "path": "python/generativeqc/_precision_batch.py",
+          "symbols": ["_compatibility_seed_capacity", "_SeedLease._capture_compatibility"],
+          "last_present_source_sha": "64e14180a06b89a1d555aed97f5df338148bff2e",
+          "replacement": "python/generativeqc/_warm_seed_native.py",
+          "reason": "Prepared precision requires current native capacity and snapshot ownership; missing support rejects the installation instead of reconstructing AO/spin bounds or copying descriptor arrays. Optional resource/domain cold-audit fallback and independent Python seed/history eligibility remain unchanged."
+        },
+        {
+          "path": "python/generativeqc/_scf_convergence.py",
+          "symbols": ["default_scf_controls", "_compatibility_default_scf_controls", "_standard_models"],
+          "last_present_source_sha": "9cfb77727661cc64e47938d9d0ba65a157427439",
+          "replacement": "python/generativeqc/_scf_defaults_native.py",
+          "reason": "All Calculator and precision consumers require the selected native defaults query. No Python model/grid/default-threshold policy or absent-ABI selection remains."
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbols": ["_complete_gradient_admission"],
+          "last_present_source_sha": "d67715e664704c97005adc8bcce0d7d04abe9a64",
+          "replacement": "python/generativeqc/_precision_candidate.py",
+          "reason": "Required native completed-candidate classification owns gradient receipt domains, complete correction binding and route selection. Native canonical catalog identity replaces runtime compiler resolution for correction admission; Python transports typed correction facts and presents receipts. Actual gradient producer eligibility and independent seed/fleet orchestration retain their existing owners."
+        },
+        {
+          "path": "python/generativeqc/accuracy.py",
+          "symbols": ["_measure_observables"],
+          "last_present_source_sha": "b40bd44840e9920402fa399ded64acdd0c428728",
+          "replacement": "python/generativeqc/_observable_comparison.py",
+          "reason": "Required selected-library observable comparison replaces production NumPy norms in both application precision and public array comparisons. Typed array validation moves to the transport; portable target/evidence scalar views remain explicit metadata rather than numerical execution. RMS uses independently checked compensated scaled squares, not a frozen NumPy summation bracket."
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbols": [
+            "_compatibility_budget_fock_controls",
+            "_compatibility_budget_fock_strict_warm_admitted",
+            "_compatibility_budget_fock_work_admitted",
+            "_compatibility_standard_fallback_admitted"
+          ],
+          "last_present_source_sha": "1622554d9ca1d7d4b7ca07b82a059b4e5174b51a",
+          "replacement": "python/generativeqc/_precision_native.py",
+          "reason": "Required selected-library controls/admission queries replace all Python budget-control, completed-work, warm-replay and strict-fallback policy arithmetic. Missing support rejects the installation; independent observable audits remain live."
+        },
+        {
+          "path": "python/generativeqc/_correlation_convergence.py",
+          "symbols": [
+            "_compatibility_scale",
+            "_compatibility_limits"
+          ],
+          "last_present_source_sha": "1622554d9ca1d7d4b7ca07b82a059b4e5174b51a",
+          "replacement": "python/generativeqc/_correlation_convergence.py",
+          "reason": "CBS planning and selected Calculator admission require the native correlated stopping-policy query. The normal native loader replaces independent optional discovery; metadata-only construction no longer computes Python ceilings."
+        }
       ]
     },
     {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import math
 from dataclasses import replace
@@ -13,10 +14,113 @@ from generativeqc import CBSBasis, CCSDTCBSCalculator, Result
 from generativeqc import cbs as cbs_module
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from generativeqc import BasisSet
 
 
 ATOMS = (("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.4)))
+
+
+@pytest.mark.parametrize("failure", ("missing", "refused"))
+def test_cbs_requires_native_plan_before_electronic_execution(
+    bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    policy_library: ctypes.CDLL,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    """Native admission cannot be replaced with Python extrapolation arithmetic."""
+
+    def refuse(inputs: Any, output: Any) -> int:
+        return cbs_module._native.STATUS_INVALID_ARGUMENT
+
+    monkeypatch.setattr(
+        policy_library,
+        "generativeqc_cbs_extrapolation_query_v1",
+        None if failure == "missing" else refuse,
+    )
+    monkeypatch.setattr(
+        cbs_module._native, "load_library", lambda **options: policy_library
+    )
+    with pytest.raises((RuntimeError, ValueError), match="extrapolation"):
+        CCSDTCBSCalculator(bases, device="cuda")
+    assert fake_native == []
+
+
+@pytest.mark.parametrize("multiplicity", (1, 3))
+def test_selected_native_plan_controls_composition_and_component_budgets(
+    bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    policy_library: ctypes.CDLL,
+    monkeypatch: pytest.MonkeyPatch,
+    multiplicity: int,
+) -> None:
+    """A valid different receipt must flow through coefficients, E/F and budgets."""
+    from generativeqc._cbs_plan import _Descriptor, native_cbs_plan
+
+    expected = native_cbs_plan(policy_library, 2, 3, 4.0, 2.0, "exponential")
+    query = policy_library.generativeqc_cbs_extrapolation_query_v1
+
+    def selected_plan(inputs: Any, output: Any) -> int:
+        copied = _Descriptor.from_buffer_copy(
+            ctypes.string_at(inputs, ctypes.sizeof(_Descriptor))
+        )
+        copied.correlation_exponent = 4.0
+        copied.hf_exponent = 2.0
+        return query(ctypes.byref(copied), output)
+
+    monkeypatch.setattr(
+        policy_library, "generativeqc_cbs_extrapolation_query_v1", selected_plan
+    )
+    monkeypatch.setattr(
+        cbs_module._native, "load_library", lambda **options: policy_library
+    )
+    workflow = CCSDTCBSCalculator(bases, device="cuda")
+    assert workflow.hf_weights == expected.hf_weights
+    assert workflow.mp2_weights == expected.mp2_weights
+    result = workflow.singlepoint(ATOMS, multiplicity=multiplicity)
+    assert {component.method for component in result.components} == (
+        {"rhf", "mp2", "ccsd(t)"} if multiplicity == 1 else {"uhf", "ump2", "uccsd(t)"}
+    )
+    by_role = {
+        role: component for component in result.components for role in component.roles
+    }
+    for role, coefficient in zip(
+        ("hf_low", "hf_high", "mp2_low", "mp2_high", "correction_ccsdt"),
+        (
+            *expected.coefficients[:2],
+            expected.coefficients[2] - 1,
+            *expected.coefficients[3:5],
+        ),
+        strict=True,
+    ):
+        assert by_role[role].coefficient == pytest.approx(coefficient, abs=1e-15)
+    assert result.energy == pytest.approx(
+        math.fsum(
+            component.coefficient * component.result.energy
+            for component in result.components
+        ),
+        abs=1e-14,
+    )
+    np.testing.assert_allclose(
+        result.forces,
+        sum(
+            component.coefficient * component.result.forces
+            for component in result.components
+        ),
+        atol=1e-14,
+    )
+    amplification = math.fsum(
+        abs(component.coefficient) for component in result.components
+    )
+    for event in fake_native:
+        if multiplicity == 1:
+            assert event["options"][
+                "_correlation_convergence_budget"
+            ].energy_abs == pytest.approx(1e-5 / amplification)
+        else:
+            assert "_correlation_convergence_budget" not in event["options"]
 
 
 def test_full_df_groups_preserve_the_explicit_reference_model(

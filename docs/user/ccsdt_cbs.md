@@ -207,9 +207,10 @@ with a DZ correction that sum is approximately `4.196866`.
 Python CBS planning queries `generativeqc_correlation_convergence_query_v1`,
 which uses the same stopping-policy owner as the native correlated solvers.
 Standalone `Calculator` validates CC ceilings using its selected library before
-creating a context. Native-free planning and older libraries missing this
-additive query retain explicit metadata compatibility; an admitted query failure
-is an error and does not retry Python arithmetic. This does not replace the
+creating a context. Planning also requires an installed native runtime: it uses
+the normal native loader and never computes stopping limits in Python. A library
+without this query must be rebuilt or updated; a refused query or malformed
+receipt is an error rather than permission to rediscover another library. This does not replace the
 separate native convergence-transport capability required for actual execution.
 
 The component allowance selects a scale `s`: the minimum of one and its
@@ -509,6 +510,20 @@ unrestricted methods.
 
 (python-cbs-ownership)=
 ## Ownership and concurrency
+
+The installed native runtime owns extrapolation weights and the six focal-point
+coefficients through
+{ref}`generativeqc_cbs_extrapolation_query_v1 <native-c-generativeqc-cbs-extrapolation-query-v1>`.
+Construction queries this geometry-independent plan and the convergence policy
+from the same normally selected host library, including for CUDA workflows.
+Missing support, a native refusal or a malformed receipt rejects construction
+before electronic execution; Python does not reconstruct a fallback plan.
+This host metadata query neither executes nor admits a molecular backend.
+
+Python still owns basis-family/identity validation, method/basis grouping,
+coefficient-L1 budget allocation, sequential component execution and observable
+composition/publication. The native coefficient plan is not a complete native
+CBS endpoint or CLI method, a basis-error estimate, or a performance certificate.
 
 `CBSBasis` snapshots local records at construction. Modifying a file or the
 caller-owned options dictionary does not change an existing workflow. Keep the

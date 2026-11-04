@@ -54,3 +54,64 @@ the optional historical fixture location from current scientific evidence.
 The original compressed transports remain in ignored task artifacts and Git
 history. No release, tag, asset, external backup, failed sample or slower
 population is created or removed by this storage-only change.
+
+## Follow-up: bounded text-context recompression, 2026-11-04
+
+The native precision candidate cutover's conflict-free evidence projection against
+master `e9dd9a26320052204a0911a67213855fbf75a278` exceeded the unchanged
+80-MiB limit by 33,347 bytes. Six existing XZ transports now use LZMA2 preset
+`9 | PRESET_EXTREME`, `lc=4`, `lp=0`, `pb=0`. Their **complete decoded byte
+streams**, not merely parsed numerical values, remain identical. The change
+saves 36,156 bytes; no measurement, failure, slow sample, source identity,
+floating-point spelling or scientific decision is regenerated or removed.
+
+| Historical family | Previous bytes | Stored bytes |
+| --- | ---: | ---: |
+| capability-fp64-20261101 | 348,612 | 344,724 |
+| df-raw-coulomb-20261023 | 485,212 | 478,368 |
+| df96-local-autotune-20261103 | 134,752 | 132,976 |
+| fast-range-warm-20261021 | 103,744 | 98,016 |
+| occupied-xc-cold-20261023 | 346,752 | 335,532 |
+| xc-prepared-parameters-20261028 | 284,648 | 277,948 |
+
+The existing family review rows, raw-J bundle checksum, capability checksum file
+and DF96 stored-byte description follow their new transport identities. No
+retention threshold, cap, exception, reader, numerical gate or producer changes.
+The compaction remains charged to the ordinary changed-evidence review budget.
+Independent before/after report replays cover the four families with standalone
+reproducers; the other two retain their whole decoded source/receipt containers.
+
+The one-off admission check streamed all 1,999 tracked XZ/Gzip benchmark
+archives (1,230,514,952 decoded bytes) looking for incoming pins to the selected
+compressed-byte hashes. None target these six transports. This is an explicit
+storage-migration check, not a new permanent CI source-fingerprint requirement.
+All original transports, proposed streams and exact-byte receipts remain in
+ignored local investigation artifacts and existing Git history.
+
+Rejected alternatives matter: the initial independent-force-tiles recompression
+grew its transport; another recipe saved only 192 bytes and was not applied.
+The CUDA KS seed transport offers larger savings but its old compressed hash
+is embedded in the XC-unroll receipt, so it is left untouched. Likewise, the
+Fast-source-floor integration receipt pins its qualification transport.
+Updating those scientific containers just to rescue storage would expand the
+ownership and validation boundary unnecessarily. The historical README DFT
+summaries also retain their explicitly promised original compressed bytes.
+
+These are historical storage changes, not new GPU runs or requalification of
+current precision sources. The small remaining space is not permission to skip
+the aggregate or changed-evidence check when upstream adds more evidence.
+
+## Follow-up: retain the complete CPU RCCSD closeout, 2026-11-04
+
+Integrating the subsequent master evidence still exceeds the unchanged aggregate
+cap after those six recompressions. The CPU RCCSD closeout now stores its original
+22,605-byte JSON as a 2,256-byte XZ stream using preset `9 | PRESET_EXTREME`.
+Its complete decoded bytes match the original Git blob recorded in the bundle
+README. The existing shared JSON reader handles transport decoding; ordinary
+and optimized replay preserve all 24 observations and reject corrupt/truncated
+streams. This does not promote the slower measured CPU-native implementation,
+change its explicit opt-in, or qualify the newly integrated source. The occupied-XC
+negative evidence and every original numerical token remain untouched. The
+one-off incoming-pin audit and rejected insufficient recompression recipes remain
+in ignored storage-investigation artifacts; no permanent implementation hash test
+or retention exemption is added.

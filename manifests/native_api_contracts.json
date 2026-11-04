@@ -3259,10 +3259,58 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_cbs_extrapolation_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "46d64aadd4eaa26613cc7aec5564baef25f87757dc3b0354d62330f12ea32c09",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_observable_comparison_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/precision_admission.h",
+      "signature_sha256": "4a17e5f731928a2c2034f4c7d9b4238a27f1b383bd6b8a8049d6068609e0711f",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_precision_admission_query_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/precision_admission.h",
       "signature_sha256": "6945ff9d9fc440989c85bea62f87c2346b513c061aecd69b9a5714e420557808",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_precision_candidate_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/precision_admission.h",
+      "signature_sha256": "f89749d2949179a6f621bd0fbc8703ce0d89c380a5eaf99d29341f267493a20f",
       "required_facets": [
         "behavior",
         "errors",
@@ -3295,6 +3343,38 @@
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
       "signature_sha256": "c653a296fd1acc1e6f1ba788088fca32296b6cc4b5be354bf12e39d0c261106a",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_precision_execution_callback_v1": {
+      "kind": "c-callback",
+      "header": "include/generativeqc/precision_admission.h",
+      "signature_sha256": "5ad28852b7e54cf2169c4bbc138f74ab4bb9c5a98fef662303b6369aa3f71e55",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_precision_execution_run_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/precision_admission.h",
+      "signature_sha256": "77b77a150109c32b4b3f2530198ac0cbeb49bf603d05778fdfb166cb4639712d",
       "required_facets": [
         "behavior",
         "errors",

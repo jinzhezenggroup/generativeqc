@@ -28,6 +28,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_scf_effort_decide_v1](#native-c-generativeqc-scf-effort-decide-v1)
 - [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
 - [generativeqc_correlation_convergence_query_v1](#native-c-generativeqc-correlation-convergence-query-v1)
+- [generativeqc_cbs_extrapolation_query_v1](#native-c-generativeqc-cbs-extrapolation-query-v1)
 - [generativeqc_hf_plan_query_v1](#native-c-generativeqc-hf-plan-query-v1)
 - [generativeqc_hf_verify_final_v1](#native-c-generativeqc-hf-verify-final-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
@@ -225,7 +226,11 @@ capability authorities, serialization, and status handling.
 - [generativeqc::KsComposition::add_exact_exchange](#native-cpp-generativeqc-kscomposition-add-exact-exchange)
 - [generativeqc::KsComposition::prepare](#native-cpp-generativeqc-kscomposition-prepare)
 - [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
+- [generativeqc_precision_candidate_query_v1](#native-c-generativeqc-precision-candidate-query-v1)
 - [generativeqc_precision_controls_query_v1](#native-c-generativeqc-precision-controls-query-v1)
+- [generativeqc_precision_execution_callback_v1](#native-c-generativeqc-precision-execution-callback-v1)
+- [generativeqc_precision_execution_run_v1](#native-c-generativeqc-precision-execution-run-v1)
+- [generativeqc_observable_comparison_query_v1](#native-c-generativeqc-observable-comparison-query-v1)
 - [generativeqc_scf_defaults_query_v1](#native-c-generativeqc-scf-defaults-query-v1)
 - [generativeqc_batch_query_warm_seed_capacity_v1](#native-c-generativeqc-batch-query-warm-seed-capacity-v1)
 - [generativeqc_batch_capture_warm_seeds_v1](#native-c-generativeqc-batch-capture-warm-seeds-v1)
@@ -691,6 +696,40 @@ callback or implicit retry. Input and output storage may overlap.
 
 **Units.** Energy allowances/tolerances are Hartree; force allowances are
 Hartree/Bohr. Density, amplitude and response gates retain their solver units.
+
+(native-c-generativeqc-cbs-extrapolation-query-v1)=
+## generativeqc_cbs_extrapolation_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_cbs_extrapolation_query_v1 ( const generativeqc_cbs_extrapolation_descriptor_v1 * descriptor , generativeqc_cbs_extrapolation_plan_v1 * output ) ;
+```
+
+**Behavior.** Plan the shared geometry-independent MP2-assisted CCSD(T)/CBS
+extrapolation, using exponential or highest-basis HF and inverse-power MP2.
+This does not certify basis completeness, observable errors or an endpoint.
+
+**Inputs.** Required complete current-ABI descriptors, increasing cardinal numbers
+in [2,100], finite positive exponents, hf_extrapolation=0/1 and reserved=0.
+Caller owns actual basis-family, identity, representation and execution admission.
+
+**Outputs.** Atomically publishes two weight pairs and six ordered coefficients.
+Singular or nonfinite weights reject; finite-input underflow of the decaying
+exponential is its valid limiting weight pair. Errors leave output unchanged.
+
+**Errors.** INVALID_ARGUMENT for null or malformed inputs and singular weights;
+ABI_MISMATCH for incompatible headers. Other mapped C-boundary failures return
+INTERNAL_ERROR without publishing a partial plan.
+
+**Lifetime.** Borrows input/output only during the call and retains no storage.
+Input/output buffers may overlap; all inputs are consumed before publication.
+
+**Execution.** Synchronous constant-storage host planning; no context, electronic
+solve, basis lookup, Python/compiler, device work, callback or implicit retry.
+
+**Units.** Exponents, cardinal numbers, weights and coefficients are dimensionless.
+Complete component energies/forces retain Hartree and Hartree/Bohr units.
 
 (native-c-generativeqc-hf-plan-query-v1)=
 ## generativeqc_hf_plan_query_v1
@@ -5979,6 +6018,42 @@ needed. Explicit observable targets still require their independent endpoint aud
 **Units.** Budgets use Eh and Eh/bohr; solver controls retain their existing native units;
 counts denote actual work, never inferred iterations or timings.
 
+(native-c-generativeqc-precision-candidate-query-v1)=
+## generativeqc_precision_candidate_query_v1
+
+Source: [precision_admission.h](../../include/generativeqc/precision_admission.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_precision_candidate_query_v1 ( const generativeqc_precision_candidate_context_v1 * candidate , const generativeqc_precision_admission_context_v1 * context , const generativeqc_precision_provenance * provenance , const generativeqc_precision_work_detail * detail , const generativeqc_precision_work_event * events , const generativeqc_precision_operator_record * operators , generativeqc_precision_candidate_v1 * output ) ;
+```
+
+**Behavior.** Classify completed precision candidates using shared native work
+predicates, incumbent gradient receipt domains and complete correction binding.
+Explicit observable targets always require an independent audit. No new
+method, derivative, provider or FP32 domain is qualified by this query.
+
+**Inputs.** Nonnull versioned candidate/admission contexts, provenance, detail
+and output. Event/operator arrays contain the counts declared by detail.
+Candidate facts override the admission context's gradient interpretation.
+Correction identity is compared to the selected library's canonical native
+r2SCAN-3c catalog entry; display names are not model identity.
+
+**Outputs.** Publish policy version 1, one disposition, reason bits and complete
+gradient admission name. AUDIT requires the existing independent observable
+endpoint; it does not mean a numerical failure or an unsupported protocol.
+
+**Errors.** INVALID_ARGUMENT for malformed facts, flags, strings or work records;
+ABI_MISMATCH for incompatible descriptors; NOT_IMPLEMENTED for unsupported
+work-detail versions. Failure leaves output unchanged.
+
+**Lifetime.** Borrow all inputs synchronously, retain nothing. Complete reads
+before publishing output, permitting input/output overlap.
+
+**Execution.** CPU metadata only, allocation-free and reentrant; no electronic
+solve, compiler, Python interpreter, resource allocation or fallback occurs.
+
+**Units.** Counts are semantic diagnostic work, not timings or inferred zeros.
+
 (native-c-generativeqc-precision-controls-query-v1)=
 ## generativeqc_precision_controls_query_v1
 
@@ -6008,6 +6083,118 @@ This neither admits an arithmetic provider nor supplies an observable-error proo
 
 **Units.** Energy allowance is Eh; force allowances are Eh/bohr; controls use existing
 native SCF units. Explicit tighter caller controls remain unchanged.
+
+(native-c-generativeqc-precision-execution-callback-v1)=
+## generativeqc_precision_execution_callback_v1
+
+Source: [precision_admission.h](../../include/generativeqc/precision_admission.h)
+
+```cpp
+typedef int ( * generativeqc_precision_execution_callback_v1 ) ( void * state , uint32_t event , uint32_t * decision ) ;
+```
+
+**Behavior.** Execute one synchronous operation requested by the native schedule.
+
+**Inputs.** state is the caller's opaque owner. event is one of the six precision
+execution events; the native owner supplies nonnull decision storage.
+
+**Outputs.** Return CALLBACK_SUCCESS and set decision=0 for execution/release;
+CLASSIFY returns 1 for an admitted no-audit publication or 0 to require an
+independent audit. AUDIT/VERIFY return 1 only when every declared observable
+gate meets its allowance. Return CALLBACK_RETRY only for a candidate failure
+eligible under the caller's unchanged numerical retry policy; other failures
+return CALLBACK_ERROR. No exception may cross this callback boundary.
+
+**Errors.** Callback failures stop the schedule, except the single explicitly
+admitted candidate retry. Neither audit nor verification errors are retried.
+
+**Lifetime.** The callback owns preparation, identity validation and cleanup,
+including failed preparation/solve. It releases transient auditors before
+returning and candidate residency before allocating an independent auditor.
+Retained candidate fleets, detached results and independent seed histories
+stay owned by state; native code retains no resource or pointer after return.
+
+**Execution.** Invoked synchronously on the calling thread. Numerical kernels,
+model/qualification admission, observable reduction and resource leases keep
+their existing owners. Native stage order is not an observable certificate.
+
+**Units.** decision is boolean; masks/events do not denote iterations or work.
+
+(native-c-generativeqc-precision-execution-run-v1)=
+## generativeqc_precision_execution_run_v1
+
+Source: [precision_admission.h](../../include/generativeqc/precision_admission.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_precision_execution_run_v1 ( const generativeqc_precision_execution_context_v1 * context , generativeqc_precision_execution_callback_v1 callback , void * state , generativeqc_precision_execution_receipt_v1 * output ) ;
+```
+
+**Behavior.** Own bounded application-precision candidate/auditor/fallback order.
+Run candidate, at most one admitted FP64 retry, then classification. An audit
+request releases candidate residency before one independent FP64 audit. Only
+an unmet audit selects one tighter verification of the FP64 replacement.
+
+**Inputs.** Nonnull versioned context, callback and receipt; state may be null.
+The callback must preserve the same scientific model and independent histories
+and must not present numerical/qualification failure as unsupported protocol.
+
+**Outputs.** Publish policy version 1, attempted/completed event masks and final
+outcome. Callback failure publishes a FAILED progress receipt, not a partial
+observable. REJECTED is a completed schedule, not a successful budget gate.
+Malformed descriptor errors leave receipt unchanged and invoke no callback.
+
+**Errors.** INVALID_ARGUMENT for null pointers, invalid flags/reserved fields or
+invalid callback decisions; ABI_MISMATCH for incompatible descriptor headers;
+INTERNAL_ERROR for callback errors. No C++ exception escapes this boundary.
+
+**Lifetime.** Borrow all storage synchronously; retain no callback, state, result
+or endpoint owner. Context and receipt may overlap; inputs are copied first.
+
+**Execution.** Constant-storage host control; electronic work occurs only through
+explicit callbacks. No device, context, library discovery, compiler, implicit
+Python fallback or retry after native protocol refusal is performed here.
+
+**Units.** Event masks and outcomes are dimensionless; numerical allowances and
+measured observable errors retain their separately declared physical units.
+
+(native-c-generativeqc-observable-comparison-query-v1)=
+## generativeqc_observable_comparison_query_v1
+
+Source: [precision_admission.h](../../include/generativeqc/precision_admission.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_observable_comparison_query_v1 ( const generativeqc_observable_comparison_context_v1 * context , const double * forces , const double * reference_forces , generativeqc_observable_comparison_v1 * output ) ;
+```
+
+**Behavior.** Measure completed energy/force discrepancies and resolve allowances.
+Energy uses absolute scalar differences; forces use maximum absolute component
+or scaled RMS over all 3N components. RMS uses compensated normalized squares
+to avoid overflow and unbounded summation error, not an unscaled sum of squares.
+
+**Inputs.** Nonnull versioned context/output. A nonzero requested_mask selects the
+three documented slots. Selected force norms require nonnull force/reference
+arrays and positive atom_count; otherwise both pointers and atom_count are zero.
+Selected observables and all coefficients are finite FP64. Values must belong
+to the same model and declared scope; convergence/identity admission belongs to
+their endpoint owner, not this comparison. Arrays may not change during the call.
+
+**Outputs.** Transactionally publish version 1, measured/met masks, differences,
+reference norms and absolute-plus-relative allowances. Coefficient multiplication
+is rounded before addition. Every failure leaves output unchanged.
+
+**Errors.** INVALID_ARGUMENT for null/mismatched arrays, invalid masks/reserved
+fields, invalid/overflowing dimensions, nonfinite values, overflowing differences
+or allowances, or invalid coefficients; ABI_MISMATCH for descriptor headers.
+
+**Lifetime.** Borrow inputs/output only during the call. Copy the descriptor and
+complete all reads before publication, allowing input/output storage overlap.
+
+**Execution.** Synchronous allocation-free host comparison, at most two passes
+over each force array. No context, compiler, device, solve, discovery or implicit
+oracle/fallback work. A met receipt is observed agreement, not a certificate
+of reference uncertainty, model accuracy, derivative qualification or convergence.
+
+**Units.** Energy is Eh; forces are Eh/bohr; relative coefficients are dimensionless.
 
 (native-c-generativeqc-scf-defaults-query-v1)=
 ## generativeqc_scf_defaults_query_v1

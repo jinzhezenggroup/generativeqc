@@ -21,11 +21,15 @@ from generativeqc import (
     Result,
     TargetAccuracy,
     TargetErrorBudget,
+    _native,
 )
 from generativeqc import precision_policy as implementation
 from generativeqc.batch import BatchItemResult
 
-from tools.generativeqc_validation.native_registry_stub import install_registry_stub
+from tools.generativeqc_validation.native_registry_stub import (
+    install_registry_stub,
+    install_scf_defaults_stub,
+)
 
 ATOMS = (("H", (0, 0, -0.7)), ("H", (0, 0, 0.7)))
 ENERGY = TargetAccuracy((ObservableTarget("energy", "absolute", "Eh", absolute=1e-6),))
@@ -40,8 +44,23 @@ def result(energy: float = -1.0, force: float = 0.0, **changes: typing.Any) -> R
     )
 
 
+def policy_metadata(library: typing.Any, **capabilities: typing.Any) -> SimpleNamespace:
+    """Borrow native predicates without granting the fake backend real work."""
+    return SimpleNamespace(
+        generativeqc_precision_controls_query_v1=library.generativeqc_precision_controls_query_v1,
+        generativeqc_precision_admission_query_v1=library.generativeqc_precision_admission_query_v1,
+        generativeqc_scf_defaults_query_v1=library.generativeqc_scf_defaults_query_v1,
+        generativeqc_precision_execution_run_v1=library.generativeqc_precision_execution_run_v1,
+        generativeqc_observable_comparison_query_v1=library.generativeqc_observable_comparison_query_v1,
+        generativeqc_precision_candidate_query_v1=library.generativeqc_precision_candidate_query_v1,
+        **capabilities,
+    )
+
+
 @pytest.fixture
-def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+def backend(
+    monkeypatch: pytest.MonkeyPatch, policy_library: typing.Any
+) -> SimpleNamespace:
     """Inject endpoint observations while exercising the real policy controller.
 
     Native numerical/model qualification lives in the companion integration
@@ -57,6 +76,10 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         auto_properties=None,
         transport_v2=False,
         standard_convergence=False,
+        missing_admission=False,
+        missing_execution=False,
+        missing_observable=False,
+        missing_candidate=False,
     )
 
     class Backend:
@@ -64,16 +87,17 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             if state.block_auto and options["precision"] == "auto":
                 raise NotImplementedError("unavailable AUTO domain")
             self.options = options
-            from tools.generativeqc_validation.native_registry_stub import (
-                install_scf_defaults_stub,
-            )
-
-            self._library = SimpleNamespace()
-            install_scf_defaults_stub(self._library)
+            self._method = _native.METHOD_RHF
+            self._library = policy_metadata(policy_library)
+            if state.missing_admission:
+                self._library.generativeqc_precision_admission_query_v1 = None
+            if state.missing_execution:
+                self._library.generativeqc_precision_execution_run_v1 = None
+            if state.missing_observable:
+                self._library.generativeqc_observable_comparison_query_v1 = None
+            if state.missing_candidate:
+                self._library.generativeqc_precision_candidate_query_v1 = None
             if state.standard_convergence:
-                from generativeqc import _native
-
-                self._method = _native.METHOD_RHF
                 self._device_name = options.get("device")
                 install_scf_defaults_stub(
                     self._library, (1e-9, 1e-5, 1e-12), qualified=True
@@ -138,6 +162,143 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(implementation, "Calculator", Backend)
     monkeypatch.setattr("generativeqc.ecp.resolve_ecp", lambda *args: ((0, 0), ()))
     return state
+
+
+def test_fast_rejects_missing_policy_before_molecular_work(
+    backend: SimpleNamespace,
+) -> None:
+    """An older installation cannot turn missing admission into an FP64 audit."""
+    backend.missing_admission = True
+    with pytest.raises(NotImplementedError, match="required precision-admission query"):
+        PrecisionCalculator(policy="fast")
+    assert backend.calls == []
+
+
+@pytest.mark.parametrize(
+    "profile", ("standard", "fp64", "balanced", "strict", "audit_auto", "fast")
+)
+def test_all_profiles_require_native_execution_before_molecular_work(
+    backend: SimpleNamespace, profile: str
+) -> None:
+    backend.missing_execution = True
+    with pytest.raises(
+        NotImplementedError, match="required precision execution controller"
+    ):
+        PrecisionCalculator(policy=profile)
+    assert backend.calls == []
+
+
+@pytest.mark.parametrize(
+    "profile", ("standard", "fp64", "balanced", "strict", "audit_auto", "fast")
+)
+def test_all_profiles_require_native_observables_before_molecular_work(
+    backend: SimpleNamespace, profile: str
+) -> None:
+    backend.missing_observable = True
+    with pytest.raises(NotImplementedError, match="required observable comparison"):
+        PrecisionCalculator(policy=profile)
+    assert backend.calls == []
+
+
+@pytest.mark.parametrize(
+    "profile", ("standard", "fp64", "balanced", "strict", "audit_auto", "fast")
+)
+def test_all_profiles_require_native_classification_before_molecular_work(
+    backend: SimpleNamespace, profile: str
+) -> None:
+    backend.missing_candidate = True
+    with pytest.raises(NotImplementedError, match="required precision-candidate query"):
+        PrecisionCalculator(policy=profile)
+    assert backend.calls == []
+
+
+def test_missing_selected_candidate_protocol_does_not_start_electronic_work(
+    backend: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calculator = PrecisionCalculator(policy="balanced")
+    monkeypatch.setattr(
+        calculator._candidate._library,
+        "generativeqc_precision_candidate_query_v1",
+        None,
+    )
+    with pytest.raises(NotImplementedError, match="required precision-candidate query"):
+        calculator.singlepoint(ATOMS)
+    assert backend.calls == []
+
+
+def test_missing_selected_observable_protocol_does_not_start_a_candidate(
+    backend: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calculator = PrecisionCalculator(policy="balanced")
+    monkeypatch.setattr(
+        calculator._candidate._library,
+        "generativeqc_observable_comparison_query_v1",
+        None,
+    )
+    with pytest.raises(NotImplementedError, match="required observable comparison"):
+        calculator.singlepoint(ATOMS)
+    assert backend.calls == []
+
+
+def test_native_measurements_control_the_observable_rejection(
+    backend: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from generativeqc._observable_comparison import _Comparison, _Context
+
+    backend.outputs = [result(), result(), result()]
+    calculator = PrecisionCalculator(policy="balanced")
+
+    def rejected(
+        context: typing.Any,
+        forces: typing.Any,
+        reference: typing.Any,
+        output: typing.Any,
+    ) -> int:
+        descriptor = ctypes.cast(context, ctypes.POINTER(_Context)).contents
+        result = ctypes.cast(output, ctypes.POINTER(_Comparison)).contents
+        result.policy_version, result.measured_mask, result.met_mask = (
+            1,
+            descriptor.requested_mask,
+            0,
+        )
+        for slot in range(3):
+            if descriptor.requested_mask & (1 << slot):
+                (
+                    result.differences[slot],
+                    result.reference_norms[slot],
+                    result.allowances[slot],
+                ) = 1, 0, 0.5
+        return 0
+
+    monkeypatch.setattr(
+        calculator._candidate._library,
+        "generativeqc_observable_comparison_query_v1",
+        rejected,
+    )
+    with pytest.raises(PrecisionBudgetError) as failure:
+        calculator.singlepoint(ATOMS)
+    assert failure.value.validation.status == "observed_unmet"
+    assert failure.value.validation.solve_count == 3
+    assert all(
+        error.difference == 1 and error.allowance == 0.5
+        for error in failure.value.validation.errors
+    )
+
+
+def test_selected_execution_refusal_does_not_start_a_portable_candidate(
+    backend: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calculator = PrecisionCalculator(policy="balanced")
+    selected = calculator._candidate._library
+    monkeypatch.setattr(
+        selected,
+        "generativeqc_precision_execution_run_v1",
+        lambda *args: _native.STATUS_INVALID_ARGUMENT,
+    )
+    selected.generativeqc_status_message = lambda status: b"selected controller refused"
+    with pytest.raises(RuntimeError, match="selected controller refused"):
+        calculator.singlepoint(ATOMS)
+    assert backend.calls == []
 
 
 @pytest.mark.parametrize("profile", ["audit_auto", "balanced", "strict", "Balanced"])
@@ -393,11 +554,15 @@ def test_fast_fitted_hf_keeps_unavailable_work_counters_unknown(
 def test_budget_fock_accepts_strict_j_only_for_pure_xc_proposals(
     method: str,
     proposal: str,
+    policy_library: typing.Any,
 ) -> None:
     """A strict replacement needs a real dtype census and physical closure."""
     from generativeqc.ks import resolve_ks_options
 
-    calculator = SimpleNamespace(_ks_options=resolve_ks_options(method, KsOptions()))
+    calculator = SimpleNamespace(
+        _library=policy_metadata(policy_library),
+        _ks_options=resolve_ks_options(method, KsOptions()),
+    )
     work = {
         "operator_work_counters_valid": True,
         "complete": True,
@@ -448,12 +613,13 @@ def test_budget_fock_accepts_strict_j_only_for_pure_xc_proposals(
 )
 def test_budget_fock_controls_use_shared_modules_and_new_native_capability(
     method: str,
+    policy_library: typing.Any,
 ) -> None:
     from generativeqc.ks import resolve_ks_options
 
     calculator = SimpleNamespace(
-        _library=SimpleNamespace(
-            generativeqc_application_fock_precision_version_v2=lambda: 2
+        _library=policy_metadata(
+            policy_library, generativeqc_application_fock_precision_version_v2=lambda: 2
         ),
         _ks_options=resolve_ks_options(method, KsOptions(grid=GridSpec(48, 16, 32))),
         _density_fitting_mode=0,
@@ -497,13 +663,13 @@ def test_budget_fock_controls_use_shared_modules_and_new_native_capability(
         method, KsOptions(grid=GridSpec(48, 16, 32), xc_schedule="host_unfused")
     )
     assert select(calculator, budget, {}) == {}
-    calculator._library = SimpleNamespace()
+    calculator._library = policy_metadata(policy_library)
     assert select(calculator, budget, {}) == {}
     calculator._ks_options = resolve_ks_options(
         method, KsOptions(grid=GridSpec(48, 16, 32))
     )
-    calculator._library = SimpleNamespace(
-        generativeqc_application_fock_precision_version_v1=lambda: 1
+    calculator._library = policy_metadata(
+        policy_library, generativeqc_application_fock_precision_version_v1=lambda: 1
     )
     assert select(calculator, budget, {}) == {}
 
@@ -609,12 +775,12 @@ def test_fast_strict_warm_requires_complete_state_bound_evidence(
         "mixed_stage_fock_builds": 0,
         "strict_stage_fock_builds": 1,
         "final_residual_audits": int(missing != "audit"),
-        "returned_state_identity": "owner:epoch:returned",
+        "returned_state_identity": "cuda-ks:17:5:9",
         "scf_fock_timeline": [
-            {"kind": "strict_fock", "state": "owner:epoch:returned", "count": 1},
+            {"kind": "strict_fock", "state": "cuda-ks:17:5:9", "count": 1},
             {
                 "kind": "final_audit",
-                "state": "stale" if missing == "state" else "owner:epoch:returned",
+                "state": "cuda-ks:17:5:10" if missing == "state" else "cuda-ks:17:5:9",
                 "count": 1,
             },
         ],
@@ -689,13 +855,14 @@ def test_fast_strict_warm_requires_complete_state_bound_evidence(
     ),
 )
 def test_budget_fock_evidence_follows_the_exchange_graph(
-    method: str, has_exchange: bool
+    method: str, has_exchange: bool, policy_library: typing.Any
 ) -> None:
     """J-only graphs do not invent K, and strict range work cannot prove mixed K."""
     from generativeqc.ks import resolve_ks_options
 
     calculator = SimpleNamespace(
-        _ks_options=resolve_ks_options(method, KsOptions(grid=GridSpec(48, 16, 32)))
+        _library=policy_metadata(policy_library),
+        _ks_options=resolve_ks_options(method, KsOptions(grid=GridSpec(48, 16, 32))),
     )
     work = {
         "operator_work_counters_valid": True,
@@ -1114,7 +1281,9 @@ def test_property_fallback_preserves_later_energy_only_auto(
 
 
 @pytest.fixture
-def cuda_constructor(monkeypatch: pytest.MonkeyPatch) -> None:
+def cuda_constructor(
+    monkeypatch: pytest.MonkeyPatch, policy_library: typing.Any
+) -> None:
     """Use actual scientific resolution and capability gates without a GPU."""
     from generativeqc import _native
 
@@ -1122,7 +1291,8 @@ def cuda_constructor(monkeypatch: pytest.MonkeyPatch) -> None:
         ctypes.cast(pointer, ctypes.POINTER(ctypes.c_int32))[0] = 1
         return _native.STATUS_SUCCESS
 
-    library = SimpleNamespace(
+    library = policy_metadata(
+        policy_library,
         generativeqc_ks_options_version=lambda: 1,
         generativeqc_application_precision_version_v1=lambda: 1,
         generativeqc_method_available=available,
@@ -1382,6 +1552,7 @@ def test_nonlocal_fast_uses_real_strict_scf_policy(backend: SimpleNamespace) -> 
 )
 def test_composite_gradient_admission_requires_all_canonical_correction_sources(
     electronic: str,
+    policy_library: typing.Any,
 ) -> None:
     """A complete electronic record alone cannot certify another corrected graph."""
     from generativeqc.dispersion import (
@@ -1395,8 +1566,38 @@ def test_composite_gradient_admission_requires_all_canonical_correction_sources(
     d4 = D4CorrectionResult(0, 0.0, 0.0, 0.0, gradient, None, "cuda", "")
     gcp = GCPCorrectionResult(0, 0.0, gradient, "cpu", "", "native", "graph")
     correction = R2SCAN3CCorrectionResult(0, 0.0, gradient, "cuda+cpu", "", d4, gcp)
-    calculator = SimpleNamespace(_dispersion_method_ir=resolve_method("R2SCAN-3c"))
-    assert implementation._complete_gradient_admission(
+    calculator = SimpleNamespace(
+        _dispersion_method_ir=resolve_method("R2SCAN-3c"),
+        _library=policy_library,
+    )
+
+    def admitted(
+        calculator: typing.Any, observed: Result, qualification: str
+    ) -> str | None:
+        from generativeqc._precision_candidate import classify_candidate
+
+        precision = {
+            "gradient": {
+                "complete": True,
+                "qualification": qualification,
+                "schema_version": 4 if "-df-" in qualification else 2,
+                "owner": "python-stationary-cuda",
+            }
+        }
+        _, reasons, name = classify_candidate(
+            calculator,
+            replace(observed, precision=precision),
+            profile="fp64",
+            target=ENERGY,
+            fast_native=False,
+            fast_fock=False,
+            forces=True,
+            precision="fp64",
+            budget=None,
+        )
+        return name if reasons & 1 else None
+
+    assert admitted(
         calculator, result(dispersion=correction), electronic
     ) == electronic.replace("r2scan-", "r2scan-3c-", 1)
     for invalid in (
@@ -1407,25 +1608,13 @@ def test_composite_gradient_admission_requires_all_canonical_correction_sources(
         replace(correction, d4=replace(d4, status=1)),
         replace(correction, gcp=replace(gcp, status=1)),
     ):
-        assert (
-            implementation._complete_gradient_admission(
-                calculator, result(dispersion=invalid), electronic
-            )
-            is None
-        )
+        assert admitted(calculator, result(dispersion=invalid), electronic) is None
     assert (
-        implementation._complete_gradient_admission(
-            calculator, result(dispersion=correction), "pbe0-rks-budget-fp32-v1"
-        )
+        admitted(calculator, result(dispersion=correction), "pbe0-rks-budget-fp32-v1")
         is None
     )
     calculator._dispersion_method_ir = resolve_method("PBE0")
-    assert (
-        implementation._complete_gradient_admission(
-            calculator, result(dispersion=correction), electronic
-        )
-        is None
-    )
+    assert admitted(calculator, result(dispersion=correction), electronic) is None
 
 
 def test_uncertified_correction_cannot_bypass_audit_via_qualified_xc_warmup(
