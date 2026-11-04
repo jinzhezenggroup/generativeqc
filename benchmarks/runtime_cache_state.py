@@ -865,7 +865,7 @@ def water_endpoint(case: str) -> dict:
                 float(item.energy), item.forces, len(atoms), seconds
             ),
             seconds=seconds,
-            settings=native_settings(calculator, item),
+            settings=native_settings(owner._calculator, item),
         )
         sample["ks_diagnostic"] = (
             item.ks_diagnostic.to_payload() if item.ks_diagnostic else None
@@ -875,7 +875,7 @@ def water_endpoint(case: str) -> dict:
             "method": method,
             "atoms": len(atoms),
             "sample": sample,
-            "native_build": binary_identity(calculator),
+            "native_build": binary_identity(owner._calculator),
         }
     finally:
         owner.close()

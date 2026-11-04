@@ -130,7 +130,16 @@ class DirectForceDiagnostic {
           "\"density_contraction\":{\"attempted_shells\":%llu,\"accepted_shells\":%llu,"
           "\"mask_rejections\":%llu,\"numerical_rejections\":%llu,\"density_terms\":%llu,"
           "\"hermite_products\":%llu,\"bra_preparations\":%llu,\"ket_preparations\":%llu,"
-          "\"coulomb_preparations\":%llu}}",
+          "\"coulomb_preparations\":%llu},"
+          "\"scalar_contraction\":{\"calls\":%llu,\"separable_calls\":%llu,"
+          "\"separable_primitive_products\":%llu,\"sampled_calls\":%llu,"
+          "\"sampled_thread_cycles\":%llu,\"separable_sampled_calls\":%llu,"
+          "\"separable_sampled_thread_cycles\":%llu},"
+          "\"scalar_pair_contraction\":{\"attempted_shells\":%llu,\"accepted_shells\":%llu,"
+          "\"mask_rejections\":%llu,\"numerical_rejections\":%llu,\"checked_ao_quartets\":%llu,"
+          "\"bra_density_terms\":%llu,\"ket_density_terms\":%llu,\"primitive_products\":%llu,"
+          "\"screening_pair_terms\":%llu,\"screening_pair_proofs\":%llu,"
+          "\"screening_pair_fallbacks\":%llu}}",
           c ? "," : "", c, order, row.enumerated, row.shell_screened, row.generated_owned,
           row.admitted,
           count(row.executed_shells, complete_ && (order != 6 || shared_recurrence), shells),
@@ -144,7 +153,15 @@ class DirectForceDiagnostic {
           row.density.attempted_shells, row.density.accepted_shells, row.density.mask_rejections,
           row.density.numerical_rejections, row.density.density_terms, row.density.hermite_products,
           row.density.recurrence.bra_preparations, row.density.recurrence.ket_preparations,
-          row.density.recurrence.coulomb_preparations);
+          row.density.recurrence.coulomb_preparations, row.scalar.calls, row.scalar.separable_calls,
+          row.scalar.separable_primitive_products, row.scalar.sampled_calls,
+          row.scalar.sampled_thread_cycles, row.scalar.separable_sampled_calls,
+          row.scalar.separable_sampled_thread_cycles, row.scalar_pair.attempted_shells,
+          row.scalar_pair.accepted_shells, row.scalar_pair.mask_rejections,
+          row.scalar_pair.numerical_rejections, row.scalar_pair.checked_ao_quartets,
+          row.scalar_pair.bra_density_terms, row.scalar_pair.ket_density_terms,
+          row.scalar_pair.primitive_products, row.scalar_pair.screening_pair_terms,
+          row.scalar_pair.screening_pair_proofs, row.scalar_pair.screening_pair_fallbacks);
     }
     std::fputs("]}\n", out);
     std::fclose(out);

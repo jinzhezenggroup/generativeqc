@@ -161,7 +161,7 @@ def main() -> None:
                 "iterations": item.iterations,
                 "fock_builds": item.fock_builds,
                 "precision": item.precision,
-                "settings": native_settings(calculator, item),
+                "settings": native_settings(owner._calculator, item),
                 "ks_diagnostic": item.ks_diagnostic.to_payload()
                 if item.ks_diagnostic
                 else None,
@@ -181,7 +181,7 @@ def main() -> None:
             )
 
         execute("cold", "original", cold=start)
-        record["native_build"] = binary_identity(calculator)
+        record["native_build"] = binary_identity(owner._calculator)
         owner.set_warm_start_updates(False)
         for _ in range(args.warm_repeats):
             execute("warm", "original")

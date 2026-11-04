@@ -29,6 +29,7 @@ def _write_materialized_headers(tmp_path: Path) -> None:
         "#pragma once\n#include <cmath>\n#define __device__\n#define __host__\n"
         "#define __forceinline__ inline\n#define __global__\n#define __shared__\n"
         "#define __launch_bounds__(...)\n"
+        "using std::isfinite;\n"
         "template<class T> T atomicAdd(T* p,T value) { T old=*p; *p+=value; return old; }\n"
         "inline double __dadd_rn(double a,double b) { volatile double s=a+b; return s; }\n"
         "inline void __syncthreads() {}\ninline void __syncwarp() {}\n"
