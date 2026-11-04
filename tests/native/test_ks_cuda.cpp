@@ -1134,14 +1134,15 @@ void run_fast_anchor_delta_case() {
         const auto cold = plan.transfers();
         // Explicit FP64 admits the strict path, with or without ignored Fast budgets.
         // AUTO alone must not silently acquire the strict-only optimization.
-        const bool expected = (mode == 0 || mode == 1 || mode == 3) && selection &&
-                              std::strcmp(selection, "1") == 0;
+        const bool expected =
+            (mode == 0 || mode == 1 || mode == 3) && selection && std::strcmp(selection, "1") == 0;
         if (!expected) ordinary_anchor_state_bytes[mode] = plan.resources().state_device_bytes;
         if (expected) {
           const auto matrix_elements = basis.nao * basis.nao;
-          require(plan.resources().state_device_bytes ==
-                      ordinary_anchor_state_bytes[mode] + (5 * matrix_elements + 1) * sizeof(double),
-                  "Fast anchor capacity omitted its optional matrices or scalar");
+          require(
+              plan.resources().state_device_bytes ==
+                  ordinary_anchor_state_bytes[mode] + (5 * matrix_elements + 1) * sizeof(double),
+              "Fast anchor capacity omitted its optional matrices or scalar");
         }
         require(expected ? cold.fast_anchor_builds > 0 && cold.fast_delta_builds > 0
                          : cold.fast_anchor_builds == 0 && cold.fast_delta_builds == 0,
@@ -1221,9 +1222,8 @@ void run_fast_anchor_delta_case() {
         require(handoff_status == GENERATIVEQC_STATUS_SUCCESS &&
                     retired_state_bytes <= state_bytes - anchor_bytes &&
                     plan.resources().provider_device_bytes <= provider_bytes &&
-                    receipt[3] ==
-                        state_bytes - retired_state_bytes + provider_bytes -
-                            plan.resources().provider_device_bytes &&
+                    receipt[3] == state_bytes - retired_state_bytes + provider_bytes -
+                                      plan.resources().provider_device_bytes &&
                     plan.final_state_token(after_handoff, detail) == GENERATIVEQC_STATUS_SUCCESS &&
                     after_handoff == token &&
                     plan.resident_final_density(token, density_after, detail) ==
@@ -1245,8 +1245,7 @@ void run_fast_anchor_delta_case() {
                         before_handoff.fast_anchor_allocation_fallbacks &&
                     plan.prepare_force_memory(token, total_bytes, receipt, detail) ==
                         GENERATIVEQC_STATUS_SUCCESS &&
-                    receipt[3] == 0 &&
-                    plan.resources().state_device_bytes == retired_state_bytes &&
+                    receipt[3] == 0 && plan.resources().state_device_bytes == retired_state_bytes &&
                     plan.resources().provider_device_bytes == retired_provider_bytes &&
                     plan.final_state_token(after_handoff, detail) == GENERATIVEQC_STATUS_SUCCESS &&
                     after_handoff == token,

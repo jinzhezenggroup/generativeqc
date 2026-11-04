@@ -193,8 +193,8 @@ inline bool default_fast_anchor_delta(std::size_t aos) noexcept { return aos >= 
 inline bool admit_strict_anchor_delta(bool requested, bool strict_fp64, bool exact_direct,
                                       unsigned spins, bool vv10, bool resource_ledger,
                                       unsigned chunk_width) noexcept {
-  return requested && strict_fp64 && exact_direct && spins == 1 && vv10 &&
-         !resource_ledger && chunk_width == 1;
+  return requested && strict_fp64 && exact_direct && spins == 1 && vv10 && !resource_ledger &&
+         chunk_width == 1;
 }
 
 /** Independently qualified stationary RKS candidate at a strict final
