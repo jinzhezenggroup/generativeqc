@@ -97,7 +97,9 @@ def test_generated_scatter_all_canonical_index_coincidences(
     tmp_path: Path, native_cxx: object
 ) -> None:
     (tmp_path / "cuda_runtime.h").write_text(
-        "#pragma once\n#define __device__\n#define __host__\n#define __forceinline__ inline\ninline void atomicAdd(double* p,double x){*p+=x;}\n"
+        "#pragma once\n#include <cmath>\nusing std::isfinite;\n"
+        "#define __device__\n#define __host__\n#define __forceinline__ inline\n"
+        "inline void atomicAdd(double* p,double x){*p+=x;}\n"
     )
     (tmp_path / "scatter.hpp").write_text(emit_direct_fock_accumulation_header())
     (tmp_path / "shell_scatter.hpp").write_text(

@@ -32,7 +32,7 @@ def fused_shell_probe(
     (directory / "cuda_runtime.h").write_text(
         "#pragma once\n#include <algorithm>\n#include <cmath>\n"
         "#define __device__\n#define __host__\n#define __forceinline__ inline\n"
-        "using std::min; using std::max;\n"
+        "using std::min; using std::max; using std::isfinite;\n"
         "inline void atomicAdd(double* p, double value) { *p += value; }\n"
     )
     (directory / "generated_direct_fock_accumulation.cuh").write_text(

@@ -122,6 +122,7 @@ struct DeviceBatch {
   unsigned direct_order_seven_page_size{32};
   bool direct_dddd_force_class_major{}, direct_force_split_low{};
   bool direct_force_relative_response{true};
+  bool direct_force_pair_separable{};
   bool direct_fp32_block_screening{};
   float* direct_fp32_block_bounds{};
   float* direct_fp32_density_bounds{};
@@ -203,6 +204,22 @@ int main(int argc,char** argv) {
       assert(original.direct_force_relative_response);
     }
     assert(unsetenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES")==0);
+    return 0;
+  }
+  if(argc==2 && std::strcmp(argv[1],"--separable-policy-only")==0) {
+    const auto* name="GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_PAIR_SEPARABLE";
+    assert(unsetenv(name)==0);
+    DeviceBatch original;
+    configure_direct_coulomb_recurrence(original);
+    assert(!original.direct_force_pair_separable);
+    for(const auto* selector : {"0", "unknown", "", "1", "01"}) {
+      assert(setenv(name,selector,1)==0);
+      DeviceBatch prepared;
+      configure_direct_coulomb_recurrence(prepared);
+      assert(prepared.direct_force_pair_separable==(std::strcmp(selector,"1")==0));
+      assert(!original.direct_force_pair_separable);
+    }
+    assert(unsetenv(name)==0);
     return 0;
   }
   if(argc==2 && std::strcmp(argv[1],"--budget-only")==0) {
@@ -376,6 +393,14 @@ def test_weighted_response_policy_is_captured_per_prepared_owner(
     """Explicit rollback never mutates an already prepared arithmetic policy."""
     subprocess.run(
         [str(allocation_probe), "--response-policy-only"], check=True, timeout=10
+    )
+
+
+def test_separable_force_policy_is_default_off_and_captured_per_prepared_owner(
+    allocation_probe: Path,
+) -> None:
+    subprocess.run(
+        [str(allocation_probe), "--separable-policy-only"], check=True, timeout=10
     )
 
 
