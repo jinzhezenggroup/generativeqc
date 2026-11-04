@@ -1,5 +1,9 @@
 # Occupied XC: bounded proposals with strict matrix publication
 
+This historical capsule measures the explicit-1 policy at the source below.
+The subsequent [automatic-admission qualification](../occupied-xc-default-proposals-20261105/README.md)
+records the default promotion separately, without relabeling these receipts.
+
 Qualification spans November 4–5, 2026 on Slurm node1/main RTX 5090. The matrix
 route remains the default; exact `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` enables
 the initializer. This is neither a default promotion nor an all-functional
