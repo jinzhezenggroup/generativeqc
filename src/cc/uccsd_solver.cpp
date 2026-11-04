@@ -12,6 +12,7 @@
 
 #include "cc/iteration_driver.hpp"
 #include "cc/uccsd_executor.hpp"
+#include "core/work_budget.hpp"
 #include "generated_uccsd_cpu.hpp"
 #include "posthf/capacity.hpp"
 #include "solver/diis.hpp"
@@ -22,7 +23,6 @@ namespace {
 namespace graph = ucc_generated;
 using Shape = std::array<std::size_t, 4>;
 using Clock = std::chrono::steady_clock;
-constexpr std::size_t kMaximumWork = 100000000000ULL;
 constexpr std::array<const char*, 5> kAmplitudes{"t1a", "t1b", "t2aa", "t2ab", "t2bb"};
 
 double seconds(Clock::time_point start) {
@@ -345,8 +345,8 @@ std::size_t unrestricted_capacity(std::size_t nbf, std::size_t alpha, std::size_
       work = posthf::checked_add(
           work, posthf::checked_mul(triple_count(sizes, alpha_count), tile_work[alpha_count]));
   }
-  if (work > kMaximumWork)
-    throw std::length_error("complete native UCCSD endpoint exceeds scalar-work bound");
+  core::admit_correlation_work("uccsd_primal", work, capacity, nbf, alpha, beta,
+                               options.max_iterations);
   return capacity;
 }
 

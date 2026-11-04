@@ -39,7 +39,9 @@ enum {
    * itself: the \p fp64 record is simply not yet populated. Serializing callers
    * treat this as "no provenance yet" (e.g. Python returns None).
    */
-  GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE = 9
+  GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE = 9,
+  /** Explicit finite scalar-work policy refused execution; not memory exhaustion. */
+  GENERATIVEQC_STATUS_RESOURCE_LIMIT = 10
 };
 
 #include "generativeqc/generated_method_ids.h"

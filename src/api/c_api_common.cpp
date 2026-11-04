@@ -154,6 +154,8 @@ const char* generativeqc_status_message(generativeqc_status status) {
       return "internal error";
     case GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE:
       return "precision provenance not yet populated";
+    case GENERATIVEQC_STATUS_RESOURCE_LIMIT:
+      return "scalar-work policy limit exceeded";
   }
   return "unknown status";
 }

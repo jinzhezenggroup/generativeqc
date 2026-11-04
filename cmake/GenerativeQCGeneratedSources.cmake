@@ -770,6 +770,7 @@ macro(generativeqc_register_host_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ao_native.py"
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.hpp"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_uccsd_native.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_ao_source.py"
     ARGS --cpu-header "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.hpp")
 
@@ -1508,6 +1509,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ao_native.py"
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.cu"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_uccsd_native.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_ao_source.py"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.hpp"
     ARGS --cuda-source "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.cu")

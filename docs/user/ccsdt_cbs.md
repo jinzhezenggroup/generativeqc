@@ -71,6 +71,8 @@ Open-shell CBS supports conventional or explicitly fitted,
 real-FP64 energy and analytic-force endpoints on CPU/CUDA. Explicit CBS
 auxiliary bases require CUDA. The correction basis inherits native UCCSD(T)'s s/p/d,
 numeric memory and scalar-work admission, without a fixed AO-count cutoff.
+The finite work policy and explicit override are documented under
+[correlated resource controls](correlated_methods.md#control-cost-memory-and-convergence).
 The larger UMP2 bases retain their own native limits. Scalar ECPs follow the
 Hamiltonian contract below; frozen core is not substituted or silently
 downgraded. Unsupported native initial-guess

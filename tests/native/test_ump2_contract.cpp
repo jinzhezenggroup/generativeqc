@@ -15,6 +15,7 @@
 #include "methods/unrestricted_response.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
+#include "posthf/df_interaction_source.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "posthf/ump2_cpu_generated.hpp"
@@ -444,6 +445,41 @@ void force_contract() {
     return generativeqc::mp2::unrestricted_force_cpu(state, &problem, source, budget, 1e-10);
   };
   const auto first = evaluate(ref, 256ULL << 20);
+  {
+    generativeqc::posthf::DensityFittedInteractionSource fitted(source, ref, system, 1e-10,
+                                                                256ULL << 20, false, 0, true);
+    generativeqc::posthf::NativeBlockProvider provider(fitted, ref, 256ULL << 20);
+    const auto n = ref.nbf;
+    const generativeqc::posthf::SpinMOSlots request{{{{0, 1}, {n - 1}, {0}, {n - 1}}},
+                                                    {0, 0, 1, 1}};
+    const auto block = provider.get_spin(request);
+    std::vector<double> ao(n * n * n * n);
+    fitted.read(generativeqc::integrals::ElectronInteractionOperator::eri, {0, 0, 0, 0},
+                {n, n, n, n}, ao.data(), ao.size());
+    for (std::size_t selected = 0; selected < block.size(); ++selected) {
+      double expected = 0;
+      for (std::size_t mu = 0; mu < n; ++mu)
+        for (std::size_t nu = 0; nu < n; ++nu)
+          for (std::size_t rho = 0; rho < n; ++rho)
+            for (std::size_t sigma = 0; sigma < n; ++sigma)
+              expected += ref.coefficients[0][mu * n + selected] *
+                          ref.coefficients[0][nu * n + n - 1] * ref.coefficients[1][rho * n] *
+                          ref.coefficients[1][sigma * n + n - 1] *
+                          ao[((mu * n + nu) * n + rho) * n + sigma];
+      require(std::abs(block[selected] - expected) < 1e-11,
+              "three-index MO block differs from independent AO contraction");
+    }
+    auto stale_frame = ref;
+    stale_frame.coefficients[0][0] += 1e-6;
+    bool stale_rejected = false;
+    try {
+      generativeqc::posthf::NativeBlockProvider stale(fitted, stale_frame, 256ULL << 20);
+      (void)stale.get_spin(request);
+    } catch (const std::invalid_argument&) {
+      stale_rejected = true;
+    }
+    require(stale_rejected, "three-index cache replayed in a stale orbital frame");
+  }
   require(first.response.converged() && first.stationarity_residual < 1e-8,
           "UMP2 force did not qualify full response");
   auto swapped = ref;
@@ -469,13 +505,19 @@ void force_contract() {
   const auto reads = source.reads;
   bool rejected = false;
   try {
-    (void)evaluate(ref, first.planned_endpoint_peak_bytes - 1);
+    (void)evaluate(ref, 1);
   } catch (const std::length_error&) {
     rejected = true;
   }
   require(rejected && source.reads == reads, "force budget refusal read the source");
   const auto exact = evaluate(ref, first.planned_endpoint_peak_bytes);
   require(exact.forces == first.forces, "inclusive force capacity changed the result");
+  const auto bounded = evaluate(ref, first.planned_endpoint_peak_bytes - 1);
+  require(bounded.planned_endpoint_peak_bytes < first.planned_endpoint_peak_bytes,
+          "optional resident storage did not retain the bounded fallback");
+  for (std::size_t coordinate = 0; coordinate < first.forces.size(); ++coordinate)
+    require(std::abs(bounded.forces[coordinate] - first.forces[coordinate]) < 1e-10,
+            "bounded orbital-transform fallback changed UMP2 forces");
   source.fail = true;
   rejected = false;
   try {
@@ -729,8 +771,13 @@ void source_and_slots() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--force-contract") {
+      force_contract();
+      std::cout << "native UMP2 force contract passed\n";
+      return 0;
+    }
     native_equations();
     finite_density_equations();
     degenerate_occupied_gauge();

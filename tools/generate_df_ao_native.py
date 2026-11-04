@@ -1,4 +1,4 @@
-"""Generate the shared AO fitted-interaction map for native CPU/CUDA owners."""
+"""Generate three-index fitted-source maps for native CPU/CUDA owners."""
 
 from __future__ import annotations
 
@@ -10,17 +10,28 @@ ROOT = Path(__file__).resolve().parents[1]
 if __package__ in (None, ""):
     sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
-from generativeqc_compiler.method.df_ao_source import programs
+from generativeqc_compiler.method.df_ao_source import (
+    factor_block_program,
+    factor_programs,
+)
 from generativeqc_compiler.tensor import prepare_for_backend
 
-from tools.generate_rccsd_native import _cpu_function, _cuda_program, _required_function
+from tools.generate_rccsd_native import (
+    _cpu_function,
+    _cuda_program,
+    _required_function,
+)
+from tools.generate_uccsd_native import _work
 
 
 def prepared() -> dict:
     """Use the same deterministic physical reduction order on both backends."""
     return {
         name: prepare_for_backend(program, "cpu", preserve_reduction_order=True)
-        for name, program in zip(("value", "pullback"), programs(), strict=True)
+        for name, program in (
+            *zip(("factors", "factor_pullback"), factor_programs(), strict=True),
+            ("factor_block", factor_block_program()),
+        )
     }
 
 
@@ -36,17 +47,17 @@ def cpu_header() -> str:
         "namespace generativeqc::posthf::df_ao_generated {",
         "using posthf::checked_add;",
         "inline std::size_t checked_product(std::initializer_list<std::size_t> values){std::size_t result=1;for(auto value:values)result=posthf::checked_mul(result,value);return result;}",
-        "struct Inputs{const double *three_center{},*inverse_root{},*bar_eri{};};",
+        "struct Inputs{const double *three_center{},*inverse_root{},*coefficients{},*bar_factors{},*left_factors{},*right_factors{};};",
     ]
     for name, program in prepared().items():
+        dimensions = ("na", "nb", "q") if name == "factor_block" else ("na", "q")
         outputs = tuple(program.outputs)
         lines += [
             f"struct Outputs_{name}{{",
             *(f"const double* {key};" for key in outputs),
             "};",
-            _required_function(
-                program, f"required_{name}", dimension_names=("na", "q")
-            ),
+            _required_function(program, f"required_{name}", dimension_names=dimensions),
+            _work(program, f"work_{name}", dimensions=dimensions),
             _cpu_function(
                 program,
                 f"evaluate_{name}",
@@ -57,7 +68,7 @@ def cpu_header() -> str:
                     if node.op == "input"
                 },
                 output_fields=outputs,
-                dimension_names=("na", "q"),
+                dimension_names=dimensions,
             ),
         ]
     return "\n".join(
@@ -73,7 +84,7 @@ def cuda_source() -> str:
         '#include "posthf/df_ao_source.hpp"',
         '#include "tensor/cuda_runtime.cuh"',
         "namespace generativeqc::posthf::df_ao_generated {",
-        "struct State{std::size_t na{},q{};double *three_center{},*inverse_root{},*bar_eri{},*arena{};int* error{};cudaStream_t stream{};};",
+        "struct State{std::size_t na{},nb{},q{};double *three_center{},*inverse_root{},*coefficients{},*bar_factors{},*left_factors{},*right_factors{},*arena{};int* error{};cudaStream_t stream{};};",
     ]
     for name, program in prepared().items():
         lines.append(
@@ -88,26 +99,30 @@ def cuda_source() -> str:
                 },
                 arena_field="arena",
                 state_type="State",
-                dimension_names=("na", "q"),
+                dimension_names=("na", "nb", "q")
+                if name == "factor_block"
+                else ("na", "q"),
                 output_fields=tuple(program.outputs),
             )
         )
     lines += [
         "}  // namespace generativeqc::posthf::df_ao_generated",
         "namespace generativeqc::posthf {",
-        "DFAOSourceResult evaluate_df_ao_cuda(std::size_t nbf,std::size_t naux,std::span<const double> raw,std::span<const double> root,std::span<const double> seed,int device,std::size_t budget){",
-        "using namespace df_ao_generated;const auto raw_count=checked_product({nbf,nbf,naux}),metric_count=checked_product({naux,naux}),eri_count=checked_product({nbf,nbf,nbf,nbf});const bool reverse=!seed.empty();",
-        'if(!nbf||!naux||raw.size()!=raw_count||root.size()!=metric_count||(reverse&&seed.size()!=eri_count))throw std::invalid_argument("invalid DF AO graph input");',
-        "const auto arena_count=reverse?required_pullback(nbf,naux):required_value(nbf,naux);const auto inputs=checked_add(checked_add(raw_count,metric_count),reverse?eri_count:0);",
-        "const auto outputs=reverse?checked_add(raw_count,metric_count):eri_count;const auto elements=checked_add(inputs,arena_count);DFAOSourceResult result;result.numeric_capacity_bytes=checked_add(checked_product({checked_add(elements,outputs),sizeof(double)}),sizeof(int));",
-        'if(result.numeric_capacity_bytes>budget)throw std::length_error("DF AO CUDA graph exceeds numeric memory budget");',
-        "if(reverse){result.three_center.resize(raw_count);result.inverse_root.resize(metric_count);}else result.eri.resize(eri_count);",
-        "runtime::CudaDeviceScope guard(device);runtime::OwnedCudaStream stream(device);runtime::OwnedCudaBuffer<double> storage(device,elements,stream.get());runtime::OwnedCudaBuffer<int> error_buffer(device,1,stream.get());State state;state.na=nbf;state.q=naux;state.stream=stream.get();state.error=error_buffer.get();state.three_center=storage.get();state.inverse_root=state.three_center+raw_count;state.bar_eri=state.inverse_root+metric_count;state.arena=storage.get()+inputs;int error=0;",
-        "try{generativeqc_tensor::cuda_check(cudaMemcpyAsync(state.three_center,raw.data(),raw_count*sizeof(double),cudaMemcpyHostToDevice,state.stream));generativeqc_tensor::cuda_check(cudaMemcpyAsync(state.inverse_root,root.data(),metric_count*sizeof(double),cudaMemcpyHostToDevice,state.stream));",
-        "if(reverse){generativeqc_tensor::cuda_check(cudaMemcpyAsync(state.bar_eri,seed.data(),eri_count*sizeof(double),cudaMemcpyHostToDevice,state.stream));auto out=run_df_ao_pullback(state);generativeqc_tensor::cuda_check(cudaMemcpyAsync(result.three_center.data(),out.bar_three_center,raw_count*sizeof(double),cudaMemcpyDeviceToHost,state.stream));generativeqc_tensor::cuda_check(cudaMemcpyAsync(result.inverse_root.data(),out.bar_inverse_root,metric_count*sizeof(double),cudaMemcpyDeviceToHost,state.stream));}",
-        "else{auto out=run_df_ao_value(state);generativeqc_tensor::cuda_check(cudaMemcpyAsync(result.eri.data(),out.eri,eri_count*sizeof(double),cudaMemcpyDeviceToHost,state.stream));}",
+        "DFFactorSourceResult evaluate_df_factors_cuda(std::size_t nbf,std::size_t naux,std::span<const double> raw,std::span<const double> root,std::span<const double> coefficients,std::span<const double> seed,int device,std::size_t budget){",
+        "using namespace df_ao_generated;const auto raw_count=checked_product({nbf,nbf,naux}),metric_count=checked_product({naux,naux}),square=checked_product({nbf,nbf});const bool reverse=!seed.empty();",
+        'if(!nbf||!naux||raw.size()!=raw_count||root.size()!=metric_count||coefficients.size()!=square||(reverse&&seed.size()!=raw_count))throw std::invalid_argument("invalid DF factor graph input");',
+        "const auto arena_count=reverse?required_factor_pullback(nbf,naux):required_factors(nbf,naux);const auto inputs=checked_add(checked_add(raw_count,metric_count),checked_add(square,reverse?raw_count:0));",
+        "const auto outputs=reverse?checked_add(raw_count,checked_add(metric_count,square)):raw_count;const auto elements=checked_add(inputs,arena_count);DFFactorSourceResult result;result.numeric_capacity_bytes=checked_add(checked_product({checked_add(elements,outputs),sizeof(double)}),sizeof(int));",
+        'if(result.numeric_capacity_bytes>budget)throw std::length_error("DF factor CUDA graph exceeds numeric memory budget");',
+        "if(reverse){result.three_center.resize(raw_count);result.inverse_root.resize(metric_count);result.coefficients.resize(square);}else result.factors.resize(raw_count);",
+        "runtime::CudaDeviceScope guard(device);runtime::OwnedCudaStream stream(device);runtime::OwnedCudaBuffer<double> storage(device,elements,stream.get());runtime::OwnedCudaBuffer<int> error_buffer(device,1,stream.get());State state;state.na=nbf;state.q=naux;state.stream=stream.get();state.error=error_buffer.get();state.three_center=storage.get();state.inverse_root=state.three_center+raw_count;state.coefficients=state.inverse_root+metric_count;state.bar_factors=state.coefficients+square;state.arena=storage.get()+inputs;int error=0;",
+        "try{generativeqc_tensor::cuda_check(cudaMemcpyAsync(state.three_center,raw.data(),raw_count*sizeof(double),cudaMemcpyHostToDevice,state.stream));generativeqc_tensor::cuda_check(cudaMemcpyAsync(state.inverse_root,root.data(),metric_count*sizeof(double),cudaMemcpyHostToDevice,state.stream));generativeqc_tensor::cuda_check(cudaMemcpyAsync(state.coefficients,coefficients.data(),square*sizeof(double),cudaMemcpyHostToDevice,state.stream));",
+        "if(reverse){generativeqc_tensor::cuda_check(cudaMemcpyAsync(state.bar_factors,seed.data(),raw_count*sizeof(double),cudaMemcpyHostToDevice,state.stream));auto out=run_df_ao_factor_pullback(state);generativeqc_tensor::cuda_check(cudaMemcpyAsync(result.three_center.data(),out.bar_three_center,raw_count*sizeof(double),cudaMemcpyDeviceToHost,state.stream));generativeqc_tensor::cuda_check(cudaMemcpyAsync(result.inverse_root.data(),out.bar_inverse_root,metric_count*sizeof(double),cudaMemcpyDeviceToHost,state.stream));generativeqc_tensor::cuda_check(cudaMemcpyAsync(result.coefficients.data(),out.bar_coefficients,square*sizeof(double),cudaMemcpyDeviceToHost,state.stream));}",
+        "else{auto out=run_df_ao_factors(state);generativeqc_tensor::cuda_check(cudaMemcpyAsync(result.factors.data(),out.factors,raw_count*sizeof(double),cudaMemcpyDeviceToHost,state.stream));}",
         "generativeqc_tensor::cuda_check(cudaMemcpyAsync(&error,state.error,sizeof(int),cudaMemcpyDeviceToHost,state.stream));generativeqc_tensor::cuda_check(cudaStreamSynchronize(state.stream));",
-        'if(error)throw std::runtime_error("nonfinite DF AO CUDA graph");}catch(...){cudaStreamSynchronize(state.stream);throw;}return result;}',
+        'if(error)throw std::runtime_error("nonfinite DF factor CUDA graph");}catch(...){cudaStreamSynchronize(state.stream);throw;}return result;}',
+        "void evaluate_df_factor_block_device(std::size_t left,std::size_t right,std::size_t auxiliary,const double* lhs,const double* rhs,double* output,int* error,void* stream){",
+        "df_ao_generated::State state;state.na=left;state.nb=right;state.q=auxiliary;state.left_factors=const_cast<double*>(lhs);state.right_factors=const_cast<double*>(rhs);state.arena=output;state.error=error;state.stream=static_cast<cudaStream_t>(stream);(void)df_ao_generated::run_df_ao_factor_block(state);}",
         "}  // namespace generativeqc::posthf",
         "",
     ]

@@ -1,0 +1,7 @@
+{
+  "path": "src/posthf/df_factor_blocks.cu",
+  "reason": "Owns optional immutable device-factor storage, bounded selected-pair gathers/uploads, stream-aware cleanup and synchronous publication. Shared TensorIR generation owns the rectangular Gram scientific contraction; gathering only changes data layout.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

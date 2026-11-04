@@ -205,8 +205,26 @@ def test_native_unrestricted_rejects_unqualified_requests(method: str) -> None:
         _calculator(method, ccsd_max_iterations=1).singlepoint(atoms)
     with pytest.raises((ValueError, RuntimeError), match="denominator|energies"):
         _calculator(method, ccsd_denominator_threshold=100.0).singlepoint(atoms)
-    with pytest.raises(RuntimeError, match="scalar-work bound"):
+    with pytest.raises(
+        RuntimeError, match="error 10: correlation work-policy rejection"
+    ):
         _calculator(method, ccsd_max_iterations=2**32 - 1).singlepoint(atoms)
+
+
+def test_native_unrestricted_explicit_work_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A work override changes admission, not the method, result or memory cap."""
+    atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+    expected = _calculator("uccsd").singlepoint(atoms)
+    monkeypatch.setenv("GENERATIVEQC_CORRELATION_MAX_SCALAR_WORK", "10000000000000")
+    actual = _calculator("uccsd", ccsd_max_iterations=2**32 - 1).singlepoint(atoms)
+    np.testing.assert_allclose(actual.energy, expected.energy, atol=1e-12, rtol=0)
+    with pytest.raises(RuntimeError, match="budget"):
+        _calculator("uccsd", correlation_memory_budget_bytes=1024).singlepoint(atoms)
+    monkeypatch.setenv("GENERATIVEQC_CORRELATION_MAX_SCALAR_WORK", "0")
+    with pytest.raises(RuntimeError, match="error 1:.*positive size_t decimal integer"):
+        _calculator("uccsd").singlepoint(atoms)
 
 
 @pytest.mark.parametrize("method", ("uccsd", "uccsd(t)"))
