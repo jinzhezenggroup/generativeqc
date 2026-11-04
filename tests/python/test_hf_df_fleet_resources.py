@@ -184,14 +184,20 @@ def test_complete_candidate_exact_and_below_global_cap(
         "rhf_flag",
     ),
 )
+@pytest.mark.parametrize("budget", (0, 2**32 + 1))
 def test_native_refusal_and_malformed_output_never_retry_python(
     library: Any,
     monkeypatch: pytest.MonkeyPatch,
     corruption: str,
+    budget: int,
 ) -> None:
     """Native publication is authoritative even when old-library math could fit."""
     monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
-    query = library.generativeqc_resource_hf_df_cuda_fleet_v1
+    # Index lookup returns a fresh ctypes function without another test's ABI.
+    query = library["generativeqc_resource_hf_df_cuda_fleet_v1"]
+    native = SimpleNamespace(generativeqc_resource_hf_df_cuda_fleet_v1=query)
+    # Bind the real ABI before a Python wrapper intercepts owner configuration.
+    assert candidates(native, [topology()], requested_budget=budget)
 
     def forbidden(*arguments: Any, **options: Any) -> Any:
         raise AssertionError("native DF refusal retried compatibility composition")
@@ -202,7 +208,7 @@ def test_native_refusal_and_malformed_output_never_retry_python(
         if corruption == "refusal":
             return 1
         status = query(*arguments)
-        assert status == 0
+        assert status == 0, arguments[-2].value.decode()
         output, length = arguments[6:8]
         if length == 3:
             if corruption == "header":
@@ -227,7 +233,7 @@ def test_native_refusal_and_malformed_output_never_retry_python(
 
     selected = SimpleNamespace(generativeqc_resource_hf_df_cuda_fleet_v1=corrupt)
     with pytest.raises(ValueError):
-        candidates(selected, [topology()])
+        candidates(selected, [topology()], requested_budget=budget)
 
 
 @pytest.mark.parametrize(

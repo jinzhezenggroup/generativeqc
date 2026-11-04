@@ -159,10 +159,13 @@ reservation and non-allocation errors remain explicit failures. At a pressured
 force handoff the idle anchor is retired before optional ERIs; density, stationary
 weights, XC, the final-state token and the warm seed remain valid. Subsequent
 warm and cold solves on that owner use ordinary Fast without reallocating anchors.
-FP64 policy, strict caller controls, other models, DF/UKS, public resource-ledger owners,
-device chunks and same-owner warm replays retain their incumbent path.
+Fixed anchors in strict FP64 remain off by default. Explicit `GENERATIVEQC_KS_FAST_ANCHOR_DELTA=1`
+also admits one-spin exact full/range Direct VV10 owners in FP64, without mixed
+arithmetic or changed convergence tolerances. AUTO alone does not admit this
+strict path. DF/UKS, public resource-ledger owners, device chunks and same-owner
+warm replays retain their incumbent path.
 `GENERATIVEQC_KS_FAST_ANCHOR_DELTA=0` disables the optimization before preparation;
-unset selects the default at 192 or more AOs; `1` opts in within the scientific
+unset selects the Fast default at 192 or more AOs; `1` opts in within the scientific
 eligibility domain, including smaller owners, without forcing unsupported domains.
 There is no universal iteration-count or speed guarantee.
 
