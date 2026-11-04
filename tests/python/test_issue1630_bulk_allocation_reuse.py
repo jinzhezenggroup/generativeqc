@@ -276,6 +276,7 @@ def test_second_hvp_weight_buffer_is_frozen_per_ao_chunk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The consuming stream owns weights before the next scratch overwrite."""
+    # Keep two physical centers so the exact one-center translation is not elided.
     signature = SimpleNamespace(tensor_indices=("component",), component_shape=(65,))
     ir = SimpleNamespace(requested_derivative_centers=(0,), signature=signature)
     retained: list[np.ndarray] = []
@@ -287,7 +288,7 @@ def test_second_hvp_weight_buffer_is_frozen_per_ao_chunk(
             pass
 
         def expand_direction(self, direction: np.ndarray) -> np.ndarray:
-            return direction
+            return direction[:1]
 
     class Plan:
         def __init__(self, *args: typing.Any, **kwargs: typing.Any) -> None:
@@ -326,21 +327,22 @@ def test_second_hvp_weight_buffer_is_frozen_per_ao_chunk(
         allocations = _count_numpy_calls(patch, "zeros", "_run_kernel_hvp")
         second_hvp._run_kernel_hvp(
             {
+                "backend": "cpu",
                 "adapter": object(),
                 "cache": "synthetic",
                 "resource_budget": None,
                 "device_id": 0,
                 "second_executions": [],
-                "state": SimpleNamespace(nat=1),
+                "state": SimpleNamespace(nat=2),
             },
             "synthetic",
             lambda **kw: ir,
-            {"_center_atoms": (0,)},
+            {"_center_atoms": (0, 1)},
             (),
-            np.zeros((1, 3)),
+            np.array(((0.0, 0.0, 0.0), (0.0, 0.0, 1.4))),
             np.arange(1, 66, dtype=np.float64),
             65,
-            np.zeros((1, 3)),
+            np.zeros((2, 3)),
         )
     assert allocations == [3, 65]
     assert len(retained) == 2
