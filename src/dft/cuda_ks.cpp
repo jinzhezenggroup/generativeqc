@@ -374,9 +374,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::vector<double> cold_factor_spectrum;
   bool occupied_xc_frame_ready{}, pending_occupied_xc{}, occupied_xc_executed{};
   unsigned occupied_xc_refinement_iterations{};
+  // Automatic admission only lends bounded initializer work; strict matrix
+  // refinement still owns publication. Explicit 0 or malformed values opt out.
   const bool occupied_xc_requested = [] {
     const auto* value = std::getenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC");
-    return value && value[0] == '1' && value[1] == '\0';
+    return !value || (value[0] == '1' && value[1] == '\0');
   }();
   // Only this immutable owner can create a factor-backed warm seed. A separate
   // storage tag survives frozen replays and provider scratch/force writes.

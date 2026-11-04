@@ -85,16 +85,20 @@ arithmetic contract.
 
 ## Explicit native execution
 
-The CUDA KS owner defaults to ordinary matrix features. The exact value
-`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` enables bounded occupied-feature **SCF
-proposals**, not a different convergence certificate. A canonical frame which
+The CUDA KS owner automatically admits bounded occupied-feature **SCF
+proposals**, not a different convergence certificate. Leaving
+`GENERATIVEQC_CUDA_KS_OCCUPIED_XC` unset or setting it to the exact value `1`
+enables admission. A canonical frame which
 formed the current D may supply strict-FP64 meta-GGA features in the admitted
 phase. Finite projection/feature, coefficient-range and capacity checks guard
 initializer work; admitted proposals skip both the dense original-D
 contraction and the unused absolute-dot certificate altogether.
 Their single scratch panel fits whenever the occupied rank is below the active
 AO count; exact mode retains its separate two-panel capacity requirement.
-The control is opt-in; unset, `0`, and malformed values retain matrix work.
+Set the control to `0` to retain matrix-only work; other explicit values,
+including an empty string, conservatively disable proposals as well.
+The [automatic-admission decision](../../.agents/notes/implemented/performance/2026-11-05-occupied-xc-automatic-admission.md)
+records the default-promotion rationale and rollback boundary.
 
 Near-stationary inputs (previous residual RMS at most `1e-6`) retain matrix
 work without paying for proposal admission. The owner switches permanently to

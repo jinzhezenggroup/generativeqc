@@ -3,6 +3,10 @@
 Status: implemented, opt-in; qualification is source-bound separately
 Date: 2026-11-04
 
+The selection policy is superseded by the
+[automatic-admission decision](2026-11-05-occupied-xc-automatic-admission.md).
+The explicit-1 measurements below remain historical, source-bound evidence.
+
 ## Problem
 
 PR #2971 correctly observed that a small feature discrepancy alone is not an

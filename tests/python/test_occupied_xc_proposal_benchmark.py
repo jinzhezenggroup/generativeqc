@@ -55,6 +55,31 @@ def test_replay_recomputes_complete_endpoint_and_work_populations() -> None:
     assert summary["rks-cold"]["iterations_fock_builds"]["1"] == [(4, 5)] * 3
 
 
+@pytest.mark.parametrize("selector", ("unset", "1"))
+def test_replay_preserves_actual_default_and_explicit_control_provenance(
+    selector: str,
+) -> None:
+    """New qualification identifies an absent variable, not a relabeled opt-in."""
+    record = receipt()
+    record.update(
+        schema="generativeqc.occupied-proposals.v2",
+        proposal_selector=selector,
+        controls={"0": "0", selector: None if selector == "unset" else "1"},
+    )
+    for row in record["observations"]:
+        if row["selector"] == "1":
+            row["selector"] = selector
+        row["occupied_xc_env"] = record["controls"][row["selector"]]
+    summary = replay(record)
+    assert summary["rks-cold"]["iterations_fock_builds"][selector] == [(4, 5)] * 3
+    record["observations"][1]["occupied_xc_env"] = "invalid"
+    with pytest.raises(ValueError, match="control does not match"):
+        replay(record)
+    record["controls"][selector] = "invalid"
+    with pytest.raises(ValueError, match="control provenance"):
+        replay(record)
+
+
 @pytest.mark.parametrize(
     "corruption",
     [

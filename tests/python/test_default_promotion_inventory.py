@@ -45,6 +45,17 @@ def test_current_default_promotion_inventory_is_complete() -> None:
     assert len(payload["entries"]) >= 10
 
 
+def test_occupied_xc_inventory_tracks_automatic_admission() -> None:
+    """The public default must not remain documented as an opt-in experiment."""
+    entry = next(
+        entry
+        for entry in _payload()["entries"]
+        if entry["id"] == "ks.occupied-xc-density-features"
+    )
+    assert entry["classification"] == "already-default"
+    assert "tests/python/test_ks_occupied_xc_policy.py" in entry["evidence"]
+
+
 @pytest.mark.parametrize(
     "control",
     [

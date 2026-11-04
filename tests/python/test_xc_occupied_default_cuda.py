@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(
 def test_occupied_controls_and_strict_handoff_across_geometry(
     unrestricted: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Validate opt-in proposals and matrix publication for every control.
+    """Validate automatic proposals and matrix publication for every control.
 
     Trace counters prove no occupied frame is admitted without fixing iteration
     or internal call counts. Cold and displaced solves have independently
@@ -108,7 +108,7 @@ def test_occupied_controls_and_strict_handoff_across_geometry(
                             if row["operation"] == "cuda_ks_xc_shared"
                         ]
                         assert frames
-                        if selector == "1":
+                        if selector in (None, "1"):
                             if phase != "warm":
                                 assert any(frames)
                             if any(frames):
@@ -126,13 +126,13 @@ def test_occupied_controls_and_strict_handoff_across_geometry(
 
 
 @pytest.mark.parametrize("unrestricted", (False, True))
-def test_explicit_request_matrix_default_grid_energy_and_forces(
+def test_automatic_and_explicit_matrix_default_grid_energy_and_forces(
     unrestricted: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Compare complete native E+F with original D and independent PySCF.
 
-    An explicit occupied request must retain matrix work through native owners,
-    force scratch and geometry updates. Preserve the complete-CUDA gates of
+    Automatic and explicit occupied admission retain matrix publication through
+    native owners, force scratch and geometry updates. Preserve the CUDA gates of
     2e-9 Eh and 1e-7 Eh/Bohr and pair the ordinary matrix route at those same
     gates. Parallel force reductions do not promise bitwise reproducibility.
     Lower-level frame/certificate tests independently retain the experiment.
@@ -177,9 +177,12 @@ def test_explicit_request_matrix_default_grid_energy_and_forces(
 
     baseline = []
     observations = []
-    for selector in ("0", "1"):
+    for selector in ("0", None, "1"):
         with monkeypatch.context() as scope:
-            scope.setenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC", selector)
+            if selector is None:
+                scope.delenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC", raising=False)
+            else:
+                scope.setenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC", selector)
             calculator = Calculator(
                 method="r2scan-uks" if unrestricted else "r2scan-rks",
                 device="cuda",
@@ -222,7 +225,7 @@ def test_explicit_request_matrix_default_grid_energy_and_forces(
                                 "occupied_frame_generations": frames,
                             }
                         )
-                        if selector == "1":
+                        if selector != "0":
                             original_energy, original_forces = baseline[index]
                             difference = np.asarray(result.forces) - original_forces
                             observations[-1].update(
@@ -242,7 +245,7 @@ def test_explicit_request_matrix_default_grid_energy_and_forces(
                         assert result.succeeded and result.converged
                         assert result.executed_backend == "cuda"
                         assert frames and not frames[-1]
-                        assert any(frames) == (selector == "1")
+                        assert any(frames) == (selector != "0")
                         assert result.energy == pytest.approx(energy, abs=2e-9, rel=0)
                         np.testing.assert_allclose(
                             result.forces, forces, atol=1e-7, rtol=0

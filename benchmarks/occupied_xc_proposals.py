@@ -42,10 +42,21 @@ def save(path: Path, record: dict) -> None:
 
 def replay(record: dict) -> dict:
     """Recompute all vector gates, paired gates, completeness and work summaries."""
-    if record.get("schema") != "generativeqc.occupied-proposals.v1" or not record.get(
-        "completed"
-    ):
+    schema = record.get("schema")
+    if schema not in (
+        "generativeqc.occupied-proposals.v1",
+        "generativeqc.occupied-proposals.v2",
+    ) or not record.get("completed"):
         raise ValueError("incomplete or unsupported receipt")
+    proposal_selector = "1"
+    if schema == "generativeqc.occupied-proposals.v2":
+        proposal_selector = record.get("proposal_selector")
+        if proposal_selector not in ("1", "unset") or record.get("controls") != {
+            "0": "0",
+            proposal_selector: None if proposal_selector == "unset" else "1",
+        }:
+            raise ValueError("invalid occupied-XC control provenance")
+    selectors = ("0", proposal_selector)
     if record["energy_gate_eh"] != 2e-9 or record["force_gate_eh_per_bohr"] != 1e-7:
         raise ValueError("scientific acceptance gates changed")
     for name, size in (("source_commit", 40), ("library_sha256", 64)):
@@ -59,6 +70,12 @@ def replay(record: dict) -> dict:
     references = {(row["spin"], row["geometry"]): row for row in record["oracles"]}
     rows = {}
     for row in record["observations"]:
+        if schema == "generativeqc.occupied-proposals.v2" and (
+            row["selector"] not in selectors
+            or "occupied_xc_env" not in row
+            or row["occupied_xc_env"] != record["controls"][row["selector"]]
+        ):
+            raise ValueError("observation control does not match its cohort")
         key = row["spin"], row["repeat"], row["selector"], row["phase"]
         if key in rows:
             raise ValueError(f"duplicate observation: {key}")
@@ -72,11 +89,11 @@ def replay(record: dict) -> dict:
     summary = {}
     for spin in ("rks", "uks"):
         for phase in ("cold", "warm", "moved", "moved_warm"):
-            cohorts = {selector: [] for selector in ("0", "1")}
-            work = {selector: [] for selector in ("0", "1")}
+            cohorts = {selector: [] for selector in selectors}
+            work = {selector: [] for selector in selectors}
             for repetition in range(record["repeats"]):
                 baseline, proposal = (
-                    rows[spin, repetition, selector, phase] for selector in ("0", "1")
+                    rows[spin, repetition, selector, phase] for selector in selectors
                 )
                 check_vectors(proposal, baseline)
                 for row in (baseline, proposal):
@@ -90,8 +107,8 @@ def replay(record: dict) -> dict:
             }
             summary[f"{spin}-{phase}"] = {
                 "matrix_seconds": medians["0"],
-                "proposal_seconds": medians["1"],
-                "speedup": medians["0"] / medians["1"],
+                "proposal_seconds": medians[proposal_selector],
+                "speedup": medians["0"] / medians[proposal_selector],
                 "iterations_fock_builds": work,
             }
     if len(rows) != 16 * record["repeats"]:
@@ -127,6 +144,12 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--source-commit")
     parser.add_argument("--repeats", type=int, default=10)
+    parser.add_argument(
+        "--proposal-selector",
+        choices=("unset", "1"),
+        default="unset",
+        help="measure actual automatic admission (unset) or the explicit override",
+    )
     args = parser.parse_args()
     if args.replay:
         print(json.dumps(replay(load(args.replay)), indent=2))
@@ -156,8 +179,13 @@ def main() -> None:
     with library.open("rb") as stream:
         library_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
     record = {
-        "schema": "generativeqc.occupied-proposals.v1",
+        "schema": "generativeqc.occupied-proposals.v2",
         "completed": False,
+        "proposal_selector": args.proposal_selector,
+        "controls": {
+            "0": "0",
+            args.proposal_selector: None if args.proposal_selector == "unset" else "1",
+        },
         "source_commit": args.source_commit,
         "library_sha256": library_sha256,
         "slurm_job_id": os.environ["SLURM_JOB_ID"],
@@ -175,8 +203,13 @@ def main() -> None:
     for spin in ("rks", "uks"):
         charge = int(spin == "uks")
         for repetition in range(args.repeats):
-            for selector in ("0", "1") if repetition % 2 == 0 else ("1", "0"):
-                os.environ["GENERATIVEQC_CUDA_KS_OCCUPIED_XC"] = selector
+            selectors = ("0", args.proposal_selector)
+            for selector in selectors if repetition % 2 == 0 else reversed(selectors):
+                value = record["controls"][selector]
+                if value is None:
+                    os.environ.pop("GENERATIVEQC_CUDA_KS_OCCUPIED_XC", None)
+                else:
+                    os.environ["GENERATIVEQC_CUDA_KS_OCCUPIED_XC"] = value
                 started = perf_counter()
                 calculator = Calculator(
                     method=f"r2scan-{spin}",
@@ -217,6 +250,9 @@ def main() -> None:
                                     "spin": spin,
                                     "repeat": repetition,
                                     "selector": selector,
+                                    "occupied_xc_env": os.environ.get(
+                                        "GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
+                                    ),
                                     "phase": phase,
                                     "seconds": elapsed
                                     + (prepared - started if phase == "cold" else 0),

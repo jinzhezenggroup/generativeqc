@@ -98,9 +98,11 @@ applies the RKS occupation factor a second time. Missing bounds fail closed;
 genuine original-matrix errors are still reported. No extra global allocation
 or host oracle is introduced.
 
-Exact verification is not the production acceleration mechanism. With
-`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1`, the native owner may lend a **provisional**
-frame during a bounded initializer stage. Cheap finite projection/feature,
+Exact verification is not the production acceleration mechanism. By default,
+the native owner may lend a **provisional** frame during a bounded initializer
+stage. Unset and exact `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` enable automatic
+admission; `0` and other explicit values retain matrix-only work.
+Cheap finite projection/feature,
 coefficient-range and capacity checks guard this proposal, not its downstream
 physical accuracy. Admitted points skip original-D evaluation and absolute-dot
 certificate work; refused points still consume the live matrix. The original
