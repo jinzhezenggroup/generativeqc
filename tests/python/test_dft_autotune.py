@@ -331,7 +331,13 @@ def search(tmp_path: Path, workload: dict, monkeypatch: pytest.MonkeyPatch) -> A
     )
     monkeypatch.setattr(profiles, "cache_root", lambda: tmp_path / "cache")
     monkeypatch.setattr(
-        profiles, "select_library", lambda *args: (state.incumbent, state.diagnostics)
+        autotune,
+        "inspect_library",
+        lambda *args, **kwargs: {
+            "library": state.incumbent._name,
+            "probe": state.probe,
+            "diagnostics": state.diagnostics,
+        },
     )
 
     def worker(library: Path, path: Path, output: Path, **kwargs: Any) -> dict:

@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from _cuda_rounding_support import DIRECTED_ROUNDING_HOST
 from generativeqc_compiler.dft.ao_cuda import _NATIVE_XC_CONTRACTION_KERNELS
 from generativeqc_compiler.dft.feature_policy import emit_feature_policy
 from generativeqc_compiler.dft.xc_contraction_cuda import (
@@ -115,15 +116,18 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
         "template ", 1
     )[0]
     occupied = _emit_occupied_features(DEFAULT_XC_MATRIX_SCHEDULE)
-    occupied_bodies = definition(
-        occupied, "__device__ void tiled_occupied_product_body"
-    ) + definition(
-        occupied,
-        "template<bool Cooperative = true>\n__device__ void occupied_density_features_body",
+    occupied_bodies = (
+        definition(occupied, "__device__ bool occupied_feature_certificate")
+        + definition(occupied, "__device__ void tiled_occupied_product_body")
+        + definition(
+            occupied,
+            "template<bool Cooperative = true>\n__device__ void occupied_density_features_body",
+        )
     )
     source = tmp_path / "compact-numerics.cpp"
     source.write_text(
         _SIMULATOR
+        + DIRECTED_ROUNDING_HOST
         + compact_types()
         + "namespace generativeqc_grid_policy {\n"
         + emit_feature_policy(device=True)
@@ -244,6 +248,7 @@ _SIMULATOR = r"""
 #include <thread>
 #include <vector>
 using I=std::int64_t;
+using std::isfinite;
 struct Dim { unsigned x{1},y{1},z{1}; };
 thread_local Dim threadIdx,blockIdx;
 Dim blockDim,gridDim;
@@ -279,6 +284,16 @@ double __shfl_xor_sync(unsigned,double value,int offset,int width=32) {
   warp_barriers[warp]->arrive_and_wait();
   const unsigned source=(lane/width)*width+((lane%width)^offset);
   const double result=source/width==lane/width ? shuffle_values[source] : value;
+  warp_barriers[warp]->arrive_and_wait();
+  return result;
+}
+bool __any_sync(unsigned, bool value) {
+  const unsigned lane=threadIdx.y*blockDim.x+threadIdx.x,warp=lane/32;
+  shuffle_values[lane]=value ? 1.0 : 0.0;
+  warp_barriers[warp]->arrive_and_wait();
+  bool result=false;
+  for (unsigned index=warp*32;index<(warp+1)*32;++index)
+    result=result || shuffle_values[index]!=0.0;
   warp_barriers[warp]->arrive_and_wait();
   return result;
 }
@@ -445,7 +460,7 @@ int main() {
           }
   launch({32,4,1},{128,1,1},[&] {
     batch_density_features(tiles.data(),ao.data(),work.data(),features.data(),0,spins,jets,
-                            work_jets,terms,2,&error,{});
+                            work_jets,terms,2,ids.data(),&error,{});
   });
   for (const auto& tile : tiles)
     for (I spin=0;spin<spins;++spin)
@@ -547,6 +562,51 @@ int main() {
     assert(std::abs(potential[index]-expected[index])<=1e-8);
   for (I channel=0;channel<3;++channel) assert(totals[channel]==reference_totals[channel]);
   assert(error==0);
+  // Exercise the actual occupied batch specialization with a nonzero map and
+  // scratch offset. A representable control remains eligible; underflow must
+  // recompute from stored D without overwriting neighboring scratch owners.
+  for (bool underflow : {false,true}) {
+    const I compact_active=17,compact_points=3,compact_nao=24,compact_spins=2;
+    const size_t ao_offset=5,work_offset=7,map_offset=4;
+    const size_t work_capacity=compact_spins*4*compact_points*compact_active;
+    std::vector<size_t> compact_ids(map_offset+compact_active);
+    for (I row=0;row<compact_active;++row) compact_ids[map_offset+row]=row+2;
+    std::vector<double> frame(compact_spins*compact_nao*compact_nao),
+        stored(frame.size()),compact_ao(ao_offset+4*compact_points*compact_active),
+        compact_work(work_offset+work_capacity+5,-123.0),
+        compact_features(compact_spins*5*compact_points,-456.0);
+    frame[2]=underflow ? 1e-200 : 1.0;
+    frame[3]=underflow ? 1.0 : 0.0;
+    for (I row=0;row<compact_nao;++row)
+      for (I column=0;column<compact_nao;++column)
+        stored[row*compact_nao+column]=std::fma(frame[row],frame[column],0.0);
+    for (I jet=0;jet<4;++jet)
+      for (I point=0;point<compact_points;++point)
+        compact_ao[ao_offset+(jet*compact_points+point)*compact_active]=
+            (jet+1)*(underflow ? 1e200 : 0.25);
+    CudaXcCompactTile compact_tile{11,size_t(compact_points),size_t(compact_active),
+        map_offset,ao_offset,work_offset,0};
+    CudaXcOccupiedDensity witness{stored.data(),frame.data(),size_t(compact_nao),
+        size_t(compact_spins),{1,0},1};
+    launch({2,1,8},{16,16,1},[&] {
+      batch_density_products<double,true>(&compact_tile,stored.data(),compact_ao.data(),
+          compact_work.data(),compact_nao,compact_spins,4,compact_ids.data(),&error,witness);
+    });
+    launch({2,1,1},{128,1,1},[&] {
+      batch_density_features<true>(&compact_tile,compact_ao.data(),compact_work.data(),
+          compact_features.data(),11,compact_spins,4,4,5,2,compact_ids.data(),&error,witness);
+    });
+    const double ordinary[5]{0.0625,0.25,0.375,0.5,0.90625};
+    for (I spin=0;spin<compact_spins;++spin)
+      for (I term=0;term<5;++term)
+        for (I point=0;point<compact_points;++point)
+          close(compact_features[(spin*5+term)*compact_points+point],
+              underflow || spin ? 0.0 : ordinary[term]);
+    for (size_t offset=0;offset<work_offset;++offset) assert(compact_work[offset]==-123.0);
+    for (size_t offset=work_offset+work_capacity;offset<compact_work.size();++offset)
+      assert(compact_work[offset]==-123.0);
+    assert(error==0);
+  }
   check_diagonal_ranges();
   check_cross_fma_range_fallback();
 }

@@ -11,7 +11,9 @@ permissions:
 
 concurrency:
   group: docs-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event_name == 'merge_group' && github.ref || github.run_id }}
-  cancel-in-progress: false
+  # Only obsolete PR revisions may be preempted; merge-queue and manual
+  # documentation checks must run to completion.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:

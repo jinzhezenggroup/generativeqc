@@ -19,6 +19,12 @@ on:
 permissions:
   contents: read
 
+# Preempt obsolete PR conformance runs, never required merge-group checks or
+# master pushes. Unique non-PR groups also prevent replacement of pending runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   cpu-standard:
     runs-on: ubuntu-latest

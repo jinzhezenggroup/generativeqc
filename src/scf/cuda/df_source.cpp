@@ -374,18 +374,22 @@ generativeqc_status try_prepare_cuda_df_md_raw_source(CudaDensityFittingIntegral
   }
   // This is optional reuse, not a new resource allowance. Cap even an ample
   // remainder to keep the topology-sized preparation bounded on large bases.
-  constexpr std::size_t maximum = 256U << 20;
-  const auto device_cap = std::min({additional_device_budget, maximum,
+  const auto device_cap = std::min({additional_device_budget, kCudaDfMdRawPreparationLimit,
                                     std::numeric_limits<std::size_t>::max() - state.device_bytes});
-  const auto host_cap = std::min({additional_host_budget, maximum,
+  const auto host_cap = std::min({additional_host_budget, kCudaDfMdRawPreparationLimit,
                                   std::numeric_limits<std::size_t>::max() - state.host_peak_bytes});
   const auto selected = cudaSetDevice(state.device_id);
   if (selected != cudaSuccess) return source_cuda_status(selected);
   CudaDfMdResources resources;
+  runtime::df_progress::Scope preparation("optional_raw_hermite_preparation");
+  runtime::df_progress::number("device_cap_bytes", device_cap);
+  runtime::df_progress::number("host_cap_bytes", host_cap);
+  runtime::df_progress::number("long_range_operator", state.batch.df_range_omega > 0.0);
   auto status =
       create_cuda_df_md_raw(state.device_id, orbital, auxiliary, state.batch.df_range_omega,
                             device_cap, host_cap, &state.raw_hermite, resources, detail);
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
+    runtime::df_progress::label("refusal", detail.c_str());
     detail.clear();  // Transactional refusal retains the existing source.
     return GENERATIVEQC_STATUS_SUCCESS;
   }

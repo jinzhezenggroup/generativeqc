@@ -12,7 +12,9 @@ Run: PYTHONPATH=.:python python -m benchmarks.rccsd_cpu_compiled_endpoint
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -24,6 +26,50 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
+
+
+def _native_artifacts(cache: Path) -> list[dict[str, object]]:
+    """Identify compiled products before the temporary campaign cache is removed."""
+    return [
+        {
+            "path": str(path.relative_to(cache)),
+            "bytes": path.stat().st_size,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+        for path in sorted(cache.rglob("*.so"))
+    ]
+
+
+def _source_identity(root: Path) -> dict[str, object]:
+    """Distinguish Git checkout identity, an archive marker and missing provenance."""
+    process = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    if process.returncode == 0:
+        changes = subprocess.run(
+            ["git", "diff", "HEAD", "--binary"],
+            cwd=root,
+            capture_output=True,
+            check=True,
+            timeout=10,
+        ).stdout
+        return {
+            "kind": "git-checkout",
+            "commit": process.stdout.strip(),
+            "tracked_dirty": bool(changes),
+            "tracked_diff_sha256": hashlib.sha256(changes).hexdigest(),
+        }
+    marker = root / "SOURCE_COMMIT"
+    return {
+        "kind": "archive-marker" if marker.is_file() else "unavailable",
+        "commit": marker.read_text().strip() if marker.is_file() else None,
+        "tracked_dirty": None,
+    }
 
 
 def _worker(*, fixture: str, backend: str, cache: Path) -> dict[str, object]:
@@ -78,6 +124,12 @@ def _worker(*, fixture: str, backend: str, cache: Path) -> dict[str, object]:
     reference = float(meta["total_energy"])
     if abs(result.total_energy - reference) > 1e-8:
         raise RuntimeError(f"{backend} {fixture} fails pinned CPU endpoint oracle")
+    try:
+        from threadpoolctl import threadpool_info
+    except ImportError:
+        threadpools = None
+    else:
+        threadpools = threadpool_info()
     return {
         "fixture": fixture,
         "backend": backend,
@@ -86,6 +138,10 @@ def _worker(*, fixture: str, backend: str, cache: Path) -> dict[str, object]:
         "iterations": result.iterations,
         "energy": result.total_energy,
         "pinned_reference_energy": reference,
+        "reference_inputs_hash": meta["inputs_hash"],
+        "reference_arrays_hash": meta["arrays_hash"],
+        "blas_threadpools": threadpools,
+        "native_artifacts": _native_artifacts(cache),
         "final_r1_max": result.final_r1_max,
         "final_r2_max": result.final_r2_max,
         "equation_hash": result.state.provenance["equation_hash"],
@@ -104,6 +160,7 @@ def main() -> None:
         "--fixture", choices=["h2", "he", "h2o", "nh3", "ch4"], default="h2o"
     )
     parser.add_argument("--threads", type=int, nargs="+", default=[1, 4])
+    parser.add_argument("--worker-timeout", type=float, default=300.0)
     parser.add_argument("--output", type=raw_output_path)
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--backend", choices=["cpu", "cpu-native"], default="cpu")
@@ -111,6 +168,8 @@ def main() -> None:
     args = parser.parse_args()
     if any(thread < 1 for thread in args.threads):
         parser.error("--threads values must be positive")
+    if not math.isfinite(args.worker_timeout) or args.worker_timeout <= 0:
+        parser.error("--worker-timeout must be finite and positive")
     if args.worker:
         if args.cache is None:
             parser.error("worker requires --cache")
@@ -151,7 +210,12 @@ def main() -> None:
                     str(cache),
                 ]
                 process = subprocess.run(
-                    command, env=env, capture_output=True, text=True, check=False
+                    command,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=args.worker_timeout,
                 )
                 if process.returncode:
                     raise RuntimeError(
@@ -162,10 +226,14 @@ def main() -> None:
                 observation["blas_threads"] = threads
                 observations.append(observation)
     record = {
-        "schema": "generativeqc.rccsd.native-cpu-endpoint.v1",
+        "schema": "generativeqc.rccsd.native-cpu-endpoint.v2",
         "scope": "complete supplied-MO RCCSD solver, excludes HF/AO generation",
-        "peak_memory_scope": "isolated Linux process high-water RSS",
+        "peak_memory_scope": "isolated Linux solver-process high-water RSS; excludes compiler children",
         "cold_warm_scope": "new artifact versus cached artifact in fresh processes",
+        "source": _source_identity(Path(__file__).resolve().parents[1]),
+        "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "python_version": sys.version,
+        "worker_timeout_seconds": args.worker_timeout,
         "no_cuda": True,
         "observations": observations,
     }

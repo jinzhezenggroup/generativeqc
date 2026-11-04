@@ -45,6 +45,7 @@ int main() {
         for (bool full_shell_domain : {false,true})
           for (unsigned owner=0;owner<3;++owner)
             for (bool promoted_default : {false,true})
+              for (bool promoted_range : {false,true})
               for (bool auxiliary_g : {false,true}) {
               Metric metric_value{metric==1};
               const Metric* device_metric=metric ? &metric_value : nullptr;
@@ -57,12 +58,12 @@ int main() {
                   shell_execution && full_shell_domain && !auxiliary_g && owner==2;
               const auto expected_pairs=expected_packed ? DfDerivativePairs::packed
                   : (pair_policy=="symmetric" || pair_policy=="packed" ||
-                     (pair_policy=="auto" && promoted_default))
+                     (pair_policy=="auto" && (promoted_default || promoted_range)))
                         ? DfDerivativePairs::symmetric : DfDerivativePairs::full;
               if (packed_pairs!=expected_packed || derivative_pairs!=expected_pairs) {
                 std::cerr << "selection mismatch: " << metric << ' ' << pair_policy
                     << ' ' << shell_execution << ' ' << full_shell_domain << ' '
-                    << owner << ' ' << promoted_default << '\n';
+                    << owner << ' ' << promoted_default << ' ' << promoted_range << '\n';
                 return 1;
               }
               ++cases;

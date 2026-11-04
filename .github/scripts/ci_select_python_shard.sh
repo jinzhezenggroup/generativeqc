@@ -22,8 +22,6 @@ if [[ "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflo
   # spin/representation variants that dominate wall time under
   # --dist=loadfile.
   extra_args+=(
-    --deselect
-    'tests/python/test_mp2_gradient.py::test_dense_complete_gradient_matches_fully_resolved_finite_differences[water]'
     # The complete 55-class capability report performs bounded source
     # emission for every recurrence/schedule combination and costs
     # several minutes by itself. Focused capability/emitter tests stay
@@ -63,12 +61,6 @@ if [[ "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflo
     'tests/python/test_cc_complete_gradient.py::test_complete_native_endpoint_matches_pinned_pyscf_gradient[ch4]'
     --deselect
     'tests/python/test_cc_complete_gradient.py::test_complete_native_endpoint_matches_pinned_pyscf_gradient[nh3]'
-    --deselect
-    'tests/python/test_cc_complete_gradient.py::test_nuclear_finite_differences_resolve_hf_and_cc_at_three_steps[nh3]'
-    --deselect
-    'tests/python/test_cc_complete_gradient.py::test_nuclear_finite_differences_resolve_hf_and_cc_at_three_steps[h2o]'
-    --deselect
-    'tests/python/test_cc_complete_gradient.py::test_nuclear_finite_differences_resolve_hf_and_cc_at_three_steps[h2_d_spherical]'
     # These are qualification-scale replays (roughly 1-2 minutes
     # each on hosted runners); smaller MP2/DFT/ECP/HVP contracts still
     # execute on every PR.
@@ -77,7 +69,7 @@ if [[ "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflo
     --deselect
     'tests/python/test_ecp_heavy.py::test_heavy_complete_hf_and_core_bookkeeping[cpu-1-Au]'
     --deselect
-    'tests/python/test_dft_complete_cpu.py::test_complete_asymmetric_water_analytic_and_reconverged_fd[lda-rks-reference]'
+    'tests/python/test_dft_complete_cpu.py::test_complete_asymmetric_water_independent_analytic[lda-rks-reference]'
     --deselect
     'tests/python/test_second_derivatives_inputs.py::test_public_hvp_arbitrary_rotation_and_bra_shell_permutation[cpu-eri]'
     --deselect
@@ -90,25 +82,6 @@ if [[ "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflo
     'tests/python/test_codegen_high_l.py::test_dddp_rys5_recurrence_matches_every_symbolic_component'
     --deselect
     'tests/python/test_range_separation.py::test_generated_range_values_and_all_center_derivatives_against_libcint[angular3-cpu-long_range]'
-    # WB97M-V reconverged finite-difference replays are qualification
-    # scale on hosted runners. The coarse-grid water/OH cases take
-    # ~9.5/~12.8 minutes, and the production-grid water RKS case took
-    # 772 s in PR #1225. Keep the faster production-grid UKS endpoint
-    # on routine CI and run these long replays scheduled/manual.
-    --deselect
-    'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape0-water-rks]'
-    --deselect
-    'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape0-oh-doublet-uks]'
-    --deselect
-    'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape1-water-rks]'
-    # The remaining production-grid OH UKS replay is still a full
-    # seven-point reconverged finite-difference qualification. Hosted
-    # runners measured it at 355-508 s by itself, making one test the
-    # routine core critical path. Public WB97M-V live-state/analytic
-    # gradient, semilocal RKS/UKS, Maple/Libxc, and generated-code
-    # contracts remain on every PR; keep this full FD replay nightly.
-    --deselect
-    'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape1-oh-doublet-uks]'
     # The module-scoped analytic Hessian fixture computes a complete
     # water Hessian before the first parametrized check. On hosted
     # runners that setup alone is ~27 minutes, so keep the H2 path
@@ -123,8 +96,6 @@ if [[ "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflo
     'tests/python/test_hessian_analytic.py::test_components_match_independent_finite_difference_oracle[water]'
     --deselect
     'tests/python/test_hessian_analytic.py::test_raw_total_invariants[water]'
-    --deselect
-    'tests/python/test_hessian_analytic.py::test_three_step_directional_differences_of_native_forces[water]'
     # Full >12-AO RKS HVP qualifications compile and evaluate the
     # complete second-order path and are too expensive for routine
     # hosted feedback. Keep the lightweight synthetic >12-AO/>4-atom
@@ -134,14 +105,12 @@ if [[ "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflo
     'tests/python/test_hessian_rks_directional.py::test_rks_hvp_admits_resource_bounded_domain_above_12_aos'
     --deselect
     'tests/python/test_hessian_rks_larger_multicenter.py::test_larger_multicenter_rks_hvp_matches_nonzero_gradient_difference'
-    # Au resource-boundary replay is a full qualification loop
-    # (multiple converged displaced calculations) and currently
-    # costs another ~7-10 minutes per spin case. The ordinary Au
-    # energy/force checks remain on every PR.
+    # Au resource-boundary checks remain costly even without redundant
+    # finite-difference re-solves. Ordinary energy/force gates stay routine.
     --deselect
-    'tests/python/test_ecp_heavy.py::test_heavy_resource_boundary_replay_complete_energy_difference[cpu-0-Au]'
+    'tests/python/test_ecp_heavy.py::test_heavy_resource_boundary_replay[cpu-0-Au]'
     --deselect
-    'tests/python/test_ecp_heavy.py::test_heavy_resource_boundary_replay_complete_energy_difference[cpu-1-Au]'
+    'tests/python/test_ecp_heavy.py::test_heavy_resource_boundary_replay[cpu-1-Au]'
     # Keep one response-functional variant on routine CI; the
     # alternate LDA reconverged response remains in nightly/manual.
     --deselect
@@ -377,10 +346,6 @@ nightly_hessian_paths=(
 # Keep all scientific tests and all existing nightly-only qualifications.
 # Dedicated UCCSD force and corrected-Lambda tests use the existing force lane.
 core_hotspots_a=(
-  # Runs 40123113539 / 40124170599 exhausted core-c while core-a
-  # completed in 20m49s in the latter. Keep the intact ~305-worker-second
-  # Lambda reuse module on core-a without removing its ordinary slot.
-  tests/python/test_df_lambda_core_reuse.py
   # Historical pins retain ordinary modulo slots. Dedicated complete-file
   # transfers above take precedence over these earlier core owners.
   tests/python/test_wb97mv_hessian.py
@@ -422,6 +387,14 @@ core_hotspots_b=(
   tests/python/test_df_occupied_triples.py
 )
 core_hotspots_c=(
+  # PR #2967 run 41699527342: core-a ran tests in 941.5 s, core-c in
+  # 597.6 s. Move two intact CPU oracles (129.6 s integral AD,
+  # 96.2 s DF Lambda codegen at the measured longest-case level) to
+  # core-c without changing their core enumeration slots or test selection.
+  # Earlier core-c overloads were on different CI inventories; let live
+  # CI reject this measured rebalance if the critical path shifts back.
+  tests/python/test_integral_autodiff.py
+  tests/python/test_df_lambda_core_reuse.py
   # Runs 40096730696 / 40100233070 exhausted core-a while core-c
   # finished in 19m16s / 25m46s. Preserve this complete ~250-worker-second
   # module and its ordinary slot; only give it a stable lighter owner.

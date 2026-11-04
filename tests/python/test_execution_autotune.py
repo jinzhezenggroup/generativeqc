@@ -80,9 +80,13 @@ def search(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     )
     monkeypatch.setattr(profiles, "cache_root", lambda: tmp_path / "cache")
     monkeypatch.setattr(
-        profiles,
-        "select_library",
-        lambda *args: (state.library, {"source": "portable"}),
+        autotune,
+        "inspect_library",
+        lambda *args, **kwargs: {
+            "library": state.library._name,
+            "probe": state.probe,
+            "diagnostics": {"source": "portable"},
+        },
     )
 
     def worker(
@@ -125,8 +129,6 @@ def search(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
         tools={},
         target=SimpleNamespace(architecture="sm_120"),
     )
-    monkeypatch.setattr(execution_tune.ctypes, "CDLL", lambda path: state.library)
-    monkeypatch.setattr(profiles, "probe_device", lambda *args: state.probe)
     return state
 
 
@@ -149,6 +151,74 @@ def test_failed_gate_never_publishes_recipe(search: Any, failure: str) -> None:
     report = search.run()
     assert report["qualified_recipe"] is None and report["installed"] is None
     assert not (Path(report["directory"]) / "recipe.json").exists()
+
+
+def test_gpu_reference_choice_reaches_isolated_oracle_worker(
+    search: Any, monkeypatch: Any
+) -> None:
+    search.args.reference_engine = "gpu4pyscf"
+
+    def reference(library: Path, workload: Path, output: Path, **kwargs: Any) -> dict:
+        assert kwargs["reference"] is True
+        assert json.loads(workload.read_text())["reference_engine"] == "gpu4pyscf"
+        return {
+            "independent_reference": "synthetic GPU dispatch test, not hardware evidence",
+            "energies": [-1.0],
+            "forces": [[[0.0, 0.0, 0.0]] * 2],
+        }
+
+    monkeypatch.setattr(autotune, "_worker", reference)
+    report = search.run()
+    assert report["qualified_recipe"]
+    assert report["workload"]["reference_engine"] == "gpu4pyscf"
+
+
+def test_failed_independent_reference_never_starts_native_trials(
+    search: Any, monkeypatch: Any
+) -> None:
+    def reference(*args: Any, **kwargs: Any) -> dict:
+        raise RuntimeError("independent reference failed")
+
+    monkeypatch.setattr(autotune, "_worker", reference)
+    report = search.run()
+    assert report["qualified_recipe"] is None and report["installed"] is None
+    assert report["failure"] == "independent reference failed"
+    assert not search.calls
+
+
+@pytest.mark.parametrize("valid", (True, False))
+def test_explicit_reference_reuse_never_starts_an_oracle_solve(
+    search: Any, monkeypatch: Any, valid: bool
+) -> None:
+    from generativeqc import _dft_reference
+
+    search.args.reference_file = Path("nonexecutable-reference.json")
+    search.args.reference_sha256 = "a" * 64
+
+    def forbidden_oracle(*args: Any, **kwargs: Any) -> dict:
+        pytest.fail("explicit reference reuse must not solve SCF or gradients")
+
+    def cached(path: Path, digest: str, workload: dict) -> dict:
+        assert (
+            path == search.args.reference_file
+            and digest == search.args.reference_sha256
+        )
+        if not valid:
+            raise ValueError("reference model mismatch")
+        return {
+            "independent_reference": "synthetic reference reuse dispatch, not hardware evidence",
+            "energies": [-1.0],
+            "forces": [[[0.0, 0.0, 0.0]] * 2],
+        }
+
+    monkeypatch.setattr(autotune, "_worker", forbidden_oracle)
+    monkeypatch.setattr(_dft_reference, "load", cached)
+    report = search.run()
+    if valid:
+        assert report["qualified_recipe"]
+    else:
+        assert report["failure"] == "reference model mismatch"
+        assert not search.calls and report["qualified_recipe"] is None
 
 
 @pytest.mark.parametrize(

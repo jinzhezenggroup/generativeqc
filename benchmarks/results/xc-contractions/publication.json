@@ -20,11 +20,11 @@
       "sha256": "5dca427cbd09cca1055223f8205ac4e5bdb4184fe2aad8928a5992fcd88dbb31"
     },
     {
-      "bytes": 40900,
-      "path": "summary.json",
+      "bytes": 4060,
+      "path": "summary.json.xz",
       "reason": "Complete quantitative per-case gates and five raw timing samples retain independent numerical evidence.",
       "role": "summary",
-      "sha256": "d4c4791e52cabd72e78485faf5629c2d64c0f0abbcba2b752a9e1a74be0f1c1f"
+      "sha256": "31ddec5abe7f7bb390a3e7d37d240fd0422f6153be15a3148a28486347ccfce9"
     },
     {
       "path": "samples-cases/h2.json.gz",
@@ -49,6 +49,13 @@
       "bytes": 21742,
       "sha256": "4a4e643ed7ed492abbb998ee1cdbf3ed66d6b10a69b6a01f4a76e39eac161f7f",
       "role": "samples"
+    },
+    {
+      "role": "summary",
+      "reason": "Unchanged supplemental ASan/UBSan observations, stored losslessly.",
+      "path": "sanitizer.json.xz",
+      "bytes": 2140,
+      "sha256": "17db4623f553bc0f545299b66f223b6695869e793c7b83ef0c5865c9be793452"
     }
   ],
   "reproduction": {

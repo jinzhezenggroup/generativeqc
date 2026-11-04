@@ -146,9 +146,16 @@ def require_endpoint(device: str) -> None:
     ],
 )
 def test_default_grid_energy_and_analytic_forces(
-    device: str, fitted: bool, method: str, functional: str
+    device: str,
+    fitted: bool,
+    method: str,
+    functional: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     require_endpoint(device)
+    if fitted and functional == "WB97M_V":
+        # Compare grid defaults under the oracle's fixed mixed exact-LR model.
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
     calculator = Calculator(
         method=method,
         basis="sto-3g",
@@ -178,8 +185,12 @@ def test_default_grid_energy_and_analytic_forces(
 
 
 @pytest.mark.parametrize("fitted", [False, True])
-def test_adjusted_spin_and_independent_vv10_grids(fitted: bool) -> None:
+def test_adjusted_spin_and_independent_vv10_grids(
+    fitted: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
     require_endpoint("cuda")
+    if fitted:
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
     calculator = Calculator(
         method="wb97m-v-uks",
         basis="sto-3g",
@@ -205,9 +216,13 @@ def test_adjusted_spin_and_independent_vv10_grids(fitted: bool) -> None:
 
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
 @pytest.mark.parametrize("fitted", [False, True])
-def test_tight_xc_keeps_default_vv10_level_three(device: str, fitted: bool) -> None:
-    """Compare both defaults with independent PySCF SCF and full grid responses."""
+def test_tight_xc_keeps_default_vv10_level_three(
+    device: str, fitted: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compare grid defaults with independent SCF under a fixed radial model."""
     require_endpoint(device)
+    if fitted:
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
     calculator = Calculator(
         method="wb97m-v-rks",
         basis="sto-3g",

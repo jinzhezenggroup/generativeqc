@@ -189,6 +189,39 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --basis def2-svp --component jk --repeats 5 --max-candidates 6
 ```
 
+DFT searches (`jk` and `xc`) use an independent PySCF/libxc energy and analytic
+gradient oracle by default. To avoid a CPU SCF/gradient solve inside a GPU
+allocation, explicitly add `--reference-engine gpu4pyscf`. This requires installed
+GPU4PySCF and CuPy and runs the independent SCF and gradient on `--device-id`,
+within the scheduler-assigned visible devices. Host molecule/basis setup still
+uses PySCF. Functional components, quadrature level, basis representation,
+convergence controls and grid response remain fixed; the oracle is outside the
+timed native samples and shares the finite search budget. Missing dependencies,
+nonconvergence or a CPU SCF/gradient owner fail the search without silently
+falling back to a CPU solve. The report retains the selected engine and package
+versions. This option is DFT-only and never changes Calculator execution,
+production GPU defaults or the numerical acceptance gates.
+
+Alternatively, use `--reference-file reference.json --reference-sha256 HASH`
+to reuse independently prepared observations without solving another SCF or
+gradient. This is mutually exclusive with `--reference-engine`. The
+`generativeqc.dft-reference.v1` document contains `model`, `producer` and
+`observations`: resolve the model with `generativeqc._dft_reference.model`,
+retain the independent producer engine, package versions and original source
+document SHA256, and include converged energy/force arrays and original
+numerical/grid settings for every retained observation. Reuse checks the pinned
+file bytes, exact Bohr geometry, resolved Gaussian contents, native basis
+catalog, functional components, charge/spin, representation, batch, grid family
+and response. Every observation must pass the unchanged numerical gates.
+Original reference timings are never reused as native performance samples;
+device/source-specific endpoint, work, resource and holdout qualification still
+runs afresh. Invalid or incomplete references publish no recipe.
+
+Tuning discovery and replay identity checks also use disposable subprocesses:
+the coordinator does not retain a CUDA context while an oracle or native worker
+uses an exclusive-process GPU. This does not reset application-owned contexts
+or alter scheduler device visibility.
+
 Each trial uses an isolated child environment and complete warm E+F replay.
 Only allowlisted native execution knobs are changed; ambient GenerativeQC
 debug/experimental controls are excluded without modifying the parent or Slurm

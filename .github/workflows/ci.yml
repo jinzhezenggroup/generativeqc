@@ -235,8 +235,9 @@ jobs:
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
     # Cold GCC coverage can spend 6 minutes compiling and 13 minutes in CTest.
-    # Leave room for lcov and artifacts without enlarging plain-build budgets.
-    timeout-minutes: ${{ matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 25 || 15 }}
+    # Leave room for lcov and artifacts. Cold Clang can spend 13.5 minutes
+    # compiling plus 1.5 minutes in CTest; retain a bounded 20-minute job.
+    timeout-minutes: ${{ matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 25 || matrix.compiler == 'clang' && 20 || 15 }}
     strategy:
       fail-fast: false
       matrix:
@@ -1611,6 +1612,9 @@ jobs:
           GENERATIVEQC_BUILD_DIR: ${{ github.workspace }}/build
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
           CCACHE_MAXSIZE: 256M
+          # Capture per-invocation cache decisions only on the measured core-a
+          # shard; this diagnostic log lives outside the persisted cache tree.
+          CCACHE_STATSLOG: ${{ matrix.shard == 'core-a' && format('{0}/ccache-python-probes.stats', runner.temp) || '' }}
         run: |
           export GENERATIVEQC_CI_SHARD="${{ matrix.shard }}"
           # Selection is sourced into this shell so its arrays flow into pytest.
@@ -1625,7 +1629,9 @@ jobs:
               --native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"
             )
           fi
-          .venv/bin/python -m pytest "${collection_targets[@]}" -v \
+          # Keep failing node IDs, slowest-case timings, and full JUnit artifacts,
+          # without emitting one log line for each of ~20k core tests.
+          .venv/bin/python -m pytest "${collection_targets[@]}" -q \
             -o faulthandler_timeout=0 \
             -p tools.pytest_safe_diagnostics --diagnostic-timeout=900 \
             --diagnostics-dir="$PWD/.artifacts/python-diagnostics" \
@@ -1668,7 +1674,15 @@ jobs:
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
           CCACHE_MAXSIZE: 256M
-        run: ccache --show-stats
+          CCACHE_STATSLOG: ${{ matrix.shard == 'core-a' && format('{0}/ccache-python-probes.stats', runner.temp) || '' }}
+        run: |
+          # Distinguish expected linker calls from genuinely cacheable misses.
+          ccache --show-stats --verbose
+          if [[ "${{ matrix.shard }}" == "core-a" && -s "$CCACHE_STATSLOG" ]]; then
+            echo "Core-a native probe ccache outcomes (observational only):"
+            ccache --show-log-stats --verbose || echo "::warning::Unable to summarize probe-cache stats log"
+            ccache --print-log-stats --format=json || echo "::warning::Unable to export probe-cache stats log"
+          fi
       - name: Preserve transient benchmark/debug artifacts on failure
         if: failure() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

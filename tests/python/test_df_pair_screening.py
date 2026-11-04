@@ -1,4 +1,4 @@
-"""Spatial envelopes must dominate independent Coulomb values and derivatives."""
+"""Spatial envelopes must dominate independent Coulomb/erf derivatives."""
 
 import ctypes as ct
 import itertools
@@ -53,11 +53,14 @@ extern "C" double bound(int a,int b,double alpha,double beta,double distance,dou
     return library.bound
 
 
-@pytest.mark.parametrize("angular", list(itertools.product(range(4), repeat=3)))
+@pytest.mark.parametrize("omega", (0.0, 0.001, 0.3, 10.0))
+@pytest.mark.parametrize(
+    "angular", list(itertools.product(range(4), range(4), range(5)))
+)
 def test_contracted_values_and_shared_atom_forces(
-    bound: Bound, angular: tuple[int, int, int]
+    bound: Bound, angular: tuple[int, int, int], omega: float
 ) -> None:
-    """All s/p/d/f components, signed contractions and independent libcint."""
+    """The Coulomb majorant bounds signed erf contractions and auxiliary g."""
     pytest.importorskip("pyscf")
     from tools.generate_validation_references import pyscf_molecule
     from tools.generativeqc_validation.f_shell_numerics import _normalized_primitives
@@ -91,7 +94,7 @@ def test_contracted_values_and_shared_atom_forces(
         locations = mol.ao_loc_nr()
         norms = [scales[locations[i] : locations[i + 1]] for i in range(3)]
         normalization = np.einsum("i,j,k->ijk", *norms)
-        with mol.with_integral_screen(1e-100):
+        with mol.with_integral_screen(1e-100), mol.with_range_coulomb(omega):
             values = mol.intor_by_shell("int3c2e_cart", (0, 1, 2)) * normalization
             da = (
                 -mol.intor_by_shell("int3c2e_ip1_cart", (0, 1, 2), comp=3)

@@ -275,6 +275,79 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
 @pytest.mark.parametrize(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
+def test_mixed_rsh_force_matrix_preserves_one_tzvp_and_open_shell_in_routine(
+    event: str, tmp_path: Path
+) -> None:
+    """Collect the real parameter matrix with the actual CI marker selection."""
+    source = "tests/python/test_mixed_rsh_df_forces.py"
+    _, targets, extra = _selection(event, "ecp-forces")
+    assert source in targets
+    output = tmp_path / "mixed-rsh-collection.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+class Probe:
+    def pytest_collection_finish(self, session):
+        fields = ("device", "force_route", "spin", "representation", "basis_name")
+        rows = []
+        for item in session.items:
+            params = getattr(getattr(item, "callspec", None), "params", {})
+            if all(field in params for field in fields):
+                rows.append([params[field] for field in fields])
+        Path(sys.argv[1]).write_text(json.dumps(rows), encoding="utf-8")
+
+raise SystemExit(pytest.main(["--collect-only", "-q", *sys.argv[2:]], plugins=[Probe()]))
+""",
+            str(output),
+            source,
+            *extra,
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    rows = [tuple(row) for row in json.loads(output.read_text(encoding="utf-8"))]
+    assert len(rows) == len(set(rows))
+    retained = {
+        (0, "cartesian", "sto-3g"),
+        (0, "spherical", "sto-3g"),
+        (1, "cartesian", "sto-3g"),
+        (1, "spherical", "sto-3g"),
+        (0, "spherical", "sto-3g-water"),
+        (0, "spherical", "def2-svp"),
+        (0, "spherical", "def2-tzvp"),
+        (0, "cartesian", "def2-svp"),
+        (0, "cartesian", "def2-tzvp"),
+        (2, "spherical", "def2-svp"),
+        (2, "spherical", "def2-tzvp"),
+    }
+    if event not in ("schedule", "workflow_dispatch"):
+        retained -= {(0, "cartesian", "def2-tzvp"), (2, "spherical", "def2-tzvp")}
+    assert set(rows) == {
+        (device, route, *case)
+        for device, route in (
+            ("cpu", "reference"),
+            ("cuda", "native"),
+            ("cuda", "compatibility"),
+        )
+        for case in retained
+    }
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
 @pytest.mark.parametrize("shard", SHARDS)
 def test_expensive_full_oracles_run_in_nightly_not_routine_ci(
     event: str, shard: str
@@ -507,9 +580,13 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_df_cc_mixed_precision.py",
             "test_uccsd_solver.py",
         ),
-        "core-a": (
-            "test_cc_triples_tiles.py",
+        "core-a": ("test_cc_triples_tiles.py",),
+        "core-c": (
+            "test_integral_autodiff.py",
             "test_df_lambda_core_reuse.py",
+            "test_direct_exchange_queue.py",
+            "test_cc_canonical_denominators.py",
+            "test_direct_order5_sources.py",
         ),
         "core-b": (
             "test_native_stationary_shared_kernels.py",
@@ -521,11 +598,6 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_df_lambda_matrix_audit.py",
             "test_df_lambda_mixed_precision.py",
             "test_df_occupied_triples.py",
-        ),
-        "core-c": (
-            "test_direct_exchange_queue.py",
-            "test_cc_canonical_denominators.py",
-            "test_direct_order5_sources.py",
         ),
     }
     tracked = set(
@@ -576,7 +648,8 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_native_stationary_shared_kernels.py": "core-b",
         "tests/python/test_native_stationary_cuda_binding.py": "core-b",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
-        "tests/python/test_df_lambda_core_reuse.py": "core-a",
+        "tests/python/test_df_lambda_core_reuse.py": "core-c",
+        "tests/python/test_integral_autodiff.py": "core-c",
         "tests/python/test_correlation_convergence.py": "runtime-heavy",
         "tests/python/test_native_stationary_phased_budget.py": "runtime-heavy",
         "tests/python/test_cpu_semilocal_force_contract.py": "core-b",
@@ -598,6 +671,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             "test_native_stationary_phased_budget_next.py",
             "test_cpu_semilocal_force_contract_next.py",
             "test_df_lambda_core_reuse_next.py",
+            "test_integral_autodiff_next.py",
             "test_df_lambda_mixed_precision_next.py",
             "test_df_occupied_triples_next.py",
             "test_direct_exchange_queue_next.py",
@@ -725,7 +799,11 @@ def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     assert '--junitxml=".artifacts/pytest-${{ matrix.shard }}.xml"' in source
     assert "path: .artifacts/" in source
     assert "source .github/scripts/ci_select_python_shard.sh" in source
-    assert 'pytest "${collection_targets[@]}" -v' in source
+    # The full case ledger is JUnit, not verbose console output; quieter
+    # progress still prints failures and retains the slowest-case report.
+    assert 'pytest "${collection_targets[@]}" -q' in source
+    assert "--durations=25" in source
+    assert '-n 4 --dist="$dist_mode"' in source
     assert "source .github/scripts/ci_collect_python_shard.sh" in source
     assert '"${collection_args[@]}"' in source
     _assert_timed_diagnostics_contract(source)
