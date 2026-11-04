@@ -2,8 +2,8 @@
 
 Measured source revision: `36085eec7d745ad0e25514468ddfa42aea2c9f86`.
 Retained measured source inputs: `ec311fd6a9bc3a7105ab42ff9f7e154400119a91d79b3b6987e62c3e09cfc0b3`.
-Current checked source inputs: `3ce392e399c652e38ef8770f3cd9c6eaac36393848258ba6aa049ef4cb007a10`.
-Current checked native input identity: `4b2e67fd22b464d0eae0b8e4b09b3a7ad0ee66fd4634d9e7fe5bb73510dbafb0`.
+Current checked source inputs: `ce7cbbbc91246bbaf0a4f73a25ac099b5143a04a79975c950119e99a7a12c493`.
+Current checked native input identity: `acdf53966811fc23c58904d81d0017fcb488cf722359a1c5affc46145fdfb236`.
 Retained evidence stale for checked inputs: `True`.
 Retained executed native library SHA-256: `d16bf758445db7fc0b1b043847979e7a12ef851ee98254be2e9a7f47dace0efa`.
 Independent oracle: PySCF 2.14.0 / Libxc 7.0.0.
