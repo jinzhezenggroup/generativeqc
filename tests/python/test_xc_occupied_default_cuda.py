@@ -108,13 +108,15 @@ def test_occupied_controls_and_strict_handoff_across_geometry(
                             if row["operation"] == "cuda_ks_xc_shared"
                         ]
                         assert frames
-                        if selector == "1" and phase != "warm":
-                            assert any(frames)
-                            last_proposal = max(
-                                index for index, value in enumerate(frames) if value
-                            )
-                            assert last_proposal < len(frames) - 1
-                            assert not any(frames[last_proposal + 1 :])
+                        if selector == "1":
+                            if phase != "warm":
+                                assert any(frames)
+                            if any(frames):
+                                last_proposal = max(
+                                    index for index, value in enumerate(frames) if value
+                                )
+                                assert last_proposal < len(frames) - 1
+                                assert not any(frames[last_proposal + 1 :])
                         else:
                             assert not any(frames)
                         if phase == "cold":

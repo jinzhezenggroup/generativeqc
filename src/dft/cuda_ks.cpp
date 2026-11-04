@@ -373,6 +373,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool cold_fitted_factor_ready{};
   std::vector<double> cold_factor_spectrum;
   bool occupied_xc_frame_ready{}, pending_occupied_xc{}, occupied_xc_executed{};
+  unsigned occupied_xc_refinement_iterations{};
   const bool occupied_xc_requested = [] {
     const auto* value = std::getenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC");
     return value && value[0] == '1' && value[1] == '\0';
@@ -2432,6 +2433,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
     ++solve_epoch;
     occupied_xc_frame_ready = pending_occupied_xc = occupied_xc_executed = false;
+    occupied_xc_refinement_iterations = 0;
     is_active = false;
     is_failed = true;
     // A new attempt invalidates execution evidence immediately, before any
@@ -3371,6 +3373,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                          prepared_ao_work.point_ao_square_sum);
       CudaXcOccupiedDensity occupied_frame;
       if (occupied_xc_requested && occupied_xc_frame_ready && !strict_refinement &&
+          output.physical_residual_rms > 1e-4 &&
           phase == generativeqc::runtime::PrecisionPhase::Admitted && !device_chunk_mode &&
           !device_nonlocal && !precision_schedule.any_lower_precision() &&
           xc_layout.feature_terms == 5 && xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
@@ -3791,7 +3794,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // energy/residual after handoff is rebuilt in FP64; six unsuccessful
       // strict proposals discard all provisional history and retain the
       // incumbent exact refinement. No mixed operator certifies publication.
-      if (experimental_mixed_history && strict_refinement && refinement_iterations == 6) {
+      if ((experimental_mixed_history && strict_refinement && refinement_iterations == 6) ||
+          (occupied_xc_executed && strict_refinement && occupied_xc_refinement_iterations == 6)) {
         check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       }
@@ -4064,6 +4068,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_pending = false;
     pending_iterations = 0;
     ++output.iterations;
+    if (occupied_xc_executed && strict_refinement) ++occupied_xc_refinement_iterations;
     ++output.fock_builds;
     if (pending_nonlocal_seed || pending_nonlocal_frozen)
       ++nonlocal_seed_iterations;
@@ -4190,7 +4195,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool occupied_stage = occupied_xc_executed && !strict_refinement;
     // Approximate features are proposals, not a new point-functional contract.
     // Bound their lifetime, then reuse the existing strict target handoff:
-    // fresh energy epoch, cleared DIIS, and unchanged publication gates.
+    // fresh energy epoch and unchanged publication gates. Old DIIS entries
+    // may only predict new densities; six unsuccessful strict sweeps clear
+    // them. No historical/provisional Fock can certify a physical state.
     const MixedPrecisionWarmup occupied_warmup{1e-4, 12};
     const bool enter_occupied_audit =
         occupied_warmup.enter_refinement(occupied_stage, converged, output.iterations,
@@ -4304,7 +4311,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       stabilize_occupations = false;
       output.converged = false;
       is_active = !enter_occupied_audit || output.iterations < options.max_iterations;
-      if (!experimental_mixed_history) {
+      if (!experimental_mixed_history && !enter_occupied_audit) {
         check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       }

@@ -28,8 +28,12 @@ Reuse the existing bounded initializer handoff and strict target machinery.
 The proposal stage ends on residual at most 1e-4, apparent convergence, or the
 finite warmup cap (at most eleven iterations, leaving a fresh target build).
 These switches schedule work; they never authorize a result. Before any
-publication, clear provisional DIIS, reset the energy epoch and run the
+publication, reset the energy epoch and run the
 original stored-D target under the original physical and canonical gates.
+DIIS history remains a density predictor for at most six unsuccessful strict
+sweeps and is then cleared; no stored Fock ever certifies a physical result.
+Near-stationary inputs with prior residual RMS at most 1e-4 do not admit a
+candidate at all. This avoids needless initializer/epoch work on warm replays.
 Numerical proposal failure retries that same D strictly and never retries
 another proposal. The overall SCF iteration limit remains finite.
 
@@ -56,6 +60,11 @@ global scratch allocation, scientific kernel launch or synchronization.
 Do not invent a universal XC Lipschitz constant from the feature bound, relax
 scientific gates, sample a few original points as a proof, restore the old
 unverified default, or call full per-point dense verification an acceleration.
+Unconditionally clearing DIIS at handoff was independently tested at
+`681f4c77962e1d30ae7d056dae54e99e218d05a7`. Its 48 complete native endpoints
+passed the scientific gates but added two RKS cold/moved iterations and three
+UKS warm iterations, losing the projected work savings. Keep this rejected
+population separate rather than calling projection-only savings a speedup.
 Adding interval derivatives for every supported Libxc point program is a much
 larger project; initializer auditing avoids requiring that contract at all.
 

@@ -184,6 +184,7 @@ struct Owner {
   double previous_energy = 3, previous_energy_correction = 4;
   struct { struct { unsigned execution_retries{}; } precision;
     unsigned iterations = 5, fock_builds = 5;
+    double physical_residual_rms = 1.0;
   } output;
   struct { scf::ScfOptions::XcExecutionSchedule xc_execution_schedule =
     scf::ScfOptions::XcExecutionSchedule::DeviceFused; } options;
@@ -282,6 +283,12 @@ int main(int argc, char** argv) {
   request.stage_xc(5, Phase::Admitted);
   require(!request.pending_occupied_xc && !request.xc->last_occupied.coefficients,
               "strict refinement restarted provisional XC");
+  request.strict_refinement = false;
+  request.occupied_xc_frame_ready = true;
+  request.output.physical_residual_rms = 1e-8;
+  request.stage_xc(6, Phase::Admitted);
+  require(!request.pending_occupied_xc && !request.xc->last_occupied.coefficients,
+              "nearly stationary warm input paid for proposal admission");
  } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
 """

@@ -121,7 +121,7 @@ struct CudaXcOccupiedDensity {
   std::size_t nao{}, spins{}, occupations[2]{};
   std::uint64_t generation{};
   /** Bounded SCF initializer only, never an energy/residual/force certificate.
-   * StrictAudit rejects this mode. The owner must retire provisional history
+   * StrictAudit rejects this mode. The owner must retire provisional operators
    * and rebuild the original stored-D target before publishing convergence. */
   bool provisional{};
 

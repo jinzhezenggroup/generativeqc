@@ -108,12 +108,15 @@ live matrix. The original exact-mode `2^-45` prefilter and bitwise verification
 remain unchanged for lower-level nonprovisional calls.
 
 `StrictAudit` rejects provisional frames before submission. The KS owner
-retires the provisional stage before it can publish convergence, resets
-energy/DIIS history and rebuilds the original stored-D target under the
+retires the provisional stage before it can publish convergence, resets the
+energy epoch and rebuilds the original stored-D target under the
 unchanged energy, density, residual and final canonical gates. A failed
 proposal retries the same D strictly. Final-state and force consumers never
 receive provisional features. Canonical frame generations, scratch lifetimes,
 AO maps, capacity fallback and strict precision admission remain mandatory.
+Prior DIIS entries may predict new densities, never certify physical results;
+six unsuccessful strict sweeps clear that bounded predictor history. A previous
+residual RMS at most `1e-4` avoids candidate admission for near-stationary inputs.
 See [execution and handoff](xc_contractions.md#explicit-native-execution), the
 [audited-proposal decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-audited-proposals.md), the superseded
 [matrix-fallback decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-production-matrix-fallback.md),

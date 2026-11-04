@@ -28,11 +28,16 @@ def load(path: Path) -> dict | list:
 
 
 def save(path: Path, record: dict) -> None:
-    """Retain partial observations as well as successfully completed campaigns."""
+    """Retain observations, including legitimate infinite history sentinels.
+
+    Like the existing endpoint receipts, diagnostics use Python JSON's Infinity
+    extension for a missing previous energy. Replay independently rejects every
+    nonfinite physical observable; diagnostic sentinels are not observables.
+    """
+    serialized = json.dumps(record, separators=(",", ":"))
     opener = lzma.open if path.suffix == ".xz" else open
     with opener(path, "wt") as stream:
-        json.dump(record, stream, separators=(",", ":"), allow_nan=False)
-        stream.write("\n")
+        stream.write(serialized + "\n")
 
 
 def replay(record: dict) -> dict:

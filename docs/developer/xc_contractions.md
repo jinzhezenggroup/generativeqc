@@ -93,12 +93,15 @@ phase. An outward-rounded forward-error prefilter rejects ill-conditioned
 points; admitted proposals skip the dense original-D contraction altogether.
 The control is opt-in; unset, `0`, and malformed values retain matrix work.
 
-The owner switches permanently to the original matrix target at the proposal
-handoff, clears nonlinear history and starts a fresh energy epoch. The switch
+Near-stationary inputs (previous residual RMS at most `1e-4`) retain matrix
+work without paying for proposal admission. The owner switches permanently to
+the original matrix target at the proposal handoff and starts a fresh energy epoch. The switch
 uses the existing bounded warmup policy (maximum residual at most `1e-4`, or
 at most eleven proposal-stage iterations, with room for target evaluation).
 These are initializer scheduling controls, not scientific tolerances. No
 provisional energy, residual, warm seed or force can authorize publication.
+DIIS history may predict densities for at most six unsuccessful strict sweeps;
+it is then cleared. Only fresh matrix Focks certify the returned physical state.
 Strict matrix refinement, canonical validation and analytic force acceptance
 retain their original gates. A failed provisional numerical evaluation retries
 the same density using the strict target, without a CPU scientific fallback.
