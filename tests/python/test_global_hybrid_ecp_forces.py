@@ -28,6 +28,7 @@ def make_calculator(
     *,
     resource_budget: object = None,
     grid: GridSpec | None = GRID,
+    max_iterations: int = 240,
 ) -> Calculator:
     """Keep physical Gaussian/VWN-RPA B3LYP and the caller's spin unchanged."""
     return Calculator(
@@ -40,7 +41,7 @@ def make_calculator(
         ks_options=KsOptions() if grid is None else KsOptions(grid=grid),
         energy_tolerance=1e-13,
         density_tolerance=1e-11,
-        max_iterations=240,
+        max_iterations=max_iterations,
         resource_budget=resource_budget,
     )
 
@@ -162,6 +163,16 @@ def test_public_b3lyp_ecp_matches_state_force_and_reconverged_energy(
     )
     record_property("whole_public_endpoint_seconds", perf_counter() - started)
     assert native.converged and native.executed_backend == "cpu_reference"
+    diagnostic = native.ks_diagnostic
+    assert diagnostic is not None
+    assert len(diagnostic.history) == native.iterations <= 240
+    assert [row.iteration for row in diagnostic.history] == list(
+        range(1, native.iterations + 1)
+    )
+    assert diagnostic.fock_builds >= native.iterations
+    assert native.energy_change < 1e-13
+    assert diagnostic.density_change_max < 1e-11
+    assert diagnostic.physical_residual_max < 1e-11
     with (
         calculator.prepare_batch(
             [atoms], charges=[charge], multiplicities=[multiplicity], warm_start=False
@@ -253,6 +264,25 @@ def test_public_b3lyp_ecp_matches_state_force_and_reconverged_energy(
             errors.append(float(discrepancy))
     record_property("normalized_reconverged_energy_errors", errors)
     assert max(errors) <= FORCE_GATE
+
+
+@pytest.mark.parametrize("maximum", (1, 4))
+def test_b3lyp_ecp_uks_exhausted_budget_keeps_failure_and_rejects_warm_state(
+    ecp_records: tuple, maximum: int
+) -> None:
+    """A rejected physical state cannot acquire a fresh budget or become a seed."""
+    _, _, record = ecp_records
+    calculator = make_calculator(record, 2, max_iterations=maximum)
+    with calculator.prepare_batch(
+        [molecule_atoms("I")], charges=[-1], multiplicities=[2], warm_start=True
+    ) as batch:
+        for _attempt in range(2):
+            result = batch.execute(properties=("energy",), strict=False).items[0]
+            assert not result.succeeded and not result.converged
+            assert result.iterations <= maximum
+            assert not result.warm_start_used
+            assert result.ks_diagnostic is not None
+            assert len(result.ks_diagnostic.history) == result.iterations
 
 
 def test_cs_b3lyp_force_covariance_changed_geometry_and_failure_isolation(
