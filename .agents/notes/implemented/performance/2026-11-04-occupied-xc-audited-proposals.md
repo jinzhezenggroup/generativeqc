@@ -15,24 +15,26 @@ comparison would revive the scientific problem, not recover a safe fast path.
 Change the consumer contract, not the scientific acceptance tolerance. Treat
 occupied contractions as a bounded nonlinear SCF initializer. The explicit
 `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` route may borrow the current canonical frame
-and use an admitted, finite, forward-error-bounded feature proposal without
+and use an admitted finite feature proposal without
 reading the original matrix at that point. Unsupported points recompute the
 same live D. Default/unset/invalid controls remain matrix-only.
 
-The proposal budget `2^-32 * max(1, abs(feature))` is a quality/performance
-heuristic, not a downstream sensitivity assertion. The coefficient, jet and
-outward absolute-dot proof envelope remains intact. Exact-mode callers retain
-the old stricter prefilter followed by complete bitwise verification.
+Cheap finite projection/feature, coefficient-range and capacity checks guard
+initializer work. Proposals do not compute absolute-dot bounds: those bounds
+do not certify a published physical value under this consumer contract, and
+their directed-rounding cost needlessly erodes the shortcut. Exact-mode
+callers retain the original coefficient/jet/absolute-dot proof envelope,
+stricter prefilter and complete bitwise verification.
 
 Reuse the existing bounded initializer handoff and strict target machinery.
-The proposal stage ends on residual at most 1e-4, apparent convergence, or the
+The proposal stage ends on residual RMS at most 1e-6, apparent convergence, or the
 finite warmup cap (at most eleven iterations, leaving a fresh target build).
 These switches schedule work; they never authorize a result. Before any
 publication, reset the energy epoch and run the
 original stored-D target under the original physical and canonical gates.
 DIIS history remains a density predictor for at most six unsuccessful strict
 sweeps and is then cleared; no stored Fock ever certifies a physical result.
-Near-stationary inputs with prior residual RMS at most 1e-4 do not admit a
+Near-stationary inputs with prior residual RMS at most 1e-6 do not admit a
 candidate at all. This avoids needless initializer/epoch work on warm replays.
 Numerical proposal failure retries that same D strictly and never retries
 another proposal. The overall SCF iteration limit remains finite.
@@ -65,6 +67,9 @@ Unconditionally clearing DIIS at handoff was independently tested at
 passed the scientific gates but added two RKS cold/moved iterations and three
 UKS warm iterations, losing the projected work savings. Keep this rejected
 population separate rather than calling projection-only savings a speedup.
+Keeping the absolute-dot feature budget in a proposal-only route also proved
+unhelpful: it incurs directed-rounding work but does not replace strict target
+acceptance. A finite proposal is never treated as an energy/force certificate.
 Adding interval derivatives for every supported Libxc point program is a much
 larger project; initializer auditing avoids requiring that contract at all.
 

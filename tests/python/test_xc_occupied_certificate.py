@@ -298,6 +298,8 @@ def test_proposals_skip_dense_verification_but_exact_calls_do_not(
     )
     assert certificate_probe.evaluate(*arguments) != 0
     absolute[:] = np.inf
+    assert certificate_probe.evaluate_proposal(*arguments) == 0
+    projections[:] = np.inf
     assert certificate_probe.evaluate_proposal(*arguments) != 0
 
 

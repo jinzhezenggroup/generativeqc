@@ -40,6 +40,10 @@ def retry_probe(
         cpp_function_definition(source, "stage_xc"),
         "if (options.xc_execution_schedule",
     )
+    history_retirement = _block(
+        cpp_function_definition(source, "enqueue_legacy"),
+        "if ((experimental_mixed_history",
+    )
     folder = tmp_path_factory.mktemp("ks-mixed-retry")
     cpp, binary = folder / "retry.cpp", folder / "retry"
     cpp.write_text(
@@ -59,6 +63,9 @@ def retry_probe(
         + "bool retry() {\n"
         + retry
         + "\nreturn false;\n}\n"
+        + "void retire_provisional_history() {\n"
+        + history_retirement
+        + "\n}\n"
         + "CudaXcView stage_xc(std::uint64_t next_generation, Phase phase) {\n"
         + device_xc
         + '\nthrow std::runtime_error("unexpected host route");\n}\n};\n'
@@ -159,6 +166,8 @@ struct Xc {
 struct Source { bool mixed; bool mixed_recurrence() const { return mixed; } };
 struct Owner {
   bool occupied_xc_requested{}, occupied_xc_frame_ready{}, pending_occupied_xc{}, occupied_xc_executed{};
+  bool experimental_mixed_history{};
+  unsigned refinement_iterations{}, occupied_xc_refinement_iterations{};
   bool is_failed = true, pending_incremental_delta = true;
   bool pending_mixed_coulomb{}, pending_mixed_density{}, pending_mixed_point{};
   bool pending_mixed_contractions{};
@@ -289,6 +298,15 @@ int main(int argc, char** argv) {
   request.stage_xc(6, Phase::Admitted);
   require(!request.pending_occupied_xc && !request.xc->last_occupied.coefficients,
               "nearly stationary warm input paid for proposal admission");
+  Owner history;
+  history.occupied_xc_executed = history.strict_refinement = true;
+  for (unsigned sweep = 0; sweep <= 6; ++sweep) {
+    history.history_count_data = 4; history.history_head_data = 2;
+    history.occupied_xc_refinement_iterations = sweep;
+    history.retire_provisional_history();
+    require((history.history_count_data == 0) == (sweep == 6),
+                "provisional predictor history exceeded its strict refinement bound");
+  }
  } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
 """

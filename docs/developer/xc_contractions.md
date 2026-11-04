@@ -89,14 +89,15 @@ The CUDA KS owner defaults to ordinary matrix features. The exact value
 `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` enables bounded occupied-feature **SCF
 proposals**, not a different convergence certificate. A canonical frame which
 formed the current D may supply strict-FP64 meta-GGA features in the admitted
-phase. An outward-rounded forward-error prefilter rejects ill-conditioned
-points; admitted proposals skip the dense original-D contraction altogether.
+phase. Finite projection/feature, coefficient-range and capacity checks guard
+initializer work; admitted proposals skip both the dense original-D
+contraction and the unused absolute-dot certificate altogether.
 The control is opt-in; unset, `0`, and malformed values retain matrix work.
 
-Near-stationary inputs (previous residual RMS at most `1e-4`) retain matrix
+Near-stationary inputs (previous residual RMS at most `1e-6`) retain matrix
 work without paying for proposal admission. The owner switches permanently to
 the original matrix target at the proposal handoff and starts a fresh energy epoch. The switch
-uses the existing bounded warmup policy (maximum residual at most `1e-4`, or
+uses the existing bounded warmup policy (residual RMS at most `1e-6`, or
 at most eleven proposal-stage iterations, with room for target evaluation).
 These are initializer scheduling controls, not scientific tolerances. No
 provisional energy, residual, warm seed or force can authorize publication.

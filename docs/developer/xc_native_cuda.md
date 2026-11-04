@@ -100,11 +100,11 @@ or host oracle is introduced.
 
 Exact verification is not the production acceleration mechanism. With
 `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1`, the native owner may lend a **provisional**
-frame during a bounded initializer stage. The proposal-only prefilter allows
-an absolute/relative feature envelope of `2^-32 * max(1, abs(feature))`; this
-controls initializer quality and is not an XC sensitivity or acceptance bound.
-Admitted points skip original-D evaluation; refused points still consume the
-live matrix. The original exact-mode `2^-45` prefilter and bitwise verification
+frame during a bounded initializer stage. Cheap finite projection/feature,
+coefficient-range and capacity checks guard this proposal, not its downstream
+physical accuracy. Admitted points skip original-D evaluation and absolute-dot
+certificate work; refused points still consume the live matrix. The original
+exact-mode `2^-45` prefilter and bitwise verification
 remain unchanged for lower-level nonprovisional calls.
 
 `StrictAudit` rejects provisional frames before submission. The KS owner
@@ -116,7 +116,7 @@ receive provisional features. Canonical frame generations, scratch lifetimes,
 AO maps, capacity fallback and strict precision admission remain mandatory.
 Prior DIIS entries may predict new densities, never certify physical results;
 six unsuccessful strict sweeps clear that bounded predictor history. A previous
-residual RMS at most `1e-4` avoids candidate admission for near-stationary inputs.
+residual RMS at most `1e-6` avoids candidate admission for near-stationary inputs.
 See [execution and handoff](xc_contractions.md#explicit-native-execution), the
 [audited-proposal decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-audited-proposals.md), the superseded
 [matrix-fallback decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-production-matrix-fallback.md),

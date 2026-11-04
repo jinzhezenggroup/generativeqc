@@ -3373,7 +3373,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                          prepared_ao_work.point_ao_square_sum);
       CudaXcOccupiedDensity occupied_frame;
       if (occupied_xc_requested && occupied_xc_frame_ready && !strict_refinement &&
-          output.physical_residual_rms > 1e-4 &&
+          output.physical_residual_rms > 1e-6 &&
           phase == generativeqc::runtime::PrecisionPhase::Admitted && !device_chunk_mode &&
           !device_nonlocal && !precision_schedule.any_lower_precision() &&
           xc_layout.feature_terms == 5 && xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
@@ -4198,10 +4198,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // fresh energy epoch and unchanged publication gates. Old DIIS entries
     // may only predict new densities; six unsuccessful strict sweeps clear
     // them. No historical/provisional Fock can certify a physical state.
-    const MixedPrecisionWarmup occupied_warmup{1e-4, 12};
+    const MixedPrecisionWarmup occupied_warmup{1e-6, 12};
     const bool enter_occupied_audit =
         occupied_warmup.enter_refinement(occupied_stage, converged, output.iterations,
-                                         options.max_iterations, physical.maximum_residual) ||
+                                         options.max_iterations, physical.residual_rms) ||
         occupied_warmup.target_refresh_due(occupied_stage, output.iterations,
                                            options.max_iterations);
     if (occupied_stage) converged = false;

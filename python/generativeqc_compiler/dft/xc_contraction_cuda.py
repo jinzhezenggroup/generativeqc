@@ -352,7 +352,7 @@ __device__ void tiled_density_product_body(const double* density, const double* 
       else
         a[y][x] = point < count && col < n ? source[point*n+col] : 0.0;
       if constexpr (Certify)
-        if (!isfinite(a[y][x]) || fabs(a[y][x]) > 0x1p256) a[y][x] = NAN;
+        if (absolute_work && (!isfinite(a[y][x]) || fabs(a[y][x]) > 0x1p256)) a[y][x] = NAN;
     }
     __syncthreads();
     // Only discarded outputs may skip arithmetic. Every lane still loads the
@@ -370,8 +370,9 @@ __device__ void tiled_density_product_body(const double* density, const double* 
       else
         value += d[x][k]*a[y][k];
       if constexpr (Certify)
-        absolute_value = __dadd_ru(absolute_value,
-            __dmul_ru(fabs(d[x][k]), fabs(a[y][k])));
+        if (absolute_work)
+          absolute_value = __dadd_ru(absolute_value,
+              __dmul_ru(fabs(d[x][k]), fabs(a[y][k])));
     }
     __syncthreads();
   }
@@ -384,7 +385,8 @@ __device__ void tiled_density_product_body(const double* density, const double* 
       work[(spin*work_jets+jet)*count*output_n+point*output_n+mu] =
           occupied_frame ? value : finite(value, error, 1);
     if constexpr (Certify)
-      absolute_work[(spin*work_jets+jet)*count*output_n+point*output_n+mu] = absolute_value;
+      if (absolute_work)
+        absolute_work[(spin*work_jets+jet)*count*output_n+point*output_n+mu] = absolute_value;
   }
 }
 
@@ -764,7 +766,7 @@ def emit_native_xc_matrix_schedule(
 
 
 def _emit_occupied_features(schedule: XcMatrixSchedule) -> str:
-    """Project a density witness with outward-rounded absolute-dot certificates.
+    """Project a witness for exact certificates or bounded SCF initialization.
 
     Projection and bound panels must both fit the dead matrix-product scratch.
     Potential construction retains the original AO jets; refused points consume
@@ -793,7 +795,7 @@ _OCCUPIED_TEMPLATE = r"""
 // dot panels and their squared norms are rounded outward, never RN estimates.
 // The full derivation and gradual-underflow envelope are in the Agent Note.
 __device__ bool occupied_feature_certificate(const double* features, const double* squared_norms,
-    I active, I rank, I spins, bool provisional = false) {
+    I active, I rank, I spins) {
   if (active < 1 || rank < 1 || active > I(0x1p50) || rank > I(0x1p50)) return false;
   const double steps = __dadd_ru(__dmul_ru(8.0,
       __dadd_ru(static_cast<double>(active), static_cast<double>(rank))), 128.0);
@@ -816,10 +818,7 @@ __device__ bool occupied_feature_certificate(const double* features, const doubl
     const double candidate = weight * features[term];
     const double error_bound = __dadd_ru(underflow,
         __dmul_ru(__dmul_ru(2.0, gamma), __dmul_ru(weight, magnitudes[term])));
-    // Proposal admission only controls initializer quality. It cannot certify
-    // a published XC value; the KS owner must rebuild the strict target.
-    const double roundoff_budget = (provisional ? 0x1p-32 : 0x1p-45) *
-        fmax(1.0, fabs(candidate));
+    const double roundoff_budget = 0x1p-45 * fmax(1.0, fabs(candidate));
     if (!isfinite(candidate) || !isfinite(error_bound) || error_bound > roundoff_budget)
       return false;
   }
@@ -831,10 +830,12 @@ __device__ void tiled_occupied_product_body(CudaXcOccupiedDensity occupied,
     const size_t* ids, I spin_jet) {
   // Both scientific sources use the same shared panels and AO traversal.
   // A compact batch does not pay for a second statically allocated panel.
+  // The strict-target handoff controls initializer error. An unused absolute
+  // bound would add cost without certifying a published physical result.
   tiled_density_product_body<false, true, double, true>(occupied.coefficients, ao, active, count, 4,
       work, error, ids, occupied.nao, spin_jet, occupied.coefficients,
       occupied.occupations[spin_jet / 4], occupied.rank(),
-      work + occupied.spins * 4 * count * occupied.rank());
+      occupied.provisional ? nullptr : work + occupied.spins * 4 * count * occupied.rank());
 }
 
 __global__ void occupied_density_products(CudaXcOccupiedDensity occupied,
@@ -855,17 +856,20 @@ __device__ void occupied_density_features_body(const double* work, I rank, I cou
     const auto* source = work + spin * 4 * stride;
     double accum[5]{};
     double squared_norms[4]{};
-    bool unsafe = !absolute_work || terms != 5;
-    for (I orbital = lane; absolute_work && orbital < rank; orbital += width) {
+    bool unsafe = (!provisional && !absolute_work) || terms != 5;
+    for (I orbital = lane; (provisional || absolute_work) && orbital < rank; orbital += width) {
       const I index = point * rank + orbital;
       double panel[4]{source[index], source[stride + index],
                       source[2 * stride + index], source[3 * stride + index]};
       double derivatives[3]{panel[1], panel[2], panel[3]};
       for (I jet = 0; jet < 4; ++jet) {
-        const double bound = absolute_work[(spin * 4 + jet) * stride + index];
-        unsafe = unsafe || !isfinite(panel[jet]) || !isfinite(bound) || bound < 0.0 ||
-            (bound != 0.0 && (bound < 0x1p-256 || bound > 0x1p256));
-        squared_norms[jet] = __dadd_ru(squared_norms[jet], __dmul_ru(bound, bound));
+        unsafe = unsafe || !isfinite(panel[jet]);
+        if (!provisional) {
+          const double bound = absolute_work[(spin * 4 + jet) * stride + index];
+          unsafe = unsafe || !isfinite(bound) || bound < 0.0 ||
+              (bound != 0.0 && (bound < 0x1p-256 || bound > 0x1p256));
+          squared_norms[jet] = __dadd_ru(squared_norms[jet], __dmul_ru(bound, bound));
+        }
       }
       generativeqc_grid_policy::add_features(panel[0], derivatives, panel, accum, 15U);
     }
@@ -873,13 +877,19 @@ __device__ void occupied_density_features_body(const double* work, I rank, I cou
       for (int offset = 16; offset > 0; offset >>= 1) {
         for (I term = 0; term < 5; ++term)
           accum[term] += __shfl_down_sync(0xffffffffu, accum[term], offset);
-        for (I jet = 0; jet < 4; ++jet)
-          squared_norms[jet] = __dadd_ru(squared_norms[jet],
-              __shfl_down_sync(0xffffffffu, squared_norms[jet], offset));
+        if (!provisional)
+          for (I jet = 0; jet < 4; ++jet)
+            squared_norms[jet] = __dadd_ru(squared_norms[jet],
+                __shfl_down_sync(0xffffffffu, squared_norms[jet], offset));
       }
     }
-    if (lane == 0 && !unsafe)
-      unsafe = !occupied_feature_certificate(accum, squared_norms, active, rank, spins, provisional);
+    if (lane == 0 && !unsafe) {
+      if (!provisional)
+        unsafe = !occupied_feature_certificate(accum, squared_norms, active, rank, spins);
+      else
+        for (I term = 0; term < 5; ++term)
+          unsafe = unsafe || !isfinite((spins == 1 ? 2.0 : 1.0) * accum[term]);
+    }
     if constexpr (Cooperative) unsafe = __any_sync(0xffffffffu, unsafe);
     const bool original_available = density && ao && active && full_n && terms == 5;
     const bool use_proposal = provisional && original_available && !unsafe;
@@ -953,7 +963,7 @@ inline void launch_occupied_density(cudaStream_t stream, CudaXcOccupiedDensity o
       128, 0, stream>>>(work, occupied.rank(), count, occupied.spins, terms, features, error,
                         occupied.density, ao, active, occupied.nao, ids,
                         projection_fits ? work + occupied.spins * 4 * count * occupied.rank() : nullptr,
-                        occupied.provisional);
+                        occupied.provisional && projection_fits);
   generativeqc_tensor::cuda_check(cudaGetLastError());
 }
 """
