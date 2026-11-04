@@ -444,3 +444,71 @@ never used for promotion timing.
 
 - [Earlier LR Rys evidence](2026-11-02-long-range-rys-derivatives.md)
 - [Warm-anchor work transfer](2026-11-01-default-range-warm-anchor.md)
+
+## Review repair: spectral response capacity admission
+
+Review of `aeaee658` found that automatic LR shell scheduling reserved the
+full-rank response layout even when the selected LR metric was truncated.
+The occupied spectral and dense spectral layouts require different fixed
+storage. Shell metadata could therefore consume the last bytes needed by an
+otherwise viable generic response. The repair shares the checked selected
+source-response workspace between optional shell admission and the later
+allocation check. Explicit schedules, response budgets and derivative algebra
+remain unchanged; automatic selection retains generic execution when the
+additional shell metadata cannot coexist with the selected response layout.
+Automatic LR admission also checks current physical free bytes and the active
+owner ledger, independently of the declared cap. The physical-memory snapshot
+is advisory: concurrent allocations can still refuse subsequent storage. No
+unconditional allocation-retry guarantee is claimed.
+
+A host regression exercises full-rank, dense truncated and occupied truncated
+storage, invalid dimensions and overflow. The production admission predicate
+is checked separately at declared-cap, physical-free and owner-ledger capacity
+boundaries. For 96 orbitals, 384 auxiliaries,
+occupied rank 20, one response term, 32 atoms and 96/384 orbital/auxiliary
+shells, the remaining allowance after common AO metadata upload must cover
+7,488,000 bytes for generic response, including positions/output, density and
+a two-Q panel. Shell metadata raises that minimum to 7,493,776 bytes. Every
+byte in the generic-only interval [7,488,000, 7,493,776) retains generic
+execution; the exact shell boundary admits the optional metadata. The former
+full-rank estimate incorrectly admitted shell execution from 5,174,416 bytes.
+
+The compiled host response-budget regression passes with ccache 4.12.2.
+This is host-only verification of capacity selection, not a fresh physical GPU
+qualification or a replacement for the retained numerical/performance evidence
+above. The historical source and release-library identities above refer to
+the measured candidate before this narrow repair.
+
+### CI fixture alignment after default promotion
+
+The unchanged-head CI run exposed two remaining old-default assumptions. The
+native `mixed_df_rsh_cpu_endpoints_for_mode` fixture already retains independent
+matched-grid exact-LR and fitted-LR oracles, but selected the fitted oracle only
+for explicit `df`. Its default/auto cases now select the existing fitted oracle
+for this resolved tiny metric; explicit `direct`, generic PBE-RSH and every
+numerical tolerance remain unchanged. The synthetic ECP Hessian/HVP fixture
+now selects `direct` within each fitted test, preserving the qualified
+fitted-primary/exact-LR second-order model and its finite-difference checks.
+The default/auto/df fitted-LR second-order refusal tests remain separate.
+
+The core-a failure was a real stale canonical catalog and is repaired by the
+exact-candidate offline regeneration, preserving all historical evidence and
+qualification flags. CLI stopped at its existing required-failure guard and
+therefore remains unqualified until required CI reruns. Local validation of the
+fixture edits does not claim a fresh native molecular/Hessian execution.
+
+Later completed CI shards exposed the same model-target mismatch in the
+independent R1 force and Treutler grid fixtures: their PySCF helper explicitly
+retains exact LR, while the native default now admits fitted LR. Per-test
+`direct` selection is restricted to fitted WB97M-V cases, including the opt-in
+phased-grid consumer of that same reference. Other functionals, non-DF cases,
+reference equations and numerical tolerances are unchanged. The independent
+fitted-LR force test and the unset/auto/fitted admission, lifecycle and
+second-order refusal tests retain their existing default paths unchanged.
+
+Two extracted-source host probes also needed interface updates: the packed
+pair cross-product now includes LR shell promotion, and the preliminary-seed
+scheduler mock accepts the per-item frozen radial selection. All previous
+assertions remain. The repaired probes pass 88 host tests, including 1,152
+packed-selection combinations. These compile/host results do not claim a new
+physical force, Hessian, GPU or performance qualification.

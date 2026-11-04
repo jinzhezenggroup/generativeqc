@@ -1,0 +1,33 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-sm90-db36-profile-baseline-20261103",
+  "owner": "H100 frozen DB36 profile and retained baseline delivery",
+  "reason": "Preserve original current profile and source7013 baseline with four exact proof files, supported by the existing safety package. Recover five exact old CD2B final payloads from already merged Git to fit unchanged limits.",
+  "review_document": "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/nsys-v1-analysis.tar.xz",
+      "bytes": 636000,
+      "sha256": "9f7c5ba3a8a6fd10cea9e15d34772d346d12b514d9870208e04b1e48f6b5bba1",
+      "family": "h100-sm90-db36-profile-baseline-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact source-labelled profile/SQLite or prior7013 DF/screen full-vector observations. No source transfer or final timing votes; retained controls and runtime/source/work identities remain replayable."
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/df-molecular-v1-completed.tar.xz",
+      "bytes": 447876,
+      "sha256": "69483f766a0247bfb28b486e9f3c1d3564283e71ce5d973131887fa8a11ec02e",
+      "family": "h100-sm90-db36-profile-baseline-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact source-labelled profile/SQLite or prior7013 DF/screen full-vector observations. No source transfer or final timing votes; retained controls and runtime/source/work identities remain replayable."
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/screening-v1-completed.tar.xz",
+      "bytes": 413848,
+      "sha256": "ad379382ee761ea3a28b62640b07c0ba72ade613ac82a86d4cfa84e55ae3e121",
+      "family": "h100-sm90-db36-profile-baseline-20261103",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact source-labelled profile/SQLite or prior7013 DF/screen full-vector observations. No source transfer or final timing votes; retained controls and runtime/source/work identities remain replayable."
+    }
+  ]
+}

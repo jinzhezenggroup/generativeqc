@@ -19,7 +19,7 @@ from test_treutler_endpoints import WATER, reference, require_endpoint
     "method,functional", [("pbe0-rks", "PBE0"), ("wb97m-v-rks", "WB97M_V")]
 )
 def test_large_treutler_phased_endpoint(
-    method: str, functional: str, fitted: bool
+    method: str, functional: str, fitted: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Gate native/composite forces, reuse, moved geometry and bounded storage.
 
@@ -31,6 +31,9 @@ def test_large_treutler_phased_endpoint(
     if os.environ.get("GENERATIVEQC_TREUTLER_PHASED_ENDPOINT") != "1":
         pytest.skip("explicit large Treutler endpoint qualification")
     require_endpoint("cuda")
+    if fitted and functional == "WB97M_V":
+        # Preserve the independent mixed exact-LR grid/staging reference.
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
     atoms = []
     for fragment in range(16):
         shift = np.array([8 * (fragment % 4), 8 * (fragment // 4), 0.0])

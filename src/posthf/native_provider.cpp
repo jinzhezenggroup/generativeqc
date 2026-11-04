@@ -199,20 +199,20 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
 }
 
 std::vector<std::vector<double>> NativeBlockProvider::get_many_spin(
-    const std::vector<SpinMOSlots>& requests, ProviderWork* work) const {
+    const std::vector<SpinMOSlots>& requests, ProviderWork* work, bool cuda, int device) const {
   if (reference_view_.spin_channels != 2)
     throw std::invalid_argument("spin-owned MO requests require a UHF reference");
   std::vector<SpinMORequestView> views;
   views.reserve(requests.size());
   for (const auto& request : requests) views.push_back({&request.slots, request.spins});
-  return get_many_impl(views, false, 0, nullptr, work);
+  return get_many_impl(views, cuda, device, nullptr, work);
 }
 
-std::vector<double> NativeBlockProvider::get_spin(const SpinMOSlots& request,
-                                                  ProviderWork* work) const {
+std::vector<double> NativeBlockProvider::get_spin(const SpinMOSlots& request, ProviderWork* work,
+                                                  bool cuda, int device) const {
   if (reference_view_.spin_channels != 2)
     throw std::invalid_argument("spin-owned MO request requires a UHF reference");
-  auto values = get_many_impl({{&request.slots, request.spins}}, false, 0, nullptr, work);
+  auto values = get_many_impl({{&request.slots, request.spins}}, cuda, device, nullptr, work);
   return std::move(values.front());
 }
 
@@ -224,8 +224,6 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many_impl(
   ProviderWork observed_work;
   if (trace.enabled() && !work) work = &observed_work;
   const auto prior_work = trace.enabled() ? *work : ProviderWork{};
-  if (cuda && reference_view_.spin_channels != 1)
-    throw std::invalid_argument("unrestricted native MO CUDA transform is unavailable");
   const auto provider_started = std::chrono::steady_clock::now();
 
   std::vector<std::array<std::size_t, 4>> shapes;

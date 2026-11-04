@@ -815,14 +815,14 @@ void mixed_df_rsh_cpu_endpoints_for_mode(const char* range_mode) {
       const double cold = result.energy;
       // Independently reconverged PySCF 2.14.0 / Libxc 7.0.0 on this exact
       // basis/grid: DF full-range J/K with the orbital basis as auxiliary.
-      // WB97M-V fits its LR correction only with the explicit df selector;
-      // default/direct retain exact get_k(omega=0.3). The fitted oracle
+      // This bounded WB97M-V metric admits fitted LR for default/auto/df;
+      // direct retains exact get_k(omega=0.3). The fitted oracle
       // independently whitens libcint LR tensors in normalized auxiliary
       // coordinates with relative eigenvalue cutoff 1e-10. Generic PBE-RSH
       // remains exact-LR in all selector modes; WB97M-V retains complete VV10.
       // Match rho >= 1e-10 via tools/verify_mixed_df_rsh_cpu.py
       // --vv10-density-cutoff 1e-10 (H2 and H2- doublet).
-      const bool fitted_range = wb97mv && range_mode && std::strcmp(range_mode, "df") == 0;
+      const bool fitted_range = wb97mv && (!range_mode || std::strcmp(range_mode, "direct") != 0);
       const double oracle =
           wb97mv ? (fitted_range ? (open_shell ? -0.8133366861625834 : -1.284926849692006)
                                  : (open_shell ? -0.8191434237585024 : -1.2886176657015223))
@@ -866,7 +866,7 @@ void mixed_df_rsh_cpu_endpoints_for_mode(const char* range_mode) {
 
 void mixed_df_rsh_cpu_endpoints() {
   // This CPU-only gate must run even when no CUDA compiler/device is present.
-  // Exercise the default and both explicit Hamiltonians without inheriting the
+  // Exercise default/auto and both explicit Hamiltonians without inheriting the
   // caller's environment or leaking the selected mode into subsequent tests.
   struct RestoreRangeMode {
     const bool present = std::getenv("GENERATIVEQC_DF_RANGE_EXCHANGE") != nullptr;
@@ -878,7 +878,7 @@ void mixed_df_rsh_cpu_endpoints() {
         unsetenv("GENERATIVEQC_DF_RANGE_EXCHANGE");
     }
   } restore_range_mode;
-  for (const char* range_mode : {static_cast<const char*>(nullptr), "df", "direct"}) {
+  for (const char* range_mode : {static_cast<const char*>(nullptr), "auto", "df", "direct"}) {
     require(range_mode ? setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", range_mode, 1) == 0
                        : unsetenv("GENERATIVEQC_DF_RANGE_EXCHANGE") == 0,
             "cannot select the mixed-DF CPU RSH Hamiltonian");

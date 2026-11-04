@@ -411,9 +411,11 @@ static generativeqc_status execute_calculation(generativeqc_calculation* calcula
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
-  const bool ccsdt =
-      method == GENERATIVEQC_METHOD_RCCSD_T || method == GENERATIVEQC_METHOD_DF_RCCSD_T;
-  if ((hf || mp2) && method != GENERATIVEQC_METHOD_MP2 && !ccsdt)
+  const bool ccsdt = method == GENERATIVEQC_METHOD_RCCSD_T ||
+                     method == GENERATIVEQC_METHOD_DF_RCCSD_T ||
+                     method == GENERATIVEQC_METHOD_UCCSD_T;
+  if ((hf || mp2) && method != GENERATIVEQC_METHOD_MP2 && method != GENERATIVEQC_METHOD_UMP2 &&
+      !ccsdt)
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   if (mp2 && !ccsdt) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 

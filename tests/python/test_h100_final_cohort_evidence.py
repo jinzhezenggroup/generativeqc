@@ -30,10 +30,10 @@ def test_final_packet_rejects_missing_changed_or_reordered_inputs(
     shutil.copytree(evidence.DIRECTORY, directory)
     monkeypatch.setattr(evidence, "DIRECTORY", directory)
     if mutation == "missing":
-        (directory / "final-pairs-v3-completed.tar.xz.part01").unlink()
+        (directory / "historical-snapshot.json").unlink()
     elif mutation == "corrupt":
         path = directory / "final-pairs-v3-completed.tar.xz.part00"
-        raw = path.read_bytes()
+        raw = evidence.artifact_bytes(path.name)
         path.write_bytes(bytes([raw[0] ^ 1]) + raw[1:])
     else:
         path = directory / "cohort.json"

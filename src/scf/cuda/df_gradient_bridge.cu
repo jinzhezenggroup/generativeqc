@@ -1229,8 +1229,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
     bool promoted_default = false;
     bool promoted_source_coulomb = false;
     bool promoted_range = false;
-    const long double fixed_response_elements =
-        4.0L * a * a + (3.0L + terms.size()) * n * n + 2.0L * terms.size() * a;
+    const auto source_fixed_elements = df_source_response_fixed_workspace(
+        n, a, terms.size(), device_metric && !device_metric->full_rank,
+        spectral_occupied ? occupied->factors[0].rank : 0);
+    if (!source_fixed_elements) throw std::bad_alloc();
     unsigned derivative_architecture = 0;
     const char* upload_diagnostic = std::getenv("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE");
     const char* scatter_diagnostic = std::getenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE");
@@ -1281,9 +1283,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
           (static_cast<long double>(orbital.shells.size()) + auxiliary.shells.size()) *
               (sizeof(std::int32_t) + sizeof(std::int64_t)) +
           2 * sizeof(std::int64_t);
-      const long double pending_device_bytes =
-          shell_metadata_bytes + 6.0L * atoms * sizeof(double) +
-          (fixed_response_elements + 2.0L * n * n) * sizeof(double);
+      const long double mandatory_device_bytes =
+          6.0L * atoms * sizeof(double) +
+          (static_cast<long double>(source_fixed_elements) + 2.0L * n * n) * sizeof(double);
+      const auto pending_device_bytes = shell_metadata_bytes + mandatory_device_bytes;
       const long double pending_host_bytes =
           shell_metadata_bytes +
           (static_cast<long double>(positions.capacity()) + result.capacity()) * sizeof(double);
@@ -1292,6 +1295,16 @@ generativeqc_status execute_cuda_df_hf_gradient(
           pending_host_bytes < maximum_bytes - arena.stats.host_bytes;
       promoted_source_coulomb = source_coulomb_eligible && sufficient_work && source_shell_fits;
       promoted_range = range_shell_eligible && sufficient_work && source_shell_fits;
+      if (promoted_range) {
+        // Optional shell metadata must not consume the last generic-response
+        // bytes under physical or owner-ledger pressure either. This snapshot
+        // is advisory; concurrent allocations can still refuse later storage.
+        std::size_t free_bytes{}, total_bytes{};
+        check(cudaMemGetInfo(&free_bytes, &total_bytes));
+        promoted_range = df_response_optional_storage_fits(
+            mandatory_device_bytes, shell_metadata_bytes, maximum_bytes - arena.stats.device_bytes,
+            free_bytes, runtime::device_resource_available(device));
+      }
       runtime::cuda_trace::trace_counter(
           "response_source_coulomb_shell_budget_refused",
           source_coulomb_eligible && sufficient_work && !source_shell_fits);
@@ -1534,17 +1547,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
           n, a, terms.size(), compact_fitted_metric_workspace,
           whitened && whitened->spectral_basis && !whitened->factor_response_root);
       if (!occupied_layout.elements) throw std::bad_alloc();
-      const auto spectral_fixed =
-          spectral_occupied ? df_spectral_occupied_workspace(n, a, occupied->factors[0].rank, 0)
-                            : 0;
-      if (spectral_occupied && !spectral_fixed) throw std::bad_alloc();
       const long double fixed_elements =
-          spectral_occupied ? static_cast<long double>(spectral_fixed) + n * n
-                            : (compact_fitted_metric_workspace
-                                   ? static_cast<long double>(occupied_layout.elements) +
-                                         1.0L * terms.size() * n * n
-                                   : fixed_response_elements) +
-                                  (whitened_response ? 1.0L * a * n * n : 0.0L);
+          compact_fitted_metric_workspace
+              ? static_cast<long double>(occupied_layout.elements) + 1.0L * terms.size() * n * n
+              : static_cast<long double>(source_fixed_elements);
       // The prepared allowance is a ceiling, not a reservation of physical
       // memory. Other retained consumers (notably a nonlocal XC force owner)
       // may grow after the cold call. Replan the bounded auxiliary tile from

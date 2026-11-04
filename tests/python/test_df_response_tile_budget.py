@@ -94,6 +94,55 @@ int main() {
   }
   assert(!df_spectral_occupied_workspace(4,11,5,3));
   assert(!df_spectral_occupied_workspace(4,11,2,12));
+  using generativeqc::scf::df_source_response_fixed_workspace;
+  using generativeqc::scf::df_response_optional_storage_fits;
+  assert(!df_source_response_fixed_workspace(0,384,1,true));
+  assert(!df_source_response_fixed_workspace(96,0,1,true));
+  assert(!df_source_response_fixed_workspace(96,384,0,true));
+  assert(!df_source_response_fixed_workspace(maximum,384,1,true));
+  assert(!df_source_response_fixed_workspace(96,maximum,1,true));
+  assert(!df_source_response_fixed_workspace(96,384,maximum,true));
+  assert(!df_source_response_fixed_workspace(96,384,1,false,20));
+  assert(!df_source_response_fixed_workspace(96,384,2,true,20));
+  assert(!df_source_response_fixed_workspace(96,384,1,true,97));
+  assert(!df_source_response_fixed_workspace(1,1,maximum/3,false));
+  const auto large_n = (std::size_t{1} << ((std::numeric_limits<std::size_t>::digits-2)/2))-1;
+  assert(!df_source_response_fixed_workspace(large_n,1,1,true));
+  // Optional shell metadata must coexist with the selected response layout,
+  // including truncated occupied factors or the complete dense spectral root.
+  // A cap that admits only generic response must retain that route. Test every
+  // byte of the generic-only interval, then the exact shell-admission boundary.
+  constexpr std::size_t n = 96, a = 384, rank = 20;
+  constexpr std::size_t shell_bytes = (96+384)*12+16;
+  constexpr std::size_t coordinates_output = 6*32*sizeof(double);
+  for (bool truncated : {false,true}) for (bool occupied : {false,true}) {
+    if (occupied && !truncated) continue;
+    const auto fixed = df_source_response_fixed_workspace(n,a,1,truncated,occupied ? rank : 0);
+    const auto expected = occupied ? 4*a*a+2*a*rank*rank+2*n*n+n*rank
+                                  : 4*a*a+4*n*n+2*a+(truncated ? a*n*n : 0);
+    assert(fixed == expected);
+    const auto generic_bytes = coordinates_output+(fixed+2*n*n)*sizeof(double);
+    const auto shell_minimum = generic_bytes+shell_bytes;
+    for (auto cap = generic_bytes; cap < shell_minimum; ++cap) {
+      assert(generic_bytes <= cap);
+      assert(!df_response_optional_storage_fits(generic_bytes,shell_bytes,cap,maximum,maximum));
+      assert(!df_response_optional_storage_fits(generic_bytes,shell_bytes,maximum,cap,maximum));
+      assert(!df_response_optional_storage_fits(generic_bytes,shell_bytes,maximum,maximum,cap));
+    }
+    assert(df_response_optional_storage_fits(generic_bytes,shell_bytes,
+                                            shell_minimum,shell_minimum,shell_minimum));
+    if (occupied) {
+      assert(generic_bytes == 7488000 && shell_minimum == 7493776);
+      assert(df_spectral_occupied_workspace(n,a,rank,2)+n*n == fixed+2*n*n);
+      // The old full-rank estimate incorrectly admitted shell metadata here.
+      const auto old = df_source_response_fixed_workspace(n,a,1,false);
+      assert(coordinates_output+shell_bytes+(old+2*n*n)*sizeof(double) < generic_bytes);
+    }
+  }
+  assert(!df_response_optional_storage_fits(-1,1,maximum,maximum,maximum));
+  assert(!df_response_optional_storage_fits(1,-1,maximum,maximum,maximum));
+  assert(!df_response_optional_storage_fits(std::numeric_limits<long double>::infinity(),
+                                           1,maximum,maximum,maximum));
   // The actual A100 LR response ceiling must cover the declared compact
   // tensors, density upload and a 64-Q AO output panel. Dense spectral Z
   // alone exceeds that ceiling, independent of how its panels are tiled.
