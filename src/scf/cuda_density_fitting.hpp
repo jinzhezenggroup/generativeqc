@@ -368,6 +368,9 @@ struct CudaDensityFittingMetricDiagnostic {
   std::size_t effective_rank{};
   double absolute_threshold{};
   double condition_number{};
+  /** Preparation-time fixed-cutoff response admission, independent of rank.
+   * A truncated metric may be safe; an unresolved cutoff is not. */
+  bool response_valid{};
   std::size_t solver_device_workspace_bytes{};
   std::size_t solver_host_workspace_bytes{};
   /** Persistent device bytes retained after setup (all batch systems). */

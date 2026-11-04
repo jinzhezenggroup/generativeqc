@@ -128,10 +128,13 @@ DensityFittingMetricFactor factor_density_fitting_metric(const std::vector<doubl
   DensityFittingMetricFactor result;
   result.dimension = dimension;
   result.absolute_threshold = relative_threshold * largest;
+  result.response_valid = true;
+  const double resolution = 128 * std::numeric_limits<double>::epsilon() * largest;
   result.inverse_square_root.assign(metric_elements, 0.0);
   double smallest_retained = largest;
   for (std::size_t item = 0; item < dimension; ++item) {
     const double value = eigen.values[item];
+    if (std::abs(value - result.absolute_threshold) <= resolution) result.response_valid = false;
     if (value <= result.absolute_threshold) continue;
     ++result.effective_rank;
     smallest_retained = std::min(smallest_retained, value);
