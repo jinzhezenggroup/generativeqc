@@ -11,6 +11,7 @@
 #include <limits>
 #include <new>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string_view>
 #include <tuple>
@@ -438,6 +439,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool early_final_probe_requested{}, standard_convergence_model{};
   mutable std::optional<CudaKsFinalStateToken> cached_final_token;
   KsFinalStateDiagnostic final_validation_diagnostic;
+  cuda_ks_detail::Scalars last_physical;
+  std::string final_rejection_detail;
+  unsigned final_probe_iteration{};
   std::uint64_t owner{next_ks_owner()}, solve_epoch{}, generation{}, final_generation{};
   double previous_energy{std::numeric_limits<double>::infinity()};
   double previous_energy_correction{};
@@ -1506,12 +1510,54 @@ struct CudaKsPlan::Impl : KsStateStorage {
     multiply(hcore, false, x, tmp1);
     multiply(x, true, tmp1, tmp2);
     solve();
+    const bool qualified_core_gauge =
+        spins == 2 && n <= 64 && fitted_exchange && !budget_fock && !has_range_correction &&
+        options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
+            GENERATIVEQC_PRECISION_FP64 &&
+        !precision_schedule.any_lower_precision() &&
+        functional == semilocal_family_code(SemilocalFamily::B3lyp) &&
+        provider.system().basis_representation == core::kSphericalBasis &&
+        provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
+    if (qualified_core_gauge) {
+      read_status(false);
+      cuda_ks_detail::core_guess_frontier_tie(stream, n, occupations[1], eigenvalues, jk_error);
+      check(cudaGetLastError());
+      int tied{};
+      try {
+        check(cudaMemcpyAsync(&tied, jk_error, sizeof(tied), cudaMemcpyDeviceToHost, stream));
+        check(cudaStreamSynchronize(stream));
+      } catch (...) {
+        (void)cudaStreamSynchronize(stream);
+        throw;
+      }
+      movement.scalar_d2h_bytes += sizeof(tied);
+      ++movement.synchronizations;
+      if (tied) {
+        // A core eigensolver may return an arbitrary rotation of a tied pi
+        // pair. The subsequent beta-frontier rotation then selects a different
+        // basin on each numerical stack. Fix only this cold gauge; all physical
+        // operators, occupations and strict final-state gates stay unchanged.
+        multiply(hcore, false, x, tmp1);
+        multiply(x, true, tmp1, tmp2);
+        cuda_ks_detail::break_core_guess_ties(stream, n, tmp2);
+        check(cudaGetLastError());
+        solve();
+      }
+    }
     multiply(x, false, tmp2, tmp1);
+    if (qualified_core_gauge) {
+      // A relative sign is immaterial to each unmixed orbital projector but
+      // changes a frontier rotation. Define it before forming the spin seed.
+      cuda_ks_detail::orient_core_guess_orbitals(stream, n, tmp1);
+      check(cudaGetLastError());
+    }
     if (spins == 2) {
       check(cudaMemcpyAsync(tmp1 + matrix, tmp1, matrix * sizeof(double), cudaMemcpyDeviceToDevice,
                             stream));
-      // Reuse the common UHF frontier rotation, including beta=0/equal-spin
-      // branches; the scientific seed policy is identical to HF and CPU KS.
+      // Retain the common metric-preserving beta-frontier rotation, including
+      // beta=0/equal-spin guards; only the tied core gauge above differs.
       launch_mix_open_shell_guess_kernel(static_cast<unsigned>((n + 127) / 128), 128, 0, stream, 1,
                                          n, occupied, final_enabled, tmp1);
       check(cudaGetLastError());
@@ -2059,7 +2105,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
             sizeof(double) +
         output.dft_diagnostic.history.capacity() * sizeof(ScfIteration) + sizeof(host_xc_totals) +
         sizeof(warm_xc_totals) + sizeof(host_xc_error) + sizeof(host_spin_counts) +
-        sizeof(host_selected) + sizeof(host_all_spins) + sizeof(host_one) +
+        sizeof(host_selected) + sizeof(host_all_spins) + sizeof(host_one) + sizeof(last_physical) +
         (diis_work_enabled ? sizeof(scf::DiisWorkReadback) : 0) +
         final_validation_diagnostic.determinant.eigenframes.capacity() *
             sizeof(scf::solver::EigenFrameDiagnostic) +
@@ -2576,6 +2622,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_active = false;
     started = true;
     is_failed = false;
+    last_physical = {};
+    final_rejection_detail.clear();
+    final_probe_iteration = 0;
     stabilize_occupations = false;
     final_closure = false;
     // A resident, same-model warm proposal already passed the strict physical
@@ -2980,6 +3029,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       output.energy = diagnostic.components.total();
       output.energy_change = item.energy_change;
       output.density_rms = item.density_rms;
+      last_physical = item;
       diagnostic.history.push_back({output.iterations, diagnostic.components, item.energy_change,
                                     item.density_change, item.residual, diagnostic.electrons,
                                     false});
@@ -4119,6 +4169,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         physical.electronic_energy, physical.electronic_energy_correction, previous_energy,
         previous_energy_correction);
     output.density_rms = physical.density_rms;
+    last_physical = physical;
     const bool new_target_epoch =
         (mixed_precision_executed && refinement_iterations == 1) ||
         (nonlocal_seed_iterations && nonlocal_exact_epoch_iterations == 1 &&
@@ -4211,7 +4262,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Prove the force consumer's complete physical/canonical state before
     // publishing convergence or a warm seed. Rejection resumes the intact
     // DIIS proposal and invalidates only the borrowed orbital scratch.
-    if (converged && (standard_convergence_active() || automatic_program)) {
+    const bool fitted_final_probe =
+        fitted_exchange && !budget_fock && !has_range_correction && !nonlocal_correlation &&
+        !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
+        provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
+    // On a soft orbital manifold the extrapolated density can move much more
+    // than the actual unshifted canonical density. Audit the latter directly:
+    // its AO-maximum density bound is stricter than the proposal RMS gate.
+    if (fitted_final_probe && has_energy_history && full_energy_history &&
+        output.energy_change < options.energy_tolerance &&
+        physical.residual < physical_stationarity_tolerance() &&
+        physical.maximum_residual < physical_stationarity_tolerance()) {
+      early_final_probe_ran = true;
+      converged = probe_current_final_state();
+    } else if (converged && (standard_convergence_active() || automatic_program)) {
       early_final_probe_ran = true;
       converged = probe_current_final_state();
     } else if (!converged && early_final_probe_eligible && has_energy_history &&
@@ -4350,7 +4416,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       final_closure = true;
       output.converged = true;
       is_active = false;
-    } else if (automatic_program && converged) {
+    } else if ((automatic_program || fitted_final_probe) && converged) {
       // The shared canonical proof above audited this exact physical F[D]
       // against the original density tolerance, without changing D. Applying
       // another unextrapolated update can amplify roundoff at an unstable
@@ -4577,6 +4643,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     prepare_final_frame();
     scf::solver::FinalStateLimits limits;
     limits.density_tolerance = options.density_tolerance;
+    // Fitted callers already check the strict physical AO maximum. This
+    // optional override also tightens canonical density reconstruction, so
+    // preserve the original separate 1e-8 density contract for ordinary DF.
     if (standard_convergence_active() || automatic_program)
       limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;
@@ -4595,6 +4664,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
     KsFinalStateDiagnostic diagnostic;
     const bool accepted = validate_ks_final_state_evidence(identity, n, evidence, limits, products,
                                                            diagnostic, detail);
+    final_probe_iteration = output.iterations;
+    final_rejection_detail.clear();
+    if (!accepted) {
+      // The shared validator deliberately clears unauthorized output. Its
+      // independently computed products still explain which strict gate failed.
+      std::ostringstream rejection;
+      rejection.precision(17);
+      rejection << detail << "; commutator_ao_max=" << products.maximum_commutator
+                << ", density_rms=" << products.density_rms
+                << ", canonical_density_ao_max=" << products.maximum_density_error << " (limit="
+                << (limits.stationarity_tolerance
+                        ? std::min(*limits.stationarity_tolerance, limits.density_tolerance)
+                        : 1e-8)
+                << ')' << ", canonical_fock_mo_max=" << products.maximum_canonical_error
+                << ", electron_trace_error=" << products.maximum_trace_error
+                << ", idempotency_error=" << products.maximum_idempotency_error;
+      for (const auto& frame : products.eigenframes)
+        rejection << ", eigen_residual_scaled=" << frame.scaled_eigen_residual
+                  << ", eigen_metric_error=" << frame.maximum_metric_error;
+      final_rejection_detail = rejection.str();
+    }
     runtime::cuda_trace::trace_counter(accepted ? "early_final_accepts" : "early_final_rejects", 1);
     // Reuse only the verified physical eigenframe. The public force path still
     // performs its own token-bound proof before staging D/W in shared scratch.
@@ -4971,6 +5061,30 @@ void CudaKsPlan::begin(const std::vector<double>* seed, bool reuse_warm,
 bool CudaKsPlan::active() const noexcept { return impl_->is_active; }
 bool CudaKsPlan::pending() const noexcept { return impl_->is_pending; }
 bool CudaKsPlan::failed() const noexcept { return impl_->is_failed; }
+std::string CudaKsPlan::failure_detail() const {
+  if (impl_->output.converged) return {};
+  const auto& physical = impl_->last_physical;
+  std::ostringstream detail;
+  detail.precision(17);
+  detail << "CUDA KS " << (impl_->is_failed ? "numerical failure" : "not converged")
+         << ": iterations=" << impl_->output.iterations
+         << ", energy_change=" << impl_->output.energy_change
+         << " (limit=" << impl_->options.energy_tolerance << ')'
+         << ", density_spin_rms_max=" << physical.density_change
+         << " (limit=" << impl_->options.density_tolerance << ')'
+         << ", residual_spin_rms_max=" << physical.residual
+         << ", residual_ao_max=" << physical.maximum_residual
+         << " (limit=" << impl_->physical_stationarity_tolerance() << ')' << ", electrons=("
+         << physical.electrons[0] << ',' << physical.electrons[1] << ')'
+         << ", failure_mask=" << physical.failure
+         << " (XC=1,JK=2,eigensolver=4,nonfinite=8,range_JK=16,NLC_domain=32,NLC_pair=64)"
+         << ", occupation_stabilized=" << impl_->stabilize_occupations
+         << ", final_closure=" << impl_->final_closure;
+  if (!impl_->final_rejection_detail.empty())
+    detail << ", last_canonical_probe_iteration=" << impl_->final_probe_iteration
+           << ", last_canonical_rejection=" << impl_->final_rejection_detail;
+  return detail.str();
+}
 void CudaKsPlan::enqueue_iteration() { impl_->enqueue(); }
 bool CudaKsPlan::finish_iteration() { return impl_->finish(); }
 scf::ScfResult CudaKsPlan::result(bool export_density) {
