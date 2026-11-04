@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import ctypes
 import json
 import os
 import subprocess
@@ -236,9 +235,9 @@ def passed(evidence: dict) -> bool:
 def run(args: Any, *, base_library: Any, probe: dict, tools: dict, target: Any) -> dict:
     """Qualify a replay recipe without modifying the user's active profile index."""
     from ._dft_autotune import DFT_FUNCTIONALS, numerical_gate
-    from .autotune import _worker, read_xyz
+    from .autotune import _worker, inspect_library, read_xyz
     from .ks import GridSpec, KsOptions, resolve_ks_options
-    from .profiles import cache_root, compatibility_identity, select_library
+    from .profiles import cache_root, compatibility_identity
 
     fitted = args.component == "df"
     if args.repeats < 5 or args.method not in (("rhf",) if fitted else DFT_FUNCTIONALS):
@@ -266,6 +265,12 @@ def run(args: Any, *, base_library: Any, probe: dict, tools: dict, target: Any) 
         "architecture": target.architecture,
         "source_identity": probe["source_identity"],
     }
+    if not fitted:
+        workload["reference_engine"] = (
+            "reused"
+            if getattr(args, "reference_file", None)
+            else getattr(args, "reference_engine", "pyscf")
+        )
     if fitted:
         from ._df_autotune import numerical_gate
 
@@ -279,8 +284,8 @@ def run(args: Any, *, base_library: Any, probe: dict, tools: dict, target: Any) 
     directory = Path(
         tempfile.mkdtemp(prefix=f"{args.component}-run-", dir=root)
     ).resolve()
-    library, diagnostics = select_library(base_library, args.device_id)
-    library = Path(library._name).resolve()
+    selection = inspect_library(Path(base_library._name), args.device_id, select=True)
+    library = Path(selection["library"])
     report = {
         "schema": SCHEMA,
         "directory": str(directory),
@@ -292,7 +297,7 @@ def run(args: Any, *, base_library: Any, probe: dict, tools: dict, target: Any) 
         "toolchain": tools,
         "library": str(library),
         "library_hash": file_hash(library),
-        "incumbent_profile": diagnostics,
+        "incumbent_profile": selection["diagnostics"],
         "candidates": [],
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         "timing_scope": "frozen-density warm complete energy+analytic forces; excludes prepare/cold/warmup",
@@ -309,13 +314,18 @@ def run(args: Any, *, base_library: Any, probe: dict, tools: dict, target: Any) 
     try:
         workload_path = directory / "workload.json"
         atomic_json(workload_path, workload)
-        reference = _worker(
-            library,
-            workload_path,
-            directory / "reference.json",
-            reference=True,
-            timeout=remaining(),
-        )
+        if getattr(args, "reference_file", None):
+            from ._dft_reference import load
+
+            reference = load(args.reference_file, args.reference_sha256, workload)
+        else:
+            reference = _worker(
+                library,
+                workload_path,
+                directory / "reference.json",
+                reference=True,
+                timeout=remaining(),
+            )
         report["reference"] = reference
         baseline = worker(
             library,
@@ -402,7 +412,13 @@ def run(args: Any, *, base_library: Any, probe: dict, tools: dict, target: Any) 
         recipe_path = directory / "recipe.json"
         atomic_json(recipe_path, recipe)
         report["qualified_recipe"] = str(recipe_path)
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+    except (
+        OSError,
+        TypeError,
+        ValueError,
+        RuntimeError,
+        subprocess.SubprocessError,
+    ) as error:
         report["failure"] = str(error)
     finally:
         atomic_json(directory / "report.json", report)
@@ -411,7 +427,8 @@ def run(args: Any, *, base_library: Any, probe: dict, tools: dict, target: Any) 
 
 def replay(path: Path, output: Path, *, timeout: float = 600) -> dict:
     """Replay only a matching source/device/binary-bound, evidence-qualified workload."""
-    from .profiles import compatibility_identity, probe_device
+    from .autotune import inspect_library
+    from .profiles import compatibility_identity
 
     recipe = json.loads(path.read_text())
     if recipe.get("schema") != SCHEMA:
@@ -420,8 +437,7 @@ def replay(path: Path, output: Path, *, timeout: float = 600) -> dict:
     library = Path(recipe["library"])
     if file_hash(library) != recipe["library_hash"]:
         raise ValueError("execution recipe native library bytes changed")
-    native = ctypes.CDLL(str(library))
-    probe = probe_device(native, recipe["workload"]["device_id"])
+    probe = inspect_library(library, recipe["workload"]["device_id"])["probe"]
     if compatibility_identity(probe) != recipe["identity"]:
         raise ValueError("execution recipe device/source compatibility changed")
     report = json.loads(path.with_name("report.json").read_text())

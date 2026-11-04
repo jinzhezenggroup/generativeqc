@@ -386,6 +386,25 @@ products count actual consumer traversals after their final admission, not
 theoretical shell capacity. The diagnostic refuses graph capture and drains
 all borrowers before releasing its temporary counters, including on failure.
 
+The spatial low-order force owner fills its existing 256-descriptor queue with
+two 128-lane admission packets before one class-grouped drain. Its indexed page
+width follows that bounded capacity, independently of GPU identity. Other indexed
+consumers retain 64-candidate pages; unindexed claims retain complete block
+products through their existing fallback.
+Changing this width reduces indexed page claims, not quartet visits or primitive
+work. Traversal route zero can also include unchanged relative order-six pages, so
+its aggregate page count does not shrink by the indexed-page ratio. Compare
+per-class admission, screening, AO and primitive counts, and account separately
+for changed page counters. See the [queue-capacity decision](../../.agents/notes/proposed/2026-11-03-bounded-direct-force-queue-capacity-pages.md).
+
+Non-captured full-range hybrid Direct value calls with `GENERATIVEQC_DF_TRACE`
+also request a source-work census, which excludes the ordinary MD-Coulomb
+dispatch. Their traced J/K times
+therefore do not identify the clean endpoint's value-path bottleneck. Capture
+the actual native endpoint with the profiler API and both diagnostic variables
+unset when attributing its kernel time; retain intrusive traces only as
+separately labelled diagnostics.
+
 With the census enabled, `GENERATIVEQC_DIRECT_FORCE_CENSUS_SPLIT_LOW=1`
 separates the generated low-order and order-six spatial consumers for event
 attribution. This diagnostic repeats candidate enumeration; its measured

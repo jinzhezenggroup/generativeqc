@@ -37,6 +37,19 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument(
         "--method", choices=("rhf", "uhf", *DFT_FUNCTIONALS), default="rhf"
     )
+    references = root.add_mutually_exclusive_group()
+    references.add_argument(
+        "--reference-engine",
+        choices=("pyscf", "gpu4pyscf"),
+        default="pyscf",
+        help="independent DFT oracle; GPU4PySCF avoids a CPU SCF/gradient solve",
+    )
+    references.add_argument(
+        "--reference-file",
+        type=Path,
+        help="reuse a model-matched independent DFT reference document, not its timings",
+    )
+    root.add_argument("--reference-sha256", help="required SHA256 of --reference-file")
     root.add_argument(
         "--auxiliary-basis", help="fixed DF auxiliary basis (defaults to orbital basis)"
     )
@@ -98,6 +111,12 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser()
     args = arguments.parse_args(argv)
     is_dft = args.method not in ("rhf", "uhf")
+    if args.reference_engine == "gpu4pyscf" and not is_dft:
+        arguments.error("--reference-engine gpu4pyscf requires a DFT method")
+    if bool(args.reference_file) != bool(args.reference_sha256):
+        arguments.error("--reference-file and --reference-sha256 are required together")
+    if args.reference_file and not is_dft:
+        arguments.error("--reference-file requires a DFT method")
     if args.component in ("xc", "jk") and not is_dft:
         arguments.error("--component requires a DFT method")
     if args.component == "df" and args.method != "rhf":

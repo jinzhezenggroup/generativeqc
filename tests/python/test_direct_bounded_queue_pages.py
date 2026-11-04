@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_bounded_pages_cover_sparse_sorted_multisystem_inventory(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
-    """Cover empty/repeated rows, diagonal/tail pages and both consumer widths."""
+    """Prove exact coverage across page/CTA widths, empty rows and diagonal tails."""
     queue = (ROOT / "src/scf/cuda/direct_queue_index.cuh").read_text()
     header = (ROOT / "src/scf/cuda/direct_bounded_queue_page.cuh").read_text()
     decoder = header.split("namespace generativeqc::scf::cuda_execution {", 1)[1]
@@ -141,10 +141,15 @@ def test_cached_low_ownership_precedes_quartet_screening(
     source = (ROOT / "src/scf/cuda/direct_force_class_domains.cu").read_text()
     kernel = _definition(source, "void direct_force_spatial_spd_low_kernel(")
     begin = kernel.index("const auto order =")
-    # Retain the complete production admission block; the following CTA fence
-    # belongs to the separately GPU-qualified queue consumer.
-    admission = kernel[begin : kernel.index("__syncthreads();", begin)]
-    admission = admission[: admission.rfind("}")]
+    # Compile the admission branches independently of how many candidate
+    # packets the bounded queue retains before its CTA fence and drain.
+    admission = "\n".join(
+        (
+            kernel[begin : kernel.index(";", begin) + 1],
+            _definition(kernel, "if (order <= 6U"),
+            _definition(kernel, "else if (traversal)"),
+        )
+    )
     probe = tmp_path / "admission.cpp"
     probe.write_text(ADMISSION_PREFIX + admission + ADMISSION_DRIVER)
     executable = native_cxx.build_executable(
@@ -185,6 +190,7 @@ using namespace generativeqc::scf::cuda_execution;
 namespace detail = generativeqc::scf::detail;
 using Key = std::tuple<unsigned, unsigned, unsigned>;
 using Inventory = std::map<Key, unsigned>;
+template<std::size_t PageCandidates>
 void exercise(const std::vector<unsigned>& counts, unsigned seed, bool indexed, unsigned width) {
   const auto systems = counts.size();
   const auto block_size = detail::kBoundedDirectShellPairBlockSize;
@@ -214,21 +220,29 @@ void exercise(const std::vector<unsigned>& counts, unsigned seed, bool indexed, 
                           products.data(), static_cast<std::size_t>(products.back())};
   const detail::BoundedDirectBlockDomain domain{
       indexed ? prefix.data() : nullptr, blocks.back(), prefix.back()};
-  const auto claims = indexed ? prefix.back() * detail::kBoundedDirectIndexedCandidatePages
+  const auto claims = indexed ? prefix.back() * block_size * block_size / PageCandidates
                               : products.back();
   Inventory actual, expected;
   std::size_t visited_candidates = 0, empty_pages = 0;
   for (unsigned worker = 0; worker < 7; ++worker) {
     BoundedDirectQueuePage page{};
-    for (std::uint64_t claim = worker; bounded_direct_queue_page(batch, domain, claim, page);
+    for (std::uint64_t claim = worker; bounded_direct_queue_page<PageCandidates>(batch, domain, claim, page);
          claim += 7) {
+      if constexpr (PageCandidates == 64) {
+        BoundedDirectQueuePage default_page{};
+        assert(bounded_direct_queue_page(batch, domain, claim, default_page));
+        assert(std::tuple(page.system, page.first_block, page.second_block,
+                          page.candidate_begin, page.candidate_end) ==
+               std::tuple(default_page.system, default_page.first_block, default_page.second_block,
+                          default_page.candidate_begin, default_page.candidate_end));
+      }
       assert(claim < claims);
       assert(page.system >= 0 && static_cast<unsigned>(page.system) < systems);
       assert(page.first_block >= blocks[page.system] && page.first_block < blocks[page.system + 1]);
       assert(page.second_block >= blocks[page.system] && page.second_block <= page.first_block);
       assert(page.same_block == (page.first_block == page.second_block));
       if (page.candidate_begin >= page.candidate_end) ++empty_pages;
-      if (indexed) assert(page.candidate_end <= page.candidate_begin + 64);
+      if (indexed) assert(page.candidate_end <= page.candidate_begin + PageCandidates);
       for (auto packet = page.candidate_begin; packet < page.candidate_end; packet += width)
         for (unsigned lane = 0; lane < width && packet + lane < page.candidate_end; ++lane) {
           const auto candidate = packet + lane;
@@ -258,8 +272,8 @@ void exercise(const std::vector<unsigned>& counts, unsigned seed, bool indexed, 
   assert(actual == expected && visited_candidates == expected.size());
   for (const auto& [key, multiplicity] : actual) assert(multiplicity == 1);
   BoundedDirectQueuePage exhausted{};
-  assert(!bounded_direct_queue_page(batch, domain, claims, exhausted));
-  assert(!bounded_direct_queue_page(batch, domain, claims + 1, exhausted));
+  assert(!bounded_direct_queue_page<PageCandidates>(batch, domain, claims, exhausted));
+  assert(!bounded_direct_queue_page<PageCandidates>(batch, domain, claims + 1, exhausted));
   if (indexed && seed == 1 && !actual.empty()) assert(empty_pages > 0);
 }
 int main() {
@@ -267,7 +281,12 @@ int main() {
                             std::vector<unsigned>{0,1,31,32,33,65,0,129,0}})
     for (unsigned seed = 0; seed < 7; ++seed)
       for (bool indexed : {false,true})
-        for (unsigned width : {128U,256U}) exercise(counts, seed, indexed, width);
+        for (unsigned width : {128U,256U}) {
+          exercise<32>(counts, seed, indexed, width);
+          exercise<64>(counts, seed, indexed, width);
+          exercise<128>(counts, seed, indexed, width);
+          exercise<256>(counts, seed, indexed, width);
+        }
 }
 """
 
