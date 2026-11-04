@@ -50,25 +50,47 @@ def test_fast_cpu_uses_native_admission_and_keeps_independent_audit(name: str) -
 
 
 @pytest.mark.parametrize("name", ("h2", "h2o", "hf-plus-uhf"))
-def test_fp64_single_fp64_endpoint_against_independent_reference(name: str) -> None:
-    """FP64 preserves native forces without using the oracle in production."""
+@pytest.mark.parametrize("profile", ("standard", "fp64"))
+def test_strict_resident_endpoints_against_independent_reference(
+    name: str, profile: str
+) -> None:
+    """Resident geometry changes preserve pinned energy and covariant forces."""
     fixture = next(
         record for record in load_fixtures() if record["inputs"]["name"] == name
     )
     inputs = fixture["inputs"]
-    calculator = PrecisionCalculator(policy="fp64", **calculator_inputs(inputs))
-    output = calculator.singlepoint(
-        zip(inputs["atomic_numbers"], inputs["coordinates"], strict=True),
-        charge=inputs["charge"],
-        multiplicity=inputs["multiplicity"],
+    calculator = PrecisionCalculator(policy=profile, **calculator_inputs(inputs))
+    atoms = tuple(zip(inputs["atomic_numbers"], inputs["coordinates"], strict=True))
+    rotation = np.array(((0.0, -1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)))
+    transformed = tuple(
+        (atomic_number, rotation @ np.asarray(position) + (0.11, -0.07, 0.04))
+        for atomic_number, position in atoms
     )
-    assert output.precision_validation.status == "strict_fp64"
-    assert output.precision_validation.solve_count == 1
-    assert output.precision_validation.target is None
-    assert abs(output.energy - fixture["data"]["energy"]) < 1e-9
-    np.testing.assert_allclose(
-        output.forces, fixture["data"]["forces"], atol=1e-8, rtol=0
-    )
+    identities = []
+    try:
+        for phase in ("cold", "resident", "transformed", "cleared"):
+            if phase == "cleared":
+                calculator.clear_cache()
+            output = calculator.singlepoint(
+                transformed if phase == "transformed" else atoms,
+                charge=inputs["charge"],
+                multiplicity=inputs["multiplicity"],
+            )
+            assert output.precision_validation.status == "strict_fp64"
+            assert output.precision_validation.solve_count == 1
+            assert output.precision_validation.target is None
+            identities.append(output.precision_validation.model_identity)
+            assert abs(output.energy - fixture["data"]["energy"]) < 1e-9
+            expected_forces = np.asarray(fixture["data"]["forces"])
+            if phase == "transformed":
+                expected_forces = expected_forces @ rotation.T
+            np.testing.assert_allclose(
+                output.forces, expected_forces, atol=1e-8, rtol=0
+            )
+        assert identities[0] == identities[1] == identities[3]
+        assert identities[0] != identities[2]
+    finally:
+        calculator.clear_cache()
 
 
 @pytest.mark.parametrize("profile", ("audit_auto", "balanced", "strict"))

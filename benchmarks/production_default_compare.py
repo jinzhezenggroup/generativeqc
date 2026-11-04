@@ -94,15 +94,12 @@ def native_constructor_kwargs(method: str) -> dict[str, Any]:
 
 
 def make_native_calculator(method: str, arm: str) -> Any:
-    """Select real public default implementations; do not pass numerical flags."""
-    from generativeqc import Calculator, PrecisionCalculator
+    """Select the shared public policy owner without manual numerical flags."""
+    from generativeqc import PrecisionCalculator
 
-    options = native_constructor_kwargs(method)
-    if arm == "standard":
-        return Calculator(**options)
-    if arm == "fast":
-        return PrecisionCalculator(policy="fast", **options)
-    raise ValueError("native arm must be standard or fast")
+    if arm not in NATIVE_ARMS:
+        raise ValueError("native arm must be standard or fast")
+    return PrecisionCalculator(policy=arm, **native_constructor_kwargs(method))
 
 
 def reference_r2scan3c_basis() -> dict[str, list[list[Any]]]:
@@ -210,17 +207,13 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
     ):
         raise RuntimeError("native r2SCAN-3c omitted D4/gCP corrections")
 
-    # Fast is a public PrecisionCalculator wrapper; its internally selected
-    # Calculator may have DIFFERENT default controls and may perform an FP64
-    # reference audit. Read the result's actual status, never assume FP32.
-    candidate = calculator if arm == "standard" else calculator._candidate
+    # Both profiles use the same controller. Record actual candidate controls
+    # and complete audits rather than inferring arithmetic from the arm name.
+    candidate = calculator._candidate
     validation = result.precision_validation
-    if arm == "fast":
-        if validation is None or validation.profile != "fast":
-            raise RuntimeError("Fast result lacks its actual precision validation")
-        validation_info: dict[str, Any] | None = validation.to_dict()
-    else:
-        validation_info = None
+    if validation is None or validation.profile != arm:
+        raise RuntimeError(f"{arm} result lacks its actual precision validation")
+    validation_info = validation.to_dict()
     grid = candidate.ks_options.grid
     guess = candidate.initial_guess
     initial = result.initial_guess if isinstance(result.initial_guess, dict) else None
@@ -228,9 +221,7 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
     gradient = work.get("gradient") if isinstance(work, dict) else None
     settings = {
         "precision_profile": "fp64" if arm == "standard" else "fast",
-        "selected_candidate_precision": (
-            "fp64" if arm == "standard" else calculator._candidate_precision
-        ),
+        "selected_candidate_precision": calculator._candidate_precision,
         "initial_guess": guess.kind if guess is not None else "hcore",
         "initial_guess_policy": "auto",
         "initial_guess_executed": (
