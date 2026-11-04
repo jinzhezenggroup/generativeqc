@@ -131,8 +131,9 @@ def test_explicit_frame_default_grid_energy_and_forces(
 
     Exact feature verification must survive native owners, force scratch and
     geometry updates, not just the standalone feature kernels. Preserve the
-    existing complete-CUDA gates of 2e-9 Eh and 1e-7 Eh/Bohr. A paired bitwise
-    check is additional coverage, not a replacement for that independent oracle.
+    existing complete-CUDA gates of 2e-9 Eh and 1e-7 Eh/Bohr. Pair the matrix
+    route at those same gates; parallel force reductions do not promise bitwise
+    endpoint reproducibility even though occupied feature inputs must match.
     """
     from generativeqc import Calculator
     from pyscf import dft, gto, lib
@@ -219,6 +220,20 @@ def test_explicit_frame_default_grid_energy_and_forces(
                                 "occupied_frame_generations": frames,
                             }
                         )
+                        if selector == "1":
+                            original_energy, original_forces = baseline[index]
+                            difference = np.asarray(result.forces) - original_forces
+                            observations[-1].update(
+                                matrix_pair_energy_error=abs(
+                                    result.energy - original_energy
+                                ),
+                                matrix_pair_force_max_error=float(
+                                    np.max(np.abs(difference))
+                                ),
+                                matrix_pair_force_rms_error=float(
+                                    np.sqrt(np.mean(difference**2))
+                                ),
+                            )
                         (
                             tmp_path / "native-default-grid-energy-forces.json"
                         ).write_text(json.dumps(observations, indent=2) + "\n")
@@ -235,10 +250,14 @@ def test_explicit_frame_default_grid_energy_and_forces(
                             )
                         else:
                             original_energy, original_forces = baseline[index]
-                            assert result.energy == original_energy
-                            np.testing.assert_array_equal(
-                                np.asarray(result.forces).view(np.uint64),
-                                original_forces.view(np.uint64),
+                            assert result.energy == pytest.approx(
+                                original_energy, abs=2e-9, rel=0
+                            )
+                            np.testing.assert_allclose(
+                                result.forces,
+                                original_forces,
+                                atol=1e-7,
+                                rtol=0,
                             )
             finally:
                 calculator.clear_cache()

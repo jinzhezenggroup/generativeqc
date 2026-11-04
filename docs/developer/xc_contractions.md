@@ -85,19 +85,23 @@ arithmetic contract.
 
 ## Explicit native execution
 
-The CUDA KS owner automatically requests occupied-orbital density features for
-eligible strict-FP64 meta-GGA proposals. Only the token-bound canonical frame
+The CUDA KS owner retains ordinary matrix features by default. Its explicit
+occupied route is restricted to eligible strict-FP64 meta-GGA proposals and
+exact original-D feature identity, as specified in the
+[native certificate contract](xc_native_cuda.md#occupied-density-certificates).
+Only the token-bound canonical frame
 that actually formed the accepted density can supply the four orbital jets,
-and a tile uses it only when its occupied rank is smaller than its active AO
-count. Existing density scratch holds the projection; potential assembly still
+and a tile uses it only when twice its occupied rank fits its active AO count.
+Existing density scratch holds the projection and outward bounds; potential assembly still
 uses the original AO jets. No extra allocation or screening change is required.
 
 Every completion retires that frame lease. Held confirmations, rejected probes,
 imported densities, mixed precision, nonlocal and response work, and missing or
 stale frames retain matrix contraction. LDA/GGA's one-jet route is unchanged.
-`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=0` disables the request for comparison or
-rollback; unset or `1` requests it without bypassing any admission check.
-Other explicit values also retain matrix contraction.
+Only `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` requests the verified experimental
+route, without bypassing any admission check. Unset, `0` and other values retain
+matrix contraction; prior automatic-route timing does not qualify the added
+exact-verification work.
 
 The CUDA density-feature reduction uses one warp per spin/grid point for
 32 or more AOs. Lanes traverse adjacent AO components and reduce the existing
