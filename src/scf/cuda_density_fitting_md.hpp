@@ -4,6 +4,9 @@
 
 namespace generativeqc::scf {
 
+/** Finite ceiling shared by optional raw-source admission and its tile planner. */
+inline constexpr std::size_t kCudaDfMdRawPreparationLimit = 256U << 20;
+
 /** Prepare reusable Hermite E for a fresh single-system packed raw source.
  * The enclosing planner must pass only capacity left AFTER its unchanged
  * resident value/SCF/setup reservation. This does not resize its panels or

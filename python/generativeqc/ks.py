@@ -559,11 +559,12 @@ def split_hybrid_df_force_admitted(
 
 
 def mixed_density_fitted_force_eligible(method_ir: MethodIR, *, backend: str) -> bool:
-    """Admit fitted primary plus exact-LR forces by graph/provider capabilities.
+    """Admit fitted-primary composite forces by graph/provider capabilities.
 
     CPU and CUDA share graph admission, but qualify their own execution owners.
-    This is not range-separated RI-K: DF owns full-range J/K and a separate
-    Direct owner supplies the LR correction. The compiler's external source
+    DF owns full-range J/K; the prepared LR proof selects its independent fitted
+    or Direct correction and matching derivative owner. Graph admission alone
+    does not choose the radial approximation. The compiler's external source
     inventory and generated native family record must both agree. Basis,
     Hamiltonian, precision and backend checks remain with the public owner.
     A zero LR correction cannot publish distinct SR/LR rows and stays rejected.

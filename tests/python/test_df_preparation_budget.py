@@ -627,6 +627,41 @@ int main() {
       }
     }
   }
+  // An optional source must displace staging, never admitted B/U or its cap.
+  // A successful ceiling reservation also proves every smaller actual source
+  // can be replanned without losing the original retained representation.
+  unsigned source_admissions = 0;
+  for (const auto orbitals : {std::size_t(24), std::size_t(96), std::size_t(768)}) {
+    const auto auxiliaries = orbitals == 768 ? 3616 : 4 * orbitals;
+    for (const auto rank : {std::size_t(0), orbitals / 5}) {
+      for (const auto bytes : {std::size_t(1ULL<<20), std::size_t(32ULL<<20),
+                              std::size_t(2ULL<<30), std::size_t(12354066476ULL)}) {
+        const auto plan_source = [&](std::size_t extra) {
+          return plan_requested_density_fitting_tiles(
+              DfPairStorageRequest::Automatic,1,orbitals,auxiliaries,orbitals,rank,
+              bytes,(64ULL<<10)+extra,true,0,true);
+        };
+        try {
+          const auto incumbent = plan_source(0);
+          const auto reserved = plan_source(256ULL<<20);
+          if (!incumbent.stores_full_three_center || !reserved.stores_full_three_center ||
+              reserved.value_storage.pairs != incumbent.value_storage.pairs ||
+              reserved.value_storage.rank_capacity < incumbent.value_storage.rank_capacity)
+            continue;
+          ++source_admissions;
+          for (const auto actual : {std::size_t(1),std::size_t(105901184),
+                                    std::size_t(256ULL<<20)}) {
+            const auto final = plan_source(actual);
+            if (!final.stores_full_three_center || final.peak_workspace_bytes > bytes ||
+                final.value_storage.pairs != incumbent.value_storage.pairs ||
+                final.value_storage.rank_capacity < incumbent.value_storage.rank_capacity)
+              return 47;
+          }
+        } catch (const DensityFittingBudgetError&) {}
+      }
+    }
+  }
+  if (!source_admissions) return 48;
   try {
     (void)method_owned_df_resident_capacity(1,1,2,0);
     return 42;

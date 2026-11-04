@@ -20,6 +20,12 @@ ATOMS = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def explicit_direct_range_anchor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The lazy anchor belongs to exact LR, including automatic admission fallback."""
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
+
+
 @pytest.fixture(scope="module")
 def independent_reference() -> dict[str, Any]:
     """Independently reconverge fitted full-range J/K plus exact range K."""

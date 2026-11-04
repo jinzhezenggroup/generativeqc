@@ -47,8 +47,11 @@ def synthetic_basis() -> BasisSet:
 @pytest.mark.parametrize("unrestricted", (False, True))
 @pytest.mark.parametrize("fitted", (False, True))
 def test_ecp_hvp_includes_effective_charges_and_both_residual_channels(
-    unrestricted: bool, fitted: bool, tmp_path: Path
+    unrestricted: bool, fitted: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    if fitted:
+        # Second-order DF coverage uses its qualified fitted-primary/exact-LR model.
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
     atoms = [("Na", (0.13, -0.21, 0.17)), ("H", (0.43, 0.19, 2.1))]
     direction = np.array([[0.02, -0.03, 0.1], [-0.02, 0.03, -0.1]])
     left = np.array([[0.03, 0.04, -0.07], [-0.03, -0.04, 0.07]])
