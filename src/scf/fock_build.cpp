@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "generativeqc/generativeqc.hpp"
 #include "tensor/cpu_compensated_sum.hpp"
 #include "tensor/cpu_linalg.hpp"
 
@@ -281,7 +282,8 @@ FockProviderCapabilities fock_provider_capabilities(FockApproximation approximat
 void require_fock_provider_executable(FockApproximation approximation, FockBackend backend) {
   const auto& provider = fock_provider_registration(approximation, backend);
   if (!runtime::provider_executable(provider))
-    throw std::runtime_error(runtime::provider_diagnostic(provider, "Fock preparation"));
+    throw generativeqc::Error(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                              runtime::provider_diagnostic(provider, "Fock preparation"));
 }
 
 FockCosxSpec make_cosx_v1_spec(std::size_t radial_points, std::size_t angular_polar,

@@ -26,6 +26,10 @@ void ecp_quadrature(unsigned radial, unsigned angular, std::vector<EcpRadialPoin
 EcpData ecp_integrals(const core::System& system, unsigned radial = 160, unsigned angular = 32,
                       bool derivatives = true);
 EcpData checked_ecp_integrals(const core::System& system, bool derivatives);
+/** Conservative numeric workspace for checked value/first-derivative consumers.
+ * Includes both grids, public matrices, radial staging and host/device metadata;
+ * callers reserve it in addition to their retained reference/correlation state. */
+std::size_t ecp_workspace_capacity(const core::System& system);
 void add_ecp(const EcpData& ecp, std::vector<double>& hcore, std::vector<double>& derivative);
 
 }  // namespace generativeqc::integrals

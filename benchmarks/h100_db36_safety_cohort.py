@@ -1,5 +1,7 @@
 """Recompute frozen DB36 H100 safety proofs from original observations."""
 
+from __future__ import annotations
+
 import hashlib
 import json
 import lzma
@@ -8,8 +10,12 @@ import sys
 import tarfile
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from benchmarks import h100_production_cohort as support
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTORY = ROOT / "benchmarks/results/h100-sm90-db36-safety-20261103"
@@ -181,9 +187,9 @@ def install(task: Path, cohort: str) -> None:
                     support.copy_exact(source, task / relative)
 
 
-def reader(task: Path, name: str) -> None:
+def reader(task: Path, name: str, *arguments: str) -> None:
     result = subprocess.run(
-        [sys.executable, str(task / name)],
+        [sys.executable, str(task / name), *arguments],
         cwd=task,
         env=support.ENV,
         text=True,
@@ -214,12 +220,13 @@ def build_producers(task: Path) -> None:
                 stream.write(data)
 
 
-def replay() -> dict:
+def replay(*, extension: Callable[[Path, Path], dict] | None = None) -> dict:
     check(
         sys.version_info >= (3, 12) and not sys.flags.optimize,
         "Use unoptimized Python3.12+",
     )
     publication = checked_publication()
+    additional = None
     with tempfile.TemporaryDirectory(prefix="gqc-db36-safety-") as temporary:
         base = Path(temporary)
         task = base / "tasks/cohort-db36"
@@ -295,7 +302,9 @@ def replay() -> dict:
             and spatial["full_EF"] == spatial["clean_timing_votes"] == 0,
             "Public/spatial population differs",
         )
-    return {
+        if extension is not None:
+            additional = extension(base, task)
+    result = {
         "status": "PASS_PUBLIC_DB36_SEVEN_SAFETY_PROOFS_ONLY",
         "source_revision": SOURCE,
         "source_tree": TREE,
@@ -308,6 +317,9 @@ def replay() -> dict:
         "clean_timing_votes": 0,
         "majority_accepted": False,
     }
+    if additional is not None:
+        result["additional"] = additional
+    return result
 
 
 def main() -> None:

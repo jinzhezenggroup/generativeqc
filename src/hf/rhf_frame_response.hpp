@@ -197,7 +197,8 @@ struct RHFFrameResponseResult {
 
 /** Compose matrix-sized TensorIR pullbacks, reference-matched G(D)=J(D)-K(D)/2,
  * matrix-free physical Z response, AO Pulay and reference nuclear sources.
- * The reference must belong to this exact normalized all-electron system.
+ * The reference must belong to this exact normalized scalar Hamiltonian,
+ * including any ECP core counts and potential parameters.
  * Canonical density/Fock consistency is audited before response. bar_fock_mo
  * uses full row-major Frobenius coordinates; bar_frame is dL/dC in the original
  * AO frame. Both must already include all correlation/triples sources.

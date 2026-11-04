@@ -103,7 +103,7 @@ struct RccsdtForceResult {
  * response and derivative on host. The CUDA owner runs generated Lambda,
  * triples, parameter and Hamiltonian/orbital actions on device; GMRES control
  * and the final MO-to-AO weight pullback retain their host ownership.
- * The final nuclear derivative contraction uses the CUDA consumer. DF, frozen-core, ECP
+ * The final nuclear derivative contraction uses the CUDA consumer. DF, frozen-core
  * and open-shell variants remain separate capabilities. max_bytes is the complete numeric
  * allowance, including the borrowed molecule, physical reference, CC problem/amplitudes
  * and occupied/virtual energy vectors, as in plan_rccsdt_force_cpu.

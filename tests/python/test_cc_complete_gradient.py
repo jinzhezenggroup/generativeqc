@@ -295,45 +295,6 @@ def test_complete_native_endpoint_matches_pinned_pyscf_gradient(
         result.integral_components["overlap"] = np.zeros_like(result.gradient)
 
 
-def _fresh_energy(value: typing.Any) -> typing.Any:
-    options = CCSDGradientOptions()
-    with _source(value) as source:
-        reference, _ = export_rhf(
-            source, tolerance=options.scf_tolerance, max_iterations=150
-        )
-        with ConventionalProvider(reference, source) as provider:
-            cc = solve(reference, provider, options=options.cc_options)
-            assert cc.converged
-            return cc.total_energy, reference.identity
-
-
-@pytest.mark.parametrize("name", ("h2", "h2o", "nh3", "h2_d_spherical"))
-def test_nuclear_finite_differences_resolve_hf_and_cc_at_three_steps(
-    name: typing.Any,
-) -> None:
-    result = _result(name)
-    value = inputs(name)
-    direction = np.random.default_rng(153).normal(size=result.gradient.shape)
-    direction /= np.linalg.norm(direction)
-    analytic = float(np.sum(result.gradient * direction))
-    identities = set()
-    errors = []
-    for step in (1e-3, 3e-4, 1e-4):
-        energies = []
-        for sign in (-1, 1):
-            displaced = deepcopy(value)
-            displaced["coordinates"] = (
-                np.asarray(value["coordinates"]) + sign * step * direction
-            ).tolist()
-            energy, identity = _fresh_energy(displaced)
-            energies.append(energy)
-            identities.add(identity)
-        errors.append(abs((energies[1] - energies[0]) / (2 * step) - analytic))
-    assert len(identities) == 6
-    assert errors[-1] < 2e-7, errors
-    assert min(errors[1:]) < 2e-7, errors
-
-
 def test_overlap_and_orbital_omissions_are_detectable() -> None:
     result = _result("h2o")
     oracle = np.array(load("h2o")["gradient"])

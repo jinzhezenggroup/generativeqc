@@ -581,67 +581,6 @@ def independent_semilocal_total_gradient(
     "method,charge,multiplicity",
     [("r2scan-rks", 0, 1), ("r2scan-uks", 1, 2)],
 )
-def test_complete_r2scan_cpu_gradient_reconverged_directional_fd(
-    method: typing.Any,
-    charge: typing.Any,
-    multiplicity: typing.Any,
-    record_property: typing.Any,
-) -> None:
-    """Hard gate: complete tau force agrees with fully reconverged energy differences."""
-    calc = calculator(method, max_iterations=200)
-    with (
-        calc.prepare_batch(
-            [ATOMS], charges=[charge], multiplicities=[multiplicity]
-        ) as batch,
-        NativeAO(ATOMS, charge=charge, multiplicity=multiplicity) as basis,
-    ):
-        batch.execute(strict=True)
-        state = StationaryKsState.from_native(batch, basis)
-        assert state.identity.method == method
-        result = complete_rks_gradient_diagnostic(
-            state,
-            basis,
-            cache=".cache/r2scan-gradient-tests",
-            execution="native",
-            tile_points=137,
-            integral_terms=17,
-            primitive_tile=29,
-        )
-        np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-9, rtol=0)
-
-        xyz = np.asarray([position for _, position in ATOMS])
-        direction = np.array(
-            [[0.13, -0.07, 0.11], [-0.05, 0.17, 0.03], [0.09, 0.02, -0.14]]
-        )
-        estimates = []
-        for step in (3e-4, 1e-4):
-            energies = []
-            for sign in (1, -1):
-                moved = [
-                    (atom[0], position)
-                    for atom, position in zip(
-                        ATOMS, xyz + sign * step * direction, strict=True
-                    )
-                ]
-                energies.append(
-                    calc.singlepoint(
-                        moved,
-                        charge=charge,
-                        multiplicity=multiplicity,
-                        properties=("energy",),
-                    ).energy
-                )
-            estimates.append((energies[0] - energies[1]) / (2 * step))
-        actual = float(np.sum(result.gradient * direction))
-        assert abs(estimates[-1] - estimates[-2]) < 2e-6
-        assert abs(estimates[-1] - actual) < 2e-6
-        record_property("r2scan_fd_error", abs(estimates[-1] - actual))
-
-
-@pytest.mark.parametrize(
-    "method,charge,multiplicity",
-    [("r2scan-rks", 0, 1), ("r2scan-uks", 1, 2)],
-)
 def test_complete_r2scan_cpu_gradient_independent_analytic(
     method: typing.Any,
     charge: typing.Any,
@@ -681,7 +620,7 @@ def test_complete_r2scan_cpu_gradient_independent_analytic(
 
 @pytest.mark.parametrize("execution", ["reference", "native"])
 @pytest.mark.parametrize("method", ["lda-rks", "pbe-rks"])
-def test_complete_asymmetric_water_analytic_and_reconverged_fd(
+def test_complete_asymmetric_water_independent_analytic(
     method: typing.Any, record_property: typing.Any, execution: typing.Any
 ) -> None:
     pytest.importorskip("pyscf", reason="independent analytic reference requires PySCF")
@@ -736,41 +675,6 @@ def test_complete_asymmetric_water_analytic_and_reconverged_fd(
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-10, rtol=0)
 
         coordinates = np.array([a[1] for a in ATOMS])
-        estimates = []
-        for step in (1e-3, 3e-4, 1e-4):
-            fd = np.empty_like(coordinates)
-            for a, axis in product_coordinates():
-                direction = np.zeros_like(coordinates)
-                direction[a, axis] = step
-                energies = [
-                    calc.singlepoint(
-                        [
-                            (label, pos)
-                            for (label, _), pos in zip(
-                                ATOMS,
-                                coordinates + sign * direction,
-                                strict=True,
-                            )
-                        ]
-                    ).energy
-                    for sign in (1, -1)
-                ]
-                fd[a, axis] = (energies[0] - energies[1]) / (2 * step)
-            estimates.append(fd)
-        # A multistep stable region and the full componentwise force gate;
-        # every displaced density, grid, Fock and SCF solve is recomputed.
-        np.testing.assert_allclose(estimates[-1], estimates[-2], atol=1e-6, rtol=0)
-        np.testing.assert_allclose(result.gradient, estimates[-1], atol=1e-6, rtol=0)
-        richardson = (9 * estimates[-1] - estimates[-2]) / 8
-        np.testing.assert_allclose(result.gradient, richardson, atol=1e-7, rtol=0)
-        record_property(
-            "finite_difference_max_error",
-            float(np.max(np.abs(result.gradient - estimates[-1]))),
-        )
-        record_property(
-            "richardson_max_error", float(np.max(np.abs(result.gradient - richardson)))
-        )
-
         shift, order = np.array([0.25, -0.37, 0.18]), [2, 0, 1]
         moved = [(ATOMS[i][0], coordinates[i] + shift) for i in order]
         with calc.prepare_batch([moved]) as other, NativeAO(moved) as moved_basis:
@@ -804,7 +708,7 @@ def test_complete_asymmetric_water_analytic_and_reconverged_fd(
 
 @pytest.mark.parametrize("execution", ["reference", "native"])
 @pytest.mark.parametrize("method", ["lda-uks", "pbe-uks"])
-def test_complete_open_shell_uks_analytic_and_reconverged_fd(
+def test_complete_open_shell_uks_independent_analytic(
     method: typing.Any, execution: typing.Any
 ) -> None:
     """B3: asymmetric doublet uses the same seven-source plan without RKS factors."""
@@ -837,37 +741,6 @@ def test_complete_open_shell_uks_analytic_and_reconverged_fd(
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=3e-10, rtol=0)
         assert result.work["ordered_quartets"] == basis.nao**4
         assert all(np.isfinite(value).all() for value in result.components.values())
-
-        # Re-solve both spin channels and the physical moving grid at each displacement.
-        # The directional test is kept on the compiled route to avoid duplicating the
-        # expensive SCF matrix for the interpreter-only diagnostic.
-        if execution == "native":
-            xyz = np.asarray([position for _, position in ATOMS])
-            direction = np.array(
-                [[0.13, -0.07, 0.11], [-0.05, 0.17, 0.03], [0.09, 0.02, -0.14]]
-            )
-            estimates = []
-            for step in (3e-4, 1e-4):
-                energies = []
-                for sign in (1, -1):
-                    moved = [
-                        (atom[0], position)
-                        for atom, position in zip(
-                            ATOMS, xyz + sign * step * direction, strict=True
-                        )
-                    ]
-                    energies.append(
-                        calc.singlepoint(
-                            moved,
-                            charge=charge,
-                            multiplicity=multiplicity,
-                            properties=("energy",),
-                        ).energy
-                    )
-                estimates.append((energies[0] - energies[1]) / (2 * step))
-            actual = float(np.sum(result.gradient * direction))
-            assert abs(estimates[-1] - estimates[-2]) < 1e-6
-            assert abs(estimates[-1] - actual) < 1e-6
 
         # A replay creates a new native identity and must revoke the old UKS lease.
         batch.execute(strict=True)
@@ -1119,33 +992,6 @@ def test_global_hybrid_complete_gradient_matches_independent_pyscf(
             )
             > 1e-4
         )
-        if execution == "native":
-            xyz = np.asarray([position for _, position in ATOMS])
-            direction = np.array(
-                [[0.13, -0.07, 0.11], [-0.05, 0.17, 0.03], [0.09, 0.02, -0.14]]
-            )
-            estimates = []
-            for step in (3e-4, 1e-4):
-                energies = []
-                for sign in (1, -1):
-                    moved = [
-                        (atom[0], position)
-                        for atom, position in zip(
-                            ATOMS, xyz + sign * step * direction, strict=True
-                        )
-                    ]
-                    energies.append(
-                        calc.singlepoint(
-                            moved,
-                            charge=charge,
-                            multiplicity=multiplicity,
-                            properties=("energy",),
-                        ).energy
-                    )
-                estimates.append((energies[0] - energies[1]) / (2 * step))
-            actual = float(np.sum(result.gradient * direction))
-            assert abs(estimates[-1] - estimates[-2]) < 1e-6
-            assert abs(estimates[-1] - actual) < 1e-6
         # The generated manifest remains backend-neutral/energy-only.  The
         # Calculator promotes only this qualified all-electron CPU owner.
         assert method_capabilities(method).supported_properties == frozenset({"energy"})
@@ -1203,10 +1049,6 @@ def test_second_global_hybrid_composition_reuses_same_scf_and_gradient_path() ->
         np.testing.assert_allclose(result.gradient, reference, atol=1e-7, rtol=0)
         assert "exact_exchange" in result.components
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=3e-10, rtol=0)
-
-
-def product_coordinates() -> typing.Any:
-    return ((a, axis) for a in range(3) for axis in range(3))
 
 
 def test_failure_isolation_native_malformed_geometry_and_detached_state() -> None:

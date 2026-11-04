@@ -2537,6 +2537,8 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
         expected_route = "ecp"
         calculator._create_native_system(context, atoms, -1, 2)
         calculator._density_fitting_mode = native.DENSITY_FITTING_CUDA
+        calculator._create_native_system(context, atoms, -1, 2)
+        calculator._method = native.METHOD_RHF
         native_seen = False
         try:
             calculator._create_native_system(context, atoms, -1, 2)

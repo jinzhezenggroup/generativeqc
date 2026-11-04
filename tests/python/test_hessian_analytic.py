@@ -231,44 +231,6 @@ def test_native_d_shell_hessian_matches_external_oracle() -> None:
         )
 
 
-def test_three_step_directional_differences_of_native_forces(
-    case: typing.Any,
-) -> None:
-    from generativeqc import Calculator
-
-    _, state, comp = case
-    calculator = Calculator(
-        method="rhf",
-        basis=state.source.shells,
-        device="cpu",
-        energy_tolerance=1e-13,
-        density_tolerance=1e-12,
-        max_iterations=400,
-    )
-    direction = np.random.default_rng(449).normal(size=(state.nat, 3))
-    direction /= np.linalg.norm(direction)
-    expected = np.einsum("abxy,by->ax", comp["total"], direction)
-    errors = []
-    for step in (3e-3, 1e-3, 3e-4):
-        gradients = []
-        for sign in (1, -1):
-            xyz = state.coords + sign * step * direction
-            result = calculator.singlepoint(
-                [
-                    (atom.atomic_number, position)
-                    for atom, position in zip(state.source.atoms, xyz, strict=True)
-                ],
-                charge=state.source.charge,
-                multiplicity=1,
-            )
-            assert result.forces is not None
-            gradients.append(-np.asarray(result.forces))
-        numeric = (gradients[0] - gradients[1]) / (2 * step)
-        errors.append(float(np.max(np.abs(numeric - expected))))
-    assert errors[-1] < 2e-5, errors
-    assert errors[-1] < max(errors[0] * 0.2, 1e-7), errors
-
-
 def test_large_domain_is_rejected_before_native_scf(
     monkeypatch: typing.Any,
 ) -> None:

@@ -458,31 +458,6 @@
       "reason": "Exact source-bound original full E/F, failure/refusal, lifecycle and actual route observations, independently CPU replayable; preserves Budget5/7 and original facade failures with separately scoped Budget9/API fallback acceptance. No clean timing or later-source qualification.",
       "sha256": "bdaa53bcc2e5fd2c1e21a0cc75aad0aa45294192e67495798cf3be569008c8a2"
     },
-    "benchmarks/results/h100-sm90-cd2b-final-20261103/actual-result-audit.json.xz": {
-      "owner": "H100 frozen CD2B final fixed30 delivery",
-      "reason": "Exact completed180-process/720-full-EF original archive part or lossless scientific metadata/failure record. All30 physical inputs and every unfavorable outcome retained; no source or storage gate relaxation.",
-      "sha256": "ba70ef611e6ff4cbe49671005011e6306627cbc07c4995eeddb1d266ccf216ed"
-    },
-    "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-completed.tar.xz.part00": {
-      "owner": "H100 frozen CD2B final fixed30 delivery",
-      "reason": "Exact completed180-process/720-full-EF original archive part or lossless scientific metadata/failure record. All30 physical inputs and every unfavorable outcome retained; no source or storage gate relaxation.",
-      "sha256": "9954b73488a24c9b8f5c080066602e9062889aff5771c774e66bd7d158c198a5"
-    },
-    "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-completed.tar.xz.part01": {
-      "owner": "H100 frozen CD2B final fixed30 delivery",
-      "reason": "Exact completed180-process/720-full-EF original archive part or lossless scientific metadata/failure record. All30 physical inputs and every unfavorable outcome retained; no source or storage gate relaxation.",
-      "sha256": "f920881d29a149d3ef460503b53bb014b8881b0c1ea1b9685ed0ef4e959c2ecf"
-    },
-    "benchmarks/results/h100-sm90-cd2b-final-20261103/final-pairs-v3-download-manifest.json.xz": {
-      "owner": "H100 frozen CD2B final fixed30 delivery",
-      "reason": "Exact completed180-process/720-full-EF original archive part or lossless scientific metadata/failure record. All30 physical inputs and every unfavorable outcome retained; no source or storage gate relaxation.",
-      "sha256": "8f6cfed046a0bb5d966601eac7a880ca381dc18cd890be64d59189d58aae6aa9"
-    },
-    "benchmarks/results/h100-sm90-cd2b-final-20261103/precompute-failures-v1.tar.xz": {
-      "owner": "H100 frozen CD2B final fixed30 delivery",
-      "reason": "Exact completed180-process/720-full-EF original archive part or lossless scientific metadata/failure record. All30 physical inputs and every unfavorable outcome retained; no source or storage gate relaxation.",
-      "sha256": "a95df8789c09adf7ad0f0f3aeffd6feafc1f6349f771b0a5311d7cbef64e60b8"
-    },
     "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-metadata.tar.xz": {
       "owner": "H100 frozen DB36 safety delivery",
       "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
@@ -537,6 +512,51 @@
       "owner": "H100 frozen DB36 safety delivery",
       "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
       "sha256": "774a31d38216c436be4e0cb5244072ed83e8302b39fa012d7c75767fa3db2ce6"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/nsys-v1-analysis.tar.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "9f7c5ba3a8a6fd10cea9e15d34772d346d12b514d9870208e04b1e48f6b5bba1"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/nsys-v1-analysis-download.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "d65df5c7f96070ed650c069bd21804ad9060a0a3424a8314c217756d9dea09ee"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/df-molecular-v1-completed.tar.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "69483f766a0247bfb28b486e9f3c1d3564283e71ce5d973131887fa8a11ec02e"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/df-molecular-v1-download-manifest.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "7e37076e017602c764d2ae009df8c2bebcf9727f9b094e5ef8a0eb7ff7c87629"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/screening-v1-completed.tar.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "ad379382ee761ea3a28b62640b07c0ba72ade613ac82a86d4cfa84e55ae3e121"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/screening-v1-download-manifest.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "c0901d3adb3534c7c77436f19b058ea944e60600007e2f03aba9775f68c5f213"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/source-applicability-db36-ledger.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "6da5ad85878568b2de63739ca3ff95515f72a91942fb6aa70356ed51492d3f53"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/source-applicability-7013-ledger.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "62f1c74c66ccb8898c12bfd9eb332c6584eccc08880da12d220d77b27b87a9dd"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/source-applicability-review.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "334bad59067eee5ef1a1336b0b346a0f8d8e55032abd8c87d4981f90b4f82871"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

@@ -622,9 +622,11 @@ Default SCF convergence controls are queried through
 method layer uses the generated complete-model catalog and the existing default-grid
 owner for its scoped CUDA policy. Python transports the already selected model,
 backend, ECP and grid metadata; it does not repeat model qualification. Explicit
-caller controls and native physical final-state checks are unchanged. Missing
-additive support retains the explicit older-library policy; a selected native
-failure cannot retry Python selection. This query does not move the precision
+caller controls and native physical final-state checks are unchanged. This query
+is required: a missing protocol, native failure or invalid receipt rejects the
+selected installation rather than selecting Python defaults. The duplicate
+Python model/grid policy and its legacy version-only admission are removed.
+This query does not move the precision
 candidate/auditor execution or their independent seed lifetimes.
 Each Calculator may retain one copied metadata answer keyed by every consumed
 input and the selected native query; returned control dictionaries are detached.
