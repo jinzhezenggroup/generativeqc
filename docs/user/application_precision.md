@@ -6,6 +6,14 @@ from an application error budget: supported routes can use FP32 arithmetic,
 relaxed stopping limits, or both, without asking users to select kernels.
 Fast need not execute approximate work or be faster on every input.
 
+Both profiles use the same candidate execution, native scheduling and publication
+pipeline. Successful unaudited scalar calls retain their candidate's native
+workspace for subsequent calls in either profile. `clear_cache()` releases it;
+execution/publication failures and transitions to an independent audit also
+release candidate residency. Precision policy changes arithmetic admission and
+evidence, not this resource lifetime. Prepared batches likewise use the same
+policy owner and retain their independently managed `close()` lifetime.
+
 `policy="fp64"` remains a backward-compatible name for Standard: both use
 identical controls and execution, and the serialized `profile` preserves the
 name requested by the caller for compatibility. The native CLI

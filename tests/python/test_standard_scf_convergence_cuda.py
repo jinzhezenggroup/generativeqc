@@ -120,8 +120,8 @@ def test_default_complete_endpoint_against_tight_same_model(
             forces -= correction_gradient
         calculator = native_calculator(method, "standard", mode, tmp_path)
         try:
-            assert calculator._energy_tolerance == 1e-9
-            assert calculator._density_tolerance == 1e-5
+            assert calculator._candidate._energy_tolerance == 1e-9
+            assert calculator._candidate._density_tolerance == 1e-5
             with calculator.prepare_batch([geometry], warm_start=True) as owner:
                 for repeat in range(2):
                     result = owner.execute(
