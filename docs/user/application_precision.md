@@ -465,19 +465,30 @@ It does not imply FP32 execution or promise a speedup for every workload.
 
 Standard (or legacy `fp64`) without `target` reports `strict_fp64`, with `target=None` and no measured
 errors. Native convergence/final-state checks are retained, but **no independent
-observable-budget audit is claimed**. Its CUDA solver defaults are `1e-9` energy change, `1e-5` density change and
-`1e-12` screening for all-electron RHF and canonical restricted PBE, PBE0,
-B3LYP, r2SCAN (including r2SCAN-3c), M06-2X, and WB97M-V on the default grid. CPU,
-unrestricted, correlated and other model/grid domains, and older native
-libraries, retain `1e-10` energy and `1e-8` density. `Calculator` and Fast's
-Standard fallback resolve the same defaults. Explicit tighter controls are
-preserved; neither FP64 arithmetic nor solver thresholds bound force error.
+observable-budget audit is claimed**. Shared public SCF defaults are `1e-9`
+energy change, `1e-5` density change and `1e-12` screening, independent of backend,
+spin, ECP, model or grid. `Calculator`, native mean-field descriptors, `FockPlan.solve`
+and the CLI share these convergence defaults. Explicit tighter controls are preserved;
+post-HF references, response solves and Hessian endpoints retain their stricter
+method-owned requirements. A compatible native default-policy query is required.
+GFN2-xTB is an SCC method with no GPU4PySCF counterpart and retains its own
+`1e-10` energy and `1e-8` density defaults.
+
+The energy default matches GPU4PySCF's `conv_tol=1e-9`. GPU4PySCF's ordinary SCF
+test additionally requires an MO-gradient norm below `sqrt(conv_tol)` (about
+`3.1623e-5` at the default); its density change is diagnostic, not a stopping
+threshold. GenerativeQC's density control and physical final-state gates are
+additional native conditions, not a relabeling of that MO-gradient norm. These
+shared settings do not imply identical SCF trajectories or iteration counts.
+Neither FP64 arithmetic nor solver thresholds bound observable energy/force error.
 
 Eligible CUDA owners cap the physical AO commutator at `1e-5`. KS must also
 pass its complete canonical final-state proof before accepting convergence;
 a rejected proof continues SCF without publishing a warm seed. Either tighter
 energy or density controls restore the strict physical residual ceiling.
 Trace, idempotency, ownership and force-token checks remain mandatory.
+Shared defaults do not grant physical-owner qualification: other owners retain
+their stricter physical ceilings, including UHF's final-state requirements.
 This AO norm is different from GPU4PySCF's orbital-gradient norm. Qualification
 compares complete energies and forces against independent, tightly converged
 same-grid/same-fitted-model references. It does not remove quadrature or fitting

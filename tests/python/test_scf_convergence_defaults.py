@@ -1,4 +1,4 @@
-"""Default solver controls require a compatible owner and preserve tight requests."""
+"""Shared solver defaults preserve explicit controls and independent physical gates."""
 
 from __future__ import annotations
 
@@ -109,13 +109,13 @@ def test_default_controls_and_explicit_tight_overrides(
         ("pbe-rks", "cuda", {"ks_options": KsOptions(grid=GridSpec.treutler(4))}),
     ],
 )
-def test_calculator_copies_strict_native_controls_for_contexts(
+def test_calculator_copies_uniform_native_controls_for_contexts(
     library: SimpleNamespace, method: str, device: str, options: dict[str, Any]
 ) -> None:
-    install_scf_defaults_stub(library)
+    install_scf_defaults_stub(library, (1e-9, 1e-5, 1e-12), qualified=True)
     calculator = Calculator(method=method, device=device, **options)
-    assert calculator._energy_tolerance == 1e-10
-    assert calculator._density_tolerance == 1e-8
+    assert calculator._energy_tolerance == 1e-9
+    assert calculator._density_tolerance == 1e-5
 
 
 @pytest.mark.parametrize("legacy_version", [None, 1, 2])

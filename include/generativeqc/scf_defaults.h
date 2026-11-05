@@ -7,9 +7,9 @@
 extern "C" {
 #endif
 
-/** Model/backend context for default solver controls, separate from arithmetic.
- * has_ecp is boolean. MethodIR identity identifies the complete electronic model;
- * a familiar name or ingredient cannot qualify a custom composition. */
+/** Validated calculation facts, separate from arithmetic and method admission.
+ * has_ecp is boolean. SCF defaults do not depend on backend, spin, ECP, model or grid;
+ * supplying these facts cannot grant a physical-final-state capability. */
 typedef struct generativeqc_scf_defaults_context_v1 {
   uint32_t struct_size, abi_version;
   generativeqc_backend backend;
@@ -27,17 +27,19 @@ typedef struct generativeqc_scf_defaults_v1 {
 /** @native-contract generativeqc_scf_defaults_query_v1
  * @behavior Query shared versioned default SCF convergence controls.
  * @inputs Nonnull versioned context and output; optional KS descriptor and complete
- * lowercase 64-byte MethodIR identity. A missing identity cannot qualify KS defaults.
- * KS grid fields, dense element radii and XC schedule are inspected; other descriptor
- * fields are outside this metadata query. A null KS descriptor denotes a non-KS model.
- * @outputs Transactionally writes policy version 1, three tolerances, and whether the
- * qualified CUDA default policy applied. CPU/ECP/other models retain strict defaults.
+ * lowercase 64-byte MethodIR identity. Optional KS grid data is validated but does
+ * not select tolerances. A null KS descriptor denotes a non-KS model.
+ * @outputs Transactionally writes policy version 2, energy 1e-9, density 1e-5 and
+ * screening 1e-12 for SCF. SCC retains energy 1e-10/density 1e-8; qualified_defaults
+ * is zero for SCC and one otherwise. Explicit user controls and stricter method-owned
+ * reference/final-state gates remain authoritative.
  * @errors INVALID_ARGUMENT for invalid backend/flags, malformed identity or grid data;
  * ABI_MISMATCH for invalid descriptor headers. Output is unchanged on failure.
  * @lifetime All pointers are borrowed for this call only; no pointer is retained.
  * @execution Synchronous allocation-free host metadata query; no provider, GPU,
- * quadrature, compiler or scientific solve. Unknown model identities keep strict defaults.
- * @units Energy tolerance is Eh; density and screening retain their native SCF units.
+ * quadrature, compiler or scientific solve. Unknown model identities use the same defaults.
+ * @units Energy tolerance is Eh, matching GPU4PySCF's default conv_tol. Density and
+ * screening retain native SCF units; density is not GPU4PySCF's MO-gradient norm.
  */
 GENERATIVEQC_API generativeqc_status generativeqc_scf_defaults_query_v1(
     const generativeqc_scf_defaults_context_v1* context, const generativeqc_ks_options* ks_options,

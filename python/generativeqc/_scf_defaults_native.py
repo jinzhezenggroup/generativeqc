@@ -144,7 +144,7 @@ def default_controls(calculator: Any) -> dict[str, float]:
     if (
         output.struct_size != ct.sizeof(_Controls)
         or output.abi_version != _native.ABI_VERSION
-        or output.policy_version != 1
+        or output.policy_version != 2
         or output.qualified_defaults not in (0, 1)
         or any(not math.isfinite(value) or value <= 0 for value in result.values())
     ):

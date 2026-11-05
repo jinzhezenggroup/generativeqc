@@ -199,10 +199,13 @@ class Calculator:
         unchanged. It never certifies an error from ``energy_tolerance``.
 
         Omitted SCF controls resolve to energy/density tolerances 1e-9/1e-5
-        on qualified CUDA RHF and default-grid restricted KS owners, including
-        canonical WB97M-V. WB97M-V uses energy plus physical MO-gradient
-        convergence; its density control still bounds final canonical proof.
-        Other admitted models/backends retain 1e-10/1e-8. A library without the
+        on every HF/KS backend, spin, model and grid. SCC retains its separate
+        1e-10/1e-8 defaults. The SCF energy tolerance matches
+        GPU4PySCF's default conv_tol; density is an additional native condition,
+        not GPU4PySCF's MO-gradient norm. Canonical CUDA WB97M-V uses energy plus
+        physical MO-gradient convergence; its density control still bounds final
+        canonical proof. Stricter post-HF reference and physical final-state gates
+        remain mandatory. A library without the
         required native default-controls query must be updated. Explicit
         values are preserved. Convergence controls are solver conditions, not
         observable-error bounds; see the application precision guide.
