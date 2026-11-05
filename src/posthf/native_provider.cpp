@@ -11,6 +11,7 @@
 #include "integrals/density_fitting_metric.hpp"
 #include "integrals/s_integrals.hpp"
 #include "posthf/cuda_transform.hpp"
+#include "posthf/df_interaction_source.hpp"
 #include "posthf/source_reuse_schedule_generated.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "tensor/cpu_linalg.hpp"
@@ -150,6 +151,15 @@ NumericBlockPlan NativeBlockProvider::plan(const std::array<std::size_t, 4>& sha
                                            bool cuda) const {
   for (auto n : shape)
     if (!n || n > nbf_) throw std::invalid_argument("native MO block shape out of bounds");
+  if (const auto* fitted = dynamic_cast<const DensityFittedInteractionSource*>(&source_)) {
+    fitted->validate_frame(reference_view_);
+    const auto output =
+        checked_mul(checked_mul(shape[0], shape[1]), checked_mul(shape[2], shape[3]));
+    const auto bytes = checked_add(checked_add(source_bytes_, reference_bytes_),
+                                   fitted->block_capacity(shape, cuda));
+    if (bytes > budget_) throw std::length_error("DF factor block exceeds memory budget");
+    return {output, 0, 0, output, bytes, 0, 0, 0};
+  }
   auto p = numeric_block_plan(nbf_, reference_bytes_, source_bytes_, shape, tile_, cuda);
   if (cuda && p.stage_elements > INT32_MAX)
     throw std::length_error("MO stage exceeds cuBLAS int32 range");
@@ -160,6 +170,11 @@ NumericBlockPlan NativeBlockProvider::plan(const std::array<std::size_t, 4>& sha
 
 std::size_t NativeBlockProvider::batch_bytes(const std::array<std::size_t, 4>& shape,
                                              std::size_t requests, bool cuda) const {
+  if (const auto* fitted = dynamic_cast<const DensityFittedInteractionSource*>(&source_)) {
+    const auto base = checked_add(source_bytes_, reference_bytes_);
+    if (requests) (void)plan(shape, cuda);
+    return checked_add(base, checked_mul(requests, fitted->block_capacity(shape, cuda)));
+  }
   if (!requests && !cuda) return common_host_bytes();
   const auto p = plan(shape, cuda);
   const auto host_common = common_host_bytes();
@@ -225,6 +240,38 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many_impl(
   if (trace.enabled() && !work) work = &observed_work;
   const auto prior_work = trace.enabled() ? *work : ProviderWork{};
   const auto provider_started = std::chrono::steady_clock::now();
+
+  if (const auto* fitted = dynamic_cast<const DensityFittedInteractionSource*>(&source_)) {
+    fitted->validate_frame(reference_view_);
+    const auto base = checked_add(source_bytes_, reference_bytes_);
+    auto capacity = base;
+    for (const auto& request : requests) {
+      std::array<std::size_t, 4> shape{};
+      for (unsigned axis = 0; axis < 4; ++axis) shape[axis] = (*request.slots)[axis].size();
+      (void)plan(shape, cuda);
+      capacity = checked_add(capacity, fitted->block_capacity(shape, cuda));
+    }
+    if (capacity > budget_) throw std::length_error("DF factor batch exceeds memory budget");
+    std::vector<std::vector<double>> outputs;
+    for (const auto& request : requests)
+      outputs.push_back(fitted->factor_block({*request.slots, request.spins}, cuda, device,
+                                             budget_ - base, work));
+    if (trace.enabled()) {
+      runtime::df_progress::number("factor_cache_reuses", requests.size());
+      runtime::df_progress::number("source_scans", 0);
+      runtime::df_progress::number("source_reads", 0);
+      runtime::df_progress::number("source_values", 0);
+      runtime::df_progress::number("transform_fmas",
+                                   work->transform_fmas - prior_work.transform_fmas);
+      runtime::df_progress::number("h2d_bytes", work->h2d_bytes - prior_work.h2d_bytes);
+      runtime::df_progress::number("d2h_bytes", work->d2h_bytes - prior_work.d2h_bytes);
+    }
+    if (work)
+      work->provider_seconds +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - provider_started)
+              .count();
+    return outputs;
+  }
 
   std::vector<std::array<std::size_t, 4>> shapes;
   std::vector<NumericBlockPlan> plans;

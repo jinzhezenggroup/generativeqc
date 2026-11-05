@@ -134,6 +134,7 @@ function(generativeqc_add_posthf_cc_sources target)
       src/hf/rhf_frame_response.cu
       src/cc/df_source_cuda.cu
       src/posthf/df_mo_response.cu
+      src/posthf/df_factor_blocks.cu
       src/cc/df_triples_cuda.cu
       src/cc/df_lambda_cuda.cu
       src/cc/cuda_solver.cu

@@ -6,10 +6,32 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
+
+from benchmarks.ks_incremental_default import incremental_expectation
+
 if TYPE_CHECKING:
     from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("selector", ("unset", "off"))
+@pytest.mark.parametrize("mode", ("direct", "df"))
+@pytest.mark.parametrize("budget_fock", (False, True))
+@pytest.mark.parametrize("phase", ("cold", "warm", "moved", "moved-warm", "reset"))
+def test_campaign_incremental_expectation_uses_numerical_route(
+    selector: str, mode: str, budget_fock: bool, phase: str
+) -> None:
+    """Strict Fast fallback must not be excluded from a reusable FP64 path."""
+    requested, active = incremental_expectation(
+        selector=selector, mode=mode, budget_fock=budget_fock, phase=phase
+    )
+    if selector == "off" or mode == "df" or budget_fock:
+        assert not requested and not active
+    else:
+        assert requested
+        assert active == (phase in ("cold", "reset"))
 
 
 def test_auto_cold_guard_truth_table(tmp_path: Path, native_cxx: NativeCxx) -> None:

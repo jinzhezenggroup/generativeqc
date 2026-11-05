@@ -231,7 +231,7 @@ def test_fail_closed_on_invalid_three_arm_receipts(fault: str) -> None:
         runner.compare(gpu, standard, fast)
 
 
-def test_native_constructor_is_default_and_fast_uses_real_policy(
+def test_native_arms_share_the_public_policy_constructor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     assert runner.native_constructor_kwargs("pbe") == {
@@ -242,19 +242,18 @@ def test_native_constructor_is_default_and_fast_uses_real_policy(
     }
     calls: list[tuple[str, dict[str, Any]]] = []
 
-    def standard(**kwargs: Any) -> Any:
-        calls.append(("standard", kwargs))
+    def constructor(*, policy: str, **kwargs: Any) -> Any:
+        calls.append((policy, {"policy": policy, **kwargs}))
         return SimpleNamespace()
 
-    def fast(*, policy: str, **kwargs: Any) -> Any:
-        calls.append(("fast", {"policy": policy, **kwargs}))
-        return SimpleNamespace()
-
-    fake = SimpleNamespace(Calculator=standard, PrecisionCalculator=fast)
+    fake = SimpleNamespace(PrecisionCalculator=constructor)
     monkeypatch.setitem(sys.modules, "generativeqc", fake)
     runner.make_native_calculator("pbe", "standard")
     runner.make_native_calculator("pbe", "fast")
-    assert calls[0] == ("standard", runner.native_constructor_kwargs("pbe"))
+    assert calls[0] == (
+        "standard",
+        {"policy": "standard", **runner.native_constructor_kwargs("pbe")},
+    )
     assert calls[1] == (
         "fast",
         {"policy": "fast", **runner.native_constructor_kwargs("pbe")},
@@ -1134,7 +1133,9 @@ def test_native_sampler_records_and_requires_implicit_vv10_inheritance(
         forces=[[0.0, 0.0, 0.0]],
         iterations=12,
         initial_guess=None,
-        precision_validation=None,
+        precision_validation=SimpleNamespace(
+            profile="standard", to_dict=lambda: {"profile": "standard"}
+        ),
         precision={},
         ks_diagnostic=SimpleNamespace(grid_points=200),
     )
@@ -1163,8 +1164,13 @@ def test_native_sampler_records_and_requires_implicit_vv10_inheritance(
             )
         ),
     )
+    policy_calculator = SimpleNamespace(
+        _candidate=calculator,
+        _candidate_precision="fp64",
+        singlepoint=calculator.singlepoint,
+    )
     monkeypatch.setattr(
-        runner, "make_native_calculator", lambda method, arm: calculator
+        runner, "make_native_calculator", lambda method, arm: policy_calculator
     )
     atoms = [("H", (0.0, 0.0, 0.0))]
     if nonlocal_level is not None:

@@ -118,6 +118,7 @@ struct Owner {
   std::array<double, 3> warm_xc_totals{};
   bool defer_range_warm_energy() const { return false; }
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
+  bool occupied_xc_frame_ready = false;
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
   // The occupied frame has a lifetime independent of the fitted projection.
   bool final_occupied_factor_ready = false;

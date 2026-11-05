@@ -27,6 +27,20 @@ SELECTORS = (
 GATES = {"energy_per_atom": 2.5e-6, "force_max": 2.5e-5, "force_rms": 7.5e-6}
 
 
+def incremental_expectation(
+    *, selector: str, mode: str, budget_fock: bool, phase: str
+) -> tuple[bool, bool]:
+    """Check this campaign's qualified hybrids by numerical route, not label.
+
+    Its default-grid water sizes are inside native automatic hybrid admission.
+    Mixed budget Focks cannot borrow exact incremental anchors, whereas a Fast
+    candidate with strict SCF is eligible just like Standard. Warm and moved
+    seeds retain the independent native provenance exclusions.
+    """
+    requested = selector == "unset" and mode == "direct" and not budget_fock
+    return requested, requested and phase in ("cold", "reset")
+
+
 def main() -> None:
     """Write raw samples and provenance, including failed numerical gates."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -160,15 +174,15 @@ def main() -> None:
                 seconds = perf_counter() - started
                 if not item.converged or item.executed_backend != "cuda":
                     raise RuntimeError("native complete CUDA endpoint failed")
-                candidate = calculator if args.arm == "standard" else owner._calculator
+                candidate = owner._calculator
                 if "native_build" not in record:
                     record["native_build"] = binary_identity(candidate)
-                requested = (
-                    args.selector == "unset"
-                    and args.arm == "standard"
-                    and args.mode == "direct"
+                requested, active = incremental_expectation(
+                    selector=args.selector,
+                    mode=args.mode,
+                    budget_fock=calculator._fast_fock,
+                    phase=phase,
                 )
-                active = requested and phase in ("cold", "reset")
                 record["samples"].append(
                     {
                         "phase": phase,

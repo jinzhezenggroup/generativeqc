@@ -110,6 +110,7 @@ struct BatchItemResult {
   std::size_t bucket_id{};
   bool warm_start_used{}, warm_start_fallback{};
   std::optional<scf::TargetFockWork> target_fock_work;
+  std::string detail;
 };
 using Coordinates = std::vector<std::optional<std::vector<double>>>;
 // RESULT_ADAPTER
@@ -152,6 +153,7 @@ struct CudaKsPlan {
   unsigned warm_replacements{};
   bool has_warm_start() const noexcept;
   bool failed() const noexcept;
+  std::string failure_detail() const { return "injected CUDA KS diagnostic"; }
   void set_warm_start_updates(bool) noexcept;
   void clear_warm_start() noexcept;
   void invalidate_final_state() noexcept;
@@ -480,7 +482,7 @@ def cuda_control_probe(
                 between(
                     cuda,
                     "bool CudaKsPlan::failed()",
-                    "\nvoid CudaKsPlan::enqueue_iteration",
+                    "\nstd::string CudaKsPlan::failure_detail",
                 ),
                 between(
                     cuda,
@@ -612,8 +614,10 @@ def test_prepared_cuda_failure_gets_one_fresh_hcore_attempt(
     assert result["status"] == "returned" and result["converged"]
     assert (result["kind"], result["outcome"], result["attempts"]) == (3, 5, 2)
     exported = scenario == "nonconverged"
-    assert result["discarded_iterations"] == (7 if exported else 0)
-    assert result["discarded_focks"] == ((1 << 33) + 7 if exported else 0)
+    # Physical failures retain partial diagnostics without claiming a complete
+    # work census or authorizing final-state labels.
+    assert result["discarded_iterations"] == 7
+    assert result["discarded_focks"] == (1 << 33) + 7
     assert result["returned_iterations"] == 3 and result["returned_focks"] == 5
     assert result["complete"] == exported
     assert result["jk_complete"] == exported

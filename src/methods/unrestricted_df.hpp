@@ -4,6 +4,7 @@
 #include <cmath>
 #include <optional>
 
+#include "core/work_budget.hpp"
 #include "methods/method.hpp"
 #include "posthf/capacity.hpp"
 #include "scf/fock_build.hpp"
@@ -35,8 +36,12 @@ struct UnrestrictedFitting {
     fitted = posthf::checked_add(fitted, posthf::source_capacity(*auxiliary));
     if (fitted > budget)
       throw std::length_error("unrestricted DF reference exceeds fitting memory budget");
-    if (posthf::checked_mul(metric, auxiliary_count) > 100000000000ULL)
-      throw std::length_error("unrestricted DF metric exceeds scalar-work bound");
+    const auto nbf = molecule::ao_count(system);
+    const auto alpha =
+        static_cast<std::size_t>((system.electron_count + system.multiplicity - 1) / 2);
+    core::admit_correlation_work("df_reference_metric",
+                                 posthf::checked_mul(metric, auxiliary_count), fitted, nbf, alpha,
+                                 static_cast<std::size_t>(system.electron_count) - alpha);
     return posthf::checked_add(result, fitted);
   }
 

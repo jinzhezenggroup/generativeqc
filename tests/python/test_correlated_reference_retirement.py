@@ -287,6 +287,20 @@ std::vector<double> NativeBlockProvider::get(const MOSlots&, bool, int,
 #include "scf/cuda/arena.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda/reference_eri_policy.hpp"
+
+namespace generativeqc::posthf {
+// This conventional-source probe must never reach the optional fitted planner.
+// Keep that numerical boundary fail-closed without constructing fitted storage.
+class DensityFittedInteractionSource : public integrals::ElectronInteractionSource {
+ public:
+  void validate_frame(const core::ElectronicReferenceView&) const {
+    throw std::logic_error("conventional retirement probe reached a fitted frame");
+  }
+  std::size_t block_capacity(const std::array<std::size_t, 4>&, bool) const {
+    throw std::logic_error("conventional retirement probe reached fitted storage");
+  }
+};
+}
 """
     cuda_plan = (
         "namespace generativeqc::mp2::generated { CudaPlan cuda_plan(unsigned tile, int) {"

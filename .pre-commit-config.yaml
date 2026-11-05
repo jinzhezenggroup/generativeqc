@@ -23,7 +23,7 @@ repos:
         exclude: ^benchmarks/results/(?:.*\.patch|.*/receipts\.txt|array-api-rhf-slurm-20261011/.*\.log|h100-sm90-db36-profile-baseline-20261103/readers/replay-screening-integration-v4\.py)$
       - id: end-of-file-fixer
         # Keep archived reference responses and checksum-bound GPU receipts unchanged.
-        exclude: ^benchmarks/results/(?:.*\.bse\.json|array-api-rhf-slurm-20261011/.*\.(?:log|xml)|h100-sm90-db36-profile-baseline-20261103/source-applicability-admission-v1\.json)$
+        exclude: ^benchmarks/results/(?:.*\.bse\.json|array-api-rhf-slurm-20261011/.*\.(?:log|xml)|h100-sm90-db36-profile-baseline-20261103/source-applicability-admission-v1\.json|shared-fp64-anchor-trial-20261105/def2-svp\.json)$
       - id: check-yaml
       - id: check-json
       - id: check-added-large-files

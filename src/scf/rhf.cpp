@@ -41,6 +41,7 @@
 #include "scf/fock_build.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/fock_provider.hpp"
+#include "scf/fock_symmetry.hpp"
 #include "scf/initial_guess/density.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/mean_field.hpp"
@@ -2553,7 +2554,7 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       orthogonalizers.push_back(orthogonalizer);
       densities.push_back(std::move(density));
       orbitals.push_back(std::move(initial_orbitals).value_or(EigenResult{}));
-      diis.emplace_back(options.diis_history);
+      diis.emplace_back(options.diis_history, true);
       previous_energies.push_back(std::numeric_limits<double>::infinity());
       outputs[source].scf.initial_density_used = initial_densities[source] != nullptr;
     } catch (const std::bad_alloc&) {
@@ -2583,7 +2584,8 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       while (diis.size() > slot_before) diis.pop_back();
       previous_energies.resize(slot_before);
       outputs[source].status = error.status();
-    } catch (...) {
+      outputs[source].detail = error.what();
+    } catch (const std::exception& error) {
       source_indices.resize(slot_before);
       data.resize(slot_before);
       orthogonalizers.resize(slot_before);
@@ -2592,6 +2594,7 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       while (diis.size() > slot_before) diis.pop_back();
       previous_energies.resize(slot_before);
       outputs[source].status = GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+      outputs[source].detail = error.what();
     }
   }
   if (data.empty()) return outputs;
@@ -2643,11 +2646,15 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       }
       return false;
     } catch (const generativeqc::Error& error) {
-      for (const std::size_t source : source_indices) outputs[source].status = error.status();
+      for (const std::size_t source : source_indices) {
+        outputs[source].status = error.status();
+        outputs[source].detail = error.what();
+      }
       return false;
-    } catch (...) {
+    } catch (const std::exception& error) {
       for (const std::size_t source : source_indices) {
         outputs[source].status = GENERATIVEQC_STATUS_CUDA_ERROR;
+        outputs[source].detail = error.what();
       }
       return false;
     }
@@ -2789,7 +2796,10 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
     });
     if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
         device_status == GENERATIVEQC_STATUS_CUDA_ERROR) {
-      for (const auto source : source_indices) outputs[source].status = device_status;
+      for (const auto source : source_indices) {
+        outputs[source].status = device_status;
+        outputs[source].detail = device_detail;
+      }
       return outputs;
     }
     runtime::df_progress::number("compact_dispatch_status", device_status);
@@ -2826,12 +2836,15 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
           outputs[source].status = GENERATIVEQC_STATUS_SUCCESS;
         } catch (const std::bad_alloc&) {
           outputs[source].status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-        } catch (const std::invalid_argument&) {
+        } catch (const std::invalid_argument& error) {
           outputs[source].status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+          outputs[source].detail = error.what();
         } catch (const generativeqc::Error& error) {
           outputs[source].status = error.status();
-        } catch (...) {
+          outputs[source].detail = error.what();
+        } catch (const std::exception& error) {
           outputs[source].status = GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+          outputs[source].detail = error.what();
         }
       }
       return outputs;
@@ -2861,7 +2874,10 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
     for (const auto source : source_indices) ++outputs[source].scf.fock_builds;
     if (jk_status != GENERATIVEQC_STATUS_SUCCESS) {
       for (std::size_t slot = 0; slot < source_indices.size(); ++slot) {
-        if (active[slot]) outputs[source_indices[slot]].status = jk_status;
+        if (active[slot]) {
+          outputs[source_indices[slot]].status = jk_status;
+          outputs[source_indices[slot]].detail = detail;
+        }
         active[slot] = false;
       }
       break;
@@ -2878,6 +2894,7 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
         for (std::size_t element = 0; element < matrix_size; ++element) {
           fock[element] += j[element] - 0.5 * k[element];
         }
+        preserve_fock_symmetry(fock, nbf);
         const double energy =
             electronic_energy(densities[slot], data[slot].one_electron.hcore, fock) +
             data[slot].one_electron.nuclear_repulsion;
@@ -2891,13 +2908,22 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
         Matrix next_density =
             density_from_orbitals(orbitals[slot].vectors, nbf,
                                   static_cast<std::size_t>(systems[source].electron_count / 2));
+        const auto proposed_density_rms = density_rms(next_density, densities[slot]);
+        // The compact solve already failed. A bounded convex startup avoids
+        // core-guess charge sloshing; retire its history before strict DIIS.
+        // Gate the undamped proposal, never the artificially smaller mixed step.
+        if (iteration <= 32 && proposed_density_rms > options.density_tolerance) {
+          for (std::size_t element = 0; element < matrix_size; ++element)
+            next_density[element] = 0.5 * next_density[element] + 0.5 * densities[slot][element];
+          if (iteration == 32) diis[slot].clear();
+        }
         ScfResult& result = outputs[source].scf;
         result.iterations = iteration;
         result.energy = energy;
         result.energy_change = std::isfinite(previous_energies[slot])
                                    ? std::abs(energy - previous_energies[slot])
                                    : std::numeric_limits<double>::infinity();
-        result.density_rms = density_rms(next_density, densities[slot]);
+        result.density_rms = proposed_density_rms;
         if (iteration > 1 && result.energy_change < options.energy_tolerance &&
             result.density_rms < options.density_tolerance) {
           densities[slot] = std::move(next_density);
@@ -2914,10 +2940,12 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
         --active_count;
       } catch (const generativeqc::Error& error) {
         outputs[source].status = error.status();
+        outputs[source].detail = error.what();
         active[slot] = false;
         --active_count;
-      } catch (...) {
+      } catch (const std::exception& error) {
         outputs[source].status = GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+        outputs[source].detail = error.what();
         active[slot] = false;
         --active_count;
       }
@@ -2943,12 +2971,15 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       outputs[source].status = GENERATIVEQC_STATUS_SUCCESS;
     } catch (const std::bad_alloc&) {
       outputs[source].status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-    } catch (const std::invalid_argument&) {
+    } catch (const std::invalid_argument& error) {
       outputs[source].status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      outputs[source].detail = error.what();
     } catch (const generativeqc::Error& error) {
       outputs[source].status = error.status();
-    } catch (...) {
+      outputs[source].detail = error.what();
+    } catch (const std::exception& error) {
       outputs[source].status = GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+      outputs[source].detail = error.what();
     }
   }
   return outputs;
@@ -3092,7 +3123,7 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_impl(
       beta_densities.push_back(std::move(beta_density));
       alpha_orbitals.push_back(std::move(initial_alpha_orbitals).value_or(EigenResult{}));
       beta_orbitals.push_back(std::move(initial_beta_orbitals).value_or(EigenResult{}));
-      diis.emplace_back(options.diis_history);
+      diis.emplace_back(options.diis_history, true);
       previous_energies.push_back(std::numeric_limits<double>::infinity());
       outputs[source].scf.initial_density_used = initial_densities[source] != nullptr;
     } catch (const std::bad_alloc&) {
@@ -3290,8 +3321,10 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_impl(
           cuda_df_iteration_diis_history(options));
     });
     if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
-      for (const auto source : source_indices)
+      for (const auto source : source_indices) {
         outputs[source].status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+        outputs[source].detail = device_detail;
+      }
       return outputs;
     }
     runtime::df_progress::number("compact_dispatch_status", device_status);
@@ -3356,7 +3389,10 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_impl(
         plan, batch_alpha, batch_beta, coulomb, alpha_exchange, beta_exchange, detail);
     if (jk_status != GENERATIVEQC_STATUS_SUCCESS) {
       for (std::size_t slot = 0; slot < source_indices.size(); ++slot) {
-        if (active[slot]) outputs[source_indices[slot]].status = jk_status;
+        if (active[slot]) {
+          outputs[source_indices[slot]].status = jk_status;
+          outputs[source_indices[slot]].detail = detail;
+        }
         active[slot] = false;
       }
       break;
@@ -3376,6 +3412,8 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_impl(
           alpha_fock[element] += j[element] - ak[element];
           beta_fock[element] += j[element] - bk[element];
         }
+        preserve_fock_symmetry(alpha_fock, nbf);
+        preserve_fock_symmetry(beta_fock, nbf);
         const double energy =
             uhf_electronic_energy(alpha_densities[slot], beta_densities[slot],
                                   data[slot].one_electron.hcore, alpha_fock, beta_fock) +
