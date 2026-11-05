@@ -434,6 +434,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # The intact RKS Hessian suite now starts on the existing force lane.
     fresh_frontier_paths=(
       tests/python/test_wb97mv_uks_hessian.py
+      # Run 41939348245 passed both scalar-ECP HVP cases (443/1097 s),
+      # but one worker started them late and sequentially before the 1800 s cap.
+      # Their native states/caches are function-scoped. Start the two cases on
+      # separate existing worker frontiers; preserve their ordinary core owner.
+      tests/python/test_global_hybrid_ecp_hessian.py
     )
     case "${GENERATIVEQC_CI_SHARD}" in
       core-a) target_bucket=0 ;;
