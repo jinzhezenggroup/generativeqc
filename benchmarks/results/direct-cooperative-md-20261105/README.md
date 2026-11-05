@@ -79,11 +79,13 @@ The failed compile launches no GPU endpoint.
 
 Before publication the branch synchronizes first to
 `30657763a1f79c44e1b897b524ae9f54c96928cd` (#2991), then to latest master
-`051a157c64061eac4fd9ee90d7becfa982f80161` (#3011). These updates concern CPU
+`051a157c64061eac4fd9ee90d7becfa982f80161` (#3011), and then
+`1e3169c06` (#3009). These updates concern CPU
 UKS final closure, ECP qualification, and public CPU full-range Hessian admission,
 not the measured CUDA force sources, generated math, or endpoint runner. API
-comparisons are retained under `build/master-compare.json` and
-`build/master-second-compare.json`. Timing images remain labeled with their
+comparisons are retained under `build/master-compare.json.xz` and
+`build/master-second-compare.json.xz`; the subsequent CI-only update is audited
+in `build/master-third-compare.json`. Timing images remain labeled with their
 actual older source/base; they are not represented as newly rebuilt images.
 
 - Clean A100 pair: LSF **225682**, exclusive GPU, finite 18-minute limit,
@@ -98,6 +100,14 @@ actual older source/base; they are not represented as newly rebuilt images.
   outside the allowlist. Neither is treated as a completed population.
 
 ## Replay
+
+Immutable execution scripts, API comparison responses, and the independent
+pytest XML are retained as lossless `.xz` files. Process/compiler/test logs
+are retained as deterministic `.log.gz` receipts, with exact-byte, scoped
+justifications in `benchmarks/evidence-policy.json`; neither general storage
+limits nor scientific acceptance gates are relaxed. Decompression reproduces
+the executed producer and original output bytes, rather than formatting them
+after execution. Failed attempts remain separate from accepted populations.
 
 From the checkout root, without a GPU or either electronic-structure engine:
 

@@ -130,6 +130,24 @@ forces as another substantial owner. No new same-A100 GPU4PySCF ranking follows
 from the incomplete reference attempt, and no repeated broad population is run
 to rescue or amplify the observed improvement.
 
+## CI publication follow-up (2026-11-06)
+
+The branch also integrates master `1e3169c06` (#3009), a CI shard/cache-routing
+change with no measured CUDA producer or consumer inputs. The measured images
+retain their original source identity. The evidence package now losslessly
+compresses original producer scripts, API responses, XML and process logs;
+bounded transient receipts have exact-byte retention justifications rather than
+a general policy exemption. The pre-commit bot had added a newline to the raw
+pytest XML; the compressed receipt preserves the original executed bytes and
+prevents source-formatting hooks from mutating this scientific provenance.
+
+The native Libxc catalog's global source identities also change with this
+integral compiler patch. Regenerating its canonical snapshot/rendered reference
+updates only the checked source identities: the retained campaign remains stale,
+the capability summary is unchanged, and no historical measurement is promoted
+to current-source qualification. This metadata refresh needs no additional GPU
+population and must not be confused with new Libxc scientific acceptance.
+
 ## Revisit when
 
 Real-GPU parity, endpoint timing, resource bounds, or 5090 non-regression fails.

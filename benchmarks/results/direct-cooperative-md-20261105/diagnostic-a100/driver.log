@@ -1,1 +1,0 @@
-/tmp/direct-gap-master-225599.sh: line 75: 107569 Killed                  timeout --kill-after=20s 480 "${python[@]}" "$trial/endpoint.py" "${extra[@]}" --source "$(cat "$trial/master-source-identity.txt")" --inputs "$shared/source/inputs" --output "$out/$arm.json" > "$out/$arm.log" 2>&1

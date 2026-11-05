@@ -528,6 +528,106 @@
       "reason": "Exact original180-process/720-full-EF archive parts or lossless actual result audit and manifest. Fixed30 original gates,9nonwins and all raw vectors retained; no later-source or storage-limit transfer.",
       "sha256": "218ef169df2b0566c2d4edb2a3c42b719d603a2e46cd0bcbc119b7a7db37be8c"
     },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/baseline.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded native baseline endpoint stdout for the completed 5090 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
+      "sha256": "5deab9a1683484703e6ac8f0ac990b00bf3ed2b635086230f12dc8ee011343b1"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/candidate.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded native candidate endpoint stdout for the completed 5090 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
+      "sha256": "281f743e5d55f5ca493f0ef89dbacf3540d6bbdd0adb1dba323f5a052d504418"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/driver.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact empty driver-output receipt for completed Slurm job 16004. Acceptance instead requires terminal scheduler status, per-arm process exit codes and complete populations; empty stdout is never treated as proof of success.",
+      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/independent.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded pytest process-completion receipt for the independent 24-case Slurm-5090 Libcint run, cross-checked against the lossless XML and retained zero process exit code; not a new qualification for later sources.",
+      "sha256": "06c25bb5ce55ee3a1a34433ef4900fdd93fa1f191c74846b23b0e0d1748470ab"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/independent.xml.xz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Lossless original pytest XML for 24 real-Slurm-5090 Libcint J/K derivative oracle cases. Offline replay requires every case to complete without skip, failure or error; retaining the exact original output prevents a compact success count from concealing omitted cases.",
+      "sha256": "eb837960dbb6e57fe2d9cd7c5c6f9cf1071c565c01f7c9124cb6d86d83065cd7"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/reference.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded GPU4PySCF reference endpoint stdout from completed Slurm job 16004. Retains reference process diagnostics alongside the full population and documented CPU D4/gCP corrections; reference CPU work is not a native production dependency.",
+      "sha256": "70a5078dfaf37af81de8a570e155bf3495a00edb48398eb59b5932e2eb3bcb08"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/a100/baseline.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded native baseline endpoint stdout for the completed a100 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
+      "sha256": "a0c7a798da0b27fdd5b12d8848d167de46b4566f4b3f219279e903fcd0b4788a"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/a100/candidate.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded native candidate endpoint stdout for the completed a100 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
+      "sha256": "70279d1b3c93b4a927fe8e8020b8814f02db554e4b563c08b6b1169382d5f800"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/a100/driver.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded LSF driver-output receipt for job 225682, retained to bind the completed A100 native populations to the executed finite job and uploaded source identities; no A100 reference timing claim is inferred.",
+      "sha256": "163b280c9edecc340a2129afa8d2d9425d411f274f56b309f01b421f8f4f91ee"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/candidate-build-resume.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact compressed successful incremental compiler continuation receipt for the measured Release SM80+SM120 candidate ELF. Retains warnings, completed actions and cache reuse after the first finite attempt timed out; the same authenticated ELF was qualified on both GPUs.",
+      "sha256": "bd07c505f7edda3f54e4bcd3e59b2cd14d8640bdd0367fbda6d28ac1bd0a065b"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/candidate-build.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact compressed compiler receipt for the initial finite 1800-second Release SM80+SM120 candidate build, which timed out at exit 124 before GPU execution. Retains the failed attempt and cache/toolchain provenance alongside its successful bounded continuation; no binaries or objects are admitted.",
+      "sha256": "0a5fc8b63c865cce22b1e82d58f595f74bd95816649bf185ed94552fbf91bb6a"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/compiler-structure-final-sync.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact 50-byte original compiler dependency-audit completion receipt after synchronization to master 051a157c6; distinguishes the final host structural check from the older measured CUDA images.",
+      "sha256": "75cfd3d79aa64b438d0f4143781ea8c86923ec6f902e252a38b817404902fecc"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/compiler-structure-final.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact 50-byte original compiler dependency-audit completion receipt after the first master synchronization; historical source scope is retained separately and is not relabelled as fresh execution after later master changes.",
+      "sha256": "75cfd3d79aa64b438d0f4143781ea8c86923ec6f902e252a38b817404902fecc"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/final-sync-host-tests.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact small completion receipt for the 66 focused host tests after synchronization to master 051a157c6. Source chronology remains separate from the older measured GPU images.",
+      "sha256": "7f6e8aff3e6902e0e6af7a605b534ea58853e3066236825e9d067638d9c20bb4"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/host-tests-complete.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact small completion receipt for the 66 focused host tests before master synchronization, retaining the actual count and process output without generating a new GPU claim.",
+      "sha256": "869643ce28cd14c34538618038d8d27ea4ec168fedbbd4b54855bde427b84c3e"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/md-host-tests-complete.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded completion and skip-reason receipt for 1378 MD scientific/emission host tests and 73 unexecuted cases. Skips are retained explicitly and are never counted as independent scientific acceptance.",
+      "sha256": "39b30b9c425e26a334fe2fca15e8abaa1899aa9bf01bb14ab3c64bc07810b438"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/post-sync-host-tests.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact small completion receipt for the 66 focused host tests after the first master synchronization. Preserves successive source-qualified host checks rather than silently replacing an earlier result.",
+      "sha256": "e7e535ed9626f1ec64a9d592ecacb80d294a3135f85f4bae35c363246247f650"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/type-check.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact empty stdout receipt from the targeted successful type-check command. This is an execution-provenance record, not independent scientific or GPU acceptance evidence.",
+      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/diagnostic-a100/bootstrap-225596.tar.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact 2839-byte bounded archive from failed bootstrap LSF job 225596. Preserves the Bash empty-array/nounset failure before any endpoint, preventing failed-attempt omission; it contains no passing population or reference performance evidence.",
+      "sha256": "d06c6e9c173841a94643c21065100d9b8c78dda7f04afc4e23381407c7a4b9a1"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/diagnostic-a100/driver.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded intrusive diagnostic-driver receipt for LSF job 225599. Preserves the incomplete reference exit 137 after the finite time cap; zero reference samples are retained and explicitly excluded from A100 speed comparisons.",
+      "sha256": "8448e6fc74504a46adf88cecceffb3efd5d39d4cd5a98cda16a6b90de6afa25f"
+    },
     "benchmarks/results/h100-sm90-db36-final-20261103/actual-result-audit.tar.xz": {
       "owner": "H100 frozen DB36 final fixed30 delivery",
       "reason": "Exact original180-process/720-full-EF archive parts or lossless actual result audit and manifest. Fixed30 original gates,9nonwins and all raw vectors retained; no later-source or storage-limit transfer.",

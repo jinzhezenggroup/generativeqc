@@ -190,9 +190,9 @@ def main() -> None:
         for device, records in populations.items()
         for arm, record in zip(("baseline", "candidate"), records, strict=True)
     }
-    independent = root / "5090" / "independent.xml"
+    independent = root / "5090" / "independent.xml.xz"
     assert (independent.parent / "independent.exit-code.txt").read_text().strip() == "0"
-    xml_bytes = independent.read_bytes()
+    xml_bytes = lzma.decompress(independent.read_bytes())
     assert len(xml_bytes) <= 1 << 20
     assert (
         b"<!DOCTYPE" not in xml_bytes.upper() and b"<!ENTITY" not in xml_bytes.upper()
