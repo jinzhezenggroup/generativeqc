@@ -173,6 +173,16 @@ int main(int argc, char** argv) {
     witness.coefficients = coefficients.value;
     owner.enqueue(density.value, elements, 9, PrecisionPhase::StrictAudit, witness);
     require(owner.read_scalars(9).error == 0, "alias failure poisoned the next generation");
+    // StrictAudit discards proposal-only frames before even validating their
+    // borrowed storage. Exact-mode aliases above must still be rejected.
+    witness.generation = 10;
+    witness.coefficients = density.value;
+    witness.provisional = true;
+    owner.enqueue(density.value, elements, 10, PrecisionPhase::StrictAudit, witness);
+    require(owner.read_scalars(10).error == 0, "strict target used a provisional frame");
+    const auto strict_potential = owner.download_potential(10);
+    for (size_t element = 0; element < elements; ++element)
+      require(strict_potential[element] == potential[element], "strict target changed matrix work");
     std::cout << "native occupied/fallback ownership and scientific parity passed\n";
     return 0;
   } catch (const std::exception& error) {

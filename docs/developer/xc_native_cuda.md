@@ -81,7 +81,7 @@ does not authorize a nonzero feature discrepancy: there is no qualified
 point-program/domain sensitivity contract that turns its internal budget into
 an XC energy, potential or force bound.
 
-Every explicit occupied invocation also evaluates the original stored-D
+Every exact-mode occupied invocation also evaluates the original stored-D
 features in registers with the retained built-in matrix arithmetic. A candidate
 is used only when all five finite features are bitwise identical, including
 the sign of zero. Otherwise the original-D vector is used. Identical inputs
@@ -98,14 +98,32 @@ applies the RKS occupation factor a second time. Missing bounds fail closed;
 genuine original-matrix errors are still reported. No extra global allocation
 or host oracle is introduced.
 
-Because exact verification repeats dense feature work, every CUDA KS request
-uses the ordinary matrix route, including `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1`.
-KS does not publish a candidate frame, so it avoids both projection and dense
-verification overhead. The lower-level explicit `CudaXcPlan` experiment and its
-identity, precision, generation, mapping, capacity and lifetime checks remain.
-It is not an available production acceleration option. Restoring production
-admission requires a cheaper numerically qualified contract and complete
-admission-inclusive endpoint cost evidence. See the
+Exact verification is not the production acceleration mechanism. By default,
+the native owner may lend a **provisional** frame during a bounded initializer
+stage. Unset and exact `GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1` enable automatic
+admission; `0` and other explicit values retain matrix-only work.
+Cheap finite projection/feature,
+coefficient-range and capacity checks guard this proposal, not its downstream
+physical accuracy. Admitted points skip original-D evaluation and absolute-dot
+certificate work; refused points still consume the live matrix. The original
+exact-mode `2^-45` prefilter and bitwise verification
+remain unchanged for lower-level nonprovisional calls.
+Provisional projection needs only one scratch panel and requires
+`occupied_rank < active_ao_count`, so its work is smaller than the dense route.
+It neither reserves nor forms a pointer to the unused absolute-bound panel.
+
+`StrictAudit` rejects provisional frames before submission. The KS owner
+retires the provisional stage before it can publish convergence, resets the
+energy epoch and rebuilds the original stored-D target under the
+unchanged energy, density, residual and final canonical gates. A failed
+proposal retries the same D strictly. Final-state and force consumers never
+receive provisional features. Canonical frame generations, scratch lifetimes,
+AO maps, capacity fallback and strict precision admission remain mandatory.
+Prior DIIS entries may predict new densities, never certify physical results;
+six unsuccessful strict sweeps clear that bounded predictor history. A previous
+residual RMS at most `1e-6` avoids candidate admission for near-stationary inputs.
+See [execution and handoff](xc_contractions.md#explicit-native-execution), the
+[audited-proposal decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-audited-proposals.md), the superseded
 [matrix-fallback decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-production-matrix-fallback.md),
 [exact-identity restriction decision](../../.agents/notes/implemented/numerics/2026-11-04-occupied-xc-exact-identity.md)
 and earlier [roundoff-certificate proposal](../../.agents/notes/proposed/2026-11-04-occupied-xc-stored-density-certificate.md).
