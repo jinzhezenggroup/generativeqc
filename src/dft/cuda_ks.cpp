@@ -373,6 +373,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // Algebraic cold factors have no canonical generation and cannot lend W/U.
   bool cold_fitted_factor_ready{};
   std::vector<double> cold_factor_spectrum;
+  bool occupied_xc_frame_ready{}, pending_occupied_xc{}, occupied_xc_executed{};
+  unsigned occupied_xc_refinement_iterations{};
+  // Automatic admission only lends bounded initializer work; strict matrix
+  // refinement still owns publication. Explicit 0 or malformed values opt out.
+  const bool occupied_xc_requested = [] {
+    const auto* value = std::getenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC");
+    return !value || (value[0] == '1' && value[1] == '\0');
+  }();
   // Only this immutable owner can create a factor-backed warm seed. A separate
   // storage tag survives frozen replays and provider scratch/force writes.
   bool warm_factor_storage{};
@@ -2489,6 +2497,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw std::overflow_error("CUDA KS solve epoch exhausted");
     }
     ++solve_epoch;
+    occupied_xc_frame_ready = pending_occupied_xc = occupied_xc_executed = false;
+    occupied_xc_refinement_iterations = 0;
     is_active = false;
     is_failed = true;
     // A new attempt invalidates execution evidence immediately, before any
@@ -3430,13 +3440,30 @@ struct CudaKsPlan::Impl : KsStateStorage {
       runtime::cuda_trace::trace_counter("xc_point_ao_visits", prepared_ao_work.point_ao_visits);
       runtime::cuda_trace::trace_counter("xc_point_ao_square_sum",
                                          prepared_ao_work.point_ao_square_sum);
-      // Exact occupied verification repeats original-D work after projection.
-      // Until a cheaper qualified contract exists, all KS requests (including
-      // GENERATIVEQC_CUDA_KS_OCCUPIED_XC=1) use the ordinary matrix route.
-      // Lower-level CudaXcPlan experiments retain their explicit frame API.
-      runtime::cuda_trace::trace_counter("occupied_xc_frame_generation", 0);
+      CudaXcOccupiedDensity occupied_frame;
+      const auto occupied_rank = std::max(occupations[0], spins == 2 ? occupations[1] : 0);
+      // Do not start a provisional epoch without useful projection work and
+      // two strict submits for a fresh energy comparison inside the caller's budget.
+      if (occupied_xc_requested && occupied_xc_frame_ready && !strict_refinement &&
+          output.iterations < options.max_iterations &&
+          options.max_iterations - output.iterations > 2 && occupied_rank &&
+          occupied_rank < prepared_ao_work.max_active && output.physical_residual_rms > 1e-6 &&
+          phase == generativeqc::runtime::PrecisionPhase::Admitted && !device_chunk_mode &&
+          !device_nonlocal && !precision_schedule.any_lower_precision() &&
+          xc_layout.feature_terms == 5 && xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
+        occupied_frame = {
+            density,         tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
+            next_generation, true};
+      }
+      // tmp1 is borrowed only until residual/DIIS work reuses it on this stream.
+      occupied_xc_frame_ready = false;
+      pending_occupied_xc = occupied_frame.coefficients != nullptr;
+      occupied_xc_executed = occupied_xc_executed || pending_occupied_xc;
+      runtime::cuda_trace::trace_counter("occupied_xc_frame_generation",
+                                         pending_occupied_xc ? next_generation : 0);
+      runtime::cuda_trace::trace_counter("occupied_xc_provisional", pending_occupied_xc);
       if (!device_nonlocal || nonlocal_seed_stage) {
-        xc->enqueue(density, elements, next_generation, phase);
+        xc->enqueue(density, elements, next_generation, phase, occupied_frame);
         return xc->view(next_generation);
       }
       // Keep AO/semilocal work separate from the quadratic nonlocal pair sweep
@@ -3843,12 +3870,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     runtime::cuda_trace::trace_counter("density_generation", generation + 1);
     runtime::cuda_trace::trace_counter("fock_build", output.fock_builds + 1);
     is_pending = true;  // Any partial CUDA submission is drained on failure.
+    pending_occupied_xc = false;
     try {
       // Mixed history is only a bounded proposal accelerator. Every physical
       // energy/residual after handoff is rebuilt in FP64; six unsuccessful
       // strict proposals discard all provisional history and retain the
       // incumbent exact refinement. No mixed operator certifies publication.
-      if (experimental_mixed_history && strict_refinement && refinement_iterations == 6) {
+      if ((experimental_mixed_history && strict_refinement && refinement_iterations == 6) ||
+          (occupied_xc_executed && strict_refinement && occupied_xc_refinement_iterations == 6)) {
         check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       }
@@ -4121,6 +4150,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_pending = false;
     pending_iterations = 0;
     ++output.iterations;
+    if (occupied_xc_executed && strict_refinement) ++occupied_xc_refinement_iterations;
     ++output.fock_builds;
     if (pending_nonlocal_seed || pending_nonlocal_frozen)
       ++nonlocal_seed_iterations;
@@ -4168,6 +4198,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     last_physical = physical;
     const bool new_target_epoch =
         (mixed_precision_executed && refinement_iterations == 1) ||
+        (occupied_xc_executed && strict_refinement && occupied_xc_refinement_iterations == 1) ||
         (nonlocal_seed_iterations && nonlocal_exact_epoch_iterations == 1 &&
          !pending_nonlocal_seed && !pending_nonlocal_frozen);
     const bool first_strict_energy =
@@ -4190,12 +4221,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (is_failed) {
       pending_incremental_delta = false;
       if (pending_mixed_coulomb || pending_mixed_density || pending_mixed_point ||
-          pending_mixed_contractions || pending_mixed_range_exchange || pending_mixed_nonlocal) {
+          pending_mixed_contractions || pending_mixed_range_exchange || pending_mixed_nonlocal ||
+          pending_occupied_xc) {
         // Any failed low-precision attempt retries the same density with the
         // strict target operator. Do not publish or cache the failed proposal.
         ++output.precision.execution_retries;
         record_precision_retry();
         strict_refinement = true;
+        occupied_xc_frame_ready = false;
         // A numerical retry must discard the provisional operator as well as
         // its arithmetic. Never omit NLC or retain a mixed frozen potential in
         // the fresh strict target evaluation at this unchanged density.
@@ -4243,25 +4276,41 @@ struct CudaKsPlan::Impl : KsStateStorage {
          physical.maximum_residual, options.energy_tolerance, options.density_tolerance,
          physical_stationarity_tolerance()});
     bool early_final_probe_ran = false;
+    const bool occupied_stage = occupied_xc_executed && !strict_refinement;
+    // Approximate features are proposals, not a new point-functional contract.
+    // Bound their lifetime, then reuse the existing strict target handoff:
+    // fresh energy epoch and unchanged publication gates. Old DIIS entries
+    // may only predict new densities; six unsuccessful strict sweeps clear
+    // them. No historical/provisional Fock can certify a physical state.
+    // The first strict Fock has no comparable prior target energy. Reserve
+    // two strict submits, while retaining the established 11-proposal cap.
+    const MixedPrecisionWarmup occupied_warmup{1e-6, 12};
+    const bool enter_occupied_audit =
+        occupied_warmup.enter_refinement(occupied_stage, converged, output.iterations,
+                                         options.max_iterations, physical.residual_rms) ||
+        occupied_warmup.target_refresh_due(occupied_stage, output.iterations,
+                                           options.max_iterations - 1);
+    if (occupied_stage) converged = false;
     // The final contract admits a 1e-8 AO maximum but separately checks the
     // true F[D] canonical density. The 1e-9 spin-RMS and public E/D gates stay
     // intact. Optional/device/backend cases without this qualified ownership
     // retain the incumbent conservative stopping policy.
     const bool early_final_probe_eligible =
-        early_final_probe_requested && spins == 1 && !budget_fock && !fitted_exchange &&
-        !has_range_correction && !nonlocal_correlation && !incremental_direct_jk &&
-        !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
-        final_validation_partial && matrix_products.library_enabled() &&
-        provider.system().ecp_terms.empty() &&
+        !occupied_stage && early_final_probe_requested && spins == 1 && !budget_fock &&
+        !fitted_exchange && !has_range_correction && !nonlocal_correlation &&
+        !incremental_direct_jk && !precision_schedule.any_lower_precision() &&
+        configured_chunk_width() == 1 && final_validation_partial &&
+        matrix_products.library_enabled() && provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
     // Prove the force consumer's complete physical/canonical state before
     // publishing convergence or a warm seed. Rejection resumes the intact
     // DIIS proposal and invalidates only the borrowed orbital scratch.
+    // Provisional occupied Focks cannot certify or cache a canonical frame.
     const bool fitted_final_probe =
-        fitted_exchange && !budget_fock && !has_range_correction && !nonlocal_correlation &&
-        !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
-        provider.system().ecp_terms.empty() &&
+        !occupied_stage && fitted_exchange && !budget_fock && !has_range_correction &&
+        !nonlocal_correlation && !precision_schedule.any_lower_precision() &&
+        configured_chunk_width() == 1 && provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
     // On a soft orbital manifold the extrapolated density can move much more
@@ -4344,7 +4393,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                            nonlocal_outer_active && pending_nonlocal_frozen &&
                                            enter_nonlocal_target;
     const bool enter_strict_refinement =
-        handoff_nonlocal_proposal ||
+        enter_occupied_audit || handoff_nonlocal_proposal ||
         mixed_warmup.enter_refinement(mixed_stage, converged, output.iterations,
                                       options.max_iterations, physical.maximum_residual,
                                       pending_nonlocal_seed || pending_nonlocal_frozen);
@@ -4363,8 +4412,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       final_corrections = 0;
       stabilize_occupations = false;
       output.converged = false;
-      is_active = true;
-      if (!experimental_mixed_history) {
+      is_active = !enter_occupied_audit || output.iterations < options.max_iterations;
+      if (!experimental_mixed_history && !enter_occupied_audit) {
         check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       }
@@ -4442,6 +4491,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = !output.converged && refinement_budget;
     }
     try {
+      occupied_xc_frame_ready = false;
       // Final RI-K provenance is independent of whether the caller elects to
       // update the reusable warm density cache.
       if (output.converged) retain_final_fitted_projection();
@@ -4480,6 +4530,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
           warm_orbitals_are_ao = retain_ao;
           ++movement.warm_orbital_frames_retained;
           occupied_fitted_factor_ready = fitted_exchange;
+          occupied_xc_frame_ready = !device_chunk_mode;
         }
       } else {
         occupied_fitted_factor_ready = false;

@@ -1003,7 +1003,8 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
   const auto count = size_mul(layout_.spins, matrix, "CUDA XC density size overflow");
   if (elements != count) throw std::invalid_argument("CUDA XC density size is invalid");
   density_binding(phase);  // Validate before any submission.
-  if (!publish_generation || layout_.response || layout_.jets != 4 || layout_.work_jets != 4 ||
+  if ((occupied.provisional && phase != PrecisionPhase::Admitted) || !publish_generation ||
+      layout_.response || layout_.jets != 4 || layout_.work_jets != 4 ||
       layout_.feature_terms != 5 || layout_.ao_precision != CudaXcAoPrecision::Fp64 ||
       !density_binding(phase).precision.arithmetic.is_strict_fp64() ||
       !occupied.matches(density, layout_.nao, layout_.spins, generation))
