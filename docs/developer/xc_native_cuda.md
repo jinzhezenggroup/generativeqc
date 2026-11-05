@@ -1055,15 +1055,18 @@ requests, the already planned additional force envelope must fit available
 device memory; otherwise the eager anchor remains in place. Selection uses
 resource requirements, with no GPU-model condition. Setting
 `GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY=0` restores eager preparation.
-Unset and `1` select the guarded default; other explicit values conservatively
-retain eager preparation. Unsupported owners retain the eager path.
+Unset and `1` select the guarded fitted default; other explicit values
+conservatively retain eager preparation. Explicit `1` additionally admits strict
+FP64 full-Direct RKS with its accepted dense warm density, under the same source,
+precision, XC and force-headroom guards. Full Direct remains eager when unset;
+partially fitted and unsupported owners retain the eager path.
 
 If a later replay loses its source, preparation restores the frozen warm density
-and factor and rebuilds their matching incumbent energy using their own saved
-XC scalars. This extra Fock action appears in the `preparation` precision phase
-and the ordinary public work census. Current final-state force leases remain
-untouched during eviction. Explicit and transported seeds cannot inherit the
-source owner's deferred anchor. Performance validation must inspect the first
+and, when applicable, factor and rebuilds their matching incumbent energy using
+their own saved XC scalars. This extra Fock action appears in the `preparation`
+precision phase and the ordinary public work census. Current final-state force
+leases remain untouched during eviction. Explicit and transported seeds cannot
+inherit the source owner's deferred anchor. Performance validation must inspect the first
 warm call and the whole lifecycle separately from a pooled warm median.
 
 `GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE=1` is a default-off Direct RSH force
