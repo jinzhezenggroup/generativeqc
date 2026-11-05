@@ -1,0 +1,20 @@
+{
+  "requested_model": "gpt-6.1-sol",
+  "requested_effort": "ultra",
+  "actual_returned_model": "unknown",
+  "actual_returned_effort": "unknown",
+  "identity_observation": "The tool response identifies no backend model or reasoning setting. The requested route is not treated as verified returned identity.",
+  "review_independence": "fresh same-family audit",
+  "assurance": "provisional",
+  "subagents_spawned": 0,
+  "scope": "Read-only primary-source/Git inspection and independent bounded CPU arithmetic on existing receipts; only own audit directory written.",
+  "prompt_sha256": "5e34ae527ba193d50a6507eeebd4a4427537948e29c4a6bd9ad8973397d3f3d1",
+  "pending": null,
+  "requested_fork_turns": "none",
+  "requested_route_evidence": [
+    "../cold-force-final-audit-dispatch-v1.json",
+    "../cold-force-review-route-preparation-v1.json"
+  ],
+  "route_evidence_scope": "Parent reports actual native spawn request model=gpt-6.1-sol, reasoning_effort=ultra, fork_turns=none. These are requested settings only.",
+  "readiness_message_received": true
+}

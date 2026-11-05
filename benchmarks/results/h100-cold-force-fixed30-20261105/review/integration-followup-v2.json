@@ -1,0 +1,185 @@
+{
+  "schema": "generativeqc.scoped-audit-integration-followup.v2",
+  "review_completed": true,
+  "review_scope_complete": true,
+  "verdict": "PASS_SCOPED_INTEGRATION_NO_BLOCKING_CONCERN",
+  "original_WARN_and_v1_conclusions_unchanged": true,
+  "head": "728e17c1ece72967a033cbc2910e05d55233c0ee",
+  "merge_parents": [
+    "a5c12e2c176f82deea2ef5faddd25db8d15a0e52",
+    "051a157c64061eac4fd9ee90d7becfa982f80161"
+  ],
+  "prior_publication": "a5c12e2c176f82deea2ef5faddd25db8d15a0e52",
+  "upstream": "051a157c64061eac4fd9ee90d7becfa982f80161",
+  "blockers": [],
+  "findings": [
+    {
+      "check": "actual_parent_scope",
+      "status": "PASS",
+      "evidence": "No src/include/CMake/native-compiler delta. Exactly three runtime Python files change and each equals actual upstream parent051a157c6. Other upstream Hessian evidence/tests remain outside this supplement."
+    },
+    {
+      "check": "CUDA_constructor_short_circuit",
+      "status": "PASS",
+      "evidence": "Calculator.__init__:1256-1271 changes only the KS symbol import and _composite_rks_second_order assignment. Existing KS-present guard and composite predicate are AST-identical. The new OR arm begins self._device_name==cpu; for CUDA it short-circuits before basis/DF/full-range helper evaluation. With missing KS options, original false remains; with original CUDA composite eligibility true/false, the result is unchanged. ks.py adds only an inert function definition; no existing import-time statement or helper changes."
+    },
+    {
+      "check": "cold_warm_EF_and_force_defaults",
+      "status": "PASS_SOURCE_SCOPE",
+      "evidence": "All Calculator methods except constructor and four explicitly second-order methods are AST-identical. CUDA _composite flag value is preserved at its auxiliary-domain/ECP guard uses (calculator.py:1826-1833,2291-2299,2360-2368). Native RKS/force policies, preparation, benchmark timer and batch/precision-batch inputs are byte-identical to a5c12e2c. Constructor has extra Python symbol/Boolean bookkeeping; this review makes no claim of zero timing overhead or freshly measured728e17 performance."
+    },
+    {
+      "check": "Hessian_only_changes",
+      "status": "PASS_SCOPE_SEPARATION",
+      "evidence": "New full-range graph eligibility is CPU-gated in the constructor. Primal SCF fields are exported only inside _run_public_rks_second_order:2903-2933. composite_rks_hessian.py:1227-1230,1306-1308 changes direct-helper diagnostic public_calculator_endpoint to false. These are invoked by explicit Hessian/HVP endpoints, not cold/warm energy+forces."
+    },
+    {
+      "check": "four_payload_members_and_immutable_reviews",
+      "status": "PASS",
+      "evidence": "Exactly two record parts, summary.json.xz and replay.py are byte-equal to publisheda5c12e2c and current working bytes. Both original report files and both v1 supplement files match their prior saved hashes. No1398-member unpack/readback or720/72 arithmetic was repeated."
+    },
+    {
+      "check": "Libxc_checked_identity_refresh",
+      "status": "PASS",
+      "evidence": "Decompressed comparison to both actual parents changes only source_identity/native_source_identity; every other scientific/capability/execution/evidence/stale field is equal. stale remains true. Qualification prose changes only the same checked identities."
+    }
+  ],
+  "changed_Calculator_methods": [
+    "__init__",
+    "_checked_rks_second_order_atoms",
+    "_run_public_rks_second_order",
+    "hessian_vector_product",
+    "hessian"
+  ],
+  "constructor_changed_statement_types": [
+    "ImportFrom",
+    "Assign"
+  ],
+  "unchanged_direct_EF_source_paths": [
+    "src/methods/dft_method.cpp",
+    "src/dft/ks_tile_policy.hpp",
+    "src/dft/cuda_ks.cpp",
+    "src/dft/rks.cpp",
+    "src/methods/dft_method_preparation.cpp",
+    "benchmarks/readme_defaults.py",
+    "python/generativeqc/batch.py",
+    "python/generativeqc/_precision_batch.py"
+  ],
+  "scientific_payload_members_checked": [
+    "benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part00",
+    "benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part01",
+    "benchmarks/results/h100-cold-force-fixed30-20261105/summary.json.xz",
+    "benchmarks/results/h100-cold-force-fixed30-20261105/replay.py"
+  ],
+  "new_checked_source_identity": "e21251016a177598394f6c7036685724ee737075080f8ecbb2e4fb161a49b0f0",
+  "new_checked_native_source_identity": "cc2acbc91d8562e6062014edc52e6b65341f9322a986609b74cc7b98d8b42dd3",
+  "Libxc_changed_fields": [
+    "source_identity",
+    "native_source_identity"
+  ],
+  "Libxc_all_other_fields_equal_to_both_parents": true,
+  "stale": true,
+  "input_hash_count": 18,
+  "input_hashes": [
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/upstream3011-integration-v1.json",
+      "bytes": 9737,
+      "sha256": "9b35a0e72afcd832aea59a544bfd4f81f6b7d0c668b276b98e4a343a7082f693"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/upstream3011-source-refresh-v1.json",
+      "bytes": 1601,
+      "sha256": "52dfa1413b2f4a190dc8a9509ed5cb772fa6470dbbe999dcfce9412f73e74dc4"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/audit-report.json",
+      "bytes": 52655,
+      "sha256": "78252e26bc512d53221d6048eea1622e94255a65dd28c537b68df19432b019db"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/audit-report.md",
+      "bytes": 18119,
+      "sha256": "5175ca44ba239c656b0808033096d3ca0fcf84dff0cae4330b9bef988cb89efd"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/integration-followup-v1.json",
+      "bytes": 25074,
+      "sha256": "4611dd6ff7aa9cb9591831a100f58c388584abeef815db410fc1fb1abbc711fd"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/integration-followup-v1.md",
+      "bytes": 2669,
+      "sha256": "a6b594360440fa1bd1859d2f3c6060e6f6ad656409497b19ab8edbb91f5065cc"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part00",
+      "bytes": 786432,
+      "sha256": "05cc76d2918c81c65a461c1089d1f408d7946083dac428902dd4a07c2dfefae3"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part01",
+      "bytes": 586600,
+      "sha256": "51a1eed1451826d447c1c1257fc77bfc7e1fd65dcdf7fe02e61437847f38938a"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/summary.json.xz",
+      "bytes": 21136,
+      "sha256": "4cf8881dd67a0b76d2e0be33770bdd672888d4e2870b1ae9c29def3f64e52f28"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/replay.py",
+      "bytes": 8950,
+      "sha256": "cf24b765784870a68f1d1f863241d142f941fecff16dede2727f85d0f7a45763"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/python/generativeqc/calculator.py",
+      "bytes": 164291,
+      "sha256": "212b2752489354b6f429dc5ebb8e1e90f98d431428974aeeaa3f0dd86df29d2e"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/python/generativeqc/ks.py",
+      "bytes": 61218,
+      "sha256": "91466a7e5bb7a6e0dbdf8ef02ffc07217299b8ad09d697266bb42d6eee21571f"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/python/generativeqc/composite_rks_hessian.py",
+      "bytes": 55059,
+      "sha256": "d9048dce5725afafae3cdf32976966f84f99aa71a6d38c34e52745c30f7a049f"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/methods/dft_method.cpp",
+      "bytes": 217910,
+      "sha256": "90c1ddff1fe48c75db6041c3c796ea669050c49891913f47b85700ebd42c53b0"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/dft/ks_tile_policy.hpp",
+      "bytes": 2186,
+      "sha256": "cfdc46fbfe6556513c9d869a129e5c7fe6371d05b512efc598a984d85f07540e"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/readme_defaults.py",
+      "bytes": 24735,
+      "sha256": "e79ae3e71e82681f4549e29747dc5bf5e0c51736fbf4f8260fbacc5559ea3d08"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/manifests/libxc/native-qualification-snapshot.json.xz",
+      "bytes": 13220,
+      "sha256": "e74cf9ecacee9908dffc0b4064429578da533b194b8ce83460bf8ab9d25fbf7b"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/docs/reference/libxc_qualification.md",
+      "bytes": 4128,
+      "sha256": "a2805623719ed3a2d83e1160a872fe5bcda15284397db3d4efb0a4a2d37f1a89"
+    }
+  ],
+  "method": "Bounded read-only Git/source/AST/byte/JSON checks of this integration delta. No library imports, constructors, solvers, compilers, jobs, GPU/device gates, tests, fetch, full evidence inventories or original numeric reductions executed. Only these two supplement files are written.",
+  "requested_model": "gpt-6.1-sol",
+  "requested_effort": "ultra original route, continuation",
+  "actual_backend_identity": "unknown",
+  "assurance": "same-family/provisional",
+  "limits": [
+    "Upstream CPU Hessian science is not qualified by this source review. Normal CI covers merged interfaces.",
+    "728e17c1e remains a later unmeasured source. Original720 and72 cohorts retain frozen0ee and4ee/ed33 source/device identities; reuse is limited to unchanged CUDA E/F/force/default behavior.",
+    "Original WARN provenance/runtime-image limits and same-family/provisional assurance remain."
+  ]
+}

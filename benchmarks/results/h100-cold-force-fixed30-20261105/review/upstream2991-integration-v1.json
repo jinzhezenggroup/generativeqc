@@ -1,0 +1,17 @@
+{
+  "status": "NORMAL_UPSTREAM_METADATA_ONLY_CONFLICT",
+  "prior_head": "4a0bd352527fa92df34ec378ea797957ec15eb98",
+  "upstream": "30657763a1f79c44e1b897b524ae9f54c96928cd",
+  "parent_snapshot_differences": {
+    "source_identity": {
+      "ours": "81d376bbe7ec2b99123f26ec9d3f24409e77d3e446a226aa063299dfd594bd0f",
+      "upstream": "5e3ef29b4091e7d5b40f00bb998f7ff63f497f5d043395ef7e7511fcd1774fa9"
+    },
+    "native_source_identity": {
+      "ours": "a0f5574bc0ca91fcb664b4082a3e7f33999fa0e6378c97dfc90f66987a81313a",
+      "upstream": "124ad1e99725b1c15b995969a3e9ada3ef45c7673136d761a39241c8019c3cbe"
+    }
+  },
+  "upstream_native_diff": "diff --git a/src/dft/uks.cpp b/src/dft/uks.cpp\nindex b15ade2c1..e3a7bf126 100644\n--- a/src/dft/uks.cpp\n+++ b/src/dft/uks.cpp\n@@ -515,9 +515,10 @@ ScfResult run_uks_impl(\n     }\n     if (result.converged && options.retain_ks_state)\n       result.ks_physical_fock = concatenate(final.fock.alpha, final.fock.beta);\n-    // Only the generic ordinary owner retries a rejected final closure. Preserve\n-    // every iteration/Fock count and reuse, rather than increase, its SCF budget.\n-    if (result.converged || !evaluate_xc.program || options.max_iterations - used_iterations < 2)\n+    // An ordinary CPU owner can exhaust the short physical closure before its\n+    // SCF budget. Resume from that rejected physical state with fresh DIIS,\n+    // preserving every gate, iteration/Fock count and the original budget.\n+    if (result.converged || !ordinary_primary || options.max_iterations - used_iterations < 2)\n       break;\n     diis.clear();\n   }\n",
+  "scope": "Upstream2991 CPU UKS ordinary final-closure budget change and ECP tests; unchanged CUDA RKS automatic-force policy. Choose current upstream generated snapshot as generator input, preserve all scientific content, then regenerate actual checked identities. No old/new GPU measurement or full30 replay."
+}
