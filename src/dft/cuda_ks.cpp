@@ -86,6 +86,7 @@ namespace {
 using namespace scf::cuda_execution;
 constexpr unsigned kMaximumFinalCorrections = 4;
 constexpr unsigned kCudaKsChunkCapacity = 2;
+constexpr unsigned kColdFockStartupIterations = 16;
 
 // Bind native mathematical implementations once, outside the SCF hot path.
 // Execution uses the manifest-owned semilocal code rather than name branches.
@@ -458,6 +459,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   double warm_energy{std::numeric_limits<double>::infinity()};
   double warm_energy_correction{};
   bool warm_energy_baseline{};
+  bool cold_fock_startup{};
   // These three scalars belong to the immutable warm density, which can be
   // older than the latest final state when warm_updates is false. Never use
   // xc->view(generation) to reconstruct that frozen seed's energy later.
@@ -2646,6 +2648,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // A transported/external density may already approximate the full target.
     // Anchor it first instead of pulling it back to the semilocal-only solution.
     const bool native_cold_seed = !input || seed_origin == CudaKsSeedOrigin::NativeColdGuess;
+    // Deep-core UKS Hcore seeds can enter a large occupation cycle before
+    // Pulay has a useful local history. A finite, native-only Fock warmup
+    // changes proposals, never the physical F[D], stopping gates or budget.
+    // Imported/transported and authenticated warm densities retain their path.
+    cold_fock_startup =
+        native_cold_seed && !use_warm && spins == 2 &&
+        options.max_iterations >= kColdFockStartupIterations + 4 &&
+        functional == semilocal_family_code(SemilocalFamily::B3lyp) &&
+        !has_range_correction && !nonlocal_correlation && !budget_fock &&
+        options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
+            GENERATIVEQC_PRECISION_FP64 &&
+        !precision_schedule.any_lower_precision() && provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; }) &&
+        std::any_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                    [](const auto& atom) { return atom.atomic_number > 18; });
     nonlocal_seed_stage = nonlocal_initialization && (!outer_requested || native_cold_seed);
     nonlocal_inner_residual_tolerance = standard_nonlocal_model && standard_convergence_active()
                                             ? physical_stationarity_tolerance()
@@ -4111,26 +4129,51 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaGetLastError());
         runtime::cuda_trace::trace_counter("physical_orbital_gradient_checks", 1);
       }
+      const double* history_residual = residual;
+      if (cold_fock_startup && output.iterations >= kColdFockStartupIterations && !final_closure) {
+        // Pulay's norm must not let compact heavy-atom AOs dominate valence
+        // rotations. Fit X^T(FDS-SDF)X while retaining the unmodified AO
+        // commutator for every physical stopping and final-state check.
+        if (!physical_orbital_check) {
+          multiply(residual, true, false, x, false, tmp1);
+          multiply(x, false, true, tmp1, true, tmp2);
+        }
+        history_residual = tmp2;
+        runtime::cuda_trace::trace_counter("orthogonal_diis_residuals", 1);
+      }
       if (final_closure) {
         // Discard DIIS history and rebuild the closure proposal from F[D].
         // A stationary UKS occupation cycle still needs its virtual-space
         // shift, as on CPU. Export separately validates the unshifted F[D].
         check(cudaMemcpyAsync(effective, fock, elements * sizeof(double), cudaMemcpyDeviceToDevice,
                               stream));
+      } else if (cold_fock_startup && output.iterations < kColdFockStartupIterations) {
+        // The first history slot is dead until Pulay starts. Retain the
+        // preceding damped proposal there, not a mislabeled physical history.
+        // The last warmup proposal is unmodified F[D]; all warmup sweeps count
+        // against max_iterations. No new matrix storage or host copy is needed.
+        const bool damp =
+            output.iterations > 0 && output.iterations + 1 < kColdFockStartupIterations;
+        cuda_ks_detail::cold_start_fock(stream, elements, fock, fock_history, effective, damp);
+        check(cudaGetLastError());
+        runtime::cuda_trace::trace_counter(damp ? "startup_damped_focks" : "startup_current_focks",
+                                            1);
       } else {
         if (ordered_diis_gram) {
-          launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock, residual,
-                                         enabled, fock_history, residual_history, gram, weights,
-                                         history_count, history_head, effective, raw_gram, true,
-                                         diis_work);
+          launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock,
+                                         history_residual, enabled, fock_history, residual_history,
+                                         gram, weights, history_count, history_head, effective,
+                                         raw_gram, true, diis_work);
         } else {
           const bool incremental_gram = incremental_diis_gram;
           if (incremental_gram)
-            check(launch_diis_pending_gram(stream, 1, n, spins, history, residual, residual_history,
-                                           enabled, history_count, history_head, raw_gram));
-          launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
-                                    fock_history, residual_history, gram, weights, history_count,
-                                    history_head, effective, true, false, nullptr, 0, raw_gram);
+            check(launch_diis_pending_gram(stream, 1, n, spins, history, history_residual,
+                                           residual_history, enabled, history_count, history_head,
+                                           raw_gram));
+          launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, history_residual,
+                                    enabled, fock_history, residual_history, gram, weights,
+                                    history_count, history_head, effective, true, false, nullptr, 0,
+                                    raw_gram);
         }
         check(cudaGetLastError());
       }
@@ -4391,8 +4434,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // publishing convergence or a warm seed. Rejection resumes the intact
     // DIIS proposal and invalidates only the borrowed orbital scratch.
     // Provisional occupied Focks cannot certify or cache a canonical frame.
-    const bool fitted_final_probe =
-        !occupied_stage && fitted_exchange && !budget_fock && !has_range_correction &&
+    // Direct UKS needs the same proof as RI-K: do not replace an already
+    // canonical physical density by a destabilizing unextrapolated update.
+    const bool canonical_final_probe =
+        !occupied_stage && (fitted_exchange || (spins == 2 && has_exchange)) && !budget_fock &&
+        !has_range_correction &&
         !nonlocal_correlation && !precision_schedule.any_lower_precision() &&
         configured_chunk_width() == 1 && provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
@@ -4400,7 +4446,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // On a soft orbital manifold the extrapolated density can move much more
     // than the actual unshifted canonical density. Audit the latter directly:
     // its AO-maximum density bound is stricter than the proposal RMS gate.
-    if (fitted_final_probe && has_energy_history && full_energy_history &&
+    if (canonical_final_probe && has_energy_history && full_energy_history &&
         output.energy_change < options.energy_tolerance &&
         physical.residual < physical_stationarity_tolerance() &&
         physical.maximum_residual < physical_stationarity_tolerance()) {
@@ -4557,7 +4603,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       final_closure = true;
       output.converged = true;
       is_active = false;
-    } else if ((automatic_program || fitted_final_probe) && converged) {
+    } else if ((automatic_program || canonical_final_probe) && converged) {
       // The shared canonical proof above audited this exact physical F[D]
       // against the original density tolerance, without changing D. Applying
       // another unextrapolated update can amplify roundoff at an unstable
@@ -4788,9 +4834,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     prepare_final_frame();
     scf::solver::FinalStateLimits limits;
     limits.density_tolerance = options.density_tolerance;
-    // Fitted callers already check the strict physical AO maximum. This
+    // Explicit callers already check the strict physical AO maximum. This
     // optional override also tightens canonical density reconstruction, so
-    // preserve the original separate 1e-8 density contract for ordinary DF.
+    // preserve the original separate 1e-8 canonical-density contract.
     if (standard_convergence_active() || automatic_program)
       limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;

@@ -183,7 +183,7 @@ bool pack_host_batch(const std::vector<core::System>& systems,
     const std::size_t system_direct_ao_begin = host.direct_ao_shells.size();
     const std::size_t system_shell_begin = host.shell_atoms.size();
     for (const core::Shell& shell : system.shells) {
-      if (shell.angular_momentum > (df_values ? 4U : kMaximumAngularMomentum) ||
+      if (shell.angular_momentum > (df_values ? 5U : kMaximumAngularMomentum) ||
           shell.atom_index >= system.atoms.size())
         return false;
       if (host.shell_atoms.size() >=

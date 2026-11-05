@@ -301,12 +301,33 @@ class BasisSet:
             json.dumps(self.to_payload(), indent=2, sort_keys=True) + "\n"
         )
 
-    def shells_for(self, atoms: typing.Any) -> typing.Any:
-        """Expand general contractions without normalization or dropping zeros."""
+    def shells_for(
+        self,
+        atoms: typing.Any,
+        *,
+        backend: str = "cpu",
+        operator: str = "eri",
+        derivative_order: int = 0,
+        role: str = "orbital",
+        consumer: str | None = None,
+    ) -> typing.Any:
+        """Expand contractions under the requested role-specific execution contract.
+
+        Expansion performs no device work. Preserve the caller's auxiliary
+        contract rather than rechecking admitted h metadata as CPU orbital ERIs.
+        """
         from .basis_capabilities import require_basis
         from .calculator import Primitive, Shell
 
-        require_basis(self, atoms)
+        require_basis(
+            self,
+            atoms,
+            backend=backend,
+            operator=operator,
+            derivative_order=derivative_order,
+            role=role,
+            consumer=consumer,
+        )
         result = []
         for index, atom in enumerate(atoms):
             try:

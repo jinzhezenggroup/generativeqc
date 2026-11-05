@@ -193,7 +193,7 @@ struct HostBasis {
  */
 std::size_t host_basis_expansion_bytes(unsigned angular,
                                        generativeqc_basis_representation representation) {
-  if (angular > 4)
+  if (angular > 5)
     throw std::invalid_argument("generated DF gradient shell exceeds its admitted basis role");
   const auto cartesian = molecule::cartesian_count(angular);
   const auto components = cartesian * sizeof(molecule::CartesianComponent);
@@ -576,7 +576,7 @@ CudaDfNuclearSink::CudaDfNuclearSink(int device, const core::System& orbital,
     if (orbital.atoms[atom].position != auxiliary.atoms[atom].position)
       throw std::invalid_argument("DF nuclear sink requires matching physical atom coordinates");
   const auto terms = std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
-                                 [](const auto& shell) { return shell.angular_momentum == 4; })
+                                 [](const auto& shell) { return shell.angular_momentum >= 4; })
                          ? molecule::kMaximumAuxiliaryAoExpansionTerms
                          : molecule::kMaximumAoExpansionTerms;
   long double primitives = 0;
@@ -616,7 +616,7 @@ CudaDfNuclearSink::CudaDfNuclearSink(int device, const core::System& orbital,
     DeviceGuard restore;
     check(cudaSetDevice(device));
     check(cudaStreamCreateWithFlags(&arena.stream, cudaStreamNonBlocking));
-    const auto host_o = pack(orbital, 3, terms), host_x = pack(auxiliary, 4, terms);
+    const auto host_o = pack(orbital, 3, terms), host_x = pack(auxiliary, 5, terms);
     std::vector<double> positions(3 * atoms);
     state->result.resize(positions.size());
     for (std::size_t atom = 0; atom < atoms; ++atom)
@@ -742,7 +742,7 @@ generativeqc_status execute_cuda_df_gradient(
     }
   const auto expansion_terms =
       std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
-                  [](const auto& shell) { return shell.angular_momentum == 4; })
+                  [](const auto& shell) { return shell.angular_momentum >= 4; })
           ? molecule::kMaximumAuxiliaryAoExpansionTerms
           : molecule::kMaximumAoExpansionTerms;
   long double primitives = 0;
@@ -760,7 +760,7 @@ generativeqc_status execute_cuda_df_gradient(
   }
   try {
     const auto host_o = pack(orbital, 3, expansion_terms),
-               host_a = pack(auxiliary, 4, expansion_terms);
+               host_a = pack(auxiliary, 5, expansion_terms);
     std::vector<double> positions(3 * atoms), result(3 * atoms);
     for (std::size_t atom = 0; atom < atoms; ++atom)
       std::copy(orbital.atoms[atom].position.begin(), orbital.atoms[atom].position.end(),
@@ -867,7 +867,7 @@ generativeqc_status execute_cuda_df_gradient_tile(
   }
   const auto expansion_terms =
       std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
-                  [](const auto& shell) { return shell.angular_momentum == 4; })
+                  [](const auto& shell) { return shell.angular_momentum >= 4; })
           ? molecule::kMaximumAuxiliaryAoExpansionTerms
           : molecule::kMaximumAoExpansionTerms;
   long double primitives = 0;
@@ -884,7 +884,7 @@ generativeqc_status execute_cuda_df_gradient_tile(
   }
   try {
     const auto host_o = pack(orbital, 3, expansion_terms),
-               host_a = pack(auxiliary, 4, expansion_terms);
+               host_a = pack(auxiliary, 5, expansion_terms);
     std::vector<double> positions(3 * atoms), result(3 * atoms);
     for (std::size_t atom = 0; atom < atoms; ++atom)
       std::copy(orbital.atoms[atom].position.begin(), orbital.atoms[atom].position.end(),
@@ -1174,10 +1174,17 @@ generativeqc_status execute_cuda_df_hf_gradient(
   long double primitives = 0;
   for (const auto* system : {&orbital, &auxiliary})
     for (const auto& shell : system->shells) primitives += shell.primitives.size();
-  const bool auxiliary_g =
+  const bool auxiliary_h =
       std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
-                  [](const auto& shell) { return shell.angular_momentum == 4; });
-  const auto expansion_terms = auxiliary_g ? molecule::kMaximumAuxiliaryAoExpansionTerms
+                  [](const auto& shell) { return shell.angular_momentum == 5; });
+  const bool auxiliary_high =
+      std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
+                  [](const auto& shell) { return shell.angular_momentum >= 4; });
+  if (auxiliary_h && range_omega != 0.0) {
+    detail = "h auxiliary DF response requires the full-range Coulomb operator";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const auto expansion_terms = auxiliary_high ? molecule::kMaximumAuxiliaryAoExpansionTerms
                                            : molecule::kMaximumAoExpansionTerms;
   const long double per_ao = 2 * sizeof(std::int32_t) + sizeof(std::int64_t) +
                              sizeof(std::uint8_t) +
@@ -1190,7 +1197,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
   }
   try {
     const auto host_o = pack(orbital, 3, expansion_terms),
-               host_a = pack(auxiliary, 4, expansion_terms);
+               host_a = pack(auxiliary, 5, expansion_terms);
     std::vector<double> positions(3 * atoms), result(3 * atoms);
     for (std::size_t atom = 0; atom < atoms; ++atom)
       std::copy(orbital.atoms[atom].position.begin(), orbital.atoms[atom].position.end(),
@@ -1324,9 +1331,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // LR reuses the same generated radial geometry as the generic derivative.
     // A work/capacity-admitted LR source uses the qualified shell path without
     // enabling its full-range screening, compact schedule or mixed precision.
-    const bool shell_execution = (range_omega == 0.0 || execution_control || promoted_range) &&
+    // H has no promoted shell schedule. Keep its complete response on the
+    // independently qualified, bounded six-term polynomial panel consumer.
+    const bool shell_execution = !auxiliary_h && (range_omega == 0.0 || execution_control || promoted_range) &&
                                  execution != "generic" && device_metric && schedule == 0;
-    mixed_shell = mixed_shell && shell_execution && !auxiliary_g && range_omega == 0.0;
+    mixed_shell = mixed_shell && shell_execution && !auxiliary_high && range_omega == 0.0;
     if (mixed_shell) {
       precision_work =
           static_cast<unsigned long long*>(arena.allocate(sizeof(observed_precision_work)));
@@ -1360,7 +1369,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // adjoints when a generated shell consumer is available.
     const bool packed_pairs = (!device_metric || device_metric->full_rank) &&
                               pair_policy == "packed" && shell_execution && full_shell_domain &&
-                              !auxiliary_g && borrowed && borrowed->occupied_response;
+                              !auxiliary_high && borrowed && borrowed->occupied_response;
     const auto derivative_pairs =
         packed_pairs ? DfDerivativePairs::packed
         : pair_policy == "symmetric" || pair_policy == "packed" ||

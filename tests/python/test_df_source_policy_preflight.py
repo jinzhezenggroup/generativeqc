@@ -13,6 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 PREFIX = r"""
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <memory>
@@ -301,6 +302,8 @@ def host_policy_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ("invalid", 3, 4, -1),
         ("auto", 4, 4, -1),
         ("generic", 3, 5, -1),
+        ("generic", 3, 6, -1),
+        ("polynomial", 3, 5, -1),
     ],
 )
 def test_real_policy_rejects_before_work_and_freezes_admitted_source(
@@ -311,6 +314,8 @@ def test_real_policy_rejects_before_work_and_freezes_admitted_source(
     auxiliary: int,
     expected: int,
 ) -> None:
+    if endpoint == "factory" and selection == "generic" and auxiliary == 5:
+        expected = 0
     subprocess.run(
         [
             str(host_policy_probe),

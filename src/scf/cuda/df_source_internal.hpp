@@ -36,6 +36,7 @@ struct CudaDensityFittingIntegralSourceImpl {
   CudaDfMdRaw* raw_hermite{};  // optional immutable prepared E, charged below
   unsigned value_math{};   // Frozen with mapping; only qualified generated math for auxiliary g.
   bool has_auxiliary_g{};  // Immutable basis domain; auxiliary g uses explicit polynomial
+  bool has_auxiliary_h{};
                            // value/response lowering.
   std::size_t batch_size{};
   std::size_t public_nbf{};

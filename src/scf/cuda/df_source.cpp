@@ -344,10 +344,12 @@ CudaDensityFittingSourceDiagnostic cuda_density_fitting_integral_source_diagnost
   const char* math = implementation.value_math == 3U   ? "manifest"
                      : implementation.value_math == 1U ? "specialized_polynomial"
                      : implementation.value_math == 2U ? "specialized_rys"
+                     : implementation.has_auxiliary_h  ? "generated_rys_auxiliary_h_polynomial"
                      : implementation.has_auxiliary_g  ? "generated_rys_auxiliary_g_polynomial"
                                                        : "generated_rys";
   if (implementation.raw_hermite)
-    math = implementation.has_auxiliary_g ? "prepared_hermite/generated_rys_auxiliary_g_polynomial"
+    math = implementation.has_auxiliary_h ? "prepared_hermite/generated_rys_auxiliary_h_polynomial"
+           : implementation.has_auxiliary_g ? "prepared_hermite/generated_rys_auxiliary_g_polynomial"
                                           : "prepared_hermite/generated_rys";
   return {math, mapping, true, true};
 }

@@ -41,7 +41,7 @@ def test_raw_df_operator_roles_domain_and_permutations() -> None:
                 == integral.signature.component_shape
             )
     with pytest.raises(ValueError, match="s/p/d/f"):
-        build_df_value_ir("coulomb_metric", (3, 5))
+        build_df_value_ir("coulomb_metric", (3, 6))
     with pytest.raises(ValueError, match="basis roles"):
         build_df_value_ir("three_center_eri", (1, 2))
     with pytest.raises(ValueError, match="DF values"):
@@ -54,13 +54,13 @@ def test_cuda_df_inventory_retains_all_operator_signatures_and_exact_root_counts
     from generativeqc_compiler.integral.df_cuda import df_program_inventory
 
     inventory = df_program_inventory()
-    assert len(inventory["programs"]) == 25 + 80
+    assert len(inventory["programs"]) == 36 + 96
     root_counts = set()
     for payload in inventory["programs"]:
         integral = integral_from_payload(payload)
-        if 4 in integral.signature.angular:
+        if max(integral.signature.angular) >= 4:
             assert integral.recurrence == "subset_wick"
-            assert integral.maximum_coulomb_order <= 10
+            assert integral.maximum_coulomb_order <= 11
             if len(integral.signature.angular) == 3:
                 assert max(integral.signature.angular[:2]) <= 3
             continue

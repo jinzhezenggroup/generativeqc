@@ -1,5 +1,6 @@
 #include "molecule/basis.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -8,7 +9,7 @@
 namespace generativeqc::molecule {
 namespace {
 
-constexpr unsigned kMaximumPublicAngularMomentum = 4;
+constexpr unsigned kMaximumPublicAngularMomentum = 5;
 
 double radial_primitive_normalization(double exponent, unsigned angular_momentum) {
   return std::pow(2.0 * exponent / std::numbers::pi, 0.75) *
@@ -32,7 +33,7 @@ double odd_double_factorial(unsigned angular_power) noexcept {
 
 std::vector<CartesianComponent> cartesian_components(unsigned l) {
   if (l > kMaximumPublicAngularMomentum)
-    throw std::invalid_argument("Cartesian components support l<=4");
+    throw std::invalid_argument("Cartesian components support l<=5");
   std::vector<CartesianComponent> components;
   components.reserve(cartesian_count(l));
   // CCA/libcint order: x power decreases first; for a fixed x power, y
@@ -186,7 +187,8 @@ double cartesian_component_normalization(const CartesianComponent& component) no
   return 1.0 / std::sqrt(denominator);
 }
 
-generativeqc_status validate_and_normalize(core::System& system, std::string& detail) {
+generativeqc_status validate_and_normalize(core::System& system, std::string& detail,
+                                           unsigned maximum_angular_momentum) {
   if (system.atoms.empty()) {
     detail = "a system requires at least one atom";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -237,10 +239,12 @@ generativeqc_status validate_and_normalize(core::System& system, std::string& de
       detail = "shell atom index is out of range";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-    if (shell.angular_momentum > kMaximumPublicAngularMomentum) {
+    if (shell.angular_momentum > std::min(maximum_angular_momentum, kMaximumPublicAngularMomentum)) {
       detail = "shell on atom " + std::to_string(shell.atom_index) +
                " has l=" + std::to_string(shell.angular_momentum) +
-               "; native CPU Cartesian/real-spherical execution supports s through g shells";
+               (maximum_angular_momentum == 5
+                    ? "; native SCF auxiliary basis metadata supports s through h shells"
+                    : "; native CPU Cartesian/real-spherical execution supports s through g shells");
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     if (shell.primitives.empty()) {

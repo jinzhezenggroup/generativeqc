@@ -199,6 +199,24 @@ template<unsigned Math=0> struct CompensatedValue {
         if derivatives
         else ""
     )
+    h_support = (
+        emit_df_derivatives_cuda(auxiliary_h=True)
+        + _auxiliary_g_policy_adapter()
+        .replace("generated_df_g_adapter", "generated_df_h_adapter")
+        .replace(
+            "generated_df_auxiliary_g_derivatives",
+            "generated_df_auxiliary_h_derivatives",
+        )
+        if derivatives
+        else ""
+    )
+    h_policy = (
+        derivative.replace(
+            "struct Derivative", "struct AuxiliaryHighDerivative"
+        ).replace("generated_df_derivatives::", "generated_df_h_adapter::")
+        if derivatives
+        else ""
+    )
     range_policy = ""
     if derivatives:
         range_policy = (
@@ -243,9 +261,11 @@ struct LongRangeValue {
         f"#ifndef {guard}\n#define {guard}\n"
         f'#include "{header}"\n'
         + g_support
+        + h_support
         + "namespace generativeqc::scf::generated_df_policy {\n"
         + (derivative if derivatives else value)
         + g_policy
+        + h_policy
         + range_policy
         + "} // namespace generativeqc::scf::generated_df_policy\n#endif\n"
     )
