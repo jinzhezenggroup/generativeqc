@@ -1,5 +1,16 @@
 # Current-source occupied-XC cold endpoint qualification
 
+Historical full receipts are now recovered from the already-published
+`ffa6936968d5c5a33194bd9bc09435a9f2ee0d05` snapshot, not copied into every
+checkout. `historical-snapshot.json` authenticates all 335,532 compressed bytes
+and their original SHA-256; `reproduce.py` verifies recovery before replay.
+All 168 endpoints, reference vectors, source reconstruction, failed cohorts
+and original protocol remain intact. Ordinary synthetic profile tests do not
+load this report. Recovery never fetches implicitly; a shallow clone may need
+an explicit fetch of that published revision before the optional historical
+replay. This frees space for current occupied-XC qualification without changing
+the storage cap or publishing an external archive.
+
 Measured source: `66a8a98bf5e81d17a71225f9fcd091022d64e4bf`.
 This integrates the existing compiler/native occupied-XC proposal from PR #2577
 (`b1851abc43856f777a0f99e8150bc87b2d8e6b66`) with the current cold SCF owner.

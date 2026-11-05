@@ -120,7 +120,7 @@ class Ump2Prepared final : public PreparedCalculation, public ReferenceSeededCal
       if (fitting_.auxiliary) {
         if (external_capacity >= phase_budget)
           throw std::length_error("UMP2 DF reference exceeds endpoint budget");
-        fitted.emplace(reference_source, *fitting_.auxiliary, fitting_.threshold,
+        fitted.emplace(reference_source, reference, *fitting_.auxiliary, fitting_.threshold,
                        std::min(fitting_.budget, phase_budget - external_capacity), cuda_, device_,
                        compute_forces, unrestricted_integral_backend());
         external_capacity =

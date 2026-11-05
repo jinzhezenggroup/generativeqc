@@ -33,7 +33,20 @@ _SHIM = r"""
 #include "scf/cuda_batch.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/fock_symmetry.hpp"
 #include "scf/initial_guess/eigen_operation.hpp"
+#include "scf/solver/validation_products.hpp"
+
+namespace generativeqc::scf::reference {
+// This probe replaces numerical providers to inject typed failures. Physical
+// product correctness and provider ownership have separate analytic gates.
+Matrix multiply(const Matrix&, const Matrix&, std::size_t) {
+  throw std::runtime_error("unexpected seed-validation matrix product");
+}
+Matrix transpose(const Matrix&, std::size_t) {
+  throw std::runtime_error("unexpected seed-validation transpose");
+}
+}
 
 namespace generativeqc::runtime::df_progress {
 void number(const char*, auto) {}
@@ -144,7 +157,7 @@ Matrix normalized_warm_density(const core::System&, const auto&, const Matrix& d
 void validate_preliminary_target(const core::System&, const ResolvedFockBuild&, const ScfOptions&) {}
 std::optional<Matrix> prepare_huckel_initial_density(const core::System& system,
     const auto&, const PreliminaryOptions&, PreliminaryDiagnostic& diagnostic,
-    const EigenOperation& eigen) {
+    const EigenOperation& eigen, const MatrixProductOperation&) {
   ++preparations.at(source_id(system));
   in_seed = true;
   try { eigen({1}, nullptr, nullptr, 1); }
@@ -163,7 +176,11 @@ Matrix prepare_initial_density(const core::System& system, const auto&, const Ma
   ++core_densities.at(source_id(system));
   return {2};
 }
-struct Diis { explicit Diis(unsigned) {} Matrix update(const Matrix& f, const Matrix&) { return f; } };
+struct Diis {
+  explicit Diis(unsigned, bool = false) {}
+  Matrix update(const Matrix& f, const Matrix&) { return f; }
+  void clear() {}
+};
 struct CudaDensityFittingDeviceScfItem {
   bool converged{}; unsigned iterations{}; double energy{}, energy_change{}, density_rms{};
   std::uint64_t fock_builds{};

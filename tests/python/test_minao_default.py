@@ -316,7 +316,10 @@ def test_mixed_ecp_basis_does_not_disable_an_all_electron_neighbor(
         _native, "load_library", lambda *args, **kwargs: automatic._library
     )
     legacy = Calculator(method, basis, device="cpu", **options)
-    assert legacy.initial_guess is None
+    assert legacy.initial_guess == InitialGuessSpec("minao")
+    assert initial_guess_for_systems(legacy, systems[:1]) == legacy.initial_guess
+    assert initial_guess_for_systems(legacy, systems[1:]) is None
+    assert initial_guess_for_systems(legacy, systems) is None
 
 
 def test_default_checkpoint_density_skips_preparation(

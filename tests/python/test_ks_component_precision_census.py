@@ -62,6 +62,8 @@ using Kind = scf::PrecisionOperatorKind;
 using Mode = scf::PrecisionArithmeticMode;
 using Dtype = scf::PrecisionDtype;
 struct Owner {
+  bool occupied_xc_executed{}, strict_refinement{};
+  unsigned occupied_xc_refinement_iterations{};
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
   bool pending_mixed_point{}, experimental_mixed_contractions{}, pending_mixed_exchange{};
   bool pending_mixed_contractions{};

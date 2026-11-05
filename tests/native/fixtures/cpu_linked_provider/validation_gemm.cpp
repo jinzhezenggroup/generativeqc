@@ -14,7 +14,9 @@ void require(bool value) {
 struct Audit {
   ~Audit() {
     const auto* setting = std::getenv("GENERATIVEQC_SCF_VALIDATION_GEMM");
-    const bool requested = setting && std::string_view(setting) == "1";
+    const bool requested =
+        setting ? std::string_view(setting) == "1"
+                : std::getenv("GENERATIVEQC_TEST_VALIDATION_PREFER_PROVIDER") != nullptr;
     require(threads == 7);
     require(used ==
             (requested && GENERATIVEQC_HAS_OPENBLAS && GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS));

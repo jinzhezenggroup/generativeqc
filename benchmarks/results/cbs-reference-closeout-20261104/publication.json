@@ -1,0 +1,57 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "6707989cce434b0ca4ef43f9920d5f91525f30c1",
+    "dirty": false
+  },
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/cbs-reference-closeout-20261104/replay.py"
+    ]
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Six frozen restricted CUDA fixture/model combinations and physical full-DF water pass independent fixed gates under explicit :16:8; historical conventional CPU reused; four CPU DF combinations unsupported. V2 refusals retained. No default/performance/current-main qualification."
+  },
+  "archives": [],
+  "files": [
+    {
+      "path": "replay.py",
+      "role": "reproduction",
+      "bytes": 13101,
+      "sha256": "8aeacc9334a0da3cadb4bd6ea00d4307741985b02c2f33ab33a4d2cd8c9d4e32"
+    },
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 6701,
+      "sha256": "ab62eabed197894359dd230803d3f4896ddefe308debd08c09ce246d0416143c"
+    },
+    {
+      "path": "summary.json",
+      "role": "summary",
+      "bytes": 43678,
+      "sha256": "b720a6c017b8d14eb54ffc922a083ad0ad76a65d0a7a65b54eb1dc47351a617d"
+    },
+    {
+      "path": "errors.csv",
+      "role": "summary",
+      "bytes": 9542,
+      "sha256": "fa610b75158a97a511b04d8fc276e6b9391500e06d8fa5198d57336fc9ab83ce"
+    },
+    {
+      "path": "records-01.json.xz",
+      "role": "samples",
+      "bytes": 383436,
+      "sha256": "38e6d5a0196c70d5c114d63344e873c643b7e934ea0c06623e22a0b3bba6f892"
+    },
+    {
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "bytes": 4568,
+      "sha256": "26050aec5b64d84760fb886e7cf56382d0831024e47adb4f9d54378ff6209794"
+    }
+  ]
+}

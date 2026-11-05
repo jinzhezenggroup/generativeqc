@@ -67,6 +67,16 @@ tolerance. With `proposer=None`, results and convergence follow the existing
 path; there is no snapshot work unless capture is requested. Strict initial
 seeds are validated before use and are not silently rescaled.
 
+Cold CUDA DF Hückel preparation prefers the existing FP64 CPU BLAS products
+for target seed admission at 512 AOs and above. It preserves the atomic model,
+eigen provider, metric/occupation checks and preliminary memory cap. Other
+host validation owners remain scalar by default. The per-validation selector
+`GENERATIVEQC_SCF_VALIDATION_GEMM=0` restores scalar products; `=1` requests
+BLAS products for all host validation owners. An unavailable qualified BLAS
+provider or any other explicit selector value retains scalar products. Provider
+failures follow the existing typed seed-preparation error boundary, without a
+silent product-backend retry. Explicit/warm densities bypass this cold work.
+
 A small residual does not establish the lowest or intended electronic state.
 Snapshots expose metric occupations, gaps, and population outside the Aufbau
 occupied subspace. Stability and intended-state status remain `not_evaluated`

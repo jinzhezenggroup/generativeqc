@@ -147,11 +147,13 @@ def backend(
             return ResolvedModel("rhf", "geometry", "orbital", 2)
 
         def singlepoint(self, atoms: typing.Any, **options: typing.Any) -> Result:
-            assert state.live is None, "previous endpoint retained its workspace"
+            assert state.live is None or state.live is self, (
+                "another endpoint retained its workspace"
+            )
             state.live = self
             state.calls.append((self, atoms, options))
             output = state.outputs.pop(0)
-            if isinstance(output, Exception):
+            if isinstance(output, BaseException):
                 raise output
             return output
 
@@ -331,6 +333,8 @@ def test_standard_executes_once_without_inventing_budget_evidence(
     assert report.target is None and report.errors == report.rejected_errors == ()
     assert "no-observable-audit" in report.reference
     assert report.solves[0].requested_precision == "fp64"
+    assert backend.live is calculator._candidate
+    calculator.clear_cache()
     assert backend.live is None
     assert calculator.policy.to_dict() == {"profile": profile.lower(), "target": None}
     assert json.loads(json.dumps(report.to_dict(), allow_nan=False))["target"] is None
@@ -346,8 +350,8 @@ def test_tight_is_a_cbs_only_preset(backend: SimpleNamespace) -> None:
     assert not backend.instances
 
 
-@pytest.mark.parametrize("profile", ("standard", "fp64"))
-def test_standard_explicit_target_retains_the_complete_budget_audit(
+@pytest.mark.parametrize("profile", ("standard", "fp64", "fast"))
+def test_profiles_with_explicit_target_retain_the_complete_budget_audit(
     backend: SimpleNamespace, profile: str
 ) -> None:
     """A caller's requested error proof cannot disappear inside a speed preset."""
@@ -358,6 +362,7 @@ def test_standard_explicit_target_retains_the_complete_budget_audit(
     report = output.precision_validation
     assert report.status == "observed_met" and report.solve_count == 2
     assert report.target == ENERGY and report.errors[0].difference > 0
+    assert backend.live is None
 
 
 @pytest.mark.parametrize("profile", ("standard", "fp64"))
@@ -420,6 +425,74 @@ def strict_native_result(**changes: typing.Any) -> Result:
             **changes,
         },
     )
+
+
+@pytest.mark.parametrize("profile", ("standard", "fast", "fp64"))
+def test_unaudited_profiles_share_resident_scalar_lifetime(
+    backend: SimpleNamespace, profile: str
+) -> None:
+    """Changing accuracy policy must not force a fresh native owner on replay."""
+    backend.block_auto = True
+    backend.outputs = [strict_native_result(), strict_native_result()]
+    calculator = PrecisionCalculator(policy=profile, device="cuda")
+    first = calculator.singlepoint(ATOMS)
+    assert backend.live is calculator._candidate
+    moved = (("H", (0, 0, -0.71)), ATOMS[1])
+    second = calculator.singlepoint(moved)
+    assert backend.live is calculator._candidate
+    assert first.precision_validation.solve_count == 1
+    assert second.precision_validation.solve_count == 1
+    assert backend.calls[0][1] != backend.calls[-1][1]
+    calculator.clear_cache()
+    assert backend.live is None
+    np.testing.assert_array_equal(first.forces, second.forces)
+
+
+@pytest.mark.parametrize("profile", ("standard", "fast"))
+@pytest.mark.parametrize(
+    "damaged",
+    [
+        replace(strict_native_result(), converged=False),
+        replace(strict_native_result(), energy=float("nan")),
+        replace(strict_native_result(), forces=np.zeros((1, 3))),
+        RuntimeError("execution failed"),
+        KeyboardInterrupt(),
+    ],
+)
+def test_shared_scalar_lifetime_releases_failed_publications(
+    backend: SimpleNamespace, profile: str, damaged: Result | BaseException
+) -> None:
+    """Invalid results and cancellation release residency before another call."""
+    backend.block_auto = True
+    backend.outputs = [damaged, strict_native_result()]
+    calculator = PrecisionCalculator(policy=profile, device="cuda")
+    with pytest.raises((RuntimeError, ValueError, KeyboardInterrupt)):
+        calculator.singlepoint(ATOMS)
+    assert backend.live is None
+    assert calculator.singlepoint(ATOMS).converged
+    calculator.clear_cache()
+    assert backend.live is None
+
+
+@pytest.mark.parametrize("profile", ("standard", "fast"))
+def test_shared_scalar_lifetime_releases_classification_failures(
+    backend: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, profile: str
+) -> None:
+    """A completed solve is not publishable when its policy receipt fails."""
+    backend.block_auto = True
+    backend.outputs = [strict_native_result(), strict_native_result()]
+    calculator = PrecisionCalculator(policy=profile, device="cuda")
+
+    def fail_classification(**kwargs: typing.Any) -> None:
+        raise RuntimeError("invalid classification receipt")
+
+    with monkeypatch.context() as scope:
+        scope.setattr(calculator, "_classify_candidate", fail_classification)
+        with pytest.raises(RuntimeError, match="invalid classification receipt"):
+            calculator.singlepoint(ATOMS)
+    assert backend.live is None
+    assert calculator.singlepoint(ATOMS).converged
+    calculator.clear_cache()
 
 
 def test_fast_strict_fallback_retains_standard_without_repeating_endpoint(

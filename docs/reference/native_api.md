@@ -246,6 +246,9 @@ specific to their C descriptors. See [units](units.md).
 Other status codes distinguish invalid arguments, ABI mismatch,
 unsupported operations, non-convergence, numerical failure,
 CUDA failure, out-of-memory and internal errors. The special
+`GENERATIVEQC_STATUS_RESOURCE_LIMIT` distinguishes an explicit finite work-policy
+refusal from allocation failure; see [correlated resource controls](../user/correlated_methods.md#control-cost-memory-and-convergence).
+The special
 `GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE` means a completed precision
 provenance record is not available; it does not, by itself, mean a solve
 failed. Use `generativeqc_status_message` for status explanations and
@@ -254,6 +257,16 @@ failed. Use `generativeqc_status_message` for status explanations and
 Batch execution may succeed structurally while individual member results fail.
 Always inspect each input-indexed member's status and convergence fields before
 using its numerical data; a missing force array is not a zero force.
+
+KS batches retain the first failing item's execution-local detail, prefixed by
+its input index. Native provider exceptions keep their original message and
+typed status. A terminal CUDA KS non-convergence reports the energy change,
+maximum per-spin density RMS, maximum per-spin commutator RMS, and AO-maximum
+commutator separately, together with their limits. A rejected canonical proof
+also records its iteration and unshifted final-state validation products.
+Numerical failures can retain partial KS history for diagnosis; that history
+never authorizes energy/force labels or a stationary-state token. Copy context
+detail before another context operation; the next batch execution clears it.
 
 For advanced Python/compiler extensions instead of C handles, consult
 the [extension guide](../developer/extensions.md) and

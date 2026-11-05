@@ -170,6 +170,7 @@ HARNESS = r"""
 #include "scf/fleet_item.hpp"
 using generativeqc::methods::MethodError;
 using generativeqc::methods::item_exception_status;
+using generativeqc::methods::item_exception_detail;
 using generativeqc::methods::retryable_seed_failure;
 namespace scf = generativeqc::scf;
 namespace initial_guess = scf::initial_guess;
@@ -326,7 +327,7 @@ struct Calculation {
   std::size_t fock_builds{};
   std::optional<generativeqc::dft::ScfDiagnostic> ks_diagnostic;
 };
-struct BatchResult : Item { Calculation calculation; };
+struct BatchResult : Item { Calculation calculation; std::string detail; };
 struct KsItem {
   std::exception_ptr failure;
   std::unique_ptr<StubKsPlan> plan{std::make_unique<StubKsPlan>()};

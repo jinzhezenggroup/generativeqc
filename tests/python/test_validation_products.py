@@ -50,12 +50,20 @@ def test_physical_validation_products(
         ],
         link_args=["-Wl,--gc-sections"],
     )
-    for setting in (None, "0", "1", "true", "2"):
+    settings = [
+        (setting, preferred)
+        for preferred in ((False, True) if owner == "validation_proposal" else (False,))
+        for setting in (None, "0", "1", "true", "2")
+    ]
+    for setting, preferred in settings:
         env = dict(os.environ)
         env.pop("GENERATIVEQC_SCF_VALIDATION_GEMM", None)
         env.pop("GENERATIVEQC_TEST_VALIDATION_GEMM_CORRUPT", None)
+        env.pop("GENERATIVEQC_TEST_VALIDATION_PREFER_PROVIDER", None)
         if setting is not None:
             env["GENERATIVEQC_SCF_VALIDATION_GEMM"] = setting
+        if preferred:
+            env["GENERATIVEQC_TEST_VALIDATION_PREFER_PROVIDER"] = "1"
         subprocess.run(
             [str(binary)], env=env, check=True, capture_output=True, timeout=30
         )
