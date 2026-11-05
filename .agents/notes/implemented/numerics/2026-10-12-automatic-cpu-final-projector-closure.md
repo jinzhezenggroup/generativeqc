@@ -73,3 +73,9 @@ admission follows. The separate empty-spin physical-birth question is unchanged.
 
 A shared CPU final-state owner replaces the bounded closure, or an actual CPU
 operator/event producer can certify complete returned-attempt work.
+
+## Later extension
+
+`2026-11-04-curated-cpu-uks-final-closure-budget.md` extends the bounded UKS
+restart to ordinary curated CPU owners after an independently reproduced IH(-)
+failure. The original SCF budget and physical acceptance gates remain unchanged.
