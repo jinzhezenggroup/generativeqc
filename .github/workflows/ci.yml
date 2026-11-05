@@ -1392,10 +1392,6 @@ jobs:
           # Offline retention tests recover real artifacts from historical commits.
           fetch-depth: 0
           persist-credentials: false
-      # Capture committed inputs before imports/builds create bytecode and assets.
-      - name: Fingerprint committed Python probe inputs
-        id: python_probe_inputs
-        run: python3 tools/ci_python_probe_key.py
       - name: Select README-only CI scope
         id: prose_scope
         continue-on-error: true
@@ -1419,6 +1415,12 @@ jobs:
           fi
           printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
           printf 'README-only CI scope: %s\n' "$scope"
+      # Capture committed inputs before preparing build/test environments.
+      # Prose-only changes keep their existing cheap classification path.
+      - name: Fingerprint committed Python probe inputs
+        id: python_probe_inputs
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        run: python3 tools/ci_python_probe_key.py
       - name: Install uv and Python 3.11
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -1698,7 +1700,7 @@ jobs:
           PROBE_SHARD: ${{ matrix.shard }}
         run: python3 tools/ci_cpu_ccache_snapshot.py package --profile probe --shard "$PROBE_SHARD"
       - name: Publish trusted master Python probes
-        if: steps.python_probe_snapshot.outcome == 'success'
+        if: steps.python_probe_snapshot.outcome == 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 2
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

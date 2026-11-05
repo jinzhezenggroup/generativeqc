@@ -100,6 +100,8 @@ def test_missing_git_inventory_fails_closed(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "relative",
     (
+        "cmake/CompilerOptions.cmake",
+        "python/generativeqc_compiler/integral/provider.py",
         ".github/scripts/ci_select_python_shard.sh",
         ".github/scripts/ci_collect_python_shard.sh",
         ".github/workflows/ci.yml",
