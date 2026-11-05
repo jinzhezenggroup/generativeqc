@@ -100,6 +100,13 @@ including an empty string, conservatively disable proposals as well.
 The [automatic-admission decision](../../.agents/notes/implemented/performance/2026-11-05-occupied-xc-automatic-admission.md)
 records the default-promotion rationale and rollback boundary.
 
+Numerical admission is not a per-input profitability guarantee. Use
+`benchmarks/occupied_xc_functionals.py` to compare complete native energy/force
+populations with actual unset/`0` controls, independent references and semantic
+SCF/Fock counts. Keep traced admission diagnostics separate from timing, retain
+neutral/regressing populations, and require matching optional native providers
+rather than treating a recognized functional name as a backend capability.
+
 Near-stationary inputs (previous residual RMS at most `1e-6`), the final two
 permitted iterations, and plans without any AO domain larger than the occupied
 rank retain matrix work without starting a provisional energy epoch. The owner switches permanently to

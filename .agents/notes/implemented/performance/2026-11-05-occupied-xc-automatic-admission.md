@@ -71,7 +71,6 @@ The subsequent delivery merge retains the PR branch's existing upstream/CI
 integration and raw-output guards. It does not turn the pinned default image
 measurements into merged-target qualification or refresh scientific claims.
 
-
 ## Bounded admission correction
 
 Source review found that first admission on the final permitted submit could
@@ -92,3 +91,7 @@ runner's fixed three-atom water case without rewriting retained bytes; new
 receipts also record the atom count. Streaming library hashing supports Python
 3.10 without changing the digest. Existing numerical and cost gates remain
 unchanged.
+
+The subsequent [cross-functional survey](2026-11-05-occupied-xc-functional-survey.md)
+finds a replicated M06-2X gain and MN15/UKS counterexamples. It supplements the
+profitability scope without changing this original observation or selector.
