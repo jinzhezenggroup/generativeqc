@@ -140,6 +140,8 @@ sources retain their existing routes. No GPU-model dispatch is used.
 `GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE` is captured by the prepared owner
 and included in resource/restart identity. Unset or `1` enables this preference;
 `0`, empty and unknown values disable it without disabling relative responses.
+Changing it requires a newly prepared owner. The old experimental selector is
+not an interface. See the [qualification and retained limitations](../../.agents/notes/implemented/performance/2026-11-06-direct-complete-pair-projection.md).
 
 ### Long-range shell-weighted responses
 
@@ -162,8 +164,8 @@ included in resource/restart identity. Unset or `1` selects shell weighting;
 `0`, empty and unknown values select the previous per-AO consumer. The separate
 relative-response selector still requests nuclear coordinates, and a nonfinite
 relative reduction retries the strict nuclear weighted graph before atom scatter.
-Changing it requires a newly prepared owner. The old experimental selector is
-not an interface. See the [qualification and retained limitations](../../.agents/notes/implemented/performance/2026-11-06-direct-complete-pair-projection.md).
+Changing it requires a newly prepared owner. See the
+[qualified default and retained integration failures](../../.agents/notes/implemented/performance/2026-11-06-lr-weighted-direct-forces.md).
 
 ### Native streaming boundary
 
