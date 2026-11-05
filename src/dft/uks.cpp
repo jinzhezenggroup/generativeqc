@@ -515,9 +515,10 @@ ScfResult run_uks_impl(
     }
     if (result.converged && options.retain_ks_state)
       result.ks_physical_fock = concatenate(final.fock.alpha, final.fock.beta);
-    // Only the generic ordinary owner retries a rejected final closure. Preserve
-    // every iteration/Fock count and reuse, rather than increase, its SCF budget.
-    if (result.converged || !evaluate_xc.program || options.max_iterations - used_iterations < 2)
+    // An ordinary CPU owner can exhaust the short physical closure before its
+    // SCF budget. Resume from that rejected physical state with fresh DIIS,
+    // preserving every gate, iteration/Fock count and the original budget.
+    if (result.converged || !ordinary_primary || options.max_iterations - used_iterations < 2)
       break;
     diis.clear();
   }

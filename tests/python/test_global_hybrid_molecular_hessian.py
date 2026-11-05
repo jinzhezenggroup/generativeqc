@@ -1,6 +1,7 @@
 """Independent molecular full-range qualification through shared and public owners."""
 
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
@@ -28,6 +29,13 @@ ATOMS = [("H", (0.03, -0.02, -0.72)), ("H", (0.11, 0.13, 0.72))]
 DIRECTION = np.array([[0.02, -0.03, -0.1], [-0.02, 0.03, 0.1]])
 GRID = GridSpec(radial_points=8, angular_polar=4, angular_azimuth=8)
 SOLVER = GMRESOptions(atol=1e-12, rtol=1e-11)
+
+
+def record_scalar_property(
+    record_property: Callable[[str, object], None], name: str, value: float
+) -> None:
+    """Keep numerical receipts serializable by pytest-xdist's worker transport."""
+    record_property(name, float(value))
 
 
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
@@ -333,7 +341,9 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
     assert native_energy == pytest.approx(center, abs=2e-10)
     np.testing.assert_allclose(native_overlap, overlap, atol=2e-12, rtol=0)
     np.testing.assert_allclose(native_density, density, atol=2e-9, rtol=0)
-    record_property("independent_energy_error", abs(native_energy - center))
+    record_scalar_property(
+        record_property, "independent_energy_error", abs(native_energy - center)
+    )
     record_property(
         "independent_density_error", float(np.max(abs(native_density - density)))
     )
