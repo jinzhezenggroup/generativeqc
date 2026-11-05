@@ -132,6 +132,22 @@ struct CudaXcOccupiedDensity {
       std::size_t rank() const noexcept {
     return occupations[0] > occupations[1] ? occupations[0] : occupations[1];
   }
+  /** Cheap work/scratch admission, not a numerical or convergence certificate. */
+#if defined(__CUDACC__)
+  __host__ __device__
+#endif
+      bool projection_fits(std::size_t active, std::size_t jets,
+                           std::size_t work_jets) const noexcept {
+    // GGA projects C^T*phi, then reconstructs C*(C^T*phi) during the feature
+    // reduction. Both contractions must beat one D*phi; only the rank-sized
+    // value panel occupies dead work storage. LDA needs no reconstruction.
+    if (!rank() || !active || !((jets == 1 && work_jets == 1) ||
+                               (jets == 4 && (work_jets == 1 || work_jets == 4))))
+      return false;
+    if (provisional) return rank() <= (active - 1) / (jets == 4 && work_jets == 1 ? 2 : 1);
+    // The exact certificate still has the five-feature, two-panel contract.
+    return jets == 4 && work_jets == 4 && rank() <= active / 2;
+  }
   bool matches(const double* current_density, std::size_t current_nao, std::size_t current_spins,
                std::uint64_t current_generation) const noexcept {
     return density && density == current_density && coefficients && nao == current_nao &&

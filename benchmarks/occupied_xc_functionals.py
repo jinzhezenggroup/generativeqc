@@ -20,6 +20,7 @@ from benchmarks._retention import raw_output_path
 from benchmarks.occupied_xc_proposals import check_vectors, load, save
 
 METHODS = {
+    "lda": "LDA_X,PW",
     "m06-2x": "M06-2X",
     "mn15": "MN15",
     "scan": "SCAN",
@@ -207,6 +208,7 @@ def run(args: argparse.Namespace) -> None:
                         "iterations": result.iterations,
                         "fock_builds": result.fock_builds,
                         "settings": native_settings(calculator, result),
+                        "diagnostic": result.ks_diagnostic.to_payload(),
                     }
                 )
                 save(args.output, record)

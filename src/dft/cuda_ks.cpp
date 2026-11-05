@@ -3502,19 +3502,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
       runtime::cuda_trace::trace_counter("xc_point_ao_square_sum",
                                          prepared_ao_work.point_ao_square_sum);
       CudaXcOccupiedDensity occupied_frame;
-      const auto occupied_rank = std::max(occupations[0], spins == 2 ? occupations[1] : 0);
+      const CudaXcOccupiedDensity candidate{
+          density, tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
+          next_generation, true};
       // Do not start a provisional epoch without useful projection work and
       // two strict submits for a fresh energy comparison inside the caller's budget.
       if (occupied_xc_requested && occupied_xc_frame_ready && !strict_refinement &&
           output.iterations < options.max_iterations &&
-          options.max_iterations - output.iterations > 2 && occupied_rank &&
-          occupied_rank < prepared_ao_work.max_active && output.physical_residual_rms > 1e-6 &&
+          options.max_iterations - output.iterations > 2 &&
+          candidate.projection_fits(prepared_ao_work.max_active, xc_layout.jets,
+                                     xc_layout.work_jets) &&
+          output.physical_residual_rms > 1e-4 &&
           phase == generativeqc::runtime::PrecisionPhase::Admitted && !device_chunk_mode &&
           !device_nonlocal && !precision_schedule.any_lower_precision() &&
-          xc_layout.feature_terms == 5 && xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
-        occupied_frame = {
-            density,         tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
-            next_generation, true};
+          (xc_layout.feature_terms == 1 || xc_layout.feature_terms == 4 ||
+           xc_layout.feature_terms == 5) && xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
+        occupied_frame = candidate;
       }
       // tmp1 is borrowed only until residual/DIIS work reuses it on this stream.
       occupied_xc_frame_ready = false;
@@ -4368,7 +4371,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // them. No historical/provisional Fock can certify a physical state.
     // The first strict Fock has no comparable prior target energy. Reserve
     // two strict submits, while retaining the established 11-proposal cap.
-    const MixedPrecisionWarmup occupied_warmup{1e-6, 12};
+    // Switch before the nearly stationary tail: a late energy-epoch reset can
+    // otherwise add a Fock solely to obtain a second comparable strict energy.
+    const MixedPrecisionWarmup occupied_warmup{1e-4, 12};
     const bool enter_occupied_audit =
         occupied_warmup.enter_refinement(occupied_stage, converged, output.iterations,
                                          options.max_iterations, physical.residual_rms) ||

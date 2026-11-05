@@ -108,8 +108,13 @@ physical accuracy. Admitted points skip original-D evaluation and absolute-dot
 certificate work; refused points still consume the live matrix. The original
 exact-mode `2^-45` prefilter and bitwise verification
 remain unchanged for lower-level nonprovisional calls.
-Provisional projection needs only one scratch panel and requires
-`occupied_rank < active_ao_count`, so its work is smaller than the dense route.
+Provisional LDA and tau-meta-GGA projection needs only one scratch panel and
+requires `occupied_rank < active_ao_count`. GGA instead projects only values
+and reconstructs their rank-factorized action during the AO-row feature
+reduction, sharing the compiler's original rho/gradient bilinears. Its two
+contractions require `2 * occupied_rank < active_ao_count`; four separate GGA
+jet projections would replace one dense product with four and are not used.
+The exact five-feature certificate is not generalized to other families.
 It neither reserves nor forms a pointer to the unused absolute-bound panel.
 
 `StrictAudit` rejects provisional frames before submission. The KS owner
@@ -121,7 +126,10 @@ receive provisional features. Canonical frame generations, scratch lifetimes,
 AO maps, capacity fallback and strict precision admission remain mandatory.
 Prior DIIS entries may predict new densities, never certify physical results;
 six unsuccessful strict sweeps clear that bounded predictor history. A previous
-residual RMS at most `1e-6` avoids candidate admission for near-stationary inputs.
+residual RMS at most `1e-4` avoids candidate admission for near-stationary inputs
+and starts the strict energy epoch before the convergence tail. No energy,
+density, residual, canonical or force acceptance tolerance is relaxed. Nonlocal,
+response, lower-precision and unsupported ingredient layouts keep matrix work.
 See [execution and handoff](xc_contractions.md#explicit-native-execution), the
 [audited-proposal decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-audited-proposals.md), the superseded
 [matrix-fallback decision](../../.agents/notes/implemented/performance/2026-11-04-occupied-xc-production-matrix-fallback.md),
