@@ -1,4 +1,4 @@
-"""Generate the offline Ni/H basis input from independently pinned BSE data.
+"""Generate offline Ni/H and optional I/Cs ECP inputs from pinned BSE data.
 
 This generator imports neither GenerativeQC nor an electronic-structure
 provider. Source file hashes match the primary BSE repository at the declared
@@ -22,6 +22,10 @@ SOURCES = {
     "ahlrichs/SV/def2-SV-base.1.json": "9a83096a009c034a18c4e5fffa93e9022e8a2ff2e2f1ea17621dad86ec01a5a8",
     "ahlrichs/SV/def2-SVP-add.1.json": "2206794676d13abcb4df8a778b9a4a1f3c7cc7c2345622aca6937b01dfde5722",
 }
+ECP_SOURCES = {
+    "ahlrichs/def2-SV(P).1.element.json": "f91073be33e46df0af516cf36ba6b3fea559f6740f3292bb572f0d217d07ed33",
+    "ahlrichs/ECP/def2-ECP.1.json": "183b1b3c94dd8abeb60c5a16079da322ea4676c45ef71a58ba6aabb9a10454b1",
+}
 
 
 def _serialize(payload: object) -> bytes:
@@ -37,11 +41,19 @@ def main() -> int:
         type=Path,
         help="Parent directory containing the pinned basis_set_exchange package",
     )
+    parser.add_argument("--output-directory", type=Path)
     parser.add_argument(
-        "--output-directory", type=Path, default=root / "tests/data/global_hybrid"
+        "--include-def2-ecp",
+        action="store_true",
+        help="Export Ni/H/I/Cs with I ECP28 and Cs ECP46 to a separate fixture",
     )
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
+    if args.output_directory is None:
+        directory_name = (
+            "global_hybrid_ecp" if args.include_def2_ecp else "global_hybrid"
+        )
+        args.output_directory = root / "tests/data" / directory_name
     if args.bse_package is not None:
         sys.path.insert(0, str(args.bse_package.resolve()))
     import basis_set_exchange as bse
@@ -52,7 +64,8 @@ def main() -> int:
         and package != args.bse_package.resolve() / "basis_set_exchange"
     ):
         raise RuntimeError("BSE import does not match the requested package")
-    for relative, expected in SOURCES.items():
+    sources = {**SOURCES, **(ECP_SOURCES if args.include_def2_ecp else {})}
+    for relative, expected in sources.items():
         if (
             hashlib.sha256((package / "data" / relative).read_bytes()).hexdigest()
             != expected
@@ -63,8 +76,15 @@ def main() -> int:
     license_path = root / "tests/data/external_basis/BSE-LICENSE"
     if hashlib.sha256(license_path.read_bytes()).hexdigest() != LICENSE_HASH:
         raise RuntimeError("retained BSE license differs from the source pin")
-    name = "def2-svp-ni-h.json"
-    payload = _serialize(bse.get_basis("def2-svp", elements=[1, 28], version=1))
+    elements = [1, 28, 53, 55] if args.include_def2_ecp else [1, 28]
+    name = "def2-svp-ni-i-cs-h.json" if args.include_def2_ecp else "def2-svp-ni-h.json"
+    basis = bse.get_basis("def2-svp", elements=elements, version=1)
+    if args.include_def2_ecp and {
+        number: basis["elements"][str(number)].get("ecp_electrons", 0)
+        for number in elements
+    } != {1: 0, 28: 0, 53: 28, 55: 46}:
+        raise RuntimeError("pinned def2-SVP ECP core-electron identities differ")
+    payload = _serialize(basis)
     manifest = _serialize(
         {
             "schema": "generativeqc.global-hybrid-basis-reference/v1",
@@ -72,14 +92,28 @@ def main() -> int:
             "source_commit": PIN,
             "basis_name": "def2-SVP",
             "basis_version": 1,
-            "elements": [1, 28],
+            "elements": elements,
             "representation": "real-spherical",
-            "source_sha256": SOURCES,
+            "source_sha256": sources,
             "license": "BSD-3-Clause",
             "license_file": "../external_basis/BSE-LICENSE",
             "license_sha256": LICENSE_HASH,
             "file": name,
             "sha256": hashlib.sha256(payload).hexdigest(),
+            **(
+                {
+                    "ecp_core_electrons": {"53": 28, "55": 46},
+                    "ecp_conventions": {
+                        "model": "scalar-semilocal, no spin-orbit",
+                        "local_channel": "highest supplied angular-momentum label",
+                        "radial": "c * r^(r_exponent-2) * exp(-exponent*r^2)",
+                        "coulomb_tail": "-Z_effective/r, separate nuclear attraction",
+                    },
+                    "qualification": "input provenance only, not force/Hessian admission",
+                }
+                if args.include_def2_ecp
+                else {}
+            ),
         }
     )
     for filename, contents in ((name, payload), ("manifest.json", manifest)):
