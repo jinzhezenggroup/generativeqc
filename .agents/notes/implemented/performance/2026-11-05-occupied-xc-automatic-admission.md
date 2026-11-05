@@ -95,3 +95,7 @@ unchanged.
 The subsequent [cross-functional survey](2026-11-05-occupied-xc-functional-survey.md)
 finds a replicated M06-2X gain and MN15/UKS counterexamples. It supplements the
 profitability scope without changing this original observation or selector.
+
+The [ingredient-family decision](2026-11-05-occupied-xc-feature-families.md)
+supersedes the meta-GGA-only admission and late initializer handoff. This note's
+original measurements remain bound to their original source and binary.

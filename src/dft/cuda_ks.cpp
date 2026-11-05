@@ -3937,11 +3937,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     pending_occupied_xc = false;
     try {
       // Mixed history is only a bounded proposal accelerator. Every physical
-      // energy/residual after handoff is rebuilt in FP64; six unsuccessful
-      // strict proposals discard all provisional history and retain the
-      // incumbent exact refinement. No mixed operator certifies publication.
-      if ((experimental_mixed_history && strict_refinement && refinement_iterations == 6) ||
-          (occupied_xc_executed && strict_refinement && occupied_xc_refinement_iterations == 6)) {
+      // energy/residual after handoff is rebuilt in FP64. Retain the separate
+      // FP32 experiment's six-sweep reset, but do not erase the strict DIIS
+      // predictor accumulated after an occupied-FP64 handoff. Its provisional
+      // entries age out through the ordinary bounded chronological ring
+      // (at most options.diis_history strict insertions). None certifies a
+      // physical state; only the fresh stored-D target can do that.
+      if (experimental_mixed_history && strict_refinement && refinement_iterations == 6) {
         check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       }
@@ -4367,8 +4369,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Approximate features are proposals, not a new point-functional contract.
     // Bound their lifetime, then reuse the existing strict target handoff:
     // fresh energy epoch and unchanged publication gates. Old DIIS entries
-    // may only predict new densities; six unsuccessful strict sweeps clear
-    // them. No historical/provisional Fock can certify a physical state.
+    // may only predict new densities and expire through the bounded DIIS ring.
+    // No historical/provisional Fock can certify a physical state.
     // The first strict Fock has no comparable prior target energy. Reserve
     // two strict submits, while retaining the established 11-proposal cap.
     // Switch before the nearly stationary tail: a late energy-epoch reset can

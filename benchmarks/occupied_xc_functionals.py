@@ -12,6 +12,7 @@ import argparse
 import json
 import math
 import os
+import platform
 import statistics
 from pathlib import Path
 from time import perf_counter
@@ -162,6 +163,7 @@ def run(args: argparse.Namespace) -> None:
         "library_sha256": library_sha256,
         "occupied_xc_env": control,
         "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "host": platform.node(),
         "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
         "strict_solver": args.strict_solver,
         "traced": args.trace,

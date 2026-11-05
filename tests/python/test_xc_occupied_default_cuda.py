@@ -126,8 +126,24 @@ def test_occupied_controls_and_strict_handoff_across_geometry(
 
 
 @pytest.mark.parametrize("unrestricted", (False, True))
+@pytest.mark.parametrize(
+    "functional,reference_xc",
+    (
+        ("lda", "LDA_X,PW"),
+        ("pbe", "PBE"),
+        ("pbe0", "PBE0"),
+        ("b3lyp", "B3LYP"),
+        ("r2scan", "R2SCAN"),
+        ("m06-2x", "M06-2X"),
+        ("mn15", "MN15"),
+    ),
+)
 def test_automatic_and_explicit_matrix_default_grid_energy_and_forces(
-    unrestricted: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    unrestricted: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    functional: str,
+    reference_xc: str,
 ) -> None:
     """Compare complete native E+F with original D and independent PySCF.
 
@@ -165,7 +181,7 @@ def test_automatic_and_explicit_matrix_default_grid_energy_and_forces(
             verbose=0,
         )
         reference = dft.UKS(molecule) if unrestricted else dft.RKS(molecule)
-        reference.xc = "R2SCAN"
+        reference.xc = reference_xc
         reference.conv_tol = 1e-12
         reference.conv_tol_grad = 1e-9
         reference.max_cycle = 200
@@ -184,7 +200,7 @@ def test_automatic_and_explicit_matrix_default_grid_energy_and_forces(
             else:
                 scope.setenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC", selector)
             calculator = Calculator(
-                method="r2scan-uks" if unrestricted else "r2scan-rks",
+                method=f"{functional}-{'uks' if unrestricted else 'rks'}",
                 device="cuda",
                 basis="def2-svp",
                 basis_representation="spherical",

@@ -125,7 +125,8 @@ proposal retries the same D strictly. Final-state and force consumers never
 receive provisional features. Canonical frame generations, scratch lifetimes,
 AO maps, capacity fallback and strict precision admission remain mandatory.
 Prior DIIS entries may predict new densities, never certify physical results;
-six unsuccessful strict sweeps clear that bounded predictor history. A previous
+the bounded chronological ring replaces them with fresh strict entries. Do not
+clear the new strict predictor merely because six strict sweeps elapsed. A previous
 residual RMS at most `1e-4` avoids candidate admission for near-stationary inputs
 and starts the strict energy epoch before the convergence tail. No energy,
 density, residual, canonical or force acceptance tolerance is relaxed. Nonlocal,

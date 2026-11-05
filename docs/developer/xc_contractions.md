@@ -127,8 +127,11 @@ The earlier switch leaves a strict energy-comparison window before the nearly
 stationary tail instead of adding a Fock solely to establish that baseline.
 These are initializer scheduling controls, not scientific tolerances. No
 provisional energy, residual, warm seed or force can authorize publication.
-DIIS history may predict densities for at most six unsuccessful strict sweeps;
-it is then cleared. Only fresh matrix Focks certify the returned physical state.
+DIIS history only predicts densities. Provisional entries age out through the
+existing chronological ring, bounded by the configured history depth (at most
+64), without clearing the strict predictor accumulated after handoff. Only
+fresh matrix Focks certify the returned physical state. The separate FP32
+history experiment retains its own six-sweep reset.
 Strict matrix refinement, canonical validation and analytic force acceptance
 retain their original gates. A failed provisional numerical evaluation retries
 the same density using the strict target, without a CPU scientific fallback.

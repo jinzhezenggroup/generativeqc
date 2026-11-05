@@ -18,6 +18,19 @@ Start the strict energy epoch at residual RMS `1e-4` rather than `1e-6`.
 This is an earlier initializer handoff, never a relaxed stopping tolerance.
 Keep the eleven-proposal cap, two reserved strict evaluations, finite original
 iteration budget, bounded predictor history and strict original-D publication.
+The occupied-FP64 predictor uses the ordinary chronological DIIS ring, not a
+blanket reset after six strict submissions. Its provisional entries are replaced
+within the configured history depth (validated at most 64), or sooner when
+dependent-error retirement shrinks the live window. No old entry certifies a
+physical state. The distinct FP32 history experiment keeps its existing reset.
+
+The first current-source candidate `8299cd88d1400931e67958e1ca6181912f49e196`
+demonstrated why earlier handoff alone was insufficient. M06-2X UKS retained
+24 vs 25 cold Focks and 18 vs 20 displaced Focks. Its physical residual history
+agrees with the matrix control until the density proposed immediately after the
+six-sweep history reset. That reset discarded six useful strict Focks together
+with the remaining old provisional entries. Natural ring ageing removes the
+unnecessary solver restart without a kernel, transfer or extra target rebuild.
 
 Dispatch by supported ingredient layout, not functional or molecule names:
 
@@ -44,6 +57,10 @@ recompute the dense contraction; unsafe points retain the stored-D fallback.
 - Functional or atom-count exclusions hide rather than fix solver overhead.
 - Comparing strict energies with a provisional baseline or relaxing numerical
   gates would compromise the final-state contract.
+- Clearing the whole DIIS ring after six strict sweeps destroys useful target
+  history. Truncating to six also unnecessarily discards strict directions for
+  callers with a deeper ring; normal bounded chronological replacement already
+  retires every old entry and requires no new device work.
 
 ## Evidence
 

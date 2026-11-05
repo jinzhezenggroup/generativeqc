@@ -44,10 +44,12 @@ def retry_probe(
     start = finish.index("const bool occupied_stage =")
     end = finish.index("if (occupied_stage) converged = false;", start)
     occupied_handoff = finish[start:end]
-    history_retirement = _block(
-        cpp_function_definition(source, "enqueue_legacy"),
-        "if ((experimental_mixed_history",
-    )
+    enqueue = cpp_function_definition(source, "enqueue_legacy")
+    history_retirement = enqueue[
+        enqueue.index("if (experimental_mixed_history") : enqueue.index(
+            "std::string detail;"
+        )
+    ]
     folder = tmp_path_factory.mktemp("ks-mixed-retry")
     cpp, binary = folder / "retry.cpp", folder / "retry"
     cpp.write_text(
@@ -246,8 +248,8 @@ struct Owner {
   double* tmp1{};
   std::size_t n{1}, spins{1}, occupations[2]{1, 0};
   unsigned final_corrections = 2, nonlocal_exact_epoch_iterations = 7;
-  int history_count_data = 4, history_head_data = 2;
-  int *history_count = &history_count_data, *history_head = &history_head_data;
+  std::uint32_t history_count_data = 4, history_head_data = 2;
+  std::uint32_t *history_count = &history_count_data, *history_head = &history_head_data;
   double previous_energy = 3, previous_energy_correction = 4;
   struct { struct { unsigned execution_retries{}; } precision;
     unsigned iterations = 5, fock_builds = 5;
@@ -425,11 +427,14 @@ int main(int argc, char** argv) {
   Owner history;
   history.occupied_xc_executed = history.strict_refinement = true;
   for (unsigned sweep = 0; sweep <= 6; ++sweep) {
-    history.history_count_data = 4; history.history_head_data = 2;
-    history.occupied_xc_refinement_iterations = sweep;
-    history.retire_provisional_history();
-    require((history.history_count_data == 0) == (sweep == 6),
-                "provisional predictor history exceeded its strict refinement bound");
+    for (unsigned count = 0; count <= 64; ++count) {
+      history.history_count_data = count; history.history_head_data = 2;
+      history.occupied_xc_refinement_iterations = sweep;
+      history.retire_provisional_history();
+      require(history.history_count_data == count &&
+                  history.history_head_data == 2,
+                  "occupied handoff discarded the strict predictor history");
+    }
   }
  } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
