@@ -1,6 +1,6 @@
 # Decision: VV10 confirmation must satisfy the active stationarity policy
 
-Status: implemented; large-endpoint qualification recorded below
+Status: implemented; native water96 complete, independent water96 comparison unqualified
 Date: 2026-11-05
 
 ## Problem
@@ -58,18 +58,52 @@ fails sqrt(1e-9). The same probe covers allowed energy confirmation without
 history, the exact MO threshold, NaN/negative/infinite norms, rejected canonical
 proofs, and strict-policy isolation.
 
-Initial focused host tests pass (2); adjacent local host tests pass (78), with
-22 nonallocated CUDA cases skipped rather than executed outside Slurm. Exact
+Focused host tests pass (2); adjacent local host tests pass (78), with 22
+nonallocated CUDA cases skipped rather than executed outside Slurm. Exact
 new-runtime host qualification in Slurm 15941 passes all 114 selected tests.
-The independent small E/F/warm/moved and bounded water96 Direct results are
-recorded after that same job finishes; no prequalification speedup is claimed.
+Both independent tight same-grid small default/strict E/F/warm/moved tests
+pass in 35.54 s, including actual default MO-path admission and strict isolation.
 
-Both independent small default/strict E/F/warm/moved tests passed in 35.54 s.
-The in-progress water96 run has already observed two
-`nonlocal_confirmation_orbital_blocks` at its first sixteen completed
-iterations, with zero density holds. Thus the old AO-hold/MO-candidate mismatch
-is exercised by the actual 96-atom input, not only the analytic counterexample.
-Complete endpoint/science qualification remains separate from this admission.
+### Bounded water96 result
+
+The single allocated 5090 run completes both native Direct E/F endpoints:
+
+| Native phase | Complete seconds | Public SCF iterations | Total Fock builds |
+| --- | ---: | ---: | ---: |
+| Cold | 214.366170 | 18 | 19 |
+| Own-density warm | 18.774825 | 1 | 1 |
+
+The cold timer includes constructor, preparation, SCF, analytic forces and host
+export. The native process rejects PySCF/GPU4PySCF imports and does not borrow
+the reference density. These timings include progress instrumentation and
+therefore are not a clean statistical performance population or a general 5090
+non-regression result. The earlier progress comment's 19 trace completions must
+not be confused with the final public cold count: 18 SCF iterations plus a
+post-SCF build give 19 cold Focks; warm has one iteration/build.
+
+The actual large input observes two old-AO-hold/MO-candidate mismatches, then
+one allowed density hold, six physical MO checks and two accepted canonical
+probes across cold/warm, with no rejected probe or unfinished native region.
+This establishes the actual water96 trigger and successful solver escape, not
+the exact stages or total attribution of the older untraced 540-second timeout.
+Cold semantic work is 19 J/38 K, 13 provisional plus 5 target SCF Focks and
+4 VV10 sweeps. Warm is 1 J/2 K, 1 target Fock and 0 VV10 sweeps.
+
+The following stock GPU4PySCF Direct reference reaches its 360-second wall cap
+without a complete cold sample. The overall shell/Slurm task therefore exits
+124 **in the reference phase**, after the native arm returned successfully.
+The raw reference JSON still says `running`, has zero samples and is explicitly
+incomplete; it is not a valid 360-second endpoint time or a reference numerical
+failure. No 96-atom cross-engine E/F acceptance or speed ratio is claimed, and
+the cap was not extended or the population repeated. The separate small tight
+independent scientific gates above remain valid.
+
+For future work, the completed diagnostic attributes cold iteration XC
+100.122151 s (84.114902 s of VV10 pair work **inside** XC), JK 28.732487 s,
+optional LR preparation 20.675874 s and stationary forces 43.809581 s. Warm
+stationary forces account for 15.696044 s. Nested regions must not be summed
+as independent elapsed time. Optimize those measured operators rather than
+reintroducing a hold that suppresses necessary density updates.
 
 Native source identity:
 `25555f38303c47ae970413639b16d208775763a22dd91c34f2b429379ae645e2`.
@@ -81,6 +115,16 @@ sccache 0.16.0 and fresh-mtime changed-file overlays. The actual changed
 The build helper's final receipt extraction initially exited 127 because n1
 lacked rg, after compilation/linking completed. A grep fallback recovered that
 receipt without rebuilding; the original exit and recovery explanation remain.
+
+The existing checked-source Libxc catalog is regenerated with its authoritative
+checker; only the current input identities change, capability summaries are
+unchanged and historical science remains stale. Its 63 host regressions pass.
+This metadata refresh does not change the measured native source identity.
+
+Final CPU-only audit SHA256:
+`c9c429f94bc82df9a1c8473a49911908cb1e5253a5b3208359fb6339000d07f8`.
+The machine-readable audit explicitly reports the native completion, reference
+incompleteness, driver exit 124 and false overall large scientific qualification.
 
 ## Consequences and acceptance
 
