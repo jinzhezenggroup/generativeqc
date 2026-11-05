@@ -22,6 +22,7 @@ from generativeqc_compiler.dft.nonlocal_reference import (
     nonlocal_explicit_geometry_derivatives_reference,
 )
 from generativeqc_compiler.dft.spatial import SpatialPolicy, build_spatial_tasks
+from generativeqc_compiler.integral.second_derivatives import build_eri_second_ir
 from generativeqc_compiler.method import original_nonlocal_correlation
 from generativeqc_compiler.tensor.autodiff import _vjp_einsum
 from generativeqc_compiler.xc.reference import exchange_reference
@@ -276,8 +277,10 @@ def test_second_hvp_weight_buffer_is_frozen_per_ao_chunk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The consuming stream owns weights before the next scratch overwrite."""
-    signature = SimpleNamespace(tensor_indices=("component",), component_shape=(65,))
-    ir = SimpleNamespace(requested_derivative_centers=(0,), signature=signature)
+    # Keep two physical centers so the exact one-center translation is not elided.
+    ir = build_eri_second_ir((1, 1, 3, 0), output="weighted_hvp")
+    component_count = ir.signature.component_count
+    weights = np.arange(1, component_count + 1, dtype=np.float64)
     retained: list[np.ndarray] = []
 
     class AtomMap:
@@ -287,7 +290,7 @@ def test_second_hvp_weight_buffer_is_frozen_per_ao_chunk(
             pass
 
         def expand_direction(self, direction: np.ndarray) -> np.ndarray:
-            return direction
+            return direction[:1]
 
     class Plan:
         def __init__(self, *args: typing.Any, **kwargs: typing.Any) -> None:
@@ -323,31 +326,33 @@ def test_second_hvp_weight_buffer_is_frozen_per_ao_chunk(
         patch.setattr(second_hvp, "prepare_second_shell_stream", consume)
         patch.setattr(second_hvp, "PreparedSecondDerivative", Plan)
         patch.setattr(second_hvp, "_scatter_hvp", lambda full, *a: full)
-        allocations = _count_numpy_calls(patch, "zeros", "_run_kernel_hvp")
         second_hvp._run_kernel_hvp(
             {
+                "backend": "cpu",
                 "adapter": object(),
                 "cache": "synthetic",
                 "resource_budget": None,
                 "device_id": 0,
                 "second_executions": [],
-                "state": SimpleNamespace(nat=1),
+                "second_requests": {},
+                "factorized_provider": None,
+                "output_accumulator_bytes": 48,
+                "budget_bytes": 32 << 10,
+                "state": SimpleNamespace(nat=2),
             },
             "synthetic",
             lambda **kw: ir,
-            {"_center_atoms": (0,)},
+            {"_center_atoms": (0, 1, 1, 0)},
             (),
-            np.zeros((1, 3)),
-            np.arange(1, 66, dtype=np.float64),
-            65,
-            np.zeros((1, 3)),
+            np.array(((0.0, 0.0, 0.0), (0.0, 0.0, 1.4))),
+            weights,
+            component_count,
+            np.zeros((2, 3)),
         )
-    assert allocations == [3, 65]
-    assert len(retained) == 2
-    np.testing.assert_array_equal(retained[0][:64], np.arange(1, 65))
-    assert retained[0][64] == 0
-    np.testing.assert_array_equal(retained[1][:64], np.zeros(64))
-    assert retained[1][64] == 65
+    assert retained
+    assert all(np.count_nonzero(tile) <= 64 for tile in retained)
+    np.testing.assert_array_equal(np.sum(retained, axis=0), weights)
+    np.testing.assert_array_equal(weights, np.arange(1, component_count + 1))
 
 
 def test_spatial_validation_reuses_one_omitted_mask(

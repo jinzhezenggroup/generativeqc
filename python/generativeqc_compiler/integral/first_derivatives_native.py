@@ -32,7 +32,8 @@ def validate_first_components(integral: typing.Any, indices: typing.Any) -> None
     """Reject unsupported semantics rather than relabel another derivative."""
     if integral.derivative is None or integral.derivative.order != 1:
         raise ValueError("first component execution requires derivative order one")
-    if any(l > 3 for l in integral.signature.angular):
+    signature = integral.signature
+    if any(order > 3 for order in signature.angular):
         raise ValueError("first component execution supports s/p/d/f")
     if integral.requested_derivative_centers != integral.operator.centers:
         raise ValueError("all mathematical derivative centers must be requested")
@@ -40,8 +41,8 @@ def validate_first_components(integral: typing.Any, indices: typing.Any) -> None
         not 1 <= len(indices) <= 64
         or len(set(indices)) != len(indices)
         or any(
-            type(i) is not int or not 0 <= i < integral.signature.component_count
-            for i in indices
+            type(index) is not int or not 0 <= index < signature.component_count
+            for index in indices
         )
     ):
         raise ValueError("select one to 64 distinct in-range AO components")

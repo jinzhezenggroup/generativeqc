@@ -346,6 +346,47 @@ def test_integral_hvp_block_stays_fail_closed_for_geometric_xc_sources() -> None
         p.integral_block("coulomb", terms=64, coordinates=12, max_elements=1)
 
 
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("coordinates", (1, 3, 12))
+def test_integral_term_schedule_obeys_unchanged_block_budget(
+    spin: str, coordinates: int
+) -> None:
+    """Execute admitted slices and reject the unsplit term count at the boundary."""
+    owner = plan("B3LYP", spin)
+    capacity = 65536 // (coordinates + (4 if spin == "polarized" else 2) + 4)
+    for terms in (1, capacity, capacity + 1, 10000, 20000):
+        covered = np.zeros(terms, dtype=int)
+        for tile in owner.integral_term_tiles(terms, coordinates=coordinates):
+            assert 0 < tile.stop - tile.start <= capacity
+            covered[tile] += 1
+            owner.integral_block(
+                "coulomb", terms=tile.stop - tile.start, coordinates=coordinates
+            )
+        np.testing.assert_array_equal(covered, 1)
+    with pytest.raises(ValueError, match="element budget"):
+        owner.integral_block("coulomb", terms=capacity + 1, coordinates=coordinates)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    (
+        {"terms": 0},
+        {"terms": -1},
+        {"terms": True},
+        {"terms": 1.0},
+        {"terms": 1, "coordinates": 0},
+        {"terms": 1, "coordinates": True},
+        {"terms": 1, "max_elements": 0},
+        {"terms": 1, "max_elements": 1},
+        {"terms": 1, "max_elements": 65536.0},
+    ),
+)
+def test_integral_term_schedule_rejects_invalid_limits_eagerly(kwargs: dict) -> None:
+    """Bad limits fail on schedule creation, not after allocating consumer feeds."""
+    with pytest.raises(ValueError):
+        plan("PBE").integral_term_tiles(**kwargs)
+
+
 def test_integral_hvp_contraction_rejects_missing_response_or_second_term() -> None:
     block = plan("PBE").integral_block("one_electron", terms=2, coordinates=3)
     with pytest.raises(ValueError, match="response_weights"):

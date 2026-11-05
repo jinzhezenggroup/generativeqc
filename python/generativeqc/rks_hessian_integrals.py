@@ -21,12 +21,19 @@ from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.common.resources import ResourceBudget
 from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.integral.blocks import TensorLayout, WeightTile
+from generativeqc_compiler.integral.eri_symmetry import (
+    canonical_eri_quartets,
+    distinct_eri_shell_permutations,
+    fold_eri_shell_weights,
+)
+from generativeqc_compiler.integral.factorized_host import FactorizedERIHost
 from generativeqc_compiler.integral.first_derivatives_execute import (
     FirstDerivativeEvaluator,
     compile_first_derivative,
 )
 from generativeqc_compiler.integral.first_derivatives_native import (
     first_component_identity,
+    validate_first_components,
 )
 from generativeqc_compiler.integral.first_directional import (
     DirectionalMatrixTerm,
@@ -52,6 +59,7 @@ from generativeqc_compiler.integral.one_electron_derivatives import (
 from generativeqc_compiler.integral.second_derivatives import (
     build_eri_second_ir,
     build_one_electron_second_ir,
+    require_second_consumer,
 )
 from generativeqc_compiler.integral.second_derivatives_execute import (
     PreparedSecondDerivative,
@@ -62,6 +70,7 @@ from generativeqc_compiler.integral.second_derivatives_inputs import (
 )
 from generativeqc_compiler.integral.second_order_layout import (
     SecondAtomMap,
+    second_component_tiles,
     second_coordinate_tiles,
 )
 from generativeqc_compiler.integral.shell_spec import cartesian_components
@@ -183,6 +192,9 @@ class _FirstDerivativeProvider:
         self.compiler = CppCompilerAdapter(Path(shutil.which("c++") or "c++"))
         self.cache = Path(cache) / "first-cache"
         self.evaluators: dict[str, FirstDerivativeEvaluator] = {}
+        self.integrals: dict[object, typing.Any] = {}
+        self.normalizations: dict[tuple[int, ...], np.ndarray] = {}
+        self.factorized: FactorizedERIHost | None = None
         self.shells = topology.shells
         self.offsets = np.cumsum((0, *topology.shell_sizes))
         self.primitives = tuple(
@@ -196,44 +208,82 @@ class _FirstDerivativeProvider:
             [atom.position for atom in topology.atoms], dtype=np.float64
         )
 
-    def raw_tiles(
+    def eri_ir(
+        self, angular: tuple[int, ...], operator: typing.Any = FOUR_CENTER_ERI_OPERATOR
+    ) -> typing.Any:
+        """Reuse immutable requests across shell quartets with equal mathematics."""
+        key = (angular, operator)
+        if key not in self.integrals:
+            self.integrals[key] = build_weighted_eri_ir(angular, operator=operator)
+        return self.integrals[key]
+
+    def one_electron_ir(
+        self, family: str, angular: tuple[int, ...], *, charge: float = 1.0
+    ) -> typing.Any:
+        """Keep nuclear charge in the request identity while reusing shell classes."""
+        key = (family, angular, charge)
+        if key not in self.integrals:
+            self.integrals[key] = build_one_electron_derivative_ir(
+                family, angular, charge=charge
+            )
+        return self.integrals[key]
+
+    def raw_blocks(
         self,
         ir: typing.Any,
         slots: tuple[int, ...],
         atom_indices: tuple[int, ...],
-    ) -> typing.Iterator[tuple[tuple[int, ...], np.ndarray]]:
-        angular = ir.signature.angular
-        count = ir.signature.component_count
-        shape = ir.signature.component_shape
-        scales = np.asarray(
-            [
-                weight
-                for _, weight in normalized_cartesian_components(
-                    angular, np.ones(shape)
-                )
-            ]
+    ) -> typing.Iterator[tuple[tuple[np.ndarray, ...], np.ndarray]]:
+        """Publish bounded component batches, not a Python callback per AO tuple."""
+        signature = ir.signature
+        angular, count, shape = (
+            signature.angular,
+            signature.component_count,
+            signature.component_shape,
         )
+        if angular not in self.normalizations:
+            self.normalizations[angular] = np.asarray(
+                [
+                    weight
+                    for _, weight in normalized_cartesian_components(
+                        angular, np.ones(shape)
+                    )
+                ]
+            )
+        scales = self.normalizations[angular]
         for start in range(0, count, 64):
             indices = tuple(range(start, min(start + 64, count)))
-            key = first_component_identity(ir, indices)
-            if key not in self.evaluators:
-                artifact = compile_first_derivative(
-                    ir,
-                    self.compiler,
-                    self.cache,
-                    component_indices=indices,
+            if ir.operator == FOUR_CENTER_ERI_OPERATOR:
+                validate_first_components(ir, indices)
+                if self.factorized is None:
+                    self.factorized = FactorizedERIHost(
+                        self.compiler, self.cache.parent / "factorized-eri"
+                    )
+                values = self.factorized.raw_first(
+                    angular,
+                    indices,
+                    tuple(self.primitives[i] for i in slots),
+                    self.coords[list(atom_indices)],
                 )
-                self.evaluators[key] = FirstDerivativeEvaluator(artifact)
-            values = self.evaluators[key].contract(
-                tuple(self.primitives[i] for i in slots),
-                self.coords[list(atom_indices)],
-            )
+            else:
+                key = first_component_identity(ir, indices)
+                if key not in self.evaluators:
+                    artifact = compile_first_derivative(
+                        ir,
+                        self.compiler,
+                        self.cache,
+                        component_indices=indices,
+                    )
+                    self.evaluators[key] = FirstDerivativeEvaluator(artifact)
+                values = self.evaluators[key].contract(
+                    tuple(self.primitives[i] for i in slots),
+                    self.coords[list(atom_indices)],
+                )
             values *= scales[list(indices), None]
-            for row, index in enumerate(indices):
-                yield (
-                    np.unravel_index(index, shape),
-                    values[row, 1:].reshape(-1, 3),
-                )
+            yield (
+                np.unravel_index(indices, shape),
+                values[:, 1:].reshape(len(indices), -1, 3),
+            )
 
 
 def _contract_directional_first_order(
@@ -259,12 +309,14 @@ def _contract_directional_first_order(
         out: np.ndarray,
         atoms: tuple[int, ...],
         derivative: np.ndarray,
-        u: int,
-        v: int,
-        coefficient: float = 1.0,
+        rows: np.ndarray,
+        columns: np.ndarray,
+        coefficient: typing.Any = 1.0,
     ) -> None:
-        out[u, v] += coefficient * np.einsum(
-            "ca,ca->", derivative, direction[list(atoms)]
+        np.add.at(
+            out,
+            (rows, columns),
+            coefficient * np.einsum("nca,ca->n", derivative, direction[list(atoms)]),
         )
 
     if not np.any(direction):
@@ -274,15 +326,19 @@ def _contract_directional_first_order(
         angular = (shells[a].angular_momentum, shells[b].angular_momentum)
         atoms = (shells[a].atom_index, shells[b].atom_index)
         for family, out in (("overlap", overlap), ("kinetic", frozen)):
-            ir = build_one_electron_derivative_ir(family, angular)
-            for (u, v), gradient in provider.raw_tiles(ir, (a, b), atoms):
+            if atoms[0] == atoms[1]:
+                continue
+            ir = provider.one_electron_ir(family, angular)
+            for (u, v), gradient in provider.raw_blocks(ir, (a, b), atoms):
                 accumulate(out, atoms, gradient, offsets[a] + u, offsets[b] + v)
         for nucleus, charge in enumerate(charges):
-            ir = build_one_electron_derivative_ir(
+            centers = (*atoms, nucleus)
+            if len(set(centers)) == 1:
+                continue
+            ir = provider.one_electron_ir(
                 "nuclear_attraction", angular, charge=float(charge)
             )
-            centers = (*atoms, nucleus)
-            for (u, v), gradient in provider.raw_tiles(ir, (a, b), centers):
+            for (u, v), gradient in provider.raw_blocks(ir, (a, b), centers):
                 accumulate(
                     frozen,
                     centers,
@@ -291,44 +347,44 @@ def _contract_directional_first_order(
                     offsets[b] + v,
                 )
 
-    for slots in product(range(len(shells)), repeat=4):
+    # Evaluate a real Coulomb-family quartet once, then scatter every distinct
+    # ordered shell orientation. J and full-range K share that same raw jet;
+    # their density/spin factors remain explicit consumer policy here.
+    consumers: dict[
+        object, list[tuple[tuple[int, int], tuple[int, int], float, np.ndarray]]
+    ] = {}
+    if include_coulomb:
+        consumers[FOUR_CENTER_ERI_OPERATOR] = [((0, 1), (2, 3), 1.0, density)]
+    for operator, coefficient in exchange_operators:
+        consumers.setdefault(operator, []).append(
+            ((0, 2), (1, 3), -0.5 * float(coefficient), exchange_density)
+        )
+    for slots in canonical_eri_quartets(len(shells)) if consumers else ():
         angular = tuple(shells[i].angular_momentum for i in slots)
         atoms = tuple(shells[i].atom_index for i in slots)
-        ir = build_weighted_eri_ir(angular)
-        for component, gradient in (
-            provider.raw_tiles(ir, slots, atoms) if include_coulomb else ()
-        ):
-            u, v, w, x = (
-                offsets[shell] + c for shell, c in zip(slots, component, strict=True)
-            )
-            ao = (u, v, w, x)
-            for term in SEMILOCAL_RKS_FIRST_ERI_TERMS:
-                i, j = (ao[k] for k in term.output_pair)
-                k, l = (ao[k] for k in term.weight_pair)
-                accumulate(
-                    frozen,
-                    atoms,
-                    gradient,
-                    i,
-                    j,
-                    term.coefficient * density[k, l],
-                )
-
-        for operator, coefficient in exchange_operators:
-            ir = build_weighted_eri_ir(angular, operator=operator)
-            for component, gradient in provider.raw_tiles(ir, slots, atoms):
-                first, second, third, fourth = (
+        # All physical centers translate together, so the molecular derivative
+        # is exactly zero. Raw independent-slot derivative providers stay intact.
+        if len(set(atoms)) == 1:
+            continue
+        permutations = distinct_eri_shell_permutations(slots)
+        for operator, terms in consumers.items():
+            ir = provider.eri_ir(angular, operator)
+            for component, gradient in provider.raw_blocks(ir, slots, atoms):
+                ao = tuple(
                     offsets[shell] + index
                     for shell, index in zip(slots, component, strict=True)
                 )
-                accumulate(
-                    frozen,
-                    atoms,
-                    gradient,
-                    first,
-                    third,
-                    -0.5 * float(coefficient) * exchange_density[second, fourth],
-                )
+                directional = np.einsum("nca,ca->n", gradient, direction[list(atoms)])
+                for _, permutation in permutations:
+                    ordered = tuple(ao[axis] for axis in permutation)
+                    for output_pair, weight_pair, coefficient, weight in terms:
+                        rows, columns = (ordered[axis] for axis in output_pair)
+                        first, second = (ordered[axis] for axis in weight_pair)
+                        np.add.at(
+                            frozen,
+                            (rows, columns),
+                            coefficient * weight[first, second] * directional,
+                        )
 
     if not np.isfinite(frozen).all() or not np.isfinite(overlap).all():
         raise FloatingPointError("generated RKS nuclear source is nonfinite")
@@ -747,11 +803,9 @@ def generated_weighted_first_integral_gradient(
     def accumulate(
         atoms: tuple[int, ...], derivative: np.ndarray, coefficient: typing.Any
     ) -> None:
-        coefficient = float(coefficient)
-        if coefficient == 0.0:
-            return
+        contracted = np.einsum("nca,n->ca", derivative, coefficient)
         for center, atom in enumerate(atoms):
-            result[atom] += coefficient * derivative[center]
+            result[atom] += contracted[center]
 
     if source_name != "coulomb":
         if eri_shell_weights is not None:
@@ -768,34 +822,52 @@ def generated_weighted_first_integral_gradient(
                 ("overlap",),
             )[source_name == "overlap_pulay"]
             for family in families:
-                ir = build_one_electron_derivative_ir(family, angular)
-                for (u, v), gradient in provider.raw_tiles(ir, (a, b), atoms):
+                if atoms[0] == atoms[1]:
+                    continue
+                ir = provider.one_electron_ir(family, angular)
+                for (u, v), gradient in provider.raw_blocks(ir, (a, b), atoms):
                     accumulate(atoms, gradient, block[u, v])
             if source_name == "one_electron":
                 for nucleus, charge in enumerate(charges):
-                    ir = build_one_electron_derivative_ir(
+                    centers = (*atoms, nucleus)
+                    if len(set(centers)) == 1:
+                        continue
+                    ir = provider.one_electron_ir(
                         "nuclear_attraction", angular, charge=float(charge)
                     )
-                    centers = (*atoms, nucleus)
-                    for (u, v), gradient in provider.raw_tiles(ir, (a, b), centers):
+                    for (u, v), gradient in provider.raw_blocks(ir, (a, b), centers):
                         accumulate(centers, gradient, block[u, v])
     else:
         if pair_weights is not None or not callable(eri_shell_weights):
             raise ValueError(
                 "coulomb first derivative requires shell-local ERI weights"
             )
-        for slots in product(range(len(shells)), repeat=4):
+        symmetric = eri_operator == FOUR_CENTER_ERI_OPERATOR
+        quartets = (
+            canonical_eri_quartets(len(shells))
+            if symmetric
+            else product(range(len(shells)), repeat=4)
+        )
+        for slots in quartets:
             angular = tuple(shells[i].angular_momentum for i in slots)
             atoms = tuple(shells[i].atom_index for i in slots)
             shape = tuple(offsets[i + 1] - offsets[i] for i in slots)
-            weights = np.asarray(eri_shell_weights(slots), dtype=np.float64)
+            weights = (
+                fold_eri_shell_weights(slots, shape, eri_shell_weights)
+                if symmetric
+                else np.asarray(eri_shell_weights(slots), dtype=np.float64)
+            )
             if weights.shape != shape or not np.isfinite(weights).all():
                 raise ValueError(
                     "ERI shell weights must be finite with the ordered shell shape"
                 )
-            ir = build_weighted_eri_ir(angular, operator=eri_operator)
-            for component, gradient in provider.raw_tiles(ir, slots, atoms):
+            if len(set(atoms)) == 1:
+                del weights
+                continue
+            ir = provider.eri_ir(angular, eri_operator)
+            for component, gradient in provider.raw_blocks(ir, slots, atoms):
                 accumulate(atoms, gradient, weights[component])
+            del weights
 
     if not np.isfinite(result).all():
         raise FloatingPointError("nonfinite weighted first-integral contraction")
@@ -832,11 +904,6 @@ def _compile_cached(
     return artifact
 
 
-def _component_tiles(count: int, chunk: int = 64) -> typing.Iterator[tuple[int, ...]]:
-    for start in range(0, count, chunk):
-        yield tuple(range(start, min(start + chunk, count)))
-
-
 def _scatter_hvp(
     full: np.ndarray,
     center_indices: tuple[int, ...],
@@ -863,17 +930,69 @@ def _run_kernel_hvp(
     direction: np.ndarray,
 ) -> np.ndarray:
     center_atoms = typing.cast("tuple[int, ...]", ir_extra["_center_atoms"])
+    # Elide only physical molecular translations after outer budget/weight
+    # validation. Do not change primitive independent-slot or CUDA execution.
+    if data["backend"] == "cpu" and len(set(center_atoms)) == 1:
+        return np.zeros((data["state"].nat, 3))
     extra = {k: v for k, v in ir_extra.items() if k != "_center_atoms"}
-    ir = build_ir(**extra)
+    request_key = (build_ir, tuple(extra.items()))
+    if request_key not in data["second_requests"]:
+        request = build_ir(**extra)
+        data["second_requests"][request_key] = (request, request.signature)
+    ir, signature = data["second_requests"][request_key]
     center_indices = ir.requested_derivative_centers
     mapping = SecondAtomMap(center_indices, center_atoms)
     center_direction = mapping.expand_direction(direction[list(mapping.atom_indices)])
     full = np.zeros(len(center_indices) * 3)
-    signature = ir.signature
+    consumer = require_second_consumer(ir)
+    # The shared factor jets trade component-specific compilation for a fixed
+    # host lease. Preserve the original bounded lowering when it cannot fit.
+    reserve_bytes = data["output_accumulator_bytes"] + 8 * (3 * component_count + 12)
+    if (
+        data["backend"] == "cpu"
+        and ir.operator == FOUR_CENTER_ERI_OPERATOR
+        and consumer.output == "weighted_hvp"
+        and consumer.weights is not None
+        and center_indices == ir.operator.centers
+        and reserve_bytes + FactorizedERIHost.required_bytes() <= data["budget_bytes"]
+    ):
+        if data["factorized_provider"] is None:
+            data["factorized_provider"] = FactorizedERIHost(
+                data["adapter"],
+                data["cache"].parent / "factorized-eri",
+                budget_bytes=data["budget_bytes"] - reserve_bytes,
+            )
+        scales = np.asarray(
+            [
+                value
+                for _, value in normalized_cartesian_components(
+                    signature.angular, np.ones(signature.component_shape)
+                )
+            ]
+        )
+        coefficient = (
+            consumer.output_sign * consumer.weights.sign * consumer.weights.prefactor
+        )
+        for ao_chunk in second_component_tiles(component_count, tile_size=64):
+            selection = list(ao_chunk)
+            values, diagnostic = data["factorized_provider"].weighted_hvp(
+                signature.angular,
+                ao_chunk,
+                primitives,
+                centers,
+                coefficient * scales[selection] * weight_flat[selection],
+                center_direction,
+            )
+            full += values.ravel()
+            diagnostic["resources"]["peak_bytes"]["host"] += reserve_bytes
+            data["second_executions"].append(diagnostic)
+        return _scatter_hvp(full, center_indices, center_atoms, data["state"].nat)
     # The public shell-stream adapter freezes its weight tile before the
     # next AO chunk: one FP64 backing buffer can be reset and reused.
     weights = np.zeros(component_count)
-    for ao_chunk in _component_tiles(component_count):
+    for ao_chunk in second_component_tiles(
+        component_count, tile_size=8 if data["backend"] == "cpu" else 64
+    ):
         weights.fill(0.0)
         weights[list(ao_chunk)] = weight_flat[list(ao_chunk)]
         for output_indices in second_coordinate_tiles(
@@ -1002,6 +1121,11 @@ def _second_data(
         "output_accumulator_bytes": output_bytes,
         "resource_budget": resource_budget,
         "second_executions": [],
+        "second_requests": {},
+        "factorized_provider": None,
+        "peak_symmetry_weight_bytes": 0,
+        "ordered_eri_shell_weight_blocks": 0,
+        "symmetry_reduced_eri_shell_quartets": 0,
     }
 
 
@@ -1029,16 +1153,27 @@ def _second_diagnostics(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
             sorted({item["native_artifact"] for item in executions})
         ),
         "executions": len(executions),
+        "scalar_lowering_component_tile_limit": 64 if cuda else 8,
         "primitive_records": sum(item["records"] for item in executions),
+        "factorized_primitive_component_evaluations": sum(
+            item.get("component_evaluations", 0) for item in executions
+        ),
         "record_batches": chunks,
         "record_batch_uploads": chunks if cuda else 0,
         "result_tile_downloads": chunks if cuda else 0,
         "raw_hessian_downloads": 0,
         "intermediate_matrix_downloads": 0,
         "peak_host_bytes": max(
-            (item["resources"]["peak_bytes"].get("host", 0) for item in executions),
-            default=0,
+            data["peak_symmetry_weight_bytes"],
+            max(
+                (item["resources"]["peak_bytes"].get("host", 0) for item in executions),
+                default=0,
+            ),
         ),
+        "ordered_eri_shell_weight_blocks": data["ordered_eri_shell_weight_blocks"],
+        "symmetry_reduced_eri_shell_quartets": data[
+            "symmetry_reduced_eri_shell_quartets"
+        ],
         "peak_device_bytes": max(
             (item["resources"]["peak_bytes"].get("device", 0) for item in executions),
             default=0,
@@ -1122,10 +1257,11 @@ def _run_eri_hvp(
 ) -> np.ndarray:
     state, shells = data["state"], data["shells"]
     total = np.zeros((state.nat, 3))
-    for slots in product(range(len(shells)), repeat=4):
+
+    def contract(slots: tuple[int, ...], weights: np.ndarray) -> None:
+        nonlocal total
         angular = tuple(shells[i].angular_momentum for i in slots)
         extents = tuple(len(cartesian_components(value)) for value in angular)
-        weights = np.asarray(shell_weights(slots), dtype=np.float64)
         if weights.shape != extents or not np.isfinite(weights).all():
             raise ValueError(
                 "four-center shell weights must be finite with the ordered "
@@ -1150,6 +1286,47 @@ def _run_eri_hvp(
             int(np.prod(extents)),
             direction,
         )
+
+    symmetric = data["backend"] == "cpu" and operator == FOUR_CENTER_ERI_OPERATOR
+    quartets = (
+        canonical_eri_quartets(len(shells))
+        if symmetric
+        else product(range(len(shells)), repeat=4)
+    )
+    for slots in quartets:
+        angular = tuple(shells[slot].angular_momentum for slot in slots)
+        extents = tuple((order + 1) * (order + 2) // 2 for order in angular)
+        fold_bytes = data["output_accumulator_bytes"] + 2 * 8 * int(np.prod(extents))
+        if symmetric and fold_bytes <= data["budget_bytes"]:
+            data["peak_symmetry_weight_bytes"] = max(
+                data["peak_symmetry_weight_bytes"], fold_bytes
+            )
+            weights = fold_eri_shell_weights(slots, extents, shell_weights)
+            data["ordered_eri_shell_weight_blocks"] += len(
+                distinct_eri_shell_permutations(slots)
+            )
+            data["symmetry_reduced_eri_shell_quartets"] += 1
+            contract(slots, weights)
+            del weights
+        else:
+            # Folding is optional resident storage, not an admission lift. Keep
+            # every ordered block when its additional accumulator cannot fit.
+            ordered = (
+                tuple(item[0] for item in distinct_eri_shell_permutations(slots))
+                if symmetric
+                else (slots,)
+            )
+            for orientation in ordered:
+                weights = np.asarray(shell_weights(orientation))
+                if weights.dtype.kind not in "iuf":
+                    raise ValueError(
+                        "four-center shell weights must be finite real with the "
+                        "ordered Cartesian shell shape"
+                    )
+                weights = np.asarray(weights, dtype=np.float64)
+                data["ordered_eri_shell_weight_blocks"] += 1
+                contract(orientation, weights)
+                del weights
     return total
 
 
@@ -1181,28 +1358,32 @@ def generated_weighted_second_integral_hvp(
         compiler=compiler,
         device_id=device_id,
     )
-    vector = checked_direction(direction, data["state"].nat)
-    if source_name == "coulomb":
-        if pair_weights is not None or not callable(eri_shell_weights):
-            raise ValueError("coulomb second HVP requires shell-local ERI weights")
-        value = _run_eri_hvp(data, eri_shell_weights, vector, eri_operator)
-    else:
-        if eri_shell_weights is not None:
-            raise ValueError("pair second HVP cannot consume ERI shell weights")
-        weights = _checked_ao_weight(
-            pair_weights, topology.nbf, "pair second HVP weight"
-        )
-        if source_name == "one_electron":
-            value = _run_one_electron_hvp(
-                data, "kinetic", weights, vector
-            ) + _run_one_electron_hvp(data, "nuclear_attraction", weights, vector)
+    try:
+        vector = checked_direction(direction, data["state"].nat)
+        if source_name == "coulomb":
+            if pair_weights is not None or not callable(eri_shell_weights):
+                raise ValueError("coulomb second HVP requires shell-local ERI weights")
+            value = _run_eri_hvp(data, eri_shell_weights, vector, eri_operator)
         else:
-            value = _run_one_electron_hvp(data, "overlap", weights, vector)
-    if not np.isfinite(value).all():
-        raise FloatingPointError("nonfinite generated second-integral HVP")
-    diagnostic = _second_diagnostics(data)
-    diagnostic.update(source=source_name, full_ao_rank_four_weights=False)
-    return immutable(value), diagnostic
+            if eri_shell_weights is not None:
+                raise ValueError("pair second HVP cannot consume ERI shell weights")
+            weights = _checked_ao_weight(
+                pair_weights, topology.nbf, "pair second HVP weight"
+            )
+            if source_name == "one_electron":
+                value = _run_one_electron_hvp(
+                    data, "kinetic", weights, vector
+                ) + _run_one_electron_hvp(data, "nuclear_attraction", weights, vector)
+            else:
+                value = _run_one_electron_hvp(data, "overlap", weights, vector)
+        if not np.isfinite(value).all():
+            raise FloatingPointError("nonfinite generated second-integral HVP")
+        diagnostic = _second_diagnostics(data)
+        diagnostic.update(source=source_name, full_ao_rank_four_weights=False)
+        return immutable(value), diagnostic
+    finally:
+        if data["factorized_provider"] is not None:
+            data["factorized_provider"].close()
 
 
 def nuclear_hvp_from_topology(
