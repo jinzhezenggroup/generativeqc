@@ -1,0 +1,129 @@
+{
+  "schema": "generativeqc.h100-cold-force-fixed30.v1",
+  "scope": "One physical H100/SM90, fresh source-bound original30 complete cold and warm cohort. Reuse all40 existing dense/CPU-spot references and compiled caches. No old suite replay, displaced chemistry, A100/5090/UKS/CBS expansion.",
+  "measurement_boundary": "Original30 frozen0ee before upstream3006; later4ee/ed33 WB2 integration separate; subsequent2977 head is not measured by either full-matrix record.",
+  "selector_source": "87bbc0b4f20f7696cfd22974bbe5b207e7d69c38",
+  "frozen_force_default_source": "db0788b2032ba99029d1e7a7a995380777d4981f",
+  "native_source_identity": "0ee40c0ab15addfe978f93ae293c6ea5fd0cacec4147161b283ee5159134a73e",
+  "core_sha256": "6b48c5c9e3b1101441609eba70fa1ea1f6e54ac98c3ab0a442d682c907698240",
+  "frozen_force_default_device_uuid": "GPU-a21ed680-6184-b931-377d-81ff7cf9f52e",
+  "original_physical_protocol_sha256": "2391b71fb49660f682f1b60056b2892d5516f01871d7479319f0be2cf925fdaa",
+  "protocol_sha256": "7956bb9222991d737897ca52806360b37e131deff8252d8c0a2111c0c5147340",
+  "physical_cases": 30,
+  "direct_cases": 16,
+  "df_cases": 14,
+  "qualified_populations": 180,
+  "returned_EF": 720,
+  "independent_dense_cpu_spot_oracles": 40,
+  "records": {
+    "parts": [
+      {
+        "path": "records.json.xz.part00",
+        "bytes": 786432,
+        "sha256": "05cc76d2918c81c65a461c1089d1f408d7946083dac428902dd4a07c2dfefae3"
+      },
+      {
+        "path": "records.json.xz.part01",
+        "bytes": 586600,
+        "sha256": "51a1eed1451826d447c1c1257fc77bfc7e1fd65dcdf7fe02e61437847f38938a"
+      }
+    ],
+    "bytes": 1373032,
+    "sha256": "e23a61216834f3c2a66dc9f42bc70c576c208ec17510cd4af50deaf4d4e6db1e",
+    "decoded_bytes": 44542496,
+    "files": 1398,
+    "distinct_blobs": 1060,
+    "original_member_bytes": 44723683
+  },
+  "summary": {
+    "path": "summary.json.xz",
+    "bytes": 21136,
+    "sha256": "4cf8881dd67a0b76d2e0be33770bdd672888d4e2870b1ae9c29def3f64e52f28"
+  },
+  "reader": {
+    "path": "replay.py",
+    "sha256": "cf24b765784870a68f1d1f863241d142f941fecff16dede2727f85d0f7a45763"
+  },
+  "image_provenance": {
+    "historical_installation_catalog_sha256": "90b182945183c66d76876c901ee30592850baab87cf0b37d9c74d460a929d413",
+    "reference_populations_compared": 90,
+    "distinct_reference_site_images": 76,
+    "scope": "Actual post-endpoint reference-site mappings match the original published wheel/installation image catalog. The original old-device runtime/probe is not relabelled as a fresh probe; base-image science libraries outside the recorded reference-site mappings are not a new all-library/before-import witness. Native observed core/AOT mappings match current25-artifact build; this does not claim every AOT companion was mapped."
+  },
+  "later_main_wb2_integration": {
+    "source_revision": "4ee811b567938df2d8200389b4918481297511cb",
+    "native_source_identity": "ed33e0ca6d2f06ec039545283699be2c668245021dfae13f11c7ce7ae2356d05",
+    "core_sha256": "d164314b4ad97818c906b96648fe6f22a2b23cd29f85ad29d43713688b39f58e",
+    "device_uuid": "GPU-a04c1eb0-72d5-2f4a-2ea4-d8c6e3e1db59",
+    "qualified_populations": 18,
+    "returned_EF": 72,
+    "science_pass": true,
+    "performance_pass": true
+  },
+  "integrity_review": {
+    "review_completed": true,
+    "review_scope_complete": true,
+    "overall_verdict": "WARN_SCOPED_ACCEPTANCE_NO_BLOCKING_DEFECT_FOUND",
+    "audited_code_head": "8e31d0b19ccb4795229c05444267438e393f0022",
+    "requested_model": "gpt-6.1-sol",
+    "requested_effort": "ultra",
+    "actual_returned_model": "unknown",
+    "actual_returned_effort": "unknown",
+    "review_independence": "fresh same-family",
+    "assurance": "provisional",
+    "unresolved_blockers": [],
+    "status": "WARN_SCOPED_ACCEPTANCE_NO_BLOCKING_DEFECT_FOUND",
+    "acceptance_status": "provisional",
+    "artifacts": [
+      {
+        "path": "review/audit-report.json",
+        "bytes": 52655,
+        "sha256": "78252e26bc512d53221d6048eea1622e94255a65dd28c537b68df19432b019db"
+      },
+      {
+        "path": "review/audit-report.md",
+        "bytes": 18119,
+        "sha256": "5175ca44ba239c656b0808033096d3ca0fcf84dff0cae4330b9bef988cb89efd"
+      },
+      {
+        "path": "review/audit-request.json",
+        "bytes": 1052,
+        "sha256": "2d36aa63617590992d4f24dd9d8792885cf8871f75b3c926793471f9f9d3e01f"
+      },
+      {
+        "path": "review/audit-request.txt",
+        "bytes": 10322,
+        "sha256": "5e34ae527ba193d50a6507eeebd4a4427537948e29c4a6bd9ad8973397d3f3d1"
+      },
+      {
+        "path": "review/audit-trace.json",
+        "bytes": 6102,
+        "sha256": "ab21f99744fc1c33b63eddec43e1578ec7de42c75464fd51a24913488238b1cd"
+      },
+      {
+        "path": "review/audited-input-hashes.json.xz",
+        "bytes": 52332,
+        "sha256": "9349da9060a6e98875f44deaf0432a3c5d24bcb9b7e9a87e508544c55e190df6",
+        "logical_path": "review/audited-input-hashes.json",
+        "decoded_bytes": 486256,
+        "decoded_sha256": "8d912df6cdbd48cc162a3261c1c00a2d805a0ed462059fb094f1b7bac9eea85f"
+      },
+      {
+        "path": "review/independent-reduce.py",
+        "bytes": 12480,
+        "sha256": "7eb6ff471242a310f3fd67065f5fa85b0bcb23b253365a261261d0911aff61fc"
+      },
+      {
+        "path": "review/independent-wb2.py",
+        "bytes": 9939,
+        "sha256": "20524ae4c296b833544a70becdd81d452ca664240fec8e8ecd6c10785ccdefe2"
+      }
+    ],
+    "scope": "Fresh read-only primary/code/independent arithmetic review. Scope limitations remain, including inherited refined-oracle executable provenance, observed core-only mappings, later-head unmeasured status and no other-architecture/general-chemistry acceptance. Review attachment is a later delivery step; scientific receipt/summary/reader bytes unchanged."
+  },
+  "limitations": [
+    "Measured source is explicit; do not relabel older DB36 or selector records as current default.",
+    "No general molecule, displaced geometry, UKS/CBS, A100/5090 or cross-GPU ranking.",
+    "All original vectors/failures/ratios remain; no semantic force/AO census is inferred from equal SCF work."
+  ]
+}

@@ -1,9 +1,9 @@
-# Proposal: admit Direct nonlocal force batching independently of SCF panels
+# Decision: admit Direct nonlocal force batching independently of SCF panels
 
-Status: proposed; selector performance qualified, changed-default device integration pending
+Status: implemented; H100 source-bound selector and frozen default integration qualified
 Date: 2026-11-05
 
-## Problem and proposed decision
+## Problem and decision
 
 The nonlocal preparation branch requires a fitted strict RKS owner before
 considering either SCF or force tiles. Large Direct WB97M-V consequently retains
@@ -43,7 +43,7 @@ Cold includes constructor/preparation, SCF, forces and host export after CUDA
 context initialization, with verified compiled artifacts retained. Installation,
 AOT compilation and process startup are excluded. First-call outliers remain.
 These static original-matrix water-96/def2-SVP results are not a general molecular
-or cross-device ranking, and are not measurements of this proposed default.
+or cross-device ranking; the separate default integration is recorded below.
 
 ## Rejected companion and verification boundary
 
@@ -64,6 +64,32 @@ the independently predeclared force study passes. Preserve both outcomes.
 Eight focused compiled CPU policy, capacity, failure and retirement cases pass
 on the existing CPU environment using verified sccache 0.16.0. Initial local
 packaging and zero-test import-path failures remain retained. No GPU acceptance
-is inferred from those host probes. The changed default still requires its
-source-bound native build and actual device admission; publication and broader
-original30 results remain pending under issue #3004.
+is inferred from those host probes. The independent selector evidence does not substitute for changed-default device admission.
+
+## Frozen default integration and later main
+
+The source `db0788b2032ba99029d1e7a7a995380777d4981f`, native identity
+`0ee40c0ab15addfe978f93ae293c6ea5fd0cacec4147161b283ee5159134a73e`, was built
+and qualified on one H100 `GPU-a21ed680-6184-b931-377d-81ff7cf9f52e`. All180
+fresh processes /720 complete E/F calls in the unchanged original30 matrix pass
+the original40 independent dense/CPU-spot numerical references. WB96 Direct
+observes automatic prepared force1024 /SCF256 in every cold/warm sample, without
+an explicit tile override. Cold wins25/30, complete-set geometric mean
+GPU4PySCF/native1.646099582645; warm wins26/30, geometric mean1.438302760540.
+The five cold nonwins and all adverse process ratios remain retained.
+
+This frozen cohort precedes upstream #3006. The later normal main merge changes
+only `src/dft/cuda_ks.cpp` among native inputs; it keeps this force policy intact.
+Its necessary H100 integration is restricted to original WB48/96 Direct, with
+eager-anchor OFF and unset/default arms on the same combined source. Do not pool
+those later-source times into a hybrid latest30 aggregate or multiply their gains
+by the force-selector result. See the source-qualified publication under
+`benchmarks/results/h100-cold-force-fixed30-20261105/` and issue #3004.
+
+## Revisit when
+
+New representative geometries or actual resource failures show a regression in
+complete E/F. Retain explicit force requests, strict scientific settings, independent
+numerical references, the drained fallback and the existing resource promises.
+A100/5090, UKS/CBS and displaced-geometry acceptance require their own evidence;
+this H100 stage does not extend those claims.
