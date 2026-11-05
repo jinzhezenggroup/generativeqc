@@ -228,8 +228,9 @@ and 1 GiB free device memory. Other nonlocal owners retain 256.
 points). When omitted, an explicit SCF tile is inherited. With automatic SCF,
 ordinary CUDA semilocal XC also defaults to 1024 force points, so a bare call
 uses the same two-consumer schedule as an explicit 1024-point SCF tile.
-Nonlocal large fitted strict-FP64, gradient-dependent RKS owners independently
-use 1024 force points on compute capability 8 or newer. This requires the same AO/grid
+Nonlocal large strict-FP64, gradient-dependent RKS owners, both Direct and
+density-fitted, independently use 1024 force points on compute capability 8 or newer.
+This requires the same AO/grid
 size and free-memory thresholds, all-electron basis shells through d, 48–128
 atoms, native stationary admission and no resource promise. Other owners use
 256. An automatic force owner that exceeds an allowance or cannot allocate

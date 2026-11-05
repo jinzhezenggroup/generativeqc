@@ -673,8 +673,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
             options_.xc_force_tile_points = options_.xc_tile_points;
             automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
           }
-        } else if (fitted_rks_fp64 && unconstrained && basis_.nao >= 512 &&
-                   grid_.point_count() >= (1U << 19)) {
+        } else if ((fitted_rks_fp64 || (automatic_force && fused_rks_fp64)) && unconstrained &&
+                   basis_.nao >= 512 && grid_.point_count() >= (1U << 19)) {
           cudaDeviceProp properties{};
           auto status = cudaGetDeviceProperties(&properties, device);
           if (status == cudaErrorNotSupported || status == cudaErrorInvalidValue) {
@@ -699,13 +699,15 @@ class KsPreparedState final : public KsSingleOwnerPort {
                 std::all_of(options_.application_precision_budget.begin(),
                             options_.application_precision_budget.end(),
                             [](double value) { return value == 0; });
+            // Nonlocal SCF panels keep their fitted admission. Force batching
+            // admits the same strict fused RKS owner independently of fitting.
             options_.xc_tile_points = dft::automatic_ks_scf_tile(
                 0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
                 execution_plan_.nonlocal_correlation, properties.major,
                 properties.singleToDoublePrecisionPerfRatio);
             if (automatic_force && strict_precision_budget && admitted_cuda_stationary_binding()) {
               options_.xc_force_tile_points = dft::automatic_ks_force_tile(
-                  fitted_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
+                  fused_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
                   basis_.natom, basis_.nao, grid_.point_count(), properties.major);
               automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
             }
