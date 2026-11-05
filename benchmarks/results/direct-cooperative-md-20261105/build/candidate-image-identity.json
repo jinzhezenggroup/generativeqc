@@ -1,0 +1,9 @@
+{
+  "source_identity": "b78434b9416f124db8bf73b3b339bae894027959ed0220f6731e1bb1b10c2293",
+  "base_commit": "a970014e8de544aa54c6e0662eda32ebc5e5388f",
+  "library_sha256": "05319ea1eada9df72daa64fe05d131c553de582211b6b594d4d2f44f5fba8871",
+  "build_receipts": [
+    "candidate-build",
+    "candidate-build-resume"
+  ]
+}

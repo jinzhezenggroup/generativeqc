@@ -276,6 +276,10 @@ nonempty value retains the nuclear-coordinate rollback. `ssss`, FP32 and
 long-range roots are unchanged. See the
 [compiler and finite-fallback contract](../developer/weighted_eri.md#relative-coordinate-force-responses).
 
+Eligible pure-Coulomb sources also use exact complete-pair projection by
+default. `GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE=0` disables only that
+preference; see its [admission and prepared-identity contract](../developer/weighted_eri.md#complete-pair-direct-force-projection).
+
 Independently, qualified full-range exact-Direct restricted FP64 force producers
 with at least 384 public AOs automatically request relative-response order-six
 reuse and guarded pure-J density-first contraction in orders six/seven. The

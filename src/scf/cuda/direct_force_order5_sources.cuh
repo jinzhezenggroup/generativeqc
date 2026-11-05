@@ -20,12 +20,15 @@ struct Order5SourceRoots {
   static constexpr unsigned bra_pair_components = ShellClass == kDdpsShellClass ? 36U : 18U;
   static constexpr unsigned ket_pair_components = component_count / bra_pair_components;
 
-  /** Complete ordered DPPP pairs only; no arbitrary exchange/mask cotangent. */
+  /** Complete ordered pairs only; no arbitrary exchange/mask cotangent. */
   __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate_separable(
-      const generated_weighted_eri::Geometry& geometry, const double* bra, const double* ket)
-    requires(ShellClass == kDpppShellClass)
-  {
-    return generated_weighted_eri::dppp_force_separable(geometry, bra, ket);
+      const generated_weighted_eri::Geometry& geometry, const double* bra, const double* ket) {
+    if constexpr (ShellClass == kDpppShellClass)
+      return generated_weighted_eri::dppp_force_separable(geometry, bra, ket);
+    else if constexpr (ShellClass == kDpdsShellClass)
+      return generated_weighted_eri::dpds_force_separable(geometry, bra, ket);
+    else
+      return generated_weighted_eri::ddps_force_separable(geometry, bra, ket);
   }
 
   __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate_relative(

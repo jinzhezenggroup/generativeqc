@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import ctypes
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -17,9 +17,10 @@ from generativeqc_compiler.integral.lowering.fock_accumulation import (
 )
 from generativeqc_compiler.integral.weighted_eri_cuda import (
     emit_low_order_weighted_header,
+    emit_order4_weighted_header,
     emit_order5_weighted_header,
 )
-from test_weighted_eri_separable import CENTERS, _libcint
+from test_weighted_eri_separable import CENTERS, CLASSES, _libcint
 
 ROOT = Path(__file__).resolve().parents[2]
 DIMENSION = 15
@@ -51,6 +52,7 @@ def native_pair_owner(required_native_cxx: Any, tmp_path_factory: Any) -> Any:
     headers = {
         "cuda_runtime.h": SHIM,
         "weighted_eri.cuh": emit_low_order_weighted_header(),
+        "order4_weighted_eri.cuh": emit_order4_weighted_header(),
         "order5_weighted_eri.cuh": emit_order5_weighted_header(),
         "generated_direct_fock_accumulation.cuh": emit_direct_fock_accumulation_header(),
     }
@@ -67,18 +69,21 @@ def native_pair_owner(required_native_cxx: Any, tmp_path_factory: Any) -> Any:
             f"-I{ROOT / 'src'}",
             f"-I{ROOT / 'include'}",
         ),
-        compile_timeout=180,
+        compile_timeout=300,
     )
     loaded = ctypes.CDLL(str(library))
     array = np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")
     integer = np.ctypeslib.ndpointer(dtype=np.int32, flags="C_CONTIGUOUS")
     counts = np.ctypeslib.ndpointer(dtype=np.uint64, flags="C_CONTIGUOUS")
-    function = loaded.scalar_pair_probe
+    function = cast("Any", loaded.scalar_pair_probe)
     function.argtypes = (
+        ctypes.c_uint,
+        ctypes.c_bool,
         ctypes.c_bool,
         ctypes.c_bool,
         ctypes.c_bool,
         ctypes.c_uint,
+        ctypes.c_bool,
         ctypes.c_bool,
         ctypes.c_uint,
         integer,
@@ -113,18 +118,23 @@ def native_pair_owner(required_native_cxx: Any, tmp_path_factory: Any) -> Any:
     return function
 
 
-def _inputs(unrestricted: bool, system: int = 0) -> dict[str, Any]:
+def _inputs(
+    unrestricted: bool, system: int = 0, angular: tuple[int, ...] = (2, 1, 1, 1)
+) -> dict[str, Any]:
     generator = np.random.default_rng(8831)
+    dimension = sum((degree + 1) * (degree + 2) // 2 for degree in angular)
+    matrix = dimension**2
     return {
+        "class_index": CLASSES.index(angular),
         "unrestricted": unrestricted,
         "system": system,
         "atoms": np.array([0, 1, 2, 3], dtype=np.int32),
         "positions": CENTERS.copy().ravel(),
         "density": generator.normal(
-            size=(system + 1) * (2 if unrestricted else 1) * MATRIX
+            size=(system + 1) * (2 if unrestricted else 1) * matrix
         ),
-        "coefficients": generator.normal(size=(system + 1) * DIMENSION),
-        "bounds": np.ones((system + 1) * MATRIX),
+        "coefficients": generator.normal(size=(system + 1) * dimension),
+        "bounds": np.ones((system + 1) * matrix),
     }
 
 
@@ -133,9 +143,11 @@ def _run(
     inputs: dict[str, Any],
     *,
     enabled: bool = True,
+    relative: bool | None = None,
     separate: bool = True,
     orientation: int = 0,
     same_ket: bool = False,
+    same_pair: bool = False,
     seeded: bool = False,
     exchange: float = 0.0,
     mixed: bool = False,
@@ -148,11 +160,14 @@ def _run(
     seed = np.cos(np.arange(inputs["density"].size))
     pointer = seed.ctypes.data_as(ctypes.POINTER(ctypes.c_double)) if seeded else None
     owner(
+        inputs["class_index"],
         inputs["unrestricted"],
         separate,
         enabled,
+        enabled if relative is None else relative,
         orientation,
         same_ket,
+        same_pair,
         inputs["system"],
         inputs["atoms"],
         inputs["positions"],
@@ -175,14 +190,18 @@ def _run(
 @pytest.mark.parametrize("separate", (False, True))
 @pytest.mark.parametrize("orientation", range(8))
 @pytest.mark.parametrize("same_ket", (False, True))
+@pytest.mark.parametrize("angular", CLASSES)
 def test_native_pair_matches_strict_orbit_with_canonical_symmetries(
     native_pair_owner: Any,
     unrestricted: bool,
     separate: bool,
     orientation: int,
     same_ket: bool,
+    angular: tuple[int, ...],
 ) -> None:
-    inputs = _inputs(unrestricted, system=orientation % 2)
+    if same_ket and angular[2] != angular[3]:
+        pytest.skip("a repeated ket shell must have the same angular degree")
+    inputs = _inputs(unrestricted, system=orientation % 2, angular=angular)
     actual, counts = _run(
         native_pair_owner,
         inputs,
@@ -200,53 +219,97 @@ def test_native_pair_matches_strict_orbit_with_canonical_symmetries(
     )
     np.testing.assert_allclose(actual, expected, rtol=4e-11, atol=4e-12)
     np.testing.assert_array_equal(counts[:4], [1, 1, 0, 0])
-    np.testing.assert_array_equal(counts[4:9], [0, 18, 6 if same_ket else 9, 1, 0])
-    np.testing.assert_array_equal(counts[10:], [24 if same_ket else 27, 1, 0])
+    components = [(degree + 1) * (degree + 2) // 2 for degree in angular]
+    bra_terms = components[0] * components[1]
+    ket_terms = (
+        components[2] * (components[2] + 1) // 2
+        if same_ket
+        else components[2] * components[3]
+    )
+    # Equal-degree PPPP pairs may exchange bra/ket during canonicalization.
+    np.testing.assert_array_equal(counts[[4, 7, 8]], [0, 1, 0])
+    np.testing.assert_array_equal(np.sort(counts[5:7]), sorted((bra_terms, ket_terms)))
+    np.testing.assert_array_equal(counts[10:], [bra_terms + ket_terms, 1, 0])
     if separate:
         np.testing.assert_array_equal(actual[12:], np.linspace(0.01, 0.24, 24)[12:])
 
 
 @pytest.mark.parametrize("unrestricted", (False, True))
 @pytest.mark.parametrize("coulomb", (0.73, -0.41))
+@pytest.mark.parametrize("angular", CLASSES)
+@pytest.mark.parametrize("topology", ("distinct", "same_ket", "same_pair"))
 def test_native_pair_force_matches_independent_libcint_and_unique_orbits(
-    native_pair_owner: Any, unrestricted: bool, coulomb: float
+    native_pair_owner: Any,
+    unrestricted: bool,
+    coulomb: float,
+    angular: tuple[int, ...],
+    topology: str,
 ) -> None:
     """Independently assemble signed forces from raw libcint center derivatives."""
-    inputs = _inputs(unrestricted)
-    _, gradient = _libcint((2, 1, 1, 1), "regular")
-    total = inputs["density"][:MATRIX].copy()
+    if topology == "same_pair" and angular[:2] != angular[2:]:
+        pytest.skip("a repeated shell pair must have equal pair signatures")
+    if topology == "same_ket" and angular[2] != angular[3]:
+        pytest.skip("a repeated ket shell must have equal degrees")
+    slots = (
+        (0, 1, 0, 1)
+        if topology == "same_pair"
+        else (0, 1, 2, 2)
+        if topology == "same_ket"
+        else (0, 1, 2, 3)
+    )
+    inputs = _inputs(unrestricted, angular=angular)
+    components = [(degree + 1) * (degree + 2) // 2 for degree in angular]
+    offsets = np.r_[0, np.cumsum(components)]
+    dimension = int(offsets[-1])
+    matrix = dimension**2
+    _, gradient = _libcint(angular, "regular", slots)
+    total = inputs["density"][:matrix].copy()
     if unrestricted:
-        total += inputs["density"][MATRIX:]
+        total += inputs["density"][matrix:]
     expected = np.linspace(0.01, 0.24, 24)
-    index = 0
-    for first in range(6):
-        for second in range(6, 9):
-            for third in range(9, 12):
-                for fourth in range(12, 15):
-                    orbit = {
-                        (first, second, third, fourth),
-                        (second, first, third, fourth),
-                        (first, second, fourth, third),
-                        (second, first, fourth, third),
-                        (third, fourth, first, second),
-                        (fourth, third, first, second),
-                        (third, fourth, second, first),
-                        (fourth, third, second, first),
-                    }
-                    coefficient = sum(
-                        0.5
-                        * coulomb
-                        * total[left + DIMENSION * right]
-                        * total[ket_left + DIMENSION * ket_right]
-                        for left, right, ket_left, ket_right in orbit
-                    )
-                    coefficient *= np.prod(
-                        inputs["coefficients"][[first, second, third, fourth]]
-                    )
-                    expected[:12] -= coefficient * gradient[:, index]
-                    index += 1
-    actual, _ = _run(native_pair_owner, inputs, orientation=7, coulomb=coulomb)
+    seen = set()
+    for index, component in enumerate(np.ndindex(*components)):
+        first, second, third, fourth = (
+            int(offsets[slot]) + local
+            for slot, local in zip(slots, component, strict=True)
+        )
+        orbit = frozenset(
+            {
+                (first, second, third, fourth),
+                (second, first, third, fourth),
+                (first, second, fourth, third),
+                (second, first, fourth, third),
+                (third, fourth, first, second),
+                (fourth, third, first, second),
+                (third, fourth, second, first),
+                (fourth, third, second, first),
+            }
+        )
+        if orbit in seen:
+            continue
+        seen.add(orbit)
+        coefficient = sum(
+            0.5
+            * coulomb
+            * total[left + dimension * right]
+            * total[ket_left + dimension * ket_right]
+            for left, right, ket_left, ket_right in orbit
+        )
+        coefficient *= np.prod(inputs["coefficients"][[first, second, third, fourth]])
+        for center, atom in enumerate(slots):
+            expected[3 * atom : 3 * atom + 3] -= (
+                coefficient * gradient[3 * center : 3 * center + 3, index]
+            )
+    actual, counts = _run(
+        native_pair_owner,
+        inputs,
+        orientation=7,
+        coulomb=coulomb,
+        same_ket=topology == "same_ket",
+        same_pair=topology == "same_pair",
+    )
     np.testing.assert_allclose(actual, expected, rtol=4e-11, atol=4e-12)
+    np.testing.assert_array_equal(counts[:4], [1, 1, 0, 0])
 
 
 @pytest.mark.parametrize("atoms", ((0, 0, 1, 2), (0, 1, 1, 2), (0, 0, 0, 0)))
@@ -263,17 +326,21 @@ def test_native_pair_repeated_atom_folding(
 @pytest.mark.parametrize(
     "refusal", ("mask", "early_extreme", "late_extreme", "late_inf", "late_bound")
 )
+@pytest.mark.parametrize("angular", CLASSES)
 def test_native_pair_refuses_before_publication_and_retries_once(
-    native_pair_owner: Any, refusal: str
+    native_pair_owner: Any, refusal: str, angular: tuple[int, ...]
 ) -> None:
-    inputs = _inputs(False)
+    inputs = _inputs(False, angular=angular)
+    components = [(degree + 1) * (degree + 2) // 2 for degree in angular]
+    offsets = np.r_[0, np.cumsum(components)]
+    dimension = int(offsets[-1])
     fault = 1 if refusal == "late_inf" else 2 if refusal == "late_bound" else 0
     if refusal == "mask":
-        inputs["bounds"][DIMENSION * 6] = 0
+        inputs["bounds"][dimension * offsets[1]] = 0
     elif refusal == "early_extreme":
-        inputs["density"][DIMENSION * 6] = 1e-200
+        inputs["density"][dimension * offsets[1]] = 1e-200
     elif refusal == "late_extreme":
-        inputs["density"][11 + DIMENSION * 14] = 1e-200
+        inputs["density"][offsets[3] - 1 + dimension * (dimension - 1)] = 1e-200
     actual, counts = _run(native_pair_owner, inputs, fault=fault)
     expected, _ = _run(native_pair_owner, inputs, enabled=False, fault=fault)
     np.testing.assert_array_equal(actual, expected)
@@ -286,18 +353,21 @@ def test_native_pair_refuses_before_publication_and_retries_once(
     else:
         assert counts[7] == 0
     if refusal == "late_extreme":
-        np.testing.assert_array_equal(counts[5:7], [18, 9])
+        np.testing.assert_array_equal(
+            counts[5:7], [components[0] * components[1], components[2] * components[3]]
+        )
 
 
 @pytest.mark.parametrize(
     "guard", ({"seeded": True}, {"exchange": -0.29}, {"mixed": True})
 )
+@pytest.mark.parametrize("angular", CLASSES)
 def test_native_pair_unsupported_inputs_keep_original_consumer(
-    native_pair_owner: Any, guard: dict[str, Any]
+    native_pair_owner: Any, guard: dict[str, Any], angular: tuple[int, ...]
 ) -> None:
-    inputs = _inputs(False)
+    inputs = _inputs(False, angular=angular)
     actual, counts = _run(native_pair_owner, inputs, **guard)
-    expected, _ = _run(native_pair_owner, inputs, enabled=False, **guard)
+    expected, _ = _run(native_pair_owner, inputs, enabled=False, relative=True, **guard)
     np.testing.assert_array_equal(actual, expected)
     assert not counts[:8].any()
 
@@ -480,3 +550,23 @@ def test_native_pair_invalid_schwarz_preserves_strict_force_fallback(
     if counts[2]:
         np.testing.assert_array_equal(actual, expected)
         assert not counts[5:8].any() and counts[8] == 1
+
+
+@pytest.mark.parametrize("angular", CLASSES)
+@pytest.mark.parametrize("relative", (False, True))
+@pytest.mark.parametrize("enabled", (False, True))
+def test_pair_preference_respects_nuclear_response_rollback(
+    native_pair_owner: Any, angular: tuple[int, ...], relative: bool, enabled: bool
+) -> None:
+    """The pair preference cannot override the explicit nuclear response policy."""
+    inputs = _inputs(False, angular=angular)
+    actual, counts = _run(native_pair_owner, inputs, enabled=enabled, relative=relative)
+    nuclear, _ = _run(native_pair_owner, inputs, enabled=False, relative=False)
+    if relative:
+        np.testing.assert_allclose(actual, nuclear, rtol=4e-11, atol=4e-12)
+    else:
+        np.testing.assert_array_equal(actual, nuclear)
+    if enabled and relative:
+        np.testing.assert_array_equal(counts[:4], [1, 1, 0, 0])
+    else:
+        assert not counts[:8].any()

@@ -207,17 +207,17 @@ int main(int argc,char** argv) {
     return 0;
   }
   if(argc==2 && std::strcmp(argv[1],"--separable-policy-only")==0) {
-    const auto* name="GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_PAIR_SEPARABLE";
+    const auto* name="GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE";
     assert(unsetenv(name)==0);
     DeviceBatch original;
     configure_direct_coulomb_recurrence(original);
-    assert(!original.direct_force_pair_separable);
+    assert(original.direct_force_pair_separable);
     for(const auto* selector : {"0", "unknown", "", "1", "01"}) {
       assert(setenv(name,selector,1)==0);
       DeviceBatch prepared;
       configure_direct_coulomb_recurrence(prepared);
       assert(prepared.direct_force_pair_separable==(std::strcmp(selector,"1")==0));
-      assert(!original.direct_force_pair_separable);
+      assert(original.direct_force_pair_separable);
     }
     assert(unsetenv(name)==0);
     return 0;
@@ -396,9 +396,10 @@ def test_weighted_response_policy_is_captured_per_prepared_owner(
     )
 
 
-def test_separable_force_policy_is_default_off_and_captured_per_prepared_owner(
+def test_separable_force_policy_is_default_on_and_captured_per_prepared_owner(
     allocation_probe: Path,
 ) -> None:
+    """Rollback selectors cannot mutate an already prepared default-on owner."""
     subprocess.run(
         [str(allocation_probe), "--separable-policy-only"], check=True, timeout=10
     )

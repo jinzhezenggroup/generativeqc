@@ -1,8 +1,9 @@
-"""Lower the existing Coulomb DAG to a bounded cooperative CUDA schedule.
+"""Lower the existing MD radial source to bounded cooperative Direct forces.
 
-The compiler owns node dependencies and component/state mappings. CUDA lanes
-execute independent nodes between publication barriers; no scalar recurrence
-or derivative algebra is reimplemented for this schedule.
+The compact MD-J owner supplies stage dependencies and scalar arithmetic.
+CUDA lanes publish disjoint stage buffers, then the existing relative-gradient
+consumer reads the same spatial roots. The DAG lowering remains an independent
+compiler reference; no derivative or screening equations are replaced.
 """
 
 from __future__ import annotations
@@ -11,6 +12,10 @@ from dataclasses import dataclass
 from functools import cache
 
 from .direct_density_gradient_cuda import emit_density_direct_force_support
+from .md_j_engine_cuda import (
+    cooperative_md_radial_workspace,
+    emit_cooperative_md_radial_support,
+)
 from .shell_class import build_coulomb_derivative_algebra
 
 
@@ -86,29 +91,15 @@ def build_cooperative_coulomb_schedule() -> CooperativeCoulombSchedule:
 
 def emit_cooperative_direct_force_support() -> str:
     """Emit bounded shared execution; only order-six/seven s/p/d tasks are admitted."""
-    schedule = build_cooperative_coulomb_schedule()
-    instructions = ",\n".join(
-        "  " + ", ".join(f"{value}ULL" for value in schedule.instructions[i : i + 8])
-        for i in range(0, len(schedule.instructions), 8)
-    )
-    roots = ", ".join(f"{value}U" for value in schedule.roots)
-    levels = ", ".join(f"{value}U" for value in schedule.levels)
-    constants = ", ".join(repr(value) for value in schedule.constants)
-    prefix = f"""
+    prefix = """
 #if defined(__CUDACC__)
-namespace generativeqc::scf::cuda_execution {{
-// Lane-varying instruction/output tables use coalesced read-only global loads.
-// Uniform level/constant reads use constant storage. The kernel does not carry
-// scalar DAG roots or per-component recurrence arrays in private storage.
-static __device__ const unsigned long long kCooperativeCoulombNodes[] = {{
-{instructions}
-}};
-static __device__ __constant__ unsigned kCooperativeCoulombLevels[] = {{{levels}}};
-static __device__ const unsigned kCooperativeCoulombRoots[] = {{{roots}}};
-static __device__ __constant__ double kCooperativeCoulombConstants[] = {{{constants}}};
+namespace generativeqc::scf::cuda_execution {
+"""
+    prefix += emit_cooperative_md_radial_support()
+    prefix += f"""
 struct CooperativeDirectPairDerivativeRecurrence {{
   DirectRelativePairDerivativeRecurrence recurrence;
-  double nodes[{len(schedule.instructions)}], boys[9], rho;
+  double radial[{cooperative_md_radial_workspace(8)}], boys[9], rho;
   Vec3<double> difference;
   double warp_sums[8];
 }};
@@ -208,7 +199,10 @@ _PRIMITIVE_TRAVERSAL = r"""  auto& recurrence = shared.recurrence;
             atom_position<double>(batch, atoms[2], -1),
             atom_position<double>(batch, atoms[3], -1), recurrence.ket, lk, ll, threadIdx.x);
       __syncthreads();
-@KET_PROJECTION@      fill_cooperative_direct_coulomb(shared);
+@KET_PROJECTION@      if (li + lj + lk + ll == 6U)
+        fill_cooperative_direct_coulomb<7U>(shared);
+      else
+        fill_cooperative_direct_coulomb<8U>(shared);
 @CONTRACTION@
       __syncthreads();
     }
@@ -265,36 +259,21 @@ _FORCE_SCATTER = r"""  const std::size_t stride = std::size_t(batch.total_atoms)
   }"""
 
 _COMPONENT_CONSUMER = r"""
-/** Evaluate the existing spatial DAG once per primitive product. Independent
- * nodes are lane-strided within a level. A CTA barrier publishes every level,
- * including levels with fewer nodes than lanes. Only n=0 spatial states are
- * consumed by Cartesian contraction and its raised first-response view. */
+/** Reuse the MD-J compiler's bounded stages and the caller's unchanged Boys
+ * ladder. A total-order-six force needs spatial degree seven; order seven
+ * needs degree eight. Publish every required root before the consumer runs. */
+template <unsigned Degree>
 __device__ inline void fill_cooperative_direct_coulomb(
     CooperativeDirectPairDerivativeRecurrence& shared) {
-  constexpr unsigned Levels = sizeof(kCooperativeCoulombLevels) / sizeof(unsigned) - 1U;
-  for (unsigned level = 0; level < Levels; ++level) {
-    for (unsigned node = kCooperativeCoulombLevels[level] + threadIdx.x;
-         node < kCooperativeCoulombLevels[level + 1]; node += blockDim.x) {
-      const auto instruction = __ldg(kCooperativeCoulombNodes + node);
-      const unsigned first = instruction & 65535U, second = (instruction >> 16) & 65535U;
-      const unsigned opcode = instruction >> 32;
-      double value;
-      if (opcode == 0U) value = kCooperativeCoulombConstants[first];
-      else if (opcode == 1U)
-        value = first == 0U ? shared.rho
-              : first < 4U ? vec_axis(shared.difference, first - 1U)
-                           : shared.boys[first - 4U];
-      else if (opcode == 2U) value = shared.nodes[first] * shared.nodes[second];
-      else value = shared.nodes[first] + shared.nodes[second];
-      shared.nodes[node] = value;
-    }
-    __syncthreads();
-  }
-  constexpr unsigned Roots = sizeof(kCooperativeCoulombRoots) / sizeof(unsigned);
+  static_assert(Degree == 7U || Degree == 8U);
+  const auto* values = cooperative_md_radial<Degree>(
+      shared.rho, shared.difference, shared.boys, shared.radial);
+  const auto* roots = Degree == 7U ? kCooperativeMdRadialRoots7 : kCooperativeMdRadialRoots8;
+  constexpr unsigned Roots = (Degree + 1U) * (Degree + 2U) * (Degree + 3U) / 6U;
   for (unsigned root = threadIdx.x; root < Roots; root += blockDim.x) {
-    const unsigned mapping = __ldg(kCooperativeCoulombRoots + root);
+    const unsigned mapping = __ldg(roots + root);
     shared.recurrence.coulomb.at(0, mapping & 15U, (mapping >> 4) & 15U,
-                               (mapping >> 8) & 15U) = shared.nodes[mapping >> 12];
+                               (mapping >> 8) & 15U) = values[root];
   }
   __syncthreads();
 }
