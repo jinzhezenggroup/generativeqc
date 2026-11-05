@@ -1,0 +1,7 @@
+{
+  "base_commit": "c511f9a330ef4e6c7d48e6ed4a5f778bff260001",
+  "native_input_identity": "0ad22da997d05751e2e2afd420ca0d0ed95a8491fbfb066afb3a09a0ab02e372",
+  "inventory_patch_sha256": "e9a268df39aeca7b0b91f61507cf426ec1254a2f872f26b31b6ca41c635ab089",
+  "native_fixture_sha256": "39125b00307ac83a50d1d4819d9f7ad316e3e817dd70ea17937de956f4362440",
+  "endpoint_sha256": "a362123493e126c71e17fa7b50e3fba14500c9e5e2970ee801bbfb0c25f81a90"
+}

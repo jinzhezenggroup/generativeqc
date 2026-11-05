@@ -83,7 +83,7 @@ at native D must also satisfy the unchanged 1e-9 AO stationarity bound and agree
 with the native Fock. It is not acceptable to compare unrelated cold roots or
 infer force correctness from an energy-only probe. Compact measured results
 are retained with source/library identities under
-`benchmarks/results/ks-scf-2984/qualification.json`.
+`benchmarks/results/ks-scf-2984/qualification.json.xz`.
 
 Compiled CUDA controls exercise tie/no-tie and empty/full occupation guards,
 orbital-sign invariance, original exception detail, per-item isolation, stale

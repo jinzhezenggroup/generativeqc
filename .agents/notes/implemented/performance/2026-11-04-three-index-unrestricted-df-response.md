@@ -317,7 +317,7 @@ cardinal components. These are semantic UMP2 initial-weight counters, not total
 endpoint FLOPs or transfers. No controlled L20 speedup, RCC/UCC ratio or
 hundreds-of-AO qualification is inferred.
 
-The [current compact accepted record](../../../../benchmarks/results/unrestricted-df-20261104/qualification-summary.json)
+The [current compact accepted record](../../../../benchmarks/results/unrestricted-df-20261104/qualification-summary.json.xz)
 retains these final-source populations and hashes of their full summary and
 provenance. Complete inputs, scripts, endpoint receipts, independent oracles,
 source inventories, actual library queries, cache/compiler/build logs, device

@@ -93,7 +93,7 @@ The CUDA library SHA-256 is
 Ignored local receipts under `build/issues-2978-2980-evidence/` retain source
 provenance, scripts, input/basis snapshots, numerical results, raw traces,
 device samples, build logs and compiler-cache statistics. The machine-readable
-`qualification-summary.json` is derived from those complete endpoint receipts.
+`qualification-summary.json.xz` is derived from those complete endpoint receipts.
 
 Qualification used n1's RTX 5090 (32607 MiB, driver 580.95.05), Release,
 CUDA 12.9.1 / sm_120, GCC 13 and verified sccache 0.16.0. AOT shell/stationary
