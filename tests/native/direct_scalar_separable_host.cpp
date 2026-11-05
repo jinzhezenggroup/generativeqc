@@ -5,8 +5,10 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 
+#include "scf/cuda/direct_force_order4_sources.cuh"
 #include "scf/cuda/direct_force_order5_sources.cuh"
 
 using namespace generativeqc::scf::cuda_execution;
@@ -16,10 +18,11 @@ static_assert(!DeviceBatch{}.direct_force_pair_separable);
 namespace {
 unsigned evaluations{}, fault{};
 
-struct FaultRoots : Order5SourceRoots<kDpppShellClass> {
+template <class Roots>
+struct FaultRoots : Roots {
   static generated_weighted_eri::IndependentGradient evaluate_separable(
       const generated_weighted_eri::Geometry& geometry, const double* bra, const double* ket) {
-    auto result = Order5SourceRoots<kDpppShellClass>::evaluate_separable(geometry, bra, ket);
+    auto result = Roots::evaluate_separable(geometry, bra, ket);
     if (++evaluations == 2U) {
       if (fault == 1U) result.center[0][0] = std::numeric_limits<double>::infinity();
       if (fault == 2U) result.center[0][0] = std::numeric_limits<double>::max() / 8.0;
@@ -28,38 +31,44 @@ struct FaultRoots : Order5SourceRoots<kDpppShellClass> {
   }
 };
 
-template <bool Unrestricted, DirectForceOutputMode Mode, class Roots>
+template <unsigned ShellClass, bool Unrestricted, DirectForceOutputMode Mode, class Roots>
 void execute(const DeviceBatch& batch, const double* bounds, const double* density,
              const std::uint8_t* active, double threshold, double coulomb, double exchange,
-             double* forces) {
-  contract_two_electron_force_low_order_sources_task<Unrestricted, kDpppShellClass, false, Roots,
-                                                     Mode>(
-      batch, {0U, 1U, 0U}, threshold, bounds, density, active, forces, coulomb, exchange);
+             double* forces, bool same_pair) {
+  contract_two_electron_force_low_order_sources_task<Unrestricted, ShellClass, false, Roots, Mode>(
+      batch, {0U, same_pair ? 0U : 1U, 0U}, threshold, bounds, density, active, forces, coulomb,
+      exchange);
 }
-}  // namespace
 
-extern "C" void scalar_pair_probe(bool unrestricted, bool separate, bool enabled,
-                                  unsigned orientation, bool same_ket, unsigned system,
-                                  const std::int32_t* atoms, const double* positions,
-                                  const double* density, const double* coefficients,
-                                  const double* bounds, const double* seed, double threshold,
-                                  double coulomb, double exchange, bool mixed,
-                                  unsigned injected_fault, double* forces,
-                                  unsigned long long* counters) {
+template <unsigned ShellClass, class Roots>
+void run_probe(const std::array<std::uint8_t, 4>& angular, bool unrestricted, bool separate,
+               bool enabled, unsigned orientation, bool same_ket, bool same_pair, unsigned system,
+               const std::int32_t* atoms, const double* positions, const double* density,
+               const double* coefficients, const double* bounds, const double* seed,
+               double threshold, double coulomb, double exchange, bool mixed,
+               unsigned injected_fault, double* forces, unsigned long long* counters) {
   DeviceBatch batch{};
   batch.batch_size = system + 1;
-  batch.nbf = batch.direct_nbf = 15;
+  unsigned dimension = 0U;
+  std::int64_t offsets[5]{};
+  for (unsigned shell = 0; shell < 4U; ++shell) {
+    dimension += (angular[shell] + 1U) * (angular[shell] + 2U) / 2U;
+    offsets[shell + 1U] = dimension;
+  }
+  batch.nbf = batch.direct_nbf = dimension;
   batch.total_atoms = batch.total_shells = 4;
   batch.total_shell_pairs = 2;
   batch.positions = positions;
   batch.shell_atoms = atoms;
-  const std::uint8_t angular[4] = {2U, 1U, 1U, 1U};
-  batch.shell_angular = angular;
-  std::int64_t offsets[5] = {0, 6, 9, 12, 15};
-  for (auto& offset : offsets) offset += system * 15;
+  batch.shell_angular = angular.data();
+  for (auto& offset : offsets) offset += system * dimension;
   batch.shell_direct_ao_offsets = offsets;
   batch.direct_ao_coefficients = coefficients;
   std::int32_t shells[4] = {0, 1, 2, same_ket ? 2 : 3};
+  if (same_pair) {
+    shells[2] = 0;
+    shells[3] = 1;
+  }
   if (orientation & 1U) std::swap(shells[0], shells[1]);
   if (orientation & 2U) std::swap(shells[2], shells[3]);
   if (orientation & 4U) {
@@ -109,11 +118,11 @@ extern "C" void scalar_pair_probe(bool unrestricted, bool separate, bool enabled
   fault = injected_fault;
   const auto call = [&]<bool Unrestricted, DirectForceOutputMode Mode>() {
     if (fault)
-      execute<Unrestricted, Mode, FaultRoots>(batch, bounds, density, active, threshold, coulomb,
-                                              exchange, forces);
+      execute<ShellClass, Unrestricted, Mode, FaultRoots<Roots>>(
+          batch, bounds, density, active, threshold, coulomb, exchange, forces, same_pair);
     else
-      execute<Unrestricted, Mode, Order5SourceRoots<kDpppShellClass>>(
-          batch, bounds, density, active, threshold, coulomb, exchange, forces);
+      execute<ShellClass, Unrestricted, Mode, Roots>(batch, bounds, density, active, threshold,
+                                                     coulomb, exchange, forces, same_pair);
   };
   if (unrestricted) {
     if (separate)
@@ -126,7 +135,7 @@ extern "C" void scalar_pair_probe(bool unrestricted, bool separate, bool enabled
     else
       call.template operator()<false, DirectForceOutputMode::Combined>();
   }
-  const auto& pair = work.classes[kDpppShellClass].scalar_pair;
+  const auto& pair = work.classes[ShellClass].scalar_pair;
   const unsigned long long observed[] = {pair.attempted_shells,
                                          pair.accepted_shells,
                                          pair.mask_rejections,
@@ -135,12 +144,58 @@ extern "C" void scalar_pair_probe(bool unrestricted, bool separate, bool enabled
                                          pair.bra_density_terms,
                                          pair.ket_density_terms,
                                          pair.primitive_products,
-                                         work.classes[kDpppShellClass].scalar.calls,
+                                         work.classes[ShellClass].scalar.calls,
                                          evaluations,
                                          pair.screening_pair_terms,
                                          pair.screening_pair_proofs,
                                          pair.screening_pair_fallbacks};
   std::copy(std::begin(observed), std::end(observed), counters);
+}
+}  // namespace
+
+/** Exercise each actual roots binding without rewriting production source. */
+extern "C" void scalar_pair_probe(unsigned class_index, bool unrestricted, bool separate,
+                                  bool enabled, unsigned orientation, bool same_ket, bool same_pair,
+                                  unsigned system, const std::int32_t* atoms,
+                                  const double* positions, const double* density,
+                                  const double* coefficients, const double* bounds,
+                                  const double* seed, double threshold, double coulomb,
+                                  double exchange, bool mixed, unsigned injected_fault,
+                                  double* forces, unsigned long long* counters) {
+  constexpr std::array<std::uint8_t, 4> angular[] = {{1, 1, 1, 1}, {2, 1, 1, 1}, {2, 0, 1, 1},
+                                                     {2, 0, 2, 0}, {2, 1, 1, 0}, {2, 1, 2, 0},
+                                                     {2, 2, 1, 0}};
+  const auto call = [&]<unsigned ShellClass, class Roots>() {
+    run_probe<ShellClass, Roots>(angular[class_index], unrestricted, separate, enabled, orientation,
+                                 same_ket, same_pair, system, atoms, positions, density,
+                                 coefficients, bounds, seed, threshold, coulomb, exchange, mixed,
+                                 injected_fault, forces, counters);
+  };
+  switch (class_index) {
+    case 0:
+      call.template operator()<kPpppShellClass, Order4SourceRoots<kPpppShellClass>>();
+      break;
+    case 1:
+      call.template operator()<kDpppShellClass, Order5SourceRoots<kDpppShellClass>>();
+      break;
+    case 2:
+      call.template operator()<kDsppShellClass, Order4SourceRoots<kDsppShellClass>>();
+      break;
+    case 3:
+      call.template operator()<kDsdsShellClass, Order4SourceRoots<kDsdsShellClass>>();
+      break;
+    case 4:
+      call.template operator()<kDppsShellClass, Order4SourceRoots<kDppsShellClass>>();
+      break;
+    case 5:
+      call.template operator()<kDpdsShellClass, Order5SourceRoots<kDpdsShellClass>>();
+      break;
+    case 6:
+      call.template operator()<kDdpsShellClass, Order5SourceRoots<kDdpsShellClass>>();
+      break;
+    default:
+      std::abort();
+  }
 }
 
 /** Exercise the real mask proof with arbitrary pair domains, independently of

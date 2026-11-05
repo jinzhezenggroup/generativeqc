@@ -117,8 +117,8 @@ struct DeviceBatch {
   bool direct_force_split_low{};
   /** Exact relative-coordinate AD; false retains the nuclear-coordinate graph. */
   bool direct_force_relative_response{true};
-  /** Default-off scalar pure-J pair projection. Unsupported or nonfinite
-   * tasks retry the retained strict component consumer before any scatter. */
+  /** Captured pure-J pair preference; conservative until owner configuration.
+   * Unsupported/nonfinite tasks retain strict fallback before any scatter. */
   bool direct_force_pair_separable{};
   /** Per-launch qualification candidate, never a process-global precision mode.
    * Only full-range weighted order-0..5 sources consume it. Geometry, density
