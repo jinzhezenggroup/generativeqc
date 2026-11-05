@@ -3503,7 +3503,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                          prepared_ao_work.point_ao_square_sum);
       CudaXcOccupiedDensity occupied_frame;
       const CudaXcOccupiedDensity candidate{
-          density, tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
+          density,         tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
           next_generation, true};
       // Do not start a provisional epoch without useful projection work and
       // two strict submits for a fresh energy comparison inside the caller's budget.
@@ -3511,12 +3511,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
           output.iterations < options.max_iterations &&
           options.max_iterations - output.iterations > 2 &&
           candidate.projection_fits(prepared_ao_work.max_active, xc_layout.jets,
-                                     xc_layout.work_jets) &&
+                                    xc_layout.work_jets) &&
           output.physical_residual_rms > 1e-4 &&
           phase == generativeqc::runtime::PrecisionPhase::Admitted && !device_chunk_mode &&
           !device_nonlocal && !precision_schedule.any_lower_precision() &&
           (xc_layout.feature_terms == 1 || xc_layout.feature_terms == 4 ||
-           xc_layout.feature_terms == 5) && xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
+           xc_layout.feature_terms == 5) &&
+          xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
         occupied_frame = candidate;
       }
       // tmp1 is borrowed only until residual/DIIS work reuses it on this stream.

@@ -141,8 +141,8 @@ struct CudaXcOccupiedDensity {
     // GGA projects C^T*phi, then reconstructs C*(C^T*phi) during the feature
     // reduction. Both contractions must beat one D*phi; only the rank-sized
     // value panel occupies dead work storage. LDA needs no reconstruction.
-    if (!rank() || !active || !((jets == 1 && work_jets == 1) ||
-                               (jets == 4 && (work_jets == 1 || work_jets == 4))))
+    if (!rank() || !active ||
+        !((jets == 1 && work_jets == 1) || (jets == 4 && (work_jets == 1 || work_jets == 4))))
       return false;
     if (provisional) return rank() <= (active - 1) / (jets == 4 && work_jets == 1 ? 2 : 1);
     // The exact certificate still has the five-feature, two-panel contract.

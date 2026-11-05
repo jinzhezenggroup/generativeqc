@@ -1008,7 +1008,8 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
       (layout_.feature_terms == 4 && layout_.jets == 4 && layout_.work_jets == 1) ||
       (layout_.feature_terms == 5 && layout_.jets == 4 && layout_.work_jets == 4);
   if ((occupied.provisional && phase != PrecisionPhase::Admitted) || !publish_generation ||
-      layout_.response || !occupied_layout || (!occupied.provisional && layout_.feature_terms != 5) ||
+      layout_.response || !occupied_layout ||
+      (!occupied.provisional && layout_.feature_terms != 5) ||
       layout_.ao_precision != CudaXcAoPrecision::Fp64 ||
       !density_binding(phase).precision.arithmetic.is_strict_fp64() ||
       !occupied.matches(density, layout_.nao, layout_.spins, generation))
