@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-11-04
 
+The native ownership decision remains current. Its backend/model-dependent
+threshold selection is superseded by
+[uniform SCF defaults](../numerics/2026-11-05-uniform-scf-defaults.md).
+
 ## Problem
 
 The native catalog/grid default-controls query already owns the admitted policy,

@@ -147,9 +147,10 @@ void check_route(const char* name, bool reference, bool forces) {
   const auto solves = work.count("final_state_correction_solve");
   const auto probes = work.count("final_state_fixed_point");
   const auto promotions = work.count("final_state_fixed_point_promotion");
-  require(corrections > 0 && corrections <= 32 && focks == corrections + 1 &&
-              solves + promotions == corrections && probes == promotions + 1 &&
-              result.fock_builds == result.iterations + 1 + focks &&
+  // A verified retained determinant needs no correction. Preserve the bounded
+  // physical proof and reconcile all observed work in either acceptance path.
+  require(corrections <= 32 && focks == corrections + 1 && solves + promotions == corrections &&
+              probes == promotions + 1 && result.fock_builds == result.iterations + 1 + focks &&
               result.fock_builds <= result.iterations + 34 &&
               reference_final == (reference ? 2 * (1 + solves + probes) : 0) &&
               work.count("final_state_weighted_density") == 1,
