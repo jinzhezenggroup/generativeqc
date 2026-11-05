@@ -67,7 +67,16 @@ def metadata(library: Any, method: str) -> Any:
 
 
 @pytest.mark.parametrize(
-    "method", ("rhf", "pbe-rks", "pbe0-rks", "b3lyp-rks", "r2scan-rks", "m06-2x-rks")
+    "method",
+    (
+        "rhf",
+        "pbe-rks",
+        "pbe0-rks",
+        "b3lyp-rks",
+        "r2scan-rks",
+        "m06-2x-rks",
+        "wb97m-v-rks",
+    ),
 )
 def test_native_defaults_use_complete_catalog_and_grid(
     library: Any, method: str
@@ -82,7 +91,7 @@ def test_native_defaults_use_complete_catalog_and_grid(
     assert transport.default_controls(calculator)["density_tolerance"] == 1e-8
 
 
-@pytest.mark.parametrize("method", ("uhf", "mp2", "pbe-uks", "wb97m-v-rks"))
+@pytest.mark.parametrize("method", ("uhf", "mp2", "pbe-uks"))
 def test_unqualified_models_keep_strict_defaults(library: Any, method: str) -> None:
     assert (
         transport.default_controls(metadata(library, method))["density_tolerance"]

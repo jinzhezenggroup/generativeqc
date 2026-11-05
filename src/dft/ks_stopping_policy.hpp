@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 
 #include "dft/semilocal_family.hpp"
@@ -48,6 +49,46 @@ constexpr bool ordinary_ks_converged(const KsStoppingState& state) noexcept {
          state.density_change < state.density_tolerance &&
          state.residual < state.stationarity_tolerance &&
          state.maximum_residual < state.stationarity_tolerance;
+}
+
+/** Physical MO stationarity shared by convergence and density confirmation.
+ * AO RMS/maximum bounds do not imply this global occupied-virtual norm. A
+ * confirmation hold must pass it before suppressing a new density proposal.
+ */
+inline bool orbital_ks_stationary(const KsStoppingState& state, double orbital_gradient) noexcept {
+  return orbital_gradient >= 0.0 && orbital_gradient < std::sqrt(state.energy_tolerance);
+}
+
+/** Restricted molecular E/MO-gradient candidate, matching GPU4PySCF's norms.
+ * The transformed physical commutator has Frobenius norm sqrt(2)*||2 F_vo||.
+ * Density change is diagnostic here, not an additional SCF stopping condition.
+ * Full-target energy history and the owner's canonical publication proof are
+ * still mandatory; provisional/frozen VV10 operators cannot publish a state.
+ */
+inline bool orbital_ks_converged(const KsStoppingState& state, double orbital_gradient) noexcept {
+  const bool history =
+      state.iterations > 1 || (state.iterations == 1 && state.warm_energy_baseline);
+  return history && state.full_energy_history && state.target_ready &&
+         state.energy_change < state.energy_tolerance &&
+         orbital_ks_stationary(state, orbital_gradient);
+}
+
+/** Hold a physical VV10 density only to establish its energy history.
+ * The caller excludes provisional seed/frozen operators. Energy convergence
+ * and a second target observation are deliberately not prerequisites: the
+ * next unchanged-density evaluation supplies them. The active stationarity
+ * gate must already pass, and a rejected canonical proof must advance the
+ * owned proposal instead of repeatedly validating the same rejected state.
+ * Strict/non-orbital consumers retain their original AO confirmation bounds.
+ */
+inline bool nonlocal_ks_density_confirmation(const KsStoppingState& state,
+                                             double confirmation_tolerance, bool orbital_policy,
+                                             double orbital_gradient,
+                                             bool final_probe_rejected) noexcept {
+  return !final_probe_rejected && state.density_change < state.density_tolerance &&
+         state.residual < confirmation_tolerance &&
+         state.maximum_residual < confirmation_tolerance &&
+         (!orbital_policy || orbital_ks_stationary(state, orbital_gradient));
 }
 
 }  // namespace generativeqc::dft

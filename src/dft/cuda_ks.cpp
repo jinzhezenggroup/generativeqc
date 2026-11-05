@@ -33,6 +33,7 @@
 #include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
+#include "methods/named_ks_catalog.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/compiled_execution_region.hpp"
 #include "runtime/cuda_component_trace.hpp"
@@ -65,6 +66,7 @@
 #include "scf/diis_work.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/initial_guess/density.hpp"
+#include "scf/mean_field.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/eigen_frame.hpp"
 #include "scf/solver/proposal_control.hpp"
@@ -444,7 +446,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
   // Eligible strict solves may replace the conservative AO-maximum margin
   // only with a successful complete canonical final-state proof.
-  bool early_final_probe_requested{}, standard_convergence_model{};
+  bool early_final_probe_requested{}, standard_convergence_model{}, standard_nonlocal_model{};
   mutable std::optional<CudaKsFinalStateToken> cached_final_token;
   KsFinalStateDiagnostic final_validation_diagnostic;
   cuda_ks_detail::Scalars last_physical;
@@ -866,7 +868,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return standard_convergence_model &&
            scf::standard_scf_convergence_requested(options.energy_tolerance,
                                                    options.density_tolerance) &&
-           spins == 1 && !budget_fock && !has_range_correction && !nonlocal_correlation &&
+           spins == 1 && !budget_fock &&
+           (standard_nonlocal_model || (!has_range_correction && !nonlocal_correlation)) &&
            !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
            final_validation_partial && matrix_products.library_enabled() &&
            provider.system().ecp_terms.empty() &&
@@ -1876,6 +1879,57 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (functional == (0x20000U | 450U) && options.semilocal_exchange_scale == 1.0 &&
          options.semilocal_correlation_scale == 1.0 && exchange_coefficient == -0.27 &&
          grid_spec == default_grid_spec());
+    // Resolve the complete canonical model from the compiler-owned catalog.
+    // A point-family/name match alone cannot authorize a custom RSH or VV10.
+    const auto* standard_nonlocal = methods::named_ks::find_method("wb97m-v-rks");
+    if (standard_nonlocal && functional == semilocal_family_code(SemilocalFamily::Wb97mv) &&
+        options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
+        grid_spec == default_grid_spec() && nonlocal_grid.spec() == default_grid_spec() &&
+        nonlocal_correlation && range_correction &&
+        nonlocal_domain == nlc::Vv10DensityDomain::MolecularV1 &&
+        nonlocal_correlation->parameters() ==
+            nlc::Vv10Parameters{nlc::Vv10Variant::vv10, standard_nonlocal->nonlocal.b,
+                                standard_nonlocal->nonlocal.c,
+                                standard_nonlocal->nonlocal.coefficient}) {
+      const auto terms = methods::named_ks::exchanges(*standard_nonlocal);
+      standard_nonlocal_model =
+          terms.size() == 2 && strategy.spec.coulomb.present &&
+          strategy.spec.coulomb.coefficient == 1.0 &&
+          strategy.spec.coulomb.op == scf::FockOperator::FullRange &&
+          strategy.spec.coulomb.omega == 0.0 && strategy.spec.exchange.present &&
+          strategy.spec.exchange.op == scf::FockOperator::FullRange &&
+          strategy.spec.exchange.omega == 0.0 && !range_correction->spec.coulomb.present &&
+          range_correction->backend == scf::FockBackend::Cuda &&
+          range_correction->spec.exchange.present &&
+          range_correction->spec.exchange.op == scf::FockOperator::LongRange;
+      for (const auto& term :
+           {strategy.spec.coulomb, strategy.spec.exchange, range_correction->spec.exchange})
+        standard_nonlocal_model = standard_nonlocal_model &&
+                                  (term.approximation == scf::FockApproximation::Exact ||
+                                   term.approximation == scf::FockApproximation::DensityFitted);
+      const auto short_range = std::find_if(terms.begin(), terms.end(), [](const auto& term) {
+        return term.operator_kind == GENERATIVEQC_KS_EXCHANGE_SHORT_RANGE;
+      });
+      const auto long_range = std::find_if(terms.begin(), terms.end(), [](const auto& term) {
+        return term.operator_kind == GENERATIVEQC_KS_EXCHANGE_LONG_RANGE;
+      });
+      if (short_range == terms.end() || long_range == terms.end()) {
+        standard_nonlocal_model = false;
+      } else {
+        // The catalog specifies a*SR+b*LR, while the resident owner executes
+        // a*full+(b-a)*LR. Reuse production lowering rather than comparing
+        // coefficients belonging to different operator representations.
+        const auto correction =
+            scf::make_rsh_correction_fock_spec(scf::FockSpin::Restricted, short_range->coefficient,
+                                               long_range->coefficient, short_range->omega);
+        standard_nonlocal_model =
+            standard_nonlocal_model && short_range->omega == long_range->omega &&
+            strategy.spec.exchange.coefficient == short_range->fock_coefficient &&
+            range_correction->spec.exchange.coefficient == correction.exchange.coefficient &&
+            range_correction->spec.exchange.omega == correction.exchange.omega;
+      }
+    }
+    standard_convergence_model = standard_convergence_model || standard_nonlocal_model;
     if (const char* setting = std::getenv("GENERATIVEQC_KS_EARLY_FINAL_PROBE")) {
       if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
         throw std::invalid_argument("GENERATIVEQC_KS_EARLY_FINAL_PROBE requires 0 or 1");
@@ -2593,7 +2647,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Anchor it first instead of pulling it back to the semilocal-only solution.
     const bool native_cold_seed = !input || seed_origin == CudaKsSeedOrigin::NativeColdGuess;
     nonlocal_seed_stage = nonlocal_initialization && (!outer_requested || native_cold_seed);
-    nonlocal_inner_residual_tolerance = 1e-9;
+    nonlocal_inner_residual_tolerance = standard_nonlocal_model && standard_convergence_active()
+                                            ? physical_stationarity_tolerance()
+                                            : 1e-9;
     nonlocal_frozen_stage = pending_nonlocal_frozen = false;
     nonlocal_anchor_generation = 0;
     nonlocal_inner_iterations = nonlocal_exact_epoch_iterations = 0;
@@ -4037,6 +4093,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
       launch_subtract_matrix_batches_kernel(blocks, 128, 0, stream, 1, spins, n, tmp2, enabled,
                                             residual);
       check(cudaGetLastError());
+      const bool physical_orbital_check = standard_nonlocal_model &&
+                                          standard_convergence_active() && !pending_nonlocal_seed &&
+                                          !pending_nonlocal_frozen;
+      if (physical_orbital_check) {
+        // X^T S X=I and D=2 C_occ C_occ^T. Hence the transformed physical
+        // commutator norm is sqrt(2)*||2 C_vir^T F C_occ||_F. Neither AO RMS
+        // nor its largest element can be compared to the MO threshold directly.
+        multiply(residual, true, false, x, false, tmp1);
+        multiply(x, false, true, tmp1, true, tmp2);
+        cuda_ks_detail::orbital_gradient(stream, n, tmp2, enabled, scalar_records);
+        check(cudaGetLastError());
+        runtime::cuda_trace::trace_counter("physical_orbital_gradient_checks", 1);
+      }
       if (final_closure) {
         // Discard DIIS history and rebuild the closure proposal from F[D].
         // A stationary UKS occupation cycle still needs its virtual-space
@@ -4077,12 +4146,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
       multiply(x, false, false, tmp2, true, tmp1);
       build_density(tmp1, nullptr, enabled, proposal);
       check(cudaGetLastError());
-      cuda_ks_detail::diagnostics(
-          stream, n, spins, density, proposal, residual, hcore, overlap, j, exchange,
-          exchange_coefficient, range_exchange, range_exchange_coefficient, potential.totals,
-          potential.error, jk_error, range_jk_error,
-          device_nonlocal ? nonlocal_domain_error : nullptr,
-          device_nonlocal ? nonlocal_pair_error : nullptr, solver_info, enabled, scalar_records);
+      cuda_ks_detail::diagnostics(stream, n, spins, density, proposal, residual, hcore, overlap, j,
+                                  exchange, exchange_coefficient, range_exchange,
+                                  range_exchange_coefficient, potential.totals, potential.error,
+                                  jk_error, range_jk_error,
+                                  device_nonlocal ? nonlocal_domain_error : nullptr,
+                                  device_nonlocal ? nonlocal_pair_error : nullptr, solver_info,
+                                  enabled, scalar_records, physical_orbital_check);
       check(cudaGetLastError());
     } catch (...) {
       cudaStreamSynchronize(stream);
@@ -4268,13 +4338,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
     refine_incremental_energy(physical.density_change, physical.residual,
                               physical.maximum_residual);
     const bool full_energy_history = !incremental_direct_jk || incremental_energy_full_builds >= 2;
-    bool converged = ordinary_ks_converged(
-        {output.iterations, warm_energy_baseline, full_energy_history,
-         !pending_nonlocal_seed && !pending_nonlocal_frozen &&
-             (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2),
-         output.energy_change, physical.density_change, physical.residual,
-         physical.maximum_residual, options.energy_tolerance, options.density_tolerance,
-         physical_stationarity_tolerance()});
+    const KsStoppingState stopping{
+        output.iterations,
+        warm_energy_baseline,
+        full_energy_history,
+        !pending_nonlocal_seed && !pending_nonlocal_frozen &&
+            (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2),
+        output.energy_change,
+        physical.density_change,
+        physical.residual,
+        physical.maximum_residual,
+        options.energy_tolerance,
+        options.density_tolerance,
+        physical_stationarity_tolerance()};
+    const bool orbital_policy = standard_nonlocal_model && standard_convergence_active();
+    bool converged = orbital_policy ? orbital_ks_converged(stopping, physical.orbital_gradient)
+                                    : ordinary_ks_converged(stopping);
     bool early_final_probe_ran = false;
     const bool occupied_stage = occupied_xc_executed && !strict_refinement;
     // Approximate features are proposals, not a new point-functional contract.
@@ -4339,13 +4418,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // and repeat expensive changing-density sweeps without improving the
     // accepted physical state. The original energy gate still has to pass;
     // this is neither an acceptance shortcut nor a provisional-state replay.
-    const auto nonlocal_confirmation =
-        nonlocal_confirmation_tolerance(budget_stationarity, options.density_tolerance);
+    const auto nonlocal_confirmation = nonlocal_confirmation_tolerance(
+        budget_stationarity || orbital_policy, options.density_tolerance);
+    const bool physical_nonlocal_confirmation =
+        nonlocal_seed_iterations && !pending_nonlocal_seed && !pending_nonlocal_frozen;
     const bool confirm_nonlocal_stationary_density =
-        nonlocal_seed_iterations && !pending_nonlocal_seed && !pending_nonlocal_frozen &&
-        physical.density_change < options.density_tolerance &&
-        physical.residual < nonlocal_confirmation &&
-        physical.maximum_residual < nonlocal_confirmation;
+        physical_nonlocal_confirmation &&
+        nonlocal_ks_density_confirmation(stopping, nonlocal_confirmation, orbital_policy,
+                                         physical.orbital_gradient,
+                                         early_final_probe_ran && !converged);
+    // Observe the precise old hold/candidate mismatch without extra device
+    // transfers. This is diagnostic work, not another convergence criterion.
+    if (physical_nonlocal_confirmation && orbital_policy &&
+        nonlocal_ks_density_confirmation(stopping, nonlocal_confirmation, false,
+                                         physical.orbital_gradient, false) &&
+        !orbital_ks_stationary(stopping, physical.orbital_gradient))
+      runtime::cuda_trace::trace_counter("nonlocal_confirmation_orbital_blocks", 1);
     const bool confirm_direct_stationary_density =
         spins == 1 && !has_exchange && !fitted_coulomb && !fitted_exchange &&
         !has_range_correction && !nonlocal_correlation && !incremental_direct_jk && !budget_fock &&
@@ -4437,7 +4525,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } else if (nonlocal_outer_active && !converged) {
       output.converged = false;
       is_active = output.iterations < options.max_iterations;
-      const double target_residual_gate = std::min(1e-9, options.density_tolerance);
+      const double target_residual_gate = standard_nonlocal_model && standard_convergence_active()
+                                              ? physical_stationarity_tolerance()
+                                              : std::min(1e-9, options.density_tolerance);
       if (confirm_nonlocal_stationary_density || physical.maximum_residual < target_residual_gate ||
           output.iterations + 20 >= options.max_iterations) {
         // Close with consecutive fresh physical Focks and the original strict
@@ -4447,7 +4537,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         nonlocal_frozen_stage = true;
         nonlocal_inner_iterations = 0;
         nonlocal_inner_residual_tolerance = nonlocal_inner_tolerance(
-            budget_stationarity, physical.maximum_residual, options.density_tolerance);
+            budget_stationarity || (standard_nonlocal_model && standard_convergence_active()),
+            physical.maximum_residual, options.density_tolerance);
         // The just-computed target Fock is also the first exact Fock of this
         // fixed-potential inner problem. Retain that one valid DIIS entry.
       }
@@ -4505,6 +4596,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         occupied_fitted_factor_ready = false;
       } else if (is_active &&
                  (confirm_nonlocal_stationary_density || confirm_direct_stationary_density)) {
+        if (confirm_nonlocal_stationary_density)
+          runtime::cuda_trace::trace_counter("nonlocal_stationary_density_holds", 1);
         // The unaccepted eigensolver proposal overwrote tmp1/tmp2, while D
         // remains unchanged for the next physical confirmation. Its retained
         // AO factor still belongs to exactly that D. Restore it before the
