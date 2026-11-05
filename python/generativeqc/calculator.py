@@ -1333,10 +1333,8 @@ class Calculator:
             self._ks_options is not None
             and self._ks_options.method_ir.spin == "unpolarized"
         )
-        native_per_item_guess = False
         if self._automatic_initial_guess:
             from .initial_guess import (
-                _uses_native_automatic_cpu,
                 automatic_initial_guess_candidate,
             )
 
@@ -1346,16 +1344,9 @@ class Calculator:
                 has_ecp=False,
             )
             if candidate is not None:
+                # Unused ECP records do not change the target. CUDA checks actual
+                # atoms in initial_guess_for_systems; CPU resolves each native item.
                 self._initial_guess = candidate
-                # A basis package can contain unused ECP records. Only the qualified
-                # native per-item path may defer those facts to actual target admission.
-                native_per_item_guess = basis_has_ecp and _uses_native_automatic_cpu(
-                    self
-                )
-                if not basis_has_ecp or native_per_item_guess:
-                    self._initial_guess = candidate
-                else:
-                    self._initial_guess = None
 
         if self._initial_guess is not None:
             from .initial_guess import (
@@ -1384,10 +1375,7 @@ class Calculator:
                     and self._initial_guess.kind != "huckel"
                 )
                 or not restricted
-                or (
-                    basis_has_ecp
-                    and not (self._automatic_initial_guess and native_per_item_guess)
-                )
+                or (basis_has_ecp and not self._automatic_initial_guess)
                 or self._capabilities.family
                 not in ("hartree_fock", "density_functional")
             ):

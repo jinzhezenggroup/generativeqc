@@ -123,6 +123,18 @@ void reference_policy() {
   }
   require(methods::item_exception_status({}) == GENERATIVEQC_STATUS_INTERNAL_ERROR,
           "empty exception has no internal status");
+  require(methods::item_exception_detail({}).empty(), "empty exception fabricated detail");
+  for (const auto& failure : terminal_failures) {
+    try {
+      std::rethrow_exception(failure);
+    } catch (const std::exception& error) {
+      require(methods::item_exception_detail(failure) == error.what(),
+              "item boundary discarded the original provider error");
+    }
+  }
+  require(methods::item_exception_detail(std::make_exception_ptr(17)) ==
+              "unknown native execution failure",
+          "nonstandard exception fabricated a provider message");
 }
 
 core::System h2() {

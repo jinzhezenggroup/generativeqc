@@ -1,0 +1,171 @@
+{
+  "cases": [
+    {
+      "alias": "n2_minus_doublet",
+      "atomic_numbers": [
+        7,
+        7
+      ],
+      "charge": -1,
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.9643710255622864
+        ],
+        [
+          0.0,
+          0.0,
+          -0.9643710255622864
+        ]
+      ],
+      "ecp_core_electrons": 0,
+      "geometry_sha256": "18c3c1fdbe50d01f087032b3a0c17351ed770691bb7eb4af1e5ca9511072af2d",
+      "hva": 2,
+      "multiplicity": 2,
+      "nao": 28,
+      "natoms": 2,
+      "route": "df-uks",
+      "symbols": [
+        "N",
+        "N"
+      ],
+      "task_id": "geom-18c3c1fdbe50d01f087032b3a0c17351ed770691bb7eb4af1e5ca9511072af2d"
+    },
+    {
+      "alias": "o2_plus_doublet",
+      "atomic_numbers": [
+        8,
+        8
+      ],
+      "charge": 1,
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          1.067033052444458
+        ],
+        [
+          0.0,
+          0.0,
+          -1.067033052444458
+        ]
+      ],
+      "ecp_core_electrons": 0,
+      "geometry_sha256": "06fd629f6ad005471135f20a845e198369d66beda754497de0f269b7fed311de",
+      "hva": 2,
+      "multiplicity": 2,
+      "nao": 28,
+      "natoms": 2,
+      "route": "df-uks",
+      "symbols": [
+        "O",
+        "O"
+      ],
+      "task_id": "geom-06fd629f6ad005471135f20a845e198369d66beda754497de0f269b7fed311de"
+    },
+    {
+      "alias": "o2_minus_doublet",
+      "atomic_numbers": [
+        8,
+        8
+      ],
+      "charge": -1,
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.7639690041542053
+        ],
+        [
+          0.0,
+          0.0,
+          -0.7639690041542053
+        ]
+      ],
+      "ecp_core_electrons": 0,
+      "geometry_sha256": "1016fdd7c12e33436d0627bc0876f9e6126db81a4de1ea28c28b78f591c77e62",
+      "hva": 2,
+      "multiplicity": 2,
+      "nao": 28,
+      "natoms": 2,
+      "route": "df-uks",
+      "symbols": [
+        "O",
+        "O"
+      ],
+      "task_id": "geom-1016fdd7c12e33436d0627bc0876f9e6126db81a4de1ea28c28b78f591c77e62"
+    },
+    {
+      "alias": "alf2_doublet",
+      "atomic_numbers": [
+        13,
+        9,
+        9
+      ],
+      "charge": 0,
+      "coordinates_angstrom": [
+        [
+          31.42258071899414,
+          -5.605569839477539,
+          18.8817195892334
+        ],
+        [
+          33.081321716308594,
+          -3.2174699306488037,
+          18.212390899658203
+        ],
+        [
+          30.93560028076172,
+          -8.15546989440918,
+          17.434900283813477
+        ]
+      ],
+      "ecp_core_electrons": 0,
+      "geometry_sha256": "2492e8f9edd4a55e66bcd401fbf8c12165cb95297f2fc7ff59563c3c4532a826",
+      "hva": 3,
+      "multiplicity": 2,
+      "nao": 46,
+      "natoms": 3,
+      "route": "df-uks",
+      "symbols": [
+        "Al",
+        "F",
+        "F"
+      ],
+      "task_id": "geom-2492e8f9edd4a55e66bcd401fbf8c12165cb95297f2fc7ff59563c3c4532a826"
+    },
+    {
+      "alias": "o2_singlet",
+      "atomic_numbers": [
+        8,
+        8
+      ],
+      "charge": 0,
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.6573780179023743
+        ],
+        [
+          0.0,
+          0.0,
+          -0.6573780179023743
+        ]
+      ],
+      "ecp_core_electrons": 0,
+      "geometry_sha256": "f4fdc7e03e0c6727faf55601f9423c40ddbbfeef76986eeb6ee7483d53bfb125",
+      "hva": 2,
+      "multiplicity": 1,
+      "nao": 28,
+      "natoms": 2,
+      "route": "df-rks",
+      "symbols": [
+        "O",
+        "O"
+      ],
+      "task_id": "geom-f4fdc7e03e0c6727faf55601f9423c40ddbbfeef76986eeb6ee7483d53bfb125"
+    }
+  ]
+}
