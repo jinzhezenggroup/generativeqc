@@ -111,3 +111,9 @@ suite that required literal hashFiles globs for every cache. Keep that check for
 all unchanged cache families; bind probe keys to their actual committed-input
 producer instead. New real-Git tests verify that committed CMake and compiler
 source changes invalidate the probe fingerprint, preserving the intended guard.
+
+## Cold merge-queue tail correction
+
+Queue run 42040437186 (107fc932) exhausted core-c's unchanged 1800-second test ceiling at 99%. The diagnostic artifact 13425155115 shows no OOM: the independent molecular hybrid module first started at 959 seconds, and workers were still starting 103-136-second curvature cases at 1672, 1757 and 1779 seconds. Core-b completed in 763.62 seconds, core-a in 1294.55 seconds.
+
+Move only the new complete molecular hybrid module to core-b and register it with the existing fresh-frontier plugin. This seeds its function-local cases across the four existing worksteal queues before ordinary work. Preserve every historical file owner, all scientific cases and selection arguments, worker count, cache trust and the 30-minute ceiling. Synthetic inventory tests cover all five events and missing/untracked files; real four-worker execution verifies early starts, exactly-once cases and exactly-once fresh setups. Production queue timing remains to be measured after publication.
