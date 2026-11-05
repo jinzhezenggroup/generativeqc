@@ -2,24 +2,8 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "h100-sm90-db36-final-20261103",
   "owner": "H100 frozen DB36 fixed30 final delivery",
-  "reason": "Publish the original final source-bound720EF/21wins with actual result review and all9nonwins; recover9owned old CD2B guard packets from already merged Git, preserving all old14proof files and unchanged storage limits.",
+  "reason": "Publish the original final source-bound720EF/21wins with actual result review and all9nonwins; recover9owned old CD2B guard packets from already merged Git, preserving all old14proof files and unchanged storage limits. The two original archive parts now recover byte-for-byte from already merged40f126a74fcf527012f2f4b2a53b158a87334967; the original cohort, full result audit, all21wins/9nonwins and offline reader remain source bound. This admits current cold evidence without raising limits or retiring other-owner data.",
   "review_document": "benchmarks/results/h100-sm90-db36-final-20261103/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/h100-sm90-db36-final-20261103/final-pairs-v1-completed.tar.xz.part00",
-      "bytes": 786432,
-      "sha256": "fd3cb8cd8c38682c2751b948a12c1268db5bc1b049477fd749861ff9825b2ebf",
-      "family": "h100-sm90-db36-final-20261103",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Exact frozen DB36 original final raw archive part; complete E/F, failures, plans, runtime images, all consumed admissions and executed producers remain CPU replayable."
-    },
-    {
-      "path": "benchmarks/results/h100-sm90-db36-final-20261103/final-pairs-v1-completed.tar.xz.part01",
-      "bytes": 439416,
-      "sha256": "0c6cbf0801e81028a230091abaabe1a79c21ab7ba7717923cc271e29b2ad407a",
-      "family": "h100-sm90-db36-final-20261103",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Exact frozen DB36 original final raw archive part; complete E/F, failures, plans, runtime images, all consumed admissions and executed producers remain CPU replayable."
-    }
-  ]
+  "files": [],
+  "historical_snapshot": "benchmarks/results/h100-sm90-db36-final-20261103/historical-snapshot.json"
 }

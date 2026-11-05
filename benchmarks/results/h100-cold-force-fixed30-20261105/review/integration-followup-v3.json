@@ -1,0 +1,202 @@
+{
+  "schema": "generativeqc.scoped-audit-integration-followup.v3",
+  "review_completed": true,
+  "review_scope_complete": true,
+  "verdict": "PASS_SCOPED_INTEGRATION_NO_BLOCKING_CONCERN",
+  "original_WARN_and_v1_v2_limits_unchanged": true,
+  "head": "1cbf5adaa58ca2db98cd71940e8f7a7d7c83817c",
+  "merge_parents": [
+    "be7badb6785b331042b2bd2b3acc1be11f85d938",
+    "415d8caba12a8f7ecb4e81e48d5dae913720e695"
+  ],
+  "prior_publication": "be7badb6785b331042b2bd2b3acc1be11f85d938",
+  "upstream": "415d8caba12a8f7ecb4e81e48d5dae913720e695",
+  "blockers": [],
+  "checks": [
+    {
+      "id": "actual_parents_CI_scope",
+      "status": "PASS",
+      "evidence": "Actual parents be7badb6785 and415d8caba12. Incoming3009 is1e3169c064b; its11 files are CI workflow/action/script/cache tooling, tests and their note; no production module."
+    },
+    {
+      "id": "single_runtime_delta",
+      "status": "PASS",
+      "evidence": "Only CompositeRKSResponse.from_native changes in runtime, exactly matching upstream. AST comparison confirms the sole executable delta removes density.shape[0]==1 from CPU-first full_range_candidate. Native-state, all-electron/exact-provider/primitive guards, Fock provenance, budgets, CUDA branch and cleanup remain identical; other changes are text."
+    },
+    {
+      "id": "call_domain_first_EF",
+      "status": "PASS_SOURCE_SCOPE",
+      "evidence": "Calculator.py:2870-2920 invokes this explicit second-order binder after the second-order primal execute. Ordinary E/F Calculator, batch/precision-batch and timer inputs are unchanged. CPU-first candidate remains false on CUDA. Public full-range eligibility (ks.py:748-759) still requires unpolarized graphs; low-level UKS admission does not promote a public UKS/H100 capability."
+    },
+    {
+      "id": "native_defaults_payloads_reports",
+      "status": "PASS",
+      "evidence": "Entire native src/API/include/CMake/compiler scope and all9 declared E/F/default/timer inputs are unchanged. Exactly4 frozen payload members match be7. All6 original/v1/v2 reports match saved hashes and publishedbe7/current review bytes. No member expansion, numeric/device/test replay."
+    },
+    {
+      "id": "Libxc_refresh",
+      "status": "PASS",
+      "evidence": "Against both actual parents, only source_identity/native_source_identity change; every nonidentity scientific/capability/execution/evidence/stale field is equal. stale:true persists. Documentation changes only checked identities."
+    }
+  ],
+  "CI_only_commit": "1e3169c064bea377ec018975703b5889b673f19a",
+  "CI_only_changed_paths": [
+    ".agents/notes/implemented/performance/2026-11-05-hybrid-ci-routing.md",
+    ".github/actions/restore-python-probe-ccache/action.yml",
+    ".github/scripts/ci_select_python_shard.sh",
+    ".github/workflows/ci.yml",
+    "tests/python/test_ci_native_probe_cache.py",
+    "tests/python/test_ci_shard_ownership.py",
+    "tests/python/test_df_shell_units.py",
+    "tests/test_ci_probe_snapshot.py",
+    "tests/test_ci_python_probe_key.py",
+    "tools/ci_cpu_ccache_snapshot.py",
+    "tools/ci_python_probe_key.py"
+  ],
+  "unchanged_EF_default_timer_paths": [
+    "src/methods/dft_method.cpp",
+    "src/dft/ks_tile_policy.hpp",
+    "src/dft/cuda_ks.cpp",
+    "src/dft/rks.cpp",
+    "src/methods/dft_method_preparation.cpp",
+    "benchmarks/readme_defaults.py",
+    "python/generativeqc/calculator.py",
+    "python/generativeqc/batch.py",
+    "python/generativeqc/_precision_batch.py"
+  ],
+  "scientific_payload_members_checked": [
+    "benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part00",
+    "benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part01",
+    "benchmarks/results/h100-cold-force-fixed30-20261105/summary.json.xz",
+    "benchmarks/results/h100-cold-force-fixed30-20261105/replay.py"
+  ],
+  "immutable_report_count": 6,
+  "new_checked_source_identity": "53dd6b01140fca7a6602413cdc2e7d6b63f218f5329c06a044145d72e143299d",
+  "new_checked_native_source_identity": "4af36fd244801a3fc07b6be318ef86789aceb69132f171752980c380fdf88c77",
+  "Libxc_non_identity_fields_equal_to_both_parents": true,
+  "stale": true,
+  "input_hash_count": 22,
+  "input_hashes": [
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/upstream2985-integration-v1.json",
+      "bytes": 3404,
+      "sha256": "9e41cbbcb54cde99d7ae0928d7d885b8d0d17890d48a6c1ff6d033fc2293c45c"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/upstream2985-source-refresh-v1.json",
+      "bytes": 1740,
+      "sha256": "77b601b0f34a8b699d39d8e34a0e10ba33bf77e4be81b2e977f28de61929f96b"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/audit-report.json",
+      "bytes": 52655,
+      "sha256": "78252e26bc512d53221d6048eea1622e94255a65dd28c537b68df19432b019db"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/audit-report.md",
+      "bytes": 18119,
+      "sha256": "5175ca44ba239c656b0808033096d3ca0fcf84dff0cae4330b9bef988cb89efd"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/integration-followup-v1.json",
+      "bytes": 25074,
+      "sha256": "4611dd6ff7aa9cb9591831a100f58c388584abeef815db410fc1fb1abbc711fd"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/integration-followup-v1.md",
+      "bytes": 2669,
+      "sha256": "a6b594360440fa1bd1859d2f3c6060e6f6ad656409497b19ab8edbb91f5065cc"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/integration-followup-v2.json",
+      "bytes": 10217,
+      "sha256": "e14a8d31507c35b1a5c58ea7c82ba81b8772092fedc2cfa850290d2cf8893c33"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/integration-followup-v2.md",
+      "bytes": 2105,
+      "sha256": "b65d74e72e49cfa2c3976470c4f6eef9a9d377bf3e96f0748460f728284e88df"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part00",
+      "bytes": 786432,
+      "sha256": "05cc76d2918c81c65a461c1089d1f408d7946083dac428902dd4a07c2dfefae3"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part01",
+      "bytes": 586600,
+      "sha256": "51a1eed1451826d447c1c1257fc77bfc7e1fd65dcdf7fe02e61437847f38938a"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/summary.json.xz",
+      "bytes": 21136,
+      "sha256": "4cf8881dd67a0b76d2e0be33770bdd672888d4e2870b1ae9c29def3f64e52f28"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/replay.py",
+      "bytes": 8950,
+      "sha256": "cf24b765784870a68f1d1f863241d142f941fecff16dede2727f85d0f7a45763"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/python/generativeqc/composite_rks_hessian.py",
+      "bytes": 55342,
+      "sha256": "f0a6ace4a0b48aa69ec9d23cef10eb5e5a6e5ae7efc83aa734382fca1aa793ae"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/methods/dft_method.cpp",
+      "bytes": 217910,
+      "sha256": "90c1ddff1fe48c75db6041c3c796ea669050c49891913f47b85700ebd42c53b0"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/dft/ks_tile_policy.hpp",
+      "bytes": 2186,
+      "sha256": "cfdc46fbfe6556513c9d869a129e5c7fe6371d05b512efc598a984d85f07540e"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/dft/cuda_ks.cpp",
+      "bytes": 332499,
+      "sha256": "fa51c59c75c022f6e6c46e8305729824bb6f298eb0bb17b81a50298b5697447e"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/readme_defaults.py",
+      "bytes": 24735,
+      "sha256": "e79ae3e71e82681f4549e29747dc5bf5e0c51736fbf4f8260fbacc5559ea3d08"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/python/generativeqc/calculator.py",
+      "bytes": 164291,
+      "sha256": "212b2752489354b6f429dc5ebb8e1e90f98d431428974aeeaa3f0dd86df29d2e"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/python/generativeqc/batch.py",
+      "bytes": 90104,
+      "sha256": "f1f5735e8200f89a83ad0903cacdff2b521f11f2e74fed0918c0405f23d1164e"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/python/generativeqc/_precision_batch.py",
+      "bytes": 29434,
+      "sha256": "a9ffc494ce51bd658e366ee548337355a5f4c49233567c9d6a6d8f969b6bf247"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/manifests/libxc/native-qualification-snapshot.json.xz",
+      "bytes": 13220,
+      "sha256": "962f3725d6348d17a5c8b9706d673dd2de0ce03c4e61b679ab272f049207ebdb"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/docs/reference/libxc_qualification.md",
+      "bytes": 4128,
+      "sha256": "86fbd0ce1437ae1dc31a51fa8133dcaf7e046d7350121ee24a754ddb390439c5"
+    }
+  ],
+  "method": "Delta-only read-only Git/source/AST/byte/JSON comparison. No1398-member inventory, unpack/replay,720/72 reduction, GPU/job, compiler/build, solver/oracle, test-suite, fetch or other-owner work. Only v3 JSON/Markdown are written.",
+  "reader_note": "Initial AST text normalization was asymmetric for pre-existing RKS/UKS strings; symmetric normalization corrected this reader check. No production defect was inferred and no files were written by that failed reader attempt.",
+  "requested_model": "gpt-6.1-sol",
+  "requested_effort": "ultra original route, continuation",
+  "actual_backend_identity": "unknown",
+  "assurance": "same-family/provisional",
+  "limits": [
+    "No upstream CPU UKS/Hessian science is qualified here; normal CI covers merged interfaces.",
+    "Head1cbf5adaa remains unmeasured. Original frozen0ee720 and4ee/ed3372 cohorts retain source/device scope; no latest-head or pooled timing claim.",
+    "Original refined-oracle producer-byte/runtime-image WARN limits and same-family/provisional assurance persist."
+  ]
+}

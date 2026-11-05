@@ -214,5 +214,14 @@
     "qualified_populations": 180,
     "returned_EF": 720
   },
-  "scope": "Frozen DB36 original fixed30 only; all30 science,180 qualified,720 full EF,21 wins. No later-main, cross-GPU or broader chemistry claim. Historical pre-dispatch and result reviews retain their original publication-pending fields."
+  "scope": "Frozen DB36 original fixed30 only; all30 science,180 qualified,720 full EF,21 wins. No later-main, cross-GPU or broader chemistry claim. Historical pre-dispatch and result reviews retain their original publication-pending fields.",
+  "storage": {
+    "historical_snapshot": "historical-snapshot.json",
+    "historical_members": [
+      "final-pairs-v1-completed.tar.xz.part00",
+      "final-pairs-v1-completed.tar.xz.part01"
+    ],
+    "reader": "benchmarks/h100_db36_final_cohort.py::artifact_bytes",
+    "scope": "Original archive identities, scientific records and acceptance are unchanged; only storage uses verified published Git history."
+  }
 }
