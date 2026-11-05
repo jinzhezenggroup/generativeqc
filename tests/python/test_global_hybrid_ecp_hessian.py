@@ -155,8 +155,10 @@ def test_low_level_def2_cs_rks_hvp_matches_independent_moving_grid_gradients(
                         )
                     finite = (gradients[0] - gradients[1]) / (2 * step)
                     errors.append(
-                        float(np.max(abs(result.value - finite)))
-                        / np.linalg.norm(direction)
+                        float(
+                            np.max(abs(result.value - finite))
+                            / np.linalg.norm(direction)
+                        )
                     )
                 record_property("independent_normalized_hvp_errors", errors)
                 assert max(errors) <= 1e-5
