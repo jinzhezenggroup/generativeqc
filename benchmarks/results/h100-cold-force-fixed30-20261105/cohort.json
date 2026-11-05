@@ -149,6 +149,35 @@
             "sha256": "cfb703b5e0bbf5c5eadbb7b95d4148fae8a1b8c280b32ad89c20611ddaa16bc9"
           }
         ]
+      },
+      {
+        "status": "PASS_SCOPED_INTEGRATION_NO_BLOCKING_CONCERN",
+        "audited_head": "728e17c1ece72967a033cbc2910e05d55233c0ee",
+        "upstream": "051a157c64061eac4fd9ee90d7becfa982f80161",
+        "original_verdict_unchanged": "WARN_SCOPED_ACCEPTANCE_NO_BLOCKING_DEFECT_FOUND",
+        "scope": "Postqualification upstream3011 public Hessian interface integration; CUDA first-E/F routing and native RKS force/default/timer inputs remain unchanged. Additional Python bookkeeping is not a timing qualification. No new H100 measurement or old numerical/device replay.",
+        "artifacts": [
+          {
+            "path": "review/integration-followup-v2.json",
+            "bytes": 10217,
+            "sha256": "e14a8d31507c35b1a5c58ea7c82ba81b8772092fedc2cfa850290d2cf8893c33"
+          },
+          {
+            "path": "review/integration-followup-v2.md",
+            "bytes": 2105,
+            "sha256": "b65d74e72e49cfa2c3976470c4f6eef9a9d377bf3e96f0748460f728284e88df"
+          },
+          {
+            "path": "review/upstream3011-integration-v1.json",
+            "bytes": 9737,
+            "sha256": "9b35a0e72afcd832aea59a544bfd4f81f6b7d0c668b276b98e4a343a7082f693"
+          },
+          {
+            "path": "review/upstream3011-source-refresh-v1.json",
+            "bytes": 1601,
+            "sha256": "52dfa1413b2f4a190dc8a9509ed5cb772fa6470dbbe999dcfce9412f73e74dc4"
+          }
+        ]
       }
     ]
   },

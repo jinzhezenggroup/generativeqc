@@ -1,0 +1,26 @@
+{
+  "status": "PASS_CHECKED_IDENTITIES_ONLY_AND_NATIVE_RKS_TIMING_INPUTS_UNCHANGED",
+  "generated_changes": {
+    "native_source_identity": {
+      "before": "52fe2b6d03c54cbf3bc08ea8d7ac0a2583a91c2730acc346c25bdda610f73cdf",
+      "after": "cc2acbc91d8562e6062014edc52e6b65341f9322a986609b74cc7b98d8b42dd3"
+    },
+    "source_identity": {
+      "before": "65af9a42be0acbba256b9f17463e7d02be585a96004eabe872f9e063e1bcfaed",
+      "after": "e21251016a177598394f6c7036685724ee737075080f8ecbb2e4fb161a49b0f0"
+    }
+  },
+  "stale_unchanged": true,
+  "all_non_identity_scientific_fields_equal": true,
+  "unchanged_inputs": {
+    "src/methods/dft_method.cpp": "90c1ddff1fe48c75db6041c3c796ea669050c49891913f47b85700ebd42c53b0",
+    "src/dft/ks_tile_policy.hpp": "cfdc46fbfe6556513c9d869a129e5c7fe6371d05b512efc598a984d85f07540e",
+    "src/dft/cuda_ks.cpp": "fa51c59c75c022f6e6c46e8305729824bb6f298eb0bb17b81a50298b5697447e",
+    "src/dft/rks.cpp": "84e9d204c2f20f91a28d2a08feccc0c7bc4c37f9a872e909b2390a12387f4de0",
+    "src/methods/dft_method_preparation.cpp": "26831f98ccd9f6f994df5310e6d71f4508792080cf419c97dd0b8cf7d9280a61",
+    "benchmarks/readme_defaults.py": "e79ae3e71e82681f4549e29747dc5bf5e0c51736fbf4f8260fbacc5559ea3d08",
+    "python/generativeqc/batch.py": "f1f5735e8200f89a83ad0903cacdff2b521f11f2e74fed0918c0405f23d1164e",
+    "python/generativeqc/_precision_batch.py": "a9ffc494ce51bd658e366ee548337355a5f4c49233567c9d6a6d8f969b6bf247"
+  },
+  "remaining_source_review": "Calculator constructor/publicHessian andks helper changes require scoped read-only check; no numerical reexecution."
+}

@@ -235,3 +235,12 @@ force/default/timer paths, all prior public member bytes, and Libxc scientific/s
 fields. Only checked source identities regenerate. The original audit remains WARN
 with its original limits; this later head is not a new H100 timing population.
 Neither the720/72 arithmetic nor compiled/device gates were rerun.
+
+The subsequent normal merge of upstream #3011 updates CPU full-range Hessian
+eligibility and second-order diagnostics. Its [bounded follow-up](review/integration-followup-v2.md)
+confirms that CUDA short-circuits the new CPU eligibility arm and retains first-E/F
+routing and native RKS force/default/timer inputs. The four scientific payload
+members and original/v1 reports remain byte-identical. Extra Python bookkeeping
+is acknowledged without a new timing claim. Libxc changes only checked identities;
+the original WARN, source/device boundaries and scientific fields remain unchanged.
+No numerical, compiled or device replay was needed for this interface integration.

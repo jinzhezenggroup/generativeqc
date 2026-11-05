@@ -103,3 +103,11 @@ Reuse the source-qualified H100 evidence within that scope. Do not relabel the
 later head as a measured matrix or repeat original720/72 reductions/device gates
 for this unrelated CPU integration. The public review supplement retains the
 actual parent/source hashes and original WARN limitations.
+
+The following normal #3011 merge updates CPU full-range Hessian admission and
+second-order diagnostic exports. CUDA short-circuits the new CPU eligibility arm;
+first-E/F routing and native RKS force/default/timer inputs remain unchanged.
+The second bounded public review supplement verifies unchanged scientific payload
+and original/v1 review bytes. Extra Python bookkeeping carries no new timing
+claim. Retain the same measured-source boundaries and original WARN; unrelated
+interface integration does not require repeating completed numerical/device work.
