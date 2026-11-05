@@ -1813,3 +1813,58 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     # Every selected case owns one fresh setup; no duplicate or shared fixture
     # is introduced by adding a complete module to the existing priority lane.
     assert Counter(node for node, _ in setups) == expected
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+def test_hybrid_qualification_insertion_preserves_existing_core_owners(
+    event: str, presence: str, tmp_path: Path
+) -> None:
+    """Adding complete hybrid gates must not migrate unrelated cached workloads."""
+    owners = {
+        "test_composite_integral_weights.py": "core-c",
+        "test_eri_symmetry.py": "core-a",
+        "test_factorized_host.py": "core-b",
+        "test_global_hybrid_grid_second_order.py": "core-a",
+        "test_global_hybrid_hessian_lifecycle.py": "core-b",
+        "test_global_hybrid_molecular_hessian.py": "core-c",
+        "test_native_semilocal_grid_second_order.py": "core-c",
+        "test_orbital_gap_preconditioner.py": "core-c",
+        "test_second_component_schedule.py": "core-a",
+        "test_spherical_global_hybrid_basis.py": "core-b",
+        "test_stationary_one_center_integrals.py": "core-c",
+    }
+    owners = {f"tests/python/{name}": shard for name, shard in owners.items()}
+    # Interleave ordinary files with the inserted qualification filenames.
+    ordinary = sorted(
+        f"{path[:-3]}_{suffix}.py" for path in owners for suffix in ("aaa", "zzz")
+    )
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in ordinary:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    shards = ("core-a", "core-b", "core-c")
+    before = {shard: _selection(event, shard, root=tmp_path) for shard in shards}
+    if presence != "absent":
+        for relative in owners:
+            (tmp_path / relative).touch()
+    tracked = presence in {"tracked", "missing"}
+    if tracked:
+        subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    if presence == "missing":
+        for relative in owners:
+            (tmp_path / relative).unlink()
+    after = {shard: _selection(event, shard, root=tmp_path) for shard in shards}
+    for shard in shards:
+        assert after[shard][0] == before[shard][0] == "worksteal"
+        assert after[shard][2] == before[shard][2]
+        assert [p for p in after[shard][1] if p not in owners] == before[shard][1]
+        assert Counter(p for p in after[shard][1] if p in owners) == Counter(
+            p for p, owner in owners.items() if tracked and owner == shard
+        )
+    expected = Counter([*ordinary, *(owners if tracked else [])])
+    assert Counter(p for _, paths, _ in after.values() for p in paths) == expected
