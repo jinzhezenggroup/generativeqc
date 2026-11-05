@@ -60,6 +60,18 @@ int main(int argc,char** argv) {
   if(mode=="driver-failure") {owner.following_force_device_bytes=1;driver_failure=true;}
   if(mode=="no-replay") {owner.replay=false;owner.following_force_device_bytes=1025;}
   if(mode=="mixed") {owner.precision_schedule.lower=true;owner.following_force_device_bytes=1025;}
+  if(mode=="direct" || mode=="direct-pressure" || mode=="direct-no-replay" ||
+     mode=="direct-mixed" || mode=="direct-unrestricted" || mode=="direct-driver-failure") {
+    owner.fitted_coulomb=owner.fitted_exchange=owner.warm_factor_storage=false;
+    owner.following_force_device_bytes=1024;
+  }
+  if(mode=="direct-pressure")owner.following_force_device_bytes=1025;
+  if(mode=="direct-no-replay")owner.replay=false;
+  if(mode=="direct-mixed")owner.precision_schedule.lower=true;
+  if(mode=="direct-unrestricted")owner.spins=2;
+  if(mode=="direct-driver-failure")driver_failure=true;
+  if(mode=="partial-fitting")owner.fitted_exchange=false;
+  if(mode=="missing-factor")owner.warm_factor_storage=false;
   try {bool defer=owner.defer_range_warm_energy();std::cout<<defer<<" "<<queries<<"\n";}
   catch(const std::runtime_error&) {std::cout<<"error "<<queries<<"\n";}
 }
@@ -92,6 +104,24 @@ int main(int argc,char** argv) {
         ("mixed", "1", "0 0"),
         ("fits", "0", "0 0"),
         ("fits", "invalid", "0 0"),
+        ("direct", None, "1 1"),
+        ("direct-pressure", None, "0 1"),
+        ("direct-no-replay", None, "0 0"),
+        ("direct-mixed", None, "0 0"),
+        ("direct-unrestricted", None, "0 0"),
+        ("direct-driver-failure", None, "error 1"),
+        ("direct", "0", "0 0"),
+        ("direct", "invalid", "0 0"),
+        ("direct", "1", "1 1"),
+        ("direct-pressure", "1", "0 1"),
+        ("direct-no-replay", "1", "0 0"),
+        ("direct-mixed", "1", "0 0"),
+        ("direct-unrestricted", "1", "0 0"),
+        ("direct-driver-failure", "1", "error 1"),
+        ("partial-fitting", "1", "0 0"),
+        ("missing-factor", "1", "0 0"),
+        ("partial-fitting", None, "0 0"),
+        ("missing-factor", None, "0 0"),
     ],
 )
 def test_imminent_force_headroom(

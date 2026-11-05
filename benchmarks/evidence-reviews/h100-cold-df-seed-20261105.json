@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-cold-df-seed-20261105",
+  "owner": "issue3004 H100 cold optimization: scoped CUDA DF seed-admission stage",
+  "reason": "Retain every original full-precision endpoint, plan, producer, independent dense/CPU reference, scientific input, cache/source/build/allocation receipt and scoped read-only review for all15processes/60completeE+F. Includes the slightly slower HF48 size guard and strongly regressing WB incremental pilot; no omitted unfavorable samples. Exact member bytes were authenticated against the producer capsule and independently replayed offline. Scientific performance acceptance is limited to HF96 DF on measured87bbc/d60/4702; no full30 or universal claim, cap increase, archive disguise or removal of unrelated evidence.",
+  "review_document": "benchmarks/results/h100-cold-df-seed-20261105/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-cold-df-seed-20261105/records.json.xz",
+      "family": "h100-cold-df-seed-20261105",
+      "bytes": 203796,
+      "sha256": "d9e5e1d3c5976a9246b37724fc5ddda5123ebaf8ed3eea96554a27c04b606b9f",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete lossless JSON receipt container for scoped H100 cold default acceptance and retained rejected pilot; source-bound offline scientific replay supplied separately"
+    }
+  ]
+}
