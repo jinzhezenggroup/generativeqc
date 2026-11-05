@@ -64,3 +64,13 @@ remaining preparation bottleneck and explicit scratch/lifetime qualification.
 The earlier [host validation experiment](2026-10-24-host-validation-products.md)
 retains its global default-off conclusion and broader historical qualification.
 Track current H100 work in [issue #3004](https://github.com/jinzhezenggroup/generativeqc/issues/3004).
+
+## Follow-up: changed-default acceptance
+
+The narrow default was subsequently measured at source `87bbc0b4f20f7696cfd22974bbe5b207e7d69c38`.
+Its median paired HF96 DF cold reduction is **7.332%**, with a -0.081% warm
+change; HF48 remains a one-round numerical guard and the separate WB incremental
+pilot is rejected. The 8.43% result above remains the earlier, different-source
+wider-selector experiment. See the [implemented decision](../implemented/performance/2026-11-05-df-cold-seed-products.md)
+and [complete source-bound receipts](../../../benchmarks/results/h100-cold-df-seed-20261105/README.md).
+The original proposal's pending status records its pre-qualification state.
