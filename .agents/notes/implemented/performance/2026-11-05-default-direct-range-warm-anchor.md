@@ -1,6 +1,6 @@
 # Decision: enable qualified dense-Direct warm-anchor deferral by default
 
-Status: implemented; promoted-image endpoint qualification pending
+Status: implemented; promoted-image A100/RTX 5090 endpoint qualification complete
 Date: 2026-11-05
 
 Supersedes the default-selection policy in
@@ -46,6 +46,51 @@ actual scheduled devices, and run one unset-default water96 cold/three-warm
 lifecycle per device. Reuse the authenticated independent large reference from
 the trial, with provenance stated explicitly. Do not repeat the successful
 matched populations or relax numerical/work gates.
+
+### Promoted-image qualification
+
+The new default is qualified separately at production commit
+`00ec18f032a1574ed495d0cdc9615657ec204687`, native source identity
+`c69a04e5c7bc79220e4e52516c79ab86d76ed42b42b446de657e66a8264f7f32`, and
+core ELF SHA256
+`3cf435f6fb2ae36cc411d27a44a88498544ec896bc6892ecf793e9a898c04dcb`.
+An exclusive incremental build actually recompiles `cuda_ks.cpp` and build
+identity, relinks the core, and refreshes companion manifests. The verified
+private sccache 0.16.0 launcher records two misses/two compilations/no failures;
+existing SM80/SM120 Release CUDA objects remain unchanged. Do not describe this
+as an identity-only relink or claim cache hits.
+
+One unset-default water96 cold/three-warm E+F lifecycle per device completes:
+
+| Device/allocation | Cold (s) | Warm 1 (s) | Warm 2 (s) | Warm 3 (s) |
+| --- | ---: | ---: | ---: | ---: |
+| A100, LSF 225544 | 118.503707 | 21.692416 | 21.598975 | 21.600666 |
+| RTX 5090, Slurm 15959 | 203.074699 | 19.287336 | 19.304196 | 19.325214 |
+
+These are new-default observations, not another paired eager/on comparison.
+Both cold calls use 18 iterations/Focks, 18 J and 36 K applications; every warm
+call uses one iteration/Fock. All scopes in the eight execution traces close,
+without incumbent rebasing or deferred preparation Focks. Relative to earlier eager samples,
+A100 warm ratios are 0.998309/1.000232/1.001367; RTX 5090 ratios are
+1.011313/1.011175/1.010297. They pass the existing 1.05 per-call timing guard;
+these single populations do not establish statistical zero regression.
+
+On each device, two Direct capacity/lifetime tests cover frozen/updating warm
+seeds with eager/on/unset controls and an independent same-grid GPU4PySCF
+oracle. Two additional public default/strict/moved-geometry E+F controls pass.
+Host qualification passes 106 checks; six GPU cases skip outside allocation.
+The unchanged large independent reference from LSF 225523 is explicitly reused,
+not recomputed: all 16 new native/reference observable pairs pass. Worst errors
+are 7.1481e-12 Ha/atom, 3.5522e-7 Ha/Bohr force max and 1.5571e-7 force RMS;
+strict paired parity against the retained optimized image also passes.
+
+LSF 225544 is terminal DONE on `gpu_chem/gpu22`, eight CPU slots/one exclusive
+GPU, finite 15 minutes. Slurm 15959 runs on `main/node1`, eight CPUs/one 5090,
+finite 12 minutes, with driver and scheduler client returning zero. Assigned
+visibility is preserved. Slurm accounting storage is disabled; do not invent
+a terminal `sacct` record. The
+[separate compact publication and CPU reader](../../../../benchmarks/results/direct-range-default-20261105/README.md)
+retain all observations, trace summaries, identities and receipt hashes.
 
 ## Revisit when
 
