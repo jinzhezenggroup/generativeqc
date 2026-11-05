@@ -1,0 +1,16 @@
+{
+  "reference_path": "benchmarks/results/direct-range-warm-anchor-20261105/publication.json.xz",
+  "reference_sha256": "6659c9962ca035cc6c0b5411cf54c6f1f64409a922eda2d00aff29726b65880f",
+  "pairs": 16,
+  "maximum_errors": [
+    7.129112115459672e-12,
+    3.552126539574374e-07,
+    1.5570660046576916e-07
+  ],
+  "gates": [
+    1e-05,
+    0.0001,
+    3e-05
+  ],
+  "timing_reused": false
+}

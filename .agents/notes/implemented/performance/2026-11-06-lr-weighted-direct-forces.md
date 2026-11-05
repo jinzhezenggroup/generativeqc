@@ -1,6 +1,6 @@
-# Proposal: contract order-four/five Direct LR force weights before AD
+# Decision: contract order-four/five Direct LR force weights before AD
 
-Status: proposed; measured on A100/RTX5090, final master integration pending
+Status: implemented; default qualified on A100/RTX5090 and synchronized master
 Date: 2026-11-06
 
 ## Problem
@@ -11,7 +11,7 @@ zero through three at shell level, but its covered s/p/d order-four/five tasks
 still repeat geometry and screened-moment derivative work per AO quartet.
 Previously delivered pure-J pair projection does not apply to exchange weights.
 
-## Candidate decision
+## Decision
 
 Reuse the existing arbitrary-cotangent order-four/five weighted-ERI graphs and
 their relative-coordinate responses with the screened Boys ladder. For fixed
@@ -25,9 +25,8 @@ existing LR orders zero through three and noncanonical omega owner admission
 remain unchanged. This does not introduce a recurrence or pair factorization.
 
 The prepared-owner selector `GENERATIVEQC_DIRECT_LR_WEIGHTED_FORCES` is included
-in resource/restart identity. Candidate code captures unset/1 as enabled and
-0/empty/unknown as disabled, but this is not yet authorization to publish a
-default-on change. The nuclear response selector remains independent. A
+in resource/restart identity. Unset/1 enables the qualified default and
+0/empty/unknown retains the incumbent. The nuclear response selector remains independent. A
 nonfinite relative primitive reduction publishes nothing and retries its
 strict nuclear weighted graph once.
 
@@ -80,15 +79,61 @@ cases and actual-library27 resource cases pass. No new sanitizer pass is claimed
 
 Master advanced to1943a24b7 during measurement; PR3014 head9a72d770a is now
 preserved by the follow-up branch. The integrated sourceff6117e3ba5b481e6124f3bf80f4613fa27586d77bff88f5187f9290abbf5afa
-is rebuilding for a finite default-only verification. Historical paired records
+was rebuilt for a finite default-only verification. Historical paired records
 remain tied to their actual sourcec313decb…/ELFd9b33f54…, not relabelled.
 See `benchmarks/results/direct-lr-weighted-20261106/README.md` for full precision,
 original producers, settings, work, failures and offline replay.
 
+## Integration packaging failure
+
+The first integrated rebuild exported the new source stamp but retained some
+old objects: unpacking a later Git archive in-place restored commit-time mtimes
+older than the existing objects. CMake therefore missed changed source inputs.
+Slurm16017 failed its first independent case with the Python-required policy2
+versus native policy1 receipt, before any complete endpoint. Its source stamp
+`ff6117e3…` and ELF `d5d4181f…` are explicitly **not** integrated qualification.
+A source stamp and successful link alone cannot establish object freshness.
+
+Re-extract with `tar --touch`, retain normal Release flags and the shared content
+compiler cache, then require the allocation-free native SCF metadata policy2
+before further GPU work. This is host API metadata validation, not a production
+CPU scientific solve or reference substitution. Preserve the failed case and
+the bad-image policy receipt separately from later execution. The independent
+original selector0/1 measurements are unaffected. The first A100 integration
+transfer also stopped at expired SSH authentication; no LSF job was submitted
+by that attempt. Renew the private control channel, not the GPU cohort.
+
+## Final integrated default
+
+The corrected complete rebuild qualifies source `ff6117e3…` with ELF
+`4c73bcf8a409a15362355d290695e7866c3a2b28753a42a1d61c91aba4ffe83a`.
+The native metadata policy2 gate passes before both scheduled populations.
+LSF225806 finishes DONE/exit0; Slurm16018 finishes exit0. The LR selector is
+unset, not explicitly enabled, in both endpoint producers.
+
+WB97M-V full-Direct cold/warm medians are111.973577/14.990246s on A100 and
+194.419602/14.365366s on5090. The additional5090 r²SCAN-3c control is
+28.854132/10.569315s. Against the original measured candidate-on image, warm
+ratios are0.995931/0.997174/0.995831, respectively. All settings and semantic
+work remain identical, with paired observable errors below the original gates.
+These are later-image integration checks, not a new isolated LR ablation.
+Another8 independent device-source and27 resource cases pass;16 additional
+independent reference-observable pairings pass. No reference timing is reused.
+
+The default is therefore retained rather than hidden behind opt-in. The final
+follow-up is PR #3017. Parent #3014 was subsequently squash-merged as master
+`863359f4b`; its full tree is identical to qualified base `9a72d770a`.
+`delivery.json` retains and authenticates both raw commit objects and equal
+tree identities. Synchronizing this ancestry and retargeting to master changes
+no scientific input or native source identity; it does not require another GPU
+cohort or relabelling any measured binary. Preserve
+the initial mixed-object failure and private-auth transport failure alongside
+the passing receipts; do not infer full cold or GPU4PySCF parity from this work.
+
 ## References
 
 - Issue #2976 decision comment 6668126027.
-- Prior delivered PR #3014; this candidate belongs to a separate stacked PR.
+- Prior delivered PR #3014; follow-up PR #3017 owns this separate optimization.
 - `tests/python/test_direct_lr_weighted_host.py`
 - `tests/python/test_direct_lr_weighted_cuda.py`
 - Private raw receipts: `.artifacts/direct-next-20261106/`.

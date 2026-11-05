@@ -142,29 +142,41 @@ def compare(
     return report
 
 
-def test_gate(name: str, receipt: dict[str, Any], expected: tuple[int, int, int]) -> None:
+def test_gate(
+    name: str, receipt: dict[str, Any], expected: tuple[int, int, int]
+) -> None:
     """Keep initial fixture/environment failures distinct from accepted gates."""
     assert len(receipt["original_xml_sha256"]) == 64
     cases = receipt["cases"]
     failures = [case for case in cases if case["outcome"] in {"failure", "error"}]
     skipped = [case for case in cases if case["outcome"] == "skipped"]
-    assert all(case["outcome"] in {"passed", "failure", "error", "skipped"} for case in cases)
+    assert all(
+        case["outcome"] in {"passed", "failure", "error", "skipped"} for case in cases
+    )
     assert (
         len(cases) - len(failures) - len(skipped),
         len(skipped),
         len(failures),
     ) == expected
     if name == "host-including-native-missing":
-        assert all("test_hf_resources" in case["attributes"]["classname"] for case in failures)
+        assert all(
+            "test_hf_resources" in case["attributes"]["classname"] for case in failures
+        )
         assert all(
             "native library was not found" in json.dumps(case["details"])
             for case in failures
         )
 
 
-def reference_gate(root: Path, publication: dict[str, Any]) -> None:
+def reference_gate(
+    root: Path,
+    publication: dict[str, Any],
+    *,
+    receipt_name: str = "reference-reuse.json",
+    expected_pairs: int = 48,
+) -> None:
     """Reuse the original independent reference only for static observables."""
-    receipt = json.loads((root / "reference-reuse.json").read_text())
+    receipt = json.loads((root / receipt_name).read_text())
     repository = root.parents[2]
     path = repository / receipt["reference_path"]
     assert hashlib.sha256(path.read_bytes()).hexdigest() == receipt["reference_sha256"]
@@ -201,8 +213,97 @@ def reference_gate(root: Path, publication: dict[str, Any]) -> None:
                     for actual, expected in zip(worst, errors, strict=True)
                 ]
                 pairs += 1
-    assert pairs == receipt["pairs"] == 48 and worst == receipt["maximum_errors"]
+    assert (
+        pairs == receipt["pairs"] == expected_pairs
+        and worst == receipt["maximum_errors"]
+    )
     assert not receipt["timing_reused"]
+
+
+def integration_gate(root: Path, measured: dict[str, Any]) -> dict[str, Any]:
+    """Authenticate later default-only execution, never relabel old paired data."""
+    integration = json.loads(
+        lzma.decompress((root / "integration.json.xz").read_bytes())
+    )
+    assert integration["schema"] == "generativeqc.direct-lr-weighted-integration.v1"
+    assert integration["status"] == "qualified"
+    assert integration["source_identity"] == (
+        "ff6117e3ba5b481e6124f3bf80f4613fa27586d77bff88f5187f9290abbf5afa"
+    )
+    assert integration["base_commit"] == "9a72d770a8d32d0491a51161fd477d3891d8d86d"
+    assert integration["master_commit"] == "1943a24b7c851a9c2bf4f68a1026c9f637c98f12"
+    assert integration["lr_selector"] == "unset"
+    delivery = json.loads((root / "delivery.json").read_text())
+    assert delivery["source_identity"] == integration["source_identity"]
+    assert delivery["qualified_base"]["oid"] == integration["base_commit"]
+    assert (
+        delivery["latest_master"]["oid"] == "863359f4bc8eb019d69e05623d992ba4cad51ad7"
+    )
+    trees = []
+    for key in ("qualified_base", "latest_master"):
+        raw = delivery[key]["raw_commit"].encode()
+        header = b"commit " + str(len(raw)).encode() + b"\0"
+        assert (
+            hashlib.sha1(header + raw, usedforsecurity=False).hexdigest()
+            == delivery[key]["oid"]
+        )
+        trees.append(raw.decode().splitlines()[0])
+    assert trees[0] == trees[1] and trees[0].startswith("tree ")
+    assert integration["candidate_image"]["library_sha256"] == (
+        "4c73bcf8a409a15362355d290695e7866c3a2b28753a42a1d61c91aba4ffe83a"
+    )
+    build = json.loads((root / "integration-build.json").read_text())
+    assert build["exit-code.txt"].strip() == "0"
+    assert build["identity"] == integration["candidate_image"]
+    assert build["default_policy"]["status"] == 0
+    assert build["default_policy"]["policy_version"] == 2
+    failed_build = build["initial_mixed_object_build"]
+    assert (
+        json.loads(failed_build["failed-image-default-policy.json"])["policy_version"]
+        == 1
+    )
+    assert json.loads(failed_build["identity.json"])["library_sha256"] == (
+        "d5d4181ffdb0b6a09ad50a5aeed7b5858a075c408e245e5afaa2b116ac262160"
+    )
+    report = {}
+    for device in ("A100", "RTX5090"):
+        assert integration["cohort_exit_codes"][device] == 0
+        assert integration["device_policy_receipts"][device]["status"] == 0
+        assert integration["device_policy_receipts"][device]["policy_version"] == 2
+        current = population(integration, device, "wb-default")
+        scheduler_key = "LSB_JOBID" if device == "A100" else "SLURM_JOB_ID"
+        assert current["scheduler"][scheduler_key]
+        assert current["scheduler"]["CUDA_VISIBLE_DEVICES"]
+        result = {"wb": compare(population(measured, device, "wb-on"), current)}
+        if device == "RTX5090":
+            result["semilocal"] = compare(
+                population(measured, device, "r2-on"),
+                population(integration, device, "r2-default"),
+            )
+        for comparison in result.values():
+            comparison["lr_only_attribution"] = False
+            assert comparison["warm"]["ratio"] <= 1.05
+        report[device] = result
+    tests = json.loads(
+        lzma.decompress(
+            (root / "science" / "integration-test-cases.json.xz").read_bytes()
+        )
+    )
+    test_gate("integration-device-libcint", tests["device-libcint"], (8, 0, 0))
+    test_gate("integration-native-resources", tests["native-resources"], (27, 0, 0))
+    test_gate("initial-policy-mismatch", tests["initial-policy-mismatch"], (0, 0, 1))
+    assert "native SCF default policy returned an invalid receipt" in json.dumps(
+        tests["initial-policy-mismatch"]
+    )
+    reference_gate(
+        root,
+        integration,
+        receipt_name="integration-reference-reuse.json",
+        expected_pairs=16,
+    )
+    expected = json.loads((root / "integration-summary.json").read_text())
+    assert json.dumps(report, sort_keys=True) == json.dumps(expected, sort_keys=True)
+    return report
 
 
 def main() -> None:
@@ -249,7 +350,9 @@ def main() -> None:
             )
             assert result["semilocal_nonregression"]["warm"]["ratio"] <= 1.05
         report[device] = result
-    tests = json.loads(lzma.decompress((root / "science" / "test-cases.json.xz").read_bytes()))
+    tests = json.loads(
+        lzma.decompress((root / "science" / "test-cases.json.xz").read_bytes())
+    )
     for name, counts in (
         ("host-including-native-missing", (2076, 164, 11)),
         ("initial-fault-fixture", (106, 0, 8)),
@@ -262,6 +365,10 @@ def main() -> None:
     reference_gate(root, publication)
     expected = json.loads((root / "summary.json").read_text())
     assert json.dumps(report, sort_keys=True) == json.dumps(expected, sort_keys=True)
+    if (root / "integration.json.xz").exists():
+        report["latest_master_default_integration"] = integration_gate(
+            root, publication
+        )
     print(json.dumps(report, indent=2))
 
 

@@ -1,6 +1,6 @@
-# Direct LR weighted forces — measured candidate
+# Direct LR weighted forces — qualified default
 
-Issue #2976. This is a separate follow-up to PR #3014, not another measurement
+Issue #2976, PR #3017. This is a separate follow-up to PR #3014, not another measurement
 of its pure-J pair projection. The exact order-four/five LR exchange weights
 are contracted before the existing weighted-ERI derivative graph. No DF,
 low-rank assumption, GPU-name dispatch, CPU production oracle, new recurrence,
@@ -72,13 +72,23 @@ match. This protects the unrelated semilocal route against regression.
 
 ## Provenance and integration boundary
 
+The first master-integration attempt, Slurm16017, failed its first source test:
+native SCF metadata still reported policy1 while Python required policy2.
+Restored Git-archive mtimes had left some old objects unrebuilt despite a new
+source stamp. That mixed-object ELF `d5d4181f…` is **not** a qualified integrated
+image. Re-extraction with `tar --touch` forces normal dependency rebuilding,
+without clearing the compiler cache; policy2 metadata is checked before the
+replacement scheduled cohort. The original measured selector comparison is
+unaffected. An expired-SSH A100 transfer attempt submitted no LSF job.
+
 Measured base: `b27caeec846b6fd28597c06cbbb55498c1e3d730`.
 `measured-source.patch.xz` reconstructs the exact seven production overlays.
 
 | Image | Source identity | ELF SHA256 |
 | --- | --- | --- |
-| Previous qualified | `4c54ccfb3d38e5ec86b147a019d8ef99e87c8b8247ca5a42bf50a84027dc61ed` | `3142176ecd915a1fe5eaaced6aa5cb4b3da3af6a2255f199799` |
+| Previous qualified | `4c54ccfb3d38e5ec86b147a019d8ef99e87c8b8247ca5a42bf50a84027dc61ed` | `3142176ecd915a1fe5eaaced6aa5cb4b3da3af6a1ff7b71b4cf6a2255f199799` |
 | Measured LR candidate | `c313decb8884e69c3b44b6fe2e72c9491869b64313db3e4fcdd56f8e5f52a2a1` | `d9b33f54155186cc3240ecd325a290bcd1fecadcc136ed9c8ce72107f88f3486` |
+| Qualified master integration | `ff6117e3ba5b481e6124f3bf80f4613fa27586d77bff88f5187f9290abbf5afa` | `4c73bcf8a409a15362355d290695e7866c3a2b28753a42a1d61c91aba4ffe83a` |
 
 Normal Release O3, CUDA12.9.86, verified sccache0.16.0, SM80-real+SM120-real,
 successful actual link. Final linked resource inventories retain all216 bounded
@@ -91,13 +101,38 @@ Master advanced during measurement to `1943a24b7` (#3008, uniform SCF defaults).
 The follow-up branch preserves PR3014's reviewed rollback fix and follows its
 new head `9a72d770a`. The integrated source is
 `ff6117e3ba5b481e6124f3bf80f4613fa27586d77bff88f5187f9290abbf5afa`;
-its rebuild/default endpoint verification is **pending**, distinct from the
-sealed measured image. This is not yet a final integrated-image qualification.
+its corrected complete rebuild and default-only verification **pass**, distinct
+from the sealed measured image. The original measured object's pending field
+is its historical checkpoint; `integration.json.xz` records final qualification.
+The same production patch applied to base`9a72d770a` reconstructs this integrated
+source. The native metadata policy2 receipt, not just a source stamp, is required.
+
+| Actual default-only allocation | Cold (single observation) | Three-warm median | Warm / measured candidate-on |
+| --- | ---: | ---: | ---: |
+| A100 LSF225806, WB97M-V | 111.973577 s | 14.990246 s | 0.995931 |
+| RTX5090 Slurm16018, WB97M-V | 194.419602 s | 14.365366 s | 0.997174 |
+| RTX5090 Slurm16018, r²SCAN-3c | 28.854132 s | 10.569315 s | 0.995831 |
+
+Both endpoint producers **unset** the LR selector. Complete settings and
+semantic work match the measured candidate-on image; the same original paired
+observable gates pass. These are later-build non-regression/integration checks,
+not a new same-image LR attribution. Another8 device Libcint and27 resource
+cases pass. Sixteen additional independent reference-observable pairings pass;
+their timing is not reused. `integration-build.json` and semantic test records
+also retain the original policy-mismatch failure; it is never called passing.
+The default remains enabled, with the bounded incumbent rollback available.
+
+Parent PR3014 subsequently lands as master`863359f4b`. Its full tree equals
+qualified base`9a72d770a`; `delivery.json` authenticates both raw Git commit
+objects and that equality. The follow-up synchronizes this ancestry and targets
+master directly. Native inputs remain source`ff6117e3…`: no GPU rerun or
+historical-image relabelling is needed for an identical tree.
 
 LSF225805 is DONE and its runner exits0. SCP copied the complete archive but
 did not terminate normally; a separate remote SHA256 receipt authenticates the
 bytes before use. No GPU cohort was repeated because of transport errors. The
-task-owned finite transfer server is stopped; shared VPN/SSH sessions remain.
+task-owned transfer servers are stopped after authenticated retrieval; shared
+VPN/SSH sessions remain.
 No binary, tarball, Release, tag, release asset or external backup is published.
 
 ## Offline replay
