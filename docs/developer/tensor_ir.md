@@ -117,6 +117,11 @@ snapshots of every executed node. `Program.nodes` retains explicit definitions;
 for inspecting the original mathematical DAG even after producing an optimized
 program.
 
+Programs retain only immutable graph order, liveness and stable naming metadata
+across actions. `Program.debug_names` returns a detached dictionary. This reuse
+does not retain numerical inputs or outputs, skip per-action validation, or
+change serialized equations and artifact identity.
+
 All values follow immutable SSA semantics. There are no in-place destinations,
 so a transpose/slice/broadcast view cannot be overwritten by another node.
 Inputs may be noncontiguous, negative-stride, read-only, or share memory with

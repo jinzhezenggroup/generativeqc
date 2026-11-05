@@ -203,7 +203,7 @@ def test_cpu_range_df_components_against_libcint(
 ) -> None:
     """Qualify normalized dddd/ffff, expansion pullbacks and repeated centers."""
     gto = pytest.importorskip("pyscf.gto")
-    from generativeqc._stationary_range_cpu import (
+    from generativeqc_compiler.integral.eri_symmetry import (
         canonical_eri_quartets,
         eri_quartet_orbits,
     )

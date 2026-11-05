@@ -7,6 +7,10 @@ Cartesian/spherical AOs, full-rank DF and scalar ECPs in FP64. CUDA uses a
 device-resident numerical owner with no host derivative fallback. No
 displaced SCF or reference engine enters production; quadrature/active-set
 branches and occupations remain fixed during differentiation.
+
+CPU direct all-electron full-range RKS graphs can also enter the low-level
+qualification owner. They do not inherit WB97M-V's public capability admission:
+independent molecular, spherical/Ni and resource gates remain prerequisites.
 """
 
 from __future__ import annotations
@@ -15,19 +19,27 @@ import time
 import typing
 from copy import deepcopy
 from dataclasses import dataclass, replace
-from itertools import product
+from functools import partial
 from types import MappingProxyType, SimpleNamespace
 
 from generativeqc_compiler.common.array_execution import arrays as np
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft._generated_native_semilocal import (
+    SEMILOCAL_FAMILY_BY_CODE,
+)
 from generativeqc_compiler.dft.ao import directional_ao_jets
 from generativeqc_compiler.integral.ir import four_center_eri_operator
 from generativeqc_compiler.integral.range_separation import CoulombKernel
-from generativeqc_compiler.method import StationaryHVPPlan, StationaryMeanField
+from generativeqc_compiler.method import (
+    StationaryHVPPlan,
+    StationaryMeanField,
+    compile_ks_execution_plan,
+)
 from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
 from generativeqc_compiler.method.stationary_grid_second import (
     GRID_FIELD_WORKSPACE_PANELS,
+    SemilocalPointPartials,
     StationaryGridSecondOrder,
     features,
     nuclear_repulsion_hvp,
@@ -51,10 +63,10 @@ from .df_hessian import DFSecondOrder
 from .ecp_hessian import ECPSecondOrder
 from .fock import FockBuildSpec, FockPlan, FockTerm
 from .hessian_basis import HessianBasis
-from .ks import composite_stationary_second_order_eligible, resolve_ks_method
+from .ks import composite_stationary_second_order_eligible
 from .profiles import canonical_hash
 from .response_operator import CPKSResponseOperator
-from .response_solver import GMRESOptions, solve
+from .response_solver import DiagonalPreconditioner, GMRESOptions, solve
 from .rks_hessian import (
     RKSHessianResult,
     _checked_integral_budget,
@@ -95,7 +107,7 @@ class CompositeRKSHVPResult:
 
 
 class _CompositeJK:
-    """Native linear J/SR-K/LR-K map, including physical exchange coefficients."""
+    """Native linear J/K map, including physical primitive exchange coefficients."""
 
     def __init__(
         self,
@@ -142,13 +154,21 @@ class _CompositeJK:
                     charge=basis.charge,
                     multiplicity=basis.multiplicity,
                 )
+            exchange_terms = compile_ks_execution_plan(state._source.method_ir).exchange
             short_exchange = next(
-                primitive.coefficient
-                for primitive in state._source.method_ir.primitives
-                if primitive.kind == "range_separated_exchange"
-                and primitive.operator == "short-range"
+                (
+                    term.coefficient
+                    for term in exchange_terms
+                    if term.operator == "short-range"
+                ),
+                None,
             )
             if self.fitted:
+                if short_exchange is None:
+                    raise NotImplementedError(
+                        "composite fitted Hessian currently requires the qualified "
+                        "short-/long-range exchange decomposition"
+                    )
                 calculator = state._source._batch._calculator
                 auxiliary_spec = calculator._auxiliary_basis
                 auxiliary_shells = (
@@ -200,10 +220,8 @@ class _CompositeJK:
                         "DF Hessian requires a full-rank metric; "
                         "rank-truncated metric response is not qualified"
                     )
-            for primitive in state._source.method_ir.primitives:
-                if primitive.kind != "range_separated_exchange":
-                    continue
-                if self.fitted and primitive.operator != "long-range":
+            for term in exchange_terms:
+                if self.fitted and term.operator != "long-range":
                     continue
                 self.plans.append(
                     FockPlan(
@@ -215,12 +233,12 @@ class _CompositeJK:
                             exchange=FockTerm(
                                 coefficient=(-1 if self.spins == 2 else -0.5)
                                 * float(
-                                    primitive.coefficient - short_exchange
+                                    term.coefficient - short_exchange
                                     if self.fitted
-                                    else primitive.coefficient
+                                    else term.coefficient
                                 ),
-                                operator=primitive.operator.replace("-", "_"),
-                                omega=float(primitive.omega),
+                                operator=term.operator.replace("-", "_"),
+                                omega=float(term.omega),
                             ),
                         ),
                         device=self.device,
@@ -291,6 +309,81 @@ def _ao_coefficients(values: np.ndarray) -> dict:
     }
 
 
+class _NativeSemilocalGridPoints:
+    """Reuse the token-bound scaled LDA/PBE SCF and response point workers.
+
+    The compiler grid owner still owns feature and grid-weight pullbacks. This
+    provider only supplies native physical potentials/JVPs, preserving the
+    scaled tail arithmetic and C2 spin policy of the actual converged SCF.
+    """
+
+    # Conservatively include tile copies and the streamed native jet stack.
+    workspace_bytes_per_point = 32768
+
+    def __init__(self, state: StationaryKsState, functional: typing.Any) -> None:
+        record = SEMILOCAL_FAMILY_BY_CODE.get(state._source.functional_code)
+        if (
+            state._source.backend != "cpu"
+            or record is None
+            or record["legacy_cpu_point_response_slot"] is None
+            or "tau" in functional.ingredients
+            or state._source.functional.identity != functional.identity
+        ):
+            raise NotImplementedError(
+                "native grid points require a matching CPU LDA/PBE state"
+            )
+        self.state, self.functional = state, functional
+        self.spins = 2 if functional.spin == "polarized" else 1
+        self.pbe = bool(record["legacy_cpu_point_response_slot"])
+        self.functional_identity = functional.identity
+        self.identity = canonical_hash(
+            {
+                "native_point_model": state.identity.regularization_identity,
+                "functional": functional.identity,
+                "semilocal_scales": state._source.coefficients[:2],
+                "response": "native-scaled-cartesian-direction-v2",
+            }
+        )
+
+    def evaluate(
+        self, fields: np.ndarray, direction: np.ndarray
+    ) -> SemilocalPointPartials:
+        """Evaluate one bounded feature tile without a different XC expression."""
+        values = fields.reshape(self.spins, 5, -1)
+        moving = direction.reshape(self.spins, 5, -1)
+        rho, gradient = values[:, 0], values[:, 1:4].transpose(0, 2, 1)
+        drho, dgradient = moving[:, 0], moving[:, 1:4].transpose(0, 2, 1)
+        if self.spins == 1:
+            spin_rho = np.repeat(rho * 0.5, 2, axis=0)
+            spin_gradient = np.repeat(gradient * 0.5, 2, axis=0)
+            response = self.state._source.evaluate_rks_response_points(
+                self.pbe, rho[0], gradient[0], drho[0], dgradient[0]
+            )
+        else:
+            spin_rho, spin_gradient = rho, gradient
+            response = self.state._source.evaluate_uks_response_points(
+                self.pbe, rho, gradient, drho, dgradient
+            )
+        primal = self.state._source.evaluate_xc_points(
+            self.functional, spin_rho, spin_gradient
+        )
+        potential = np.zeros_like(values)
+        if self.spins == 1:
+            potential[0, 0] = primal["rho"].mean(axis=0)
+            potential[0, 1:4] = primal["gradient"].mean(axis=0).T
+        else:
+            potential[:, 0] = primal["rho"]
+            potential[:, 1:4] = primal["gradient"].transpose(0, 2, 1)
+        delta = np.zeros_like(values)
+        delta[:, 0] = response["rho"]
+        delta[:, 1:4] = response["gradient"].transpose(0, 2, 1)
+        return SemilocalPointPartials(
+            primal["energy"],
+            potential.reshape(fields.shape),
+            delta.reshape(fields.shape),
+        )
+
+
 class _CompositeGrid:
     """Bind compiler grid partials to native AO jets and moving Becke weights."""
 
@@ -307,7 +400,11 @@ class _CompositeGrid:
                 "independent XC/VV10 grids do not yet support coupled response"
             )
         self.state, self.basis, self.grid = state, basis, state.grid
-        _, self.spec = resolve_ks_method(state.identity.method)
+        # The native carrier can be PBE even when the physical graph is B3LYP.
+        # Differentiate the token-bound MethodIR, never the carrier selector.
+        self.spec = compile_ks_execution_plan(
+            state._source.method_ir
+        ).semilocal.functional
         self.functional_identity = self.spec.identity
         self.grid_identity = self.grid.identity
         self.basis_identity = _basis_hash(basis)
@@ -328,11 +425,18 @@ class _CompositeGrid:
                 "composite Hessian requires retained native grid provenance"
             )
         nonlocal_primitive = next(
-            primitive
-            for primitive in state._source.method_ir.primitives
-            if primitive.kind == "nonlocal_correlation"
+            (
+                primitive
+                for primitive in state._source.method_ir.primitives
+                if primitive.kind == "nonlocal_correlation"
+            ),
+            None,
         )
-        ao_bytes = len(self.grid.points) * basis.nao * 8 * 64
+        ao_bytes = (
+            basis.numeric_bytes
+            + len(self.grid.points) * (basis.nao * 8 * 64 + 64)
+            + 4096
+        )
         if ao_bytes >= grid_budget_bytes:
             raise MemoryError("AO jet/motion workspace exceeds grid_budget_bytes")
         self.model = StationaryGridSecondOrder(
@@ -340,6 +444,14 @@ class _CompositeGrid:
             nonlocal_primitive,
             budget_bytes=grid_budget_bytes - ao_bytes,
             max_pair_evaluations=max_nonlocal_pairs,
+            point_provider=(
+                _NativeSemilocalGridPoints(state, self.spec)
+                if SEMILOCAL_FAMILY_BY_CODE.get(state._source.functional_code, {}).get(
+                    "legacy_cpu_point_response_slot"
+                )
+                is not None
+                else None
+            ),
         )
         self.host_workspace_bytes = grid_budget_bytes
         self.feature_budget_bytes = (
@@ -351,7 +463,9 @@ class _CompositeGrid:
         )
         if self.feature_budget_bytes < 1:
             raise MemoryError("retained grid partials exceed grid_budget_bytes")
-        self.jets = basis.evaluate(self.grid.points, 3)
+        # The native tile must consume the admitted reserve, not its unrelated
+        # default cap; keep that reserve excluded from the scalar-grid budget.
+        self.jets = basis.evaluate(self.grid.points, 3, budget_bytes=ao_bytes)
         self.fields = np.vstack(
             (
                 self.feature_fields(),
@@ -597,9 +711,22 @@ class CompositeRKSResponse(CPKSResponseOperator):
                 raise NotImplementedError(
                     "composite Hessian requires native CPU/CUDA KS"
                 )
-            if not composite_stationary_second_order_eligible(state._source.method_ir):
+            method = state._source.method_ir
+            full_range_candidate = (
+                state._source.backend == "cpu"
+                and state.density.shape[0] == 1
+                and state._source.hamiltonian == "all-electron"
+                and state._source.fock_provider_proof()[:2] == ("exact", "exact")
+                and {primitive.kind for primitive in method.primitives}
+                == {"semilocal_xc", "exact_exchange"}
+            )
+            if not (
+                composite_stationary_second_order_eligible(method)
+                or full_range_candidate
+            ):
                 raise NotImplementedError(
-                    "composite molecular Hessian currently requires canonical WB97M-V"
+                    "composite molecular Hessian requires canonical WB97M-V or "
+                    "a CPU direct all-electron RKS full-range qualification candidate"
                 )
             if state._source.backend == "cuda":
                 from .cuda_composite_hessian import CudaCompositeResponse
@@ -743,6 +870,95 @@ class CompositeUKSResponse(SpinCPKSOperator, CompositeRKSResponse):
     """Coupled spin response sharing the composite integral/grid lifetime owner."""
 
 
+class _PreparedIntegralWeights:
+    """Borrow one response's fixed densities and reuse compiler weight programs.
+
+    Public-to-Cartesian density pullbacks are invariant across shell blocks.
+    Only mathematical programs, not shell weights or integral tensors, are
+    retained by term count. The factory expires with its source contribution;
+    it is never a geometry/state replay cache. MethodIR/TensorIR still owns
+    every coefficient, spin factor and density-response product rule.
+    """
+
+    def __init__(
+        self, operator: CompositeRKSResponse, response: typing.Any, source: str
+    ) -> None:
+        self.operator = operator
+        self.source = source
+        self.offsets = np.cumsum((0, *operator.topology.shell_sizes))
+        self.blocks: dict[int, typing.Any] = {}
+        overlap = source == "overlap_pulay"
+        self.density = operator.integral_basis.density(
+            operator.state.weighted_density if overlap else operator.state.density
+        )
+        self.moving = operator.integral_basis.density(
+            response.energy_weighted_density_derivative
+            if overlap
+            else response.density_derivative
+        )
+        if self.moving.ndim == 2:
+            self.moving = self.moving[None]
+
+    def _evaluate(self, slots: tuple | None, *, moving: bool) -> np.ndarray:
+        shape = (
+            (self.operator.topology.nbf,) * 2
+            if slots is None
+            else tuple(self.operator.topology.shell_sizes[slot] for slot in slots)
+        )
+        weights = np.empty(int(np.prod(shape)))
+        output = "response_weights" if moving else "weights"
+        for tile in self.operator.plan.integral_term_tiles(weights.size, coordinates=1):
+            # A Cartesian ffff shell already exceeds one symbolic block. Gather
+            # only this tile's indices/feeds; the shell-local output is ephemeral.
+            indices = np.array(
+                np.unravel_index(np.arange(tile.start, tile.stop), shape)
+            )
+            if slots is None:
+                rows, columns = indices
+                feeds = (
+                    {
+                        "weighted_density": self.density[:, rows, columns],
+                        "d_weighted_density": self.moving[:, rows, columns],
+                    }
+                    if self.source == "overlap_pulay"
+                    else {
+                        "density_left": self.density[:, rows, columns],
+                        "d_density_left": self.moving[:, rows, columns],
+                    }
+                )
+            else:
+                indices += self.offsets[list(slots), None]
+                first, second, third, fourth = indices
+                left, right = (
+                    ((first, second), (third, fourth))
+                    if self.source == "coulomb"
+                    else ((first, third), (second, fourth))
+                )
+                feeds = {
+                    "density_left": self.density[:, left[0], left[1]],
+                    "density_right": self.density[:, right[0], right[1]],
+                    "d_density_left": self.moving[:, left[0], left[1]],
+                    "d_density_right": self.moving[:, right[0], right[1]],
+                }
+            terms = tile.stop - tile.start
+            if terms not in self.blocks:
+                self.blocks[terms] = self.operator.plan.integral_block(
+                    self.source, terms=terms, coordinates=1
+                )
+            block = self.blocks[terms]
+            program = block.response_weights if moving else block.weights
+            weights[tile] = execute(program, feeds).outputs[output]
+        return weights.reshape(shape)
+
+    def fixed(self, slots: tuple | None = None) -> np.ndarray:
+        """Evaluate only the fixed cotangent needed by the second-integral pass."""
+        return self._evaluate(slots, moving=False)
+
+    def moving_weights(self, slots: tuple | None = None) -> np.ndarray:
+        """Evaluate only its density-response JVP for the first-integral pass."""
+        return self._evaluate(slots, moving=True)
+
+
 def _composite_integral_hvp(
     operator: CompositeRKSResponse,
     response: typing.Any,
@@ -752,66 +968,13 @@ def _composite_integral_hvp(
     budget_bytes: int,
 ) -> np.ndarray:
     """Contract public-space stationary weights in a fixed Cartesian workspace."""
-    density = operator.integral_basis.density(operator.state.density)
-    moving = operator.integral_basis.density(response.density_derivative)
-    if moving.ndim == 2:
-        moving = moving[None]
-    weighted = operator.integral_basis.density(operator.state.weighted_density)
-    dweighted = operator.integral_basis.density(
-        response.energy_weighted_density_derivative
-    )
-    if dweighted.ndim == 2:
-        dweighted = dweighted[None]
-    offsets = np.cumsum((0, *operator.topology.shell_sizes))
-
-    def weights(slots: tuple | None = None) -> tuple:
-        if slots is None:
-            rows, columns = np.indices((operator.topology.nbf,) * 2).reshape(2, -1)
-            feeds = (
-                {
-                    "weighted_density": weighted[:, rows, columns],
-                    "d_weighted_density": dweighted[:, rows, columns],
-                }
-                if source == "overlap_pulay"
-                else {
-                    "density_left": density[:, rows, columns],
-                    "d_density_left": moving[:, rows, columns],
-                }
-            )
-            shape = (operator.topology.nbf,) * 2
-        else:
-            indices = np.asarray(
-                tuple(
-                    product(
-                        *(range(offsets[slot], offsets[slot + 1]) for slot in slots)
-                    )
-                )
-            )
-            first, second, third, fourth = indices.T
-            feeds = {
-                "density_left": density[:, first, second],
-                "density_right": density[:, third, fourth],
-                "d_density_left": moving[:, first, second],
-                "d_density_right": moving[:, third, fourth],
-            }
-            shape = tuple(operator.topology.shell_sizes[slot] for slot in slots)
-        block = operator.plan.integral_block(
-            source, terms=int(np.prod(shape)), coordinates=1
-        )
-        return (
-            execute(block.weights, feeds).outputs["weights"].reshape(shape),
-            execute(block.response_weights, feeds)
-            .outputs["response_weights"]
-            .reshape(shape),
-        )
-
+    weights = _PreparedIntegralWeights(operator, response, source)
     if source == "coulomb":
-        fixed_options = {"eri_shell_weights": lambda slots: weights(slots)[0]}
-        moving_options = {"eri_shell_weights": lambda slots: weights(slots)[1]}
+        fixed_options = {"eri_shell_weights": weights.fixed}
+        moving_options = {"eri_shell_weights": weights.moving_weights}
     else:
-        fixed, delta = weights()
-        fixed_options = {"pair_weights": fixed}
-        moving_options = {"pair_weights": delta}
+        fixed_options = {"pair_weights": weights.fixed()}
+        moving_options = {"pair_weights": weights.moving_weights()}
     first = generated_weighted_first_integral_gradient(
         operator.topology, source, cache=cache, **moving_options
     )
@@ -825,34 +988,6 @@ def _composite_integral_hvp(
         **fixed_options,
     )
     return immutable(first + second)
-
-
-def _exchange_weights(
-    operator: CompositeRKSResponse, response: typing.Any, source: str, slots: tuple
-) -> tuple:
-    offsets = np.cumsum((0, *operator.topology.shell_sizes))
-    indices = np.asarray(
-        tuple(product(*(range(offsets[slot], offsets[slot + 1]) for slot in slots)))
-    )
-    first, second, third, fourth = indices.T
-    density = operator.integral_basis.density(operator.state.density)
-    moving = operator.integral_basis.density(response.density_derivative)
-    if moving.ndim == 2:
-        moving = moving[None]
-    feeds = {
-        "density_left": density[:, first, third],
-        "density_right": density[:, second, fourth],
-        "d_density_left": moving[:, first, third],
-        "d_density_right": moving[:, second, fourth],
-    }
-    block = operator.plan.integral_block(source, terms=len(indices), coordinates=1)
-    shape = tuple(operator.topology.shell_sizes[slot] for slot in slots)
-    return (
-        execute(block.weights, feeds).outputs["weights"].reshape(shape),
-        execute(block.response_weights, feeds)
-        .outputs["response_weights"]
-        .reshape(shape),
-    )
 
 
 def composite_rks_hvp(
@@ -912,29 +1047,23 @@ def composite_rks_hvp(
             raise
     if operator.df is not None:
         operator.df.check_budget(integral_budget_bytes)
+    exchange_terms = compile_ks_execution_plan(operator.plan.method).exchange
     exchange = tuple(
         (
             four_center_eri_operator(
-                CoulombKernel(
-                    primitive.operator.replace("-", "_"), float(primitive.omega)
-                )
+                CoulombKernel(term.operator.replace("-", "_"), float(term.omega))
             ),
-            primitive.coefficient,
+            term.coefficient,
         )
-        for primitive in operator.plan.method.primitives
-        if primitive.kind == "range_separated_exchange"
+        for term in exchange_terms
     )
     exchange_sources = {
-        "exchange_" + primitive.operator.replace("-", "_"): entry[0]
-        for primitive, entry in zip(
-            (
-                primitive
-                for primitive in operator.plan.method.primitives
-                if primitive.kind == "range_separated_exchange"
-            ),
-            exchange,
-            strict=True,
-        )
+        (
+            "exact_exchange"
+            if term.operator == "full-range"
+            else "exchange_" + term.operator.replace("-", "_")
+        ): entry[0]
+        for term, entry in zip(exchange_terms, exchange, strict=True)
     }
     if operator.df is not None:
         short_fraction = next(
@@ -973,15 +1102,24 @@ def composite_rks_hvp(
             operator.integral_basis.matrix(overlap),
         )
 
+    response_preconditioner = "none"
+
     def response_driver(values: tuple) -> typing.Any:
+        nonlocal response_preconditioner
         if isinstance(operator, CompositeUKSResponse):
             return operator.solve_nuclear(
                 *values, GMRESOptions() if solver_options is None else solver_options
             )
+        preconditioner = DiagonalPreconditioner.from_orbital_gaps(
+            operator.problem.reference.orbital_energies, operator.problem.layout
+        )
+        response_preconditioner = (
+            "orbital-gap" if preconditioner is not None else "none-singular-orbital-gap"
+        )
         return solve_stationary_nuclear_perturbation(
             operator,
             *values,
-            solver=solve,
+            solver=partial(solve, preconditioner=preconditioner),
             options=GMRESOptions() if solver_options is None else solver_options,
         )
 
@@ -1027,17 +1165,11 @@ def composite_rks_hvp(
                 integral_budget_bytes,
             )
         if source in exchange_sources:
-
-            def fixed(slots: tuple) -> np.ndarray:
-                return _exchange_weights(operator, response, source, slots)[0]
-
-            def moving(slots: tuple) -> np.ndarray:
-                return _exchange_weights(operator, response, source, slots)[1]
-
+            weights = _PreparedIntegralWeights(operator, response, source)
             first = generated_weighted_first_integral_gradient(
                 operator.topology,
                 "coulomb",
-                eri_shell_weights=moving,
+                eri_shell_weights=weights.moving_weights,
                 eri_operator=exchange_sources[source],
                 cache=cache,
             )
@@ -1045,7 +1177,7 @@ def composite_rks_hvp(
                 operator.topology,
                 "coulomb",
                 context.direction,
-                eri_shell_weights=fixed,
+                eri_shell_weights=weights.fixed,
                 eri_operator=exchange_sources[source],
                 cache=cache,
                 budget_bytes=integral_budget_bytes,
@@ -1095,7 +1227,9 @@ def composite_rks_hvp(
     diagnostics = {
         **executed.diagnostics,
         "derivative_method": "compiler-automatic-differentiation",
-        "public_calculator_endpoint": True,
+        "public_calculator_endpoint": composite_stationary_second_order_eligible(
+            operator.state._source.method_ir
+        ),
         "backend": operator.backend.device,
         "spin": operator.state.identity.spin,
         "representation": operator.basis.representation,
@@ -1112,6 +1246,7 @@ def composite_rks_hvp(
         else None,
         "execution_residency": "host",
         "nuclear_response_solves": 1,
+        "response_preconditioner": response_preconditioner,
         "displaced_scf_evaluations": 0,
         "response_residual_norm": response.solve_result.residual_norm,
         "response_iterations": response.solve_result.iterations,
@@ -1172,7 +1307,9 @@ def composite_rks_hessian(
         residuals.append(result.diagnostics["response_residual_norm"])
     diagnostics = {
         "derivative_method": "compiler-automatic-differentiation",
-        "public_calculator_endpoint": True,
+        "public_calculator_endpoint": composite_stationary_second_order_eligible(
+            operator.state._source.method_ir
+        ),
         "backend": operator.backend.device,
         "spin": operator.state.identity.spin,
         "representation": operator.basis.representation,

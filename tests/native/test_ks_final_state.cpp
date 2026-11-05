@@ -408,6 +408,41 @@ void cuda_range_exchange_identity() {
   }
 }
 
+void cpu_composed_global_hybrid_identity() {
+  for (const double fraction : {0.2, 0.37}) {
+    for (const bool unrestricted : {false, true}) {
+      Fixture composed;
+      const auto spin = unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted;
+      composed.id.determinant.model =
+          resolve_fock_build(make_global_hybrid_fock_spec(spin, fraction), FockBackend::Cpu);
+      composed.id.model.device = -1;
+      composed.id.model.functional = semilocal_family_code(SemilocalFamily::B3lyp);
+      composed.id.model.scf_domain_version =
+          semilocal_family_domain_version(SemilocalFamily::B3lyp);
+      if (unrestricted) {
+        composed.id.determinant.occupied = {1, 0};
+        composed.id.model.spins = 2;
+        composed.physical.density = {{.5, 0, 0, 0}, {0, 0, 0, 0}};
+        composed.physical.fock.push_back(composed.physical.fock[0]);
+        composed.candidate.spins.push_back(composed.candidate.spins[0]);
+      }
+      composed.sync();
+      require(composed.validate(), "CPU composed full-range identity was rejected");
+
+      auto stale = composed;
+      stale.physical.identity.determinant.model.spec.exchange.coefficient -= 0.01;
+      require(!stale.validate(), "CPU composed final state accepted another K coefficient");
+      stale = composed;
+      stale.candidate.identity.determinant.model.spec.exchange.coefficient -= 0.01;
+      require(!stale.validate(), "CPU composed eigenframe accepted another K coefficient");
+      stale = composed;
+      stale.id.model.semilocal_exchange_scale = 0.75;
+      stale.sync();
+      require(!stale.validate(), "CPU composed B3 family accepted changed semilocal scales");
+    }
+  }
+}
+
 void cuda_global_hybrid_identity() {
   for (const bool unrestricted : {false, true}) {
     const auto spin = unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted;
@@ -698,6 +733,7 @@ int main() {
     analytic_rks_and_uks();
     automatic_empty_spin_identity();
     cuda_range_exchange_identity();
+    cpu_composed_global_hybrid_identity();
     cuda_global_hybrid_identity();
 #if GENERATIVEQC_HAS_CUDA
     cuda_split_hybrid_identity();

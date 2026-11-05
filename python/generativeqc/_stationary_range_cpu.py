@@ -11,44 +11,6 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.range_exchange_cpu import emit_range_exchange_cpu
 
 
-def canonical_eri_quartets(nao: int) -> Any:
-    """Enumerate the unscreened eightfold ERI domain once, including diagonals."""
-    pairs = tuple(
-        (first, second) for first in range(nao) for second in range(first + 1)
-    )
-    for first_pair, left in enumerate(pairs):
-        for second_pair in range(first_pair + 1):
-            yield (*left, *pairs[second_pair])
-
-
-def eri_quartet_orbits(indices: Any) -> tuple[np.ndarray, np.ndarray]:
-    """Bind all eight permutations and undo duplicate diagonal multiplicity.
-
-    TensorIR still owns each ordered density weight. Summing the distinct
-    orbit weights before integral differentiation is exact for arbitrary RKS
-    or UKS densities, not just a shortcut multiplying one weight by eight.
-    """
-    permutations = (
-        (0, 1, 2, 3),
-        (1, 0, 2, 3),
-        (0, 1, 3, 2),
-        (1, 0, 3, 2),
-        (2, 3, 0, 1),
-        (3, 2, 0, 1),
-        (2, 3, 1, 0),
-        (3, 2, 1, 0),
-    )
-    canonical = np.asarray(indices, dtype=np.int64)
-    orbits = canonical[:, np.asarray(permutations)]
-    multiplicities = (
-        np.where(canonical[:, 0] == canonical[:, 1], 1, 2)
-        * np.where(canonical[:, 2] == canonical[:, 3], 1, 2)
-        * np.where(np.all(canonical[:, :2] == canonical[:, 2:], axis=1), 1, 2)
-        / 8
-    )
-    return orbits.reshape(-1, 4), multiplicities
-
-
 class PreparedCpuRangeExchange:
     """One operator-frozen artifact; no per-component plans or primitive arrays.
 

@@ -611,9 +611,9 @@ ScfResult run_r2scan_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis
 }
 ScfResult run_b3lyp_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const dft::MolecularGrid& grid, const ScfOptions& options,
-                        const std::vector<double>* initial_density) {
-  auto spec =
-      make_global_hybrid_fock_spec(FockSpin::Unrestricted, dft::generated::kB3lypExactExchange);
+                        double exact_exchange, const std::vector<double>* initial_density) {
+  auto spec = make_global_hybrid_fock_spec(FockSpin::Unrestricted, exact_exchange);
+  spec.exchange.present = exact_exchange != 0.0;
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
     spec.coulomb.approximation = FockApproximation::DensityFitted;
     spec.exchange.approximation = FockApproximation::DensityFitted;

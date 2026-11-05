@@ -190,6 +190,17 @@ generativeqc_status generativeqc_xc_rks_response_batch_v1(
 generativeqc_status generativeqc_xc_uks_response_batch_v1(
     std::uint32_t pbe, const double* rho, const double* gradient, const double* delta_rho,
     const double* delta_gradient, std::size_t point_count, double* values, std::size_t value_count);
+/** Scaled CPU LDA/PBE response using the exact native SCF numerical domain.
+ * Scales are nonnegative finite physical semilocal weights, independent of K.
+ * Layouts and discard-on-failure semantics match the frozen v1 bridges. */
+generativeqc_status generativeqc_xc_rks_response_batch_v2(
+    std::uint32_t pbe, double exchange_scale, double correlation_scale, const double* rho,
+    const double* gradient, const double* delta_rho, const double* delta_gradient,
+    std::size_t point_count, double* values, std::size_t value_count);
+generativeqc_status generativeqc_xc_uks_response_batch_v2(
+    std::uint32_t pbe, double exchange_scale, double correlation_scale, const double* rho,
+    const double* gradient, const double* delta_rho, const double* delta_gradient,
+    std::size_t point_count, double* values, std::size_t value_count);
 generativeqc_status generativeqc_ks_snapshot_ecp_derivatives_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);

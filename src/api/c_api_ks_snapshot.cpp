@@ -1362,14 +1362,25 @@ generativeqc_status generativeqc_xc_rks_response_batch_v1(std::uint32_t pbe, con
                                                           const double* delta_gradient,
                                                           std::size_t point_count, double* values,
                                                           std::size_t value_count) {
+  return generativeqc_xc_rks_response_batch_v2(pbe, 1.0, 1.0, rho, gradient, delta_rho,
+                                               delta_gradient, point_count, values, value_count);
+}
+
+generativeqc_status generativeqc_xc_rks_response_batch_v2(
+    std::uint32_t pbe, double exchange_scale, double correlation_scale, const double* rho,
+    const double* gradient, const double* delta_rho, const double* delta_gradient,
+    std::size_t point_count, double* values, std::size_t value_count) {
   constexpr std::size_t stride = 4;
-  if (pbe > 1 || !rho || !gradient || !delta_rho || !delta_gradient || !values ||
-      point_count == 0 || point_count > std::numeric_limits<std::size_t>::max() / stride ||
+  if (pbe > 1 || !std::isfinite(exchange_scale) || exchange_scale < 0.0 ||
+      !std::isfinite(correlation_scale) || correlation_scale < 0.0 || !rho || !gradient ||
+      !delta_rho || !delta_gradient || !values || point_count == 0 ||
+      point_count > std::numeric_limits<std::size_t>::max() / stride ||
       value_count != stride * point_count)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   for (std::size_t point = 0; point < point_count; ++point) {
     const auto xc = generativeqc::dft::point::restricted_response(
-        pbe != 0, rho[point], gradient + 3 * point, delta_rho[point], delta_gradient + 3 * point);
+        pbe != 0, rho[point], gradient + 3 * point, delta_rho[point], delta_gradient + 3 * point,
+        exchange_scale, correlation_scale);
     if (!xc.valid) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     values[stride * point] = xc.rho[0];
     for (unsigned k = 0; k < 3; ++k) values[stride * point + 1 + k] = xc.gradient[0][k];
@@ -1383,9 +1394,19 @@ generativeqc_status generativeqc_xc_uks_response_batch_v1(std::uint32_t pbe, con
                                                           const double* delta_gradient,
                                                           std::size_t point_count, double* values,
                                                           std::size_t value_count) {
+  return generativeqc_xc_uks_response_batch_v2(pbe, 1.0, 1.0, rho, gradient, delta_rho,
+                                               delta_gradient, point_count, values, value_count);
+}
+
+generativeqc_status generativeqc_xc_uks_response_batch_v2(
+    std::uint32_t pbe, double exchange_scale, double correlation_scale, const double* rho,
+    const double* gradient, const double* delta_rho, const double* delta_gradient,
+    std::size_t point_count, double* values, std::size_t value_count) {
   constexpr std::size_t stride = 8;
-  if (pbe > 1 || !rho || !gradient || !delta_rho || !delta_gradient || !values ||
-      point_count == 0 || point_count > std::numeric_limits<std::size_t>::max() / stride ||
+  if (pbe > 1 || !std::isfinite(exchange_scale) || exchange_scale < 0.0 ||
+      !std::isfinite(correlation_scale) || correlation_scale < 0.0 || !rho || !gradient ||
+      !delta_rho || !delta_gradient || !values || point_count == 0 ||
+      point_count > std::numeric_limits<std::size_t>::max() / stride ||
       value_count != stride * point_count)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   for (std::size_t point = 0; point < point_count; ++point) {
@@ -1399,7 +1420,8 @@ generativeqc_status generativeqc_xc_uks_response_batch_v1(std::uint32_t pbe, con
       }
     }
     const auto xc = generativeqc::dft::point::unrestricted_response(
-        pbe != 0, local_rho, local_gradient, local_delta_rho, local_delta_gradient);
+        pbe != 0, local_rho, local_gradient, local_delta_rho, local_delta_gradient, exchange_scale,
+        correlation_scale);
     if (!xc.valid) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     for (unsigned s = 0; s < 2; ++s) {
       values[stride * point + s] = xc.rho[s];
