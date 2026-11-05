@@ -105,6 +105,8 @@ macro(generativeqc_add_native_tests)
                        NO_GENERATIVEQC NO_SRC_INCLUDE)
   target_include_directories(generativeqc_geometry_optimizer_tests PRIVATE
                              "${CMAKE_CURRENT_SOURCE_DIR}/include")
+  generativeqc_native_test(generativeqc_saddle_optimizer_tests
+                       tests/native/test_saddle_optimizer.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_ks_mixed_warmup_tests
                        tests/native/test_ks_mixed_warmup.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_cuda_value_work_tests

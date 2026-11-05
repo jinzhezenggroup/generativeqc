@@ -1,0 +1,68 @@
+{
+  "schema": "generativeqc.shared-fp64-anchor-trial.v1",
+  "method": "wb97m-v-rks",
+  "atoms": [
+    24,
+    48
+  ],
+  "basis": "complete spherical def2-SVP snapshot exported once from independent PySCF",
+  "grid": [
+    48,
+    16,
+    32
+  ],
+  "policies": [
+    "fp64",
+    "fast"
+  ],
+  "selector": "GENERATIVEQC_KS_FIXED_ANCHOR_DELTA",
+  "selections": [
+    "0",
+    "1"
+  ],
+  "paired_rounds": 3,
+  "selection_order_by_round": [
+    [
+      "0",
+      "1"
+    ],
+    [
+      "1",
+      "0"
+    ],
+    [
+      "0",
+      "1"
+    ]
+  ],
+  "warm_repeats_per_fresh_owner": 3,
+  "cold_scope": "constructor+prepare+synchronized complete energy/forces+host/density export+teardown; excludes intervening warm calls and independent oracle",
+  "warm_scope": "same-owner synchronized complete energy/forces+host force/work export",
+  "independent_oracle": "fresh stock GPU4PySCF, same basis snapshot/moving grid, no native state",
+  "strict_independent_limits": [
+    1e-08,
+    1e-07,
+    1e-07
+  ],
+  "fast_independent_limits": [
+    1e-05,
+    0.0001,
+    3e-05
+  ],
+  "strict_paired_energy_force_max_force_rms_limits": [
+    1e-09,
+    1e-07,
+    3e-08
+  ],
+  "maximum_warm_median_on_off_ratio": 1.05,
+  "minimum_interesting_cold_reduction_fraction": 0.02,
+  "default_promotion": false,
+  "required_work": [
+    "actual strict/mixed Fock counts",
+    "full-target and post-SCF closure",
+    "anchor and delta builds",
+    "no warm anchor reuse",
+    "resident bytes and fallback receipts",
+    "all audit/retry solves"
+  ]
+}

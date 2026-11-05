@@ -34,6 +34,19 @@ inline generativeqc_status item_exception_status(
   }
 }
 
+/** Keep the original provider/solver message at item-isolating batch boundaries. */
+inline std::string item_exception_detail(
+    const std::exception_ptr& failure = std::current_exception()) {
+  if (!failure) return {};
+  try {
+    std::rethrow_exception(failure);
+  } catch (const std::exception& error) {
+    return error.what();
+  } catch (...) {
+    return "unknown native execution failure";
+  }
+}
+
 /** Only an explicit seed/numerical rejection permits a cold solve. Allocation,
  * driver, capability and untyped runtime failures must propagate unchanged. */
 inline bool retryable_seed_failure(generativeqc_status status,

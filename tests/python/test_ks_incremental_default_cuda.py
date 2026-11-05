@@ -18,11 +18,21 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize(
-    "arm,mode",
-    (("standard", "direct"), ("fast", "direct"), ("standard", "df"), ("fast", "df")),
+    "arm,mode,strict_budget",
+    (
+        ("standard", "direct", False),
+        ("fast", "direct", False),
+        ("standard", "df", False),
+        ("fast", "df", False),
+        ("fast", "direct", True),
+    ),
 )
 def test_default_cold_warm_reset_and_explicit_off(
-    arm: str, mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    arm: str,
+    mode: str,
+    strict_budget: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Qualify automatic admission and Fast/DF fallback at complete E/F endpoints.
 
@@ -31,9 +41,11 @@ def test_default_cold_warm_reset_and_explicit_off(
     A moved seed cannot borrow automatic cold admission or a frozen warm proof.
     """
     import cupy as cp
+    from generativeqc import PrecisionCalculator, PrecisionPolicy, TargetErrorBudget
     from gpu4pyscf.dft import rks
     from pyscf import gto, lib
 
+    from benchmarks.ks_incremental_default import incremental_expectation
     from benchmarks.readme_defaults import native_calculator, prepare_inputs
     from benchmarks.readme_hf_scaling import scaling_cases
     from benchmarks.readme_wb97mv import configure_reference_full_fock
@@ -53,7 +65,21 @@ def test_default_cold_warm_reset_and_explicit_off(
             scope.delenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK", raising=False)
             if choice == "off":
                 scope.setenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK", "off")
-            calculator = native_calculator("pbe0", arm, mode, tmp_path)
+            calculator = (
+                PrecisionCalculator(
+                    method="pbe0-rks",
+                    basis="def2-svp",
+                    basis_representation="spherical",
+                    device="cuda",
+                    policy=PrecisionPolicy(
+                        "fast", budget=TargetErrorBudget(1e-6, 1e-6, 3e-7)
+                    ),
+                )
+                if strict_budget
+                else native_calculator("pbe0", arm, mode, tmp_path)
+            )
+            if strict_budget:
+                assert not calculator._fast_fock
             records = []
             try:
                 with calculator.prepare_batch([atoms], warm_start=True) as owner:
@@ -72,10 +98,12 @@ def test_default_cold_warm_reset_and_explicit_off(
                             properties=("energy", "forces"),
                         ).items[0]
                         assert result.converged and result.executed_backend == "cuda"
-                        requested = (
-                            choice == "unset" and arm == "standard" and mode == "direct"
+                        requested, active = incremental_expectation(
+                            selector=choice,
+                            mode=mode,
+                            budget_fock=calculator._fast_fock,
+                            phase=phase,
                         )
-                        active = requested and phase in ("cold", "reset")
                         assert result.incremental_direct_jk["requested"] == requested
                         assert result.incremental_direct_jk["active"] == active
                         if phase in ("warm", "moved-warm"):

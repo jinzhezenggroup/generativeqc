@@ -50,3 +50,48 @@ def test_unset_is_automatic_and_explicit_controls_fail_closed(
         check=True,
         timeout=10,
     )
+
+
+def test_fitted_canonical_probe_excludes_provisional_xc(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """A physical final-state probe must wait for the stored-D target stage."""
+    source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
+    beginning = source.index("const bool fitted_final_probe =")
+    ending = source.index("// On a soft orbital manifold", beginning)
+    driver, binary = tmp_path / "final_probe.cpp", tmp_path / "final_probe"
+    driver.write_text(
+        "#include <algorithm>\n#include <vector>\n"
+        "struct Atom { int ecp_core{}; };\n"
+        "struct System { std::vector<int> ecp_terms; std::vector<Atom> atoms{{}}; };\n"
+        "struct Provider { System value; const System& system() const { return value; } };\n"
+        "struct Schedule { bool lower{}; bool any_lower_precision() const { return lower; } };\n"
+        "struct Probe {\n"
+        "  bool occupied_stage{}, fitted_exchange{true}, budget_fock{}, has_range_correction{}, nonlocal_correlation{};\n"
+        "  unsigned chunk_width{1}; Provider provider; Schedule precision_schedule;\n"
+        "  unsigned configured_chunk_width() const { return chunk_width; }\n"
+        "  bool eligible() const {\n"
+        + source[beginning:ending]
+        + "return fitted_final_probe; }\n};\n"
+        "int main() {\n"
+        "  Probe target; if (!target.eligible()) return 1;\n"
+        "  Probe provisional; provisional.occupied_stage = true;\n"
+        "  if (provisional.eligible()) return 2;\n"
+        "  provisional.occupied_stage = false; if (!provisional.eligible()) return 3;\n"
+        "  for (int gate = 0; gate < 8; ++gate) {\n"
+        "    Probe excluded;\n"
+        "    switch (gate) {\n"
+        "      case 0: excluded.fitted_exchange = false; break;\n"
+        "      case 1: excluded.budget_fock = true; break;\n"
+        "      case 2: excluded.has_range_correction = true; break;\n"
+        "      case 3: excluded.nonlocal_correlation = true; break;\n"
+        "      case 4: excluded.precision_schedule.lower = true; break;\n"
+        "      case 5: excluded.chunk_width = 2; break;\n"
+        "      case 6: excluded.provider.value.ecp_terms.push_back(1); break;\n"
+        "      case 7: excluded.provider.value.atoms[0].ecp_core = 2; break;\n"
+        "    }\n"
+        "    if (excluded.eligible()) return 4;\n"
+        "  }\nreturn 0;\n}\n"
+    )
+    native_cxx.build_executable([driver], binary, compile_args=["-std=c++20"])
+    subprocess.run([str(binary)], check=True, timeout=10)

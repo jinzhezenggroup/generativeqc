@@ -151,6 +151,7 @@ from .spin_roots import (
     SpinRootResult,
     SpinRootUnqualified,
 )
+from .vibrations import HarmonicAnalysis, analyze_harmonic_modes
 
 _install_native_loader()
 del _install_native_loader
@@ -204,6 +205,7 @@ __all__ = [
     "GridSpec",
     "HFConvergence",
     "HFPhysicalResidualAudit",
+    "HarmonicAnalysis",
     "InactiveEigensolverProfileEntry",
     "InitialGuessSpec",
     "KsDiagnostic",
@@ -272,6 +274,7 @@ __all__ = [
     "TargetErrorBudget",
     "TargetProblem",
     "TransferOperation",
+    "analyze_harmonic_modes",
     "assemble_fixed_density_exchange",
     "basis_capability",
     "compare_observables",
