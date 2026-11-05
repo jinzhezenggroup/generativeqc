@@ -3139,10 +3139,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
    */
   bool defer_range_warm_energy() const {
     const auto* lazy = std::getenv("GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY");
+    const bool fitted_seed = fitted_coulomb && fitted_exchange && warm_factor_storage;
+    // Direct replay restores the accepted dense D rather than an occupied
+    // factor. Its existing incumbent fallback can rebase that same D after
+    // source loss. Both seed representations share the replay/headroom guards.
+    const bool direct_seed = !fitted_coulomb && !fitted_exchange;
     const bool eligible =
         (!lazy || std::strcmp(lazy, "1") == 0) && range_source_active() &&
-        retain_range_source_for_replay(true) && fitted_coulomb && fitted_exchange &&
-        warm_factor_storage && spins == 1 && !precision_schedule.any_lower_precision() &&
+        retain_range_source_for_replay(true) && (fitted_seed || direct_seed) && spins == 1 &&
+        !precision_schedule.any_lower_precision() &&
         options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
             GENERATIVEQC_PRECISION_FP64 &&
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
@@ -3176,8 +3181,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
             range_warm_energy = warm_energy;
             range_warm_energy_correction = warm_energy_correction;
           }
-          // Only strict factor-backed range replay can defer this anchor.
-          // All other owners retain the existing eager, audited fallback.
+          // Qualified factor-backed or dense-Direct replay defers this anchor
+          // by default. Other owners retain eager fallback.
           if (defer_range_warm_energy()) {
             warm_incumbent_deferred = true;
             warm_energy = std::numeric_limits<double>::infinity();
