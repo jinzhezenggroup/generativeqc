@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.global-hybrid-preparation/v1",
+  "purpose": "Explicit external artifact prewarming, not a free cold endpoint and not a production fallback.",
+  "classes": 52,
+  "artifact_checks": 218,
+  "failures": 0,
+  "workers": 8,
+  "wall_seconds": 199.8622414013371,
+  "wrapper_user_seconds": 1562.26,
+  "wrapper_system_seconds": 31.57,
+  "task_seconds_sum": 1593.6646868083626,
+  "raw_receipts_sha256": "d7b5f9e80f96540286f9f1e4d156bc43a18ce3655b6bd1bcf6e7eb92f83829ac",
+  "compiler_cache_version": "sccache 0.16.0",
+  "compiler_cache_stats_note": "Runtime uses independently owned per-invocation foreground servers. Parent-server counters do not aggregate those invocations and must not be read as zero compiler-cache use or as hit counts. Metadata compile_seconds may describe an existing artifact and is not measured compile work.",
+  "before_stats": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n",
+  "after_stats": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n"
+}
