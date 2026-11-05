@@ -156,7 +156,11 @@ def test_direct_dense_seed_anchor_lifecycle(
                 == result.fock_builds
             )
         assert all(result.iterations == 1 for result in population[1:])
-        assert retained.fock_builds == retained.iterations
+        # Publishing an updated seed eagerly rebuilds its incumbent anchor.
+        # This is post-SCF work, not deferred cold preparation or another cycle.
+        eager_update = int(updates and selector != "1")
+        assert retained.fock_builds == retained.iterations + eager_update
+        assert retained.precision["post_scf_fock_builds"] == eager_update
         assert fallback.fock_builds == fallback.iterations + int(selector == "1")
         assert second.fock_builds == second.iterations
         assert all(
