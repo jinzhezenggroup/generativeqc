@@ -6,7 +6,7 @@ works by ingredient layout for LDA, GGA and tau-meta-GGA, including their
 supported hybrid semilocal parts. It does not claim all Libxc products,
 Laplacian/nonlocal/response consumers or all inputs are accelerated.
 
-## Scientific image
+## Family-survey scientific image
 
 - Source: `3c41b36142d2fe52fc7b3cb7de89e42fef670b42`.
 - Native source identity:
@@ -23,8 +23,9 @@ Laplacian/nonlocal/response consumers or all inputs are accelerated.
 
 Primary family populations use node4; independent confirmations and the original
 96-atom workload use node5. Every matrix/default comparison stays on one host;
-no samples or clocks are pooled across nodes or scientific images. The later
-documentation/evidence commits do not change this scientific-source identity.
+no samples or clocks are pooled across nodes or scientific images. Documentation
+commits preserve this identity; the subsequent master integration has its own
+image and measurements below.
 
 ## Complete endpoint results
 
@@ -59,6 +60,56 @@ the separate PBE0/3 RKS confirmation flags frozen warm at **2.045% slower**
 (about 1.3 ms); the primary PBE0/3 warm population is neutral. This isolated
 disagreement is retained, not erased, relabelled or used for a functional
 exclusion. Admission is not a universal per-input profitability guarantee.
+
+## Master integration qualification
+
+After integrating master `051a157c64061eac4fd9ee90d7becfa982f80161`, repeat
+the two profitable complete-endpoint populations instead of relabelling the
+family survey as a new image. The six occupied-XC implementation/compiler files
+are byte-identical to the survey source, but upstream CPU/Hessian changes alter
+the native source identity.
+
+- Measured integration source: `1a01e7109f9d3ccc17547f2c9f7e6195a3d2f241`.
+- Native source identity:
+  `efe799a008482dad106f2d49e4926fdc2e47c26f915cb4a635308037772e8518`.
+- Library SHA-256:
+  `7cfcdd909988028da3369c5141351d7302bebf2d5e51d9ffde0aff71f212d0dd`.
+- `integration.json.xz`: 50,176 bytes, SHA-256
+  `10059a7e7250332300c9153211ace2fb44b8d96263d11ef02a4036febbbce40f`.
+
+Both populations run on node4, each with three alternating fresh-process pairs,
+the same complete preparation/E+F/export timers and unchanged 2%/MAD floor.
+M06-2X retains all four phases and passes both independent grid-5/grid-6 force
+references; original r2SCAN-3c retains cold/frozen-warm and its checksum-pinned
+independent qualifier. Full vectors, settings, source hashes, finite scheduler
+commands, cache statistics and execution logs are in the supplement.
+
+| Integration cold population | Matrix median (s) | Default median (s) | Less time |
+| --- | ---: | ---: | ---: |
+| Original r2SCAN-3c/96 | 30.279007 | 29.138219 | 3.768% |
+| M06-2X/48 | 9.820248 | 9.611699 | 2.124% |
+
+Both retain 10/10 Focks. Original frozen warm is neutral at
+`11.208290 -> 11.151579 s`, with 1/1 Fock. All four M06-2X phases and both
+original phases remain within the unchanged regression floor. No old/new image
+or host timing samples are pooled. The integration image passes the scheduled
+**320 GPU tests** and **293 host/controller/capsule tests**; two additional
+supplement replay tests protect the separate image and corruption rejection.
+Sanitizer counts above belong to the survey image, not a new integration run.
+
+The subsequent `pre-commit.ci` change only formats `cuda_ks.cpp`, `cuda_xc.cpp`
+and `cuda_xc.hpp`: clang-format 23.1.1 produces identical canonical bytes for
+each before/after pair. Source `25e1039ebdae4c0a40436f66dd9da752321e3a1b`
+also merges the upstream CI-only changes from `1e3169c06`. Its rebuilt native
+identity is `1ec87aa0b415e19b8af0a53450ab8b0e29358d7a6f25ce3dc26a0fd089ee4217`,
+with library SHA-256
+`c54b1b9548ebc18cfb92a918502e712d4ec1d251009a51a61c2c8b52502727ae`.
+The supplement's `formatted_followup` records this build and its independent
+320-case scheduled GPU rerun, the expanded **486-case host suite**, canonical
+source hashes and cache statistics. It is not a retiming of the formatted image;
+the table stays bound to measured source `1a01e7109`. Refresh the generated
+Libxc snapshot after the formatting-only source-hash change without promoting
+any stale capability claim.
 
 ## Semantic work and discarded candidates
 
@@ -112,10 +163,10 @@ features, full-density J/K qualification, canonicality and forces are unchanged.
 - Original r2SCAN-3c/96 reuses the checksum-pinned independent dense references
   and unchanged qualifier from `readme-final-20261022`; this is static-geometry
   qualification, not a newly established trajectory accuracy claim.
-- Final-image scheduled GPU suite: **320 passed** (272 emitted projection
+- Survey-image scheduled GPU suite: **320 passed** (272 emitted projection
   fixtures, 32 native lifecycle fixtures, 16 independent/control endpoints).
   Memcheck, racecheck and synccheck: **36 cases each, zero findings**.
-- Final host/controller/native-contraction suite: **278 passed** before the
+- Survey host/controller/native-contraction suite: **278 passed** before the
   additional retained-capsule tests. Compiler structure: **586 modules,
   zero dependency errors**. The native Libxc catalog remains explicitly stale
   with zero currently qualified public products; this change does not promote it.
@@ -136,8 +187,8 @@ PYTHONPATH=.:python python benchmarks/results/occupied-xc-families-20261105/repl
 PYTHONPATH=.:python python -O benchmarks/results/occupied-xc-families-20261105/replay.py
 ```
 
-It rechecks image/host separation, complete force vectors, independent and
-paired gates, grid stability, semantic work, actual controls and original
+It rechecks both capsules' image/host separation, complete force vectors,
+independent and paired gates, grid stability, semantic work, actual controls and original
 reference checksums. Corruption probes and regression tests remain active under
 optimized Python. `endpoints.json.xz` retains the exact execution scripts in
 `commands`; raw profiler events, incomplete receipts and build outputs stay

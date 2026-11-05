@@ -196,6 +196,12 @@ def replay(capsule: dict) -> dict:
             stage == "after" and proposal != baseline
         ):
             raise ValueError("J/K handoff did not preserve basis-transform work")
+    original = original_scaling(capsule, capsule["original_r2scan3c"])
+    return {"current": summaries, "pre_incremental": discontinued, "original": original}
+
+
+def original_scaling(capsule: dict, records: dict) -> dict:
+    """Reuse checksum-bound original-workload references without importing CUDA."""
     references = ROOT.parent / "readme-final-20261022"
     for name, expected in capsule["original_reference_sha256"].items():
         if hashlib.sha256((references / name).read_bytes()).hexdigest() != expected:
@@ -206,10 +212,55 @@ def replay(capsule: dict) -> dict:
         raise ValueError("missing original independent qualifier")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    original = module.scaling(
-        dict(capsule, scaling_records=capsule["original_r2scan3c"])
-    )
-    return {"current": summaries, "pre_incremental": discontinued, "original": original}
+    return module.scaling(dict(capsule, scaling_records=records))
+
+
+def replay_integration(supplement: dict, baseline: dict) -> dict:
+    """Qualify the master integration as a separate image, never pooled timings."""
+    identity = ("source_commit", "source_identity", "library_sha256")
+    if supplement["schema"] != "generativeqc.occupied-xc-integration.v1":
+        raise ValueError("unsupported integration capsule")
+    if (
+        hashlib.sha256((ROOT / "endpoints.json.xz").read_bytes()).hexdigest()
+        != supplement["baseline_capsule_sha256"]
+        or any(supplement["baseline_image"][key] != baseline[key] for key in identity)
+        or supplement["original_reference_sha256"]
+        != baseline["original_reference_sha256"]
+    ):
+        raise ValueError("integration reference provenance changed")
+    records = supplement["m06_records"]
+    if len(records) != 6:
+        raise ValueError("incomplete integration family population")
+    expected_oracle = baseline["populations"]["large-m06-2x-rks"][0]["oracle"]
+    second = baseline["second_references"]["m06-2x-48-rks"]
+    if (
+        not second["full_fock"]
+        or second["grid"]["level"] != 6
+        or second["geometries"] != expected_oracle["geometries"]
+    ):
+        raise ValueError("integration second reference scope changed")
+    for record in records:
+        if (
+            any(record[key] != supplement[key] for key in identity)
+            or record["host"] != supplement["host"]
+            or (record["method"], record["atoms"], record["spin"])
+            != ("m06-2x", 48, "rks")
+            or record["oracle"] != expected_oracle
+        ):
+            raise ValueError("integration family image, host or oracle changed")
+        for row in record["observations"]:
+            source_work(row)
+            independent_gate(
+                row,
+                second["observations"][int(row["phase"].startswith("moved"))],
+                record["atoms"],
+            )
+    family = replay_records(records)
+    for record in supplement["original_records"].values():
+        if record["environment"]["host"]["node"] != supplement["host"]:
+            raise ValueError("integration original workload changed host")
+    original = original_scaling(supplement, supplement["original_records"])
+    return {"m06": family, "original": original}
 
 
 def corruption_probes(capsule: dict) -> None:
@@ -260,8 +311,58 @@ def corruption_probes(capsule: dict) -> None:
         raise ValueError(f"corruption probe escaped: {kind}")
 
 
+def integration_corruption_probes(supplement: dict, baseline: dict) -> None:
+    """Exercise the new image's independent gates even with assertions removed."""
+    for kind in (
+        "image",
+        "host",
+        "force",
+        "control",
+        "incomplete",
+        "original",
+        "original_host",
+        "inventory",
+        "reference",
+        "baseline",
+    ):
+        damaged = copy.deepcopy(supplement)
+        record = damaged["m06_records"][-1]
+        if kind == "image":
+            record["library_sha256"] = "0" * 64
+        elif kind == "host":
+            record["host"] = "another-node"
+        elif kind == "force":
+            record["observations"][0]["forces"][0][0] += 1
+        elif kind == "control":
+            record["occupied_xc_env"] = "1"
+        elif kind == "incomplete":
+            damaged["m06_records"].pop()
+        elif kind == "original":
+            damaged["original_records"]["r0-unset"]["samples"][0]["forces"][0][0] += 1
+        elif kind == "original_host":
+            damaged["original_records"]["r0-unset"]["environment"]["host"]["node"] = (
+                "another-node"
+            )
+        elif kind == "inventory":
+            record["observations"][0]["precision"]["operator_inventory_complete"] = (
+                False
+            )
+        elif kind == "reference":
+            damaged["original_reference_sha256"] = {}
+        else:
+            damaged["baseline_image"]["source_identity"] = "0" * 64
+        try:
+            replay_integration(damaged, baseline)
+        except ValueError:
+            continue
+        raise ValueError(f"integration corruption probe escaped: {kind}")
+
+
 if __name__ == "__main__":
     capsule = load(ROOT / "endpoints.json.xz")
     result = replay(capsule)
     corruption_probes(capsule)
+    supplement = load(ROOT / "integration.json.xz")
+    result["integration"] = replay_integration(supplement, capsule)
+    integration_corruption_probes(supplement, capsule)
     print(json.dumps(result, indent=2))

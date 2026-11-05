@@ -110,6 +110,38 @@ def test_retained_family_corruption_is_rejected(
         module.replay(capsule)
 
 
+def test_integrated_image_is_qualified_separately(
+    retained: tuple[ModuleType, dict],
+) -> None:
+    module, capsule = retained
+    supplement = load(SCRIPT.parent / "integration.json.xz")
+    assert supplement["source_identity"] != capsule["source_identity"]
+    summary = module.replay_integration(supplement, capsule)
+    assert summary["m06"]["phases"]["cold"]["profitable"]
+    assert summary["original"]["cold"]["profitable"]
+    for phase in summary["m06"]["phases"].values():
+        assert not phase["regresses"]
+        assert (
+            phase["iterations_fock_builds"]["matrix"]
+            == phase["iterations_fock_builds"]["default"]
+        )
+    for phase in summary["original"].values():
+        assert not phase["regresses"]
+        assert (
+            phase["iterations_fock_builds"]["0"]
+            == phase["iterations_fock_builds"]["unset"]
+        )
+
+
+def test_integrated_image_corruption_is_rejected(
+    retained: tuple[ModuleType, dict],
+) -> None:
+    module, capsule = retained
+    module.integration_corruption_probes(
+        load(SCRIPT.parent / "integration.json.xz"), capsule
+    )
+
+
 @pytest.mark.parametrize("optimize", [False, True])
 def test_retained_family_gates_survive_optimized_python(optimize: bool) -> None:
     command = [sys.executable, *(["-O"] if optimize else []), str(SCRIPT)]

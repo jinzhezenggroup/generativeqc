@@ -112,6 +112,32 @@ adding a whitelist. Independent final native/GPU tests pass 320 cases,
 including 16 complete RKS/UKS oracle/control tests. The emitted family subset
 passes memcheck, racecheck and synccheck (36 cases each, zero findings).
 
+### Master integration supplement
+
+The later master integration (`051a157c6`, measured source `1a01e7109`) has
+native identity `efe799a008482dad106f2d49e4926fdc2e47c26f915cb4a635308037772e8518`,
+not the survey image above. The six relevant occupied-XC implementation/compiler
+files remain byte-identical; upstream CPU/Hessian code changes the image identity.
+Keep `integration.json.xz` separate rather than rewriting or pooling the earlier
+measurements. Three fresh-process node4 pairs reconfirm original r2SCAN-3c/96
+cold at `30.279007 -> 29.138219 s` (3.768%) and M06-2X/48 at
+`9.820248 -> 9.611699 s` (2.124%), with 10/10 Focks. Other measured phases
+remain neutral under the same floor; both independent M06-2X references and the
+original-workload independent qualifier still pass. The integration GPU suite
+passes 320 cases and the existing host/controller/capsule suite passes 293.
+The supplementary replay preserves separate image/host identities and rejects
+corruptions under normal and optimized Python. Earlier sanitizer results are
+not relabelled as an integration-image sanitizer run.
+
+The later automatic C++ formatting changes only whitespace in three files;
+canonical clang-format output matches before and after. The rebuild at
+`25e1039eb` (including the upstream CI-only merge) has native identity
+`1ec87aa0b415e19b8af0a53450ab8b0e29358d7a6f25ce3dc26a0fd089ee4217`.
+Its separate GPU rerun and expanded 486-case host suite are retained as
+`formatted_followup`, not presented as new endpoint timings. Source-hash-bound
+generated catalog snapshots must be refreshed even for such formatting changes;
+the refresh preserves the old evidence's stale/zero-qualified status.
+
 ## Revisit when
 
 Retain neutral and regressing complete E+F populations. Revisit scheduling on a
