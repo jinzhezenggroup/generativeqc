@@ -4242,9 +4242,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         options.energy_tolerance,
         options.density_tolerance,
         physical_stationarity_tolerance()};
-    bool converged = standard_nonlocal_model && standard_convergence_active()
-                         ? orbital_ks_converged(stopping, physical.orbital_gradient)
-                         : ordinary_ks_converged(stopping);
+    const bool orbital_policy = standard_nonlocal_model && standard_convergence_active();
+    bool converged = orbital_policy ? orbital_ks_converged(stopping, physical.orbital_gradient)
+                                    : ordinary_ks_converged(stopping);
     bool early_final_probe_ran = false;
     // The final contract admits a 1e-8 AO maximum but separately checks the
     // true F[D] canonical density. The 1e-9 spin-RMS and public E/D gates stay
@@ -4279,13 +4279,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // accepted physical state. The original energy gate still has to pass;
     // this is neither an acceptance shortcut nor a provisional-state replay.
     const auto nonlocal_confirmation = nonlocal_confirmation_tolerance(
-        budget_stationarity || (standard_nonlocal_model && standard_convergence_active()),
-        options.density_tolerance);
+        budget_stationarity || orbital_policy, options.density_tolerance);
+    const bool physical_nonlocal_confirmation =
+        nonlocal_seed_iterations && !pending_nonlocal_seed && !pending_nonlocal_frozen;
     const bool confirm_nonlocal_stationary_density =
-        nonlocal_seed_iterations && !pending_nonlocal_seed && !pending_nonlocal_frozen &&
-        physical.density_change < options.density_tolerance &&
-        physical.residual < nonlocal_confirmation &&
-        physical.maximum_residual < nonlocal_confirmation;
+        physical_nonlocal_confirmation &&
+        nonlocal_ks_density_confirmation(stopping, nonlocal_confirmation, orbital_policy,
+                                         physical.orbital_gradient,
+                                         early_final_probe_ran && !converged);
+    // Observe the precise old hold/candidate mismatch without extra device
+    // transfers. This is diagnostic work, not another convergence criterion.
+    if (physical_nonlocal_confirmation && orbital_policy &&
+        nonlocal_ks_density_confirmation(stopping, nonlocal_confirmation, false,
+                                         physical.orbital_gradient, false) &&
+        !orbital_ks_stationary(stopping, physical.orbital_gradient))
+      runtime::cuda_trace::trace_counter("nonlocal_confirmation_orbital_blocks", 1);
     const bool confirm_direct_stationary_density =
         spins == 1 && !has_exchange && !fitted_coulomb && !fitted_exchange &&
         !has_range_correction && !nonlocal_correlation && !incremental_direct_jk && !budget_fock &&
@@ -4447,6 +4455,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         occupied_fitted_factor_ready = false;
       } else if (is_active &&
                  (confirm_nonlocal_stationary_density || confirm_direct_stationary_density)) {
+        if (confirm_nonlocal_stationary_density)
+          runtime::cuda_trace::trace_counter("nonlocal_stationary_density_holds", 1);
         // The unaccepted eigensolver proposal overwrote tmp1/tmp2, while D
         // remains unchanged for the next physical confirmation. Its retained
         // AO factor still belongs to exactly that D. Restore it before the

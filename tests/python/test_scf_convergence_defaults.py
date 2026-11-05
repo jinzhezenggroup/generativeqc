@@ -213,3 +213,82 @@ int main() {
         compile_args=["-std=c++20", f"-I{Path(__file__).resolve().parents[2] / 'src'}"],
     )
     subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_nonlocal_confirmation_requires_active_stationarity_and_no_rejected_proof(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """A physical idempotent target cannot be held below only the AO bounds."""
+    occupied = np.eye(8)[:, :4]
+    virtual = np.eye(8)[:, 4:]
+    density = 2 * occupied @ occupied.T
+    fock = np.diag([-1.0] * 4 + [1.0] * 4)
+    fock[:4, 4:] = 4.5e-6
+    fock[4:, :4] = 4.5e-6
+    _, coefficients = np.linalg.eigh(fock)
+    proposal = 2 * coefficients[:, :4] @ coefficients[:, :4].T
+    commutator = fock @ density - density @ fock
+    gradient = np.linalg.norm(2 * virtual.T @ fock @ occupied)
+    density_rms = np.linalg.norm(proposal - density) / 8
+    residual_rms = np.linalg.norm(commutator) / 8
+    maximum_residual = np.max(np.abs(commutator))
+    assert np.linalg.norm(density @ density - 2 * density) < 1e-14
+    assert max(density_rms, residual_rms, maximum_residual) < 1e-5
+    assert gradient > np.sqrt(1e-9)
+
+    source = tmp_path / "confirmation.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <cmath>
+#include <initializer_list>
+#include <limits>
+#include "dft/ks_stopping_policy.hpp"
+int main() {
+  using namespace generativeqc::dft;
+  KsStoppingState state{20, false, true, true, 0.0,
+"""
+        + f"{density_rms:.17g}, {residual_rms:.17g}, {maximum_residual:.17g},\n"
+        + r"""
+                        1e-9, 1e-5, 1e-5};
+"""
+        + f"  const double gradient = {gradient:.17g};\n"
+        + r"""
+  auto confirm = [&](bool orbital, double norm, bool rejected = false,
+                     double tolerance = 1e-5) {
+    return nonlocal_ks_density_confirmation(state, tolerance, orbital, norm, rejected);
+  };
+  assert(confirm(false, gradient));
+  assert(!orbital_ks_converged(state, gradient));
+  assert(!confirm(true, gradient));
+  const double stationary = gradient * 0.5;
+  assert(confirm(true, stationary));
+  assert(orbital_ks_converged(state, stationary));
+  assert(!confirm(true, stationary, true));
+  assert(!confirm(false, stationary, true));
+  assert(!confirm(true, std::sqrt(state.energy_tolerance)));
+  for (double invalid : {-1.0, std::numeric_limits<double>::infinity(),
+                         std::numeric_limits<double>::quiet_NaN()})
+    assert(!confirm(true, invalid));
+  state.iterations = 1;
+  state.full_energy_history = state.target_ready = false;
+  state.energy_change = std::numeric_limits<double>::infinity();
+  assert(confirm(true, stationary));
+  assert(!orbital_ks_converged(state, stationary));
+  assert(!confirm(false, stationary, false, 1e-9));
+  state.density_change = state.residual = state.maximum_residual = 1e-10;
+  assert(confirm(false, std::numeric_limits<double>::quiet_NaN(), false, 1e-9));
+  state.maximum_residual = 1e-9;
+  assert(!confirm(false, stationary, false, 1e-9));
+  state.maximum_residual = 1e-10;
+  state.density_change = state.density_tolerance;
+  assert(!confirm(true, stationary));
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [source],
+        tmp_path / "confirmation",
+        compile_args=["-std=c++20", f"-I{Path(__file__).resolve().parents[2] / 'src'}"],
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
