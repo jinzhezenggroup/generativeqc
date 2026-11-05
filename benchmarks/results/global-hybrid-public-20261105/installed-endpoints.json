@@ -1,0 +1,1677 @@
+{
+  "schema": "generativeqc.installed-global-hybrid-qualification/v1",
+  "complete": true,
+  "locations": [
+    "/tmp/gqc-pr2977-completion/installed/lib/python3.13/site-packages/generativeqc/__init__.py",
+    "/tmp/gqc-pr2977-completion/installed/lib/python3.13/site-packages/generativeqc_compiler/__init__.py",
+    "/tmp/gqc-pr2977-completion/installed/lib/python3.13/site-packages/generativeqc/lib/libgenerativeqc.so"
+  ],
+  "basis_sha256": "a90855656d14a33001bf722e4c393a72f1bff29e6be295d53b6973b8c247a348",
+  "reference_sha256": {
+    "reference-matrix.npz": "a8ad5f8d0d0b47ae5094ba7fcc7a96f9ad34e3da9538273b03db858df8e6fa6d",
+    "reference-grid.npz": "104f7ac64c54f11c703e16a48c905f7b0fe00519a5d8620bebd7b71e4b96df16",
+    "reference-actions.npz": "4c3f4ed1747c46392801d8dd62c8ee508f679e06fead929d17d89199ee36cb10",
+    "reference-center.npz": "b968be167b0d3aebae296b9f4322ab02f0449233c8c9080af790f4a374f56bf5",
+    "reference-components.npz": "cb367405b311b2f650f3194c25b3d9527f1aacc7ec37c7506cb5577c9e252e36"
+  },
+  "oracle_gate": 1e-05,
+  "invariance_gate": 2e-07,
+  "units": "Hartree/Bohr^2",
+  "ordering": "atom-major xyz",
+  "columns": [
+    {
+      "column": 0,
+      "errors": [
+        2.198280826481991e-06,
+        5.500142754577553e-07,
+        1.9837600140348854e-07
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 1.8279455682027083e-10,
+        "response_iterations": 16,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 1329.2609823029488
+      }
+    },
+    {
+      "column": 1,
+      "errors": [
+        1.6399264102240352e-06,
+        4.0999861172785756e-07,
+        1.4766201480997942e-07
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 1.1616235926378074e-10,
+        "response_iterations": 16,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 726.5758575350046
+      }
+    },
+    {
+      "column": 2,
+      "errors": [
+        9.113394404403063e-07,
+        2.2799873350409783e-07,
+        8.238096796397976e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 1.8103190673297367e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 728.7391588259488
+      }
+    },
+    {
+      "column": 3,
+      "errors": [
+        1.3360460977551725e-06,
+        3.352287838431778e-07,
+        1.2231198853740466e-07
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 1.9824825656524564e-10,
+        "response_iterations": 16,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 724.4882564442232
+      }
+    },
+    {
+      "column": 4,
+      "errors": [
+        1.3348220651021592e-07,
+        3.398381087649227e-08,
+        1.281747367444519e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 2.6538744957013025e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 727.2710736757144
+      }
+    },
+    {
+      "column": 5,
+      "errors": [
+        1.1537207389444859e-07,
+        3.049248442632546e-08,
+        1.0337731552734208e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 2.532605718613474e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 727.2219418864697
+      }
+    },
+    {
+      "column": 6,
+      "errors": [
+        6.832575432103027e-07,
+        1.6968480331946978e-07,
+        6.48202418268573e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 5.796072196759701e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 725.8220603177324
+      }
+    },
+    {
+      "column": 7,
+      "errors": [
+        1.63734942104643e-07,
+        4.0894863717610974e-08,
+        1.4761203665641931e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 2.0023390797620145e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 725.5685486905277
+      }
+    },
+    {
+      "column": 8,
+      "errors": [
+        2.1329875976583423e-07,
+        5.3043339720559857e-08,
+        1.842826964637556e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 3.5593906548815075e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 728.5903425691649
+      }
+    },
+    {
+      "column": 9,
+      "errors": [
+        1.7535905517951367e-07,
+        4.36505933343323e-08,
+        1.563461259415644e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 1.6236013685826858e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 721.3456769622862
+      }
+    },
+    {
+      "column": 10,
+      "errors": [
+        1.0402923495966832e-06,
+        2.591802856777292e-07,
+        9.708861226087606e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 2.0991430929893723e-10,
+        "response_iterations": 16,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 723.8588825454935
+      }
+    },
+    {
+      "column": 11,
+      "errors": [
+        1.9414982604937236e-07,
+        4.8735610658212636e-08,
+        1.8674957615039123e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 3.6987471856794545e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 725.7905758870766
+      }
+    },
+    {
+      "column": 12,
+      "errors": [
+        1.7489143314119993e-07,
+        4.372667700147659e-08,
+        1.6530619390692225e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 1.3505206179460494e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 726.3490032292902
+      }
+    },
+    {
+      "column": 13,
+      "errors": [
+        5.703012915247996e-07,
+        1.4059191233428692e-07,
+        5.2106101058879695e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 5.6130450094899044e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 725.0672477502376
+      }
+    },
+    {
+      "column": 14,
+      "errors": [
+        2.0275276507719653e-07,
+        5.062145058687406e-08,
+        1.9950918341005153e-08
+      ],
+      "diagnostics": {
+        "schema": "generativeqc.stationary-second-order-result/v1",
+        "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+        "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+        "source_order": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+        "contributors": [
+          [
+            "one_electron",
+            "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+          ],
+          [
+            "coulomb",
+            "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+          ],
+          [
+            "xc_ao",
+            "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+          ],
+          [
+            "xc_grid",
+            "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+          ],
+          [
+            "xc_weight",
+            "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+          ],
+          [
+            "exact_exchange",
+            "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+          ],
+          [
+            "overlap_pulay",
+            "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+          ],
+          [
+            "nuclear",
+            "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+          ]
+        ],
+        "complete_source_coverage": true,
+        "method_dispatch": "none",
+        "derivative_method": "compiler-automatic-differentiation",
+        "public_calculator_endpoint": false,
+        "backend": "cpu",
+        "spin": "unpolarized",
+        "representation": "real_spherical",
+        "first_integral_backend": "cpu",
+        "second_integral_backend": "cpu",
+        "grid_ad_backend": "cpu",
+        "ecp_ad_backend": null,
+        "df_integral_ad_backend": null,
+        "density_fitting": "none",
+        "df_metric_threshold": null,
+        "execution_residency": "host",
+        "nuclear_response_solves": 1,
+        "response_preconditioner": "orbital-gap",
+        "displaced_scf_evaluations": 0,
+        "response_residual_norm": 3.147064774857506e-11,
+        "response_iterations": 17,
+        "source_names": [
+          "one_electron",
+          "coulomb",
+          "xc_ao",
+          "xc_grid",
+          "xc_weight",
+          "exact_exchange",
+          "overlap_pulay",
+          "nuclear"
+        ],
+        "pair_evaluations": 0,
+        "assembly_seconds": 722.4782407078892
+      }
+    }
+  ],
+  "matrix_endpoint": {
+    "wall_seconds": 11503.235189544968,
+    "peak_process_tree_rss_bytes": 1105362944,
+    "memory_sampling_seconds": 0.05
+  },
+  "matrix_complete": true,
+  "matrix_errors": [
+    2.198280826481991e-06,
+    5.500142754577553e-07,
+    1.9837600140348854e-07
+  ],
+  "raw_symmetry": 2.2655287368333887e-11,
+  "translation": 4.415837378916876e-11,
+  "matrix_diagnostics": {
+    "derivative_method": "compiler-automatic-differentiation",
+    "public_calculator_endpoint": true,
+    "backend": "cpu",
+    "spin": "unpolarized",
+    "representation": "real_spherical",
+    "first_integral_backend": "cpu",
+    "second_integral_backend": "cpu",
+    "grid_ad_backend": "cpu",
+    "ecp_ad_backend": null,
+    "df_integral_ad_backend": null,
+    "density_fitting": "none",
+    "df_metric_threshold": null,
+    "execution_residency": "host",
+    "posthoc_symmetrization": false,
+    "nuclear_response_solves": 15,
+    "displaced_scf_evaluations": 0,
+    "raw_symmetry_error": 2.2655287368333887e-11,
+    "response_residual_norms": [
+      1.8279455682027083e-10,
+      1.1616235926378074e-10,
+      1.8103190673297367e-11,
+      1.9824825656524564e-10,
+      2.6538744957013025e-11,
+      2.532605718613474e-11,
+      5.796072196759701e-11,
+      2.0023390797620145e-11,
+      3.5593906548815075e-11,
+      1.6236013685826858e-11,
+      2.0991430929893723e-10,
+      3.6987471856794545e-11,
+      1.3505206179460494e-11,
+      5.6130450094899044e-11,
+      3.147064774857506e-11
+    ],
+    "source_names": [
+      "one_electron",
+      "coulomb",
+      "xc_ao",
+      "xc_grid",
+      "xc_weight",
+      "exact_exchange",
+      "overlap_pulay",
+      "nuclear"
+    ],
+    "pair_evaluations": 0,
+    "assembly_seconds": 11488.45044146292,
+    "scf_energy": -1510.2368466096882,
+    "scf_iterations": 97,
+    "scf_fock_builds": 113,
+    "scf_executed_backend": "cpu_reference",
+    "endpoint_seconds": 11503.230497935787
+  },
+  "first_hvp_endpoint": {
+    "wall_seconds": 741.0083797601983,
+    "peak_process_tree_rss_bytes": 1024925696,
+    "memory_sampling_seconds": 0.05
+  },
+  "first_hvp_diagnostics": {
+    "schema": "generativeqc.stationary-second-order-result/v1",
+    "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+    "executor_identity": "ad013aee8dcdf51181ef9c3f271434a2126f507d2de5e1bd3c69dffe4837e2ac",
+    "source_order": [
+      "one_electron",
+      "coulomb",
+      "xc_ao",
+      "xc_grid",
+      "xc_weight",
+      "exact_exchange",
+      "overlap_pulay",
+      "nuclear"
+    ],
+    "perturbation_provider": "7ca316d35358a123e15e1230bbf4fe5e615e9afcbf4c1017f47fa50d033d6452",
+    "response_driver": "7ca316d35358a123e15e1230bbf4fe5e615e9afcbf4c1017f47fa50d033d6452",
+    "contributors": [
+      [
+        "one_electron",
+        "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+      ],
+      [
+        "coulomb",
+        "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+      ],
+      [
+        "xc_ao",
+        "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+      ],
+      [
+        "xc_grid",
+        "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+      ],
+      [
+        "xc_weight",
+        "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+      ],
+      [
+        "exact_exchange",
+        "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+      ],
+      [
+        "overlap_pulay",
+        "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+      ],
+      [
+        "nuclear",
+        "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+      ]
+    ],
+    "complete_source_coverage": true,
+    "method_dispatch": "none",
+    "derivative_method": "compiler-automatic-differentiation",
+    "public_calculator_endpoint": true,
+    "backend": "cpu",
+    "spin": "unpolarized",
+    "representation": "real_spherical",
+    "first_integral_backend": "cpu",
+    "second_integral_backend": "cpu",
+    "grid_ad_backend": "cpu",
+    "ecp_ad_backend": null,
+    "df_integral_ad_backend": null,
+    "density_fitting": "none",
+    "df_metric_threshold": null,
+    "execution_residency": "host",
+    "nuclear_response_solves": 1,
+    "response_preconditioner": "orbital-gap",
+    "displaced_scf_evaluations": 0,
+    "response_residual_norm": 8.110805132056192e-12,
+    "response_iterations": 17,
+    "source_names": [
+      "one_electron",
+      "coulomb",
+      "xc_ao",
+      "xc_grid",
+      "xc_weight",
+      "exact_exchange",
+      "overlap_pulay",
+      "nuclear"
+    ],
+    "pair_evaluations": 0,
+    "assembly_seconds": 725.9355259798467,
+    "scf_energy": -1510.2368466096882,
+    "scf_iterations": 97,
+    "scf_fock_builds": 113,
+    "scf_executed_backend": "cpu_reference",
+    "endpoint_seconds": 741.0025049773976
+  },
+  "second_hvp_endpoint": {
+    "wall_seconds": 739.6329485243186,
+    "peak_process_tree_rss_bytes": 1045004288,
+    "memory_sampling_seconds": 0.05
+  },
+  "gradient_errors": [
+    2.6253144744138862e-08,
+    7.2917214011548655e-09,
+    1.0925655369008865e-08
+  ],
+  "component_errors": [
+    [
+      5.5612667237518024e-08,
+      3.568013184680162e-08,
+      3.8529796475063543e-10,
+      7.242796154831677e-10,
+      2.5861471489369173e-08,
+      2.040377562656433e-08
+    ],
+    [
+      2.6035978959948573e-07,
+      2.678734054294922e-07,
+      2.6580489845321262e-09,
+      4.90558574339527e-09,
+      5.494513960322294e-09,
+      2.267116516462074e-09
+    ],
+    [
+      2.3795568326488e-06,
+      2.5684420900325615e-06,
+      3.2843636817403215e-08,
+      3.260532493953885e-08,
+      9.542027378026846e-08,
+      2.0433075112701201e-10
+    ]
+  ],
+  "matrix_hvp_errors": [
+    1.6630080382786077e-11,
+    1.6975789528092713e-11
+  ],
+  "bilinear_error": 3.47687672162181e-14,
+  "second_hvp_diagnostics": {
+    "schema": "generativeqc.stationary-second-order-result/v1",
+    "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+    "executor_identity": "37fe9077f5f0c1ac6451ca26337f250780479c9c9cf80786d3d694cc53aae50a",
+    "source_order": [
+      "one_electron",
+      "coulomb",
+      "xc_ao",
+      "xc_grid",
+      "xc_weight",
+      "exact_exchange",
+      "overlap_pulay",
+      "nuclear"
+    ],
+    "perturbation_provider": "f76ec6a9c5580d5da813373dc93462231db991ecf9d52795f88ffa1187061a4d",
+    "response_driver": "f76ec6a9c5580d5da813373dc93462231db991ecf9d52795f88ffa1187061a4d",
+    "contributors": [
+      [
+        "one_electron",
+        "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+      ],
+      [
+        "coulomb",
+        "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+      ],
+      [
+        "xc_ao",
+        "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+      ],
+      [
+        "xc_grid",
+        "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+      ],
+      [
+        "xc_weight",
+        "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+      ],
+      [
+        "exact_exchange",
+        "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+      ],
+      [
+        "overlap_pulay",
+        "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+      ],
+      [
+        "nuclear",
+        "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+      ]
+    ],
+    "complete_source_coverage": true,
+    "method_dispatch": "none",
+    "derivative_method": "compiler-automatic-differentiation",
+    "public_calculator_endpoint": true,
+    "backend": "cpu",
+    "spin": "unpolarized",
+    "representation": "real_spherical",
+    "first_integral_backend": "cpu",
+    "second_integral_backend": "cpu",
+    "grid_ad_backend": "cpu",
+    "ecp_ad_backend": null,
+    "df_integral_ad_backend": null,
+    "density_fitting": "none",
+    "df_metric_threshold": null,
+    "execution_residency": "host",
+    "nuclear_response_solves": 1,
+    "response_preconditioner": "orbital-gap",
+    "displaced_scf_evaluations": 0,
+    "response_residual_norm": 5.2865615169772464e-12,
+    "response_iterations": 17,
+    "source_names": [
+      "one_electron",
+      "coulomb",
+      "xc_ao",
+      "xc_grid",
+      "xc_weight",
+      "exact_exchange",
+      "overlap_pulay",
+      "nuclear"
+    ],
+    "pair_evaluations": 0,
+    "assembly_seconds": 724.8992873150855,
+    "scf_energy": -1510.2368466096882,
+    "scf_iterations": 97,
+    "scf_fock_builds": 113,
+    "scf_executed_backend": "cpu_reference",
+    "endpoint_seconds": 739.6290874360129
+  },
+  "parent_process_peak_rss_kib": 1071800
+}
