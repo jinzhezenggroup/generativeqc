@@ -1,20 +1,25 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "api/handles.hpp"
+#include "cc/uccsd_force.hpp"
 #include "cc/uccsd_solver.hpp"
+#include "core/work_budget.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "methods/ump2_method.hpp"
 #include "methods/unrestricted_df.hpp"
 #include "methods/unrestricted_response.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
+#include "posthf/df_interaction_source.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "posthf/ump2_cpu_generated.hpp"
@@ -28,6 +33,81 @@ namespace {
 
 void require(bool valid, const char* detail) {
   if (!valid) throw std::runtime_error(detail);
+}
+
+/** Keep the process work policy unchanged after failure-injection replays. */
+class WorkPolicy {
+ public:
+  WorkPolicy() {
+    if (const auto* value = std::getenv(variable)) previous_ = value;
+    unsetenv(variable);
+  }
+  ~WorkPolicy() {
+    if (previous_)
+      setenv(variable, previous_->c_str(), 1);
+    else
+      unsetenv(variable);
+  }
+  void set(std::size_t allowed) { setenv(variable, std::to_string(allowed).c_str(), 1); }
+
+ private:
+  static constexpr const char* variable = "GENERATIVEQC_CORRELATION_MAX_SCALAR_WORK";
+  std::optional<std::string> previous_;
+};
+
+/** Raise a finite policy only to each observed refusal boundary. No generated
+ * program/action counts are pinned: the complete force must admit its final
+ * fitted seeds, report the actual Lambda ceiling, and recover after refusal. */
+template <class Source>
+void fitted_uccsd_response_admission(
+    const generativeqc::hf::UnrestrictedPhysicalReference& reference,
+    const generativeqc::posthf::DensityFittedInteractionSource& fitted, Source& conventional,
+    generativeqc::scf::PreparedFockPlan& plan) {
+  WorkPolicy policy;
+  generativeqc::cc::SolverOptions options;
+  options.max_iterations = 200;
+  options.energy_tolerance = 1e-13;
+  options.residual_tolerance = 1e-11;
+  const auto parent =
+      generativeqc::cc::solve_unrestricted(reference, fitted, options, true, 0, true);
+  require(parent.converged, "fitted UCCSD response parent did not converge");
+  auto problem = generativeqc::methods::detail::unrestricted_response_problem(reference, plan);
+  const auto evaluate = [&] {
+    return generativeqc::cc::unrestricted_force(reference, fitted, parent, options, true, 0,
+                                                &problem, false, 0, &fitted, &conventional);
+  };
+  const auto baseline = evaluate();
+  bool seed_refusal = false, lambda_refusal = false, recovered = false;
+  std::size_t allowed = 1;
+  for (unsigned attempt = 0; attempt < 1000; ++attempt) {
+    // Narrow the policy after preflight so its conservative primal estimate
+    // cannot mask an independently executed response-phase refusal.
+    policy.set(100000000000ULL);
+    conventional.response_work_limit = allowed;
+    try {
+      const auto actual = evaluate();
+      require(actual.forces == baseline.forces, "work refusal poisoned fitted force replay");
+      recovered = true;
+      break;
+    } catch (const generativeqc::core::WorkLimitError& error) {
+      const std::string message(error.what());
+      if (message.find("phase=uccsd_response/lambda ") != std::string::npos) {
+        lambda_refusal = true;
+        require(message.find("iteration_ceiling=300 ") != std::string::npos,
+                "Lambda refusal reports the primal iteration ceiling");
+      }
+      seed_refusal |= message.find("phase=uccsd_response/df_pair_cotangent ") != std::string::npos;
+      const auto position = message.find("estimated_work=");
+      require(position != std::string::npos, "work refusal lost its estimated work");
+      const auto required = std::stoull(message.substr(position + 15));
+      require(required > allowed, "work refusal did not advance its finite boundary");
+      allowed = required;
+    }
+  }
+  conventional.response_work_limit.reset();
+  require(seed_refusal, "fitted UCCSD response omitted fitted-seed work admission");
+  require(lambda_refusal, "fitted UCCSD fixture did not exercise Lambda refusal");
+  require(recovered, "fitted UCCSD response did not recover under a sufficient finite policy");
 }
 
 generativeqc_method_descriptor ump2_descriptor() {
@@ -151,10 +231,14 @@ class CountingSource final : public generativeqc::integrals::ElectronInteraction
             const std::array<std::size_t, 4>& count, double* output,
             std::size_t elements) const override {
     ++reads;
+    if (response_work_limit)
+      setenv("GENERATIVEQC_CORRELATION_MAX_SCALAR_WORK",
+             std::to_string(*response_work_limit).c_str(), 1);
     if (fail) throw std::runtime_error("injected source failure");
     raw_.read(op, begin, count, output, elements);
   }
   mutable std::size_t reads{};
+  std::optional<std::size_t> response_work_limit;
   bool fail{};
 
  private:
@@ -444,6 +528,42 @@ void force_contract() {
     return generativeqc::mp2::unrestricted_force_cpu(state, &problem, source, budget, 1e-10);
   };
   const auto first = evaluate(ref, 256ULL << 20);
+  {
+    generativeqc::posthf::DensityFittedInteractionSource fitted(source, ref, system, 1e-10,
+                                                                256ULL << 20, false, 0, true);
+    generativeqc::posthf::NativeBlockProvider provider(fitted, ref, 256ULL << 20);
+    const auto n = ref.nbf;
+    const generativeqc::posthf::SpinMOSlots request{{{{0, 1}, {n - 1}, {0}, {n - 1}}},
+                                                    {0, 0, 1, 1}};
+    const auto block = provider.get_spin(request);
+    std::vector<double> ao(n * n * n * n);
+    fitted.read(generativeqc::integrals::ElectronInteractionOperator::eri, {0, 0, 0, 0},
+                {n, n, n, n}, ao.data(), ao.size());
+    for (std::size_t selected = 0; selected < block.size(); ++selected) {
+      double expected = 0;
+      for (std::size_t mu = 0; mu < n; ++mu)
+        for (std::size_t nu = 0; nu < n; ++nu)
+          for (std::size_t rho = 0; rho < n; ++rho)
+            for (std::size_t sigma = 0; sigma < n; ++sigma)
+              expected += ref.coefficients[0][mu * n + selected] *
+                          ref.coefficients[0][nu * n + n - 1] * ref.coefficients[1][rho * n] *
+                          ref.coefficients[1][sigma * n + n - 1] *
+                          ao[((mu * n + nu) * n + rho) * n + sigma];
+      require(std::abs(block[selected] - expected) < 1e-11,
+              "three-index MO block differs from independent AO contraction");
+    }
+    auto stale_frame = ref;
+    stale_frame.coefficients[0][0] += 1e-6;
+    bool stale_rejected = false;
+    try {
+      generativeqc::posthf::NativeBlockProvider stale(fitted, stale_frame, 256ULL << 20);
+      (void)stale.get_spin(request);
+    } catch (const std::invalid_argument&) {
+      stale_rejected = true;
+    }
+    require(stale_rejected, "three-index cache replayed in a stale orbital frame");
+    fitted_uccsd_response_admission(ref, fitted, source, plan);
+  }
   require(first.response.converged() && first.stationarity_residual < 1e-8,
           "UMP2 force did not qualify full response");
   auto swapped = ref;
@@ -469,13 +589,19 @@ void force_contract() {
   const auto reads = source.reads;
   bool rejected = false;
   try {
-    (void)evaluate(ref, first.planned_endpoint_peak_bytes - 1);
+    (void)evaluate(ref, 1);
   } catch (const std::length_error&) {
     rejected = true;
   }
   require(rejected && source.reads == reads, "force budget refusal read the source");
   const auto exact = evaluate(ref, first.planned_endpoint_peak_bytes);
   require(exact.forces == first.forces, "inclusive force capacity changed the result");
+  const auto bounded = evaluate(ref, first.planned_endpoint_peak_bytes - 1);
+  require(bounded.planned_endpoint_peak_bytes < first.planned_endpoint_peak_bytes,
+          "optional resident storage did not retain the bounded fallback");
+  for (std::size_t coordinate = 0; coordinate < first.forces.size(); ++coordinate)
+    require(std::abs(bounded.forces[coordinate] - first.forces[coordinate]) < 1e-10,
+            "bounded orbital-transform fallback changed UMP2 forces");
   source.fail = true;
   rejected = false;
   try {
@@ -729,8 +855,13 @@ void source_and_slots() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--force-contract") {
+      force_contract();
+      std::cout << "native UMP2 force contract passed\n";
+      return 0;
+    }
     native_equations();
     finite_density_equations();
     degenerate_occupied_gauge();

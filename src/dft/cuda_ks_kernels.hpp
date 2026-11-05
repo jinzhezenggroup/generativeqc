@@ -6,11 +6,24 @@
 #include <cstdint>
 
 namespace generativeqc::dft::cuda_ks_detail {
+/** Detect numerical core-spectrum ties touching the beta frontier. The cold
+ * seed, not the physical Hamiltonian, may resolve this otherwise arbitrary
+ * gauge. Both adjacent occupied/virtual clusters participate in the check. */
+void core_guess_frontier_tie(cudaStream_t stream, std::size_t dimension, int occupied_beta,
+                             const double* energies, int* tied);
+/** Deterministic 1e-8-Eh diagonal tie-break in the orthogonal cold-guess basis.
+ * Never apply this to an SCF, DIIS, final-state or response Fock matrix. */
+void break_core_guess_ties(cudaStream_t stream, std::size_t dimension, double* core_guess);
+/** Fix each cold orbital's arbitrary sign before mixing distinct columns.
+ * The first AO among numerically tied largest components defines its phase. */
+void orient_core_guess_orbitals(cudaStream_t stream, std::size_t dimension, double* coefficients);
+
 struct Scalars {
   double one_electron{}, hartree{}, exact_exchange{}, xc{}, residual{}, density_change{};
   double residual_rms{}, density_rms{};
   // Snapshot admission checks the largest AO commutator entry, not its RMS.
   double maximum_residual{};
+  double orbital_gradient{};
   double electrons[2]{}, grid_electrons[2]{};
   double energy_change{};
   int failure{};
@@ -46,7 +59,11 @@ void diagnostics(cudaStream_t stream, std::size_t n, unsigned spins, const doubl
                  double range_exchange_coefficient, const double* xc_totals, const int* xc_error,
                  const int* jk_error, const int* range_jk_error, const int* nonlocal_domain_error,
                  const int* nonlocal_pair_error, const int* solver_info,
-                 const std::uint8_t* enabled, Scalars* output);
+                 const std::uint8_t* enabled, Scalars* output,
+                 bool retain_orbital_gradient = false);
+/** Reduce X^T(FDS-SDF)X without retaining an extra resident matrix. */
+void orbital_gradient(cudaStream_t stream, std::size_t n, const double* transformed_residual,
+                      const std::uint8_t* enabled, Scalars* output);
 void advance(cudaStream_t stream, std::size_t n, unsigned spins, double nuclear_repulsion,
              int occupied_alpha, int occupied_beta, double energy_tolerance,
              double density_tolerance, unsigned max_iterations, bool warm_updates, Scalars* current,

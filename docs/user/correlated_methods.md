@@ -79,6 +79,56 @@ scientific buffers, not a process RSS or free-VRAM guarantee. A refusal is an
 explicit failure: it never authorizes dropping forces, switching to a cheaper
 method, or publishing partial work.
 
+Unrestricted CC primal execution, fitted source/metric preparation and generated
+CC response also use a separate finite scalar-work policy. The default limit is
+`100000000000` estimated scalar-work units per phase (cumulative within the CC
+response runtime). Set `GENERATIVEQC_CORRELATION_MAX_SCALAR_WORK` to a positive
+decimal integer before preparation/execution to explicitly select a different
+finite limit. Empty, zero, signed, nonnumeric and overflowing values are errors;
+there is no unlimited setting. This process-wide policy does not change the
+Hamiltonian, generated artifact identity or numeric memory allowance.
+
+Work-policy refusal returns `GENERATIVEQC_STATUS_RESOURCE_LIMIT` (10), not
+`OUT_OF_MEMORY`. Its diagnostic reports the phase, AO/spin occupied/virtual
+counts, iteration ceiling when applicable, estimated/allowed work and numeric
+storage estimate. These estimates are neither measured FLOPs nor runtime
+predictions. Raising the limit does not qualify a molecule, guarantee convergence
+or make a singleton-heavy execution path practical. Allocation, checked shape
+arithmetic, finite-value, convergence and complete-output gates remain active.
+
+Native DF-HF reference failures preserve the backend status and any available
+provider detail. Diagnostics distinguish SCF nonconvergence from missing physical
+reference export and include iteration, energy-change, density and physical
+residual observations; an unavailable residual is not a convergence certificate.
+The host-orchestrated CUDA DF-RHF retry uses a bounded damped startup followed by
+undamped DIIS when the compact device solve fails. This changes the iteration
+schedule, not the fitted Hamiltonian or final physical-reference acceptance gates.
+
+Unrestricted fitted interactions cache spin-labelled three-index factors in the
+accepted physical orbital frame. UMP2 analytic forces contract factor adjoints
+directly, including both orbital legs, the fixed-rank metric response and nuclear
+response; they do not reconstruct full AO fourth-order ERIs or their cotangents.
+Initial same-spin and opposite-spin weights use occupied-pair/virtual-pair blocks,
+and same-spin exchange reuses the ordered block. Device-resident factors are
+optional: if their admitted allocation is unavailable, bounded selected-panel
+uploads still execute the contraction on CUDA. The frame and backend must match
+the cache; stale coefficients are rejected, not silently reused.
+
+This removes the fitted-source AO fourth-order storage barrier, not all
+fourth-order method storage or high-order correlated work. UCC still admits its
+generated MO tensors and ordered triples work separately. Correlation-only DF
+retains its explicit conventional-reference derivative consumer; full DF uses
+the fitted reference consistently. Host FP64 metric conditioning and detached
+factor/cotangent transport remain explicit parts of the native hybrid contract,
+not an automatic CPU/PySCF correlation fallback.
+
+For diagnostic qualification, set `GENERATIVEQC_DF_PROGRESS_TRACE` to a fresh
+JSONL path. The journal distinguishes cached factor-block reuse, source scans,
+transfers, semantic work and UMP2/UCC response phases. Timings include tracing
+overhead and require matching trace-off repeats; a returned scope alone does not
+certify convergence. Resource estimates remain numeric-capacity bounds rather
+than process-RSS or observed device-memory measurements.
+
 The `ccsd_*` options control the iterative solve and apply to restricted and
 unrestricted CC alike:
 

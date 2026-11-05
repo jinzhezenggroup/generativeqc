@@ -4,6 +4,7 @@
 #include <new>
 #include <stdexcept>
 
+#include "core/work_budget.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "methods/method.hpp"
 
@@ -18,6 +19,9 @@ generativeqc_status map_exception(std::string* detail) noexcept {
   } catch (const generativeqc::Error& error) {
     if (detail != nullptr) *detail = error.what();
     return error.status();
+  } catch (const core::WorkLimitError& error) {
+    if (detail != nullptr) *detail = error.what();
+    return GENERATIVEQC_STATUS_RESOURCE_LIMIT;
   } catch (const std::bad_alloc& error) {
     if (detail != nullptr) *detail = error.what();
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;

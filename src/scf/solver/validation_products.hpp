@@ -11,17 +11,22 @@
 namespace generativeqc::scf::solver {
 
 /** Host physical validation keeps its original matrices, equations and gates.
- * This default-off schedule delegates only dense products to the shared FP64
- * provider, never the reference eigensolver or a GPU numerical oracle. Capture
- * the selector once per validation; unavailable providers keep the incumbent. */
+ * An owner may prefer the shared FP64 provider for qualified cold preparation;
+ * other owners remain default-off. Neither schedule replaces the reference
+ * eigensolver or gates. Capture the selector once per validation; an explicit
+ * off/invalid selector or unavailable provider keeps the scalar incumbent. */
 class ValidationProducts {
  public:
-  explicit ValidationProducts(const initial_guess::MatrixProductOperation& operation = {})
+  explicit ValidationProducts(const initial_guess::MatrixProductOperation& operation = {},
+                              bool prefer_provider = false)
       : operation_(operation) {
 #if defined(GENERATIVEQC_HAS_OPENBLAS) && GENERATIVEQC_HAS_OPENBLAS
     const auto* selection = std::getenv("GENERATIVEQC_SCF_VALIDATION_GEMM");
-    provider_ = selection && std::string_view(selection) == "1" &&
-                tensor::resolve_cpu_linalg_provider({}) == tensor::CpuLinalgProvider::openblas;
+    const bool requested = selection ? std::string_view(selection) == "1" : prefer_provider;
+    provider_ =
+        requested && tensor::resolve_cpu_linalg_provider({}) == tensor::CpuLinalgProvider::openblas;
+#else
+    (void)prefer_provider;
 #endif
   }
 

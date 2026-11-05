@@ -199,7 +199,9 @@ class Calculator:
         unchanged. It never certifies an error from ``energy_tolerance``.
 
         Omitted SCF controls resolve to energy/density tolerances 1e-9/1e-5
-        on qualified CUDA RHF and default-grid restricted local KS owners.
+        on qualified CUDA RHF and default-grid restricted KS owners, including
+        canonical WB97M-V. WB97M-V uses energy plus physical MO-gradient
+        convergence; its density control still bounds final canonical proof.
         Other admitted models/backends retain 1e-10/1e-8. A library without the
         required native default-controls query must be updated. Explicit
         values are preserved. Convergence controls are solver conditions, not
@@ -1331,10 +1333,8 @@ class Calculator:
             self._ks_options is not None
             and self._ks_options.method_ir.spin == "unpolarized"
         )
-        native_per_item_guess = False
         if self._automatic_initial_guess:
             from .initial_guess import (
-                _uses_native_automatic_cpu,
                 automatic_initial_guess_candidate,
             )
 
@@ -1344,16 +1344,9 @@ class Calculator:
                 has_ecp=False,
             )
             if candidate is not None:
+                # Unused ECP records do not change the target. CUDA checks actual
+                # atoms in initial_guess_for_systems; CPU resolves each native item.
                 self._initial_guess = candidate
-                # A basis package can contain unused ECP records. Only the qualified
-                # native per-item path may defer those facts to actual target admission.
-                native_per_item_guess = basis_has_ecp and _uses_native_automatic_cpu(
-                    self
-                )
-                if not basis_has_ecp or native_per_item_guess:
-                    self._initial_guess = candidate
-                else:
-                    self._initial_guess = None
 
         if self._initial_guess is not None:
             from .initial_guess import (
@@ -1382,10 +1375,7 @@ class Calculator:
                     and self._initial_guess.kind != "huckel"
                 )
                 or not restricted
-                or (
-                    basis_has_ecp
-                    and not (self._automatic_initial_guess and native_per_item_guess)
-                )
+                or (basis_has_ecp and not self._automatic_initial_guess)
                 or self._capabilities.family
                 not in ("hartree_fock", "density_functional")
             ):

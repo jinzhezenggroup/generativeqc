@@ -37,6 +37,7 @@ def test_phase_source_begin_failure_is_terminal_and_releases_the_lease(
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <vector>
 #include "scf/coulomb_exchange_work.hpp"
 #include "scf/diis_work.hpp"
@@ -96,6 +97,9 @@ struct Owner {
   struct Metrics { unsigned replays = 0; };
   struct Executor { Metrics replay_metrics() { return {}; } } solver_region_executor;
   bool is_active = true, started = false, is_failed = true;
+  int last_physical = 7;
+  std::string final_rejection_detail = "previous failure";
+  unsigned final_probe_iteration = 7;
   bool stabilize_occupations{}, final_closure{}, strict_refinement{}, phase_source_cold{};
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
   bool pending_mixed_exchange = true, pending_mixed_resident = true;
@@ -205,6 +209,8 @@ int main(int argc, char** argv) {
     assert(owner.diis_work_ready == (scenario == 4));
     if (scenario == 4) assert(owner.diis_work_readback->work.dots == 0);
     assert(owner.is_failed && !owner.is_active);
+    assert(owner.last_physical == 0 && owner.final_rejection_detail.empty() &&
+           owner.final_probe_iteration == 0);
     assert(!owner.output.dft_diagnostic.coulomb_exchange_work.complete);
     assert(!owner.pending_mixed_point && !owner.pending_mixed_exchange &&
            !owner.pending_mixed_resident);

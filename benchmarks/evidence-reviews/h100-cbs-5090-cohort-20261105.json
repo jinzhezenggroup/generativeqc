@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-cbs-5090-cohort-20261105",
+  "owner": "issue3003 H100 CBS verification using the published RTX5090 methodology",
+  "reason": "Retain all full-precision H100 primary/startup/energy-only observations, immutable executed producers and prepared bases, sequential/aggregate validation receipts and authenticated submission/running/terminal allocation proofs. Original independent references and source-build packet are reused from pinned existing Git rather than duplicated. No unrelated evidence removal, limit increase, production change or scientific gate relaxation.",
+  "review_document": "benchmarks/results/h100-cbs-5090-cohort-20261105/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-cbs-5090-cohort-20261105/records-01.json.xz",
+      "family": "h100-cbs-5090-cohort-20261105",
+      "bytes": 242576,
+      "sha256": "19155ae9345aedd015152fbf4150f3510cf1303bb4f23ddaa3b4a4c42da09747",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Reconstructible complete H100 CBS observations and source/allocation/input proof; postprocessing readers separately labeled"
+    }
+  ]
+}

@@ -628,7 +628,7 @@ def test_checkpoint_respects_a_feasible_current_resource_plan(
     "variable,value",
     [
         ("GENERATIVEQC_FINAL_FOCK_REBUILD", "1"),
-        ("GENERATIVEQC_KS_FAST_ANCHOR_DELTA", "1"),
+        ("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", "1"),
         ("GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING", "1"),
         ("GENERATIVEQC_BOUNDED_ANGULAR_FORCE", "1"),
         ("GENERATIVEQC_DIRECT_COULOMB_REACHABLE", "1"),

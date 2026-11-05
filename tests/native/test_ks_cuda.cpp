@@ -17,6 +17,7 @@
 #include "api/handles.hpp"
 #include "api/ks_snapshot.hpp"
 #include "dft/cuda_ks.hpp"
+#include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
@@ -1099,26 +1100,26 @@ void run_fast_anchor_delta_case() {
   strict.xc_tile_points = tile_points;
   const auto reference = scf::run_wb97mv_rks(cpu, cpu_range, basis, grid, strict, *cpu_nonlocal);
   require(reference.converged, "Fast anchor independent CPU reference did not converge");
-  const char* previous = std::getenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA");
+  const char* previous = std::getenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA");
   const std::string saved = previous ? previous : "";
   const bool had_previous = previous != nullptr;
-  std::array<std::size_t, 5> ordinary_anchor_state_bytes{};
+  std::array<std::size_t, 4> ordinary_state_bytes{};
   const auto restore = [&] {
     if (had_previous)
-      ::setenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA", saved.c_str(), 1);
+      ::setenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", saved.c_str(), 1);
     else
-      ::unsetenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA");
+      ::unsetenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA");
   };
   try {
     for (const char* selection : {"0", "1", static_cast<const char*>(nullptr)}) {
-      require((selection ? ::setenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA", selection, 1)
-                         : ::unsetenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA")) == 0,
-              "could not select Fast anchor qualification route");
-      for (const unsigned mode : {0U, 1U, 2U, 3U, 4U}) {
+      require((selection ? ::setenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", selection, 1)
+                         : ::unsetenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA")) == 0,
+              "could not select shared anchor qualification route");
+      for (const unsigned mode : {0U, 1U, 2U, 3U}) {
         auto options = strict;
         options.precision_mode =
             mode == 1 || mode == 3 ? GENERATIVEQC_PRECISION_FP64 : GENERATIVEQC_PRECISION_AUTO;
-        if (mode < 3) options.application_precision_budget = {1e-5, 1e-4, 3e-5};
+        if (mode != 1) options.application_precision_budget = {1e-5, 1e-4, 3e-5};
         if (mode == 0) {
           options.energy_tolerance = 1e-6;
           options.density_tolerance = 1e-4;
@@ -1132,22 +1133,18 @@ void run_fast_anchor_delta_case() {
         require(result.converged && std::abs(result.energy - reference.energy) < energy_gate,
                 "Fast anchor total-density XC/VV10 endpoint disagrees with independent CPU");
         const auto cold = plan.transfers();
-        // Explicit FP64 admits the strict path, with or without ignored Fast budgets.
-        // AUTO alone must not silently acquire the strict-only optimization.
-        const bool expected =
-            (mode == 0 || mode == 1 || mode == 3) && selection && std::strcmp(selection, "1") == 0;
-        if (!expected) ordinary_anchor_state_bytes[mode] = plan.resources().state_device_bytes;
+        const bool expected = mode != 2 && selection && std::strcmp(selection, "1") == 0;
+        if (!expected) ordinary_state_bytes[mode] = plan.resources().state_device_bytes;
         if (expected) {
           const auto matrix_elements = basis.nao * basis.nao;
-          require(
-              plan.resources().state_device_bytes ==
-                  ordinary_anchor_state_bytes[mode] + (5 * matrix_elements + 1) * sizeof(double),
-              "Fast anchor capacity omitted its optional matrices or scalar");
+          require(plan.resources().state_device_bytes ==
+                      ordinary_state_bytes[mode] + (5 * matrix_elements + 1) * sizeof(double),
+                  "Fast anchor capacity omitted its optional matrices or scalar");
         }
-        require(expected ? cold.fast_anchor_builds > 0 && cold.fast_delta_builds > 0
-                         : cold.fast_anchor_builds == 0 && cold.fast_delta_builds == 0,
-                "Fast/strict anchor opt-in, default rollback or AUTO exclusion did not execute "
-                "as selected");
+        require(
+            expected ? cold.fast_anchor_builds > 0 && cold.fast_delta_builds > 0
+                     : cold.fast_anchor_builds == 0 && cold.fast_delta_builds == 0,
+            "Shared anchor opt-in, default rollback or AUTO exclusion did not execute as selected");
         if (!expected) continue;
         const auto warm = plan.run();
         require(warm.converged && std::abs(warm.energy - reference.energy) < 1e-5 &&
@@ -1217,8 +1214,8 @@ void run_fast_anchor_delta_case() {
         detail.clear();
         const auto handoff_status = plan.prepare_force_memory(token, total_bytes, receipt, detail);
         const auto retired_state_bytes = plan.resources().state_device_bytes;
-        // Pressure may retire the independent frozen-VV10 potential as well.
-        // Account for every released byte, not only the five J/K matrices.
+        // Strict pressure can retire frozen-VV10 storage as well as J/K anchors.
+        // Every released byte must be receipted without revoking final D/W/token.
         require(handoff_status == GENERATIVEQC_STATUS_SUCCESS &&
                     retired_state_bytes <= state_bytes - anchor_bytes &&
                     plan.resources().provider_device_bytes <= provider_bytes &&
@@ -2774,6 +2771,112 @@ void rejected_api_requests_revoke_tokens() {
                                                     detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
               "rejected C batch request retained a previous token");
   }
+
+  generativeqc_batch_item_result_descriptor outputs[2]{};
+  for (auto& output : outputs) {
+    output.struct_size = sizeof(output);
+    output.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  ks_cuda_fail_next_runtime_for_test_v1();
+  require(generativeqc_batch_execute(batch.get(), nullptr, 0, outputs, 2) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              outputs[0].status == GENERATIVEQC_STATUS_CUDA_ERROR &&
+              outputs[1].status == GENERATIVEQC_STATUS_SUCCESS,
+          "KS batch did not isolate an injected backend failure");
+  const auto* failure_detail = generativeqc_context_get_last_detail(context.get());
+  require(
+      failure_detail && std::string(failure_detail).find(cudaGetErrorString(cudaErrorUnknown)) !=
+                            std::string::npos,
+      "KS batch discarded the original CUDA error message");
+  require(generativeqc_batch_execute(batch.get(), nullptr, 0, outputs, 2) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              outputs[0].status == GENERATIVEQC_STATUS_SUCCESS &&
+              std::string(generativeqc_context_get_last_detail(context.get())).empty(),
+          "successful KS replay retained stale failure detail");
+
+  method.max_iterations = 1;
+  generativeqc_batch* short_raw{};
+  require(generativeqc_batch_prepare(context.get(), systems, 2, &method, 0, &short_raw) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          "short KS diagnostic fixture preparation failed");
+  std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> short_batch(
+      short_raw, generativeqc_batch_destroy);
+  require(generativeqc_batch_execute(short_batch.get(), nullptr, 0, outputs, 2) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              outputs[0].status == GENERATIVEQC_STATUS_NOT_CONVERGED,
+          "short cold KS solve fabricated convergence");
+  const std::string stopping_detail = generativeqc_context_get_last_detail(context.get());
+  require(stopping_detail.find("residual_ao_max=") != std::string::npos &&
+              stopping_detail.find("density_spin_rms_max=") != std::string::npos &&
+              stopping_detail.find("energy_change=") != std::string::npos,
+          "terminal KS diagnostic omitted distinct physical stopping gates");
+}
+
+void core_guess_gauge_case() {
+  runtime::OwnedCudaStream stream(0);
+  const std::array<double, 4> spectrum{-2.0, -0.5, -0.5, 0.2};
+  runtime::OwnedCudaBuffer<double> energies(0, spectrum.size(), stream.get());
+  runtime::OwnedCudaBuffer<int> flag(0, 1, stream.get());
+  require(cudaMemcpy(energies.get(), spectrum.data(), sizeof(spectrum), cudaMemcpyHostToDevice) ==
+              cudaSuccess,
+          "core spectrum upload failed");
+  for (const int occupied : {0, 1, 2, 3, 4}) {
+    dft::cuda_ks_detail::core_guess_frontier_tie(stream.get(), 4, occupied, energies.get(),
+                                                 flag.get());
+    int tied = -1;
+    require(cudaStreamSynchronize(stream.get()) == cudaSuccess &&
+                cudaMemcpy(&tied, flag.get(), sizeof(tied), cudaMemcpyDeviceToHost) == cudaSuccess,
+            "core tie detection failed");
+    require(tied == (occupied > 0 && occupied < 4),
+            "core tie detection lost an adjacent frontier cluster or empty/full guard");
+  }
+  const std::array<double, 4> separated{-2.0, -0.5, -0.49, 0.2};
+  require(cudaMemcpy(energies.get(), separated.data(), sizeof(separated), cudaMemcpyHostToDevice) ==
+              cudaSuccess,
+          "separated spectrum upload failed");
+  dft::cuda_ks_detail::core_guess_frontier_tie(stream.get(), 4, 2, energies.get(), flag.get());
+  int tied = -1;
+  require(cudaStreamSynchronize(stream.get()) == cudaSuccess &&
+              cudaMemcpy(&tied, flag.get(), sizeof(tied), cudaMemcpyDeviceToHost) == cudaSuccess &&
+              tied == 0,
+          "nondegenerate frontier requested a gauge change");
+  std::vector<double> core_guess(16, -0.7);
+  runtime::OwnedCudaBuffer<double> device_guess(0, core_guess.size(), stream.get());
+  require(cudaMemcpy(device_guess.get(), core_guess.data(), core_guess.size() * sizeof(double),
+                     cudaMemcpyHostToDevice) == cudaSuccess,
+          "core guess upload failed");
+  dft::cuda_ks_detail::break_core_guess_ties(stream.get(), 4, device_guess.get());
+  require(cudaStreamSynchronize(stream.get()) == cudaSuccess &&
+              cudaMemcpy(core_guess.data(), device_guess.get(), core_guess.size() * sizeof(double),
+                         cudaMemcpyDeviceToHost) == cudaSuccess,
+          "core gauge update failed");
+  for (std::size_t row = 0; row < 4; ++row) {
+    for (std::size_t column = 0; column < 4; ++column) {
+      const double expected = -0.7 + (row == column ? 1e-8 * row / 4 : 0.0);
+      require(std::abs(core_guess[4 * row + column] - expected) < 1e-15,
+              "core gauge changed an off-diagonal element or exceeded its perturbation bound");
+    }
+  }
+  const std::vector<double> oriented{1.0, -1.0 - 1e-14, 0.0, 0.0, 0.0,  2.0, -1.0, 0.0,
+                                     0.0, 0.0,          2.0, 1.0, -1.0, 2.0, 0.0,  0.0};
+  for (unsigned signs = 0; signs < 16; ++signs) {
+    auto coefficients = oriented;
+    for (std::size_t column = 0; column < 4; ++column)
+      for (std::size_t row = 0; row < 4; ++row)
+        if (signs & (1U << column)) coefficients[4 * column + row] *= -1.0;
+    require(cudaMemcpy(device_guess.get(), coefficients.data(),
+                       coefficients.size() * sizeof(double), cudaMemcpyHostToDevice) == cudaSuccess,
+            "core orbital upload failed");
+    dft::cuda_ks_detail::orient_core_guess_orbitals(stream.get(), 4, device_guess.get());
+    dft::cuda_ks_detail::orient_core_guess_orbitals(stream.get(), 4, device_guess.get());
+    require(
+        cudaStreamSynchronize(stream.get()) == cudaSuccess &&
+            cudaMemcpy(coefficients.data(), device_guess.get(),
+                       coefficients.size() * sizeof(double), cudaMemcpyDeviceToHost) == cudaSuccess,
+        "core orbital phase selection failed");
+    require(coefficients == oriented,
+            "core gauge depends on incoming column phases or a roundoff-level pivot tie");
+  }
 }
 std::size_t minao_reference_solves = 0;
 std::size_t observe_minao_reference(const char* name, std::size_t) noexcept {
@@ -2924,6 +3027,12 @@ int main(int argc, char** argv) {
       run_control("seed_product_case()", [&] { seed_product_case(); });
       return 0;
     }
+    if (argc == 2 && std::string(argv[1]) == "--recovery-controls") {
+      run_control("core_guess_gauge_case()", [&] { core_guess_gauge_case(); });
+      run_control("rejected_api_requests_revoke_tokens()",
+                  [&] { rejected_api_requests_revoke_tokens(); });
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--precision-census") {
       for (const auto* selection : std::array<const char*, 3>{nullptr, "0", "1"}) {
         run_control(
@@ -3057,6 +3166,7 @@ int main(int argc, char** argv) {
     run_control("public_wb97mv_cuda_case(true)", [&] { public_wb97mv_cuda_case(true); });
     run_control("rejected_api_requests_revoke_tokens()",
                 [&] { rejected_api_requests_revoke_tokens(); });
+    run_control("core_guess_gauge_case()", [&] { core_guess_gauge_case(); });
     run_control("run_exact_exchange_case(true)", [&] { run_exact_exchange_case(true); });
     run_control("run_exact_exchange_case(false)", [&] { run_exact_exchange_case(false); });
     run_control("ks_cold_factor_cases()", [&] { ks_cold_factor_cases(); });

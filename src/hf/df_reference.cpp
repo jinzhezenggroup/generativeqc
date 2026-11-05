@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <stdexcept>
 
+#include "hf/df_reference_status.hpp"
 #include "posthf/capacity.hpp"
 #include "scf/cuda_df_gradient.hpp"
 #include "scf/df_response_weights.hpp"
@@ -37,11 +38,7 @@ scf::ScfResult DFReference::solve(const core::System& orbital, const core::Syste
   std::vector<scf::CudaDensityFittingMetricDiagnostic> diagnostics;
   auto results = scf::run_rhf_density_fitting_cuda_bucket_cached(
       &plan_, {*orbital_}, auxiliary_, options, {initial_density}, device, &diagnostics, &data_);
-  if (results.size() == 1 && results.front().status == GENERATIVEQC_STATUS_OUT_OF_MEMORY)
-    throw std::bad_alloc();
-  if (results.size() != 1 || results.front().status != GENERATIVEQC_STATUS_SUCCESS ||
-      !results.front().scf.converged || !results.front().scf.reference)
-    throw std::runtime_error("native DF-HF reference did not converge");
+  require_df_reference_result(results);
   if (diagnostics.size() != 1)
     throw std::logic_error("DF reference has no unique forward metric receipt");
   metric_diagnostic_ = diagnostics.front();

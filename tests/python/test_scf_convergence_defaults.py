@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from conftest import NativeCxx
 
+import numpy as np
 import pytest
 from generativeqc import Calculator, GridSpec, KsOptions, PrecisionCalculator, _native
 from generativeqc._scf_defaults_native import default_controls
@@ -19,6 +20,27 @@ from tools.generativeqc_validation.native_registry_stub import (
     install_registry_stub,
     install_scf_defaults_stub,
 )
+
+
+def test_restricted_mo_gradient_from_nonorthogonal_physical_commutator() -> None:
+    """An independent MO evaluation fixes the normalization, not AO RMS numbers."""
+    random = np.random.default_rng(2987)
+    rotations, _ = np.linalg.qr(random.normal(size=(8, 8)))
+    overlap = rotations @ np.diag(np.linspace(0.2, 3.0, 8)) @ rotations.T
+    eigenvalues, eigenvectors = np.linalg.eigh(overlap)
+    orthogonalizer = (eigenvectors / np.sqrt(eigenvalues)) @ eigenvectors.T
+    frame, _ = np.linalg.qr(random.normal(size=(8, 8)))
+    coefficients = orthogonalizer @ frame
+    occupied, virtual = coefficients[:, :3], coefficients[:, 3:]
+    density = 2 * occupied @ occupied.T
+    fock = random.normal(size=(8, 8))
+    fock = (fock + fock.T) / 2
+    commutator = fock @ density @ overlap - overlap @ density @ fock
+    transformed = orthogonalizer.T @ commutator @ orthogonalizer
+    expected = np.linalg.norm(2 * virtual.T @ fock @ occupied)
+    assert np.linalg.norm(transformed) / np.sqrt(2) == pytest.approx(
+        expected, rel=1e-13
+    )
 
 
 @pytest.fixture
@@ -53,7 +75,16 @@ def library(monkeypatch: pytest.MonkeyPatch, policy_library: Any) -> SimpleNames
 
 
 @pytest.mark.parametrize(
-    "method", ["rhf", "pbe-rks", "pbe0-rks", "b3lyp-rks", "r2scan-rks", "m06-2x-rks"]
+    "method",
+    [
+        "rhf",
+        "pbe-rks",
+        "pbe0-rks",
+        "b3lyp-rks",
+        "r2scan-rks",
+        "m06-2x-rks",
+        "wb97m-v-rks",
+    ],
 )
 def test_default_controls_and_explicit_tight_overrides(
     library: SimpleNamespace, method: str
@@ -75,7 +106,6 @@ def test_default_controls_and_explicit_tight_overrides(
         ("uhf", "cuda", {}),
         ("mp2", "cuda", {}),
         ("pbe-uks", "cuda", {}),
-        ("wb97m-v-rks", "cuda", {}),
         ("pbe-rks", "cuda", {"ks_options": KsOptions(grid=GridSpec.treutler(4))}),
     ],
 )
@@ -135,6 +165,7 @@ def test_physical_limits_are_capped_and_tight_controls_restore_strict_policy(
 #include <limits>
 #include <initializer_list>
 #include "scf/convergence_limits.hpp"
+#include "dft/ks_stopping_policy.hpp"
 int main() {
   using namespace generativeqc::scf;
   assert(standard_scf_convergence_requested(1e-9,1e-5));
@@ -151,6 +182,24 @@ int main() {
   assert(scf_stationarity_tolerance(1e-10,1e-5,1e-9)==1e-9);
   assert(scf_stationarity_tolerance(1e-9,1e-8,1e-9)==1e-9);
   assert(scf_stationarity_tolerance(1e-9,1e-12,1e-9)==1e-12);
+  using namespace generativeqc::dft;
+  KsStoppingState state{2, false, true, true, 1e-10, 1e-3, 1e-3, 1e-3,
+                        1e-9, 1e-5, 1e-5};
+  assert(orbital_ks_converged(state, 3e-5));
+  assert(!ordinary_ks_converged(state));
+  assert(!orbital_ks_converged(state, 4e-5));
+  assert(!orbital_ks_converged(state, std::sqrt(state.energy_tolerance)));
+  state.target_ready = false;
+  assert(!orbital_ks_converged(state, 0));
+  state.target_ready = true;
+  state.full_energy_history = false;
+  assert(!orbital_ks_converged(state, 0));
+  state.full_energy_history = true;
+  state.energy_change = state.energy_tolerance;
+  assert(!orbital_ks_converged(state, 0));
+  state.energy_change = 0;
+  assert(!orbital_ks_converged(state, std::numeric_limits<double>::quiet_NaN()));
+  assert(!orbital_ks_converged(state, -1));
   for (double invalid : {0., -1., std::numeric_limits<double>::infinity(),
                         std::numeric_limits<double>::quiet_NaN()}) {
     assert(!standard_scf_convergence_requested(invalid,1e-5));
@@ -161,6 +210,85 @@ int main() {
     executable = required_native_cxx.build_executable(
         [source],
         tmp_path / "limits",
+        compile_args=["-std=c++20", f"-I{Path(__file__).resolve().parents[2] / 'src'}"],
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_nonlocal_confirmation_requires_active_stationarity_and_no_rejected_proof(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """A physical idempotent target cannot be held below only the AO bounds."""
+    occupied = np.eye(8)[:, :4]
+    virtual = np.eye(8)[:, 4:]
+    density = 2 * occupied @ occupied.T
+    fock = np.diag([-1.0] * 4 + [1.0] * 4)
+    fock[:4, 4:] = 4.5e-6
+    fock[4:, :4] = 4.5e-6
+    _, coefficients = np.linalg.eigh(fock)
+    proposal = 2 * coefficients[:, :4] @ coefficients[:, :4].T
+    commutator = fock @ density - density @ fock
+    gradient = np.linalg.norm(2 * virtual.T @ fock @ occupied)
+    density_rms = np.linalg.norm(proposal - density) / 8
+    residual_rms = np.linalg.norm(commutator) / 8
+    maximum_residual = np.max(np.abs(commutator))
+    assert np.linalg.norm(density @ density - 2 * density) < 1e-14
+    assert max(density_rms, residual_rms, maximum_residual) < 1e-5
+    assert gradient > np.sqrt(1e-9)
+
+    source = tmp_path / "confirmation.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <cmath>
+#include <initializer_list>
+#include <limits>
+#include "dft/ks_stopping_policy.hpp"
+int main() {
+  using namespace generativeqc::dft;
+  KsStoppingState state{20, false, true, true, 0.0,
+"""
+        + f"{density_rms:.17g}, {residual_rms:.17g}, {maximum_residual:.17g},\n"
+        + r"""
+                        1e-9, 1e-5, 1e-5};
+"""
+        + f"  const double gradient = {gradient:.17g};\n"
+        + r"""
+  auto confirm = [&](bool orbital, double norm, bool rejected = false,
+                     double tolerance = 1e-5) {
+    return nonlocal_ks_density_confirmation(state, tolerance, orbital, norm, rejected);
+  };
+  assert(confirm(false, gradient));
+  assert(!orbital_ks_converged(state, gradient));
+  assert(!confirm(true, gradient));
+  const double stationary = gradient * 0.5;
+  assert(confirm(true, stationary));
+  assert(orbital_ks_converged(state, stationary));
+  assert(!confirm(true, stationary, true));
+  assert(!confirm(false, stationary, true));
+  assert(!confirm(true, std::sqrt(state.energy_tolerance)));
+  for (double invalid : {-1.0, std::numeric_limits<double>::infinity(),
+                         std::numeric_limits<double>::quiet_NaN()})
+    assert(!confirm(true, invalid));
+  state.iterations = 1;
+  state.full_energy_history = state.target_ready = false;
+  state.energy_change = std::numeric_limits<double>::infinity();
+  assert(confirm(true, stationary));
+  assert(!orbital_ks_converged(state, stationary));
+  assert(!confirm(false, stationary, false, 1e-9));
+  state.density_change = state.residual = state.maximum_residual = 1e-10;
+  assert(confirm(false, std::numeric_limits<double>::quiet_NaN(), false, 1e-9));
+  state.maximum_residual = 1e-9;
+  assert(!confirm(false, stationary, false, 1e-9));
+  state.maximum_residual = 1e-10;
+  state.density_change = state.density_tolerance;
+  assert(!confirm(true, stationary));
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [source],
+        tmp_path / "confirmation",
         compile_args=["-std=c++20", f"-I{Path(__file__).resolve().parents[2] / 'src'}"],
     )
     subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)

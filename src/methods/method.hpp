@@ -167,6 +167,8 @@ struct BatchItemResult {
   /** Present only for an owner that inventories all physical target attempts.
    * An unavailable total must not fall back to the returned attempt's count. */
   std::optional<scf::TargetFockWork> target_fock_work;
+  /** Execution-local failure evidence; never a replacement for the typed status. */
+  std::string detail;
 };
 
 using Coordinates = std::vector<std::optional<std::vector<double>>>;

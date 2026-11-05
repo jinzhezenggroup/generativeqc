@@ -48,13 +48,14 @@ int main() {
   options.element_radii = grid.element_radii.data();
   options.element_radius_count = grid.element_radii.size();
   options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
-  for (auto name : {"pbe-rks", "pbe0-rks", "b3lyp-rks", "r2scan-rks", "m06-2x-rks"}) {
+  for (auto name :
+       {"pbe-rks", "pbe0-rks", "b3lyp-rks", "r2scan-rks", "m06-2x-rks", "wb97m-v-rks"}) {
     const auto* model = generativeqc::methods::named_ks::find_method(name);
     require_test(model && query(&options, model->identity) == GENERATIVEQC_STATUS_SUCCESS);
     require_test(output.qualified_defaults);
   }
   const auto identity = generativeqc::methods::named_ks::find_method("pbe-rks")->identity;
-  for (auto name : {"pbe-uks", "wb97m-v-rks", "pbe-d3(bj)-rks"}) {
+  for (auto name : {"pbe-uks", "pbe-d3(bj)-rks"}) {
     const auto* model = generativeqc::methods::named_ks::find_method(name);
     require_test(model && query(&options, model->identity) == GENERATIVEQC_STATUS_SUCCESS);
     require_test(!output.qualified_defaults);

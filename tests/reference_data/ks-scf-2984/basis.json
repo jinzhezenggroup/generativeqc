@@ -1,0 +1,550 @@
+{
+  "checksum": "c6f8f45cdd40900e6669152d93948724cd7bb619cfd799ae0db491f18b930c43",
+  "elements": [
+    {
+      "atomic_number": 7,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 7,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "-53934125305E-13",
+              "-40221581118E-12",
+              "-1793114499E-10",
+              "-46376317823E-11",
+              "-44171422662E-11"
+            ]
+          ],
+          "exponents": [
+            "17128415853E-7",
+            "25764812677E-8",
+            "58458245853E-9",
+            "16198367905E-9",
+            "50052600809E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "58731856571E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "18764592253E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "-40072398852E-12",
+              "-21807045028E-11",
+              "-51294466049E-11"
+            ]
+          ],
+          "exponents": [
+            "13571470233E-9",
+            "29257372874E-10",
+            "79927750754E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "21954348034E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1E0"
+          ],
+          "source_group": 0
+        }
+      ]
+    },
+    {
+      "atomic_number": 8,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 8,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "-53431809926E-13",
+              "-3989003923E-11",
+              "-17853911985E-11",
+              "-46427684959E-11",
+              "-44309745172E-11"
+            ]
+          ],
+          "exponents": [
+            "22661767785E-7",
+            "34087010191E-8",
+            "77363135167E-9",
+            "2147964494E-8",
+            "66589433124E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "80975975668E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "25530772234E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "43394573193E-12",
+              "23094120765E-11",
+              "51375311064E-11"
+            ]
+          ],
+          "exponents": [
+            "17721504317E-9",
+            "3863550544E-9",
+            "10480920883E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "27641544411E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "12E-1"
+          ],
+          "source_group": 0
+        }
+      ]
+    },
+    {
+      "atomic_number": 9,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 9,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "-53408255515E-13",
+              "-39904258866E-12",
+              "-17912768038E-11",
+              "-46758090825E-11",
+              "-4465313102E-10"
+            ]
+          ],
+          "exponents": [
+            "2894832599E-6",
+            "4354193912E-7",
+            "98843328866E-9",
+            "27485198001E-9",
+            "85405498171E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "10654578038E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "33247346748E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "-45212874436E-12",
+              "-23754317067E-11",
+              "-51287353587E-11"
+            ]
+          ],
+          "exponents": [
+            "22696633924E-9",
+            "49872339257E-10",
+            "13491613954E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "34829881977E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "14E-1"
+          ],
+          "source_group": 0
+        }
+      ]
+    },
+    {
+      "atomic_number": 13,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 13,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "13483347987E-13",
+              "10071576809E-12",
+              "45132454056E-12",
+              "11461268043E-11",
+              "10159608943E-11"
+            ]
+          ],
+          "exponents": [
+            "5887572703E-6",
+            "88561225996E-8",
+            "20113604899E-8",
+            "56284974674E-9",
+            "17229551243E-9"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "69347454208E-12",
+              "-42528117679E-11",
+              "-4144983221E-10"
+            ]
+          ],
+          "exponents": [
+            "29340249922E-9",
+            "3043963042E-9",
+            "11285539518E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1423417516E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "54400192313E-12"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "63963373134E-13",
+              "44189359965E-12",
+              "15581575993E-11",
+              "28635286951E-11",
+              "22921423248E-11"
+            ]
+          ],
+          "exponents": [
+            "14511918809E-8",
+            "33717894833E-9",
+            "10369863083E-9",
+            "35135616036E-10",
+            "11980050273E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "26583005913E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "71003361994E-12"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "3E-1"
+          ],
+          "source_group": 0
+        }
+      ]
+    },
+    {
+      "atomic_number": 38,
+      "ecp_core_electrons": 28,
+      "ecp_data": "[{\"ecp_type\": \"scalar_ecp\", \"angular_momentum\": [3], \"r_exponents\": [2], \"gaussian_exponents\": [\"4.633975\"], \"coefficients\": [[\"-15.805992\"]]}, {\"ecp_type\": \"scalar_ecp\", \"angular_momentum\": [0], \"r_exponents\": [2, 2, 2], \"gaussian_exponents\": [\"7.400074\", \"3.606379\", \"4.633975\"], \"coefficients\": [[\"135.47943\", \"17.534463\", \"15.805992\"]]}, {\"ecp_type\": \"scalar_ecp\", \"angular_momentum\": [1], \"r_exponents\": [2, 2, 2], \"gaussian_exponents\": [\"6.484868\", \"3.288053\", \"4.633975\"], \"coefficients\": [[\"88.359709\", \"15.394372\", \"15.805992\"]]}, {\"ecp_type\": \"scalar_ecp\", \"angular_momentum\": [2], \"r_exponents\": [2, 2, 2], \"gaussian_exponents\": [\"4.622841\", \"2.246904\", \"4.633975\"], \"coefficients\": [[\"29.888987\", \"6.659414\", \"15.805992\"]]}]",
+      "nuclear_charge": 38,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "19698765364E-11",
+              "-64852205985E-11",
+              "62064729022E-11"
+            ]
+          ],
+          "exponents": [
+            "59276428767E-10",
+            "30691274814E-10",
+            "70675488028E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "3382402428E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "617688692E-10"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "25767593093E-12"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "-37145059848E-11",
+              "37856824234E-11",
+              "59874487803E-11",
+              "35314019512E-11"
+            ]
+          ],
+          "exponents": [
+            "2432472E-6",
+            "1664234E-6",
+            "59455471858E-11",
+            "26152621998E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "10258814042E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "3322340403E-11"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "-7501E-6",
+              "108098E-6",
+              "27854E-5",
+              "477318E-6"
+            ]
+          ],
+          "exponents": [
+            "3618081E-6",
+            "996656E-6",
+            "390735E-6",
+            "12277E-5"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "36655E-6"
+          ],
+          "source_group": 0
+        }
+      ]
+    }
+  ],
+  "exponent_units": "bohr^-2",
+  "name": "def2-SVP",
+  "normalization": "normalized-primitives; native-normalized-contractions",
+  "ordering": "CCA-cartesian; libcint-real-spherical",
+  "provenance": {
+    "checksum": "c333c8a6cf2d09d624484df498ced2f9953d22d7b6a8fb6f626e5b12adf1ebbb",
+    "license": "Resolved offline parameters shared identically by native and independent reference; no runtime basis lookup",
+    "source": "PySCF installed basis library",
+    "version": "2.14.0"
+  },
+  "representation": "spherical",
+  "schema": "generativeqc.basis",
+  "schema_version": 1
+}

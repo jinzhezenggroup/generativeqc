@@ -1,0 +1,53 @@
+{
+  "schema": "generativeqc.h100-cold-df-seed-cohort.v1",
+  "measured_source": {
+    "revision": "87bbc0b4f20f7696cfd22974bbe5b207e7d69c38",
+    "tree": "99e47d472b89d3ce39c38d4aa3470cf7e82dc3b9",
+    "native_source_identity": "d60aea30bf2891a8d5c6976f59ee7f8a3505cd83af5c123dde48093e4b3ea604",
+    "core_sha256": "4702ac35b5fada834aa15d0569a4f750d1dc756dbca731090ed5b5c6f49d64a9"
+  },
+  "device_uuid": "GPU-4c6621ae-fe77-2603-be67-d476f2d4d1e4",
+  "records": {
+    "path": "records.json.xz",
+    "bytes": 203796,
+    "sha256": "d9e5e1d3c5976a9246b37724fc5ddda5123ebaf8ed3eea96554a27c04b606b9f",
+    "files": 111
+  },
+  "analyzer_sha256": "61e93fe0c5fd50b095e1f3e50003c51ccad2730e17331f944a09ca2d15c601d4",
+  "original_archive": {
+    "name": "completed-qualified-v3.tar.xz",
+    "bytes": 196908,
+    "sha256": "11333f59123677262c6c271e31301d593538277c8a6ee1c5322bde1c7ec62311",
+    "files": 99,
+    "populations": 15,
+    "returned_EF": 60,
+    "campaign_sha256": "567fed6d66ad7110155e5390d5ccebd7601b6faf5a8a93997185818d22b5463b"
+  },
+  "protocol": {
+    "cold": "Fresh process; constructor+prepare+SCF+analytic-forces+host-export, after GPU context initialization",
+    "warm": "Three repeats from each engine own frozen cold density",
+    "compiled_artifacts": "Prepopulated verified compiled caches retained; not empty-cache compilation latency",
+    "excluded": "Python/process startup, GPU context initialization, environment installation and AOT compilation"
+  },
+  "scope": "HF96 DF three-pair changed-default acceptance; HF48 one-round numerical size guard; rejected separate WB96 incremental pilot retained. Not fixed30 or later-main/cross-device/general-chemistry acceptance.",
+  "gate_units": {
+    "energy_abs_per_atom_hartree": 1e-05,
+    "force_max_abs_hartree_per_bohr": 0.0001,
+    "force_rms_hartree_per_bohr": 3e-05
+  },
+  "review": {
+    "verdict": "WARN: scoped acceptance supported, broader goal incomplete",
+    "blocking_production_defects": 0,
+    "requested_model": "gpt-6.1-sol",
+    "backend_reported_model": null,
+    "review_independence": "same-family",
+    "acceptance_status": "provisional",
+    "raw_report_member": "provenance/EXPERIMENT_AUDIT.md"
+  },
+  "issue": "https://github.com/jinzhezenggroup/generativeqc/issues/3004",
+  "pull_request": "https://github.com/jinzhezenggroup/generativeqc/pull/3007",
+  "reader_provenance": {
+    "executed_offline_analyzer_sha256": "54ed8d0044aeda07ac84cb03990ad67da999c441a7fdaacdc12fa2faf32b647e",
+    "public_analyzer_changes": "Type annotations, formatting and standard-library import order only; same independent-gate and matched-pair reduction logic. Transport reader authenticates exact member bytes and pinned imported scientific helpers."
+  }
+}
