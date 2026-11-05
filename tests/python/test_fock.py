@@ -248,6 +248,37 @@ def test_public_scf_force_variation_replay_and_legacy_equivalence(
         )
 
 
+@pytest.mark.parametrize(
+    "controls",
+    [{}, {"energy_tolerance": 1e-12}, {"density_tolerance": 1e-10}],
+)
+def test_scf_omitted_controls_use_shared_native_defaults(
+    controls: dict[str, float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Observe the stable C ABI, including each independent explicit override."""
+    with NativeAO(ATOMS) as basis, FockPlan(basis, device=DEVICE) as plan:
+        solve = plan._library.generativeqc_fock_plan_solve
+        received = {}
+
+        def observe(
+            handle: typing.Any, control_pointer: typing.Any, *args: typing.Any
+        ) -> int:
+            native = ct.cast(control_pointer, ct.POINTER(_ScfControls)).contents
+            received.update(
+                energy_tolerance=native.energy_tolerance,
+                density_tolerance=native.density_tolerance,
+            )
+            return solve(handle, control_pointer, *args)
+
+        monkeypatch.setattr(plan._library, "generativeqc_fock_plan_solve", observe)
+        result = plan.solve(compute_forces=False, **controls)
+        assert received == {
+            "energy_tolerance": controls.get("energy_tolerance", 1e-9),
+            "density_tolerance": controls.get("density_tolerance", 1e-5),
+        }
+        assert np.isfinite(result.energy)
+
+
 def test_scf_failures_do_not_publish_or_poison_sources() -> None:
     with NativeAO(ATOMS) as basis, FockPlan(basis, device=DEVICE) as plan:
         reference = plan.solve()

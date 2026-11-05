@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <string_view>
 
 #include "api/error.hpp"
@@ -34,6 +35,6 @@ extern "C" generativeqc_status generativeqc_scf_defaults_query_v1(
       if (!std::isfinite(options.element_radii[i]) || options.element_radii[i] < 0)
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  *output = generativeqc::methods::scf_defaults::resolve(*context, ks_options, identity);
+  *output = generativeqc::methods::scf_defaults::resolve(context->method);
   return GENERATIVEQC_STATUS_SUCCESS;
 }

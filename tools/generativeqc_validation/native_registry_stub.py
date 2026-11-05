@@ -51,7 +51,7 @@ def install_scf_defaults_stub(
 
     def query(context: Any, options: Any, identity: Any, size: int, output: Any) -> int:
         record = ctypes.cast(output, ctypes.POINTER(_Controls)).contents
-        record.policy_version = 1
+        record.policy_version = 2
         record.qualified_defaults = int(qualified)
         (
             record.energy_tolerance,

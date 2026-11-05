@@ -440,6 +440,10 @@ class FockPlan:
             else "cartesian",
         )
         self._library = lib = calc._library
+        self._device_name = device
+        self._method = (
+            _native.METHOD_UHF if spec.spin == "unrestricted" else _native.METHOD_RHF
+        )
         _bind(lib)
         self._native_source = lib.generativeqc_get_source_identity().decode()
         self._device_id = calc._device_id if device == "cuda" else None
@@ -688,8 +692,8 @@ class FockPlan:
         compute_forces: typing.Any = True,
         max_iterations: typing.Any = 100,
         diis_history: typing.Any = 8,
-        energy_tolerance: typing.Any = 1e-10,
-        density_tolerance: typing.Any = 1e-8,
+        energy_tolerance: typing.Any = None,
+        density_tolerance: typing.Any = None,
     ) -> typing.Any:
         """Run shared SCF for the declared J/K energy, with no XC contribution.
 
@@ -701,7 +705,17 @@ class FockPlan:
         incorrect overlap-metric occupation or electron/spin trace; it does
         not silently normalize seeds. Sources are reused, while each solve
         starts fresh DIIS history. Failure raises and leaves the plan reusable.
+        Omitted tolerances use the same native defaults as ``Calculator``;
+        explicit values never change with the execution backend.
         """
+        if energy_tolerance is None or density_tolerance is None:
+            from ._scf_defaults_native import default_controls
+
+            defaults = default_controls(self)
+            if energy_tolerance is None:
+                energy_tolerance = defaults["energy_tolerance"]
+            if density_tolerance is None:
+                density_tolerance = defaults["density_tolerance"]
         if type(compute_forces) is not bool:
             raise TypeError("compute_forces must be bool")
         if any(

@@ -8,6 +8,7 @@
 #include "generativeqc/scf_defaults.h"
 #include "methods/named_ks_catalog.hpp"
 #include "native_test_require.hpp"
+#include "scf/types.hpp"
 
 int main() {
   generativeqc_scf_defaults_context_v1 context{sizeof(context),
@@ -21,19 +22,36 @@ int main() {
     return generativeqc_scf_defaults_query_v1(&context, options, identity.data(), identity.size(),
                                               &output);
   };
+  const auto uniform_defaults = [&] {
+    require_test(output.policy_version == 2 && output.qualified_defaults);
+    require_test(output.energy_tolerance == 1e-9 && output.density_tolerance == 1e-5 &&
+                 output.screening_tolerance == 1e-12);
+  };
+  const generativeqc::scf::ScfOptions native_options;
+  require_test(query(nullptr, {}) == GENERATIVEQC_STATUS_SUCCESS);
+  require_test(native_options.energy_tolerance == output.energy_tolerance &&
+               native_options.density_tolerance == output.density_tolerance &&
+               native_options.screening_tolerance == output.screening_tolerance);
   require_test(query(nullptr, {}) == GENERATIVEQC_STATUS_SUCCESS);
   require_test(output.qualified_defaults && output.energy_tolerance == 1e-9 &&
                output.density_tolerance == 1e-5 && output.screening_tolerance == 1e-12);
   context.method = GENERATIVEQC_METHOD_UHF;
-  require_test(query(nullptr, {}) == GENERATIVEQC_STATUS_SUCCESS && !output.qualified_defaults);
+  require_test(query(nullptr, {}) == GENERATIVEQC_STATUS_SUCCESS);
+  uniform_defaults();
   context.method = GENERATIVEQC_METHOD_RHF;
   context.has_ecp = 1;
-  require_test(query(nullptr, {}) == GENERATIVEQC_STATUS_SUCCESS && !output.qualified_defaults);
+  require_test(query(nullptr, {}) == GENERATIVEQC_STATUS_SUCCESS);
+  uniform_defaults();
   context.has_ecp = 0;
   context.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
-  require_test(query(nullptr, {}) == GENERATIVEQC_STATUS_SUCCESS && !output.qualified_defaults);
-  require_test(output.energy_tolerance == 1e-10 && output.density_tolerance == 1e-8);
+  require_test(query(nullptr, {}) == GENERATIVEQC_STATUS_SUCCESS);
+  uniform_defaults();
   context.backend = GENERATIVEQC_BACKEND_CUDA;
+  context.method = GENERATIVEQC_METHOD_GFN2_XTB;
+  require_test(query(nullptr, {}) == GENERATIVEQC_STATUS_SUCCESS);
+  require_test(!output.qualified_defaults && output.energy_tolerance == 1e-10 &&
+               output.density_tolerance == 1e-8);
+  context.method = GENERATIVEQC_METHOD_RHF;
 
   const auto grid = generativeqc::dft::default_grid_spec();
   generativeqc_ks_options options{};
@@ -52,29 +70,29 @@ int main() {
        {"pbe-rks", "pbe0-rks", "b3lyp-rks", "r2scan-rks", "m06-2x-rks", "wb97m-v-rks"}) {
     const auto* model = generativeqc::methods::named_ks::find_method(name);
     require_test(model && query(&options, model->identity) == GENERATIVEQC_STATUS_SUCCESS);
-    require_test(output.qualified_defaults);
+    uniform_defaults();
   }
   const auto identity = generativeqc::methods::named_ks::find_method("pbe-rks")->identity;
   for (auto name : {"pbe-uks", "pbe-d3(bj)-rks"}) {
     const auto* model = generativeqc::methods::named_ks::find_method(name);
     require_test(model && query(&options, model->identity) == GENERATIVEQC_STATUS_SUCCESS);
-    require_test(!output.qualified_defaults);
+    uniform_defaults();
   }
   require_test(query(&options, std::string(64, '0')) == GENERATIVEQC_STATUS_SUCCESS);
-  require_test(!output.qualified_defaults);
+  uniform_defaults();
   options.radial_points = 4;
-  require_test(query(&options, identity) == GENERATIVEQC_STATUS_SUCCESS &&
-               !output.qualified_defaults);
+  require_test(query(&options, identity) == GENERATIVEQC_STATUS_SUCCESS);
+  uniform_defaults();
   options.radial_points = 3;
   auto radii = grid.element_radii;
   radii[103] = std::nextafter(radii[103], std::numeric_limits<double>::infinity());
   options.element_radii = radii.data();
-  require_test(query(&options, identity) == GENERATIVEQC_STATUS_SUCCESS &&
-               !output.qualified_defaults);
+  require_test(query(&options, identity) == GENERATIVEQC_STATUS_SUCCESS);
+  uniform_defaults();
   options.element_radii = grid.element_radii.data();
   options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED;
-  require_test(query(&options, identity) == GENERATIVEQC_STATUS_SUCCESS &&
-               !output.qualified_defaults);
+  require_test(query(&options, identity) == GENERATIVEQC_STATUS_SUCCESS);
+  uniform_defaults();
   options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
 
   const auto before = output;
