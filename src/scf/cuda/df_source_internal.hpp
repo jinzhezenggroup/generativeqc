@@ -37,7 +37,7 @@ struct CudaDensityFittingIntegralSourceImpl {
   unsigned value_math{};   // Frozen with mapping; only qualified generated math for auxiliary g.
   bool has_auxiliary_g{};  // Immutable basis domain; auxiliary g uses explicit polynomial
   bool has_auxiliary_h{};
-                           // value/response lowering.
+  // value/response lowering.
   std::size_t batch_size{};
   std::size_t public_nbf{};
   std::size_t public_naux{};

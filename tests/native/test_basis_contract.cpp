@@ -80,8 +80,8 @@ void representation_dimensions() {
             "normalized system must retain each real-spherical shell dimension");
     require(generativeqc::molecule::cartesian_ao_count(basis) == cartesian[angular],
             "spherical systems must retain the distinct Cartesian work dimension");
-    const auto expansions = generativeqc::molecule::ao_expansions(
-        angular, GENERATIVEQC_BASIS_SPHERICAL);
+    const auto expansions =
+        generativeqc::molecule::ao_expansions(angular, GENERATIVEQC_BASIS_SPHERICAL);
     require(expansions.size() == spherical[angular], "spherical shell inventory is incomplete");
     for (const auto& expansion : expansions)
       require(!expansion.empty() &&

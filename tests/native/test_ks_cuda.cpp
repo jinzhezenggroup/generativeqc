@@ -2821,7 +2821,7 @@ void cold_fock_proposal_case() {
   std::vector<double> previous(elements, std::nan("")), expected(elements), input(elements),
       actual(elements), saved(elements), unchanged(elements);
   require(cudaMemcpy(retained.get(), previous.data(), elements * sizeof(double),
-                      cudaMemcpyHostToDevice) == cudaSuccess,
+                     cudaMemcpyHostToDevice) == cudaSuccess,
           "cold proposal sentinel upload failed");
   unsigned sweep = 0;
   for (bool damp : {false, true, true, false}) {
@@ -2830,10 +2830,10 @@ void cold_fock_proposal_case() {
       expected[index] = damp ? 0.5 * (input[index] + previous[index]) : input[index];
     }
     require(cudaMemcpy(physical.get(), input.data(), elements * sizeof(double),
-                        cudaMemcpyHostToDevice) == cudaSuccess,
+                       cudaMemcpyHostToDevice) == cudaSuccess,
             "physical Fock upload failed");
     dft::cuda_ks_detail::cold_start_fock(stream.get(), elements, physical.get(), retained.get(),
-                                       proposal.get(), damp);
+                                         proposal.get(), damp);
     require(cudaGetLastError() == cudaSuccess && cudaStreamSynchronize(stream.get()) == cudaSuccess,
             "cold proposal kernel failed");
     for (const auto& [source, destination] :

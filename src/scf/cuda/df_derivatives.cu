@@ -15,9 +15,9 @@ namespace {
 namespace products = runtime::cuda_gaussian_products;
 constexpr std::size_t terms = molecule::kMaximumAoExpansionTerms;
 template <std::size_t Terms>
-using PolicyFor =
-    std::conditional_t<Terms == molecule::kMaximumAuxiliaryAoExpansionTerms,
-                       generated_df_policy::AuxiliaryHighDerivative, generated_df_policy::Derivative>;
+using PolicyFor = std::conditional_t<Terms == molecule::kMaximumAuxiliaryAoExpansionTerms,
+                                     generated_df_policy::AuxiliaryHighDerivative,
+                                     generated_df_policy::Derivative>;
 using Schedule = generated_df_policy::WeightedSchedule;
 constexpr unsigned threads = Schedule::block_threads;
 constexpr unsigned lanes = Schedule::lanes_per_element;

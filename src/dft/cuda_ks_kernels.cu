@@ -87,8 +87,8 @@ __global__ void cold_start_fock_kernel(std::size_t elements, const double* physi
                                        double* previous_proposal, double* proposal, bool damp) {
   for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < elements;
        index += std::size_t(blockDim.x) * gridDim.x) {
-    const double value = damp ? 0.5 * (physical_fock[index] + previous_proposal[index])
-                              : physical_fock[index];
+    const double value =
+        damp ? 0.5 * (physical_fock[index] + previous_proposal[index]) : physical_fock[index];
     previous_proposal[index] = proposal[index] = value;
   }
 }

@@ -239,12 +239,14 @@ generativeqc_status validate_and_normalize(core::System& system, std::string& de
       detail = "shell atom index is out of range";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-    if (shell.angular_momentum > std::min(maximum_angular_momentum, kMaximumPublicAngularMomentum)) {
-      detail = "shell on atom " + std::to_string(shell.atom_index) +
-               " has l=" + std::to_string(shell.angular_momentum) +
-               (maximum_angular_momentum == 5
-                    ? "; native SCF auxiliary basis metadata supports s through h shells"
-                    : "; native CPU Cartesian/real-spherical execution supports s through g shells");
+    if (shell.angular_momentum >
+        std::min(maximum_angular_momentum, kMaximumPublicAngularMomentum)) {
+      detail =
+          "shell on atom " + std::to_string(shell.atom_index) +
+          " has l=" + std::to_string(shell.angular_momentum) +
+          (maximum_angular_momentum == 5
+               ? "; native SCF auxiliary basis metadata supports s through h shells"
+               : "; native CPU Cartesian/real-spherical execution supports s through g shells");
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     if (shell.primitives.empty()) {

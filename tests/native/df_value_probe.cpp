@@ -68,10 +68,9 @@ void read_shells(std::istream& input, System& system, std::size_t count,
   }
   std::string detail;
   require(static_cast<bool>(input), "truncated fixture input");
-  require(
-      generativeqc::molecule::validate_and_normalize(system, detail, maximum_angular_momentum) ==
-          GENERATIVEQC_STATUS_SUCCESS,
-      detail);
+  require(generativeqc::molecule::validate_and_normalize(
+              system, detail, maximum_angular_momentum) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
 }
 }  // namespace
 

@@ -349,8 +349,9 @@ CudaDensityFittingSourceDiagnostic cuda_density_fitting_integral_source_diagnost
                                                        : "generated_rys";
   if (implementation.raw_hermite)
     math = implementation.has_auxiliary_h ? "prepared_hermite/generated_rys_auxiliary_h_polynomial"
-           : implementation.has_auxiliary_g ? "prepared_hermite/generated_rys_auxiliary_g_polynomial"
-                                          : "prepared_hermite/generated_rys";
+           : implementation.has_auxiliary_g
+               ? "prepared_hermite/generated_rys_auxiliary_g_polynomial"
+               : "prepared_hermite/generated_rys";
   return {math, mapping, true, true};
 }
 

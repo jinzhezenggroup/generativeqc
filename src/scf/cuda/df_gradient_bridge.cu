@@ -1185,7 +1185,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   const auto expansion_terms = auxiliary_high ? molecule::kMaximumAuxiliaryAoExpansionTerms
-                                           : molecule::kMaximumAoExpansionTerms;
+                                              : molecule::kMaximumAoExpansionTerms;
   const long double per_ao = 2 * sizeof(std::int32_t) + sizeof(std::int64_t) +
                              sizeof(std::uint8_t) +
                              expansion_terms * (3 * sizeof(std::uint8_t) + sizeof(double));
@@ -1333,7 +1333,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // enabling its full-range screening, compact schedule or mixed precision.
     // H has no promoted shell schedule. Keep its complete response on the
     // independently qualified, bounded six-term polynomial panel consumer.
-    const bool shell_execution = !auxiliary_h && (range_omega == 0.0 || execution_control || promoted_range) &&
+    const bool shell_execution = !auxiliary_h &&
+                                 (range_omega == 0.0 || execution_control || promoted_range) &&
                                  execution != "generic" && device_metric && schedule == 0;
     mixed_shell = mixed_shell && shell_execution && !auxiliary_high && range_omega == 0.0;
     if (mixed_shell) {

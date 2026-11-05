@@ -2652,18 +2652,18 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Pulay has a useful local history. A finite, native-only Fock warmup
     // changes proposals, never the physical F[D], stopping gates or budget.
     // Imported/transported and authenticated warm densities retain their path.
-    cold_fock_startup =
-        native_cold_seed && !use_warm && spins == 2 &&
-        options.max_iterations >= kColdFockStartupIterations + 4 &&
-        functional == semilocal_family_code(SemilocalFamily::B3lyp) &&
-        !has_range_correction && !nonlocal_correlation && !budget_fock &&
-        options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
-            GENERATIVEQC_PRECISION_FP64 &&
-        !precision_schedule.any_lower_precision() && provider.system().ecp_terms.empty() &&
-        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
-                     [](const auto& atom) { return atom.ecp_core != 0; }) &&
-        std::any_of(provider.system().atoms.begin(), provider.system().atoms.end(),
-                    [](const auto& atom) { return atom.atomic_number > 18; });
+    cold_fock_startup = native_cold_seed && !use_warm && spins == 2 &&
+                        options.max_iterations >= kColdFockStartupIterations + 4 &&
+                        functional == semilocal_family_code(SemilocalFamily::B3lyp) &&
+                        !has_range_correction && !nonlocal_correlation && !budget_fock &&
+                        options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
+                            GENERATIVEQC_PRECISION_FP64 &&
+                        !precision_schedule.any_lower_precision() &&
+                        provider.system().ecp_terms.empty() &&
+                        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                                     [](const auto& atom) { return atom.ecp_core != 0; }) &&
+                        std::any_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                                    [](const auto& atom) { return atom.atomic_number > 18; });
     nonlocal_seed_stage = nonlocal_initialization && (!outer_requested || native_cold_seed);
     nonlocal_inner_residual_tolerance = standard_nonlocal_model && standard_convergence_active()
                                             ? physical_stationarity_tolerance()
@@ -4157,7 +4157,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         cuda_ks_detail::cold_start_fock(stream, elements, fock, fock_history, effective, damp);
         check(cudaGetLastError());
         runtime::cuda_trace::trace_counter(damp ? "startup_damped_focks" : "startup_current_focks",
-                                            1);
+                                           1);
       } else {
         if (ordered_diis_gram) {
           launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock,
@@ -4438,9 +4438,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // canonical physical density by a destabilizing unextrapolated update.
     const bool canonical_final_probe =
         !occupied_stage && (fitted_exchange || (spins == 2 && has_exchange)) && !budget_fock &&
-        !has_range_correction &&
-        !nonlocal_correlation && !precision_schedule.any_lower_precision() &&
-        configured_chunk_width() == 1 && provider.system().ecp_terms.empty() &&
+        !has_range_correction && !nonlocal_correlation &&
+        !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
+        provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
     // On a soft orbital manifold the extrapolated density can move much more
