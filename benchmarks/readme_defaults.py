@@ -561,6 +561,8 @@ def main(argv: list[str] | None = None) -> None:
         "spin": 0,
         "source_revision": args.source_revision,
         "runner_sha256": digest(Path(__file__)),
+        # Preserve absence as null: explicit 1 is not default-path evidence.
+        "occupied_xc_env": os.environ.get("GENERATIVEQC_CUDA_KS_OCCUPIED_XC"),
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         # Preserve the actual allocation and visibility on both schedulers.
         "scheduler": {

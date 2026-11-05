@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "ffa6936968d5c5a33194bd9bc09435a9f2ee0d05",
+  "file_count": 1,
+  "total_bytes": 335532,
+  "purpose": "Exact published historical occupied-XC cold receipts, including all 168 endpoints, independent references, source reconstruction and failed cohorts. Offline recovery does not transfer old qualification to new source; no numerical fixture requires this payload in the checkout.",
+  "files": [
+    {
+      "path": "benchmarks/results/occupied-xc-cold-20261023/receipts.json.xz",
+      "bytes": 335532,
+      "sha256": "f2bbd7207e6d8c757b6e5ed727cbc9b3eb8435543b09a9426cf14d16a70312bc",
+      "git_blob_sha1": "d98cea797734aba6936aaff49b8a01cb5d3babaf",
+      "git_mode": "100644"
+    }
+  ]
+}

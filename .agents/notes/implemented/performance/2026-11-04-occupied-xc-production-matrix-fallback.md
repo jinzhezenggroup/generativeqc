@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-11-04
 
+The production opt-in exclusion is superseded by the
+[audited-proposal decision](2026-11-04-occupied-xc-audited-proposals.md).
+Matrix defaults and exact-mode lower-level verification remain intact.
+
 ## Problem
 
 The [exact-identity repair](../numerics/2026-11-04-occupied-xc-exact-identity.md)
