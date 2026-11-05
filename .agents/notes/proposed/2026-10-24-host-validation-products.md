@@ -81,3 +81,8 @@ and the wider Direct/DF cold goal against GPU4PySCF remains open.
 Complete byte-preserved receipts, source identities, reproduction commands and
 scope are in
 [`scf-validation-gemm-20261024`](../../../benchmarks/results/scf-validation-gemm-20261024/README.md).
+
+The later [H100 DF cold seed proposal](2026-11-05-h100-df-cold-seed-products.md)
+considers a narrow owner preference, while retaining this global default-off
+decision. Its source-matched selector evidence and changed-default acceptance
+are separate from this historical cohort.

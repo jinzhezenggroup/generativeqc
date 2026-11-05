@@ -51,6 +51,7 @@
 #include "scf/solver/diis.hpp"
 #include "scf/solver/mean_field_driver.hpp"
 #include "scf/solver/proposal_control.hpp"
+#include "scf/solver/validation_products.hpp"
 
 namespace generativeqc::scf {
 namespace host_trace = runtime::host_trace;
@@ -618,8 +619,13 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
   std::optional<Matrix> candidate;
   try {
     runtime::CpuRetainedCapacity retained(retained_bytes);
+    // Large CUDA DF seeds otherwise spend their cold-only metric/occupation
+    // admission in scalar cubic products. Borrow the existing locally threaded
+    // FP64 provider; small targets and unavailable providers retain the scalar
+    // path. Explicit selector 0 still supplies the same-source causal baseline.
+    const solver::ValidationProducts products({}, data.one_electron.nbf >= 512);
     candidate = initial_guess::prepare_huckel_initial_density(
-        system, data.one_electron, *options.preliminary_guess, diagnostic, eigen);
+        system, data.one_electron, *options.preliminary_guess, diagnostic, eigen, products);
   } catch (const std::bad_alloc&) {
     throw;
   } catch (const generativeqc::Error& error) {
