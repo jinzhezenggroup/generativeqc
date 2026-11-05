@@ -5,5 +5,5 @@
     "generated/generated_df_ao_source.cu"
   ],
   "owner": "python/generativeqc_compiler/method/df_ao_source.py",
-  "scope": "Shared TensorIR fitted AO Gram value and VJP through both three-center integral legs and the inverse metric root. Native composition retains the shared host FP64 metric conditioning/Frechet owner and admitted integral derivative consumers. This bounded dense interaction source does not claim a low-memory rank-three DF-CC algorithm or fully resident CUDA response."
+  "scope": "Shared TensorIR spin-frame three-index factor maps, rectangular pair-panel Gram contraction, and complete raw/root/both-orbital-leg VJPs. Unrestricted UMP2 composes direct factor adjoints without AO fourth-order values/cotangents. Native composition retains shared host FP64 fixed-rank metric conditioning/Frechet response and admitted nuclear integral derivative consumers. This does not claim a low-memory rank-three UCC amplitude algorithm or fully resident CUDA nuclear response."
 }

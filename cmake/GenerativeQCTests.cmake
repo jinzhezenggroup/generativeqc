@@ -105,6 +105,8 @@ macro(generativeqc_add_native_tests)
                        NO_GENERATIVEQC NO_SRC_INCLUDE)
   target_include_directories(generativeqc_geometry_optimizer_tests PRIVATE
                              "${CMAKE_CURRENT_SOURCE_DIR}/include")
+  generativeqc_native_test(generativeqc_saddle_optimizer_tests
+                       tests/native/test_saddle_optimizer.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_ks_mixed_warmup_tests
                        tests/native/test_ks_mixed_warmup.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_cuda_value_work_tests
@@ -254,6 +256,13 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
     generativeqc_native_test(generativeqc_ump2_contract_tests tests/native/test_ump2_contract.cpp)
+    add_test(NAME generativeqc_ump2_force_contract
+             COMMAND generativeqc_ump2_contract_tests --force-contract)
+    generativeqc_native_test(generativeqc_correlation_admission_tests tests/native/test_correlation_admission.cpp)
+    if(GENERATIVEQC_ENABLE_CUDA)
+      generativeqc_native_test(generativeqc_df_factor_cuda_tests tests/native/test_df_factor_cuda.cpp SKIP_77)
+      target_compile_definitions(generativeqc_df_factor_cuda_tests PRIVATE GENERATIVEQC_HAS_CUDA=1)
+    endif()
     generativeqc_native_test(generativeqc_native_gmres_tests tests/native/test_native_gmres.cpp)
     generativeqc_native_test(generativeqc_response_recycle_sdk_tests
                             tests/native/test_response_recycle_sdk.cpp NO_SRC_INCLUDE)

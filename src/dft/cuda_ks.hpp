@@ -280,6 +280,8 @@ class CudaKsPlan {
   bool active() const noexcept;
   bool pending() const noexcept;
   bool failed() const noexcept;
+  /** Terminal physical-gate evidence, including norms omitted by the legacy ABI. */
+  std::string failure_detail() const;
   void enqueue_iteration();
   /** Resolve a submitted iteration or bounded chunk; returns true while another is needed. */
   bool finish_iteration();

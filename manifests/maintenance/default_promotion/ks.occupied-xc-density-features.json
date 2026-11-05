@@ -1,0 +1,27 @@
+{
+  "id": "ks.occupied-xc-density-features",
+  "classification": "already-default",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
+  ],
+  "owner_issues": [
+    2751
+  ],
+  "sources": [
+    "src/dft/cuda_ks.cpp",
+    "src/dft/cuda_xc.cpp",
+    "python/generativeqc_compiler/dft/xc_contraction_cuda.py",
+    "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py"
+  ],
+  "rationale": "Unset and exact 1 automatically admit bounded occupied-feature SCF proposals. Admitted points avoid dense verification, while unsupported and near-stationary inputs retain live original-D work. The initializer permanently hands off to the original matrix target and resets the energy epoch before unchanged strict physical/canonical acceptance. DIIS may predict densities for at most six unsuccessful strict sweeps before being cleared, never certify a physical result. StrictAudit never receives provisional features. Explicit 0 and malformed controls remain matrix-only; automatic initializer selection is not a universal XC sensitivity certificate or an all-functional speedup claim.",
+  "revisit_condition": "Revisit automatic admission if source-matched complete native cold/warm/moved E+F timing, semantic work or independent scientific gates expose a credible regression; retain explicit 0 rollback and the strict original-D target regardless of initializer policy.",
+  "evidence": [
+    "tests/python/test_xc_occupied_certificate.py",
+    "tests/python/test_xc_occupied_features_cuda.py",
+    "tests/python/test_xc_occupied_default_cuda.py",
+    "tests/python/test_ks_occupied_xc_policy.py",
+    "tests/python/test_ks_mixed_retry_handoff.py",
+    "docs:docs/developer/xc_contractions.md",
+    "note:.agents/notes/implemented/performance/2026-11-05-occupied-xc-automatic-admission.md"
+  ]
+}

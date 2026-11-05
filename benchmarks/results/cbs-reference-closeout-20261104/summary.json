@@ -1,0 +1,1589 @@
+{
+  "status": "PASS_REQUIRED_REFERENCE_MATRIX_AND_PHYSICAL_H100_WATER",
+  "rows": [
+    {
+      "status": "PASS",
+      "case": "h2-dz-tz",
+      "model": "conventional",
+      "errors": {
+        "hf_2": {
+          "energy": {
+            "maximum": 7.993605777301127e-15,
+            "rms": 7.993605777301127e-15,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 4.773841912053545e-13,
+              "rms": 2.789157475875835e-13,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_2": {
+          "energy": {
+            "maximum": 1.687538997430238e-14,
+            "rms": 1.687538997430238e-14,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 4.4151488021171303e-13,
+              "rms": 2.5800026015145326e-13,
+              "gate": 2e-06
+            }
+          }
+        },
+        "ccsdt_2": {
+          "energy": {
+            "maximum": 3.494982081519993e-13,
+            "rms": 3.494982081519993e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 1.164112209406376e-12,
+              "rms": 6.806042164441339e-13,
+              "gate": 2e-06
+            }
+          }
+        },
+        "hf_3": {
+          "energy": {
+            "maximum": 1.199040866595169e-14,
+            "rms": 1.199040866595169e-14,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 2.0492964963869653e-12,
+              "rms": 1.1978376407572774e-12,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_3": {
+          "energy": {
+            "maximum": 3.175237850427948e-14,
+            "rms": 3.175237850427948e-14,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 4.0374066936910147e-10,
+              "rms": 2.3605437360471963e-10,
+              "gate": 2e-06
+            }
+          }
+        },
+        "composite": {
+          "energy": {
+            "maximum": 3.6992631180510216e-13,
+            "rms": 3.6992631180510216e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 5.716669637667593e-10,
+              "rms": 3.342354530362816e-10,
+              "gate": 2e-06
+            }
+          }
+        }
+      },
+      "algebra_terms": {
+        "hf_energy": {
+          "maximum": 2.220446049250313e-16,
+          "rms": 2.220446049250313e-16,
+          "gate": 1e-09
+        },
+        "mp2_correlation_energy": {
+          "maximum": 4.163336342344337e-17,
+          "rms": 4.163336342344337e-17,
+          "gate": 1e-09
+        },
+        "delta_ccsdt_energy": {
+          "maximum": 6.938893903907228e-17,
+          "rms": 6.938893903907228e-17,
+          "gate": 1e-09
+        },
+        "force_translation": {
+          "maximum": 1.4866580189121237e-15,
+          "rms": 1.0854005005224588e-15,
+          "gate": 2e-07
+        },
+        "hf_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        },
+        "mp2_correlation_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        },
+        "delta_ccsdt_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        }
+      },
+      "triples_error": {
+        "maximum": 1.465409475047445e-19,
+        "rms": 1.465409475047445e-19,
+        "gate": 1e-09
+      },
+      "independent_conventional_directions": [
+        {
+          "maximum": 5.299315937717236e-08,
+          "rms": 5.299315937717236e-08,
+          "gate": 2e-06
+        },
+        {
+          "maximum": 4.783981986597463e-09,
+          "rms": 4.783981986597463e-09,
+          "gate": 2e-06
+        }
+      ],
+      "oracle_step_stability": {},
+      "energy_only_parity": {
+        "maximum": 0.0,
+        "rms": 0.0,
+        "gate": 1e-10
+      },
+      "native_directional_internal_checks": [
+        {
+          "maximum": 4.771769533326586e-09,
+          "rms": 4.771769533326586e-09,
+          "gate": 2e-06
+        },
+        {
+          "maximum": 5.303475046278261e-10,
+          "rms": 5.303475046278261e-10,
+          "gate": 2e-06
+        }
+      ]
+    },
+    {
+      "status": "PASS",
+      "case": "h2-dz-tz",
+      "model": "correlation-df",
+      "errors": {
+        "hf_2": {
+          "energy": {
+            "maximum": 7.993605777301127e-15,
+            "rms": 7.993605777301127e-15,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 2.0450352211653922e-07,
+              "rms": 1.1868855681724436e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.840797573616007e-08,
+              "rms": 1.068205904563893e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_2": {
+          "energy": {
+            "maximum": 1.509903313490213e-14,
+            "rms": 1.509903313490213e-14,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 2.0558923835567455e-07,
+              "rms": 1.1932719459350258e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.8505667498825568e-08,
+              "rms": 1.0739526159527477e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "ccsdt_2": {
+          "energy": {
+            "maximum": 3.7194691770991994e-12,
+            "rms": 3.7194691770991994e-12,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 2.068291632406627e-07,
+              "rms": 1.2003577775643776e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.8545182242299396e-08,
+              "rms": 1.0758378628974801e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "hf_3": {
+          "energy": {
+            "maximum": 7.549516567451064e-15,
+            "rms": 7.549516567451064e-15,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.913098720551787e-07,
+              "rms": 1.1098958221180859e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.7216280659773653e-08,
+              "rms": 9.987602010515974e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_3": {
+          "energy": {
+            "maximum": 2.353672812205332e-14,
+            "rms": 2.353672812205332e-14,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.918391152599952e-07,
+              "rms": 1.1128515096215416e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.7264168167968608e-08,
+              "rms": 1.001433732524847e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "composite": {
+          "energy": {
+            "maximum": 3.731459585765151e-12,
+            "rms": 3.731459585765151e-12,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.8962981143851032e-07,
+              "rms": 1.0997469772935379e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.6992980680571868e-08,
+              "rms": 9.851608835579062e-09,
+              "gate": 2e-06
+            }
+          }
+        }
+      },
+      "algebra_terms": {
+        "hf_energy": {
+          "maximum": 2.220446049250313e-16,
+          "rms": 2.220446049250313e-16,
+          "gate": 1e-09
+        },
+        "mp2_correlation_energy": {
+          "maximum": 3.469446951953614e-17,
+          "rms": 3.469446951953614e-17,
+          "gate": 1e-09
+        },
+        "delta_ccsdt_energy": {
+          "maximum": 6.938893903907228e-18,
+          "rms": 6.938893903907228e-18,
+          "gate": 1e-09
+        },
+        "force_translation": {
+          "maximum": 2.357489203852481e-15,
+          "rms": 1.3617821042941093e-15,
+          "gate": 2e-07
+        },
+        "hf_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        },
+        "mp2_correlation_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        },
+        "delta_ccsdt_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        }
+      },
+      "triples_error": {
+        "maximum": 9.270830233190979e-20,
+        "rms": 9.270830233190979e-20,
+        "gate": 1e-09
+      },
+      "independent_conventional_directions": [],
+      "oracle_step_stability": {
+        "hf_2": {
+          "maximum": 1.8609950617576136e-07,
+          "rms": 1.0800649866448242e-07,
+          "gate": 2e-06
+        },
+        "mp2_2": {
+          "maximum": 1.870876416747505e-07,
+          "rms": 1.0858766933472093e-07,
+          "gate": 2e-06
+        },
+        "ccsdt_2": {
+          "maximum": 1.8828794079352867e-07,
+          "rms": 1.09277455441224e-07,
+          "gate": 2e-06
+        },
+        "hf_3": {
+          "maximum": 1.7409381344000996e-07,
+          "rms": 1.0100198076626547e-07,
+          "gate": 2e-06
+        },
+        "mp2_3": {
+          "maximum": 1.7457528015893398e-07,
+          "rms": 1.0127081427087435e-07,
+          "gate": 2e-06
+        },
+        "composite": {
+          "maximum": 1.7263683075793845e-07,
+          "rms": 1.0012316755463883e-07,
+          "gate": 2e-06
+        }
+      },
+      "energy_only_parity": {
+        "maximum": 0.0,
+        "rms": 0.0,
+        "gate": 1e-10
+      },
+      "native_directional_internal_checks": [
+        {
+          "maximum": 4.765040505401441e-09,
+          "rms": 4.765040505401441e-09,
+          "gate": 2e-06
+        },
+        {
+          "maximum": 5.195476583674807e-10,
+          "rms": 5.195476583674807e-10,
+          "gate": 2e-06
+        }
+      ]
+    },
+    {
+      "status": "PASS",
+      "case": "h2-dz-tz",
+      "model": "full-df",
+      "errors": {
+        "hf_2": {
+          "energy": {
+            "maximum": 0.0,
+            "rms": 0.0,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 2.0450256715820458e-07,
+              "rms": 1.1868782775831014e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.840650267381956e-08,
+              "rms": 1.0681933283278322e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_2": {
+          "energy": {
+            "maximum": 8.881784197001252e-16,
+            "rms": 8.881784197001252e-16,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 2.0558759811217797e-07,
+              "rms": 1.1932603668613157e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.8503768203000787e-08,
+              "rms": 1.073924474747817e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "ccsdt_2": {
+          "energy": {
+            "maximum": 3.752997912442879e-12,
+            "rms": 3.752997912442879e-12,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 2.0682361262513993e-07,
+              "rms": 1.2003143059871806e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.8640254840530945e-08,
+              "rms": 1.0814691617584651e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "hf_3": {
+          "energy": {
+            "maximum": 3.9968028886505635e-15,
+            "rms": 3.9968028886505635e-15,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.9130761541585883e-07,
+              "rms": 1.109879363267402e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.7216022421898125e-08,
+              "rms": 9.987331849607876e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_3": {
+          "energy": {
+            "maximum": 3.774758283725532e-15,
+            "rms": 3.774758283725532e-15,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.9183680788348312e-07,
+              "rms": 1.1128344427639432e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.7263933208347404e-08,
+              "rms": 1.0013989578443089e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "composite": {
+          "energy": {
+            "maximum": 3.75877107217093e-12,
+            "rms": 3.75877107217093e-12,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.896235764693721e-07,
+              "rms": 1.0996977993119935e-07,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.708973740126296e-08,
+              "rms": 9.907905232028145e-09,
+              "gate": 2e-06
+            }
+          }
+        }
+      },
+      "algebra_terms": {
+        "hf_energy": {
+          "maximum": 2.220446049250313e-16,
+          "rms": 2.220446049250313e-16,
+          "gate": 1e-09
+        },
+        "mp2_correlation_energy": {
+          "maximum": 1.1102230246251565e-16,
+          "rms": 1.1102230246251565e-16,
+          "gate": 1e-09
+        },
+        "delta_ccsdt_energy": {
+          "maximum": 3.122502256758253e-17,
+          "rms": 3.122502256758253e-17,
+          "gate": 1e-09
+        },
+        "force_translation": {
+          "maximum": 2.9475120261190924e-15,
+          "rms": 1.7673878081029736e-15,
+          "gate": 2e-07
+        },
+        "hf_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        },
+        "mp2_correlation_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        },
+        "delta_ccsdt_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        }
+      },
+      "triples_error": {
+        "maximum": 2.4848251780504307e-19,
+        "rms": 2.4848251780504307e-19,
+        "gate": 1e-09
+      },
+      "independent_conventional_directions": [],
+      "oracle_step_stability": {
+        "hf_2": {
+          "maximum": 1.8609747076702744e-07,
+          "rms": 1.0800589474486743e-07,
+          "gate": 2e-06
+        },
+        "mp2_2": {
+          "maximum": 1.8708486611718894e-07,
+          "rms": 1.0858679219286293e-07,
+          "gate": 2e-06
+        },
+        "ccsdt_2": {
+          "maximum": 1.8818476406768508e-07,
+          "rms": 1.0921677278970373e-07,
+          "gate": 2e-06
+        },
+        "hf_3": {
+          "maximum": 1.740929992770368e-07,
+          "rms": 1.0100060586377675e-07,
+          "gate": 2e-06
+        },
+        "mp2_3": {
+          "maximum": 1.7457465103197511e-07,
+          "rms": 1.0126945614342583e-07,
+          "gate": 2e-06
+        },
+        "composite": {
+          "maximum": 1.7253539338034363e-07,
+          "rms": 1.0006191099721026e-07,
+          "gate": 2e-06
+        }
+      },
+      "energy_only_parity": {
+        "maximum": 0.0,
+        "rms": 0.0,
+        "gate": 1e-10
+      },
+      "native_directional_internal_checks": [
+        {
+          "maximum": 4.757467766958179e-09,
+          "rms": 4.757467766958179e-09,
+          "gate": 2e-06
+        },
+        {
+          "maximum": 5.005026159146664e-10,
+          "rms": 5.005026159146664e-10,
+          "gate": 2e-06
+        }
+      ]
+    },
+    {
+      "status": "PASS",
+      "case": "water-algebra",
+      "model": "conventional",
+      "errors": {
+        "hf_2": {
+          "energy": {
+            "maximum": 8.526512829121202e-14,
+            "rms": 8.526512829121202e-14,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 1.3322017100581007e-12,
+              "rms": 6.038789837083783e-13,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_2": {
+          "energy": {
+            "maximum": 9.947598300641403e-14,
+            "rms": 9.947598300641403e-14,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 9.100082637436557e-08,
+              "rms": 5.425669928688205e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "ccsdt_2": {
+          "energy": {
+            "maximum": 1.8474111129762605e-13,
+            "rms": 1.8474111129762605e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 1.4780974817718562e-07,
+              "rms": 8.847123473283864e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "hf_3": {
+          "energy": {
+            "maximum": 1.1368683772161603e-13,
+            "rms": 1.1368683772161603e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 2.2656876375037882e-12,
+              "rms": 1.1346007345716535e-12,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_3": {
+          "energy": {
+            "maximum": 2.842170943040401e-14,
+            "rms": 2.842170943040401e-14,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 1.0976031433740374e-07,
+              "rms": 6.31136070529051e-08,
+              "gate": 2e-06
+            }
+          }
+        },
+        "composite": {
+          "energy": {
+            "maximum": 2.984279490192421e-13,
+            "rms": 2.984279490192421e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "stored_analytic": {
+              "maximum": 1.7446770576856618e-07,
+              "rms": 9.86668674991091e-08,
+              "gate": 2e-06
+            }
+          }
+        }
+      },
+      "algebra_terms": {
+        "hf_energy": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 1e-09
+        },
+        "mp2_correlation_energy": {
+          "maximum": 3.25434124093249e-15,
+          "rms": 3.25434124093249e-15,
+          "gate": 1e-09
+        },
+        "delta_ccsdt_energy": {
+          "maximum": 1.5213524884316598e-15,
+          "rms": 1.5213524884316598e-15,
+          "gate": 1e-09
+        },
+        "force_translation": {
+          "maximum": 6.7307270867900115e-15,
+          "rms": 3.919774963194173e-15,
+          "gate": 2e-07
+        },
+        "hf_forces": {
+          "maximum": 2.168404344971009e-19,
+          "rms": 7.228014483236696e-20,
+          "gate": 2e-06
+        },
+        "mp2_correlation_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        },
+        "delta_ccsdt_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        }
+      },
+      "triples_error": {
+        "maximum": 8.04854772239183e-15,
+        "rms": 8.04854772239183e-15,
+        "gate": 1e-09
+      },
+      "independent_conventional_directions": [
+        {
+          "maximum": 5.204055607971325e-08,
+          "rms": 5.204055607971325e-08,
+          "gate": 2e-06
+        },
+        {
+          "maximum": 4.867623859539094e-09,
+          "rms": 4.867623859539094e-09,
+          "gate": 2e-06
+        }
+      ],
+      "oracle_step_stability": {},
+      "energy_only_parity": {
+        "maximum": 0.0,
+        "rms": 0.0,
+        "gate": 1e-10
+      },
+      "native_directional_internal_checks": [
+        {
+          "maximum": 4.559722002750455e-09,
+          "rms": 4.559722002750455e-09,
+          "gate": 2e-06
+        },
+        {
+          "maximum": 6.754217116156092e-10,
+          "rms": 6.754217116156092e-10,
+          "gate": 2e-06
+        }
+      ]
+    },
+    {
+      "status": "PASS",
+      "case": "water-algebra",
+      "model": "correlation-df",
+      "errors": {
+        "hf_2": {
+          "energy": {
+            "maximum": 1.1368683772161603e-13,
+            "rms": 1.1368683772161603e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.7103070977519952e-07,
+              "rms": 7.424644079498875e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.5464483214822078e-08,
+              "rms": 6.731273001878384e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_2": {
+          "energy": {
+            "maximum": 1.5631940186722204e-13,
+            "rms": 1.5631940186722204e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.7235995049269537e-07,
+              "rms": 7.501900933118052e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.558343280111396e-08,
+              "rms": 6.802355204038008e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "ccsdt_2": {
+          "energy": {
+            "maximum": 5.115907697472721e-13,
+            "rms": 5.115907697472721e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.7554757088256157e-07,
+              "rms": 7.65134173238448e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.593125072141266e-08,
+              "rms": 6.936496797464215e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "hf_3": {
+          "energy": {
+            "maximum": 1.4210854715202004e-13,
+            "rms": 1.4210854715202004e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.6273433818547733e-07,
+              "rms": 7.025333902569457e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.4406173629022412e-08,
+              "rms": 6.313940754475806e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_3": {
+          "energy": {
+            "maximum": 1.1368683772161603e-13,
+            "rms": 1.1368683772161603e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.6384569230531998e-07,
+              "rms": 7.078797306550362e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.4518030957977324e-08,
+              "rms": 6.36642769274773e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "composite": {
+          "energy": {
+            "maximum": 4.121147867408581e-13,
+            "rms": 4.121147867408581e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.6492577206705938e-07,
+              "rms": 7.126123350759224e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.4643614987264186e-08,
+              "rms": 6.402651372983787e-09,
+              "gate": 2e-06
+            }
+          }
+        }
+      },
+      "algebra_terms": {
+        "hf_energy": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 1e-09
+        },
+        "mp2_correlation_energy": {
+          "maximum": 6.147859998861804e-15,
+          "rms": 6.147859998861804e-15,
+          "gate": 1e-09
+        },
+        "delta_ccsdt_energy": {
+          "maximum": 3.936087566991375e-15,
+          "rms": 3.936087566991375e-15,
+          "gate": 1e-09
+        },
+        "force_translation": {
+          "maximum": 9.71445146547012e-16,
+          "rms": 6.32443320547648e-16,
+          "gate": 2e-07
+        },
+        "hf_forces": {
+          "maximum": 3.469446951953614e-18,
+          "rms": 1.1564823173178713e-18,
+          "gate": 2e-06
+        },
+        "mp2_correlation_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        },
+        "delta_ccsdt_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        }
+      },
+      "triples_error": {
+        "maximum": 4.1825402733244865e-15,
+        "rms": 4.1825402733244865e-15,
+        "gate": 1e-09
+      },
+      "independent_conventional_directions": [],
+      "oracle_step_stability": {
+        "hf_2": {
+          "maximum": 1.5556622656037744e-07,
+          "rms": 6.751658199148872e-08,
+          "gate": 2e-06
+        },
+        "mp2_2": {
+          "maximum": 1.567765176915814e-07,
+          "rms": 6.821803522292342e-08,
+          "gate": 2e-06
+        },
+        "ccsdt_2": {
+          "maximum": 1.596163201611489e-07,
+          "rms": 6.95789813804352e-08,
+          "gate": 2e-06
+        },
+        "hf_3": {
+          "maximum": 1.4832816455645492e-07,
+          "rms": 6.394253641503322e-08,
+          "gate": 2e-06
+        },
+        "mp2_3": {
+          "maximum": 1.4932766134734266e-07,
+          "rms": 6.442447211255996e-08,
+          "gate": 2e-06
+        },
+        "composite": {
+          "maximum": 1.502821570797952e-07,
+          "rms": 6.48611050221649e-08,
+          "gate": 2e-06
+        }
+      },
+      "energy_only_parity": {
+        "maximum": 0.0,
+        "rms": 0.0,
+        "gate": 1e-10
+      },
+      "native_directional_internal_checks": [
+        {
+          "maximum": 4.545738327421667e-09,
+          "rms": 4.545738327421667e-09,
+          "gate": 2e-06
+        },
+        {
+          "maximum": 4.956447266502018e-10,
+          "rms": 4.956447266502018e-10,
+          "gate": 2e-06
+        }
+      ]
+    },
+    {
+      "status": "PASS",
+      "case": "water-algebra",
+      "model": "full-df",
+      "errors": {
+        "hf_2": {
+          "energy": {
+            "maximum": 5.684341886080802e-14,
+            "rms": 5.684341886080802e-14,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.7100971501371465e-07,
+              "rms": 7.424181620835861e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.5443488453337206e-08,
+              "rms": 6.764797428889594e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_2": {
+          "energy": {
+            "maximum": 1.4210854715202004e-14,
+            "rms": 1.4210854715202004e-14,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.723433380035333e-07,
+              "rms": 7.501760602643654e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.5557346411121387e-08,
+              "rms": 6.831925572862679e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "ccsdt_2": {
+          "energy": {
+            "maximum": 3.126388037344441e-13,
+            "rms": 3.126388037344441e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.7541751358429725e-07,
+              "rms": 7.64852441267738e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.5775140194129733e-08,
+              "rms": 6.9305021826325434e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "hf_3": {
+          "energy": {
+            "maximum": 1.4210854715202004e-13,
+            "rms": 1.4210854715202004e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.627148737554096e-07,
+              "rms": 7.026356214914397e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.4391446145900488e-08,
+              "rms": 6.301488146296968e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "mp2_3": {
+          "energy": {
+            "maximum": 1.9895196601282805e-13,
+            "rms": 1.9895196601282805e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.6382021357508325e-07,
+              "rms": 7.079654501820967e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.4499657655098197e-08,
+              "rms": 6.345734496151267e-09,
+              "gate": 2e-06
+            }
+          }
+        },
+        "composite": {
+          "energy": {
+            "maximum": 5.542233338928781e-13,
+            "rms": 5.542233338928781e-13,
+            "gate": 1e-09
+          },
+          "forces": {
+            "0.001": {
+              "maximum": 1.6478308487166693e-07,
+              "rms": 7.125034101421173e-08,
+              "gate": 2e-06
+            },
+            "0.0003": {
+              "maximum": 1.4491453884102334e-08,
+              "rms": 6.317901451167398e-09,
+              "gate": 2e-06
+            }
+          }
+        }
+      },
+      "algebra_terms": {
+        "hf_energy": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 1e-09
+        },
+        "mp2_correlation_energy": {
+          "maximum": 3.344546861683284e-15,
+          "rms": 3.344546861683284e-15,
+          "gate": 1e-09
+        },
+        "delta_ccsdt_energy": {
+          "maximum": 1.7121720707891086e-15,
+          "rms": 1.7121720707891086e-15,
+          "gate": 1e-09
+        },
+        "force_translation": {
+          "maximum": 3.606837051250977e-14,
+          "rms": 2.7999744398956055e-14,
+          "gate": 2e-07
+        },
+        "hf_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        },
+        "mp2_correlation_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        },
+        "delta_ccsdt_forces": {
+          "maximum": 0.0,
+          "rms": 0.0,
+          "gate": 2e-06
+        }
+      },
+      "triples_error": {
+        "maximum": 4.259450864935177e-15,
+        "rms": 4.259450864935177e-15,
+        "gate": 1e-09
+      },
+      "independent_conventional_directions": [],
+      "oracle_step_stability": {
+        "hf_2": {
+          "maximum": 1.5556622656037744e-07,
+          "rms": 6.74789273458309e-08,
+          "gate": 2e-06
+        },
+        "mp2_2": {
+          "maximum": 1.567859915924119e-07,
+          "rms": 6.818756867751187e-08,
+          "gate": 2e-06
+        },
+        "ccsdt_2": {
+          "maximum": 1.5964237339016751e-07,
+          "rms": 6.955882547338671e-08,
+          "gate": 2e-06
+        },
+        "hf_3": {
+          "maximum": 1.4832342760950912e-07,
+          "rms": 6.396533262059117e-08,
+          "gate": 2e-06
+        },
+        "mp2_3": {
+          "maximum": 1.4932055591998505e-07,
+          "rms": 6.445377964611102e-08,
+          "gate": 2e-06
+        },
+        "composite": {
+          "maximum": 1.502916309875646e-07,
+          "rms": 6.493812890532038e-08,
+          "gate": 2e-06
+        }
+      },
+      "energy_only_parity": {
+        "maximum": 0.0,
+        "rms": 0.0,
+        "gate": 1e-10
+      },
+      "native_directional_internal_checks": [
+        {
+          "maximum": 4.744451269356187e-09,
+          "rms": 4.744451269356187e-09,
+          "gate": 2e-06
+        },
+        {
+          "maximum": 2.680320271286618e-10,
+          "rms": 2.680320271286618e-10,
+          "gate": 2e-06
+        }
+      ]
+    }
+  ],
+  "unsupported_cpu": [
+    {
+      "case": "h2-dz-tz",
+      "model": "correlation-df",
+      "backend": "cpu",
+      "status": "UNSUPPORTED_BY_FROZEN_PUBLIC_CONTRACT",
+      "scientific_pass": false,
+      "error": "NotImplementedError('DF-CBS analytic endpoints currently require CUDA')"
+    },
+    {
+      "case": "h2-dz-tz",
+      "model": "full-df",
+      "backend": "cpu",
+      "status": "UNSUPPORTED_BY_FROZEN_PUBLIC_CONTRACT",
+      "scientific_pass": false,
+      "error": "NotImplementedError('DF-CBS analytic endpoints currently require CUDA')"
+    },
+    {
+      "case": "water-algebra",
+      "model": "correlation-df",
+      "backend": "cpu",
+      "status": "UNSUPPORTED_BY_FROZEN_PUBLIC_CONTRACT",
+      "scientific_pass": false,
+      "error": "NotImplementedError('DF-CBS analytic endpoints currently require CUDA')"
+    },
+    {
+      "case": "water-algebra",
+      "model": "full-df",
+      "backend": "cpu",
+      "status": "UNSUPPORTED_BY_FROZEN_PUBLIC_CONTRACT",
+      "scientific_pass": false,
+      "error": "NotImplementedError('DF-CBS analytic endpoints currently require CUDA')"
+    }
+  ],
+  "failures": [],
+  "historical_cpu": {
+    "status": "PASS_FROZEN_CONVENTIONAL_CPU_ONLY",
+    "source": "bbd41a42764e8d22d15c1348f70a633961d4dcf5",
+    "replay_sha256": "af3b1963b5cb1b93815849b3dc14e8a949e24322b82d4890ced9fc119f122146"
+  },
+  "physical_water": {
+    "status": "PASS_PHYSICAL_WATER_TWO_COMPLETE_EF",
+    "calls": [
+      {
+        "phase": "first",
+        "seconds": 1.4632179960026406,
+        "errors": {
+          "hf_2": {
+            "energy": {
+              "maximum": 3.126388037344441e-13,
+              "rms": 3.126388037344441e-13,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 1.3995116177056843e-09,
+                "rms": 7.02820784569682e-10,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 5.568029000542485e-09,
+                "rms": 2.3027996531957997e-09,
+                "gate": 3e-06
+              }
+            }
+          },
+          "mp2_2": {
+            "energy": {
+              "maximum": 4.547473508864641e-13,
+              "rms": 4.547473508864641e-13,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 1.395683124627567e-09,
+                "rms": 6.88761556735138e-10,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 5.564200506597006e-09,
+                "rms": 2.149528505836005e-09,
+                "gate": 3e-06
+              }
+            }
+          },
+          "ccsdt_2": {
+            "energy": {
+              "maximum": 3.623767952376511e-12,
+              "rms": 3.623767952376511e-12,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 1.375981106832569e-09,
+                "rms": 6.43296941489402e-10,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 5.662922276938875e-09,
+                "rms": 2.1522546865402806e-09,
+                "gate": 3e-06
+              }
+            }
+          },
+          "hf_3": {
+            "energy": {
+              "maximum": 4.689582056016661e-13,
+              "rms": 4.689582056016661e-13,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 2.6891511240023647e-09,
+                "rms": 1.621693562246026e-09,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 5.210719115448607e-09,
+                "rms": 2.5869877175913673e-09,
+                "gate": 3e-06
+              }
+            }
+          },
+          "mp2_3": {
+            "energy": {
+              "maximum": 5.400124791776761e-13,
+              "rms": 5.400124791776761e-13,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 2.5980813611603537e-09,
+                "rms": 1.5785348240759268e-09,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 5.748196344260159e-09,
+                "rms": 2.681857868463076e-09,
+                "gate": 3e-06
+              }
+            }
+          },
+          "composite": {
+            "energy": {
+              "maximum": 4.931166586175095e-12,
+              "rms": 4.931166586175095e-12,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 2.9217887415056154e-09,
+                "rms": 1.7386523889814548e-09,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 6.87713097406728e-09,
+                "rms": 3.1169565102657234e-09,
+                "gate": 3e-06
+              }
+            }
+          }
+        },
+        "composite_force_rms": 3.1169565102657234e-09,
+        "triples_energy": -0.0029987945467344823,
+        "triples_error": {
+          "maximum": 7.332546028693265e-14,
+          "rms": 7.332546028693265e-14,
+          "gate": 1e-07
+        },
+        "algebra_terms": {
+          "hf_energy": {
+            "maximum": 0.0,
+            "rms": 0.0,
+            "gate": 1e-07
+          },
+          "mp2_correlation_energy": {
+            "maximum": 1.2156942119645464e-14,
+            "rms": 1.2156942119645464e-14,
+            "gate": 1e-07
+          },
+          "delta_ccsdt_energy": {
+            "maximum": 6.4063337967823486e-15,
+            "rms": 6.4063337967823486e-15,
+            "gate": 1e-07
+          },
+          "force_translation": {
+            "maximum": 1.2808851201917548e-13,
+            "rms": 7.715293853827807e-14,
+            "gate": 2e-07
+          },
+          "hf_forces": {
+            "maximum": 1.734723475976807e-18,
+            "rms": 5.827411577228919e-19,
+            "gate": 3e-06
+          },
+          "mp2_correlation_forces": {
+            "maximum": 0.0,
+            "rms": 0.0,
+            "gate": 3e-06
+          },
+          "delta_ccsdt_forces": {
+            "maximum": 0.0,
+            "rms": 0.0,
+            "gate": 3e-06
+          }
+        }
+      },
+      {
+        "phase": "repeat",
+        "seconds": 0.8719716149498709,
+        "errors": {
+          "hf_2": {
+            "energy": {
+              "maximum": 3.126388037344441e-13,
+              "rms": 3.126388037344441e-13,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 1.3995089531704252e-09,
+                "rms": 7.028196274170942e-10,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 5.568026336007226e-09,
+                "rms": 2.3027986610806657e-09,
+                "gate": 3e-06
+              }
+            }
+          },
+          "mp2_2": {
+            "energy": {
+              "maximum": 4.547473508864641e-13,
+              "rms": 4.547473508864641e-13,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 1.3956902300549245e-09,
+                "rms": 6.887653648167201e-10,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 5.564207612024363e-09,
+                "rms": 2.1495321161117458e-09,
+                "gate": 3e-06
+              }
+            }
+          },
+          "ccsdt_2": {
+            "energy": {
+              "maximum": 3.623767952376511e-12,
+              "rms": 3.623767952376511e-12,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 1.375974889583631e-09,
+                "rms": 6.432950636321464e-10,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 5.6629160596899375e-09,
+                "rms": 2.152252179132362e-09,
+                "gate": 3e-06
+              }
+            }
+          },
+          "hf_3": {
+            "energy": {
+              "maximum": 4.689582056016661e-13,
+              "rms": 4.689582056016661e-13,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 2.6891511240023647e-09,
+                "rms": 1.6216931143013768e-09,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 5.2107182272701875e-09,
+                "rms": 2.586987381676276e-09,
+                "gate": 3e-06
+              }
+            }
+          },
+          "mp2_3": {
+            "energy": {
+              "maximum": 5.400124791776761e-13,
+              "rms": 5.400124791776761e-13,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 2.598083581606403e-09,
+                "rms": 1.5785358992882321e-09,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 5.748195900170949e-09,
+                "rms": 2.6818580385390068e-09,
+                "gate": 3e-06
+              }
+            }
+          },
+          "composite": {
+            "energy": {
+              "maximum": 4.931166586175095e-12,
+              "rms": 4.931166586175095e-12,
+              "gate": 1e-07
+            },
+            "forces": {
+              "0.0001": {
+                "maximum": 2.9217882783344473e-09,
+                "rms": 1.7386469547423804e-09,
+                "gate": 3e-06
+              },
+              "3e-05": {
+                "maximum": 6.877113274683655e-09,
+                "rms": 3.1169512468299995e-09,
+                "gate": 3e-06
+              }
+            }
+          }
+        },
+        "composite_force_rms": 3.1169512468299995e-09,
+        "triples_energy": -0.0029987945467344823,
+        "triples_error": {
+          "maximum": 7.332546028693265e-14,
+          "rms": 7.332546028693265e-14,
+          "gate": 1e-07
+        },
+        "algebra_terms": {
+          "hf_energy": {
+            "maximum": 0.0,
+            "rms": 0.0,
+            "gate": 1e-07
+          },
+          "mp2_correlation_energy": {
+            "maximum": 1.2156942119645464e-14,
+            "rms": 1.2156942119645464e-14,
+            "gate": 1e-07
+          },
+          "delta_ccsdt_energy": {
+            "maximum": 6.4063337967823486e-15,
+            "rms": 6.4063337967823486e-15,
+            "gate": 1e-07
+          },
+          "force_translation": {
+            "maximum": 1.2814055372345479e-13,
+            "rms": 7.976305395909028e-14,
+            "gate": 2e-07
+          },
+          "hf_forces": {
+            "maximum": 2.168404344971009e-19,
+            "rms": 1.0221956111222494e-19,
+            "gate": 3e-06
+          },
+          "mp2_correlation_forces": {
+            "maximum": 0.0,
+            "rms": 0.0,
+            "gate": 3e-06
+          },
+          "delta_ccsdt_forces": {
+            "maximum": 0.0,
+            "rms": 0.0,
+            "gate": 3e-06
+          }
+        }
+      }
+    ],
+    "oracle_step_stability": {
+      "hf_2": {
+        "maximum": 4.1685173828368005e-09,
+        "rms": 1.7465088981938779e-09,
+        "gate": 1e-06
+      },
+      "mp2_2": {
+        "maximum": 4.168517381969439e-09,
+        "rms": 1.5568812856696769e-09,
+        "gate": 1e-06
+      },
+      "ccsdt_2": {
+        "maximum": 4.2869411701063065e-09,
+        "rms": 1.6478457390046255e-09,
+        "gate": 1e-06
+      },
+      "hf_3": {
+        "maximum": 4.3816802039985114e-09,
+        "rms": 2.461759394134827e-09,
+        "gate": 1e-06
+      },
+      "mp2_3": {
+        "maximum": 3.5053441625049198e-09,
+        "rms": 2.066780700383874e-09,
+        "gate": 1e-06
+      },
+      "composite": {
+        "maximum": 4.097463108393429e-09,
+        "rms": 2.472156285242156e-09,
+        "gate": 1e-06
+      }
+    },
+    "scope": "physical full-DF cc-pVDZ/cc-pVTZ water; no cross-GPU speedup"
+  }
+}

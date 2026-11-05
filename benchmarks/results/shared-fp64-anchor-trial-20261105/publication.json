@@ -1,0 +1,166 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Standard observations retained; Fast lacks complete packaged forces, and no peak-memory/total-compilation promotion receipt exists. Strict default remains off.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 6066,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "75f760c7b54e6742b7eb6e849b06b2e7d82b319eb2d0d5c08cf746c550879729"
+    },
+    {
+      "bytes": 824,
+      "path": "acceptance.json.xz",
+      "role": "input",
+      "sha256": "e3f1e5ca846e9ededb1a3179390663e4581de076b8d8aa7951050965567082e6"
+    },
+    {
+      "bytes": 2952,
+      "path": "analyze-trial.py.xz",
+      "role": "reproduction",
+      "sha256": "97e21c15b7a16531fbf5eaaa62212e81753bbce0bdc827301723a84910bac1f6"
+    },
+    {
+      "bytes": 1368,
+      "path": "benchmark-remote.sh.xz",
+      "role": "reproduction",
+      "sha256": "1119fba5dd1282cf9673bbb8b5375471a213a76e890feff74eb80281360818e1"
+    },
+    {
+      "bytes": 940,
+      "path": "build-remote.sh.xz",
+      "role": "reproduction",
+      "sha256": "f9c49b764331b2a2fd630fb85bb4bbc1b38521a0f0e0736847835f2aa5470de3"
+    },
+    {
+      "bytes": 1060,
+      "path": "continue-remote.sh.xz",
+      "role": "reproduction",
+      "sha256": "a54865acf8bddbbf9ec3316bb02cbcf9a499aa74f5edb5ec222fc0a686725afe"
+    },
+    {
+      "bytes": 1963,
+      "path": "def2-svp.json",
+      "role": "input",
+      "sha256": "b45babd6c76ccda31a80955b071f50c8857ccd64ad06b57365f8b92550b754c0"
+    },
+    {
+      "bytes": 1140,
+      "path": "finish-remote.sh.xz",
+      "role": "reproduction",
+      "sha256": "39812bab6f86ac4cd45b2d5e3be480641a56284639980c943729cd5214268ba4"
+    },
+    {
+      "bytes": 1120,
+      "path": "host-checks.json.xz",
+      "role": "summary",
+      "sha256": "ced22150555639d1512d8a72c373a5d11c711ae55471687d3ddd421f9d188602"
+    },
+    {
+      "bytes": 5400,
+      "path": "measured-source.patch.xz",
+      "role": "source-patch",
+      "sha256": "58fe532d6aee4f52f22b144f2d520071f42a1f9e51a9e9e918cdb1045c4eb985"
+    },
+    {
+      "bytes": 508,
+      "path": "oracle48-retry.sh.xz",
+      "role": "reproduction",
+      "sha256": "1248c3503b8a03223bf815916582e4acc0b225a7a7a21397a656afda3161e701"
+    },
+    {
+      "bytes": 1128,
+      "path": "profile-remote.sh.xz",
+      "role": "reproduction",
+      "sha256": "7b7b5278ccece0ceb6c9cc991ae0eabc383cdd3252374093e0c5c152675aa7e2"
+    },
+    {
+      "bytes": 3208,
+      "path": "profile-work.json.xz",
+      "role": "summary",
+      "sha256": "9cf852f4e225baa9b4e70bece8e4ddcd4d874c2571bf713abf2f0a5ec2976369"
+    },
+    {
+      "bytes": 552,
+      "path": "profile_endpoint.py.xz",
+      "role": "reproduction",
+      "sha256": "4194179fe1d00617ac26ade04e49f63e6d66c7de72619ff41b43bafc20fab5e0"
+    },
+    {
+      "bytes": 6684,
+      "path": "qualification-receipts.json.xz",
+      "role": "summary",
+      "sha256": "cc554af9a050c0c7eb057ac9187474098fc9be33ef366d4431c37a4cef63b4a7"
+    },
+    {
+      "bytes": 856,
+      "path": "reference-remote.sh.xz",
+      "role": "reproduction",
+      "sha256": "2c4e25b431845ece669f3c94e1be1ecc860e6667aaa13f3df9dbad057bbb6fd8"
+    },
+    {
+      "bytes": 5936,
+      "path": "reference24.json.xz",
+      "role": "input",
+      "sha256": "fe4dea5be8172ae03f2a0bd58eb1facc55adbcb27088907e7f4a6668b02068b3"
+    },
+    {
+      "bytes": 6696,
+      "path": "reference48.json.xz",
+      "role": "input",
+      "sha256": "71882d28d0f9bfb792b6b9bd3672dd992e50a0fda88cfa16eed467462f8b009c"
+    },
+    {
+      "bytes": 56956,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "cc18d0c44ea726105ffebea3775f167e2dc2e991199a33b333b62d4b71914646"
+    },
+    {
+      "bytes": 439,
+      "path": "source-provenance.json",
+      "role": "input",
+      "sha256": "fe2794bdc157f70311323ddaa598216017d443a92d64eb77023c7dc020c0402c"
+    },
+    {
+      "bytes": 8064,
+      "path": "summary.json.xz",
+      "role": "summary",
+      "sha256": "2fcac8fd677c6bca1eed1e900591b4f265bbe426785d202968d7033b9a53a596"
+    },
+    {
+      "bytes": 2036,
+      "path": "trace-work.py.xz",
+      "role": "reproduction",
+      "sha256": "06c32f369d63196187c50a9b8b86b316576267b83e590ccc4b8235cbe3ebcc8d"
+    },
+    {
+      "bytes": 4740,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "79230bc1722170b5d6694b01e81f3c732d0a648626bf38dcab9a9396932ec9c6"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=8",
+      "--time=00:55:00",
+      "bash",
+      "benchmark-remote.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "c511f9a330ef4e6c7d48e6ed4a5f778bff260001"
+  }
+}

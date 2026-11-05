@@ -8,6 +8,40 @@
 
 namespace generativeqc::dft::cuda_ks_detail {
 namespace {
+__global__ void core_guess_frontier_tie_kernel(std::size_t dimension, int occupied_beta,
+                                               const double* energies, int* tied) {
+  *tied = 0;
+  if (occupied_beta <= 0 || static_cast<std::size_t>(occupied_beta) >= dimension) return;
+  const auto first = occupied_beta > 1 ? static_cast<std::size_t>(occupied_beta - 2) : 0U;
+  const auto last = min(dimension - 2, static_cast<std::size_t>(occupied_beta));
+  for (auto orbital = first; orbital <= last; ++orbital) {
+    const double gap = energies[orbital + 1] - energies[orbital];
+    if (gap >= 0.0 && gap <= 1e-10) *tied = 1;
+  }
+}
+
+__global__ void break_core_guess_ties_kernel(std::size_t dimension, double* core_guess) {
+  const auto row = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (row < dimension)
+    core_guess[row * (dimension + 1)] += 1e-8 * static_cast<double>(row) / dimension;
+}
+
+__global__ void orient_core_guess_orbitals_kernel(std::size_t dimension, double* coefficients) {
+  const auto column = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (column >= dimension) return;
+  double maximum = 0.0;
+  for (std::size_t row = 0; row < dimension; ++row)
+    maximum = fmax(maximum, fabs(coefficients[column * dimension + row]));
+  for (std::size_t pivot = 0; pivot < dimension; ++pivot) {
+    const double value = coefficients[column * dimension + pivot];
+    if (fabs(value) < maximum * (1.0 - 1e-12)) continue;
+    if (value < 0.0)
+      for (std::size_t row = 0; row < dimension; ++row)
+        coefficients[column * dimension + row] = -coefficients[column * dimension + row];
+    return;
+  }
+}
+
 __global__ void merge_grid_contributions_kernel(std::size_t elements, double* potential,
                                                 double* totals, int* error,
                                                 const double* nonlocal_potential,
@@ -262,6 +296,21 @@ void merge_grid_contributions(cudaStream_t stream, std::size_t elements, double*
   const auto blocks = std::min<std::size_t>((elements + 127) / 128, 65535);
   merge_grid_contributions_kernel<<<static_cast<unsigned>(blocks), 128, 0, stream>>>(
       elements, potential, totals, error, nonlocal_potential, nonlocal_totals, nonlocal_error);
+}
+
+void core_guess_frontier_tie(cudaStream_t stream, std::size_t dimension, int occupied_beta,
+                             const double* energies, int* tied) {
+  core_guess_frontier_tie_kernel<<<1, 1, 0, stream>>>(dimension, occupied_beta, energies, tied);
+}
+
+void break_core_guess_ties(cudaStream_t stream, std::size_t dimension, double* core_guess) {
+  break_core_guess_ties_kernel<<<static_cast<unsigned>((dimension + 127) / 128), 128, 0, stream>>>(
+      dimension, core_guess);
+}
+
+void orient_core_guess_orbitals(cudaStream_t stream, std::size_t dimension, double* coefficients) {
+  orient_core_guess_orbitals_kernel<<<static_cast<unsigned>((dimension + 127) / 128), 128, 0,
+                                      stream>>>(dimension, coefficients);
 }
 
 void stabilize_uks_proposal(cudaStream_t stream, std::size_t n, const double* overlap,
