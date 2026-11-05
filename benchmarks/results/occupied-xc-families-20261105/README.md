@@ -16,9 +16,10 @@ Laplacian/nonlocal/response consumers or all inputs are accelerated.
 - Release CUDA 12.9 / sm_120, CUDA AOT off, verified sccache 0.16.0
   CXX/CUDA launchers. Retained before/after cache statistics describe the
   incremental qualification build, not a clean-cache performance claim.
-- RTX 5090 / 32 GB, driver 580.178.04, finite Slurm `main` allocations on
-  node4 and node5. Scheduler-assigned device visibility is preserved.
-  Python 3.13.11, CuPy 13.6.0, PySCF 2.14.0; one BLAS/OpenMP thread.
+- RTX 5090 / 32 GB, finite Slurm `main` allocations. Node4 uses driver
+  580.178.04 and Python 3.13.11; node5 uses driver 570.86.16 and Python 3.13.9.
+  Both use CuPy 13.6.0 and PySCF 2.14.0, with one BLAS/OpenMP thread.
+  Scheduler-assigned device visibility is preserved.
 
 Primary family populations use node4; independent confirmations and the original
 96-atom workload use node5. Every matrix/default comparison stays on one host;
