@@ -42,10 +42,10 @@ void execute(const DeviceBatch& batch, const double* bounds, const double* densi
 
 template <unsigned ShellClass, class Roots>
 void run_probe(const std::array<std::uint8_t, 4>& angular, bool unrestricted, bool separate,
-               bool enabled, unsigned orientation, bool same_ket, bool same_pair, unsigned system,
-               const std::int32_t* atoms, const double* positions, const double* density,
-               const double* coefficients, const double* bounds, const double* seed,
-               double threshold, double coulomb, double exchange, bool mixed,
+               bool enabled, bool relative, unsigned orientation, bool same_ket, bool same_pair,
+               unsigned system, const std::int32_t* atoms, const double* positions,
+               const double* density, const double* coefficients, const double* bounds,
+               const double* seed, double threshold, double coulomb, double exchange, bool mixed,
                unsigned injected_fault, double* forces, unsigned long long* counters) {
   DeviceBatch batch{};
   batch.batch_size = system + 1;
@@ -108,7 +108,7 @@ void run_probe(const std::array<std::uint8_t, 4>& angular, bool unrestricted, bo
   }
   batch.shell_primitive_pairs = primitives;
   batch.direct_force_pair_separable = enabled;
-  batch.direct_force_relative_response = false;
+  batch.direct_force_relative_response = relative;
   batch.direct_force_fp32 = mixed;
   batch.direct_force_seed = seed;
   DirectForceWork work{};
@@ -155,8 +155,8 @@ void run_probe(const std::array<std::uint8_t, 4>& angular, bool unrestricted, bo
 
 /** Exercise each actual roots binding without rewriting production source. */
 extern "C" void scalar_pair_probe(unsigned class_index, bool unrestricted, bool separate,
-                                  bool enabled, unsigned orientation, bool same_ket, bool same_pair,
-                                  unsigned system, const std::int32_t* atoms,
+                                  bool enabled, bool relative, unsigned orientation, bool same_ket,
+                                  bool same_pair, unsigned system, const std::int32_t* atoms,
                                   const double* positions, const double* density,
                                   const double* coefficients, const double* bounds,
                                   const double* seed, double threshold, double coulomb,
@@ -166,10 +166,10 @@ extern "C" void scalar_pair_probe(unsigned class_index, bool unrestricted, bool 
                                                      {2, 0, 2, 0}, {2, 1, 1, 0}, {2, 1, 2, 0},
                                                      {2, 2, 1, 0}};
   const auto call = [&]<unsigned ShellClass, class Roots>() {
-    run_probe<ShellClass, Roots>(angular[class_index], unrestricted, separate, enabled, orientation,
-                                 same_ket, same_pair, system, atoms, positions, density,
-                                 coefficients, bounds, seed, threshold, coulomb, exchange, mixed,
-                                 injected_fault, forces, counters);
+    run_probe<ShellClass, Roots>(angular[class_index], unrestricted, separate, enabled, relative,
+                                 orientation, same_ket, same_pair, system, atoms, positions,
+                                 density, coefficients, bounds, seed, threshold, coulomb, exchange,
+                                 mixed, injected_fault, forces, counters);
   };
   switch (class_index) {
     case 0:

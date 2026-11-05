@@ -81,6 +81,7 @@ def native_pair_owner(required_native_cxx: Any, tmp_path_factory: Any) -> Any:
         ctypes.c_bool,
         ctypes.c_bool,
         ctypes.c_bool,
+        ctypes.c_bool,
         ctypes.c_uint,
         ctypes.c_bool,
         ctypes.c_bool,
@@ -142,6 +143,7 @@ def _run(
     inputs: dict[str, Any],
     *,
     enabled: bool = True,
+    relative: bool | None = None,
     separate: bool = True,
     orientation: int = 0,
     same_ket: bool = False,
@@ -162,6 +164,7 @@ def _run(
         inputs["unrestricted"],
         separate,
         enabled,
+        enabled if relative is None else relative,
         orientation,
         same_ket,
         same_pair,
@@ -364,7 +367,7 @@ def test_native_pair_unsupported_inputs_keep_original_consumer(
 ) -> None:
     inputs = _inputs(False, angular=angular)
     actual, counts = _run(native_pair_owner, inputs, **guard)
-    expected, _ = _run(native_pair_owner, inputs, enabled=False, **guard)
+    expected, _ = _run(native_pair_owner, inputs, enabled=False, relative=True, **guard)
     np.testing.assert_array_equal(actual, expected)
     assert not counts[:8].any()
 
@@ -547,3 +550,23 @@ def test_native_pair_invalid_schwarz_preserves_strict_force_fallback(
     if counts[2]:
         np.testing.assert_array_equal(actual, expected)
         assert not counts[5:8].any() and counts[8] == 1
+
+
+@pytest.mark.parametrize("angular", CLASSES)
+@pytest.mark.parametrize("relative", (False, True))
+@pytest.mark.parametrize("enabled", (False, True))
+def test_pair_preference_respects_nuclear_response_rollback(
+    native_pair_owner: Any, angular: tuple[int, ...], relative: bool, enabled: bool
+) -> None:
+    """The pair preference cannot override the explicit nuclear response policy."""
+    inputs = _inputs(False, angular=angular)
+    actual, counts = _run(native_pair_owner, inputs, enabled=enabled, relative=relative)
+    nuclear, _ = _run(native_pair_owner, inputs, enabled=False, relative=False)
+    if relative:
+        np.testing.assert_allclose(actual, nuclear, rtol=4e-11, atol=4e-12)
+    else:
+        np.testing.assert_array_equal(actual, nuclear)
+    if enabled and relative:
+        np.testing.assert_array_equal(counts[:4], [1, 1, 0, 0])
+    else:
+        assert not counts[:8].any()

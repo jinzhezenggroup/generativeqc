@@ -540,9 +540,9 @@ __device__ inline void contract_two_electron_force_low_order_sources_task(
                            const double* weights) {
                     Roots::evaluate_separable(geometry, weights, weights);
                   }) {
-      if (batch.direct_force_pair_separable && !batch.direct_force_fp32 &&
-          batch.direct_force_seed == nullptr && exchange_coefficient == 0.0 &&
-          coulomb_coefficient != 0.0) {
+      if (batch.direct_force_pair_separable && batch.direct_force_relative_response &&
+          !batch.direct_force_fp32 && batch.direct_force_seed == nullptr &&
+          exchange_coefficient == 0.0 && coulomb_coefficient != 0.0) {
         if (contract_two_electron_force_low_order_sources_impl<
                 Unrestricted, ShellClass, false, Roots, Mode, ResidentBra, false, false, true>(
                 batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
