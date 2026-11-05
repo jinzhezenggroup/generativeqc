@@ -127,6 +127,9 @@ The earlier switch leaves a strict energy-comparison window before the nearly
 stationary tail instead of adding a Fock solely to establish that baseline.
 These are initializer scheduling controls, not scientific tolerances. No
 provisional energy, residual, warm seed or force can authorize publication.
+XC-only handoff preserves an active, unchanged FP64 J/K source lease rather
+than regenerating its ERIs. An absent source stays on the incumbent bounded
+direct path; a genuinely mixed source still undergoes strict replacement.
 DIIS history only predicts densities. Provisional entries age out through the
 existing chronological ring, bounded by the configured history depth (at most
 64), without clearing the strict predictor accumulated after handoff. Only

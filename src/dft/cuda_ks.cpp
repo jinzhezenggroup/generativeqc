@@ -4518,8 +4518,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       }
       // Mixed J needs a new strict source lease; an XC-only warmup may retain
-      // its unchanged FP64 J/K source. Existing resource/seed guards still apply.
-      prepare_phase_source(phase_source_cold);
+      // its unchanged FP64 J/K source. Re-preparing that lease repeats ERI
+      // generation and allocation without changing the target. An absent
+      // source stays on the existing bounded direct path; a genuinely mixed
+      // source still retires/rebuilds under its original precision guards.
+      if (!enter_occupied_audit ||
+          (phase_source && phase_source->active() && phase_source->mixed_recurrence()))
+        prepare_phase_source(phase_source_cold);
     } else if (pending_nonlocal_seed || pending_nonlocal_frozen) {
       // Never export a provisional density, energy, residual or force as a
       // converged target. The original total iteration budget remains finite.

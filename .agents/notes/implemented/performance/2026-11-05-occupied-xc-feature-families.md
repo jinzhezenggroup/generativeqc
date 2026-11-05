@@ -32,6 +32,16 @@ six-sweep history reset. That reset discarded six useful strict Focks together
 with the remaining old provisional entries. Natural ring ageing removes the
 unnecessary solver restart without a kernel, transfer or extra target rebuild.
 
+The next candidate `ca8855d9dc5d64ffec46f011edf295ce04700811` removes those
+extra Focks, but exposes a second independent handoff cost: calling
+`prepare_phase_source` regenerates a same-precision exact ERI lease. This affects
+hybrid cold endpoints even when their SCF/Fock counts agree. XC reassociation
+does not change J/K arithmetic, geometry, basis, screening or source ownership;
+therefore its handoff now preserves an active strict lease and leaves an absent
+lease on the incumbent bounded direct path. A genuinely mixed active lease
+still follows the original strict retirement/replacement path. No generic
+cross-geometry cache identity policy is weakened.
+
 Dispatch by supported ingredient layout, not functional or molecule names:
 
 - LDA: one occupied value projection and squared-orbital feature reduction.
@@ -61,6 +71,9 @@ recompute the dense contraction; unsafe points retain the stored-D fallback.
   history. Truncating to six also unnecessarily discards strict directions for
   callers with a deeper ring; normal bounded chronological replacement already
   retires every old entry and requires no new device work.
+- Re-preparing an unchanged exact ERI lease at an XC-only handoff repeats
+  allocation and integral production. This cannot be justified by saving only
+  density-feature contractions; preserve the same-geometry strict lease.
 
 ## Evidence
 
