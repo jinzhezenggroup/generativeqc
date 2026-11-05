@@ -26,7 +26,7 @@ COMMON = ROOT / "src/posthf/mp2_derivative_common.cpp"
 WORK_PROBE = os.environ.get("GENERATIVEQC_MP2_WORK_PROBE") == "1"
 # Binding the entire source prevents newly added, uninstrumented work from being
 # silently omitted. Source changes require review of all observation sites.
-COMMON_SHA256 = "7cf56330b2c57adc4b4ab93ec992207da42c2befd119a19765333d11eeae1657"
+COMMON_SHA256 = "38669fe16f97d06fae2ad7edf1aa01a364eee971a5782da574dc847058458763"
 # (exact original statement LHS, replacement LHS). The comma expression only
 # observes execution; arithmetic and evaluation of the original RHS stay intact.
 SITES = (
@@ -167,7 +167,8 @@ def test_actual_common_pullback(
         if factorized:
             n = receipts[0]["n"]
             assert measured_iterations[4] == 0
-            assert measured_iterations[5:7] == [n**5] * 2
+            assert measured_iterations[5] == n**4 * receipts[0]["occupied"]
+            assert measured_iterations[6] == n**5
         else:
             assert measured_iterations[7] == 8 * measured_iterations[0]
 
@@ -187,6 +188,7 @@ def test_actual_common_pullback(
             assert staged["callbacks"] == receipts[0]["callbacks"]
             assert staged["local_elements"] == receipts[0]["local_elements"]
             assert receipts[0]["shell_peak_bytes"] < staged["shell_peak_bytes"]
+            assert receipts[0]["allocated_bytes"] < staged["allocated_bytes"]
             if measured_iterations is not None:
                 assert sum(measured_iterations[9:12]) < receipts[0]["n"] ** 5
         expanded_receipts = []

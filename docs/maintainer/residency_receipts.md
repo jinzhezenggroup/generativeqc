@@ -280,6 +280,29 @@ named gate explicitly, not interpret `INCOMPLETE` or absence of a report as
 approval. Changing limits requires reviewed source-matched qualification, not
 automatic baseline regeneration or file-path exemptions.
 
+Retained prepared-capture journals can also be re-audited without a GPU or a
+second recorder. Use the independently retained v2 capture contract and the
+same reviewed policy, not a regenerated policy or saved diagnostic summary:
+
+```console
+python tools/cupti_source_ratchet.py \
+  --expected expected.json --work-ratchet reviewed-policy.json \
+  --source-boundaries capture/source-boundaries.json \
+  --activity capture/activity.json --output recomputed-work.json
+```
+
+This command recomputes source/API/activity joins and requires the whole policy
+pin, selected profile, workload, and declared hot regions to match the capture
+contract. Exit codes are 0 for `WITHIN_OBSERVED_RATCHET`, 1 for `VIOLATION`, and 2
+for `INCOMPLETE`, including malformed or missing evidence. These are
+**explicit observed-work** outcomes, not the strict residency auditor's `PASS`.
+`residency_status` remains `INCOMPLETE` and `zero_round_trip_assertion` stays
+unset even at exit 0. `declared_identity` retains the source/build/device values
+for review, while `identity_authenticated: false` makes clear that offline
+replay does not authenticate their provenance. Keep the original allocation,
+source manifest, artifact hashes and independent numerical evidence with the
+journals; this command cannot replace those qualification gates.
+
 This gate cannot certify scientific producer/host-transform/consumer links,
 implicit blocking, dynamic/device-tail graph execution or a same-count/byte
 host fallback. It is not an allocation audit or endpoint timing benchmark.

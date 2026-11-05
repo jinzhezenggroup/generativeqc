@@ -1,0 +1,1135 @@
+{
+  "schema": "generativeqc.scheduled-residency-qualification.v1",
+  "scope": "actual DF host-staged compatibility fixtures and prepared RHF/UHF source/activity observations; not a full residency qualification",
+  "identity": {
+    "source_commit": "1affb86a7a34647a4491154555493b53d301e1a1",
+    "source_tree": "4f2c2b475e905415baa1f7b9deada5d47eb01f20",
+    "library_sha256": "65294ae48d260c4214920befa90650ef9c7fddf79ccd6e2450b5ecc4271ea25e",
+    "collector_sha256": "c46fcd6d5fa65f12282e580f7da942dea97a72e8eb1c049cc55f1b5e56e6a619",
+    "cupti_sha256": "2fdab19dc3fccdd4b2f5eba137aabefc68e685f6497bb38eea649866c5672a2a",
+    "cupti_api_version": 28,
+    "source_observer_layout": 2,
+    "device": "GPU-5430ba2e-194a-b6d1-f12c-6b99f6d34efd/visible:0",
+    "toolchain": "GCC 11.4; CUDA 12.9.86; Release sm_120-real; sccache 0.16.0; optional shell/stationary AOT disabled"
+  },
+  "allocation": {
+    "platform": "slurm",
+    "job_id": "1506",
+    "cuda_visible_devices": "0"
+  },
+  "slurm_time_limits": {
+    "1506": "00:15:00",
+    "1507": "00:05:00"
+  },
+  "full_native_build_exit": 0,
+  "residency_status": "INCOMPLETE",
+  "zero_round_trip_assertion": null,
+  "endpoint_timing_claim": false,
+  "independently_matched_work_ratchet": null,
+  "df": {
+    "h2": {
+      "fixture": "h2",
+      "fixture_array_hash": "cfd74081c2a53e4b613d706a2cd2a066126f2e200e4b90f4569d13c518cd0f70",
+      "allocation": {
+        "platform": "slurm",
+        "job_id": "1506",
+        "cuda_visible_devices": "0"
+      },
+      "library_sha256": "65294ae48d260c4214920befa90650ef9c7fddf79ccd6e2450b5ecc4271ea25e",
+      "collector_sha256": "c46fcd6d5fa65f12282e580f7da942dea97a72e8eb1c049cc55f1b5e56e6a619",
+      "reference_kind": "committed-independent-same-Hamiltonian-fixture",
+      "energy_error": 1.5439038936193583e-16,
+      "amplitude_error": 5.620504062164855e-16,
+      "statistics": {
+        "transformations": 1,
+        "hits": 0,
+        "peak_bytes": 8395220,
+        "source_tiles": 16,
+        "source_seconds": 0.013506344985216856,
+        "transformation_seconds": 0.00034766411408782005,
+        "host_transform_calls": 49,
+        "subsequent_h2d_bytes": null,
+        "endpoint_seconds": 0.015485280193388462,
+        "external_reserved_bytes": 0
+      },
+      "metrics": {
+        "generated_bytes": 128,
+        "d2h_bytes": 128,
+        "tile_count": 16,
+        "host_staged_tiles": 16,
+        "device_handoffs": 0,
+        "subsequent_h2d_bytes": null,
+        "generation_ms": 11.912192046642303,
+        "transfer_ms": 0.2556480001658201,
+        "endpoint_ms": 12.440524999999997,
+        "host_setup_peak_bytes": 3514,
+        "device_bytes": 1554,
+        "execution_path": "host-staged-compatibility"
+      },
+      "residency_status": "INCOMPLETE",
+      "zero_round_trip_assertion": null,
+      "recomputed_source_annotations_intact": true,
+      "recomputed_compatibility_work": {
+        "source_transfer_calls": 16,
+        "source_zero_byte_calls": 0,
+        "source_stream_fences": 0,
+        "source_event_fences": 32,
+        "h2d_bytes": 0,
+        "d2h_bytes": 128,
+        "d2d_bytes": 0,
+        "activity_sync_records": 0,
+        "activity_event_wait_records": 32
+      }
+    },
+    "water": {
+      "fixture": "water",
+      "fixture_array_hash": "ab445a04bb7c437b7e5e363fd104dee82176dae2332b20c0af9986031b845c0b",
+      "allocation": {
+        "platform": "slurm",
+        "job_id": "1506",
+        "cuda_visible_devices": "0"
+      },
+      "library_sha256": "65294ae48d260c4214920befa90650ef9c7fddf79ccd6e2450b5ecc4271ea25e",
+      "collector_sha256": "c46fcd6d5fa65f12282e580f7da942dea97a72e8eb1c049cc55f1b5e56e6a619",
+      "reference_kind": "committed-independent-same-Hamiltonian-fixture",
+      "energy_error": 1.2073675392798577e-15,
+      "amplitude_error": 2.1441182163073336e-15,
+      "statistics": {
+        "transformations": 1,
+        "hits": 0,
+        "peak_bytes": 8410620,
+        "source_tiles": 1296,
+        "source_seconds": 0.7075947360135615,
+        "transformation_seconds": 0.02660155249759555,
+        "host_transform_calls": 3891,
+        "subsequent_h2d_bytes": null,
+        "endpoint_seconds": 0.8301168740727007,
+        "external_reserved_bytes": 0
+      },
+      "metrics": {
+        "generated_bytes": 16464,
+        "d2h_bytes": 16464,
+        "tile_count": 1512,
+        "host_staged_tiles": 1296,
+        "device_handoffs": 0,
+        "subsequent_h2d_bytes": null,
+        "generation_ms": 590.5278391242027,
+        "transfer_ms": 19.509792030788958,
+        "endpoint_ms": 631.244162999999,
+        "host_setup_peak_bytes": 7890,
+        "device_bytes": 3378,
+        "execution_path": "host-staged-compatibility"
+      },
+      "residency_status": "INCOMPLETE",
+      "zero_round_trip_assertion": null,
+      "recomputed_source_annotations_intact": true,
+      "recomputed_compatibility_work": {
+        "source_transfer_calls": 1296,
+        "source_zero_byte_calls": 0,
+        "source_stream_fences": 0,
+        "source_event_fences": 2592,
+        "h2d_bytes": 0,
+        "d2h_bytes": 16464,
+        "d2d_bytes": 0,
+        "activity_sync_records": 0,
+        "activity_event_wait_records": 2592
+      }
+    },
+    "lih": {
+      "fixture": "lih",
+      "fixture_array_hash": "0a2fd309e7dc484ceea848ff0a9c74461e8b3154f50e763a522d1238da34326a",
+      "allocation": {
+        "platform": "slurm",
+        "job_id": "1506",
+        "cuda_visible_devices": "0"
+      },
+      "library_sha256": "65294ae48d260c4214920befa90650ef9c7fddf79ccd6e2450b5ecc4271ea25e",
+      "collector_sha256": "c46fcd6d5fa65f12282e580f7da942dea97a72e8eb1c049cc55f1b5e56e6a619",
+      "reference_kind": "committed-independent-same-Hamiltonian-fixture",
+      "energy_error": 1.8414089697493807e-15,
+      "amplitude_error": 8.23646706393788e-15,
+      "statistics": {
+        "transformations": 1,
+        "hits": 0,
+        "peak_bytes": 8406244,
+        "source_tiles": 500,
+        "source_seconds": 0.3192576440051198,
+        "transformation_seconds": 0.01037148293107748,
+        "host_transform_calls": 1502,
+        "subsequent_h2d_bytes": null,
+        "endpoint_seconds": 0.3652700171805918,
+        "external_reserved_bytes": 0
+      },
+      "metrics": {
+        "generated_bytes": 6912,
+        "d2h_bytes": 6912,
+        "tile_count": 600,
+        "host_staged_tiles": 500,
+        "device_handoffs": 0,
+        "subsequent_h2d_bytes": null,
+        "generation_ms": 273.36723287403584,
+        "transfer_ms": 7.610688013955951,
+        "endpoint_ms": 289.30016200000006,
+        "host_setup_peak_bytes": 6646,
+        "device_bytes": 2926,
+        "execution_path": "host-staged-compatibility"
+      },
+      "residency_status": "INCOMPLETE",
+      "zero_round_trip_assertion": null,
+      "recomputed_source_annotations_intact": true,
+      "recomputed_compatibility_work": {
+        "source_transfer_calls": 500,
+        "source_zero_byte_calls": 0,
+        "source_stream_fences": 0,
+        "source_event_fences": 1000,
+        "h2d_bytes": 0,
+        "d2h_bytes": 6912,
+        "d2d_bytes": 0,
+        "activity_sync_records": 0,
+        "activity_event_wait_records": 1000
+      }
+    },
+    "f_heh": {
+      "fixture": "f_heh",
+      "fixture_array_hash": "e120b22195ddf4f0e6aa451961101f84d7a5843d6b8e9971e58a77f341ea5ff9",
+      "allocation": {
+        "platform": "slurm",
+        "job_id": "1506",
+        "cuda_visible_devices": "0"
+      },
+      "library_sha256": "65294ae48d260c4214920befa90650ef9c7fddf79ccd6e2450b5ecc4271ea25e",
+      "collector_sha256": "c46fcd6d5fa65f12282e580f7da942dea97a72e8eb1c049cc55f1b5e56e6a619",
+      "reference_kind": "committed-independent-same-Hamiltonian-fixture",
+      "energy_error": 2.229119666630197e-15,
+      "amplitude_error": 6.175615574477433e-15,
+      "statistics": {
+        "transformations": 1,
+        "hits": 0,
+        "peak_bytes": 8412464,
+        "source_tiles": 1296,
+        "source_seconds": 0.35949975345283747,
+        "transformation_seconds": 0.026897438801825047,
+        "host_transform_calls": 3891,
+        "subsequent_h2d_bytes": null,
+        "endpoint_seconds": 0.46843920927494764,
+        "external_reserved_bytes": 0
+      },
+      "metrics": {
+        "generated_bytes": 34992,
+        "d2h_bytes": 34992,
+        "tile_count": 1944,
+        "host_staged_tiles": 1296,
+        "device_handoffs": 0,
+        "subsequent_h2d_bytes": null,
+        "generation_ms": 239.93315239436924,
+        "transfer_ms": 19.522560020908713,
+        "endpoint_ms": 280.49403300000006,
+        "host_setup_peak_bytes": 7928,
+        "device_bytes": 3696,
+        "execution_path": "host-staged-compatibility"
+      },
+      "residency_status": "INCOMPLETE",
+      "zero_round_trip_assertion": null,
+      "recomputed_source_annotations_intact": true,
+      "recomputed_compatibility_work": {
+        "source_transfer_calls": 1296,
+        "source_zero_byte_calls": 0,
+        "source_stream_fences": 0,
+        "source_event_fences": 2592,
+        "h2d_bytes": 0,
+        "d2h_bytes": 34992,
+        "d2d_bytes": 0,
+        "activity_sync_records": 0,
+        "activity_event_wait_records": 2592
+      }
+    }
+  },
+  "prepared": {
+    "rhf": {
+      "capture_exit": 1,
+      "numerical_status": "FAIL",
+      "activity_stream_intact": true,
+      "source_annotations_intact": true,
+      "source_inventory_intact": true,
+      "all_observed_production_activity_annotated": false,
+      "residency_status": "INCOMPLETE",
+      "payload_dependency_links_complete": false,
+      "implicit_wait_coverage_complete": false,
+      "graph_wait_coverage_complete": false,
+      "regions": [
+        {
+          "region": {
+            "name": "prepare",
+            "role": "prepare"
+          },
+          "transfer_records": 0,
+          "copy_operations": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 0,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "energy-first",
+            "role": "endpoint"
+          },
+          "transfer_records": 112,
+          "copy_operations": 112,
+          "h2d_bytes": 4127,
+          "d2h_bytes": 2149,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 20,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "energy-warm",
+            "role": "replay"
+          },
+          "transfer_records": 22,
+          "copy_operations": 22,
+          "h2d_bytes": 24,
+          "d2h_bytes": 581,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 4,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "force-first",
+            "role": "endpoint"
+          },
+          "transfer_records": 99,
+          "copy_operations": 99,
+          "h2d_bytes": 3183,
+          "d2h_bytes": 763,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 14,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "force-warm",
+            "role": "replay"
+          },
+          "transfer_records": 22,
+          "copy_operations": 22,
+          "h2d_bytes": 40,
+          "d2h_bytes": 738,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 2,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "moved",
+            "role": "geometry_rebuild"
+          },
+          "transfer_records": 36,
+          "copy_operations": 36,
+          "h2d_bytes": 643,
+          "d2h_bytes": 763,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 6,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "close",
+            "role": "publication"
+          },
+          "transfer_records": 0,
+          "copy_operations": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 6,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "collector-fences",
+            "role": "observer"
+          },
+          "transfer_records": 0,
+          "copy_operations": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 7,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        }
+      ],
+      "by_source_role": {
+        "compatibility": {
+          "source_transfer_calls": 0,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 0,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "activity_sync_records": 0,
+          "activity_event_wait_records": 0
+        },
+        "iteration": {
+          "source_transfer_calls": 8,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 8,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 32,
+          "d2d_bytes": 0,
+          "activity_sync_records": 8,
+          "activity_event_wait_records": 0
+        },
+        "lifetime": {
+          "source_transfer_calls": 0,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 10,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "activity_sync_records": 10,
+          "activity_event_wait_records": 0
+        },
+        "oracle": {
+          "source_transfer_calls": 0,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 0,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "activity_sync_records": 0,
+          "activity_event_wait_records": 0
+        },
+        "prepare": {
+          "source_transfer_calls": 151,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 12,
+          "source_event_fences": 0,
+          "h2d_bytes": 6649,
+          "d2h_bytes": 6,
+          "d2d_bytes": 0,
+          "activity_sync_records": 12,
+          "activity_event_wait_records": 0
+        },
+        "publication": {
+          "source_transfer_calls": 180,
+          "source_zero_byte_calls": 78,
+          "source_stream_fences": 10,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 3388,
+          "d2d_bytes": 0,
+          "activity_sync_records": 10,
+          "activity_event_wait_records": 0
+        },
+        "tile": {
+          "source_transfer_calls": 0,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 0,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "activity_sync_records": 0,
+          "activity_event_wait_records": 0
+        }
+      },
+      "diagnostic": {
+        "allocation": {
+          "platform": "slurm",
+          "job_id": "1507",
+          "cuda_visible_devices": "0"
+        },
+        "energy_gate": 1e-10,
+        "force_gate": 1e-09,
+        "comparison_errors": [
+          {
+            "match_iterations": true,
+            "endpoints": [
+              {
+                "id": "energy-first",
+                "systems": [
+                  {
+                    "energy_error": 0.0,
+                    "force_error": null,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 0.0,
+                    "force_error": null,
+                    "iterations": 7,
+                    "reference_iterations": 7
+                  },
+                  {
+                    "energy_error": 0.0,
+                    "force_error": null,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  }
+                ]
+              },
+              {
+                "id": "energy-warm",
+                "systems": [
+                  {
+                    "energy_error": 0.0,
+                    "force_error": null,
+                    "iterations": 1,
+                    "reference_iterations": 1
+                  },
+                  {
+                    "energy_error": 0.0,
+                    "force_error": null,
+                    "iterations": 1,
+                    "reference_iterations": 1
+                  },
+                  {
+                    "energy_error": 0.0,
+                    "force_error": null,
+                    "iterations": 1,
+                    "reference_iterations": 1
+                  }
+                ]
+              },
+              {
+                "id": "force-first",
+                "systems": [
+                  {
+                    "energy_error": 0.0,
+                    "force_error": 0.0,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 1.4210854715202004e-14,
+                    "force_error": 2.3869795029440866e-15,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 0.0,
+                    "force_error": 0.0,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  }
+                ]
+              },
+              {
+                "id": "force-warm",
+                "systems": [
+                  {
+                    "energy_error": 0.0,
+                    "force_error": 0.0,
+                    "iterations": 1,
+                    "reference_iterations": 1
+                  },
+                  {
+                    "energy_error": 0.0,
+                    "force_error": 8.881784197001252e-16,
+                    "iterations": 1,
+                    "reference_iterations": 1
+                  },
+                  {
+                    "energy_error": 0.0,
+                    "force_error": 0.0,
+                    "iterations": 1,
+                    "reference_iterations": 1
+                  }
+                ]
+              },
+              {
+                "id": "moved",
+                "systems": [
+                  {
+                    "energy_error": 0.0,
+                    "force_error": 0.0,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 2.842170943040401e-14,
+                    "force_error": 2.886579864025407e-15,
+                    "iterations": 6,
+                    "reference_iterations": 6
+                  },
+                  {
+                    "energy_error": 0.0,
+                    "force_error": 0.0,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "match_iterations": false,
+            "endpoints": [
+              {
+                "id": "energy-first",
+                "systems": [
+                  {
+                    "energy_error": 4.440892098500626e-16,
+                    "force_error": null,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 9.947598300641403e-14,
+                    "force_error": null,
+                    "iterations": 7,
+                    "reference_iterations": 8
+                  },
+                  {
+                    "energy_error": 4.440892098500626e-16,
+                    "force_error": null,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  }
+                ]
+              },
+              {
+                "id": "energy-warm",
+                "systems": [
+                  {
+                    "energy_error": 4.440892098500626e-16,
+                    "force_error": null,
+                    "iterations": 1,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 8.526512829121202e-14,
+                    "force_error": null,
+                    "iterations": 1,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 4.440892098500626e-16,
+                    "force_error": null,
+                    "iterations": 1,
+                    "reference_iterations": 2
+                  }
+                ]
+              },
+              {
+                "id": "force-first",
+                "systems": [
+                  {
+                    "energy_error": 4.440892098500626e-16,
+                    "force_error": 9.71445146547012e-17,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 7.105427357601002e-14,
+                    "force_error": 1.4722834063007895e-11,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 4.440892098500626e-16,
+                    "force_error": 9.71445146547012e-17,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  }
+                ]
+              },
+              {
+                "id": "force-warm",
+                "systems": [
+                  {
+                    "energy_error": 4.440892098500626e-16,
+                    "force_error": 9.71445146547012e-17,
+                    "iterations": 1,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 8.526512829121202e-14,
+                    "force_error": 1.4935108705316225e-11,
+                    "iterations": 1,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 4.440892098500626e-16,
+                    "force_error": 9.71445146547012e-17,
+                    "iterations": 1,
+                    "reference_iterations": 2
+                  }
+                ]
+              },
+              {
+                "id": "moved",
+                "systems": [
+                  {
+                    "energy_error": 0.0,
+                    "force_error": 6.106226635438361e-16,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  },
+                  {
+                    "energy_error": 8.526512829121202e-14,
+                    "force_error": 5.604596453601118e-09,
+                    "iterations": 6,
+                    "reference_iterations": 8
+                  },
+                  {
+                    "energy_error": 0.0,
+                    "force_error": 6.106226635438361e-16,
+                    "iterations": 2,
+                    "reference_iterations": 2
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "activity_stream_intact": true,
+        "source_annotations_intact": true,
+        "source_inventory_intact": true
+      }
+    },
+    "uhf": {
+      "capture_exit": 2,
+      "numerical_status": "PASS",
+      "activity_stream_intact": true,
+      "source_annotations_intact": true,
+      "source_inventory_intact": true,
+      "all_observed_production_activity_annotated": true,
+      "residency_status": "INCOMPLETE",
+      "payload_dependency_links_complete": false,
+      "implicit_wait_coverage_complete": false,
+      "graph_wait_coverage_complete": false,
+      "regions": [
+        {
+          "region": {
+            "name": "prepare",
+            "role": "prepare"
+          },
+          "transfer_records": 0,
+          "copy_operations": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 0,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "energy-first",
+            "role": "endpoint"
+          },
+          "transfer_records": 82,
+          "copy_operations": 82,
+          "h2d_bytes": 3227,
+          "d2h_bytes": 1037,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 8,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "energy-warm",
+            "role": "replay"
+          },
+          "transfer_records": 22,
+          "copy_operations": 22,
+          "h2d_bytes": 24,
+          "d2h_bytes": 1037,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 4,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "force-first",
+            "role": "endpoint"
+          },
+          "transfer_records": 99,
+          "copy_operations": 99,
+          "h2d_bytes": 3651,
+          "d2h_bytes": 1219,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 14,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "force-warm",
+            "role": "replay"
+          },
+          "transfer_records": 22,
+          "copy_operations": 22,
+          "h2d_bytes": 40,
+          "d2h_bytes": 1194,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 2,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "moved",
+            "role": "geometry_rebuild"
+          },
+          "transfer_records": 36,
+          "copy_operations": 36,
+          "h2d_bytes": 1099,
+          "d2h_bytes": 1219,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 6,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "close",
+            "role": "publication"
+          },
+          "transfer_records": 0,
+          "copy_operations": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 6,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        },
+        {
+          "region": {
+            "name": "collector-fences",
+            "role": "observer"
+          },
+          "transfer_records": 0,
+          "copy_operations": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "h2h_bytes": 0,
+          "syncs": 7,
+          "event_waits": 0,
+          "event_queries": 0,
+          "stream_queries": 0,
+          "graph_transfer_records": 0
+        }
+      ],
+      "by_source_role": {
+        "compatibility": {
+          "source_transfer_calls": 0,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 0,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "activity_sync_records": 0,
+          "activity_event_wait_records": 0
+        },
+        "iteration": {
+          "source_transfer_calls": 8,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 8,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 32,
+          "d2d_bytes": 0,
+          "activity_sync_records": 8,
+          "activity_event_wait_records": 0
+        },
+        "lifetime": {
+          "source_transfer_calls": 0,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 10,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "activity_sync_records": 10,
+          "activity_event_wait_records": 0
+        },
+        "oracle": {
+          "source_transfer_calls": 0,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 0,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "activity_sync_records": 0,
+          "activity_event_wait_records": 0
+        },
+        "prepare": {
+          "source_transfer_calls": 151,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 12,
+          "source_event_fences": 0,
+          "h2d_bytes": 8041,
+          "d2h_bytes": 6,
+          "d2d_bytes": 0,
+          "activity_sync_records": 12,
+          "activity_event_wait_records": 0
+        },
+        "publication": {
+          "source_transfer_calls": 180,
+          "source_zero_byte_calls": 78,
+          "source_stream_fences": 10,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 5668,
+          "d2d_bytes": 0,
+          "activity_sync_records": 10,
+          "activity_event_wait_records": 0
+        },
+        "tile": {
+          "source_transfer_calls": 0,
+          "source_zero_byte_calls": 0,
+          "source_stream_fences": 0,
+          "source_event_fences": 0,
+          "h2d_bytes": 0,
+          "d2h_bytes": 0,
+          "d2d_bytes": 0,
+          "activity_sync_records": 0,
+          "activity_event_wait_records": 0
+        }
+      },
+      "numerical": {
+        "source_matched": true,
+        "completed": true,
+        "allocation": {
+          "platform": "slurm",
+          "job_id": "1506",
+          "cuda_visible_devices": "0"
+        },
+        "numerical": [
+          {
+            "id": "energy-first",
+            "energy_error": 0.0,
+            "force_error": null,
+            "iterations": [
+              2,
+              8,
+              2
+            ],
+            "reference_iterations": [
+              2,
+              8,
+              2
+            ]
+          },
+          {
+            "id": "energy-warm",
+            "energy_error": 0.0,
+            "force_error": null,
+            "iterations": [
+              1,
+              1,
+              1
+            ],
+            "reference_iterations": [
+              1,
+              1,
+              1
+            ]
+          },
+          {
+            "id": "force-first",
+            "energy_error": 0.0,
+            "force_error": 2.0539125955565396e-15,
+            "iterations": [
+              2,
+              2,
+              2
+            ],
+            "reference_iterations": [
+              2,
+              2,
+              2
+            ]
+          },
+          {
+            "id": "force-warm",
+            "energy_error": 0.0,
+            "force_error": 3.3861802251067274e-15,
+            "iterations": [
+              1,
+              1,
+              1
+            ],
+            "reference_iterations": [
+              1,
+              1,
+              1
+            ]
+          },
+          {
+            "id": "moved",
+            "energy_error": 1.4210854715202004e-14,
+            "force_error": 9.769962616701378e-15,
+            "iterations": [
+              2,
+              8,
+              2
+            ],
+            "reference_iterations": [
+              2,
+              8,
+              2
+            ]
+          }
+        ],
+        "reference_kind": "ordinary CUDA prepared history",
+        "independent_reference_kind": "native CPU FP64 direct prepared history",
+        "independent_numerical": [
+          {
+            "id": "energy-first",
+            "energy_error": 8.526512829121202e-14,
+            "force_error": null,
+            "iterations": [
+              2,
+              8,
+              2
+            ],
+            "reference_iterations": [
+              2,
+              8,
+              2
+            ]
+          },
+          {
+            "id": "energy-warm",
+            "energy_error": 4.263256414560601e-14,
+            "force_error": null,
+            "iterations": [
+              1,
+              1,
+              1
+            ],
+            "reference_iterations": [
+              2,
+              2,
+              2
+            ]
+          },
+          {
+            "id": "force-first",
+            "energy_error": 7.105427357601002e-14,
+            "force_error": 8.100942139321887e-11,
+            "iterations": [
+              2,
+              2,
+              2
+            ],
+            "reference_iterations": [
+              2,
+              2,
+              2
+            ]
+          },
+          {
+            "id": "force-warm",
+            "energy_error": 9.947598300641403e-14,
+            "force_error": 8.369349657755265e-11,
+            "iterations": [
+              1,
+              1,
+              1
+            ],
+            "reference_iterations": [
+              2,
+              2,
+              2
+            ]
+          },
+          {
+            "id": "moved",
+            "energy_error": 1.4210854715202004e-14,
+            "force_error": 1.9780560522875135e-10,
+            "iterations": [
+              2,
+              8,
+              2
+            ],
+            "reference_iterations": [
+              2,
+              8,
+              2
+            ]
+          }
+        ],
+        "no_endpoint_timing_claim": true
+      }
+    }
+  },
+  "remaining": [
+    "source-owned scientific producer/host-transform/consumer dependency links",
+    "DF compatibility subsequent H2D and scientific GPU consumer remain unqualified",
+    "complete graph/device-launched work and graph/implicit-wait coverage",
+    "independently reviewed matching prepared-workload work-ratchet policy",
+    "RHF moved-water independent CPU force comparison exceeds its unchanged acceptance gate",
+    "issue 1626 six-site final measured dispositions remain outside this GPU follow-up"
+  ]
+}

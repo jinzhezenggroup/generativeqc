@@ -279,6 +279,7 @@ Expected expected(const Fixture& f, const std::vector<double>& ao, bool factoriz
   const auto persistent = sizeof(double) * 2 * n * n + sizeof(std::size_t) * (h + 1);
   const auto o = f.reference.nocc, v = n - o;
   const auto first_row = compact ? o * (2 * n + v * v) : n * n * n;
+  const auto second_rows = compact ? o : n;
   e.allocation_calls = 5 + h;  // rank-two outputs/workspaces, offsets, first stages
   e.total_bytes = sizeof(double) * (4 * n * n + n * first_row) + sizeof(std::size_t) * (h + 1);
   for (std::size_t i = 0; i < h; ++i)
@@ -296,8 +297,8 @@ Expected expected(const Fixture& f, const std::vector<double>& ao, bool factoriz
           e.elements += local;
           e.iterations[6] += local * n;
           if (!factorized) e.iterations[8] += local;
-          const auto shell =
-              sizeof(double) * (di * first_row + di * dj * n * n + di * dj * dk * n + local);
+          const auto shell = sizeof(double) * (di * first_row + di * dj * second_rows * n +
+                                               di * dj * dk * n + local);
           e.shell_peak = std::max(e.shell_peak, shell);
           e.peak = std::max(e.peak, persistent + shell);
           ++e.allocation_calls;
@@ -315,13 +316,13 @@ Expected expected(const Fixture& f, const std::vector<double>& ao, bool factoriz
       e.iterations[4] += size * n;
     }
     ++e.allocation_calls;
-    e.total_bytes += sizeof(double) * size;
+    e.total_bytes += sizeof(double) * size / n * second_rows;
   }
   for (auto t : triples) {
     const auto size = (f.offsets[t[0] + 1] - f.offsets[t[0]]) *
                       (f.offsets[t[1] + 1] - f.offsets[t[1]]) *
                       (f.offsets[t[2] + 1] - f.offsets[t[2]]) * n;
-    e.iterations[5] += size * n;
+    e.iterations[5] += size * second_rows;
     ++e.allocation_calls;
     e.total_bytes += sizeof(double) * size;
   }
@@ -389,10 +390,11 @@ int main(int argc, char** argv) {
       const auto dl = f.offsets[q[3] + 1] - f.offsets[q[3]];
       require(local.size() == di * dj * dk * dl, "local shape");
       const auto shell_bytes =
-          sizeof(double) * (di * (compact ? f.reference.nocc * (2 * n + (n - f.reference.nocc) *
-                                                                            (n - f.reference.nocc))
-                                          : n * n * n) +
-                            di * dj * n * n + di * dj * dk * n + local.size());
+          sizeof(double) *
+          (di * (compact
+                     ? f.reference.nocc * (2 * n + (n - f.reference.nocc) * (n - f.reference.nocc))
+                     : n * n * n) +
+           di * dj * (compact ? f.reference.nocc : n) * n + di * dj * dk * n + local.size());
       const auto persistent = sizeof(double) * 2 * n * n + sizeof(std::size_t) * (h + 1);
       require(allocation::live == persistent + shell_bytes, "active quartet allocation ownership");
       measured_shell_peak = std::max(measured_shell_peak, allocation::live - persistent);
@@ -454,7 +456,7 @@ int main(int argc, char** argv) {
       require(numeric_peak <= plan.derivative_staging_bytes + plan.shell_cotangent_bytes,
               "common pullback exceeds production numeric staging plan");
       std::cout << std::setprecision(17) << "{\"n\":" << n << ",\"callbacks\":" << callbacks
-                << ",\"local_elements\":" << elements
+                << ",\"occupied\":" << f.reference.nocc << ",\"local_elements\":" << elements
                 << ",\"common_peak_bytes\":" << allocation::peak
                 << ",\"retained_output_bytes\":" << retained_output_bytes
                 << ",\"shell_peak_bytes\":" << measured_shell_peak

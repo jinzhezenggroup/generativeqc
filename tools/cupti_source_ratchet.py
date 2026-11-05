@@ -8,10 +8,17 @@ dependencies and graph execution remain outside this deliberately named gate.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import re
-from typing import TYPE_CHECKING, Any
+import sys
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from tools.audit_replay_allocations import (
     InvalidReceipt,
@@ -22,9 +29,6 @@ from tools.audit_replay_allocations import (
 )
 from tools.audit_residency_receipts import HOT_ROLES, _decode_json
 from tools.cupti_source_capture import ROLES, WORK_COUNTERS, summarize_sources
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 SCHEMA = "generativeqc.observed-source-work-ratchet.v2"
 LEGACY_SCHEMA = "generativeqc.observed-source-work-ratchet.v1"
@@ -276,3 +280,104 @@ def check_work_ratchet(
         "graph_wait_coverage_complete": False,
         "zero_round_trip_assertion": None,
     }
+
+
+def reaudit_capture(
+    expected: dict[str, Any],
+    policy: Path,
+    raw_source: dict[str, Any],
+    raw_activity: dict[str, Any],
+) -> dict[str, Any]:
+    """Recompute a retained capture against its independently pinned policy.
+
+    This consumes the existing prepared-capture contract and raw journals, not
+    its derived diagnostics. The declared build/device identity is retained for
+    review, not authenticated by offline replay. Numerical, graph, implicit-wait
+    and payload-link qualification cannot be granted by this explicit-work gate.
+    """
+    _require(
+        type(expected) is dict
+        and expected.get("schema") == "generativeqc.cupti-prepared.v2",
+        "unsupported prepared capture contract",
+    )
+    identity = expected.get("identity")
+    _require(type(identity) is dict, "missing capture identity")
+    for name in ("source_commit", "source_tree"):
+        _hex(identity.get(name), 40, name)
+    for name in ("library_sha256", "collector_sha256", "cupti_sha256"):
+        _hex(identity.get(name), 64, name)
+    for name in ("device", "toolchain"):
+        _text(identity.get(name), name)
+    _require(
+        type(identity.get("cupti_api_version")) is int
+        and identity["cupti_api_version"] == 28
+        and type(identity.get("source_observer_layout")) is int
+        and identity["source_observer_layout"] == 2,
+        "unsupported capture observer versions",
+    )
+    case = expected.get("workload")
+    selected = load_work_ratchet(policy, case)
+    _require(
+        selected == expected.get("observed_work_ratchet"),
+        "independent contract/policy pin mismatch",
+    )
+    declared_regions = expected.get("regions")
+    _require(
+        type(declared_regions) is dict and bool(declared_regions),
+        "missing capture regions",
+    )
+    regions = {}
+    for key, region in declared_regions.items():
+        _require(
+            type(key) is str
+            and key.isascii()
+            and key.isdecimal()
+            and str(int(key)) == key
+            and 0 < int(key) < 1 << 64,
+            "invalid capture region identity",
+        )
+        _fields(region, {"name", "role"}, "capture region")
+        _text(region["name"], "capture region name")
+        _text(region["role"], "capture region role")
+        regions[int(key)] = region
+    result = check_work_ratchet(selected, raw_source, raw_activity, regions, case)
+    return {
+        **result,
+        "declared_identity": dict(identity),
+        "identity_authenticated": False,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Provide a CPU-only CI gate over retained raw CUDA capture journals."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--expected", type=Path, required=True)
+    parser.add_argument("--work-ratchet", type=Path, required=True)
+    parser.add_argument("--source-boundaries", type=Path, required=True)
+    parser.add_argument("--activity", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
+    arguments = parser.parse_args(argv)
+    try:
+        result = reaudit_capture(
+            _decode_json(arguments.expected.read_bytes()),
+            arguments.work_ratchet,
+            _decode_json(arguments.source_boundaries.read_bytes()),
+            _decode_json(arguments.activity.read_bytes()),
+        )
+    except (OSError, ValueError, TypeError, KeyError, OverflowError) as error:
+        result = {
+            "status": "INCOMPLETE",
+            "residency_status": "INCOMPLETE",
+            "issues": [str(error)],
+            "zero_round_trip_assertion": None,
+        }
+    encoded = json.dumps(result, indent=2, allow_nan=False) + "\n"
+    if arguments.output is not None:
+        arguments.output.write_text(encoded)
+    else:
+        print(encoded, end="")
+    return {"WITHIN_OBSERVED_RATCHET": 0, "VIOLATION": 1}.get(result["status"], 2)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
