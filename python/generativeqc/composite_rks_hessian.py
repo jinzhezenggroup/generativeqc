@@ -1227,9 +1227,7 @@ def composite_rks_hvp(
     diagnostics = {
         **executed.diagnostics,
         "derivative_method": "compiler-automatic-differentiation",
-        "public_calculator_endpoint": composite_stationary_second_order_eligible(
-            operator.state._source.method_ir
-        ),
+        "public_calculator_endpoint": False,
         "backend": operator.backend.device,
         "spin": operator.state.identity.spin,
         "representation": operator.basis.representation,
@@ -1307,9 +1305,7 @@ def composite_rks_hessian(
         residuals.append(result.diagnostics["response_residual_norm"])
     diagnostics = {
         "derivative_method": "compiler-automatic-differentiation",
-        "public_calculator_endpoint": composite_stationary_second_order_eligible(
-            operator.state._source.method_ir
-        ),
+        "public_calculator_endpoint": False,
         "backend": operator.backend.device,
         "spin": operator.state.identity.spin,
         "representation": operator.basis.representation,

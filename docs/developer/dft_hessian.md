@@ -69,21 +69,26 @@ full-range exact-exchange fraction for CPU-side algebraic composition. It binds
 the resulting restricted spin-summed -a/2 raw K action into the response
 identity and **refuses nonzero exchange unless the backend explicitly declares
 raw full-range K support**. Semilocal a=0 keeps the same identity and behavior.
-This is a provider-checked, synthetic-oracle-tested response contract only;
-`NativeRKSResponse` remains restricted to native LDA/PBE, and no native PBE0,
-B3LYP, user-composed or CUDA hybrid molecular Hessian endpoint is promoted.
+This response contract alone does not grant a molecular capability.
+`NativeRKSResponse` remains restricted to native LDA/PBE; full-range hybrid
+molecular execution uses the shared composite owner described next.
 
-The shared `CompositeRKSResponse` low-level qualification owner also accepts
+The shared `CompositeRKSResponse` owner also accepts
 CPU direct all-electron RKS full-range-exchange graphs with the native
 LDA/PBE or B88/VWN-RPA/LYP semilocal families. It binds the physical token-verified MethodIR,
 not the native carrier selector, to the mixed J/K/XC response, frozen K nuclear
 RHS and compiler-owned `exact_exchange` second-order source. Cartesian and
 real-spherical AOs reuse `HessianBasis`; the SCF, density and response remain in
-the original public variational space. This does not change public Calculator
-admission. Independent complete molecular references, real-spherical Ni,
-external def2-SVP records, installed endpoint/resource qualification and the
-production-scale gate remain necessary before promotion or issue closure.
-The low-level receipt explicitly reports `public_calculator_endpoint=False`.
+the original public variational space. The public wrapper separately admits
+strict-FP64 CPU direct all-electron restricted PBE0/B3LYP semilocal compositions
+with one full-range coefficient in `(0, 1]`, Cartesian/spherical AOs through f,
+and no additional primitive. Admission compares resolved mathematics rather
+than a user-controlled identifier. UKS, ECP, DF, dispersion and CUDA full-range
+variants remain excluded. An installed spherical Ni/def2-SVP fixture does not
+establish production-scale support for 25–40-atom Ni systems.
+The low-level receipt always reports `public_calculator_endpoint=False`;
+only the actual Calculator wrapper marks the endpoint public and adds native
+SCF counts, energy, backend and complete endpoint time.
 The CPU restricted composite owner conditions its existing shared response
 solve with signed occupied/virtual orbital gaps. Zero/near-zero gaps decline
 this scaling without modifying the physical operator or residual gates; see
@@ -135,9 +140,8 @@ wrapper still authenticates the complete prepared Fock strategy; it does not
 substitute a named functional's canonical fraction. Final-state validation
 binds the same coefficient through the immutable determinant, physical Fock
 and eigenframe identities while retaining the fixed semilocal graph/scales.
-This permits the low-level B3-family qualification with a noncanonical
-coefficient without widening CUDA's matched-composition restriction or public
-second-order admission. Molecular tests compare canonical and 37/100 exchange
+This permits B3-family execution with a noncanonical coefficient without
+widening CUDA's matched-composition restriction. Molecular tests compare canonical and 37/100 exchange
 on H2 and asymmetric HeH+ against independently converged reference energies,
 densities and complete energy-difference Hessians at three steps. These small
 all-s fixtures do not qualify real-spherical Ni or installed endpoints.
@@ -150,7 +154,8 @@ as native SCF, including its vacuum/tail convention; it does not inherit the
 different WB97M-V feature floors. Primitive fractions remain part of the graph
 and scientific identity. WB97M-V retains its existing work policy and VV10
 admission. Neither this grid source nor a complete small-molecule low-level
-HVP independently grants public B3LYP, UKS, ECP, DF, D3 or CUDA capabilities.
+HVP independently grants public capability: the complete molecular and installed
+gates remain separate. Full-range UKS, ECP, DF, D3 and CUDA are not promoted.
 
 Native LDA/PBE grid partials use a separate identity-bound point-provider
 contract inside the same grid/weight and molecular orchestration. The runtime
@@ -165,7 +170,8 @@ the authenticated semilocal X/C weights; full-range K remains a separate source.
 Frozen unscaled ABI contracts are preserved. PBE0 and changed-fraction molecular
 tests use this same mixed J/K/XC path, not a named-functional Hessian solver.
 Independent point/grid tests exercise both spins and changed X/C scales; this
-does not promote a public PBE0 endpoint or complete #2224's remaining gates.
+alone is not a public endpoint qualification; the installed endpoint,
+independent molecular, lifecycle and resource checks are also required.
 
 The closed-shell nuclear-perturbation consumer follows the same rule. Its
 canonical installed owner is `generativeqc.stationary_nuclear`: metric-density

@@ -41,7 +41,7 @@ def _calculator(method: str = "lda-rks", **kwargs: object) -> Calculator:
     )
 
 
-@pytest.mark.parametrize("method", ("lda-rks", "pbe-rks"))
+@pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "pbe0-rks", "b3lyp-rks"))
 def test_public_rks_second_order_capability_is_context_qualified(method: str) -> None:
     assert method_capabilities(method).supported_second_order == frozenset()
     calculator = _calculator(method)
@@ -55,8 +55,8 @@ def test_public_rks_second_order_capability_is_context_qualified(method: str) ->
     ("method", "kwargs"),
     (
         ("lda-uks", {}),
-        ("pbe0-rks", {}),
-        ("b3lyp-rks", {}),
+        ("pbe0-uks", {}),
+        ("b3lyp-uks", {}),
         ("r2scan-rks", {}),
         ("pbe-rks", {"basis_representation": "spherical"}),
     ),

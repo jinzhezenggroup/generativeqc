@@ -62,6 +62,10 @@ PBE0 support, installed-package/resource behavior or Ni-scale qualification.
 
 ## Revisit when
 
+The later public domain and its separate acceptance protocol are recorded in
+[qualified public full-range execution](2026-11-05-full-range-public-second-order.md).
+This does not turn the earlier tiny-fixture evidence into Ni-scale evidence.
+
 Additional functional families or backends prove a matching native numerical
 domain and immutable preparation/final-state contract. Do not widen admission
 based only on accepting a MethodIR or passing a synthetic identity test.
