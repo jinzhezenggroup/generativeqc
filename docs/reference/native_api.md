@@ -246,6 +246,9 @@ specific to their C descriptors. See [units](units.md).
 Other status codes distinguish invalid arguments, ABI mismatch,
 unsupported operations, non-convergence, numerical failure,
 CUDA failure, out-of-memory and internal errors. The special
+`GENERATIVEQC_STATUS_RESOURCE_LIMIT` distinguishes an explicit finite work-policy
+refusal from allocation failure; see [correlated resource controls](../user/correlated_methods.md#control-cost-memory-and-convergence).
+The special
 `GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE` means a completed precision
 provenance record is not available; it does not, by itself, mean a solve
 failed. Use `generativeqc_status_message` for status explanations and

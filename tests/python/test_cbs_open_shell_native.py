@@ -791,3 +791,140 @@ def test_open_shell_cbs_correction_above_twelve_aos() -> None:
     )
     assert result.converged and result.executed_backend == "cpu_reference"
     assert result.energy == pytest.approx(expected, abs=1e-8)
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_OPEN_SHELL_CUDA_TEST") != "1",
+    reason="requires allocated native open-shell CUDA qualification",
+)
+@pytest.mark.parametrize("cardinal", (2, 3))
+@pytest.mark.parametrize("multiplicity", (2, 3))
+def test_physical_hydrogen_df_ump2_force(cardinal: int, multiplicity: int) -> None:
+    """Qualify DZ/TZ fitted forces, including the zero-beta triplet channel."""
+    from tools.generativeqc_validation.correlation_df_oracle import basis_snapshot
+
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests must run through srun"
+    atoms = (
+        ATOMS
+        if multiplicity == 2
+        else (("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 0.85 / 0.529177210903)))
+    )
+    name = "cc-pvdz" if cardinal == 2 else "cc-pvtz"
+    basis = basis_snapshot(name, (1,))
+    auxiliary = basis_snapshot(name + "-jkfit", (1,))
+    calc = Calculator(
+        method="ump2",
+        basis=basis,
+        auxiliary_basis=auxiliary,
+        density_fitting="full_cuda",
+        device="cuda",
+        initial_guess=None,
+        correlation_memory_budget_bytes=32 << 30,
+        max_iterations=200,
+    )
+    try:
+        actual = calc.singlepoint(
+            atoms, multiplicity=multiplicity, properties=("energy", "forces")
+        )
+        expected = independent_components(
+            basis, 0, multiplicity, atoms, auxiliary, True
+        )
+        assert actual.converged and actual.executed_backend == "cuda"
+        np.testing.assert_allclose(actual.energy, expected["ump2"], atol=3e-8, rtol=0)
+        np.testing.assert_allclose(actual.forces.sum(axis=0), 0, atol=2e-8, rtol=0)
+        step = 3e-4
+        displaced = []
+        for sign in (-1, 1):
+            moved = [(symbol, list(position)) for symbol, position in atoms]
+            moved[1][1][2] += sign * step
+            displaced.append(
+                independent_components(
+                    basis, 0, multiplicity, tuple(moved), auxiliary, True
+                )["ump2"]
+            )
+        np.testing.assert_allclose(
+            actual.forces[1, 2],
+            -(displaced[1] - displaced[0]) / (2 * step),
+            atol=5e-7,
+            rtol=0,
+        )
+    finally:
+        calc.clear_cache()
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_OPEN_SHELL_CUDA_LADDER_TEST") != "1",
+    reason="requires allocated physical open-shell CBS size-ladder qualification",
+)
+@pytest.mark.parametrize("atom_count", (2, 3, 4))
+def test_physical_df_cbs_size_ladder(atom_count: int) -> None:
+    """Qualify the complete requested composite, not only its fitted MP2 stage."""
+    from tools.generativeqc_validation.correlation_df_oracle import basis_snapshot
+
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests must run through srun"
+    atoms = (
+        (("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 0.85 / 0.529177210903)))
+        if atom_count == 2
+        else ATOMS + ((("H", (1.9, 1.9, -0.2)),) if atom_count == 4 else ())
+    )
+    multiplicity = 2 if atom_count % 2 else 3
+    bases = tuple(basis_snapshot(name, (1,)) for name in ("cc-pvdz", "cc-pvtz"))
+    auxiliary = tuple(
+        basis_snapshot(name + "-jkfit", (1,)) for name in ("cc-pvdz", "cc-pvtz")
+    )
+    calculator = CCSDTCBSCalculator(
+        tuple(
+            CBSBasis(basis, cardinal)
+            for basis, cardinal in zip(bases, (2, 3), strict=True)
+        ),
+        auxiliary_bases=auxiliary,
+        hf_reference="df",
+        device="cuda",
+        policy="standard",
+        preconvergence="auto",
+        calculator_options={
+            "max_iterations": 200,
+            "correlation_memory_budget_bytes": 32 << 30,
+        },
+    )
+    actual = calculator.singlepoint(
+        atoms, multiplicity=multiplicity, properties=("energy", "forces")
+    )
+    assert actual.converged and actual.executed_backend == "cuda"
+    np.testing.assert_allclose(actual.forces.sum(axis=0), 0, atol=2e-8, rtol=0)
+
+    def independent_energy(geometry: tuple) -> float:
+        low, high = (
+            independent_components(basis, 0, multiplicity, geometry, fit, True)
+            for basis, fit in zip(bases, auxiliary, strict=True)
+        )
+        ratio = math.exp(-1.63)
+        return (
+            (-ratio * low["uhf"] + high["uhf"]) / (1 - ratio)
+            + (-8 * (low["ump2"] - low["uhf"]) + 27 * (high["ump2"] - high["uhf"])) / 19
+            + low["uccsd(t)"]
+            - low["ump2"]
+        )
+
+    np.testing.assert_allclose(
+        actual.energy, independent_energy(atoms), atol=3e-8, rtol=0
+    )
+    direction = np.random.default_rng(2980 + atom_count).normal(size=(atom_count, 3))
+    direction -= direction.mean(axis=0)
+    direction /= np.linalg.norm(direction)
+    for step in (1e-3, 3e-4):
+        displaced = [
+            independent_energy(
+                tuple(
+                    (symbol, np.asarray(position) + sign * step * shift)
+                    for (symbol, position), shift in zip(atoms, direction, strict=True)
+                )
+            )
+            for sign in (-1, 1)
+        ]
+        np.testing.assert_allclose(
+            -np.vdot(actual.forces, direction),
+            (displaced[1] - displaced[0]) / (2 * step),
+            atol=5e-7,
+            rtol=0,
+        )

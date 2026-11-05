@@ -121,7 +121,7 @@ class UccsdPrepared final : public PreparedCalculation {
       if (fitting_.auxiliary) {
         if (retained_reference_capacity >= options_.max_bytes)
           throw std::length_error("unrestricted DF reference exceeds endpoint budget");
-        fitted.emplace(reference_source, *fitting_.auxiliary, fitting_.threshold,
+        fitted.emplace(reference_source, reference, *fitting_.auxiliary, fitting_.threshold,
                        std::min(fitting_.budget, options_.max_bytes - retained_reference_capacity),
                        cuda_, device_, compute_forces, unrestricted_integral_backend());
         retained_reference_capacity =

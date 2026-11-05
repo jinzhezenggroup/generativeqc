@@ -33,6 +33,7 @@ _SHIM = r"""
 #include "scf/cuda_batch.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/fock_symmetry.hpp"
 #include "scf/initial_guess/eigen_operation.hpp"
 
 namespace generativeqc::runtime::df_progress {
@@ -163,7 +164,11 @@ Matrix prepare_initial_density(const core::System& system, const auto&, const Ma
   ++core_densities.at(source_id(system));
   return {2};
 }
-struct Diis { explicit Diis(unsigned) {} Matrix update(const Matrix& f, const Matrix&) { return f; } };
+struct Diis {
+  explicit Diis(unsigned, bool = false) {}
+  Matrix update(const Matrix& f, const Matrix&) { return f; }
+  void clear() {}
+};
 struct CudaDensityFittingDeviceScfItem {
   bool converged{}; unsigned iterations{}; double energy{}, energy_change{}, density_rms{};
   std::uint64_t fock_builds{};

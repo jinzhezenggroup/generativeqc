@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "core/types.hpp"
@@ -17,6 +18,8 @@ namespace generativeqc::scf {
 struct RhfBucketItem {
   generativeqc_status status{GENERATIVEQC_STATUS_INTERNAL_ERROR};
   ScfResult scf;
+  /** Underlying per-item provider/finalization failure, preserved for callers. */
+  std::string detail;
   /** A completed isolated Fock measurement deliberately has no converged SCF
    * result. Fleet must preserve its input instead of retrying a cold solve. */
   bool fock_only_diagnostic{};

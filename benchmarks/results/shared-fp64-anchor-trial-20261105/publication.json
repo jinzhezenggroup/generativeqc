@@ -13,10 +13,10 @@
       "sha256": "75f760c7b54e6742b7eb6e849b06b2e7d82b319eb2d0d5c08cf746c550879729"
     },
     {
-      "bytes": 1525,
-      "path": "acceptance.json",
+      "bytes": 824,
+      "path": "acceptance.json.xz",
       "role": "input",
-      "sha256": "e91e4c0fa25552519a48bad7e863de4bcc5392a27d8234c644ccba794711ccde"
+      "sha256": "e3f1e5ca846e9ededb1a3179390663e4581de076b8d8aa7951050965567082e6"
     },
     {
       "bytes": 2952,
@@ -139,10 +139,10 @@
       "sha256": "06c32f369d63196187c50a9b8b86b316576267b83e590ccc4b8235cbe3ebcc8d"
     },
     {
-      "bytes": 4736,
+      "bytes": 4740,
       "path": "validation.json.xz",
       "role": "evidence",
-      "sha256": "9d1d8361b3c3360c28af7b077e255482759df8ae15e047308018673655584481"
+      "sha256": "79230bc1722170b5d6694b01e81f3c732d0a648626bf38dcab9a9396932ec9c6"
     }
   ],
   "reproduction": {
