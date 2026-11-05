@@ -42,6 +42,16 @@ lease on the incumbent bounded direct path. A genuinely mixed active lease
 still follows the original strict retirement/replacement path. No generic
 cross-geometry cache identity policy is weakened.
 
+The `4dd6b34b53b882688e18e4a0036acc20326a5704` cohort exposes a third,
+separate cost on automatically incremental Direct endpoints: the shared
+`strict_refinement` flag disables delta J/K after an XC-only handoff. A traced
+48-atom M06-2X cold solve executes 48 rather than 32 structured basis actions,
+despite both routes reporting 10 Focks. Reassociation changes XC features, not
+the exact J/K density anchor, screening contract or precision. Preserve the
+ordinary incremental schedule for this FP64-only handoff. Genuine precision
+transitions, full-energy refinement and final closure still forbid deltas.
+SCF/Fock totals alone would have hidden this semantic-work regression.
+
 Dispatch by supported ingredient layout, not functional or molecule names:
 
 - LDA: one occupied value projection and squared-orbital feature reduction.

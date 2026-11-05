@@ -130,6 +130,10 @@ provisional energy, residual, warm seed or force can authorize publication.
 XC-only handoff preserves an active, unchanged FP64 J/K source lease rather
 than regenerating its ERIs. An absent source stays on the incumbent bounded
 direct path; a genuinely mixed source still undergoes strict replacement.
+The XC-only handoff also preserves the existing strict J/K incremental
+anchor and delta/full schedule. Its original full-density energy refinement
+and final canonical proof still prohibit delta builds; XC reassociation does
+not turn a J/K reuse opportunity into a precision transition.
 DIIS history only predicts densities. Provisional entries age out through the
 existing chronological ring, bounded by the configured history depth (at most
 64), without clearing the strict predictor accumulated after handoff. Only

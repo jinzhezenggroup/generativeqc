@@ -211,6 +211,8 @@ def run(args: argparse.Namespace) -> None:
                         "fock_builds": result.fock_builds,
                         "settings": native_settings(calculator, result),
                         "diagnostic": result.ks_diagnostic.to_payload(),
+                        "precision": result.precision,
+                        "incremental_direct_jk": result.incremental_direct_jk,
                     }
                 )
                 save(args.output, record)

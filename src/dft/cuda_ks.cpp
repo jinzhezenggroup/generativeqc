@@ -3807,8 +3807,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   bool incremental_delta_admitted() const noexcept {
+    // XC-only reassociation never changes the strict J/K operator or its
+    // density anchor. Preserve its ordinary delta/full schedule at handoff;
+    // precision transitions and the physical full-energy tail still forbid
+    // deltas. Occupied admission excludes every lower-precision schedule.
     if (!incremental_direct_jk || !incremental_anchored || incremental_energy_refinement ||
-        final_closure || strict_refinement)
+        final_closure || (strict_refinement && !occupied_xc_executed))
       return false;
     const auto interval = ks_incremental_proposal_interval(
         incremental_proposals_active, incremental_direct_jk_policy.requested_rebuild_interval,
