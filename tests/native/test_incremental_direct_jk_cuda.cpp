@@ -95,7 +95,8 @@ void compare_pyscf(const generativeqc::scf::ScfResult& result, bool unrestricted
             "CUDA incremental endpoint failed the independent PySCF force gate");
 }
 
-void verify_case(bool unrestricted, double screening_tolerance, unsigned requested_interval) {
+void verify_case(bool unrestricted, double screening_tolerance, unsigned requested_interval,
+                 bool resident_requested = false) {
   const auto system = asymmetric_two_center(unrestricted);
   generativeqc::scf::ScfOptions baseline_options;
   baseline_options.max_iterations = 100;
@@ -130,15 +131,24 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
           "native CUDA incremental anchor-update semantics changed");
   require(diagnostic.max_abs_delta_density > 0.0,
           "native CUDA incremental path did not observe a density delta");
-  require(diagnostic.post_scf_full_builds != 0U,
-          "native CUDA incremental path skipped strict final full rebuilds");
+  generativeqc::scf::CudaDirectFinalStateAudit audit;
+  require(generativeqc::scf::get_rhf_cuda_final_state_audit(plan, audit) &&
+              audit.route == generativeqc::scf::CudaDirectFinalStateRoute::scf_force_ready &&
+              audit.physical_residual_validated && audit.orbital_frame_bound &&
+              audit.restart_same_density_generation && diagnostic.post_scf_full_builds == 0U,
+          "full-energy-confirmed incremental state lost ordinary final-state reuse");
   std::cout << (unrestricted ? "UHF" : "RHF") << " screening=" << screening_tolerance
             << " interval=" << requested_interval << " iterations=" << incremental.scf.iterations
             << " full=" << diagnostic.anchor_full_builds << " delta=" << diagnostic.delta_builds
             << " promoted=" << diagnostic.anchor_updates
             << " final_full=" << diagnostic.post_scf_full_builds << '\n';
+  // The tiny source stays below the hard resident admission floor, even when
+  // explicitly requested. Its bounded fallback must retain a truthful census.
   require(diagnostic.quartet_work_counters_valid,
           "fixed-topology incremental Direct-J/K work counters are not valid");
+  if (resident_requested)
+    require(diagnostic.full_candidate_shell_quartets > 0U,
+            "resident capacity refusal lost the direct fallback's work census");
   require(diagnostic.full_admitted_shell_quartets <= diagnostic.full_candidate_shell_quartets &&
               diagnostic.delta_admitted_shell_quartets <= diagnostic.delta_candidate_shell_quartets,
           "incremental Direct-J/K admitted more shell quartets than it visited");
@@ -153,8 +163,8 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
       "incremental Direct-J/K candidate/admitted/rejected counters do not reconcile");
 
   if (screening_tolerance == 0.0) {
-    require(diagnostic.anchor_full_builds == 1U && diagnostic.periodic_rebuilds == 0U,
-            "unscreened exact incremental mode rebuilt unexpectedly");
+    require(diagnostic.anchor_full_builds >= 3U,
+            "unscreened incremental mode omitted full-energy confirmation");
     require(diagnostic.full_rejected_shell_quartets == 0U &&
                 diagnostic.delta_rejected_shell_quartets == 0U,
             "unscreened incremental Direct-J/K rejected shell quartets");
@@ -187,10 +197,6 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
   compare_pyscf(changed_incremental.scf, unrestricted, true);
   require(changed_incremental.scf.incremental_direct_jk.anchor_full_builds != 0U,
           "changed geometry reused a stale incremental Direct-J/K anchor");
-  if (screening_tolerance == 0.0 && requested_interval == 0U) {
-    require(changed_incremental.scf.incremental_direct_jk.anchor_full_builds == 1U,
-            "unscreened changed geometry established more than one full anchor");
-  }
 
   // Switch the same cached owner back to the ordinary policy. The bucket
   // identity must rebuild rather than replaying an incremental captured Graph.
@@ -347,6 +353,8 @@ int main() {
   try {
     require(::setenv("GENERATIVEQC_FINAL_FOCK_REBUILD", "0", 1) == 0,
             "could not select retained final-state qualification");
+    require(::setenv("GENERATIVEQC_RHF_RESIDENT_VALUES", "0", 1) == 0,
+            "could not select fixed-topology qualification");
     verify_case(false, 0.0, 0U);
     verify_case(true, 0.0, 0U);
     verify_case(false, 1.0e-12, 8U);
@@ -358,6 +366,11 @@ int main() {
     verify_density_rms_gate();
     verify_warm_full_only(false);
     verify_warm_full_only(true);
+    require(::setenv("GENERATIVEQC_RHF_RESIDENT_VALUES", "1", 1) == 0,
+            "could not select resident incremental qualification");
+    verify_case(false, 1.0e-12, 8U, true);
+    require(::setenv("GENERATIVEQC_RHF_RESIDENT_VALUES", "0", 1) == 0,
+            "could not restore fixed-topology qualification");
     require(::setenv("GENERATIVEQC_FINAL_FOCK_REBUILD", "1", 1) == 0,
             "could not select explicit final rebuild qualification");
     verify_warm_full_only(false, false);
