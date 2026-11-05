@@ -65,15 +65,23 @@ def test_probe_overlay_paths_and_namespaces_remain_disjoint_from_master() -> Non
         assert f"path: {location}" in step
         assert "path: ~/.cache/ccache" not in step
     key = next(line.strip() for line in restore.splitlines() if "key:" in line)
-    assert key.startswith(
-        "key: ccache-python-probes-v2-${{ matrix.shard }}-${{ hashFiles("
+    assert key == (
+        "key: ccache-python-probes-v2-${{ matrix.shard }}-"
+        "${{ steps.python_probe_inputs.outputs.fingerprint }}"
     )
     assert (
         "restore-keys: |\n            ccache-python-probes-v2-${{ matrix.shard }}-"
         in restore
     )
-    assert {"tests/python/**", "tests/native/**", "benchmarks/**"} <= set(
-        re.findall(r"'([^']+)'", key)
+    assert "hashFiles(" not in key
+    fingerprint = steps["Fingerprint committed Python probe inputs"]
+    assert "python3 tools/ci_python_probe_key.py" in fingerprint
+    names = list(steps)
+    assert names.index("Fingerprint committed Python probe inputs") < names.index(
+        "Prepare CPU Python test environment"
+    )
+    assert names.index("Restore trusted master Python probes after primary miss") < (
+        names.index("Reset native probe ccache statistics")
     )
     for name in (
         "Reset native probe ccache statistics",
@@ -311,3 +319,55 @@ def test_core_a_probe_cache_diagnostics_preserve_compile_and_scientific_gates() 
     assert '-n 4 --dist="$dist_mode"' in test
     # Diagnostics must not turn a failed test step into a successful one.
     assert "continue-on-error:" not in test
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "merge_group", "push", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize(
+    "ref", ("refs/heads/master", "refs/heads/feature", "refs/pull/42/merge")
+)
+@pytest.mark.parametrize(
+    "repository", ("jinzhezenggroup/generativeqc", "fork/generativeqc")
+)
+@pytest.mark.parametrize("outcome", ("success", "failure", "skipped"))
+def test_probe_artifact_producer_is_only_successful_master_qualification(
+    event: str, ref: str, repository: str, outcome: str
+) -> None:
+    steps = _steps()
+    eligible = _condition(
+        steps["Package trusted master Python probes"],
+        {
+            "github.repository": repository,
+            "github.ref": ref,
+            "github.event_name": event,
+            "steps.python_tests.outcome": outcome,
+        },
+    )
+    assert eligible == (
+        repository == "jinzhezenggroup/generativeqc"
+        and ref == "refs/heads/master"
+        and event in {"schedule", "workflow_dispatch"}
+        and outcome == "success"
+    )
+    assert "continue-on-error: true" in steps["Package trusted master Python probes"]
+    assert "timeout-minutes: 2" in steps["Package trusted master Python probes"]
+
+
+@pytest.mark.parametrize("matched", ("", "exact-probe-key", "prefix-probe-key"))
+@pytest.mark.parametrize("outcome", ("success", "failure", "skipped"))
+def test_probe_artifact_fallback_runs_only_after_true_primary_miss(
+    matched: str, outcome: str
+) -> None:
+    step = _steps()["Restore trusted master Python probes after primary miss"]
+    assert _condition(
+        step,
+        {
+            "steps.python_probe_ccache.outcome": outcome,
+            "steps.python_probe_ccache.outputs.cache-matched-key": matched,
+            "steps.prose_scope.outcome": "success",
+            "steps.prose_scope.outputs.scope": "full",
+        },
+    ) == (outcome == "success" and matched == "")
+    assert "timeout-minutes: 2" in step
+    assert "continue-on-error: true" in step
