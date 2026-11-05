@@ -244,3 +244,11 @@ members and original/v1 reports remain byte-identical. Extra Python bookkeeping
 is acknowledged without a new timing claim. Libxc changes only checked identities;
 the original WARN, source/device boundaries and scientific fields remain unchanged.
 No numerical, compiled or device replay was needed for this interface integration.
+
+A further normal merge retains #3009 CI maintenance and #2985 low-level CPU UKS
+response admission. The [third scoped follow-up](review/integration-followup-v3.md)
+confirms that the response binder is reached by explicit second-order calls,
+with unchanged ordinary CUDA first-E/F, native/default/timer inputs, four payload
+members and all six original/v1/v2 reports. Only checked Libxc identities change.
+The original WARN and source/device boundaries remain; this is no new H100 timing
+population or acceptance of upstream CPU UKS/Hessian science.

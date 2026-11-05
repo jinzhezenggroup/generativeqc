@@ -178,6 +178,35 @@
             "sha256": "52dfa1413b2f4a190dc8a9509ed5cb772fa6470dbbe999dcfce9412f73e74dc4"
           }
         ]
+      },
+      {
+        "status": "PASS_SCOPED_INTEGRATION_NO_BLOCKING_CONCERN",
+        "audited_head": "1cbf5adaa58ca2db98cd71940e8f7a7d7c83817c",
+        "upstream": "415d8caba12a8f7ecb4e81e48d5dae913720e695",
+        "original_verdict_unchanged": "WARN_SCOPED_ACCEPTANCE_NO_BLOCKING_DEFECT_FOUND",
+        "scope": "Postqualification actual main3009 CI-only maintenance and2985 explicit low-level CPU response admission. CUDA first-E/F, native/default/timer inputs and scientific payload/report bytes unchanged. No new H100 timing, numerical/device replay or upstream UKS scientific acceptance.",
+        "artifacts": [
+          {
+            "path": "review/integration-followup-v3.json",
+            "bytes": 10875,
+            "sha256": "db46d6b638d6665c665c9f891d9911e976cae8d0641cb2ab250fb4f945dd8d33"
+          },
+          {
+            "path": "review/integration-followup-v3.md",
+            "bytes": 2104,
+            "sha256": "724abdb7728ebf296499e3ea685e22d882b184c5cf5639bf477fbdf0f37aaa19"
+          },
+          {
+            "path": "review/upstream2985-integration-v1.json",
+            "bytes": 3404,
+            "sha256": "9e41cbbcb54cde99d7ae0928d7d885b8d0d17890d48a6c1ff6d033fc2293c45c"
+          },
+          {
+            "path": "review/upstream2985-source-refresh-v1.json",
+            "bytes": 1740,
+            "sha256": "77b601b0f34a8b699d39d8e34a0e10ba33bf77e4be81b2e977f28de61929f96b"
+          }
+        ]
       }
     ]
   },

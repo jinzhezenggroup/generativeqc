@@ -111,3 +111,10 @@ The second bounded public review supplement verifies unchanged scientific payloa
 and original/v1 review bytes. Extra Python bookkeeping carries no new timing
 claim. Retain the same measured-source boundaries and original WARN; unrelated
 interface integration does not require repeating completed numerical/device work.
+
+The next normal main merge retains #3009 CI maintenance and #2985 low-level CPU
+UKS response admission. Its only executable runtime edit is in the explicit
+second-order binder; ordinary CUDA cold/warm E/F routing and native/default/timer
+inputs remain unchanged. The third bounded supplement retains source/byte checks
+and the original WARN. It does not qualify upstream UKS science or a later-head
+timing population and requires no original numerical/device replay.
