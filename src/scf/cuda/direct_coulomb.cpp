@@ -53,6 +53,8 @@ void configure_direct_weighted_force_response(DeviceBatch& batch) noexcept {
   // Capture the exact-pair preference once; source-specific proof and finite
   // checks still precede publication, with the strict nuclear worker as fallback.
   batch.direct_force_pair_separable = !separable || std::string_view(separable) == "1";
+  const auto* long_range = std::getenv("GENERATIVEQC_DIRECT_LR_WEIGHTED_FORCES");
+  batch.direct_force_lr_weighted = !long_range || std::string_view(long_range) == "1";
 }
 
 bool direct_fp32_block_screening_requested() noexcept {

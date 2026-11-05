@@ -120,6 +120,9 @@ struct DeviceBatch {
   /** Captured pure-J pair preference; conservative until owner configuration.
    * Unsupported/nonfinite tasks retain strict fallback before any scatter. */
   bool direct_force_pair_separable{};
+  /** Captured LR order-four/five shell contraction preference; unsupported
+   * classes retain the ordinary screened AO-quartet consumer. */
+  bool direct_force_lr_weighted{};
   /** Per-launch qualification candidate, never a process-global precision mode.
    * Only full-range weighted order-0..5 sources consume it. Geometry, density
    * weights and radial moments stay double; all other derivative owners stay

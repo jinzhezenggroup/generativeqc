@@ -20,6 +20,15 @@ unsigned evaluations{}, fault{};
 
 template <class Roots>
 struct FaultRoots : Roots {
+  static generated_weighted_eri::IndependentGradient evaluate_relative(
+      const generated_weighted_eri::Geometry& geometry, const double* weights) {
+    auto result = Roots::evaluate_relative(geometry, weights);
+    if (++evaluations == 2U) {
+      if (fault == 1U) result.center[0][0] = std::numeric_limits<double>::infinity();
+      if (fault == 2U) result.center[0][0] = std::numeric_limits<double>::quiet_NaN();
+    }
+    return result;
+  }
   static generated_weighted_eri::IndependentGradient evaluate_separable(
       const generated_weighted_eri::Geometry& geometry, const double* bra, const double* ket) {
     auto result = Roots::evaluate_separable(geometry, bra, ket);
@@ -31,22 +40,25 @@ struct FaultRoots : Roots {
   }
 };
 
-template <unsigned ShellClass, bool Unrestricted, DirectForceOutputMode Mode, class Roots>
+template <unsigned ShellClass, bool Unrestricted, DirectForceOutputMode Mode, class Roots,
+          bool LongRange = false>
 void execute(const DeviceBatch& batch, const double* bounds, const double* density,
              const std::uint8_t* active, double threshold, double coulomb, double exchange,
-             double* forces, bool same_pair) {
-  contract_two_electron_force_low_order_sources_task<Unrestricted, ShellClass, false, Roots, Mode>(
-      batch, {0U, same_pair ? 0U : 1U, 0U}, threshold, bounds, density, active, forces, coulomb,
-      exchange);
+             double* forces, bool same_pair, double omega = 0.0) {
+  contract_two_electron_force_low_order_sources_task<Unrestricted, ShellClass, LongRange, Roots,
+                                                     Mode>(batch, {0U, same_pair ? 0U : 1U, 0U},
+                                                           threshold, bounds, density, active,
+                                                           forces, coulomb, exchange, omega);
 }
 
-template <unsigned ShellClass, class Roots>
+template <unsigned ShellClass, class Roots, bool LongRange = false>
 void run_probe(const std::array<std::uint8_t, 4>& angular, bool unrestricted, bool separate,
                bool enabled, bool relative, unsigned orientation, bool same_ket, bool same_pair,
                unsigned system, const std::int32_t* atoms, const double* positions,
                const double* density, const double* coefficients, const double* bounds,
                const double* seed, double threshold, double coulomb, double exchange, bool mixed,
-               unsigned injected_fault, double* forces, unsigned long long* counters) {
+               unsigned injected_fault, double* forces, unsigned long long* counters,
+               double omega = 0.0) {
   DeviceBatch batch{};
   batch.batch_size = system + 1;
   unsigned dimension = 0U;
@@ -108,6 +120,7 @@ void run_probe(const std::array<std::uint8_t, 4>& angular, bool unrestricted, bo
   }
   batch.shell_primitive_pairs = primitives;
   batch.direct_force_pair_separable = enabled;
+  batch.direct_force_lr_weighted = enabled;
   batch.direct_force_relative_response = relative;
   batch.direct_force_fp32 = mixed;
   batch.direct_force_seed = seed;
@@ -118,11 +131,11 @@ void run_probe(const std::array<std::uint8_t, 4>& angular, bool unrestricted, bo
   fault = injected_fault;
   const auto call = [&]<bool Unrestricted, DirectForceOutputMode Mode>() {
     if (fault)
-      execute<ShellClass, Unrestricted, Mode, FaultRoots<Roots>>(
-          batch, bounds, density, active, threshold, coulomb, exchange, forces, same_pair);
+      execute<ShellClass, Unrestricted, Mode, FaultRoots<Roots>, LongRange>(
+          batch, bounds, density, active, threshold, coulomb, exchange, forces, same_pair, omega);
     else
-      execute<ShellClass, Unrestricted, Mode, Roots>(batch, bounds, density, active, threshold,
-                                                     coulomb, exchange, forces, same_pair);
+      execute<ShellClass, Unrestricted, Mode, Roots, LongRange>(
+          batch, bounds, density, active, threshold, coulomb, exchange, forces, same_pair, omega);
   };
   if (unrestricted) {
     if (separate)
@@ -192,6 +205,55 @@ extern "C" void scalar_pair_probe(unsigned class_index, bool unrestricted, bool 
       break;
     case 6:
       call.template operator()<kDdpsShellClass, Order5SourceRoots<kDdpsShellClass>>();
+      break;
+    default:
+      std::abort();
+  }
+}
+
+/** LR uses the same actual arbitrary-weight task, never the pair projection.
+ * The additional DDSS case has a trivial pair side but nontrivial exchange. */
+extern "C" void scalar_lr_probe(unsigned class_index, bool unrestricted, bool separate,
+                                bool enabled, bool relative, unsigned orientation, bool same_ket,
+                                bool same_pair, unsigned system, const std::int32_t* atoms,
+                                const double* positions, const double* density,
+                                const double* coefficients, const double* bounds,
+                                const double* seed, double threshold, double coulomb,
+                                double exchange, bool mixed, unsigned injected_fault,
+                                double* forces, unsigned long long* counters, double omega) {
+  constexpr std::array<std::uint8_t, 4> angular[] = {{1, 1, 1, 1}, {2, 1, 1, 1}, {2, 0, 1, 1},
+                                                     {2, 0, 2, 0}, {2, 1, 1, 0}, {2, 1, 2, 0},
+                                                     {2, 2, 1, 0}, {2, 2, 0, 0}};
+  const auto call = [&]<unsigned ShellClass, class Roots>() {
+    run_probe<ShellClass, Roots, true>(
+        angular[class_index], unrestricted, separate, enabled, relative, orientation, same_ket,
+        same_pair, system, atoms, positions, density, coefficients, bounds, seed, threshold,
+        coulomb, exchange, mixed, injected_fault, forces, counters, omega);
+  };
+  switch (class_index) {
+    case 0:
+      call.template operator()<kPpppShellClass, Order4SourceRoots<kPpppShellClass>>();
+      break;
+    case 1:
+      call.template operator()<kDpppShellClass, Order5SourceRoots<kDpppShellClass>>();
+      break;
+    case 2:
+      call.template operator()<kDsppShellClass, Order4SourceRoots<kDsppShellClass>>();
+      break;
+    case 3:
+      call.template operator()<kDsdsShellClass, Order4SourceRoots<kDsdsShellClass>>();
+      break;
+    case 4:
+      call.template operator()<kDppsShellClass, Order4SourceRoots<kDppsShellClass>>();
+      break;
+    case 5:
+      call.template operator()<kDpdsShellClass, Order5SourceRoots<kDpdsShellClass>>();
+      break;
+    case 6:
+      call.template operator()<kDdpsShellClass, Order5SourceRoots<kDdpsShellClass>>();
+      break;
+    case 7:
+      call.template operator()<kDdssShellClass, Order4SourceRoots<kDdssShellClass>>();
       break;
     default:
       std::abort();
