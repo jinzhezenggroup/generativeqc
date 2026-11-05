@@ -1256,11 +1256,21 @@ class Calculator:
                 and all(shell.angular_momentum <= 3 for shell in self._basis)
             )
         )
-        from .ks import composite_stationary_second_order_eligible
+        from .ks import (
+            composite_stationary_second_order_eligible,
+            full_range_stationary_second_order_eligible,
+        )
 
-        self._composite_rks_second_order = (
-            self._ks_options is not None
-            and composite_stationary_second_order_eligible(self._ks_options.method_ir)
+        self._composite_rks_second_order = self._ks_options is not None and (
+            composite_stationary_second_order_eligible(self._ks_options.method_ir)
+            or (
+                self._device_name == "cpu"
+                and not basis_has_ecp
+                and density_fitting_mode == _native.DENSITY_FITTING_NONE
+                and full_range_stationary_second_order_eligible(
+                    self._ks_options.method_ir
+                )
+            )
         )
         public_rks_second_order = (
             (self._device_name == "cpu" or self._composite_rks_second_order)
@@ -2842,7 +2852,9 @@ class Calculator:
             raise NotImplementedError(
                 f"method {self._method_name!r} does not expose public {endpoint}; "
                 "qualified domains are CPU direct all-electron Cartesian FP64 "
-                "closed-shell LDA/PBE, or canonical FP64 WB97M-V RKS/UKS with "
+                "closed-shell LDA/PBE; CPU direct all-electron FP64 "
+                "Cartesian/spherical restricted PBE0/B3LYP compositions with "
+                "full-range exchange in (0, 1]; or canonical FP64 WB97M-V RKS/UKS with "
                 "CPU/CUDA, Cartesian/spherical, full-rank DF and scalar ECPs"
             )
         if multiplicity != 1 and not (
@@ -2897,7 +2909,7 @@ class Calculator:
             multiplicities=[multiplicity],
             warm_start=False,
         ) as batch:
-            batch.execute(strict=True, properties=("energy",))
+            primal = batch.execute(strict=True, properties=("energy",)).items[0]
             with (
                 NativeAO(
                     atoms,
@@ -2915,6 +2927,11 @@ class Calculator:
                 _diagnostics=MappingProxyType(
                     {
                         **result.diagnostics,
+                        "public_calculator_endpoint": True,
+                        "scf_energy": primal.energy,
+                        "scf_iterations": primal.iterations,
+                        "scf_fock_builds": primal.fock_builds,
+                        "scf_executed_backend": primal.executed_backend,
                         "endpoint_seconds": time.perf_counter() - started,
                     }
                 ),
@@ -2934,9 +2951,11 @@ class Calculator:
         grid_budget_bytes: int = 128 << 20,
         max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
-        """Compute a bounded analytic Cartesian HVP for LDA/PBE or WB97M-V.
+        """Compute a bounded analytic Cartesian semilocal or hybrid HVP.
 
         LDA/PBE require CPU direct all-electron Cartesian closed-shell FP64.
+        Qualified PBE0/B3LYP compositions also admit spherical AOs on CPU with
+        direct all-electron restricted FP64 and full-range exchange in (0, 1].
         Canonical WB97M-V also admits UKS, CUDA, spherical AOs, full-rank DF
         and scalar semilocal ECPs. CUDA Hessian numerics, including grid/DF/ECP
         AD and coupled response, remain in linked native C++/CUDA code. A
@@ -3020,11 +3039,14 @@ class Calculator:
         grid_budget_bytes: int = 128 << 20,
         max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
-        """Assemble a raw analytic Cartesian Hessian for LDA/PBE or WB97M-V.
+        """Assemble a bounded raw analytic semilocal or hybrid Cartesian Hessian.
 
         The matrix is never post-hoc symmetrized. The output budget must hold
         both the dense matrix and immutable publication; integral/response
         resources retain their independently checked contracts.
+
+        PBE0/B3LYP compositions require CPU direct all-electron restricted FP64;
+        Cartesian/spherical AOs and full-range exchange in (0, 1] are admitted.
 
         WB97M-V uses compiler automatic differentiation and implicit CPKS, not
         displaced SCFs. Its RKS/UKS owner assembles scalar columns
@@ -3084,11 +3106,11 @@ class Calculator:
                 type(block_size) is not int or block_size != 1
             ):
                 raise ValueError(
-                    "WB97M-V Hessian currently requires block_size=None or 1"
+                    "composite Hessian currently requires block_size=None or 1"
                 )
             if strategy not in (None, "recycled"):
                 raise ValueError(
-                    "WB97M-V Hessian currently uses the default scalar response strategy"
+                    "composite Hessian currently uses the default scalar response strategy"
                 )
             return self._run_public_rks_second_order(
                 native_atoms,
