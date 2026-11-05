@@ -1,0 +1,4 @@
+{"phase": "cold", "repeat": 0, "seconds": 29.551986195147038, "iterations": 10}
+{"phase": "warm", "repeat": 0, "seconds": 11.429283175617456, "iterations": 1}
+{"phase": "warm", "repeat": 1, "seconds": 11.544192418456078, "iterations": 1}
+{"phase": "warm", "repeat": 2, "seconds": 11.473440650850534, "iterations": 1}
