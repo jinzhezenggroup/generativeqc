@@ -759,7 +759,7 @@ def complete_rks_gradient_diagnostic(
                 primitive = plan.range_exchange_primitive(range_source.name)
                 if native_mixed_integrals and primitive.operator != "long-range":
                     continue
-                from ._stationary_range_cpu import (
+                from generativeqc_compiler.integral.eri_symmetry import (
                     canonical_eri_quartets,
                     eri_quartet_orbits,
                 )

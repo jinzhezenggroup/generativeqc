@@ -362,8 +362,15 @@ bases; a budget one byte below the queried requirement refuses before allocation
 or any operator action.
 
 The operator, preconditioner and retained-subspace roles are separate.
-`DiagonalPreconditioner` is opt-in and rejects zero/near-zero diagonal entries;
-it is never selected implicitly.
+`solve` does not select a preconditioner implicitly. `DiagonalPreconditioner`
+rejects zero/near-zero diagonal entries. Its `from_orbital_gaps` factory packs
+finite signed virtual-minus-occupied energies in the explicit restricted
+rotation order and returns `None` for zero/near-zero gaps, without clamping.
+The CPU restricted composite stationary Hessian owner requests this scaling
+explicitly; the physical operator, configured tolerances and true-residual
+acceptance are unchanged. Singular gaps retain the bounded unpreconditioned
+solve. Coupled-spin and resident CUDA owners keep their existing policies.
+The HVP diagnostic `response_preconditioner` records the selected policy.
 Its inputs and host operator/preconditioner callback outputs must have the
 declared real numeric vector shape; complex/string outputs are rejected before
 FP64 conversion rather than silently narrowed or broadcast during Krylov work.

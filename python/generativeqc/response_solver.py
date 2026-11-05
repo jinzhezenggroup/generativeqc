@@ -13,7 +13,13 @@ from generativeqc_compiler.common.arrays import immutable
 
 from generativeqc.profiles import canonical_hash
 
-from .response_problem import ResponseCompatibilityError, ResponseSolveError
+from .response_problem import (
+    ResponseCompatibilityError,
+    ResponseSolveError,
+    RotationLayout,
+)
+
+_DIAGONAL_RELATIVE_THRESHOLD = 1e-14
 
 
 def _vector_norm(value: typing.Any) -> typing.Any:
@@ -239,7 +245,10 @@ class DiagonalPreconditioner:
     """Separate diagonal preconditioner with an explicit nonzero gate."""
 
     def __init__(
-        self, diagonal: typing.Any, *, relative_threshold: typing.Any = 1e-14
+        self,
+        diagonal: typing.Any,
+        *,
+        relative_threshold: typing.Any = _DIAGONAL_RELATIVE_THRESHOLD,
     ) -> None:
         raw = np.asarray(diagonal)
         if raw.ndim != 1 or raw.dtype.kind not in "iuf" or not np.isfinite(raw).all():
@@ -259,6 +268,45 @@ class DiagonalPreconditioner:
             )
         self.diagonal = immutable(value)
         self.inverse = immutable(1.0 / value)
+
+    @classmethod
+    def from_orbital_gaps(
+        cls, orbital_energies: typing.Any, layout: RotationLayout
+    ) -> DiagonalPreconditioner | None:
+        """Build restricted occupied-major gap scaling, or decline singular gaps.
+
+        This changes Krylov conditioning, never the orbital-response operator
+        or its true-residual acceptance gate. Signed finite gaps are preserved.
+        A zero/near-zero gap selects the bounded unpreconditioned path instead
+        of clamping a physical denominator. Opaque operator/preconditioner
+        storage retains the solver's existing independent-budget contract.
+        """
+        if not isinstance(layout, RotationLayout):
+            raise TypeError("orbital-gap preconditioning requires RotationLayout")
+        raw = np.asarray(orbital_energies)
+        if (
+            raw.shape != (layout.nmo,)
+            or raw.dtype.kind not in "iuf"
+            or not np.isfinite(raw).all()
+        ):
+            raise ValueError("orbital energies must be a finite real layout vector")
+        with np.errstate(over="raise", invalid="raise"):
+            try:
+                energies = np.asarray(raw, dtype=np.float64)
+                gaps = (
+                    energies[list(layout.virtual)][None, :]
+                    - energies[list(layout.occupied)][:, None]
+                )
+            except FloatingPointError as error:
+                raise ValueError(
+                    "orbital gaps must be representable in FP64"
+                ) from error
+        if not np.isfinite(gaps).all():
+            raise ValueError("orbital gaps must be representable in FP64")
+        cutoff = _DIAGONAL_RELATIVE_THRESHOLD * max(float(np.max(np.abs(gaps))), 1.0)
+        if np.any(np.abs(gaps) <= cutoff):
+            return None
+        return cls(layout.pack(gaps))
 
     def apply(self, vector: typing.Any) -> typing.Any:
         raw = np.asarray(vector)

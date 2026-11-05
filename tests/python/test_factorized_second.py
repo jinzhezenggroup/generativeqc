@@ -100,11 +100,17 @@ def evaluate(
 
 
 def reference(
-    family: int, angular: tuple, positions: np.ndarray, radial: int = 0
+    family: int,
+    angular: tuple,
+    positions: np.ndarray,
+    radial: int = 0,
+    *,
+    exponents: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Use independent libcint integrals/gradients, not generated factor graphs."""
     from pyscf import gto
 
+    exponents = EXPONENTS if exponents is None else exponents
     count = len(angular)
     names = ("H", "He", "Li", "Be")[:count]
     molecule = gto.M(
@@ -114,7 +120,7 @@ def reference(
         ],
         basis={
             name: [[order, [exponent, 1.0]]]
-            for name, order, exponent in zip(names, angular, EXPONENTS, strict=False)
+            for name, order, exponent in zip(names, angular, exponents, strict=False)
         },
         unit="Bohr",
         cart=True,
@@ -124,7 +130,7 @@ def reference(
     shape = tuple(map(len, labels))
     norms = [
         _gaussian_squared_norm(exponent, component)
-        for exponent, components in zip(EXPONENTS, labels, strict=False)
+        for exponent, components in zip(exponents, labels, strict=False)
         for component in components
     ]
     scales = np.split(
