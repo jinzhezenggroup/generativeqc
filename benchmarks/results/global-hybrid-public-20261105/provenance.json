@@ -1,0 +1,178 @@
+{
+  "schema": "generativeqc.global-hybrid-scientific-provenance/v1",
+  "acceptance_complete": true,
+  "measured_base_revision": "72499de172f5f75a425b0dee8bff8427d7cc061e",
+  "measured_dirty": true,
+  "production_patch": "source.patch.xz",
+  "source_files": {
+    "python/generativeqc/ks.py": "91466a7e5bb7a6e0dbdf8ef02ffc07217299b8ad09d697266bb42d6eee21571f",
+    "python/generativeqc/calculator.py": "212b2752489354b6f429dc5ebb8e1e90f98d431428974aeeaa3f0dd86df29d2e",
+    "python/generativeqc/composite_rks_hessian.py": "d9048dce5725afafae3cdf32976966f84f99aa71a6d38c34e52745c30f7a049f",
+    "tools/qualify_global_hybrid_ni.py": "52a8bc4f7d72a276506107bdd7dafc963db850aba193c2d2149662820fa1e79f",
+    "tools/qualify_global_hybrid_ni_grid.py": "458e502f8bcb24a2f3f32512301587a8f20913717dd7182faf73d43f1eece57a"
+  },
+  "native_source_identity": "8c48322aed12add1c671485f6c577a5d925d1bb06ed19c4a9411d73fcde40da9",
+  "native_library_sha256": "7d32f78ba5e9a0f6a0ebb9ae98a40d7b31416f5ab41ce412f77e204ca5984c3b",
+  "repaired_wheel_sha256": "ea73be9e589e2834eb160c3bb3e836985fef9e22c40622b35bb07cb97557bbdd",
+  "wheel": "generativeqc-0.1.0-py3-none-manylinux_2_35_x86_64.whl (ignored local artifact; not published)",
+  "installed_prefix": "/tmp/gqc-pr2977-completion/installed",
+  "source_equals_installed_module_bytes": true,
+  "environment": {
+    "python": "3.13.9",
+    "numpy": "2.5.1",
+    "pyscf_oracle": "2.14.0",
+    "libxc_oracle": "7.0.0",
+    "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+    "cpu_count": 48,
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1"
+  },
+  "build": {
+    "native": "CPU Release; CUDA/CLI/tests disabled; existing build/cpu with verified explicit sccache launcher",
+    "jit": "C++17, O3, -ffp-contract=off, verified sccache 0.16.0, existing artifact cache and finite compiler deadlines",
+    "openblas": "LP64 scipy-openblas32 provider, bundled by auditwheel repair for installed execution",
+    "ninja_launcher_verified": true,
+    "compiler_cache_before": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n",
+    "compiler_cache_after": "Compile requests                      1\nCompile requests executed             1\nCache hits                            0\nCache misses                          1\nCache misses (C/C++)                  1\nCache hits rate                    0.00 %\nCache hits rate (C/C++)            0.00 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          1\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.249 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                           10 GiB\nMax cache size                       10 GiB\n"
+  },
+  "scientific_reference_manifest": "../../../tests/data/global_hybrid/ni-second-order/manifest.json",
+  "scientific_reference_manifest_sha256": "f1d78c1120f079a5d55294eab3b6e831de562fa3917734908e7360cb4485709f",
+  "scope": {
+    "qualified_scale_gate": "small matched real-spherical Ni fixture",
+    "unresolved_production_scale": "25\u201340-atom installed Ni, #2843",
+    "not_promoted": [
+      "UKS",
+      "ECP",
+      "DF hybrids",
+      "CUDA hybrids",
+      "D3(BJ) second order",
+      "TS optimization",
+      "frequencies",
+      "separate through-f public forces"
+    ]
+  },
+  "observed_action_producer": {
+    "file": "observed-action-producer.py.xz",
+    "source_sha256": "07cae674607a7167dbfeb06cc6d9c45b013e71f0cf58e6ac5af6f74bb03218b2",
+    "scope": "Reads actual shared solver result counters on a fresh public action without substituting its solution or numerical providers."
+  },
+  "retained_members": {
+    "integrated-tests.json.xz": {
+      "sha256": "f21045d366732e2d0c80718a13ad25935bdff6946965a391a8c212b22e1e74dc",
+      "bytes": 6288
+    },
+    "installed-endpoints.json": {
+      "sha256": "57acf387940831743b2e2693f6385a143d557c6c28c17cf9712c4e71f90d9e75",
+      "bytes": 55357
+    },
+    "integration.json": {
+      "sha256": "81590e2280acceb519cda609f060697ab418c6f3c8f45493f0cd1a55e0e136a8",
+      "bytes": 12052
+    },
+    "observed-action-producer.py.xz": {
+      "sha256": "903536aebb7b53c5714d6cf69671ef6e1446d2f63af9b238452ab52475b4063f",
+      "bytes": 1592
+    },
+    "source.patch.xz": {
+      "sha256": "5a9377a5214da20ce3d9a693d0b2215c4f5c5286445ef242ea95e1ffd087b4a6",
+      "bytes": 2652
+    },
+    "rotation-action.npz": {
+      "sha256": "508ba8d9366f012b627c30d059e20ef8cdf7bd23e41708530f6bd744445972db",
+      "bytes": 544
+    },
+    "raw-matrix.npz": {
+      "sha256": "8b300e172696b08624a117cd490f4530440434359e77dc0f3a66d7cf01fd9d64",
+      "bytes": 1969
+    },
+    "actions.npz": {
+      "sha256": "75bb22aaf63ad0527055c52c7ccc662eedcc841ab4aac5f3ed7fddde25fee919",
+      "bytes": 1310
+    },
+    "acceptance.json": {
+      "sha256": "3654f3f49641c30128597c737ec79e23778ebfc1b4c35789aec562f8747be8a7",
+      "bytes": 1674
+    },
+    "README.md": {
+      "sha256": "bbbdc3acba28d23a93dfa8ffc97ee198e74b56e2114530ef48d26967719d74a4",
+      "bytes": 10275
+    },
+    "integrated-default-action.npz": {
+      "sha256": "c280751a5580049284d8b5793182a5720c6c0689137a61fdb2e35d2aab4f5209",
+      "bytes": 328
+    },
+    "integrated-action-producer.py.xz": {
+      "sha256": "18929cb06b1a70394c058450c9a1828d8dc0a6cbd098e439f19459aee344eea1",
+      "bytes": 1924
+    },
+    "tests.json.xz": {
+      "sha256": "775cbd73d6514ef47a7639da8ff8656829c4d27b61b348f03027fd410edeed3c",
+      "bytes": 11576
+    },
+    "integrated-action.json": {
+      "sha256": "8a41a283cb98e1212f223836b7be76747105c7a4a6f55cb0c4fae5a7c6fab9c5",
+      "bytes": 4883
+    },
+    "observed-action.npz": {
+      "sha256": "c137f8e0a367db4478e153cd9d9050c23bf4ba11ce2eda09d4773a8067861bc4",
+      "bytes": 2132
+    },
+    "integrated-rotation-action.npz": {
+      "sha256": "508ba8d9366f012b627c30d059e20ef8cdf7bd23e41708530f6bd744445972db",
+      "bytes": 544
+    },
+    "grid-endpoints.json": {
+      "sha256": "3a31607f88a69e60152f8c2f9db009bc47d99b1e1658446eb7a9d3e71ba03d8e",
+      "bytes": 6052
+    },
+    "integrated-grid.json": {
+      "sha256": "87ab1fe574d4678d0c6f689dab7190549e4a194f790521f1cf3d0d2512828ec5",
+      "bytes": 6053
+    },
+    "observed-action.json": {
+      "sha256": "1c3d84cdfd7b9d58a92c19aafda0154cba760a0eebfe8a19d74b3e55a0f4cb7d",
+      "bytes": 4172
+    },
+    "negative.json.xz": {
+      "sha256": "50fb451f4d7b628530ba3c5125e53d904732177212775a6754ab7d77410c0824",
+      "bytes": 4672
+    },
+    "default-action.npz": {
+      "sha256": "c280751a5580049284d8b5793182a5720c6c0689137a61fdb2e35d2aab4f5209",
+      "bytes": 328
+    },
+    "preparation.json": {
+      "sha256": "06106d3d6eb03d1772146c229607b675a6eb2c2965ea9a6b16bcbc860d1e84cf",
+      "bytes": 3027
+    },
+    "integrated-action.npz": {
+      "sha256": "c137f8e0a367db4478e153cd9d9050c23bf4ba11ce2eda09d4773a8067861bc4",
+      "bytes": 2132
+    },
+    "negative/prewarm-installed.py.xz": {
+      "sha256": "0c6f6f588f92a91e80e3369df136a559ca42c62a9c63c222761eb8a2d9d4b711",
+      "bytes": 1460
+    },
+    "negative/prewarm-helper.py.xz": {
+      "sha256": "993aa91c89ac97f654803d794e318d44cc4fb496f2ffe17db63c496fdb44a825",
+      "bytes": 2376
+    },
+    "negative/ni-native-raw-partial.npz": {
+      "sha256": "5555aadb6b33384209064542e8c8575435691db3e065f02a05885c17bda9d6f2",
+      "bytes": 4129
+    },
+    "negative/installed-qualifier-v1.py.xz": {
+      "sha256": "1b0f7ed228cc875da1df5aaa27f00233fa72098d0d942c656ba833ef1c000441",
+      "bytes": 5348
+    },
+    "negative/ni-integrated-raw-partial.npz": {
+      "sha256": "5131effb9b7318ead796706f421fc382c7f5a091a7fb7ccb152a31238c151403",
+      "bytes": 4543
+    },
+    "negative/installed-cold-columns.npz": {
+      "sha256": "3b036c829f114e58030ce33001241a7bebe810ce6b8bdff5c67ce553e1dcbc00",
+      "bytes": 523
+    }
+  },
+  "integration_validation": "integration.json"
+}
