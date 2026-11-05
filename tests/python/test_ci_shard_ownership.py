@@ -1813,3 +1813,157 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     # Every selected case owns one fresh setup; no duplicate or shared fixture
     # is introduced by adding a complete module to the existing priority lane.
     assert Counter(node for node, _ in setups) == expected
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+def test_hybrid_qualification_insertion_preserves_existing_core_owners(
+    event: str, presence: str, tmp_path: Path
+) -> None:
+    """Adding complete hybrid gates must not migrate unrelated cached workloads."""
+    owners = {
+        "test_composite_integral_weights.py": "core-c",
+        "test_eri_symmetry.py": "core-a",
+        "test_factorized_host.py": "core-b",
+        "test_global_hybrid_grid_second_order.py": "core-a",
+        "test_global_hybrid_hessian_lifecycle.py": "core-b",
+        "test_global_hybrid_molecular_hessian.py": "core-b",
+        "test_native_semilocal_grid_second_order.py": "core-c",
+        "test_orbital_gap_preconditioner.py": "core-c",
+        "test_second_component_schedule.py": "core-a",
+        "test_spherical_global_hybrid_basis.py": "core-b",
+        "test_stationary_one_center_integrals.py": "core-c",
+    }
+    owners = {f"tests/python/{name}": shard for name, shard in owners.items()}
+    # Interleave ordinary files with the inserted qualification filenames.
+    ordinary = sorted(
+        f"{path[:-3]}_{suffix}.py" for path in owners for suffix in ("aaa", "zzz")
+    )
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in ordinary:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    shards = ("core-a", "core-b", "core-c")
+    before = {shard: _selection(event, shard, root=tmp_path) for shard in shards}
+    if presence != "absent":
+        for relative in owners:
+            (tmp_path / relative).touch()
+    tracked = presence in {"tracked", "missing"}
+    if tracked:
+        subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    if presence == "missing":
+        for relative in owners:
+            (tmp_path / relative).unlink()
+    after = {shard: _selection(event, shard, root=tmp_path) for shard in shards}
+    for shard in shards:
+        assert after[shard][0] == before[shard][0] == "worksteal"
+        priority = (
+            "--ci-fresh-priority=tests/python/test_global_hybrid_molecular_hessian.py"
+        )
+        expected_extra = list(before[shard][2])
+        if tracked and shard == "core-b":
+            expected_extra += ["-p", "tools.pytest_ci_fresh_frontier", priority]
+        assert after[shard][2] == expected_extra
+        assert [p for p in after[shard][1] if p not in owners] == before[shard][1]
+        assert Counter(p for p in after[shard][1] if p in owners) == Counter(
+            p for p, owner in owners.items() if tracked and owner == shard
+        )
+    expected = Counter([*ordinary, *(owners if tracked else [])])
+    assert Counter(p for _, paths, _ in after.values() for p in paths) == expected
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+def test_real_hybrid_lane_starts_curvature_before_ordinary_queues(
+    event: str, tmp_path: Path
+) -> None:
+    """Execute the selector's real order and plugin without scientific workloads."""
+    names = (
+        "test_global_hybrid_molecular_hessian.py",
+        "test_ordinary_a.py",
+        "test_ordinary_b.py",
+        "test_ordinary_c.py",
+    )
+    counts = (13, 24, 24, 17)
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    directory = tmp_path / "tests/python"
+    directory.mkdir(parents=True)
+    (tmp_path / "conftest.py").write_text(
+        "import json\nimport os\nfrom pathlib import Path\n\n"
+        "def pytest_runtest_setup(item):\n"
+        "    worker = os.environ['PYTEST_XDIST_WORKER']\n"
+        "    with Path('worker-' + worker + '.jsonl').open('a') as output:\n"
+        "        output.write(json.dumps(item.nodeid) + '\\n')\n",
+        encoding="utf-8",
+    )
+    for name, count in zip(names, counts, strict=True):
+        (directory / name).write_text(
+            "import json, os\nfrom pathlib import Path\nimport pytest\n"
+            "@pytest.fixture\n"
+            "def fresh(request):\n"
+            "    with Path('fresh-setups.jsonl').open('a') as output:\n"
+            "        output.write(json.dumps([request.node.nodeid, "
+            "os.environ['PYTEST_XDIST_WORKER']]) + '\\n')\n"
+            "    return object()\n"
+            f"@pytest.mark.parametrize('value', range({count}))\n"
+            "def test_case(value, fresh):\n    assert value >= 0\n",
+            encoding="utf-8",
+        )
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    distribution, targets, extra = _selection(event, "core-b", root=tmp_path)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "xdist.plugin",
+            "-c",
+            "pytest.ini",
+            "-n",
+            "4",
+            f"--dist={distribution}",
+            "-q",
+            *targets,
+            *extra,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        timeout=90,
+        env={
+            **os.environ,
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+            "PYTEST_ADDOPTS": "",
+            "PYTHONPATH": str(ROOT),
+        },
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    records = [
+        [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        for path in tmp_path.glob("worker-*.jsonl")
+    ]
+    assert len(records) == 4
+    prefix = "tests/python/test_global_hybrid_molecular_hessian.py::"
+    assert all(entries[0].startswith(prefix) for entries in records)
+    expected = Counter(
+        f"tests/python/{name}::test_case[{value}]"
+        for name, count in zip(names, counts, strict=True)
+        if f"tests/python/{name}" in targets
+        for value in range(count)
+    )
+    assert Counter(node for entries in records for node in entries) == expected
+    setups = [
+        json.loads(line)
+        for line in (tmp_path / "fresh-setups.jsonl").read_text().splitlines()
+    ]
+    # Every selected case owns one fresh setup; no duplicate or shared fixture
+    # is introduced by adding a complete module to the existing priority lane.
+    assert Counter(node for node, _ in setups) == expected

@@ -57,7 +57,7 @@ def test_public_wb97mv_second_order_admission(method: str) -> None:
     )
 
 
-@pytest.mark.parametrize("kwargs", ({"method": "pbe0-rks"},))
+@pytest.mark.parametrize("kwargs", ({"method": "b3lyp-uks"},))
 def test_unqualified_wb97mv_second_order_contexts_fail_before_scf(
     kwargs: dict,
     monkeypatch: pytest.MonkeyPatch,

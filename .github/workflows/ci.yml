@@ -1415,6 +1415,12 @@ jobs:
           fi
           printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
           printf 'README-only CI scope: %s\n' "$scope"
+      # Capture committed inputs before preparing build/test environments.
+      # Prose-only changes keep their existing cheap classification path.
+      - name: Fingerprint committed Python probe inputs
+        id: python_probe_inputs
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        run: python3 tools/ci_python_probe_key.py
       - name: Install uv and Python 3.11
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -1571,15 +1577,29 @@ jobs:
       # master CMake seed. Every Python shard can compile these test objects.
       # Retain their small ref-scoped overlay; never import it into shared caches.
       # Merge-group refs are ephemeral, so they restore but never publish caches.
+      - name: Test Python probe cache transport
+        if: matrix.shard == 'core-a' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 2
+        run: .venv/bin/python -m pytest tests/test_ci_python_probe_key.py tests/test_ci_probe_snapshot.py -q
       - name: Restore native Python probes
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: python_probe_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/ccache-python-probes
-          key: ccache-python-probes-v2-${{ matrix.shard }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py', 'tests/python/**', 'tests/native/**', 'benchmarks/**') }}
+          key: ccache-python-probes-v2-${{ matrix.shard }}-${{ steps.python_probe_inputs.outputs.fingerprint }}
           restore-keys: |
             ccache-python-probes-v2-${{ matrix.shard }}-
+      # PR merge-ref overlays are invisible to the merge queue. Only a verified
+      # successful master qualification may seed this separate probe directory.
+      - name: Restore trusted master Python probes after primary miss
+        if: steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-matched-key == '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-python-probe-ccache
+        with:
+          github-token: ${{ github.token }}
+          shard: ${{ matrix.shard }}
       - name: Reset native probe ccache statistics
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
@@ -1669,6 +1689,27 @@ jobs:
         with:
           path: ${{ runner.temp }}/ccache-python-probes
           key: ${{ steps.python_tests.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key || format('{0}-partial-{1}-{2}', steps.python_probe_ccache.outputs.cache-primary-key, github.run_id, github.run_attempt) }}
+      # Reuse existing full master qualifications; do not run the scientific
+      # matrix again on push solely to warm caches. PR/queue never publish these.
+      - name: Package trusted master Python probes
+        id: python_probe_snapshot
+        if: github.repository == 'jinzhezenggroup/generativeqc' && github.ref == 'refs/heads/master' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && steps.python_tests.outcome == 'success'
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          PROBE_SHARD: ${{ matrix.shard }}
+        run: python3 tools/ci_cpu_ccache_snapshot.py package --profile probe --shard "$PROBE_SHARD"
+      - name: Publish trusted master Python probes
+        if: steps.python_probe_snapshot.outcome == 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: python-probe-ccache-master-ubuntu24-x86_64-v1-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: ${{ steps.python_probe_snapshot.outputs.path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
       - name: Show post-test ccache statistics
         if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
