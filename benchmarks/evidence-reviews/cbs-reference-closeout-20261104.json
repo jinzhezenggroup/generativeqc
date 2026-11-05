@@ -2,7 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "cbs-reference-closeout-20261104",
   "owner": "issues2681/2998 bounded restricted CBS reference and physical H100 water closeout",
-  "reason": "Permanent offline replay needs the full-precision constituent/composite vectors for both explicit-profile acceptance and original resource refusals, independent FD points, exact source/runtime/binary/producer identities, prepared bases and authenticated platform receipts. Optional build warning logs and review traces stay in ignored artifacts. No unrelated evidence is removed; per-file/change-review/science guards remain unchanged. The PR explicitly reviews the separate80-to81MiB aggregate policy change.",
+  "reason": "Permanent offline replay needs the full-precision constituent/composite vectors for both explicit-profile acceptance and original resource refusals, independent FD points, exact source/runtime/binary/producer identities, prepared bases and authenticated platform receipts. Optional build warning logs and review traces stay in ignored artifacts. No unrelated evidence is removed; per-file/change-review/science guards remain unchanged. The PR explicitly reviews the separate 80-to-81-MiB aggregate policy change.",
   "review_document": "benchmarks/results/cbs-reference-closeout-20261104/README.md",
   "files": [
     {

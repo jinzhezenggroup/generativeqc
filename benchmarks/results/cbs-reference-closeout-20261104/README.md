@@ -45,9 +45,10 @@ water-algebra fixture is not substituted for this physical-water calculation.
 
 `errors.csv` gives the recomputed energy, maximum-force and RMS-force errors;
 `summary.json` includes all gates and constituent/composite comparisons. Timing
-fields describe complete singlepoint calls with prebuilt code and exclude
-process startup, imports, calculator construction and compilation. The physical
-water repeat reuses its calculator; these two calls are not independent timing
+fields describe complete singlepoint calls with prebuilt code, including
+component construction and preparation. They exclude process startup, imports,
+outer CBS calculator construction and compilation. The physical
+water repeat reuses its outer CBS calculator; these two calls are not independent timing
 replicates. No comparator or performance acceptance is registered.
 
 ## Backend and environment boundary
@@ -66,8 +67,8 @@ UNSUPPORTED, not scientific PASS. The custom CUDA observations reproduce the
 original scientific gates; the original CUDA pytest suite was not run here.
 
 The accepted CUDA attempt explicitly sets `CUBLAS_WORKSPACE_CONFIG=:16:8` in
-each fresh child and records its actual presence/value before the scientific
-imports. All runs use one math thread, tight all-FP64 controls and a 32-GiB
+each fresh child, enforces the value before scientific imports and records its
+actual presence/value. All runs use one math thread, tight all-FP64 controls and a 32-GiB
 correlation budget. NVIDIA documents this workspace profile as a debug
 reproducibility setting that may limit performance:
 <https://docs.nvidia.com/cuda/archive/12.9.2/cublas/index.html#results-reproducibility>.
