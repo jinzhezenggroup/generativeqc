@@ -3,6 +3,11 @@
 Status: implemented opt-in; matched A100/RTX 5090 qualification complete
 Date: 2026-11-05
 
+Default-selection policy is superseded by
+[guarded Direct default promotion](2026-11-05-default-direct-range-warm-anchor.md).
+The measurements and failed-attempt history below retain their original opt-in
+source/binary identities; they are not measurements of the promoted image.
+
 ## Problem
 
 The retained A100 water96 full-Direct WB97M-V energy/force endpoint spends

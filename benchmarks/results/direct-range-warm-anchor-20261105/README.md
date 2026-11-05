@@ -1,5 +1,9 @@
 # Full-Direct dense warm-anchor trial
 
+Historical opt-in qualification. The later
+[guarded-default decision](../../../.agents/notes/implemented/performance/2026-11-05-default-direct-range-warm-anchor.md)
+supersedes the selection policy below, not these measured source/binary identities.
+
 One matched, progress-instrumented cold/three-warm population per policy on
 actual A100 and RTX 5090 allocations. This is an opt-in result, not statistical
 default promotion. Both policies run full Direct WB97M-V/def2-SVP energy and

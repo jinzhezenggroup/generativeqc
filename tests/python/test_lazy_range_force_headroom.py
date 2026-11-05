@@ -104,7 +104,12 @@ int main(int argc,char** argv) {
         ("mixed", "1", "0 0"),
         ("fits", "0", "0 0"),
         ("fits", "invalid", "0 0"),
-        ("direct", None, "0 0"),
+        ("direct", None, "1 1"),
+        ("direct-pressure", None, "0 1"),
+        ("direct-no-replay", None, "0 0"),
+        ("direct-mixed", None, "0 0"),
+        ("direct-unrestricted", None, "0 0"),
+        ("direct-driver-failure", None, "error 1"),
         ("direct", "0", "0 0"),
         ("direct", "invalid", "0 0"),
         ("direct", "1", "1 1"),
@@ -115,6 +120,8 @@ int main(int argc,char** argv) {
         ("direct-driver-failure", "1", "error 1"),
         ("partial-fitting", "1", "0 0"),
         ("missing-factor", "1", "0 0"),
+        ("partial-fitting", None, "0 0"),
+        ("missing-factor", None, "0 0"),
     ],
 )
 def test_imminent_force_headroom(

@@ -1048,18 +1048,18 @@ baselines preserve the original convergence checks in both cases. Every call
 still evaluates the physical Fock, convergence gates, derivatives and force
 assembly.
 
-The incumbent warm-energy anchor is deferred by default for strict FP64 fitted
-RKS with an exact
-warm AO factor and an audited replayable range source. For energy-and-force
+The incumbent warm-energy anchor is deferred by default for strict FP64 RKS
+with an audited replayable range source and either fully fitted J/K with an
+exact warm AO factor or full Direct with its accepted dense warm density.
+For energy-and-force
 requests, the already planned additional force envelope must fit available
 device memory; otherwise the eager anchor remains in place. Selection uses
 resource requirements, with no GPU-model condition. Setting
 `GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY=0` restores eager preparation.
-Unset and `1` select the guarded fitted default; other explicit values
-conservatively retain eager preparation. Explicit `1` additionally admits strict
-FP64 full-Direct RKS with its accepted dense warm density, under the same source,
-precision, XC and force-headroom guards. Full Direct remains eager when unset;
-partially fitted and unsupported owners retain the eager path.
+Unset and `1` select this guarded default; other explicit values
+conservatively retain eager preparation. Both seed representations use the same
+source, precision, XC and force-headroom guards. Partially fitted and unsupported
+owners retain the eager path.
 
 If a later replay loses its source, preparation restores the frozen warm density
 and, when applicable, factor and rebuilds their matching incumbent energy using

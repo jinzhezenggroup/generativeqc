@@ -3142,9 +3142,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool fitted_seed = fitted_coulomb && fitted_exchange && warm_factor_storage;
     // Direct replay restores the accepted dense D rather than an occupied
     // factor. Its existing incumbent fallback can rebase that same D after
-    // source loss. Keep this additional owner opt-in until endpoint-qualified.
-    const bool direct_seed =
-        !fitted_coulomb && !fitted_exchange && lazy && std::strcmp(lazy, "1") == 0;
+    // source loss. Both seed representations share the replay/headroom guards.
+    const bool direct_seed = !fitted_coulomb && !fitted_exchange;
     const bool eligible =
         (!lazy || std::strcmp(lazy, "1") == 0) && range_source_active() &&
         retain_range_source_for_replay(true) && (fitted_seed || direct_seed) && spins == 1 &&
@@ -3182,8 +3181,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
             range_warm_energy = warm_energy;
             range_warm_energy_correction = warm_energy_correction;
           }
-          // Qualified factor-backed replay, or explicitly opted-in Direct
-          // replay, can defer this anchor. Other owners retain eager fallback.
+          // Qualified factor-backed or dense-Direct replay defers this anchor
+          // by default. Other owners retain eager fallback.
           if (defer_range_warm_energy()) {
             warm_incumbent_deferred = true;
             warm_energy = std::numeric_limits<double>::infinity();

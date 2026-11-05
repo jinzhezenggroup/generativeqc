@@ -59,7 +59,7 @@ def test_direct_dense_seed_anchor_lifecycle(
 ) -> None:
     """Source reuse avoids cold work; source loss reconstructs its own frozen D.
 
-    The opt-in must preserve independent E/F and first-warm work, including
+    The guarded default must preserve independent E/F and first-warm work, including
     frozen warm updates. Explicit eviction may defer a counted preparation
     action, but may not revoke the already-published stationary token.
     """
@@ -158,10 +158,11 @@ def test_direct_dense_seed_anchor_lifecycle(
         assert all(result.iterations == 1 for result in population[1:])
         # Publishing an updated seed eagerly rebuilds its incumbent anchor.
         # This is post-SCF work, not deferred cold preparation or another cycle.
-        eager_update = int(updates and selector != "1")
+        deferred = selector != "0"
+        eager_update = int(updates and not deferred)
         assert retained.fock_builds == retained.iterations + eager_update
         assert retained.precision["post_scf_fock_builds"] == eager_update
-        assert fallback.fock_builds == fallback.iterations + int(selector == "1")
+        assert fallback.fock_builds == fallback.iterations + int(deferred)
         assert second.fock_builds == second.iterations
         assert all(
             event["phase"] != "preparation"
@@ -169,7 +170,7 @@ def test_direct_dense_seed_anchor_lifecycle(
         )
     eager, deferred, default = populations
     assert deferred[0].fock_builds == eager[0].fock_builds - 1
-    assert default[0].fock_builds == eager[0].fock_builds
+    assert default[0].fock_builds == deferred[0].fock_builds
     for baseline, candidate, incumbent in zip(eager, deferred, default, strict=True):
         for result in (candidate, incumbent):
             assert abs(result.energy - baseline.energy) < 1e-10
