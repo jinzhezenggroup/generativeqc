@@ -28,7 +28,8 @@ inline bool standard_model(std::string_view identity) noexcept {
   // These are the incumbent independently qualified complete electronic models.
   // Resolve their current identities from the compiler-owned native catalog;
   // never pin historical hashes or admit arbitrary mixtures by display name.
-  for (auto name : {"pbe-rks", "pbe0-rks", "b3lyp-rks", "r2scan-rks", "m06-2x-rks"}) {
+  for (auto name :
+       {"pbe-rks", "pbe0-rks", "b3lyp-rks", "r2scan-rks", "m06-2x-rks", "wb97m-v-rks"}) {
     const auto* entry = generativeqc::methods::named_ks::find_method(name);
     if (entry && entry->identity == identity) return true;
   }

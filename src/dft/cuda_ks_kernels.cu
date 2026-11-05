@@ -116,7 +116,8 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
                                   const double* xc_totals, const int* xc_error, const int* jk_error,
                                   const int* range_jk_error, const int* nonlocal_domain_error,
                                   const int* nonlocal_pair_error, const int* solver_info,
-                                  const std::uint8_t* enabled, Scalars* output) {
+                                  const std::uint8_t* enabled, Scalars* output,
+                                  bool retain_orbital_gradient) {
   // The mask is immutable for this launch, so inactive blocks exit collectively.
   if (enabled != nullptr && *enabled == 0) return;
   __shared__ DiagnosticPartial partials[kDiagnosticThreads];
@@ -170,6 +171,7 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
     total.maximum_residual = fmax(total.maximum_residual, part.maximum_residual);
   }
   Scalars result{};
+  if (retain_orbital_gradient) result.orbital_gradient = output->orbital_gradient;
   result.failure = (*xc_error != 0 ? 1 : 0) | (*jk_error != 0 ? 2 : 0) |
                    (range_jk_error != nullptr && *range_jk_error != 0 ? 16 : 0) |
                    (nonlocal_domain_error != nullptr && *nonlocal_domain_error != 0 ? 32 : 0) |
@@ -319,6 +321,27 @@ void stabilize_uks_proposal(cudaStream_t stream, std::size_t n, const double* ov
       n * n, overlap, occupied_projector, enabled, proposal_fock);
 }
 
+__global__ void orbital_gradient_kernel(std::size_t matrix, const double* residual,
+                                        const std::uint8_t* enabled, Scalars* output) {
+  if (enabled != nullptr && *enabled == 0) return;
+  __shared__ double partials[kDiagnosticThreads];
+  double sum = 0.0;
+  for (std::size_t index = threadIdx.x; index < matrix; index += blockDim.x)
+    sum += residual[index] * residual[index];
+  partials[threadIdx.x] = sum;
+  __syncthreads();
+  if (threadIdx.x != 0) return;
+  double total = 0.0;
+  for (unsigned index = 0; index < blockDim.x; ++index) total += partials[index];
+  output->orbital_gradient = sqrt(0.5 * total);
+}
+
+void orbital_gradient(cudaStream_t stream, std::size_t n, const double* transformed_residual,
+                      const std::uint8_t* enabled, Scalars* output) {
+  orbital_gradient_kernel<<<1, kDiagnosticThreads, 0, stream>>>(n * n, transformed_residual,
+                                                                enabled, output);
+}
+
 void diagnostics(cudaStream_t stream, std::size_t n, unsigned spins, const double* density,
                  const double* proposal, const double* residual, const double* hcore,
                  const double* overlap, const double* coulomb, const double* exchange,
@@ -326,12 +349,12 @@ void diagnostics(cudaStream_t stream, std::size_t n, unsigned spins, const doubl
                  double range_exchange_coefficient, const double* xc_totals, const int* xc_error,
                  const int* jk_error, const int* range_jk_error, const int* nonlocal_domain_error,
                  const int* nonlocal_pair_error, const int* solver_info,
-                 const std::uint8_t* enabled, Scalars* output) {
+                 const std::uint8_t* enabled, Scalars* output, bool retain_orbital_gradient) {
   diagnostic_kernel<<<1, kDiagnosticThreads, 0, stream>>>(
       n * n, spins, density, proposal, residual, hcore, overlap, coulomb, exchange,
       exchange_coefficient, range_exchange, range_exchange_coefficient, xc_totals, xc_error,
       jk_error, range_jk_error, nonlocal_domain_error, nonlocal_pair_error, solver_info, enabled,
-      output);
+      output, retain_orbital_gradient);
 }
 
 void advance(cudaStream_t stream, std::size_t n, unsigned spins, double nuclear_repulsion,
