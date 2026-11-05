@@ -1,0 +1,348 @@
+{
+  "schema": "generativeqc.global-hybrid-second-order-references/v1",
+  "method": "Gaussian/VWN-RPA B3LYP (0.2 full-range exchange)",
+  "basis_manifest": "../manifest.json",
+  "case": "NiH4(2-), 34 electrons, RKS, real-spherical 51 AO def2-SVP",
+  "units": "Hartree, Bohr, Hartree/Bohr^2",
+  "ordering": "atom-major xyz",
+  "independent_engine": {
+    "pyscf": "2.14.0",
+    "libxc": "7.0.0"
+  },
+  "oracle_gate": 1e-05,
+  "raw_reference_steps_bohr": [
+    0.001,
+    0.0005,
+    0.0003
+  ],
+  "action_reference_steps_bohr": [
+    0.003,
+    0.001,
+    0.0003
+  ],
+  "independence": "SCF guesses are atomic or independently converged reference centers; native_density/native_energy/density in reference-actions are comparison receipts, never oracle seeds. reference-center and default-reference contain the independently solved central densities.",
+  "files": {
+    "default-reference.npz": {
+      "sha256": "3ae7d6f3892289a36cb221c8dd7a5069354b404ddfb4ab746a2fb546cabe4b5e",
+      "arrays": {
+        "density": {
+          "shape": [
+            51,
+            51
+          ],
+          "dtype": "float64"
+        },
+        "energy": {
+          "shape": [],
+          "dtype": "float64"
+        },
+        "direction": {
+          "shape": [
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "steps": {
+          "shape": [
+            3
+          ],
+          "dtype": "float64"
+        },
+        "hvp": {
+          "shape": [
+            3,
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "gate": {
+          "shape": [],
+          "dtype": "float64"
+        },
+        "pyscf_version": {
+          "shape": [],
+          "dtype": "<U6"
+        }
+      }
+    },
+    "reference-matrix.npz": {
+      "sha256": "a8ad5f8d0d0b47ae5094ba7fcc7a96f9ad34e3da9538273b03db858df8e6fa6d",
+      "arrays": {
+        "matrices": {
+          "shape": [
+            3,
+            15,
+            15
+          ],
+          "dtype": "float64"
+        },
+        "steps": {
+          "shape": [
+            3
+          ],
+          "dtype": "float64"
+        },
+        "direction": {
+          "shape": [
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "complete": {
+          "shape": [],
+          "dtype": "bool"
+        },
+        "raw_matrix_gate": {
+          "shape": [],
+          "dtype": "float64"
+        }
+      }
+    },
+    "reference-grid.npz": {
+      "sha256": "104f7ac64c54f11c703e16a48c905f7b0fe00519a5d8620bebd7b71e4b96df16",
+      "arrays": {
+        "points": {
+          "shape": [
+            5760,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "weights": {
+          "shape": [
+            5760
+          ],
+          "dtype": "float64"
+        },
+        "owners": {
+          "shape": [
+            5760
+          ],
+          "dtype": "int64"
+        },
+        "atomic_weights": {
+          "shape": [
+            5760
+          ],
+          "dtype": "float64"
+        },
+        "positions": {
+          "shape": [
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "source_head": {
+          "shape": [],
+          "dtype": "<U40"
+        }
+      }
+    },
+    "default-grid.npz": {
+      "sha256": "b6064a95c52476fa3ca83fcc09cd3fc47ff63c460db8f2cba5f7ad43c70a3d9e",
+      "arrays": {
+        "points": {
+          "shape": [
+            59872,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "weights": {
+          "shape": [
+            59872
+          ],
+          "dtype": "float64"
+        },
+        "owners": {
+          "shape": [
+            59872
+          ],
+          "dtype": "int64"
+        },
+        "atomic_weights": {
+          "shape": [
+            59872
+          ],
+          "dtype": "float64"
+        },
+        "native_density": {
+          "shape": [
+            51,
+            51
+          ],
+          "dtype": "float64"
+        },
+        "native_overlap": {
+          "shape": [
+            51,
+            51
+          ],
+          "dtype": "float64"
+        },
+        "native_energy": {
+          "shape": [],
+          "dtype": "float64"
+        }
+      }
+    },
+    "reference-actions.npz": {
+      "sha256": "4c3f4ed1747c46392801d8dd62c8ee508f679e06fead929d17d89199ee36cb10",
+      "arrays": {
+        "direction": {
+          "shape": [
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "steps": {
+          "shape": [
+            3
+          ],
+          "dtype": "float64"
+        },
+        "reference_hvp": {
+          "shape": [
+            3,
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "gradients": {
+          "shape": [
+            3,
+            2,
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "center_gradient": {
+          "shape": [
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "density": {
+          "shape": [
+            51,
+            51
+          ],
+          "dtype": "float64"
+        },
+        "native_energy": {
+          "shape": [],
+          "dtype": "float64"
+        },
+        "reference_energy": {
+          "shape": [],
+          "dtype": "float64"
+        },
+        "normalized_hvp_gate": {
+          "shape": [],
+          "dtype": "float64"
+        }
+      }
+    },
+    "reference-center.npz": {
+      "sha256": "b968be167b0d3aebae296b9f4322ab02f0449233c8c9080af790f4a374f56bf5",
+      "arrays": {
+        "density": {
+          "shape": [
+            51,
+            51
+          ],
+          "dtype": "float64"
+        },
+        "overlap": {
+          "shape": [
+            51,
+            51
+          ],
+          "dtype": "float64"
+        },
+        "energy": {
+          "shape": [],
+          "dtype": "float64"
+        },
+        "orbital_residual": {
+          "shape": [],
+          "dtype": "float64"
+        },
+        "pyscf_version": {
+          "shape": [],
+          "dtype": "<U6"
+        }
+      }
+    },
+    "reference-components.npz": {
+      "sha256": "cb367405b311b2f650f3194c25b3d9527f1aacc7ec37c7506cb5577c9e252e36",
+      "arrays": {
+        "names": {
+          "shape": [
+            6
+          ],
+          "dtype": "<U14"
+        },
+        "components": {
+          "shape": [
+            3,
+            6,
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "total_hvp": {
+          "shape": [
+            3,
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "direction": {
+          "shape": [
+            5,
+            3
+          ],
+          "dtype": "float64"
+        },
+        "steps": {
+          "shape": [
+            3
+          ],
+          "dtype": "float64"
+        },
+        "gate": {
+          "shape": [],
+          "dtype": "float64"
+        }
+      }
+    }
+  },
+  "producers": {
+    "probe-ni-gradient-reference.py": {
+      "original_sha256": "4c94c9c6ca23a9960359f2ae05b108ce31fa01b935fb9ceca6afc0361f1a489a",
+      "stored_file": "producers/probe-ni-gradient-reference.py.xz",
+      "stored_sha256": "d56b113777113719588b770d856885cb0f0f665f4f47648326c7eae9b3659c6d"
+    },
+    "probe-ni-raw-reference.py": {
+      "original_sha256": "7f43d4b30a16044ed6d509be949f14114b083da63d4837207fd6d86a226269e2",
+      "stored_file": "producers/probe-ni-raw-reference.py.xz",
+      "stored_sha256": "b7e8e1e6c14d1d1eb47ce66bfcb51ba242243958f5cba7062dff22e734cd1f98"
+    },
+    "probe-ni-reference-components.py": {
+      "original_sha256": "ad5d9f6a56ef56c96244d826b3b7bd7c3242ef90165a3d7265af2850b117e84b",
+      "stored_file": "producers/probe-ni-reference-components.py.xz",
+      "stored_sha256": "749fb579b8f55e9702d7a222ab8cf84aa080a0dd4adc6f49c7f4b23c2e26b286"
+    }
+  }
+}

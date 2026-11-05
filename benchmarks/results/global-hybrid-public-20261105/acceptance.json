@@ -1,0 +1,62 @@
+{
+  "schema": "generativeqc.global-hybrid-public-acceptance/v1",
+  "complete": true,
+  "actual_public_matrix_columns": 15,
+  "independent_matrix_errors": [
+    2.198280826481991e-06,
+    5.500142754577553e-07,
+    1.9837600140348854e-07
+  ],
+  "raw_symmetry_error": 2.2655287368333887e-11,
+  "translation_error": 4.415837378916876e-11,
+  "native_matrix_hvp_errors": [
+    1.6630080382786077e-11,
+    1.6975789528092713e-11
+  ],
+  "native_bilinear_error": 3.47687672162181e-14,
+  "fresh_public_replay_error": 0.0,
+  "native_rotation_covariance_error": 6.095827597110042e-14,
+  "maximum_response_residual": 2.0991430929893723e-10,
+  "independent_gradient_errors": [
+    2.6253144744138862e-08,
+    7.2917214011548655e-09,
+    1.0925655369008865e-08
+  ],
+  "independent_component_errors": [
+    [
+      5.5612667237518024e-08,
+      3.568013184680162e-08,
+      3.8529796475063543e-10,
+      7.242796154831677e-10,
+      2.5861471489369173e-08,
+      2.040377562656433e-08
+    ],
+    [
+      2.6035978959948573e-07,
+      2.678734054294922e-07,
+      2.6580489845321262e-09,
+      4.90558574339527e-09,
+      5.494513960322294e-09,
+      2.267116516462074e-09
+    ],
+    [
+      2.3795568326488e-06,
+      2.5684420900325615e-06,
+      3.2843636817403215e-08,
+      3.260532493953885e-08,
+      9.542027378026846e-08,
+      2.0433075112701201e-10
+    ]
+  ],
+  "oracle_gate": 1e-05,
+  "native_invariance_gate": 2e-07,
+  "response_gate": 1e-09,
+  "matrix_endpoint": {
+    "wall_seconds": 11503.235189544968,
+    "peak_process_tree_rss_bytes": 1105362944,
+    "memory_sampling_seconds": 0.05
+  },
+  "unresolved": [
+    "25\u201340-atom installed Ni production scale, #2843"
+  ]
+}

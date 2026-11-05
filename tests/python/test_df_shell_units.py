@@ -200,5 +200,11 @@ def test_ci_cache_snapshots_version_compiler_and_build_inputs() -> None:
         keys = [line for line in source.splitlines() if "key: ccache-" in line]
         assert keys
         for key in keys:
-            assert "'cmake/**'" in key
-            assert "'python/generativeqc_compiler/**'" in key
+            if "key: ccache-python-probes-v2-" in key:
+                # Probe transport fingerprints committed Git entries before
+                # builds; real inventory-change tests cover both input trees.
+                assert "${{ steps.python_probe_inputs.outputs.fingerprint }}" in key
+                assert "run: python3 tools/ci_python_probe_key.py" in source
+            else:
+                assert "'cmake/**'" in key
+                assert "'python/generativeqc_compiler/**'" in key
