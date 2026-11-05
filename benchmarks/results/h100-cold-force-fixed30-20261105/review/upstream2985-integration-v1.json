@@ -1,0 +1,18 @@
+{
+  "status": "NORMAL_UPSTREAM2985_GENERATED_METADATA_CONFLICT",
+  "prior_head": "be7badb6785b331042b2bd2b3acc1be11f85d938",
+  "upstream": "415d8caba12a8f7ecb4e81e48d5dae913720e695",
+  "includes_prior_CI_only_PR": 3009,
+  "parent_snapshot_changed_fields": {
+    "source_identity": {
+      "ours": "e21251016a177598394f6c7036685724ee737075080f8ecbb2e4fb161a49b0f0",
+      "upstream": "313bfe58206cb7b37ddde88aeb650c7dd96c6e6133cc1903d0266de8582f62ce"
+    },
+    "native_source_identity": {
+      "ours": "cc2acbc91d8562e6062014edc52e6b65341f9322a986609b74cc7b98d8b42dd3",
+      "upstream": "20553c3374304c436a0ddb86323b946b4d8666436c37db7e4943c9c87c80ab12"
+    }
+  },
+  "runtime_diff": "diff --git a/python/generativeqc/composite_rks_hessian.py b/python/generativeqc/composite_rks_hessian.py\nindex a4945948f..f3eaf9c23 100644\n--- a/python/generativeqc/composite_rks_hessian.py\n+++ b/python/generativeqc/composite_rks_hessian.py\n@@ -8,7 +8,7 @@ device-resident numerical owner with no host derivative fallback. No\n displaced SCF or reference engine enters production; quadrature/active-set\n branches and occupations remain fixed during differentiation.\n \n-CPU direct all-electron full-range RKS graphs can also enter the low-level\n+CPU direct all-electron full-range RKS/UKS graphs can also enter the low-level\n qualification owner. They do not inherit WB97M-V's public capability admission:\n independent molecular, spherical/Ni and resource gates remain prerequisites.\n \"\"\"\n@@ -697,6 +697,12 @@ class CompositeRKSResponse(CPKSResponseOperator):\n         grid_budget_bytes: int = 128 << 20,\n         max_nonlocal_pairs: int = 16_777_216,\n     ) -> typing.Self:\n+        \"\"\"Bind qualified or explicitly low-level candidate graphs to native state.\n+\n+        Full-range candidates reuse the existing physical RKS/UKS response and\n+        source owners. Admission here does not promote a public capability or\n+        relax the native state, Fock-provenance, or resource checks.\n+        \"\"\"\n         state = StationaryKsState.from_native(batch, basis)\n         backend = None\n         integral_basis = None\n@@ -714,7 +720,6 @@ class CompositeRKSResponse(CPKSResponseOperator):\n             method = state._source.method_ir\n             full_range_candidate = (\n                 state._source.backend == \"cpu\"\n-                and state.density.shape[0] == 1\n                 and state._source.hamiltonian == \"all-electron\"\n                 and state._source.fock_provider_proof()[:2] == (\"exact\", \"exact\")\n                 and {primitive.kind for primitive in method.primitives}\n@@ -726,7 +731,7 @@ class CompositeRKSResponse(CPKSResponseOperator):\n             ):\n                 raise NotImplementedError(\n                     \"composite molecular Hessian requires canonical WB97M-V or \"\n-                    \"a CPU direct all-electron RKS full-range qualification candidate\"\n+                    \"a CPU direct all-electron RKS/UKS full-range qualification candidate\"\n                 )\n             if state._source.backend == \"cuda\":\n                 from .cuda_composite_hessian import CudaCompositeResponse\n",
+  "scope": "Only low-level CPU full-range UKS response admission among runtime files. CI helper/workflow changes are inherited from actual main3009. No original H100 numeric/device replay; no current-head timing claim."
+}

@@ -513,16 +513,6 @@
       "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
       "sha256": "334bad59067eee5ef1a1336b0b346a0f8d8e55032abd8c87d4981f90b4f82871"
     },
-    "benchmarks/results/h100-sm90-db36-final-20261103/final-pairs-v1-completed.tar.xz.part00": {
-      "owner": "H100 frozen DB36 final fixed30 delivery",
-      "reason": "Exact original180-process/720-full-EF archive parts or lossless actual result audit and manifest. Fixed30 original gates,9nonwins and all raw vectors retained; no later-source or storage-limit transfer.",
-      "sha256": "fd3cb8cd8c38682c2751b948a12c1268db5bc1b049477fd749861ff9825b2ebf"
-    },
-    "benchmarks/results/h100-sm90-db36-final-20261103/final-pairs-v1-completed.tar.xz.part01": {
-      "owner": "H100 frozen DB36 final fixed30 delivery",
-      "reason": "Exact original180-process/720-full-EF archive parts or lossless actual result audit and manifest. Fixed30 original gates,9nonwins and all raw vectors retained; no later-source or storage-limit transfer.",
-      "sha256": "0c6cbf0801e81028a230091abaabe1a79c21ab7ba7717923cc271e29b2ad407a"
-    },
     "benchmarks/results/h100-sm90-db36-final-20261103/final-pairs-v1-download-manifest.json.xz": {
       "owner": "H100 frozen DB36 final fixed30 delivery",
       "reason": "Exact original180-process/720-full-EF archive parts or lossless actual result audit and manifest. Fixed30 original gates,9nonwins and all raw vectors retained; no later-source or storage-limit transfer.",
