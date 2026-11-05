@@ -226,3 +226,12 @@ The frozen30 post-endpoint native observation contains only the versioned core;
 its25-artifact build/AOT audit does not establish standalone companion loads.
 
 Fresh result-integrity review is complete: **WARN, no blocking defect found in the audited scope**. See [the exact report](review/audit-report.md), [machine-readable report](review/audit-report.json) and request/trace/input hashes under `review/`. Requested reviewer: gpt-6.1-sol/ultra in a fresh context; actual backend identity remains unknown. Assurance is **same-family/provisional**, not cross-family scientific acceptance. The inherited refined-oracle producer-byte limitation, core-only runtime mapping witness and later-head unmeasured boundary remain explicit. Required repository CI and normal merge gates still apply.
+
+## Later upstream integration supplement
+
+The normal merge of upstream #2991 changes only CPU UKS among native/runtime inputs.
+The [scoped follow-up](review/integration-followup-v1.md) confirms unchanged RKS
+force/default/timer paths, all prior public member bytes, and Libxc scientific/stale
+fields. Only checked source identities regenerate. The original audit remains WARN
+with its original limits; this later head is not a new H100 timing population.
+Neither the720/72 arithmetic nor compiled/device gates were rerun.

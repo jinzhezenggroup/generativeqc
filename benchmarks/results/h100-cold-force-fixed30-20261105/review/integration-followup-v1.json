@@ -1,0 +1,519 @@
+{
+  "schema": "generativeqc.scoped-audit-integration-followup.v1",
+  "review_completed": true,
+  "review_scope_complete": true,
+  "verdict": "PASS_SCOPED_INTEGRATION_NO_BLOCKING_CONCERN",
+  "original_audit_verdict_unchanged": "WARN_SCOPED_ACCEPTANCE_NO_BLOCKING_DEFECT_FOUND",
+  "head": "80a6ada08718be2516a7a17c4e597eed79003bb8",
+  "merge_parents": [
+    "4a0bd352527fa92df34ec378ea797957ec15eb98",
+    "30657763a1f79c44e1b897b524ae9f54c96928cd"
+  ],
+  "published_prior": "4a0bd352527fa92df34ec378ea797957ec15eb98",
+  "upstream": "30657763a1f79c44e1b897b524ae9f54c96928cd",
+  "changed_paths": [
+    ".agents/notes/implemented/numerics/2026-10-12-automatic-cpu-final-projector-closure.md",
+    ".agents/notes/implemented/numerics/2026-11-04-curated-cpu-uks-final-closure-budget.md",
+    ".agents/notes/implemented/numerics/2026-11-05-def2-ecp-global-hybrid-force-gates.md",
+    "docs/reference/libxc_qualification.md",
+    "manifests/libxc/native-qualification-snapshot.json.xz",
+    "src/dft/uks.cpp",
+    "tests/data/global_hybrid_ecp/README.md",
+    "tests/data/global_hybrid_ecp/def2-svp-ni-i-cs-h.json",
+    "tests/data/global_hybrid_ecp/manifest.json",
+    "tests/python/test_global_hybrid_ecp_basis.py",
+    "tests/python/test_global_hybrid_ecp_d3.py",
+    "tests/python/test_global_hybrid_ecp_forces.py",
+    "tools/generate_global_hybrid_hessian_basis.py"
+  ],
+  "native_runtime_codegen_delta_paths": [
+    "src/dft/uks.cpp"
+  ],
+  "checks": [
+    {
+      "id": "merge",
+      "status": "PASS",
+      "finding": "Actual normal merge parents are published4a0bd3525 and upstream30657763a; only src/dft/uks.cpp changes among native/runtime/codegen inputs. Its current bytes exactly equal the upstream parent.",
+      "evidence": [
+        "git rev-list --parents -n1 HEAD",
+        "git diff4a0bd3525..80a6ada08 -- src include python/generativeqc python/generativeqc_compiler cmake CMakeLists.txt",
+        "src/dft/uks.cpp:212-226,515-523"
+      ]
+    },
+    {
+      "id": "RKS_force_defaults_timers",
+      "status": "PASS",
+      "finding": "Nine directly checked RKS/force/default/export/timer files are byte-identical to the published prior head; whole benchmarks, Python runtime/compiler, API and methods trees also match. The UKS retry continuation now uses ordinary_primary, whose admission is CPU exact/DF; the existing explicit CUDA COSX wrapper uses its curated evaluator. No RKS automatic-force, SCF/grid/precision/stopping or endpoint timer edit appears in this merge.",
+      "evidence": [
+        "src/dft/uks.cpp:212-226,515-523,562-583",
+        "unchanged_RKS_default_timer_inputs",
+        "unchanged_subtrees"
+      ]
+    },
+    {
+      "id": "scientific_packet",
+      "status": "PASS",
+      "finding": "The complete public bundle/review inventory and every stored member byte, including all record parts, summary and replay, equal published4a0bd3525. Existing720/72 reductions and compiled/device gates were reused without rerunning them.",
+      "evidence": [
+        "unchanged_public_members",
+        "benchmarks subtree identity"
+      ]
+    },
+    {
+      "id": "Libxc_refresh",
+      "status": "PASS",
+      "finding": "Compared decompressed snapshots to both actual merge parents: only source_identity and native_source_identity differ. Every scientific, capability, execution, measured-source, evidence and stale field is equal; stale remains true. Qualification prose differs only in the same checked identities.",
+      "evidence": [
+        "snapshot_differences",
+        "unchanged_scientific_payload_sha256",
+        "docs/reference/libxc_qualification.md:3-9"
+      ]
+    },
+    {
+      "id": "scope",
+      "status": "PASS_WITH_EXISTING_LIMITATIONS",
+      "finding": "CPU UKS/ECP fixtures and their tests belong to upstream2991. This supplement provides no new CPU scientific acceptance or H100 UKS/ECP/device measurement. Current80a6ada08 is a later unmeasured native head; unchanged-source evidence remains scoped to the original frozen0ee720 and4ee/ed3372 cohorts. Original WARN provenance/runtime-mapping and same-family limits remain.",
+      "evidence": [
+        "tests/data/global_hybrid_ecp/README.md",
+        "tests/data/global_hybrid_ecp/manifest.json:qualification",
+        "tests/python/test_global_hybrid_ecp_forces.py:40,165",
+        "upstream Agent Notes retain mixed/default-grid/installed-artifact limitations"
+      ]
+    }
+  ],
+  "unresolved_blockers": [],
+  "requested_model": "gpt-6.1-sol",
+  "requested_effort": "ultra (original requested route; continuation)",
+  "actual_backend_identity": "unknown",
+  "review_independence": "same-family",
+  "assurance": "provisional",
+  "method": "Read-only bounded Git-parent/source/byte/hash/JSON comparison of the new merge delta only. No original numerical reductions, device gates, GPU jobs, compiler, solver, profiler, test suite or network fetch rerun; no production/public edits.",
+  "new_checked_source_identity": "b6f4297bc4cd701cb0b0fdf6932836ed7571382f4e6d990f125cec2381db8f03",
+  "new_checked_native_source_identity": "64f637d1ae39241cac42c7484f7d2840283a29861e3adfb91325d5adab2dbc6e",
+  "snapshot_differences": {
+    "4a0bd352527fa92df34ec378ea797957ec15eb98": {
+      "native_source_identity": {
+        "before": "a0f5574bc0ca91fcb664b4082a3e7f33999fa0e6378c97dfc90f66987a81313a",
+        "after": "64f637d1ae39241cac42c7484f7d2840283a29861e3adfb91325d5adab2dbc6e"
+      },
+      "source_identity": {
+        "before": "81d376bbe7ec2b99123f26ec9d3f24409e77d3e446a226aa063299dfd594bd0f",
+        "after": "b6f4297bc4cd701cb0b0fdf6932836ed7571382f4e6d990f125cec2381db8f03"
+      }
+    },
+    "30657763a1f79c44e1b897b524ae9f54c96928cd": {
+      "native_source_identity": {
+        "before": "124ad1e99725b1c15b995969a3e9ada3ef45c7673136d761a39241c8019c3cbe",
+        "after": "64f637d1ae39241cac42c7484f7d2840283a29861e3adfb91325d5adab2dbc6e"
+      },
+      "source_identity": {
+        "before": "5e3ef29b4091e7d5b40f00bb998f7ff63f497f5d043395ef7e7511fcd1774fa9",
+        "after": "b6f4297bc4cd701cb0b0fdf6932836ed7571382f4e6d990f125cec2381db8f03"
+      }
+    }
+  },
+  "unchanged_scientific_payload_sha256": "9bfb07bd174833e6733906e2a14b167da19b290a341d055eff76fc2d1cb73b5b",
+  "unchanged_RKS_default_timer_inputs": [
+    {
+      "path": "src/methods/dft_method.cpp",
+      "sha256": "90c1ddff1fe48c75db6041c3c796ea669050c49891913f47b85700ebd42c53b0",
+      "bytes": 217910,
+      "equal_to_prior": true
+    },
+    {
+      "path": "src/dft/ks_tile_policy.hpp",
+      "sha256": "cfdc46fbfe6556513c9d869a129e5c7fe6371d05b512efc598a984d85f07540e",
+      "bytes": 2186,
+      "equal_to_prior": true
+    },
+    {
+      "path": "src/dft/cuda_ks.cpp",
+      "sha256": "fa51c59c75c022f6e6c46e8305729824bb6f298eb0bb17b81a50298b5697447e",
+      "bytes": 332499,
+      "equal_to_prior": true
+    },
+    {
+      "path": "src/dft/rks.cpp",
+      "sha256": "84e9d204c2f20f91a28d2a08feccc0c7bc4c37f9a872e909b2390a12387f4de0",
+      "bytes": 66069,
+      "equal_to_prior": true
+    },
+    {
+      "path": "src/methods/dft_method_preparation.cpp",
+      "sha256": "26831f98ccd9f6f994df5310e6d71f4508792080cf419c97dd0b8cf7d9280a61",
+      "bytes": 37683,
+      "equal_to_prior": true
+    },
+    {
+      "path": "python/generativeqc/ks.py",
+      "sha256": "ad7540595e8907ca3836255c5a9f132b304171923e4126f11b2eceda4ef36e84",
+      "bytes": 59831,
+      "equal_to_prior": true
+    },
+    {
+      "path": "benchmarks/readme_defaults.py",
+      "sha256": "e79ae3e71e82681f4549e29747dc5bf5e0c51736fbf4f8260fbacc5559ea3d08",
+      "bytes": 24735,
+      "equal_to_prior": true
+    },
+    {
+      "path": "python/generativeqc/batch.py",
+      "sha256": "f1f5735e8200f89a83ad0903cacdff2b521f11f2e74fed0918c0405f23d1164e",
+      "bytes": 90104,
+      "equal_to_prior": true
+    },
+    {
+      "path": "python/generativeqc/_precision_batch.py",
+      "sha256": "a9ffc494ce51bd658e366ee548337355a5f4c49233567c9d6a6d8f969b6bf247",
+      "bytes": 29434,
+      "equal_to_prior": true
+    }
+  ],
+  "unchanged_subtrees": {
+    "benchmarks": {
+      "prior_git_tree": "8c177541c3abb2a5b26cb9092c87408a60876ece",
+      "current_git_tree": "8c177541c3abb2a5b26cb9092c87408a60876ece",
+      "equal": true
+    },
+    "python/generativeqc": {
+      "prior_git_tree": "b111f6006b1017628d75c3560a7bc0623af887d8",
+      "current_git_tree": "b111f6006b1017628d75c3560a7bc0623af887d8",
+      "equal": true
+    },
+    "python/generativeqc_compiler": {
+      "prior_git_tree": "4ef30e5d81ae0ff4e3376d8399e61a51ddf4ed6d",
+      "current_git_tree": "4ef30e5d81ae0ff4e3376d8399e61a51ddf4ed6d",
+      "equal": true
+    },
+    "src/api": {
+      "prior_git_tree": "85321092721fc61bfb4dd6e4e38f54ec7c961c26",
+      "current_git_tree": "85321092721fc61bfb4dd6e4e38f54ec7c961c26",
+      "equal": true
+    },
+    "src/methods": {
+      "prior_git_tree": "ca296a7ea714092c8a11a90b9695e2f858888573",
+      "current_git_tree": "ca296a7ea714092c8a11a90b9695e2f858888573",
+      "equal": true
+    }
+  },
+  "unchanged_public_members": [
+    {
+      "path": "benchmarks/evidence-reviews/h100-cold-force-fixed30-20261105.json",
+      "bytes": 1710,
+      "sha256": "1fac7c2f25da886792c019a3ca66b1bc23a6827108f523988603daf9141e2e90",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/README.md",
+      "bytes": 16632,
+      "sha256": "51264cd45c563200afc7f045a6073a7433011105e58e4e1dfda95c5c4ee60334",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/cohort.json",
+      "bytes": 6125,
+      "sha256": "6b0f8bb2c6b944c5ee6de729cd3f3581f8d2663737b0ede4d56f33de04a8e979",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part00",
+      "bytes": 786432,
+      "sha256": "05cc76d2918c81c65a461c1089d1f408d7946083dac428902dd4a07c2dfefae3",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part01",
+      "bytes": 586600,
+      "sha256": "51a1eed1451826d447c1c1257fc77bfc7e1fd65dcdf7fe02e61437847f38938a",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/replay.py",
+      "bytes": 8950,
+      "sha256": "cf24b765784870a68f1d1f863241d142f941fecff16dede2727f85d0f7a45763",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/review/README.md",
+      "bytes": 762,
+      "sha256": "14cb9a2d4e17450b8397f16db36036467a91376aa19666803070f3768566a24c",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-report.json",
+      "bytes": 52655,
+      "sha256": "78252e26bc512d53221d6048eea1622e94255a65dd28c537b68df19432b019db",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-report.md",
+      "bytes": 18119,
+      "sha256": "5175ca44ba239c656b0808033096d3ca0fcf84dff0cae4330b9bef988cb89efd",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-request.json",
+      "bytes": 1052,
+      "sha256": "2d36aa63617590992d4f24dd9d8792885cf8871f75b3c926793471f9f9d3e01f",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-request.txt",
+      "bytes": 10322,
+      "sha256": "5e34ae527ba193d50a6507eeebd4a4427537948e29c4a6bd9ad8973397d3f3d1",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-trace.json",
+      "bytes": 6102,
+      "sha256": "ab21f99744fc1c33b63eddec43e1578ec7de42c75464fd51a24913488238b1cd",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/review/audited-input-hashes.json.xz",
+      "bytes": 52332,
+      "sha256": "9349da9060a6e98875f44deaf0432a3c5d24bcb9b7e9a87e508544c55e190df6",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/review/independent-reduce.py",
+      "bytes": 12480,
+      "sha256": "7eb6ff471242a310f3fd67065f5fa85b0bcb23b253365a261261d0911aff61fc",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/review/independent-wb2.py",
+      "bytes": 9939,
+      "sha256": "20524ae4c296b833544a70becdd81d452ca664240fec8e8ecd6c10785ccdefe2",
+      "equal_to_published_prior": true
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/summary.json.xz",
+      "bytes": 21136,
+      "sha256": "4cf8881dd67a0b76d2e0be33770bdd672888d4e2870b1ae9c29def3f64e52f28",
+      "equal_to_published_prior": true
+    }
+  ],
+  "original_report_sha256": {
+    "audit-report.json": "78252e26bc512d53221d6048eea1622e94255a65dd28c537b68df19432b019db",
+    "audit-report.md": "5175ca44ba239c656b0808033096d3ca0fcf84dff0cae4330b9bef988cb89efd"
+  },
+  "input_hashes": [
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/upstream2991-integration-v1.json",
+      "bytes": 1928,
+      "sha256": "c130c975bae60e9b37da3e83715582875f81f0d43b7a262d114f6896f885f335"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/upstream2991-source-refresh-v1.json",
+      "bytes": 1455,
+      "sha256": "cfb703b5e0bbf5c5eadbb7b95d4148fae8a1b8c280b32ad89c20611ddaa16bc9"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/.agents/notes/implemented/numerics/2026-10-12-automatic-cpu-final-projector-closure.md",
+      "bytes": 4113,
+      "sha256": "3a6bb22349fde78ff04e1b30226de62b1ec0c448f314eea51bbf4fcef38b3995"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/.agents/notes/implemented/numerics/2026-11-04-curated-cpu-uks-final-closure-budget.md",
+      "bytes": 3698,
+      "sha256": "1294cefe83b16cc6ce732a6cbbde7d3b565140659b135523b878a2c4c36c439c"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/.agents/notes/implemented/numerics/2026-11-05-def2-ecp-global-hybrid-force-gates.md",
+      "bytes": 7191,
+      "sha256": "a8b0d29eef0fa022ee8a14262293e0a744a276ae0a1e1f717b0161b7b5c1f3a5"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/docs/reference/libxc_qualification.md",
+      "bytes": 4128,
+      "sha256": "f009bcd7337ecdf4e4c2362d9d038804e357f4893f46ec0e61e83314fb2beb30"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/manifests/libxc/native-qualification-snapshot.json.xz",
+      "bytes": 13224,
+      "sha256": "e4fd217d48da20784eb41a350ec7abac291e334d70d8253b964fcd33b368a11d"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/dft/uks.cpp",
+      "bytes": 38308,
+      "sha256": "0fdf3a89327e15e000236b2d615dea16aa73dde2feae5c7d0b644a60571f7f3b"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/tests/data/global_hybrid_ecp/README.md",
+      "bytes": 3699,
+      "sha256": "4d8caa03a1f5e4061fc50fd4e31902ac66e573c7342514b8ffbf1cb467d3447f"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/tests/data/global_hybrid_ecp/def2-svp-ni-i-cs-h.json",
+      "bytes": 19760,
+      "sha256": "17b6c31831b97ef5da7e7b33b4242d1f9ee243f5f592ff5becfa9819f511790a"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/tests/data/global_hybrid_ecp/manifest.json",
+      "bytes": 1782,
+      "sha256": "74dd4d2b4ebfb8662b0e5e7aed54cfd88aae1b07a31b947a52910377760d8e6e"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/tests/python/test_global_hybrid_ecp_basis.py",
+      "bytes": 5582,
+      "sha256": "43948bf52d49d1be37c58fc83be6b8f4c3a7ac85d1210801b9ecd52ab633c173"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/tests/python/test_global_hybrid_ecp_d3.py",
+      "bytes": 3866,
+      "sha256": "1032d0551144ce7b0a359228ffc9b2a52967bce4bfabf1d99e755b7c181602c1"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/tests/python/test_global_hybrid_ecp_forces.py",
+      "bytes": 17741,
+      "sha256": "749de5eba22f98d70c0fd3288598ada9aa56910cdc1f68d6b2e5567208a827e9"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/tools/generate_global_hybrid_hessian_basis.py",
+      "bytes": 5752,
+      "sha256": "51fbfeaeeb72327815dfc9b254975121bb45af6330596f661cbeaa32f2bd6609"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/methods/dft_method.cpp",
+      "bytes": 217910,
+      "sha256": "90c1ddff1fe48c75db6041c3c796ea669050c49891913f47b85700ebd42c53b0"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/dft/ks_tile_policy.hpp",
+      "bytes": 2186,
+      "sha256": "cfdc46fbfe6556513c9d869a129e5c7fe6371d05b512efc598a984d85f07540e"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/dft/cuda_ks.cpp",
+      "bytes": 332499,
+      "sha256": "fa51c59c75c022f6e6c46e8305729824bb6f298eb0bb17b81a50298b5697447e"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/dft/rks.cpp",
+      "bytes": 66069,
+      "sha256": "84e9d204c2f20f91a28d2a08feccc0c7bc4c37f9a872e909b2390a12387f4de0"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/src/methods/dft_method_preparation.cpp",
+      "bytes": 37683,
+      "sha256": "26831f98ccd9f6f994df5310e6d71f4508792080cf419c97dd0b8cf7d9280a61"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/python/generativeqc/ks.py",
+      "bytes": 59831,
+      "sha256": "ad7540595e8907ca3836255c5a9f132b304171923e4126f11b2eceda4ef36e84"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/readme_defaults.py",
+      "bytes": 24735,
+      "sha256": "e79ae3e71e82681f4549e29747dc5bf5e0c51736fbf4f8260fbacc5559ea3d08"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/python/generativeqc/batch.py",
+      "bytes": 90104,
+      "sha256": "f1f5735e8200f89a83ad0903cacdff2b521f11f2e74fed0918c0405f23d1164e"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/python/generativeqc/_precision_batch.py",
+      "bytes": 29434,
+      "sha256": "a9ffc494ce51bd658e366ee548337355a5f4c49233567c9d6a6d8f969b6bf247"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/evidence-reviews/h100-cold-force-fixed30-20261105.json",
+      "bytes": 1710,
+      "sha256": "1fac7c2f25da886792c019a3ca66b1bc23a6827108f523988603daf9141e2e90"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/README.md",
+      "bytes": 16632,
+      "sha256": "51264cd45c563200afc7f045a6073a7433011105e58e4e1dfda95c5c4ee60334"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/cohort.json",
+      "bytes": 6125,
+      "sha256": "6b0f8bb2c6b944c5ee6de729cd3f3581f8d2663737b0ede4d56f33de04a8e979"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part00",
+      "bytes": 786432,
+      "sha256": "05cc76d2918c81c65a461c1089d1f408d7946083dac428902dd4a07c2dfefae3"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part01",
+      "bytes": 586600,
+      "sha256": "51a1eed1451826d447c1c1257fc77bfc7e1fd65dcdf7fe02e61437847f38938a"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/replay.py",
+      "bytes": 8950,
+      "sha256": "cf24b765784870a68f1d1f863241d142f941fecff16dede2727f85d0f7a45763"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/review/README.md",
+      "bytes": 762,
+      "sha256": "14cb9a2d4e17450b8397f16db36036467a91376aa19666803070f3768566a24c"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-report.json",
+      "bytes": 52655,
+      "sha256": "78252e26bc512d53221d6048eea1622e94255a65dd28c537b68df19432b019db"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-report.md",
+      "bytes": 18119,
+      "sha256": "5175ca44ba239c656b0808033096d3ca0fcf84dff0cae4330b9bef988cb89efd"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-request.json",
+      "bytes": 1052,
+      "sha256": "2d36aa63617590992d4f24dd9d8792885cf8871f75b3c926793471f9f9d3e01f"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-request.txt",
+      "bytes": 10322,
+      "sha256": "5e34ae527ba193d50a6507eeebd4a4427537948e29c4a6bd9ad8973397d3f3d1"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-trace.json",
+      "bytes": 6102,
+      "sha256": "ab21f99744fc1c33b63eddec43e1578ec7de42c75464fd51a24913488238b1cd"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/review/audited-input-hashes.json.xz",
+      "bytes": 52332,
+      "sha256": "9349da9060a6e98875f44deaf0432a3c5d24bcb9b7e9a87e508544c55e190df6"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/review/independent-reduce.py",
+      "bytes": 12480,
+      "sha256": "7eb6ff471242a310f3fd67065f5fa85b0bcb23b253365a261261d0911aff61fc"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/review/independent-wb2.py",
+      "bytes": 9939,
+      "sha256": "20524ae4c296b833544a70becdd81d452ca664240fec8e8ecd6c10785ccdefe2"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105/benchmarks/results/h100-cold-force-fixed30-20261105/summary.json.xz",
+      "bytes": 21136,
+      "sha256": "4cf8881dd67a0b76d2e0be33770bdd672888d4e2870b1ae9c29def3f64e52f28"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/audit-report.json",
+      "bytes": 52655,
+      "sha256": "78252e26bc512d53221d6048eea1622e94255a65dd28c537b68df19432b019db"
+    },
+    {
+      "path": "/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1/audit-report.md",
+      "bytes": 18119,
+      "sha256": "5175ca44ba239c656b0808033096d3ca0fcf84dff0cae4330b9bef988cb89efd"
+    }
+  ],
+  "scope_decisions": [
+    "Reuse original source-qualified numerical and device evidence without relabeling80a6ada08 as measured.",
+    "Treat upstream CPU UKS/ECP test additions as their declared source/test scope; no new H100 or broader chemistry acceptance.",
+    "Retain original WARN: exact refined historical oracle producer bytes and fresh all-library/every-AOT mapping remain unverified; same-family/provisional assurance persists.",
+    "Attach this actual supplement to public review metadata only after parent review; this auditor has made no public edits."
+  ]
+}

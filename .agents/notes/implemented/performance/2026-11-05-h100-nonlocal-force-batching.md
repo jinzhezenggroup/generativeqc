@@ -93,3 +93,13 @@ complete E/F. Retain explicit force requests, strict scientific settings, indepe
 numerical references, the drained fallback and the existing resource promises.
 A100/5090, UKS/CBS and displaced-geometry acceptance require their own evidence;
 this H100 stage does not extend those claims.
+
+## Postqualification upstream integration
+
+The normal merge of #2991 updates CPU UKS final closure and ECP qualification.
+A bounded source/byte review confirms unchanged RKS force/default/timer paths and
+prior scientific packet bytes; only current checked Libxc identities regenerate.
+Reuse the source-qualified H100 evidence within that scope. Do not relabel the
+later head as a measured matrix or repeat original720/72 reductions/device gates
+for this unrelated CPU integration. The public review supplement retains the
+actual parent/source hashes and original WARN limitations.

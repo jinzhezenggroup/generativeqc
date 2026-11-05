@@ -119,7 +119,38 @@
         "sha256": "20524ae4c296b833544a70becdd81d452ca664240fec8e8ecd6c10785ccdefe2"
       }
     ],
-    "scope": "Fresh read-only primary/code/independent arithmetic review. Scope limitations remain, including inherited refined-oracle executable provenance, observed core-only mappings, later-head unmeasured status and no other-architecture/general-chemistry acceptance. Review attachment is a later delivery step; scientific receipt/summary/reader bytes unchanged."
+    "scope": "Fresh read-only primary/code/independent arithmetic review. Scope limitations remain, including inherited refined-oracle executable provenance, observed core-only mappings, later-head unmeasured status and no other-architecture/general-chemistry acceptance. Review attachment is a later delivery step; scientific receipt/summary/reader bytes unchanged.",
+    "supplements": [
+      {
+        "status": "PASS_SCOPED_INTEGRATION_NO_BLOCKING_CONCERN",
+        "audited_head": "80a6ada08718be2516a7a17c4e597eed79003bb8",
+        "upstream": "30657763a1f79c44e1b897b524ae9f54c96928cd",
+        "original_verdict_unchanged": "WARN_SCOPED_ACCEPTANCE_NO_BLOCKING_DEFECT_FOUND",
+        "scope": "Postqualification upstream2991 CPU UKS/ECP integration; RKS force/default/timer and scientific bytes unchanged. No new H100 measurement or old numerical/device replay.",
+        "artifacts": [
+          {
+            "path": "review/integration-followup-v1.json",
+            "bytes": 25074,
+            "sha256": "4611dd6ff7aa9cb9591831a100f58c388584abeef815db410fc1fb1abbc711fd"
+          },
+          {
+            "path": "review/integration-followup-v1.md",
+            "bytes": 2669,
+            "sha256": "a6b594360440fa1bd1859d2f3c6060e6f6ad656409497b19ab8edbb91f5065cc"
+          },
+          {
+            "path": "review/upstream2991-integration-v1.json",
+            "bytes": 1928,
+            "sha256": "c130c975bae60e9b37da3e83715582875f81f0d43b7a262d114f6896f885f335"
+          },
+          {
+            "path": "review/upstream2991-source-refresh-v1.json",
+            "bytes": 1455,
+            "sha256": "cfb703b5e0bbf5c5eadbb7b95d4148fae8a1b8c280b32ad89c20611ddaa16bc9"
+          }
+        ]
+      }
+    ]
   },
   "limitations": [
     "Measured source is explicit; do not relabel older DB36 or selector records as current default.",
