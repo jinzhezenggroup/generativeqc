@@ -93,8 +93,24 @@ Executable native-owner fixtures cover bounded handoff and work admission.
 The scheduled GPU projection suite passes 272 cases, including mixed-capacity
 mapped batches, standalone execution, scratch canaries and poisoned D proving
 ordinary admitted points do not consult the matrix oracle.
-Complete-endpoint measurements must bind to the new source and binary before
-making any speedup or cross-functional qualification claim.
+The final scientific source is `3c41b36142d2fe52fc7b3cb7de89e42fef670b42`,
+with source identity
+`5db4c208f23bc6215e03241dd08214258c69995291b8c8aa99a85b3b47adc8a3`.
+The [retained capsule](../../../../benchmarks/results/occupied-xc-families-20261105/README.md)
+binds 624 new family E+F observations and twelve original-workload observations
+to that image. The original 96-atom Direct Standard r2SCAN-3c cold median is
+`30.449281 -> 29.303447 s` (3.763% less time), with 10 Focks on both routes.
+M06-2X/48 cold improves 2.442% on node4 and independently 2.210% on node5;
+both exceed the predeclared 2%/MAD floor. LDA and GGA examples are supported
+but remain below the endpoint gain floor, not advertised as speedups.
+
+Keep the negative evidence: the pre-incremental candidate populations, the
+DIIS-restart counterexample and an isolated final PBE0/3 warm confirmation
+flag (about 1.3 ms, 2.045%). The original/main PBE0 warm population is neutral;
+neither this disagreement nor a functional name justifies changing gates or
+adding a whitelist. Independent final native/GPU tests pass 320 cases,
+including 16 complete RKS/UKS oracle/control tests. The emitted family subset
+passes memcheck, racecheck and synccheck (36 cases each, zero findings).
 
 ## Revisit when
 
