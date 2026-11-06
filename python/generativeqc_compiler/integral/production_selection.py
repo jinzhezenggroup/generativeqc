@@ -128,6 +128,10 @@ class KernelSelection:
         return capability in self.capabilities
 
     def __post_init__(self) -> None:
+        if self.schedule.fock_shared_rys_xy or (
+            self.fock_schedule is not None and self.fock_schedule.fock_shared_rys_xy
+        ):
+            raise ValueError("shared Rys x/y is fixture-only, not production-qualified")
         if not self.architecture.startswith("sm_"):
             raise ValueError("production architecture must use CUDA sm_ notation")
         if not self.profile:

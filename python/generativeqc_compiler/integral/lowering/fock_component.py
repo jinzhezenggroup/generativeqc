@@ -93,6 +93,35 @@ struct GeneratedDpppRys{nroots}Primitive {{
     )
 
 
+def _emit_rys_axis_fill_cuda(bra_extent: int, ket_extent: int) -> str:
+    """One TRR arithmetic emitter for private and CTA-shared addressed tables.
+
+    Text factoring preserves the incumbent private function and its noinline
+    boundary. Shared producers change storage ownership, never recurrence math.
+    """
+
+    return f"""  trr[0][0] = seed;
+#pragma unroll
+  for (unsigned bra = 1U; bra < {bra_extent}U; ++bra) {{
+    double value = c0 * trr[bra - 1U][0];
+    if (bra > 1U) value += (bra - 1U) * b10 * trr[bra - 2U][0];
+    trr[bra][0] = value;
+  }}
+#pragma unroll
+  for (unsigned ket = 1U; ket < {ket_extent}U; ++ket) {{
+#pragma unroll
+    for (unsigned bra = 0U; bra < {bra_extent}U; ++bra) {{
+      double value = cp * trr[bra][ket - 1U];
+      if (ket > 1U) value +=
+          (ket - 1U) * b01 * trr[bra][ket - 2U];
+      if (bra > 0U) value +=
+          bra * b00 * trr[bra - 1U][ket - 1U];
+      trr[bra][ket] = value;
+    }}
+  }}
+"""
+
+
 def _emit_rys_component_lane_fock_consumer_cuda(
     spec: ShellClassSpec,
     plan: FusedShellPlan,
@@ -176,7 +205,7 @@ def _emit_rys_component_lane_fock_consumer_cuda(
     component_axis_counts = tuple(
         tuple(axis_count(center, axis) for axis in range(3)) for center in range(4)
     )
-    return f"""
+    source = f"""
 /** Evaluate only the value needed by Fock, omitting force derivatives. */
 __device__ __noinline__ double generated_dppp_{symbol_tag}_value_axis(
     unsigned a, unsigned b, unsigned c, unsigned d,
@@ -185,26 +214,7 @@ __device__ __noinline__ double generated_dppp_{symbol_tag}_value_axis(
   // Runtime component ordinals require addressed storage.  The exact extents
   // {bounds_comment}
   volatile double trr[{bra_extent}][{ket_extent}];
-  trr[0][0] = seed;
-#pragma unroll
-  for (unsigned bra = 1U; bra < {bra_extent}U; ++bra) {{
-    double value = c0 * trr[bra - 1U][0];
-    if (bra > 1U) value += (bra - 1U) * b10 * trr[bra - 2U][0];
-    trr[bra][0] = value;
-  }}
-#pragma unroll
-  for (unsigned ket = 1U; ket < {ket_extent}U; ++ket) {{
-#pragma unroll
-    for (unsigned bra = 0U; bra < {bra_extent}U; ++bra) {{
-      double value = cp * trr[bra][ket - 1U];
-      if (ket > 1U) value +=
-          (ket - 1U) * b01 * trr[bra][ket - 2U];
-      if (bra > 0U) value +=
-          bra * b00 * trr[bra - 1U][ket - 1U];
-      trr[bra][ket] = value;
-    }}
-  }}
-  return generated_dppp_{symbol_tag}_state(trr, a, b, c, d, ab, cd);
+{_emit_rys_axis_fill_cuda(bra_extent, ket_extent)}  return generated_dppp_{symbol_tag}_state(trr, a, b, c, d, ab, cd);
 }}
 
 template <bool Unrestricted>
@@ -476,3 +486,128 @@ void generated_dppp_shell_class_fock_uhf_persistent_kernel(
       task_offset, task_count, task_head);
 }}
 """
+
+    if not plan.schedule.fock_shared_rys_xy:
+        return source
+    if force_support:
+        raise ValueError("shared Rys x/y does not support derivative recurrence tables")
+    return _with_shared_rys_xy_task(source, bra_extent, ket_extent)
+
+
+def _with_shared_rys_xy_task(source: str, bra_extent: int, ket_extent: int) -> str:
+    """Add a restricted task while preserving the private/UHF instantiation.
+
+    The fixture capability does not replace UHF, mixed, streaming or work-K
+    consumers. The RHF persistent queue and launch geometry remain incumbent.
+    """
+
+    marker = "template <bool Unrestricted>\n__device__"
+    task_begin = source.index(marker)
+    task_end = source.index('extern "C" __global__', task_begin)
+    task = source[task_begin:task_end]
+    task = (
+        task.replace("template <bool Unrestricted>\n", "", 1)
+        .replace(
+            "generated_dppp_shell_class_fock_task(",
+            "generated_dppp_shell_class_fock_shared_xy_task(",
+            1,
+        )
+        .replace(
+            "generated_dppp_accumulate_fock<Unrestricted>",
+            "generated_dppp_accumulate_fock<false>",
+        )
+    )
+    task = task.replace(
+        "    double roots_weights[6];",
+        f"    double roots_weights[6];\n"
+        f"    volatile double xy[3][2][{bra_extent}][{ket_extent}];",
+        1,
+    )
+    task = task.replace(
+        "  if (!__syncthreads_or(retained_by_schwarz)) return;",
+        "  const unsigned retained_count = __syncthreads_count(retained_by_schwarz);\n"
+        "  if (retained_count == 0U) return;\n"
+        "  const bool share_xy = retained_count > 2U;",
+        1,
+    )
+    producer = """      // Six fixed lanes own one complete root/axis table each, even when
+      // that lane's Cartesian component was screened. All lanes publish/retire.
+      if (share_xy && lane < 6U) {
+        const unsigned root_index = lane / 2U;
+        const unsigned axis = lane % 2U;
+        const GeneratedDpppRys3Primitive& primitive = shared.primitive;
+        const double root = shared.roots_weights[2U * root_index];
+        const double root_over_sum = root / (primitive.p + primitive.q);
+        const double root_bra = root_over_sum * primitive.q;
+        const double root_ket = root_over_sum * primitive.p;
+        const double b10 = 0.5 / primitive.p * (1.0 - root_bra);
+        const double b00 = 0.5 * root_over_sum;
+        const double b01 = 0.5 / primitive.q * (1.0 - root_ket);
+        generated_dppp_rys3_fill_axis(
+            shared.xy[root_index][axis],
+            (axis == 0U ? primitive.pax : primitive.pay) -
+                (axis == 0U ? primitive.dx : primitive.dy) * root_bra,
+            (axis == 0U ? primitive.qcx : primitive.qcy) +
+                (axis == 0U ? primitive.dx : primitive.dy) * root_ket,
+            b10, b00, b01, 1.0);
+      }
+      __syncthreads();
+"""
+    task = task.replace(
+        "      __syncthreads();\n      if (retained_by_schwarz) {",
+        "      __syncthreads();\n" + producer + "      if (retained_by_schwarz) {",
+        1,
+    )
+    for axis, ordinal in (("x", 0), ("y", 1)):
+        task = task.replace(
+            f"          const double {axis} = generated_dppp_rys3_value_axis(",
+            f"          const double {axis} = share_xy\n"
+            f"              ? generated_dppp_rys3_state(\n"
+            f"                    shared.xy[root_index][{ordinal}],\n"
+            f"                    a{axis}, b{axis}, c{axis}, d{axis}_order,\n"
+            f"                    primitive.ab{axis}, primitive.cd{axis})\n"
+            f"              : generated_dppp_rys3_value_axis(",
+            1,
+        )
+    fill = f"""
+/** Fill an unweighted root/axis table; HRR remains component-local. */
+__device__ __forceinline__ void generated_dppp_rys3_fill_axis(
+    volatile double (&trr)[{bra_extent}][{ket_extent}],
+    double c0, double cp, double b10, double b00, double b01, double seed) {{
+{_emit_rys_axis_fill_cuda(bra_extent, ket_extent)}}}
+
+"""
+    result = (
+        source[:task_begin]
+        + fill
+        + source[task_begin:task_end]
+        + task
+        + source[task_end:]
+    )
+    # The direct RHF wrapper owns a concrete restricted call. Persistent workers
+    # keep their template and choose uniformly at compile time, leaving UHF exact.
+    result = result.replace(
+        "  generated_dppp_shell_class_fock_task<false>(",
+        "  generated_dppp_shell_class_fock_shared_xy_task(",
+        1,
+    )
+    call = "    generated_dppp_shell_class_fock_task<Unrestricted>("
+    begin = result.index(call)
+    end = result.index(";", begin) + 1
+    private_call = result[begin:end]
+    shared_call = private_call.replace(
+        "generated_dppp_shell_class_fock_task<Unrestricted>",
+        "generated_dppp_shell_class_fock_shared_xy_task",
+    )
+    result = (
+        result[:begin]
+        + (
+            "    if constexpr (Unrestricted) {\n"
+            + private_call
+            + "\n    } else {\n"
+            + shared_call
+            + "\n    }"
+        )
+        + result[end:]
+    )
+    return result

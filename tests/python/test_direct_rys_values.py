@@ -1,10 +1,11 @@
 """Value-only Direct Rys lowering and independent contracted Libcint gates."""
 
+from __future__ import annotations
+
 import ctypes
-import shutil
-import subprocess
 from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -26,8 +27,13 @@ from generativeqc_compiler.integral.lowering.fock_component import (
 from generativeqc_compiler.integral.production_emission import emit_production_shard
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
 
+if TYPE_CHECKING:
+    from conftest import NativeCxx
+
+
 TARGET = cuda_target_info("sm_120")
 CLASSES = (
+    "dppp",
     "ppps",
     "dpss",
     "ddss",
@@ -173,12 +179,10 @@ def test_value_rys_emits_normal_production_streaming_artifacts(name: str) -> Non
 
 
 @pytest.fixture(scope="module")
-def compiled_axis_probe(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+def compiled_axis_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> ctypes.CDLL:
     """Compile the emitted value arithmetic, independently of native CUDA."""
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
-    if compiler is None or cache is None:
-        pytest.skip("requires a host C++ compiler and ccache")
-    subprocess.run([cache, "--version"], check=True, capture_output=True)
     directory = tmp_path_factory.mktemp("direct_rys_values")
     source = [
         "#include <cmath>\n#include <cstddef>\n#include <cstdint>\n",
@@ -227,23 +231,78 @@ extern "C" double probe_{name}(const double* bra, const double* ket,
 }}
 """
         )
+    for name in ("dppp", "pppp"):
+        plan = value_plan(name)
+        shared_plan = build_fused_shell_plan(
+            plan.spec,
+            integral=plan.kernel.integral,
+            schedule=replace(plan.schedule, fock_shared_rys_xy=True),
+            target=TARGET,
+        )
+        axis = _emit_rys_component_lane_fock_consumer_cuda(plan.spec, shared_plan, 1)
+        source.extend(
+            (
+                f"namespace shared_{name} {{\n",
+                emit_rys_value_support_cuda(plan.spec, plan.kernel.integral),
+                axis.split("template <bool Unrestricted>", 1)[0],
+                "}\n",
+            )
+        )
+        for shared in (False, True):
+            namespace = f"shared_{name}" if shared else name
+            axes = []
+            for axis, ordinal in (("x", 0), ("y", 1), ("z", 2)):
+                geometry = f"""
+        bra[{2 + ordinal}]-centers[{ordinal}]-difference[{ordinal}]*rb,
+        ket[{2 + ordinal}]-centers[{6 + ordinal}]+difference[{ordinal}]*rk"""
+                if shared and ordinal < 2:
+                    axes.append(f"""
+    volatile double {axis}_table[{sum(plan.spec.angular[:2]) + 1}][{sum(plan.spec.angular[2:]) + 1}];
+    {namespace}::generated_dppp_rys3_fill_axis(
+        {axis}_table,{geometry},b10,b00,b01,1.0);
+    const double {axis}={namespace}::generated_dppp_rys3_state(
+        {axis}_table,powers[{ordinal}],powers[{3 + ordinal}],
+        powers[{6 + ordinal}],powers[{9 + ordinal}],
+        centers[{3 + ordinal}]-centers[{ordinal}],
+        centers[{9 + ordinal}]-centers[{6 + ordinal}]);
+""")
+                else:
+                    seed = "weighted_root" if ordinal == 2 else "1.0"
+                    axes.append(f"""
+    const double {axis}={namespace}::generated_dppp_rys3_value_axis(
+        powers[{ordinal}],powers[{3 + ordinal}],powers[{6 + ordinal}],powers[{9 + ordinal}],
+        {geometry},centers[{3 + ordinal}]-centers[{ordinal}],
+        centers[{9 + ordinal}]-centers[{6 + ordinal}],b10,b00,b01,{seed});
+""")
+            source.append(f"""
+extern "C" double production_{"shared" if shared else "private"}_{name}(
+    const double* bra,const double* ket,const double* centers,
+    const unsigned* powers,double angular_coefficient) {{
+  const double p=bra[0],q=ket[0],rho=p*q/(p+q);
+  double difference[3],argument=0.0,rw[6];
+  for(unsigned axis=0;axis<3;++axis) {{
+    difference[axis]=bra[2+axis]-ket[2+axis];
+    argument+=rho*difference[axis]*difference[axis];
+  }}
+  {namespace}::generated_dppp_rys3_roots(argument,rw,1U);
+  const double prefactor=34.986836655249725*bra[5]*ket[5]/(p*q*sqrt(p+q));
+  double result=0.0;
+  for(unsigned root=0;root<3;++root) {{
+    const double u=rw[2*root]/(p+q),rb=u*q,rk=u*p;
+    const double b10=.5/p*(1-rb),b00=.5*u,b01=.5/q*(1-rk);
+    const double weighted_root=rw[2*root+1]*prefactor*angular_coefficient;
+{"".join(axes)}
+    result+=x*y*z;
+  }}
+  return result;
+}}
+""")
     cpp, output = directory / "probe.cpp", directory / "probe.so"
     cpp.write_text("".join(source))
-    subprocess.run(
-        [
-            cache,
-            compiler,
-            "-std=c++20",
-            "-O2",
-            "-ffp-contract=off",
-            "-shared",
-            "-fPIC",
-            str(cpp),
-            "-o",
-            str(output),
-        ],
-        check=True,
-        capture_output=True,
+    native_cxx.build_shared(
+        [cpp],
+        output,
+        compile_args=("-std=c++20", "-O2", "-ffp-contract=off"),
     )
     library = ctypes.CDLL(str(output))
     double = ctypes.POINTER(ctypes.c_double)
@@ -252,6 +311,11 @@ extern "C" double probe_{name}(const double* bra, const double* ket,
         function = getattr(library, f"probe_{name}")
         function.argtypes = (double, double, double, uint)
         function.restype = ctypes.c_double
+    for name in ("dppp", "pppp"):
+        for mode in ("private", "shared"):
+            function = getattr(library, f"production_{mode}_{name}")
+            function.argtypes = (double, double, double, uint, ctypes.c_double)
+            function.restype = ctypes.c_double
     return library
 
 
@@ -303,3 +367,58 @@ def test_emitted_value_axis_matches_independent_libcint(
         )
         actual[component_index] = value * coefficient
     np.testing.assert_allclose(actual, expected, atol=2e-12, rtol=2e-10)
+
+
+@pytest.mark.parametrize("name", ("dppp", "pppp"))
+@pytest.mark.parametrize("variant", ("cartesian", "coincident", "reversed_pairs"))
+def test_shared_fill_hrr_and_weighted_z_match_independent_libcint(
+    compiled_axis_probe: ctypes.CDLL,
+    name: str,
+    variant: str,
+) -> None:
+    """Execute emitted fills/HRR and production weighted-z association exactly."""
+    pytest.importorskip("pyscf")
+    from tools.generativeqc_validation.f_shell_numerics import (
+        _reference_integrals,
+        make_fixture,
+    )
+
+    fixture = make_fixture(name, variant)
+    _, _, expected, _ = _reference_integrals(fixture.inputs)
+    spec = FUSED_SHELL_SPEC_BY_NAME[name]
+    double, uint = ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_uint)
+    centers = np.ascontiguousarray(fixture.positions[list(fixture.atom_indices)])
+    outputs = []
+    for mode in ("private", "shared"):
+        function = getattr(compiled_axis_probe, f"production_{mode}_{name}")
+        actual = np.empty(expected.shape)
+        for index, component in zip(
+            np.ndindex(expected.shape), spec.components, strict=True
+        ):
+            powers = np.array(
+                [[label.count(axis) for axis in "xyz"] for label in component],
+                dtype=np.uint32,
+            )
+            coefficient = np.prod(
+                [
+                    fixture.ao_coefficients[offset + component_index]
+                    for offset, component_index in zip(
+                        fixture.ao_offsets, index, strict=True
+                    )
+                ]
+            )
+            value = 0.0
+            for bra in fixture.pairs[: fixture.pair_split]:
+                for ket in fixture.pairs[fixture.pair_split :]:
+                    value += function(
+                        bra.ctypes.data_as(double),
+                        ket.ctypes.data_as(double),
+                        centers.ctypes.data_as(double),
+                        powers.ctypes.data_as(uint),
+                        coefficient,
+                    )
+            actual[index] = value
+        assert np.isfinite(expected).all() and np.isfinite(actual).all()
+        np.testing.assert_allclose(actual, expected, atol=2e-12, rtol=2e-10)
+        outputs.append(actual)
+    np.testing.assert_allclose(*outputs, atol=2e-12, rtol=2e-10)
