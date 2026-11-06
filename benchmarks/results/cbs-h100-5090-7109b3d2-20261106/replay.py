@@ -127,7 +127,9 @@ def main():
         recovery = manifest['git_recovery']
         require(recovery == {'source-manifest.json': {'revision': SOURCE, 'format': 'git-archive-file-sha256-map.v1'}}, 'Git recovery recipe differs')
         inventory = {}
-        archive_raw = git(repository, 'archive', '--format=tar', SOURCE)
+        # Reproduce the authenticated source transport's line-ending conversion,
+        # independently of the reader's local Git configuration.
+        archive_raw = git(repository, '-c', 'core.autocrlf=true', 'archive', '--format=tar', SOURCE)
         with tarfile.open(fileobj=io.BytesIO(archive_raw), mode='r:') as archive:
             for member in archive:
                 if member.isfile():
