@@ -1,0 +1,315 @@
+{
+  "scope": "synthetic independent Libcint class Fock correctness only; not HF96 replay",
+  "source_sha256": "01c098e596f3e073eebda6cf912b8f4a139d4a6c6570cd22a69b6673e2e7bc84",
+  "schedules": {
+    "dppp_private": {
+      "kind": "component_lanes",
+      "block_threads": 192,
+      "component_tile": 162,
+      "tasks_per_warp": 1,
+      "shared_coulomb": true,
+      "pair_orientation": "canonical",
+      "pair_storage": "materialized",
+      "algebra_placement": "materialized_cse",
+      "algebra_ordering": "topological",
+      "algebra_fusion": "separate",
+      "algebra_form": "binary",
+      "unroll_pair_terms": true,
+      "minimum_blocks_per_sm": 0,
+      "maximum_registers": 0
+    },
+    "dppp_shared": {
+      "kind": "component_lanes",
+      "block_threads": 192,
+      "component_tile": 162,
+      "tasks_per_warp": 1,
+      "shared_coulomb": true,
+      "pair_orientation": "canonical",
+      "pair_storage": "materialized",
+      "algebra_placement": "materialized_cse",
+      "algebra_ordering": "topological",
+      "algebra_fusion": "separate",
+      "algebra_form": "binary",
+      "unroll_pair_terms": true,
+      "minimum_blocks_per_sm": 0,
+      "maximum_registers": 0,
+      "fock_shared_rys_xy": true
+    },
+    "pppp_private": {
+      "kind": "component_lanes",
+      "block_threads": 96,
+      "component_tile": 81,
+      "tasks_per_warp": 1,
+      "shared_coulomb": true,
+      "pair_orientation": "canonical",
+      "pair_storage": "materialized",
+      "algebra_placement": "materialized_cse",
+      "algebra_ordering": "topological",
+      "algebra_fusion": "separate",
+      "algebra_form": "binary",
+      "unroll_pair_terms": true,
+      "minimum_blocks_per_sm": 0,
+      "maximum_registers": 0
+    },
+    "pppp_shared": {
+      "kind": "component_lanes",
+      "block_threads": 96,
+      "component_tile": 81,
+      "tasks_per_warp": 1,
+      "shared_coulomb": true,
+      "pair_orientation": "canonical",
+      "pair_storage": "materialized",
+      "algebra_placement": "materialized_cse",
+      "algebra_ordering": "topological",
+      "algebra_fusion": "separate",
+      "algebra_form": "binary",
+      "unroll_pair_terms": true,
+      "minimum_blocks_per_sm": 0,
+      "maximum_registers": 0,
+      "fock_shared_rys_xy": true
+    }
+  },
+  "cases": [
+    {
+      "name": "dppp",
+      "variant": "cartesian",
+      "input_hash": "f5ab461df6f34be9443534c72983463b954e34746905352f7ef592992856b231",
+      "n": 15,
+      "pair_count": 4,
+      "pair_split": 2,
+      "reversed_mask": 0,
+      "retained_components": [
+        162,
+        27,
+        1,
+        2,
+        0
+      ],
+      "retained_producer_lanes": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        [],
+        [
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        []
+      ],
+      "primitive_quartets_per_task": 4
+    },
+    {
+      "name": "dppp",
+      "variant": "coincident",
+      "input_hash": "df6d25e23956532128223e074f1f040c5f0bd845f6c2fc39e20fd4b11f5c1598",
+      "n": 15,
+      "pair_count": 4,
+      "pair_split": 2,
+      "reversed_mask": 0,
+      "retained_components": [
+        162,
+        27,
+        1,
+        2,
+        0
+      ],
+      "retained_producer_lanes": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        [],
+        [
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        []
+      ],
+      "primitive_quartets_per_task": 4
+    },
+    {
+      "name": "dppp",
+      "variant": "reversed_pairs",
+      "input_hash": "847767cc8c547814bd744c19d04df25dcfba4bedd54a67ef9d9203a35274f4af",
+      "n": 15,
+      "pair_count": 4,
+      "pair_split": 2,
+      "reversed_mask": 3,
+      "retained_components": [
+        162,
+        27,
+        1,
+        2,
+        0
+      ],
+      "retained_producer_lanes": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        [],
+        [
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        []
+      ],
+      "primitive_quartets_per_task": 4
+    },
+    {
+      "name": "pppp",
+      "variant": "cartesian",
+      "input_hash": "54b238757673025695d6f7883a0bdd34992c74d0d72fd1df4793a05394417114",
+      "n": 12,
+      "pair_count": 4,
+      "pair_split": 2,
+      "reversed_mask": 0,
+      "retained_components": [
+        81,
+        27,
+        1,
+        2,
+        0
+      ],
+      "retained_producer_lanes": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        [],
+        [
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        []
+      ],
+      "primitive_quartets_per_task": 4
+    },
+    {
+      "name": "pppp",
+      "variant": "coincident",
+      "input_hash": "4038ebdac31d7b1daa4d40f37b750d8716cf105c3233abd35942d3c7b316a73c",
+      "n": 12,
+      "pair_count": 4,
+      "pair_split": 2,
+      "reversed_mask": 0,
+      "retained_components": [
+        81,
+        27,
+        1,
+        2,
+        0
+      ],
+      "retained_producer_lanes": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        [],
+        [
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        []
+      ],
+      "primitive_quartets_per_task": 4
+    },
+    {
+      "name": "pppp",
+      "variant": "reversed_pairs",
+      "input_hash": "fdf4dda72471851b43ccd5d0ed1d8cd6b658c35baec8e0b1b370983ad2019327",
+      "n": 12,
+      "pair_count": 4,
+      "pair_split": 2,
+      "reversed_mask": 3,
+      "retained_components": [
+        81,
+        27,
+        1,
+        2,
+        0
+      ],
+      "retained_producer_lanes": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        [],
+        [
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        []
+      ],
+      "primitive_quartets_per_task": 4
+    }
+  ],
+  "masks": [
+    "full",
+    "partial",
+    "one",
+    "two",
+    "zero"
+  ],
+  "task_mask_sequence": [
+    0,
+    4,
+    1,
+    2,
+    3,
+    0,
+    4
+  ],
+  "expected_extra_shared_bytes": {
+    "dppp": 576,
+    "pppp": 432
+  },
+  "fock_tolerances": {
+    "atol": 2e-11,
+    "rtol": 2e-10
+  },
+  "cuda_status": "not compiled or executed by source preparation"
+}

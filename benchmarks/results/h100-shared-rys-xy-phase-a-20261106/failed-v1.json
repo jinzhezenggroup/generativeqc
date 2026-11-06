@@ -1,0 +1,84 @@
+{
+  "status": "FAILED",
+  "scope": "synthetic class correctness only; no endpoint timing",
+  "utc_start": "2026-11-06T08:43:03.197151+00:00",
+  "hostname": "job-7c65ff75-5ce2-4951-ace9-8e39825b4c6f-worker-0",
+  "expected_image": "generativeqc-science-py311-cuda129:20261015",
+  "bundle_manifest_sha256": "12bbdb97e0e4ba7ef3ba84782b48468cb1b7efefbc206e1489923217a21aad6e",
+  "input_manifest": {
+    "scope": "Astra-reviewed synthetic fixture only; CUDA execution pending root-owned job",
+    "code_revision": "b56c2c935aa63f68049a116e420aa5a5dcb529e8",
+    "code_tree": "0912d6a8f9ff85bdd5d3e5307978935478363c1b",
+    "base_revision": "b681a1fc34279aa2b77de44b9aa5f42df6b31093",
+    "base_tree": "48eb3d68a9a67423b820da6fd36b949c6d9bdc99",
+    "branch": "codex/h100-shared-xy-phase-a-20261106",
+    "patch_sha256": "c2e45dc4d39bab4b5fcddf28d1046db75cd557b124c31237b189cd8d2e064534",
+    "host_tests": "143 passed; partial-mask review fix 3 passed; exact-file hooks PASS",
+    "files": [
+      {
+        "path": "headers-manifest.json",
+        "sha256": "04388e524cff507d4f3770fd51f0a3196f3956378d08cc85530edbb1da753ec7",
+        "bytes": 1023
+      },
+      {
+        "path": "include/runtime/compensated_atomic.cuh",
+        "sha256": "f2a4b2bbd3de7a777e4ffd3ec34e897c7985802431a3c12b96ffaabcd0f50d47",
+        "bytes": 1841
+      },
+      {
+        "path": "include/runtime/compensated_output.hpp",
+        "sha256": "b154714c241d0737d074608e159570d9ed62ac4f820e953e2bc3a345f5759ef3",
+        "bytes": 660
+      },
+      {
+        "path": "include/scf/generated_shell_task.hpp",
+        "sha256": "6b02b4446eca166f46553905ffc6369af689247d7f2ac06aa1b47e16b2eb083a",
+        "bytes": 5367
+      },
+      {
+        "path": "phase-a.patch",
+        "sha256": "c2e45dc4d39bab4b5fcddf28d1046db75cd557b124c31237b189cd8d2e064534",
+        "bytes": 54820
+      },
+      {
+        "path": "qualify-h100.sh",
+        "sha256": "b34c971f61108b3c675daf5497aaa1c80bf6dc44c854e0eb47658d449bbbf30d",
+        "bytes": 394
+      },
+      {
+        "path": "qualify_h100.py",
+        "sha256": "7dbb2d4b78fa189c227c015ac443b2f6f394444b8b646cd33a44474fc66af015",
+        "bytes": 8871
+      },
+      {
+        "path": "receipt.json",
+        "sha256": "a65c93fbe2d490b9fd6d0b02941f1cf7d58872fa02ac77723af0a4dd2470f488",
+        "bytes": 6390
+      },
+      {
+        "path": "shared_rys_xy_fixture.cu",
+        "sha256": "01c098e596f3e073eebda6cf912b8f4a139d4a6c6570cd22a69b6673e2e7bc84",
+        "bytes": 661558
+      }
+    ],
+    "resource_gate": "runner collects resource attributes/ptxas/cuobjdump; root must inspect expected +576/+432 shared bytes and register/local/spill deltas",
+    "cuda_status": "not compiled or run during preparation"
+  },
+  "cache_directory": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/h100-portability/20261027-fd06/cache/sccache",
+  "cache_server_port": 4255,
+  "stages": [
+    {
+      "name": "cache-after",
+      "argv": [
+        "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/h100-portability/20261027-fd06/env/bin/sccache",
+        "--show-stats"
+      ],
+      "timeout_seconds": 15,
+      "status": "PASS",
+      "returncode": 0,
+      "diagnostic_elapsed_seconds": 0.00973466201685369
+    }
+  ],
+  "failure": "[Errno 2] No such file or directory: '/opt/generativeqc-reuse/cuda-12.9/bin/compute-sanitizer'",
+  "utc_end": "2026-11-06T08:43:03.307561+00:00"
+}

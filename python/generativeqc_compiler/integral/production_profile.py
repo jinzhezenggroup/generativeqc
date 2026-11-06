@@ -305,6 +305,7 @@ def _schedule_from_payload(payload: object) -> ScheduleIR:
             mixed_pair_products_fp64=cast(
                 "bool", payload.get("mixed_pair_products_fp64", False)
             ),
+            fock_shared_rys_xy=cast("bool", payload.get("fock_shared_rys_xy", False)),
             minimum_blocks_per_sm=int(payload.get("minimum_blocks_per_sm", 0)),
             maximum_registers=int(payload.get("maximum_registers", 0)),
         )

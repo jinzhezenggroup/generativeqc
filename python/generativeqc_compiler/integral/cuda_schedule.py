@@ -15,7 +15,13 @@ from .expr import (
     AlgebraOrdering,
     RematerializationPolicy,
 )
-from .ir import IntegralIR, KernelConsumer, OperatorFamily
+from .ir import (
+    ContractionSpec,
+    DensityModel,
+    IntegralIR,
+    KernelConsumer,
+    OperatorFamily,
+)
 from .rys_task import task_parallel_rys_eligible
 from .shell_spec import AXES, ShellClassSpec
 
@@ -86,8 +92,22 @@ class CudaScheduleIR:
     warp_size: int = 32
     # Only the mixed Fock evaluator uses this; force/FP64 lowering is unchanged.
     mixed_pair_products_fp64: bool = False
+    # Fixture-only value capability; production selection remains unqualified.
+    fock_shared_rys_xy: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.fock_shared_rys_xy, bool):
+            raise TypeError("shared Rys x/y choice must be boolean")
+        if self.fock_shared_rys_xy and (
+            self.kind != ScheduleKind.COMPONENT_LANES
+            or self.warp_size != 32
+            or self.tasks_per_warp != 1
+            or not self.shared_coulomb
+            or self.mixed_pair_products_fp64
+            or self.pair_orientation != PairOrientation.CANONICAL
+            or self.pair_storage != PairStorage.MATERIALIZED
+        ):
+            raise ValueError("shared Rys x/y requires an FP64 component-lane mapping")
         if not isinstance(self.mixed_pair_products_fp64, bool):
             raise TypeError("mixed pair-product precision choice must be boolean")
         if self.warp_size < 1:
@@ -227,6 +247,26 @@ class CudaKernelIR:
         require_cuda_integral(self.integral)
         self.schedule.validate_for(self.target)
         component_count = self.integral.spec.component_count
+        if self.schedule.fock_shared_rys_xy and (
+            not isinstance(self.integral.spec, ShellClassSpec)
+            or self.integral.spec.name not in ("dppp", "pppp")
+            or self.integral.operator.family != OperatorFamily.FOUR_CENTER_ERI
+            or not any(
+                isinstance(item, ContractionSpec) and DensityModel.RHF in item.density
+                for item in self.integral.contractions
+            )
+            or self.integral.derivative is not None
+            or self.integral.recurrence != "rys3"
+            or self.integral.required_rys_roots != 3
+            or self.integral.consumers != frozenset((KernelConsumer.FOCK,))
+            or self.schedule.block_threads
+            != {"dppp": 192, "pppp": 96}.get(self.integral.spec.name)
+            or self.schedule.component_tile != component_count
+        ):
+            raise ValueError(
+                "shared Rys x/y requires value-only Rys3 DPPP/PPPP Fock "
+                "with the incumbent 192/96-thread mapping"
+            )
         if (
             self.schedule.kind != ScheduleKind.TILED_COMPONENTS
             and self.schedule.component_tile < component_count
