@@ -1,0 +1,101 @@
+{
+  "schema": "generativeqc.materialized-lr-fixture.v1",
+  "cases": 3120,
+  "compositions": 51,
+  "orders": [
+    3,
+    4,
+    5
+  ],
+  "pyscf": "2.14.0",
+  "numpy": "2.2.6",
+  "libcint": "/Users/xshengrui/.cache/uv/archive-v0/H412GM1zZQ0jgcux/lib/python3.12/site-packages/pyscf/lib/deps/lib/libcint.6.dylib",
+  "libcint_sha256": "325c71251b72331c6ea458d36b3513f3ef567a8530b74392bcbe5756652ab5e1",
+  "cgto": "/Users/xshengrui/.cache/uv/archive-v0/H412GM1zZQ0jgcux/lib/python3.12/site-packages/pyscf/lib/libcgto.dylib",
+  "cgto_sha256": "d72d79d45cdf3268d372649ba8843065cb39ca582b660272bfb84653a39d729d",
+  "emitted_gate": {
+    "atol": 2e-12,
+    "rtol": 2e-10
+  },
+  "component_gate": {
+    "atol": 3e-11,
+    "rtol": 3e-11
+  },
+  "device_qualification": "PENDING; no build or GPU execution",
+  "files": {
+    "fixtures.json": {
+      "sha256": "4de5810dee9e440b68d309d7d8e80094ff5b74571e48b687199dafff2a7f027a",
+      "bytes": 28926146
+    },
+    "fixtures.txt": {
+      "sha256": "f36486c49d03fa2a9369a2b8b5b48f2074ebe7ca9cb0bc362c848a06785e39b4",
+      "bytes": 25241569
+    },
+    "generated_direct_cartesian.cuh": {
+      "sha256": "7d4414f825d9d0ad27db3714459f9be2a8242127f22496f2772bdbbc250a38f9",
+      "bytes": 17253
+    },
+    "generated_direct_contraction.cuh": {
+      "sha256": "54cd8a7d74f46d4f97aa605db3c5a669622bcf9f4d8f4aff9441fa03561eb376",
+      "bytes": 12465
+    },
+    "generated_direct_eri_materialization.cuh": {
+      "sha256": "c32a8752958cc624cae764b2657f29d362c7d3a4a168d9949e8c68841b56fa19",
+      "bytes": 2517
+    },
+    "generated_direct_eri_order2.cuh": {
+      "sha256": "5c239e7d9929d929f94c28429d6eac1a486a72d37688fc03c77bb1e0befbad63",
+      "bytes": 7568
+    },
+    "generated_direct_eri_order3.cuh": {
+      "sha256": "d80a61ead1e8d8eb7c581392a3e528be0665e4b546bf42ef7acbe75c52712d40",
+      "bytes": 7025
+    },
+    "generated_direct_eri_order4.cuh": {
+      "sha256": "ecfbce4476fad40af55825e640327b398dad4158928a9844181ca99d3b3c7d14",
+      "bytes": 14056
+    },
+    "generated_direct_fock_accumulation.cuh": {
+      "sha256": "20374cba8dd336be4542e888afb62e752e14cde3eff857a2f62bf2c0abbcdd20",
+      "bytes": 13898
+    },
+    "generated_direct_order2_shell.cuh": {
+      "sha256": "86bb816e583ccc5793ace15697aece227844c70c64e8375cef2628ff0c33aad7",
+      "bytes": 14119
+    },
+    "generated_direct_pair_cache.cuh": {
+      "sha256": "97e8a240a8411080dbc1a462db70f741b81c27740fd269cd40dc1be0146c7857",
+      "bytes": 2744
+    },
+    "generated_direct_pair_order2.cuh": {
+      "sha256": "0b9bffcbb8a845927ca6a9e378f2627907238442dea679017fb7e2219ce6ae6a",
+      "bytes": 4078
+    },
+    "generated_direct_pair_order3.cuh": {
+      "sha256": "0a4c16edccc31ac506b241cb0dc7c844ca38cbebc8ffef7651cac05ca6a1eaec",
+      "bytes": 6428
+    },
+    "generated_direct_shell_class.cuh": {
+      "sha256": "1e834e8296f65995a66687e33dd9e85a572ad5fa5c185fe80cd0604f7e8934b7",
+      "bytes": 8221
+    },
+    "generated_direct_shell_pair_hermite.cuh": {
+      "sha256": "99f9f90c8280578601ef71a350797002b019f9fa80741b9090b648e71c88fabc",
+      "bytes": 4233
+    },
+    "generated_direct_source_contraction.cuh": {
+      "sha256": "f5c29f85ab26e5885802c7d960f5a7d2d9c79131be0fd48ae59d24e06d76f81f",
+      "bytes": 110644
+    }
+  },
+  "recovery": {
+    "original_failure_log": "/Users/xshengrui/Projects/generativeqc-code/h100-wb-lr-producer-phase-a-20261106/prepare-v1.log",
+    "failure_sha256": "15f20e792f376b707caea554abda6bb6a2dd1a7d558960d4c4d0e1f61786460e",
+    "cause": "Linux-only libcint.so name after all reference data/headers were completed; actual macOS pinned wheel libcint.6.dylib",
+    "oracle_repeated": false,
+    "json_text_correspondence_all_rows": true,
+    "complete_input_inventory_all_arrays_finite": true,
+    "headers_match_current_emitter": true,
+    "old_data_retained_unchanged": true
+  }
+}

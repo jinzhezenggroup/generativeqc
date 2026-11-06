@@ -1,0 +1,9 @@
+{
+  "status": "COMMIT_TREE_REVIEWED_BLOB_BINDING_PASS",
+  "commit": "1fa3ba2f9d579e868103bfd5877c83cc5d225f5d",
+  "tree": "4cb25a54dd8cad13bb03947103e30a7bb84a7144",
+  "source_review_manifest_sha256": "fd6c53ae5505aee520f2ef2892e6e84d5fbed30c7b9a383aee6d06a9ce0f71c5",
+  "committed_blob_hashes_match_all_five_reviewed_files": true,
+  "commit_binding_sha256": "b5fffaa50c65c3a270176e35f215311ec987e92c077d2d1bc32cf48aa056e30b",
+  "reduction_sha256": "c6a0f59ce45815b21a53a3c7ac9513c99c778f758a011d01c0b9570a799b493f"
+}

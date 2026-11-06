@@ -1,0 +1,35 @@
+{
+  "schema": "generativeqc.wb-lr-phase-a-review.v2",
+  "base_revision": "6987eea5259563250d1e81684ac998b727b8a513",
+  "branch": "codex/h100-wb-lr-producer-phase-a-20261106",
+  "worktree": "/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-wb-lr-producer-phase-a-20261106",
+  "files": {
+    "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": {
+      "sha256": "a3ad829c24c5ab0d3edb1996c72dc4139c60a7f7c09ca8539ca5ac73c2a0484d",
+      "bytes": 23046
+    },
+    "tools/generativeqc_validation/materialized_lr_values.py": {
+      "sha256": "e88510033bdbb4bf79b4ee6fb7d85b46a69ae670cf16d25e9f19c41dfd518eb3",
+      "bytes": 21809
+    },
+    "tests/native/test_materialized_lr_values.cu": {
+      "sha256": "0c5c28a6c218d8021d96891cf7036c98cd90e2ab1555533528fcc98841b07fae",
+      "bytes": 25467
+    },
+    "tests/python/test_materialized_lr_values.py": {
+      "sha256": "9125dbf6d4293c4a6110c34200dc43357dc582529e27d3cf63a7eca5c31330a4",
+      "bytes": 9980
+    },
+    ".agents/notes/proposed/2026-11-06-bounded-materialized-lr-value-sink.md": {
+      "sha256": "6c6f9aa5f34e04655c740d349cf3a0c17c5c0244b12f5f02025e1d6383bdcc93",
+      "bytes": 4929
+    }
+  },
+  "fixture_receipt": "/Users/xshengrui/Projects/generativeqc-code/h100-wb-lr-producer-phase-a-20261106/cuda-fixture-v2/receipt.json",
+  "fixture_receipt_sha256": "c1ee255c5eb93e52c8854eb6b987bf903155c5926e43553ae7fb799985212d1c",
+  "implemented_scope": "compiler-owned bounded fixture value sink only; no native integration",
+  "native_cuda_build": false,
+  "gpu_execution": false,
+  "commit": null,
+  "change_from_review_v1": "standalone fixture diagnostic output only: full ordinary raw values/K/visits/work, all execution gate fractions, summary-only sanitizer output, failure dumps; scientific sink/recurrence/mapping/reference bytes unchanged"
+}
