@@ -29,6 +29,17 @@ int main() {
   using generativeqc::dft::nonlocal_mixed_proposal_limit;
   using generativeqc::dft::nonlocal_proposal_iteration_limit;
   using generativeqc::dft::nonlocal_seed_iteration_limit;
+  using generativeqc::dft::admit_nonlocal_rms_handoff;
+  using generativeqc::dft::nonlocal_proposal_residual;
+  assert(admit_nonlocal_rms_handoff(true, true, true, false, false));
+  assert(!admit_nonlocal_rms_handoff(false, true, true, false, false));
+  assert(!admit_nonlocal_rms_handoff(true, false, true, false, false));
+  assert(!admit_nonlocal_rms_handoff(true, true, false, false, false));
+  assert(!admit_nonlocal_rms_handoff(true, true, true, true, false));
+  assert(!admit_nonlocal_rms_handoff(true, true, true, false, true));
+  assert(nonlocal_proposal_residual(true, 5e-6, 1.8e-4) < 1e-5);
+  assert(!(nonlocal_proposal_residual(false, 5e-6, 1.8e-4) < 1e-5));
+  assert(!(nonlocal_proposal_residual(true, std::numeric_limits<double>::quiet_NaN(), 1e-6) < 1e-5));
   constexpr auto proposal_limit =
       nonlocal_seed_iteration_limit + nonlocal_proposal_iteration_limit + 2;
   for (const unsigned target_limit : {1U, 2U, 3U, 4U, 20U, 180U, 1000U}) {
