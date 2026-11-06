@@ -762,10 +762,19 @@ between fixed-potential inner solves. Transported densities start with a target
 anchor. Provisional and full-target iterations share the caller's main SCF
 iteration budget; initialization gets no separate allowance. The existing ECP
 physical-final-closure policy retains its separate bound of four correction
-iterations. Only consecutive complete target evaluations passing the unchanged
-energy, density and physical residual gates can publish a successful state or
-forces. An already stationary target density is held for a further
+iterations. Only consecutive complete target evaluations passing the active
+physical convergence policy and canonical final-state checks can publish a
+successful state or forces. An already stationary target density is held for a further
 physical energy confirmation, instead of applying another sub-tolerance update.
+
+The existing qualified FP64 Standard full-Direct WB97M-V owner uses spin RMS,
+rather than the AO-element maximum, only to end provisional initializer/frozen
+solves at their existing tolerance. This does not change physical target energy
+or MO-gradient convergence, canonical density/force checks, fresh energy epochs,
+CDIIS resets or finite proposal/total budgets. Strict/tighter, fitted, mixed and
+other unqualified owners retain AO-maximum proposal control. Set
+`GENERATIVEQC_VV10_RMS_HANDOFF=0` to restore that control explicitly; `1` cannot
+bypass owner qualification. No GPU model or molecule-size branch is involved.
 
 Resident warm replays and unsupported spin, precision, incremental-J/K or
 budget cases retain their existing solve. A caller-selected device chunk also
@@ -773,6 +782,8 @@ keeps its existing solver. Set `GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED=0` to
 select the ordinary full-target fallback explicitly. Provisional history scopes
 and actual VV10 pair-work receipts distinguish initialization from accepted
 physical work; initialization is never a cached convergence result.
+Disabling initialization also withholds its automatic resident-LR source lease;
+that selector alone is not a resource-matched SCF operator-sequence benchmark.
 
 Strict-FP64 restricted VV10 initialization automatically admits bounded
 screened s/p/d range-ERI storage on grids of at least 65536 points, subject to
