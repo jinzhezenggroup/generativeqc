@@ -1,0 +1,155 @@
+{
+  "decision": "reject-both-controls",
+  "production_changed": false,
+  "fresh_gpu4pyscf_ranking": false,
+  "devices": {
+    "A100": {
+      "baseline": {
+        "cold_seconds": 111.89748338237405,
+        "warm_median_seconds": 15.095747768878937,
+        "cold_percent_change": 0.0,
+        "cold_iterations": 18,
+        "cold_fock_builds": 18,
+        "nonlocal_work": {
+          "provisional_focks": 13,
+          "target_focks": 5,
+          "pair_cache_probes": 4,
+          "pair_cache_hits": 1,
+          "pair_sweeps": 4
+        }
+      },
+      "minao": {
+        "cold_seconds": 116.3596620336175,
+        "warm_median_seconds": 15.108940467238426,
+        "cold_percent_change": 3.987738165652366,
+        "cold_iterations": 18,
+        "cold_fock_builds": 18,
+        "nonlocal_work": {
+          "provisional_focks": 13,
+          "target_focks": 5,
+          "pair_cache_probes": 4,
+          "pair_cache_hits": 1,
+          "pair_sweeps": 4
+        }
+      },
+      "orthogonal": {
+        "cold_seconds": 113.10263107344508,
+        "warm_median_seconds": 15.067734092473984,
+        "cold_percent_change": 1.0770105409366737,
+        "cold_iterations": 18,
+        "cold_fock_builds": 18,
+        "nonlocal_work": {
+          "provisional_focks": 13,
+          "target_focks": 5,
+          "pair_cache_probes": 4,
+          "pair_cache_hits": 1,
+          "pair_sweeps": 4
+        }
+      },
+      "combined": {
+        "cold_seconds": 116.62977001816034,
+        "warm_median_seconds": 15.120110370218754,
+        "cold_percent_change": 4.229126958660201,
+        "cold_iterations": 18,
+        "cold_fock_builds": 18,
+        "nonlocal_work": {
+          "provisional_focks": 13,
+          "target_focks": 5,
+          "pair_cache_probes": 4,
+          "pair_cache_hits": 1,
+          "pair_sweeps": 4
+        }
+      }
+    },
+    "RTX5090": {
+      "baseline": {
+        "cold_seconds": 194.03506987169385,
+        "warm_median_seconds": 14.35374990478158,
+        "cold_percent_change": 0.0,
+        "cold_iterations": 18,
+        "cold_fock_builds": 18,
+        "nonlocal_work": {
+          "provisional_focks": 13,
+          "target_focks": 5,
+          "pair_cache_probes": 4,
+          "pair_cache_hits": 1,
+          "pair_sweeps": 4
+        }
+      },
+      "orthogonal": {
+        "cold_seconds": 194.49562818557024,
+        "warm_median_seconds": 14.349935956299305,
+        "cold_percent_change": 0.2373582848610445,
+        "cold_iterations": 18,
+        "cold_fock_builds": 18,
+        "nonlocal_work": {
+          "provisional_focks": 13,
+          "target_focks": 5,
+          "pair_cache_probes": 4,
+          "pair_cache_hits": 1,
+          "pair_sweeps": 4
+        }
+      }
+    }
+  },
+  "independent_pairs": 32,
+  "worst_reference_errors": [
+    7.365959694046372e-12,
+    4.808248492693679e-07,
+    2.0076729822713258e-07
+  ],
+  "paired_errors": {
+    "A100/minao": [
+      9.473903143468002e-15,
+      9.036476011914374e-10,
+      3.824984169951878e-10
+    ],
+    "A100/orthogonal": [
+      2.3211062701496604e-13,
+      1.2593176101916015e-07,
+      6.978136559001707e-08
+    ],
+    "A100/combined": [
+      2.368475785867001e-13,
+      1.2479399380538325e-07,
+      6.946271590077273e-08
+    ],
+    "RTX5090/orthogonal": [
+      2.4632148173016805e-13,
+      1.2593200082733347e-07,
+      6.978140062125652e-08
+    ]
+  },
+  "qualification": {
+    "host_initial": {
+      "cases": 33,
+      "failures": 1,
+      "errors": 0,
+      "skips": 22
+    },
+    "host_repaired": {
+      "cases": 33,
+      "failures": 0,
+      "errors": 0,
+      "skips": 22
+    },
+    "metric_initial": {
+      "cases": 3,
+      "failures": 2,
+      "errors": 0,
+      "skips": 0
+    },
+    "metric_strict": {
+      "cases": 3,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "independent_default": {
+      "cases": 2,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    }
+  }
+}
