@@ -4,7 +4,7 @@ Native owners admit the numerical domain, exclusive output leases and stream.
 The CUDA templates only schedule/reduce those already generated pair outputs.
 """
 
-VV10_PARALLEL_PAIR_SCHEDULE_VERSION = "vv10-parallel-bilateral-warp-packet-fp64-fma-v6"
+VV10_PARALLEL_PAIR_SCHEDULE_VERSION = "vv10-parallel-bilateral-warp-packet-mixed-v5"
 
 
 def native_parallel_pair_cuda() -> str:
@@ -178,15 +178,7 @@ __global__ void parallel_pair_kernel(ParallelPairInputs input, ParallelPairOutpu
 // This coalesces partner loads/stores and replaces a warp reduction per partner
 // with register exchange. All lanes, including padded partners, must rotate;
 // only scientific pair evaluation and publication may be predicated.
-// Fused rounding is explicit and confined to this admitted FP64 consumer.
-// The incumbent template remains available for same-image endpoint controls.
-template <bool Fused>
-__device__ double pair_accumulate(double factor, double value, double previous) {
-  if constexpr (Fused) return ::fma(factor, value, previous);
-  return previous + factor * value;
-}
-
-template <bool Geometry, bool RetainScaleProofs = false, bool Fused = false>
+template <bool Geometry, bool RetainScaleProofs = false>
 __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPairOutputs output) {
   if (*input.rejected != 0) return;
   constexpr unsigned rows_per_lane = 4, tile = 32 * rows_per_lane;
@@ -247,8 +239,7 @@ __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPa
           if (partner_live && row_live[row]) {
             const double dx = point_x - row_x[row], dy = point_y - row_y[row];
             const double dz = point_z - row_z[row];
-            const double r2 = Fused ? ::fma(dz, dz, ::fma(dy, dy, dx * dx))
-                                    : dx * dx + dy * dy + dz * dz;
+            const double r2 = dx * dx + dy * dy + dz * dz;
             BilateralPairValues pair{};
             // Scale proofs travel with their own rows; only distance varies.
             bool mixed_pair = false;
@@ -264,28 +255,26 @@ __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPa
             if (mixed_pair) {
               ++mixed_pairs;
             } else {
-              pair = pair_values_vv10_bilateral<Geometry, Fused>(
+              pair = pair_values_vv10_bilateral<Geometry>(
                   r2, row_omega[row], omega, row_kappa[row], kappa);
               ++strict_pairs;
             }
-            sum[row][0] = pair_accumulate<Fused>(factor, pair.phi, sum[row][0]);
-            sum[row][1] = pair_accumulate<Fused>(factor, pair.dphi_domega, sum[row][1]);
-            sum[row][2] = pair_accumulate<Fused>(factor, pair.dphi_dkappa, sum[row][2]);
+            sum[row][0] += factor * pair.phi;
+            sum[row][1] += factor * pair.dphi_domega;
+            sum[row][2] += factor * pair.dphi_dkappa;
             if (outer != inner) {
-              partner[0] = pair_accumulate<Fused>(row_factor[row], pair.phi, partner[0]);
-              partner[1] = pair_accumulate<Fused>(row_factor[row], pair.dphi_domega_j, partner[1]);
-              partner[2] = pair_accumulate<Fused>(row_factor[row], pair.dphi_dkappa_j, partner[2]);
+              partner[0] += row_factor[row] * pair.phi;
+              partner[1] += row_factor[row] * pair.dphi_domega_j;
+              partner[2] += row_factor[row] * pair.dphi_dkappa_j;
             }
             if constexpr (Geometry) {
-              const double row_scale = -2.0 * factor * pair.dphi_dr2;
-              sum[row][3] = pair_accumulate<Fused>(row_scale, dx, sum[row][3]);
-              sum[row][4] = pair_accumulate<Fused>(row_scale, dy, sum[row][4]);
-              sum[row][5] = pair_accumulate<Fused>(row_scale, dz, sum[row][5]);
+              sum[row][3] += -2.0 * factor * pair.dphi_dr2 * dx;
+              sum[row][4] += -2.0 * factor * pair.dphi_dr2 * dy;
+              sum[row][5] += -2.0 * factor * pair.dphi_dr2 * dz;
               if (outer != inner) {
-                const double partner_scale = 2.0 * row_factor[row] * pair.dphi_dr2;
-                partner[3] = pair_accumulate<Fused>(partner_scale, dx, partner[3]);
-                partner[4] = pair_accumulate<Fused>(partner_scale, dy, partner[4]);
-                partner[5] = pair_accumulate<Fused>(partner_scale, dz, partner[5]);
+                partner[3] += 2.0 * row_factor[row] * pair.dphi_dr2 * dx;
+                partner[4] += 2.0 * row_factor[row] * pair.dphi_dr2 * dy;
+                partner[5] += 2.0 * row_factor[row] * pair.dphi_dr2 * dz;
               }
             }
           }

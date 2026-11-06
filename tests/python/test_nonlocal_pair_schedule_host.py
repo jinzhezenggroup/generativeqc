@@ -42,16 +42,7 @@ def schedule_probe(
 @pytest.mark.parametrize("count", (0, 1, 65535, 65536, 65537, 1 << 32))
 @pytest.mark.parametrize(
     "selector",
-    (
-        None,
-        "",
-        "parallel",
-        "parallel-packet",
-        "parallel-packet-fma",
-        "parallel-wide",
-        "ordered",
-        "unknown",
-    ),
+    (None, "", "parallel", "parallel-packet", "parallel-wide", "ordered", "unknown"),
 )
 def test_schedule_preference_without_device_dependency(
     schedule_probe: ct.CDLL,
@@ -67,7 +58,6 @@ def test_schedule_preference_without_device_dependency(
     expected = (
         count >= 65536
         if not selector
-        else selector
-        in ("parallel", "parallel-packet", "parallel-packet-fma", "parallel-wide")
+        else selector in ("parallel", "parallel-packet", "parallel-wide")
     )
     assert schedule_probe.prefer(count) == expected

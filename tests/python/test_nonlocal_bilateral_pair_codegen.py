@@ -14,11 +14,9 @@ if TYPE_CHECKING:
     from conftest import NativeCxx
 
 
-@pytest.fixture(scope="module", params=(False, True), ids=("ordered", "fused"))
+@pytest.fixture(scope="module")
 def bilateral_pair(
-    tmp_path_factory: pytest.TempPathFactory,
-    native_cxx: "NativeCxx",
-    request: pytest.FixtureRequest,
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: "NativeCxx"
 ) -> Any:
     """Compile the actual emitted scalar roots without any CUDA dependency."""
     root = tmp_path_factory.mktemp("vv10-bilateral-host")
@@ -27,14 +25,13 @@ def bilateral_pair(
         "#include <cmath>\nnamespace generativeqc::dft::nlc { "
         "enum class Vv10Variant { vv10, rvv10 }; }\n"
         + native_header()
-        + f"constexpr bool fused = {str(request.param).lower()};\n"
         + r"""
 extern "C" void pair(const double* x, double* out) {
   using namespace generativeqc::dft::nlc::generated;
-  const auto p=pair_values_vv10_bilateral<true, fused>(x[0],x[1],x[2],x[3],x[4]);
+  const auto p=pair_values_vv10_bilateral<true>(x[0],x[1],x[2],x[3],x[4]);
   out[0]=p.phi; out[1]=p.dphi_domega; out[2]=p.dphi_dkappa;
   out[3]=p.dphi_domega_j; out[4]=p.dphi_dkappa_j; out[5]=p.dphi_dr2;
-  const auto f=pair_values_vv10_bilateral<false, fused>(x[0],x[1],x[2],x[3],x[4]);
+  const auto f=pair_values_vv10_bilateral<false>(x[0],x[1],x[2],x[3],x[4]);
   out[6]=f.phi; out[7]=f.dphi_domega; out[8]=f.dphi_dkappa;
   out[9]=f.dphi_domega_j; out[10]=f.dphi_dkappa_j;
 }

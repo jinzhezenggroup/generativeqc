@@ -54,3 +54,31 @@ added to core-b. Ruff, Bash syntax and whitespace checks pass. Initial local
 collection failures due to absent test-environment dependencies were resolved
 using existing cached packages; no test was removed. This is scheduling and
 offline evidence validation, not a new scientific or GPU campaign.
+
+## Follow-up: cold total work still exceeds the core-b budget
+
+The first repair's PR core-b run passes in 761.52 seconds with 18,256 passed,
+5,168 skipped and 214 subtests, but this warm run has 838/955 compiler hits.
+Do not attribute that entire improvement to priority. Merge-group CI
+42137083928, job 127627899607, times out again at the 35-minute action limit
+with 886/892 compiler misses. All molecular, UKS and public hybrid Hessian
+cases now finish early and pass; four workers remain active on ordinary
+cases. Priority fixed the original tail placement but not cold total work.
+
+The normal cache is absent on the queue ref and bounded trusted-master
+snapshot discovery correctly finds none. The last three successful master CI
+runs (41961283952, 41766814271, 40997389481) have no matching core-b snapshot
+artifact. Preserve this fail-closed cold path and its trust boundary.
+
+Transfer only the complete molecular Hessian suite from its supplemental
+core-b owner to supplemental core-c. Its 13 passing cases consume 1634.1
+worker-seconds in the failed queue run. In that same run core-c completes its
+Python step in 806 seconds. The idealized four-worker increment is about
+409 seconds, providing substantial measured headroom without another runner.
+This estimate is not a hosted timing guarantee; the actual new queue remains
+the acceptance check. Preserve its fresh-frontier distribution, all scientific
+cases, ordinary modulo slots, markers, fixtures, four workers and time limits.
+The earlier opposite transfer preceded fresh-frontier scheduling and responded
+to a different historical inventory. Current core-c itself had 802/854 compiler
+misses, so its headroom is not inferred from a warm-cache run. Actual new queue
+validation is mandatory; this estimate does not promise a successful runtime.
