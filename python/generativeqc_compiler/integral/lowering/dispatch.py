@@ -102,6 +102,13 @@ def emit_shell_class_fused_cuda(
     elif target is not None and plan.kernel.target != target:
         raise ValueError("fused plan and explicit CUDA target disagree")
     selected_capabilities = frozenset(capabilities)
+    shared_xy_schedule = fock_schedule or plan.schedule
+    if shared_xy_schedule.fock_shared_rys_xy and (
+        selected_capabilities or plan.kernel.integral.derivative is not None
+    ):
+        raise ValueError(
+            "shared Rys x/y does not support mixed, streaming or work-K capabilities"
+        )
     if plan.spec != spec:
         raise ValueError("fused plan and shell specification do not match")
     if plan.schedule.kind not in (
