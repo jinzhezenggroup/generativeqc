@@ -296,7 +296,15 @@ def test_force_phase_aliases_poison_invalid_generation_then_recover(
 
 
 @pytest.mark.parametrize(
-    "schedule", (None, "ordered", "parallel", "parallel-wide", "parallel-packet")
+    "schedule",
+    (
+        None,
+        "ordered",
+        "parallel",
+        "parallel-wide",
+        "parallel-packet",
+        "parallel-packet-fma",
+    ),
 )
 @pytest.mark.parametrize("cross_stream", (False, True))
 def test_exact_pair_component_reuse_and_invalidation(

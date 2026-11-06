@@ -23,13 +23,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(
     scope="module",
-    params=(0, 4, 8, "packet", "packet-hoisted"),
+    params=(0, 4, 8, "packet", "packet-hoisted", "packet-fma"),
     ids=(
         "ordered",
         "parallel",
         "parallel-wide",
         "parallel-packet",
         "parallel-packet-hoisted",
+        "parallel-packet-fma",
     ),
 )
 def admission_probe(
@@ -59,7 +60,7 @@ def admission_probe(
     )
     directory = tmp_path_factory.mktemp("vv10-admission-device")
     cpp, library = directory / "probe.cu", directory / "probe.so"
-    use_packet = request.param in ("packet", "packet-hoisted")
+    use_packet = request.param in ("packet", "packet-hoisted", "packet-fma")
     pair_rows = request.param if request.param in (4, 8) else 4
     cpp.write_text(
         "#include <cuda_runtime.h>\n#include <cmath>\n#include <cstdint>\n"
@@ -75,6 +76,7 @@ def admission_probe(
         + f"constexpr bool use_packet = {str(use_packet).lower()};\n"
         + f"constexpr unsigned pair_rows = {pair_rows};\n"
         + f"constexpr bool retain_scale_proofs = {str(request.param == 'packet-hoisted').lower()};\n"
+        + f"constexpr bool fused = {str(request.param == 'packet-fma').lower()};\n"
         + r"""
 template<bool Geometry, bool Mask, bool Admit, Vv10Variant Variant = Vv10Variant::vv10>
 void launch(size_t n, const double* x, const uint64_t* indices,
@@ -97,7 +99,7 @@ void launch(size_t n, const double* x, const uint64_t* indices,
       const generated::ParallelPairOutputs output{out,out+n,out+2*n,out+3*n,out+6*n,error};
       generated::parallel_pair_initialize<Geometry><<<(n+127)/128,128>>>(input,output);
       if constexpr(use_packet)
-        generated::parallel_pair_packet_kernel<Geometry, retain_scale_proofs><<<8,128>>>(input,output);
+        generated::parallel_pair_packet_kernel<Geometry, retain_scale_proofs, fused><<<8,128>>>(input,output);
       else
         generated::parallel_pair_kernel<Geometry, pair_rows, pair_rows == 8><<<8,128>>>(input,output);
       generated::parallel_pair_zero_rows<<<8,128>>>(input,output);

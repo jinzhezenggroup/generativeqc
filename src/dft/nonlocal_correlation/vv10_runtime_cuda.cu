@@ -126,6 +126,7 @@ bool prefer_parallel_pairs(std::size_t npoint) {
   if (selector && *selector)
     return std::string_view(selector) == "parallel" ||
            std::string_view(selector) == "parallel-wide" ||
+           std::string_view(selector) == "parallel-packet-fma" ||
            std::string_view(selector) == "parallel-packet";
   return npoint >= 65536;
 }
@@ -438,12 +439,17 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
               <<<blocks, threads, 0, stream>>>(input, output);
           runtime::cuda_resource_check(cudaGetLastError());
           const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
-          if (!selector || !*selector || std::string_view(selector) == "parallel-packet") {
+          if (!selector || !*selector || std::string_view(selector) == "parallel-packet" ||
+              std::string_view(selector) == "parallel-packet-fma") {
             // Keep the qualified strict schedule independent of FP32 admission
             // state. Mixed packets carry each point's immutable scale proof
             // through the existing rotation instead of retesting every pair.
             if (mixed_pair_arithmetic)
               generated::parallel_pair_packet_kernel<Geometry, true>
+                  <<<680, threads, 0, stream>>>(input, output);
+            else if (!selector || !*selector ||
+                     std::string_view(selector) == "parallel-packet-fma")
+              generated::parallel_pair_packet_kernel<Geometry, false, true>
                   <<<680, threads, 0, stream>>>(input, output);
             else
               generated::parallel_pair_packet_kernel<Geometry>

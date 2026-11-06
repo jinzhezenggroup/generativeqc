@@ -93,7 +93,8 @@ def test_nonlocal_pair_generation_is_standalone_and_deterministic(
     # The runtime owns numerical failure observation, including outputs that
     # are not consumed physically but remain part of raw CPU admission.
     assert "std::isfinite" not in first
-    assert "std::fma" not in first
+    # The admitted packet has an independently qualified explicit-FMA closure;
+    # the ordered fallback roots below still retain their unfused lowering.
     # Every generated specialization uses legacy root scheduling: energy,
     # omega feature, kappa feature, then radial. The generic emitter's default
     # remains canonical depth/hash order for its other consumers.

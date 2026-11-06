@@ -177,6 +177,22 @@ def native_header() -> str:
                 "inline bool ", "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ", 1
             )
         )
+        fused_body = emit_scalar_cpp(
+            bilateral,
+            function_name=f"pair_vv10_bilateral_fma_g{int(geometry)}",
+            input_order=PAIR_INPUT_ORDER[:5],
+            output_order=output_order,
+            caller_owned_checks=True,
+            ordered_native_sums=True,
+            output_dependency_order=True,
+            fused_accumulation=True,
+        )
+        bodies.append(
+            f"// TensorIR logical hash: {bilateral.logical_hash}; explicit FP64 FMA.\n"
+            + fused_body.replace(
+                "inline bool ", "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ", 1
+            )
+        )
         mixed_bilateral = build_nonlocal_pair_program(
             "vv10",
             geometry=geometry,
@@ -317,11 +333,19 @@ struct BilateralPairValues : PairValues {
   double dphi_dkappa_j{};
 };
 
-template <bool Geometry>
+template <bool Geometry, bool Fused = false>
 GENERATIVEQC_NONLOCAL_PAIR_HD inline BilateralPairValues pair_values_vv10_bilateral(
     double r2, double wi, double wj, double ki, double kj) noexcept {
   BilateralPairValues result{};
-  if constexpr (Geometry)
+  if constexpr (Geometry && Fused)
+    pair_vv10_bilateral_fma_g1(r2, wi, wj, ki, kj, result.phi, result.dphi_domega,
+                              result.dphi_dkappa, result.dphi_domega_j,
+                              result.dphi_dkappa_j, result.dphi_dr2);
+  else if constexpr (Fused)
+    pair_vv10_bilateral_fma_g0(r2, wi, wj, ki, kj, result.phi, result.dphi_domega,
+                              result.dphi_dkappa, result.dphi_domega_j,
+                              result.dphi_dkappa_j);
+  else if constexpr (Geometry)
     pair_vv10_bilateral_g1(r2, wi, wj, ki, kj, result.phi, result.dphi_domega,
                           result.dphi_dkappa, result.dphi_domega_j,
                           result.dphi_dkappa_j, result.dphi_dr2);
