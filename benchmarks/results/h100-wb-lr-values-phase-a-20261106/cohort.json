@@ -88,5 +88,11 @@
     }
   ],
   "raw_artifact_note": "The original 43 MiB raw arrays/build streams remain in the bound owner run directory; their exact hashes and the completed CPU reduction are retained. This compact publication validates reports, not reconstructable device arrays.",
-  "raw_artifact_root": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/h100-cold/20261106-all30/wb-lr-cuda-qualification-1fa3ba2f9-v1"
+  "raw_artifact_root": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/h100-cold/20261106-all30/wb-lr-cuda-qualification-1fa3ba2f9-v1",
+  "publication_master_merge": {
+    "revision": "13c11aa026558ce437e4a9509f4e6f488017ab57",
+    "source": "VV10 SCF feature-sweep PR #3024",
+    "five_measured_source_files_changed": false,
+    "new_full_tree_H100_qualification": false
+  }
 }

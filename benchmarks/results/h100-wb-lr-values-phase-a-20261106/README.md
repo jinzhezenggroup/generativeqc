@@ -80,3 +80,8 @@ fixture and VV10 changes are separate PRs. These synthetic results establish no
 WB96 source cost, endpoint speedup, default promotion or completed all30 win.
 Any native source replay must first prove a compatible already-live primitive
 cache owner and charge mapping/preparation before a separate integration decision.
+
+Publication synchronization then merges main `13c11aa026558ce437e4a9509f4e6f488017ab57`
+(VV10 SCF feature-sweep PR #3024) normally. That upstream change touches none
+of the five measured files or this evidence directory. Their bytes remain
+source-bound to `1fa3`; no new full-tree device qualification is inferred.
