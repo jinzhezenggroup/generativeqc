@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cbs-h100-5090-7109b3d2-20261106",
+  "owner": "same-source H100 and RTX 5090 CBS measurement author; independent PR review is separate",
+  "reason": "Retain all 186 complete E+F and 26 energy-only returns, original worker verification records, build/cache diagnostics, source/core/device/allocation bindings and exact producers. Frozen scientific references and the full source inventory recover from existing immutable Git; only redundant passing local replay copies are regenerated. No source patch, threshold relaxation, unrelated evidence removal or storage-budget increase.",
+  "review_document": "benchmarks/results/cbs-h100-5090-7109b3d2-20261106/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cbs-h100-5090-7109b3d2-20261106/records-01.json.xz",
+      "family": "cbs-h100-5090-7109b3d2-20261106",
+      "bytes": 481796,
+      "sha256": "1a5b691810fb1a908523d8f658ec3791cf055688275cf9f3b0f1999905183a80",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete two-GPU scientific observations and source/build/allocation proof; CPU-only reconstruction and gate replay"
+    }
+  ]
+}
