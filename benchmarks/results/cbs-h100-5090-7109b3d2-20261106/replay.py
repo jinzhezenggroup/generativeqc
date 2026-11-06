@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import copy
 import hashlib
 import importlib.util
 import io
@@ -10,6 +11,7 @@ import json
 import lzma
 from pathlib import Path, PurePosixPath
 import subprocess
+import struct
 import sys
 import tempfile
 import tarfile
@@ -19,6 +21,40 @@ NATIVE = '94d7b0c9b4275ea7300ca9d7d237103072c0992fdc2606eba5aa229d73129b75'
 INPUT = '4370d6c4b1bf4033818f31a9fcc622d3045a33bf'
 HISTORICAL = 'benchmarks/results/cbs-routine-standard-20261025/records.json.xz'
 INPUT_SHA = '03b2722d016c13daaf6025a021de18e0ac333ebbb6efe94943c57748a57f5d3a'
+DICTIONARY = {
+    'revision': SOURCE,
+    'path': 'benchmarks/results/h100-cbs-5090-cohort-20261105/records-01.json.xz',
+    'sha256': '19155ae9345aedd015152fbf4150f3510cf1303bb4f23ddaa3b4a4c42da09747',
+}
+
+
+def restore_json(node, previous):
+    """Decode storage bits only; historical native values never certify a gate."""
+    tag = node[0]
+    if tag == 'r':
+        return copy.deepcopy(previous)
+    if tag == 'v':
+        return node[1]
+    if tag == 'f':
+        require(type(previous) is float, 'Float delta has no float dictionary value')
+        bits = struct.unpack('>Q', struct.pack('>d', previous))[0] ^ int(node[1], 16)
+        return struct.unpack('>d', struct.pack('>Q', bits))[0]
+    if tag == 'p':
+        require(isinstance(previous, dict), 'Object delta has no object dictionary')
+        result = copy.deepcopy(previous)
+        for key, value in node[1].items():
+            result[key] = restore_json(value, previous[key])
+        return result
+    if tag == 'd':
+        require(isinstance(previous, dict), 'Ordered object delta has no dictionary')
+        return {key: restore_json(value, previous.get(key)) for key, value in node[1]}
+    if tag == 'l':
+        require(isinstance(previous, list), 'List delta has no list dictionary')
+        result = copy.deepcopy(previous)
+        for index, value in node[1]:
+            result[index] = restore_json(value, previous[index])
+        return result
+    raise ValueError('Unknown storage-delta opcode')
 
 
 def require(value, message):
@@ -55,21 +91,39 @@ def main():
         require(not restored.exists(), 'Recovery destination must not exist')
         restored.mkdir(parents=True)
         names = set()
+        dictionary_raw = git(repository, 'show', SOURCE + ':' + DICTIONARY['path'])
+        require(digest(dictionary_raw) == DICTIONARY['sha256'], 'Storage dictionary differs')
+        dictionary = {}
+        for item in json.loads(lzma.decompress(dictionary_raw)):
+            if 'text' not in item:
+                continue
+            raw = item['text'].encode('utf-8')
+            require(len(raw) == item['bytes'] and digest(raw) == item['sha256'], 'Historical dictionary member differs')
+            dictionary[item['path']] = raw
+        recovered_bytes = {}
         for capsule in manifest['capsules']:
             payload = json.loads(lzma.decompress((package / capsule).read_bytes()))
+            require(payload['dictionary'] == DICTIONARY, 'Storage dictionary binding differs')
             for item in payload['files']:
                 name = item['path']
                 relative = PurePosixPath(name)
                 require(not relative.is_absolute() and '..' not in relative.parts and '\\' not in name and str(relative) == name, 'Unsafe capsule path')
                 require(name not in names, 'Duplicate capsule member')
                 names.add(name)
-                require(('text' in item) != ('base64' in item), 'Ambiguous capsule encoding')
-                raw = item['text'].encode('utf-8') if 'text' in item else base64.b64decode(item['base64'], validate=True)
+                require(sum(key in item for key in ['text', 'base64', 'json_delta']) == 1, 'Ambiguous capsule encoding')
+                if 'json_delta' in item:
+                    require(('dictionary_member' in item) != ('member_reference' in item), 'Ambiguous delta reference')
+                    previous = dictionary[item['dictionary_member']] if 'dictionary_member' in item else recovered_bytes[item['member_reference']]
+                    value = restore_json(item['json_delta'], json.loads(previous))
+                    raw = (json.dumps(value, indent=2, allow_nan=False) + '\n').encode('utf-8')
+                else:
+                    raw = item['text'].encode('utf-8') if 'text' in item else base64.b64decode(item['base64'], validate=True)
                 identity = members[name]
                 require(len(raw) == identity['bytes'] and digest(raw) == identity['sha256'], 'Capsule member differs: ' + name)
                 path = restored / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(raw)
+                recovered_bytes[name] = raw
         recovery = manifest['git_recovery']
         require(recovery == {'source-manifest.json': {'revision': SOURCE, 'format': 'git-archive-file-sha256-map.v1'}}, 'Git recovery recipe differs')
         inventory = {}
@@ -164,7 +218,7 @@ def main():
             require(counts == [73, 20, 13], 'Complete call population differs')
             # This copied verifier uses NumPy and retained independent energies;
             # it never imports the measured solver, CUDA or a compiler.
-            subprocess.run([sys.executable, '-B', str(restored / 'common/verify.py'), '--records', str(root / 'measurements'), '--output', str(root / 'recomputed-verification.json')], check=True)
+            subprocess.run([sys.executable, '-B', str(restored / 'common/verify.py'), '--records', str(root / 'measurements'), '--output', str(root / 'measurements/aggregate-verification.json')], check=True)
             subprocess.run([sys.executable, '-B', str(restored / 'verify-supplemental.py'), '--repository', str(repository), '--inputs', str(restored / 'common/inputs.json'), '--records', str(root / 'measurements'), '--output', str(root / 'recomputed-supplemental.json')], check=True)
         spec = importlib.util.spec_from_file_location('cbs_descriptive_summary', restored / 'summarize.py')
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
