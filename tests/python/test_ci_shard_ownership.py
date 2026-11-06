@@ -60,15 +60,26 @@ def _selection(
 @pytest.mark.parametrize(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
-def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("module", "owner"),
+    (
+        ("tests/python/test_df_cc_mixed_precision.py", "runtime-heavy"),
+        ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
+    ),
+)
+def test_measured_transfer_snapshot(
+    event: str, module: str, owner: str, tmp_path: Path
+) -> None:
     """Source both actual Bash variants across all CI events and shards."""
-    module = "tests/python/test_df_cc_mixed_precision.py"
     selector = ROOT / ".github/scripts/ci_select_python_shard.sh"
     content = selector.read_text(encoding="utf-8")
     addition = f"  {module}\n"
     assert content.count(addition) == 1
     old_selector = tmp_path / "original-selector.sh"
-    old_selector.write_text(content.replace(addition, "", 1), encoding="utf-8")
+    previous = content.replace(addition, "", 1)
+    if owner == "compiler-heavy":
+        previous = previous.replace(f" \\\n      {module}; do", "; do", 1)
+    old_selector.write_text(previous, encoding="utf-8")
     shutil.copyfile(
         selector.with_name("ci_prioritize_posthf_files.sh"),
         old_selector.with_name("ci_prioritize_posthf_files.sh"),
@@ -112,7 +123,7 @@ def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> 
     assert old_counts[module] == 1
     original_owners = [shard for shard in SHARDS if module in old[shard][1]]
     assert len(original_owners) == 1 and original_owners[0].startswith("core-")
-    assert [shard for shard in SHARDS if module in new[shard][1]] == ["runtime-heavy"]
+    assert [shard for shard in SHARDS if module in new[shard][1]] == [owner]
     for shard in SHARDS:
         assert old[shard][0] == new[shard][0]  # distribution
         assert old[shard][2] == new[shard][2]  # coverage
@@ -120,7 +131,7 @@ def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> 
         assert Counter(old[shard][1]) - Counter([module]) == (
             Counter(new[shard][1]) - Counter([module])
         )
-        if shard not in {*original_owners, "runtime-heavy"}:
+        if shard not in {*original_owners, owner}:
             assert old[shard][1] == new[shard][1]
 
 
@@ -382,6 +393,7 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
         ("tests/python/test_treutler_endpoints.py", "posthf"),
         ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
         ("tests/python/test_native_stationary_phased_budget.py", "runtime-heavy"),
+        ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
     ),
 )
 def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
@@ -433,6 +445,7 @@ def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
         ("tests/python/test_treutler_endpoints.py", "posthf"),
         ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
         ("tests/python/test_native_stationary_phased_budget.py", "runtime-heavy"),
+        ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
     ),
 )
 def test_measured_module_executes_once_with_one_shared_fixture_owner(
@@ -563,6 +576,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_cc_native_tensor_cpu.py",
             "test_uccsd_native.py",
             "test_uccsd_triples_fock_response.py",
+            "test_direct_lr_weighted_host.py",
         ),
         "uccsd-forces": (
             "test_wb97mv_hessian.py",
@@ -1128,12 +1142,58 @@ def test_fresh_frontier_files_keep_distinct_owners_and_ordinary_slots(
         )
 
 
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("offset", range(3))
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+def test_scalar_ecp_hessian_priority_retains_ordinary_core_ownership(
+    event: str, offset: int, presence: str, tmp_path: Path
+) -> None:
+    """Only prioritize selected cases, without pinning or shifting file owners."""
+    module = "tests/python/test_global_hybrid_ecp_hessian.py"
+    tracked = presence in {"tracked", "missing"}
+    inventory = [
+        *(f"tests/python/test_early_{index}.py" for index in range(3 + offset)),
+        *([module] if tracked else []),
+        *(f"tests/python/test_later_{index}.py" for index in range(6)),
+    ]
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in inventory:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    if presence == "untracked":
+        (tmp_path / module).touch()
+    elif presence == "missing":
+        (tmp_path / module).unlink()
+    priority = f"--ci-fresh-priority={module}"
+    selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
+    for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
+        distribution, targets, arguments = selections[shard]
+        assert distribution == "worksteal"
+        assert targets == inventory[bucket::3]
+        assert (priority in arguments) == (module in targets)
+        assert ("tools.pytest_ci_fresh_frontier" in arguments) == (module in targets)
+    assert sum(module in targets for _, targets, _ in selections.values()) == int(
+        tracked
+    )
+    assert not any(
+        module in argument
+        for _, _, arguments in selections.values()
+        for argument in arguments
+        if not argument.startswith("--ci-fresh-priority=")
+    )
+
+
 @pytest.mark.parametrize("filtered", (False, True))
 @pytest.mark.parametrize("mode", ("worksteal", "load", "serial"))
 @pytest.mark.parametrize(
     "fresh_suites",
     (
         (("test_frontier_fresh.py", 8),),
+        (("test_global_hybrid_ecp_hessian.py", 2),),
         (
             ("test_uccsd_t_lambda.py", 17),
             ("test_wb97mv_hessian.py", 10),
@@ -1220,7 +1280,8 @@ def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
     assert len(records) == (1 if mode == "serial" else 4)
     if mode == "worksteal":
         prefixes = tuple(f"{name}::" for name, _ in fresh_suites)
-        assert all(entries[0].startswith(prefixes) for entries in records)
+        first_fresh = sum(entries[0].startswith(prefixes) for entries in records)
+        assert first_fresh == min(4, sum(count for _, count in fresh_suites))
     actual = Counter(node for entries in records for node in entries)
     expected = Counter(
         f"test_frontier_ordinary.py::test_ordinary[{value}]" for value in range(32)

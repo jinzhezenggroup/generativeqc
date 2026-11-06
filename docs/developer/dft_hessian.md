@@ -173,6 +173,17 @@ Independent point/grid tests exercise both spins and changed X/C scales; this
 alone is not a public endpoint qualification; the installed endpoint,
 independent molecular, lifecycle and resource checks are also required.
 
+The low-level CPU direct full-range candidate owner also admits scalar-ECP
+RKS, while retaining all-electron RKS/UKS admission. Scalar-ECP UKS is not
+included in this candidate extension. This does not promote public scalar-ECP
+B3LYP/PBE0 Hessian capabilities. The existing effective ionic charges and
+shared ECP first/second-order sources are retained. A finite coarse/fine HVP
+validation mismatch may use one bounded finer validation grid; the returned
+HVP remains on the original native grid. Nonfinite values, exhausted resources
+and unresolved quadrature error still reject. The retained CsH qualification
+and its explicit domain limitations are documented in
+[the bounded-validation rationale](../../.agents/notes/implemented/numerics/2026-11-04-scalar-ecp-hessian-bounded-validation.md).
+
 The closed-shell nuclear-perturbation consumer follows the same rule. Its
 canonical installed owner is `generativeqc.stationary_nuclear`: metric-density
 RHS construction, occupied-orbital/density reconstruction and the single-/multi-
