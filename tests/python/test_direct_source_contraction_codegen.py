@@ -1,5 +1,6 @@
 """Retirement guards for compiler-owned Direct source contraction."""
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -130,8 +131,17 @@ def test_small_canonical_ctas_preserve_packet_offsets_and_slot_coverage() -> Non
     assert "canonical_materialized_component_lanes" in source
     assert "canonical_materialized_component_slots" in source
     assert "unsigned ComponentLanes = detail::kDirectQuartetTileSize" in source
-    assert source.count("slot * ComponentLanes + threadIdx.x") == 2
-    assert source.count("std::size_t(task.tile) * detail::kDirectQuartetTileSize") == 2
+    consumer = cpp_function_definition(source, "consume_materialized_direct_pair")
+    # Packet ordinals retain the fixed tile offset and per-owner lane stride.
+    # Value-sink map indices also use the stride, but are not packet ordinals.
+    ordinals = re.findall(r"const std::size_t ordinal\s*=\s*([^;]+);", consumer)
+    assert ordinals
+    assert all(
+        " ".join(expression.split())
+        == "std::size_t(task.tile) * detail::kDirectQuartetTileSize + "
+        "slot * ComponentLanes + threadIdx.x"
+        for expression in ordinals
+    )
     assert "__syncthreads_or(any_admitted)" in source
     native = (ROOT / "src/scf/cuda/direct_jk_kernels.cu").read_text(encoding="utf-8")
     assert "canonical_materialized_component_lanes(angular_order)" in native
@@ -153,11 +163,6 @@ def test_axis_owners_borrow_only_published_geometry() -> None:
     assert "prepare_materialized_direct_pair(batch.shell_primitive_pairs[ket]" in source
     assert "shared.bra, threadIdx.x, threadIdx.x + 1U)" in source
     assert "shared.ket, threadIdx.x, threadIdx.x + 1U)" in source
-    begin = source.index(
-        "__device__ inline void contract_materialized_direct_pair_fock("
-    )
-    end = source.index("}  // namespace generativeqc::scf::cuda_execution", begin)
-    assert (
-        source[begin:end].count("if (work) atomicAdd(&work->bra_preparations, 1ULL)")
-        == 1
-    )
+    # Exact preparation work is exercised through the production consumer in
+    # test_materialized_exchange_bridge_matches_dense_contraction, rather than
+    # inferred from the spelling or location of counter increments.
