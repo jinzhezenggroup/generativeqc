@@ -427,6 +427,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // VV10 potential. Every accepted endpoint still uses the unmodified full
   // target operator, consecutive physical energy checks and original budget.
   bool nonlocal_outer_active{}, nonlocal_frozen_stage{}, pending_nonlocal_frozen{};
+  bool nonlocal_rms_handoff{};
   // Retain an immutable nonlocal AO potential during each frozen inner solve,
   // borrowing a separate grid or using optional shared-grid storage. Its
   // generation stays at the last full target; publishing an
@@ -2631,6 +2632,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (!precision_schedule.any_lower_precision() || budget_fock) && !incremental_direct_jk &&
         !use_warm && options.max_iterations > 2;
     nonlocal_outer_active = outer_requested && nonlocal_initialization;
+    const auto* rms_handoff = std::getenv("GENERATIVEQC_VV10_RMS_HANDOFF");
+    nonlocal_rms_handoff = admit_nonlocal_rms_handoff(
+                               nonlocal_outer_active, standard_nonlocal_model,
+                               standard_convergence_active(), fitted_coulomb, fitted_exchange) &&
+                           (!rms_handoff || std::string_view(rms_handoff) == "1");
     fast_anchor_active = fast_anchor_arena && nonlocal_outer_active &&
                          configured_chunk_width() == 1 && !runtime::active_device_resource_ledger;
     fast_anchor_ready = pending_fast_delta = false;
@@ -4519,7 +4525,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
             : nonlocal_proposal_iteration_limit;
     const bool enter_nonlocal_target =
         (pending_nonlocal_seed || pending_nonlocal_frozen) &&
-        (physical.maximum_residual < nonlocal_stage_tolerance ||
+        (nonlocal_proposal_residual(nonlocal_rms_handoff, physical.residual,
+                                    physical.maximum_residual) < nonlocal_stage_tolerance ||
          mixed_warmup.target_refresh_due(mixed_stage, output.iterations, options.max_iterations) ||
          (pending_nonlocal_seed ? nonlocal_seed_iterations : nonlocal_inner_iterations) >=
              nonlocal_stage_limit ||

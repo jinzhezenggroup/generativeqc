@@ -3,6 +3,10 @@
 Status: proposed
 Date: 2026-11-06
 
+Follow-up: [measured provisional RMS handoff and rejected unrebased history transfer](../implemented/performance/2026-11-06-vv10-provisional-rms-handoff.md)
+supersedes the proposed handoff experiment below. It attributes two avoidable
+initializer Focks, not the complete native/reference cycle difference.
+
 ## Problem
 
 The retained 96-atom full-Direct GPU4PySCF endpoint converges in 10 reported

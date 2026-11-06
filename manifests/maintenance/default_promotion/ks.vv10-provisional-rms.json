@@ -1,0 +1,21 @@
+{
+  "id": "ks.vv10-provisional-rms",
+  "classification": "already-default",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_VV10_RMS_HANDOFF"
+  ],
+  "owner_issues": [2976],
+  "sources": [
+    "src/dft/application_precision.hpp",
+    "src/dft/cuda_ks.cpp"
+  ],
+  "rationale": "The existing qualified FP64 Standard full-Direct WB97M-V owner uses spin RMS only to end provisional semilocal/frozen-VV10 solves. Physical target energy/MO-gradient convergence, canonical density/force proof, fresh energy epochs, CDIIS resets and finite proposal/total budgets remain unchanged. Strict/tighter, fitted, mixed, unsupported models, device chunks and other unqualified consumers retain AO-maximum proposal control. Warm starts do not initialize these stages. Unset is the qualified default; explicit 0 rolls back. Explicit 1 cannot bypass qualification. No new persistent storage, GPU-model/size hardcoding or CPU/reference production dependency.",
+  "revisit_condition": "Require complete clean cold/warm energy+analytic-force+host-export endpoints and work counts on actual A100/RTX5090 before changing this guard. Qualify other owners independently. Approximate mixed-operator history continuation is not promoted; exact/secant-rebased reuse needs its own storage/ownership and scientific evidence. Outer-off also changes automatic LR residency, so it is not an isolated operator-sequence control.",
+  "evidence": [
+    "benchmarks/results/wb97mv-stage-handoff-20261106/README.md",
+    "benchmarks/results/wb97mv-stage-handoff-20261106/replay.py",
+    ".agents/notes/implemented/performance/2026-11-06-vv10-provisional-rms-handoff.md",
+    "tests/python/test_application_precision_admission.py",
+    "tests/python/test_wb97mv_default_convergence_cuda.py"
+  ]
+}
