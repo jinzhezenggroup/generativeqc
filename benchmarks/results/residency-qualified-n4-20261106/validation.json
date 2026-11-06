@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.scoped-qualification-validation.v1",
+  "focused_cpu": "553 passed, 3 optional scheduled cases skipped locally; those three cases passed in real Slurm job 1511",
+  "native_abi": "49 CPU-double ABI tests included in focused count; real CUDA/CUPTI headers; no GPU accessed",
+  "independent_mp2_complete_endpoints": 438,
+  "independent_mp2_max_energy_error": 4.937517061875951e-10,
+  "independent_mp2_max_force_error": 2.3215076212085295e-08,
+  "gpu_job": "1511: 10 passed (7 lineage controls + H2/LiH/water scientific captures); RHF/UHF numerical gates and v3 boundary ratchets pass; global strict-residency capture exit 2 intentionally preserved",
+  "docs": "Sphinx HTML warnings-as-errors build passed",
+  "storage": "82 MiB aggregate, 1 MiB per-file and 2 MiB incoming-change guards unchanged; exact per-member fixture migration verified; full non-test run artifacts remain ignored/local or in existing Git history",
+  "unrelated_previous_ci": "Libxc native catalog snapshot drift in core-a/package qualification; not modified by this task"
+}

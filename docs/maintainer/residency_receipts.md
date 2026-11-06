@@ -242,10 +242,16 @@ current workload. Supply the same file for `--pin` and `--capture`. The retained
 `manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1.json` is historical:
 its RHF/UHF profiles pin a rigid-translation workload and intentionally do not
 match the current internal-displacement workload. Keep that policy and its
-measurements unchanged. The command above collects current diagnostics without
-a ratchet and reports `not-configured`; it does not pass an observed-work gate.
-To enable the gate, first independently qualify and review a new matching policy,
-then pass its path with `--work-ratchet`. A mismatched policy fails closed.
+measurements unchanged. The command above collects diagnostics without a ratchet
+and reports `not-configured`; it does not pass an observed-work gate.
+For the fixed direct-FP64 H2/water/H2 qualification with tighter solver controls,
+use `--energy-tolerance 1e-12 --density-tolerance 1e-11` and
+`--work-ratchet manifests/residency_work_ratchets/hf_prepared_direct_fp64_tight.v3.json`
+for both pinning and capture. Both solver tolerances must be finite, positive,
+less than one, and supplied together. They are part of the workload identity and
+apply identically to observed CUDA, ordinary CUDA and independent CPU histories;
+they do not change the energy/force acceptance gates. Other workloads require
+independently reviewed policies. A mismatched policy fails closed.
 The whole policy SHA-256 and selected profile are pinned outside capture and
 rechecked after execution; pinning never
 learns or raises limits from the run being checked. Matching uses the complete
@@ -257,7 +263,7 @@ H2/water/H2 warm energy/force histories, not arbitrary systems or other owners.
 raw journals. It checks each selected public hot region by actual source owner
 and role, keeping successful transfer API calls, zero-byte calls, source stream
 fences, source event fences, executed transfer bytes and observed sync/event-wait
-records distinct. Policy schema v2 requires an explicit `source_event_fences`
+records distinct. Policy schemas v2/v3 require an explicit `source_event_fences`
 limit for each listed owner/role pair. Frozen v1 policies remain accepted with
 an implicit zero event-fence allowance; their original bytes and reviewed
 allowances are not rewritten or enlarged.
@@ -275,10 +281,23 @@ API provenance or source correlation faults cannot authorize the observed gate.
 With a configured policy, capture exits 1 when the gate is not within limits,
 retaining available raw histories and numerical diagnostics for review. A run
 within the observed gate still exits 2 and remains a full-residency `INCOMPLETE`,
-never `PASS` or a zero-round-trip assertion. CI/qualification must require the
+never a global `PASS` or global zero-round-trip assertion. CI/qualification must require the
 named gate explicitly, not interpret `INCOMPLETE` or absence of a report as
 approval. Changing limits requires reviewed source-matched qualification, not
 automatic baseline regeneration or file-path exemptions.
+
+Policy v3 additionally declares each permitted explicit boundary by public
+region, source owner/role/site/payload, operation kind and direction, with
+separate call/byte maxima. A same-byte replacement of a published density with
+an unreviewed scientific payload fails even when all aggregate counters match.
+Unlisted boundaries and unannotated blocking work have zero allowance. A failed
+source submission, loss or incomplete join cannot authorize the scoped result.
+`declared_resident_scopes.zero_unexpected_post_prepare_host_round_trips` applies
+only to the named owners/regions and observed explicit copies/waits. It is not
+proof of absent implicit/library blocking, graph wait execution or arbitrary
+scientific payload lineage. Those global coverage flags remain `false` and
+`zero_round_trip_assertion` remains unset. The v2 aggregate-only policy is
+retained for replay of its historical captures, not promoted to this assertion.
 
 Retained prepared-capture journals can also be re-audited without a GPU or a
 second recorder. Use the independently retained v2 capture contract and the
@@ -416,6 +435,37 @@ Annotating every observed transfer/explicit synchronization in a sampled HF
 history does not establish coverage of implicit CUDA/library blocking or actual
 graph wait execution. Dependency/wait coverage flags and the zero-round-trip
 assertion remain incomplete until their independent contracts are qualified.
+
+### Scientific DF host-transform lineage
+
+The existing private layout-2 observer also supports a source-owned
+`host_transform` marker. The native `df_metric_setup` preparation owner names its
+actual eigensolver eigenvalue download, existing completion fence, checked
+host cutoff/inverse-square-root calculation and scales upload. The upload feeds
+the existing device metric-scaling consumer. No new CUDA transfer or fence is
+inserted, and scientific equations/cutoffs are unchanged.
+
+`qualified_host_round_trips` requires explicit source-generation dependencies,
+one preceding matched D2H, a successful named fence after that download, a
+successful named host transform, and the matching H2D payload in the same
+execution/region. Cycles, aliased/missing generations, early fences, wrong sites
+and failed operations cannot be repaired by equal bytes or adjacent timestamps.
+This is a legal preparation residency break, not a ban on compatibility work
+or qualification of every DF consumer. The older generated-DF-to-host-MP2
+compatibility journals still have unknown subsequent H2D dependencies.
+
+Run `tests/python/test_cupti_df_metric_lineage.py` with
+`GENERATIVEQC_CUPTI_DF_METRIC_TEST=1` only inside a finite scheduled allocation,
+with `GENERATIVEQC_LIBRARY`, `GENERATIVEQC_CUPTI_COLLECTOR` and optionally
+`GENERATIVEQC_CUPTI_DF_METRIC_EVIDENCE` set. Supported scientific captures are
+H2/LiH/water DF-MP2 energies, checked against ordinary CUDA, native CPU and
+committed independent fixture energies. Failed endpoint captures retain their
+raw journals and original exception rather than treating an observer-fence
+failure as acceptance. CPU-only
+`tests/python/test_cupti_qualified_production_replay.py` recomputes the retained
+real scientific lineage and named resident-boundary checks. See the
+[qualification evidence](../../benchmarks/results/residency-qualified-n4-20261106/README.md)
+for source/build/allocation identities and unsupported captured workloads.
 
 **Successful collection still exits 2 (`INCOMPLETE`)**, never `PASS` for the strict
 residency auditor. Intact activity is not a complete residency receipt. Public

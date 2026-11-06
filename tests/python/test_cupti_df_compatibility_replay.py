@@ -17,16 +17,13 @@ from tools.generativeqc_posthf.fixtures import load_fixture
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-RETAINED = (
-    Path(__file__).resolve().parents[2]
-    / "benchmarks/results/residency-n4-20261106/production-captures.tar.xz"
-)
+RETAINED = Path(__file__).resolve().parents[2] / "tests/reference_data/cupti/n4-1506"
 
 
-@pytest.fixture(scope="module")
-def capture_archive() -> Iterator[tarfile.TarFile]:
+@pytest.fixture
+def capture_archive(name: str) -> Iterator[tarfile.TarFile]:
     """Read named files in memory without extracting archive paths."""
-    with tarfile.open(RETAINED, "r:xz") as archive:
+    with tarfile.open(RETAINED / (name + ".tar.xz"), "r:xz") as archive:
         yield archive
 
 

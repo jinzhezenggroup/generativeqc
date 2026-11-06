@@ -27,6 +27,7 @@ from tools.capture_prepared_allocations import workload
 from tools.cupti_source_capture import WORK_COUNTERS, summarize_sources
 from tools.cupti_source_ratchet import (
     LEGACY_SCHEMA,
+    RESIDENT_SCHEMA,
     SCHEMA,
     SCOPE,
     check_work_ratchet,
@@ -131,6 +132,103 @@ def test_independent_observed_budget_is_never_a_residency_pass(tmp_path: Path) -
     assert result["counts"][0]["counters"]["source_stream_fences"] == 1
     result["counts"][0]["max"]["d2h_bytes"] = 0
     assert (raw, activity, limits, REGIONS) == before
+
+
+def resident_policy() -> dict[str, Any]:
+    """Pin named boundaries independently of the candidate's byte totals."""
+    value = policy()
+    value["schema"] = RESIDENT_SCHEMA
+    value["profiles"][0]["resident_boundaries"] = [
+        {
+            "region": "energy-warm",
+            "owner": "hf_bucket",
+            "role": "publication",
+            "site": "hf.results",
+            "payload": "density",
+            "kind": "transfer",
+            "direction": "d2h",
+            "max_calls": 1,
+            "max_bytes": 128,
+        },
+        {
+            "region": "energy-warm",
+            "owner": "hf_bucket",
+            "role": "publication",
+            "site": "hf.results-fence",
+            "payload": "none",
+            "kind": "stream_sync",
+            "direction": "none",
+            "max_calls": 1,
+            "max_bytes": 0,
+        },
+    ]
+    return value
+
+
+def test_resident_scope_requires_names_not_just_equal_byte_counts(
+    tmp_path: Path,
+) -> None:
+    raw, activity = fixture()
+    limits = selected(tmp_path, resident_policy())
+    result = check_work_ratchet(limits, raw, activity, REGIONS, CASE)
+    assert result["status"] == "WITHIN_OBSERVED_RATCHET"
+    assert (
+        result["declared_resident_scopes"][
+            "zero_unexpected_post_prepare_host_round_trips"
+        ]
+        is True
+    )
+    assert result["zero_round_trip_assertion"] is None
+    assert result["residency_status"] == "INCOMPLETE"
+    raw["catalog"]["payload"]["4"] = "unexpected-scientific-host-staging"
+    altered = check_work_ratchet(limits, raw, activity, REGIONS, CASE)
+    assert summarize_sources(raw, activity, REGIONS)["source_annotations_intact"]
+    assert altered["counts"] == result["counts"]
+    assert altered["status"] == "VIOLATION"
+    assert (
+        altered["declared_resident_scopes"][
+            "zero_unexpected_post_prepare_host_round_trips"
+        ]
+        is False
+    )
+    assert altered["zero_round_trip_assertion"] is None
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing", "duplicate", "negative", "unknown-region"]
+)
+def test_resident_boundary_contract_validation(tmp_path: Path, mutation: str) -> None:
+    value = resident_policy()
+    boundaries = value["profiles"][0]["resident_boundaries"]
+    if mutation == "missing":
+        boundaries.clear()
+    if mutation == "duplicate":
+        boundaries.append(dict(boundaries[0]))
+    if mutation == "negative":
+        boundaries[0]["max_calls"] = -1
+    if mutation == "unknown-region":
+        boundaries[0]["region"] = "unreviewed"
+    with pytest.raises(InvalidReceipt):
+        selected(tmp_path, value)
+
+
+def test_failed_resident_submission_cannot_grant_a_scoped_assertion(
+    tmp_path: Path,
+) -> None:
+    raw, activity = fixture()
+    for row in raw["records"]:
+        if row["kind"] == 2:
+            row["status"] = 1
+    result = check_work_ratchet(
+        selected(tmp_path, resident_policy()), raw, activity, REGIONS, CASE
+    )
+    assert result["status"] == "INCOMPLETE"
+    assert (
+        result["declared_resident_scopes"][
+            "zero_unexpected_post_prepare_host_round_trips"
+        ]
+        is None
+    )
 
 
 @pytest.mark.parametrize("mode", ["publication", "iteration", "tile", "extra-fence"])

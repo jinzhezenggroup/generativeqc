@@ -5,6 +5,10 @@ or issue-closeout claim. Its baseline is `1affb86a7`; the exact native candidate
 patch, pullback/library SHA-256 identities, compiler, build configuration,
 thread/affinity settings and each raw complete endpoint sample are included.
 
+The later [six-site qualification](../mp2-six-site-20261106/README.md) supplies
+final measured retention dispositions and matched helper controls; the scoped
+claims and measurements in this earlier snapshot remain historical.
+
 - The actual common-pullback probe compares the prior compact-first-only source,
   the new compact second buffer and the full staged fallback. The first-only
   source is uninstrumented, so its accumulation counters are explicitly unknown.

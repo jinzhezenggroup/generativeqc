@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "mp2-six-site-20261106",
+  "owner": "mp2-six-site-20261106",
+  "reason": "Compact actual six-variant native tensor/oracle, accumulation and simultaneous-allocation records required to distinguish bounded retention from recomputation. Full build/run bundles remain ignored; no scientific or storage guard is relaxed.",
+  "review_document": "benchmarks/results/mp2-six-site-20261106/README.md",
+  "files": [
+    {
+      "bytes": 229764,
+      "classification": "required-compact-accepted-evidence",
+      "family": "mp2-six-site-20261106",
+      "path": "benchmarks/results/mp2-six-site-20261106/component.json.xz",
+      "role": "raw-component-work-storage-and-independent-oracle-values",
+      "sha256": "9852440c1b7ccad3ee8fd43a08fca2a388c44e7ac9b925439372fa4ccdf04d3e"
+    }
+  ]
+}

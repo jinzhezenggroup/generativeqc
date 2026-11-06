@@ -3,6 +3,21 @@
 These are source-bound observations and deliberately synthetic controls, not a
 full residency PASS, endpoint speedup, or closeout of issues #1626/#1629.
 
+## Later qualification and lossless storage migration
+
+The text below describes this historical measurement, not the subsequent
+[qualified campaign](../residency-qualified-n4-20261106/README.md).
+`qualification.json` is now losslessly stored as `qualification.json.xz`.
+The oversized mixed production archive's live CPU replay inputs move unchanged
+to per-case permanent fixtures in `tests/reference_data/cupti/n4-1506/`.
+Full original archives/source inventory remain recoverable from Git commit
+`12d5142a3c0c15d803704bfa2a4d6c8765b1ab1e` and ignored local artifacts; references
+to their original names below describe those historical bundles. The exact
+member/container hashes and recovery paths are in
+`manifests/evidence_migrations/mp2-residency-20261106.json`. No numerical result
+or acceptance gate is changed. The storage migration keeps the existing 82 MiB
+aggregate and 1 MiB per-file limits, rather than raising them for run dumps.
+
 ## Source and allocation
 
 - Source commit: `1affb86a7a34647a4491154555493b53d301e1a1`.

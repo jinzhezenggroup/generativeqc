@@ -124,3 +124,15 @@ PYTHONPATH=python:. python -m pytest -q tests/python/test_cupti_source_ratchet.p
 Revisit producer fusion only with retained reuse/work evidence and independent
 complete-endpoint acceptance; revisit residency acceptance only with actual
 source-owned scientific links and qualified graph/implicit-wait coverage.
+
+## Subsequent qualification
+
+The remaining-scope statements above describe the initial campaign. The later
+[six-site decision](2026-11-06-mp2-six-site-dispositions.md) supplies all six
+measured retention dispositions with matched helper controls, complete endpoints
+and simultaneous storage. The
+[scientific lineage decision](../architecture/2026-11-06-scientific-df-residency-lineage.md)
+supplies actual metric host-transform links and named HF replay-boundary
+qualification. Historical failed records are not rewritten; global implicit/
+graph-wait coverage remains unqualified even when the declared observed scope
+passes its own contract.

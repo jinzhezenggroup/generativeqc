@@ -1,0 +1,18 @@
+{
+  "source_commit": "12d5142a3c0c15d803704bfa2a4d6c8765b1ab1e",
+  "source_tree": "6412823832ea0cb532972b57fa441230bea33aa4",
+  "source_patch_sha256": "5baa2af0caae61035cee3852af6acac3dd2a0d5e9b774d2a33652b2f47647fb7",
+  "allocation": "Slurm job 1511; n4/node4; main gpu:5090:1; finite 15 min",
+  "previous_attempts": [
+    "1509 harness failure",
+    "1510 F-HeH full SCF CUPTI failure; not qualified"
+  ],
+  "native_library_sha256": "20457bdee1b33294b9d8bb416fde59b07453009f529de329681e69f726dd0401",
+  "native_build_and_capture_input_equivalence": {
+    "build_snapshot_tree": "73d2124448a4707a1ffa4b7716f262211d113f77",
+    "capture_snapshot_tree": "6412823832ea0cb532972b57fa441230bea33aa4",
+    "changed_native_build_inputs": [],
+    "collector_source_identical": true
+  },
+  "patch_reconstructed_tree": "6412823832ea0cb532972b57fa441230bea33aa4"
+}

@@ -152,11 +152,13 @@ void replay(int count) {{
     {prefix}::residency_memcpy_async(execution, role, site, payload, host, device, bytes, kind, stream);
     {prefix}::residency_memcpy(execution, role, site, payload, host, device, bytes, kind);
     {prefix}::residency_upload(execution, role, site, payload, device, host, bytes, stream);
+    {prefix}::df_metric_memcpy_async(execution, site, payload, device, host, bytes, kind, stream);
     {prefix}::residency_stream_synchronize(execution, role, site, stream);
   }}
 }}
 """
     assert rules(source) == [
+        "loop-transfer",
         "loop-transfer",
         "loop-transfer",
         "loop-transfer",
