@@ -1,0 +1,459 @@
+{
+  "decision": "default guarded provisional RMS handoff; retain operator-history resets",
+  "production_changed": true,
+  "fresh_gpu4pyscf_ranking": false,
+  "independent_pairs": 56,
+  "worst_reference_errors": [
+    8.981260180007666e-12,
+    1.1363991303525722e-06,
+    4.754376115399116e-07
+  ],
+  "records": {
+    "A100/continuous": {
+      "complete": false,
+      "status": "running",
+      "process_exit_code": 124,
+      "timeboxed": true,
+      "completed_physical_observations": 8,
+      "last_observation": {
+        "owner": 1,
+        "epoch": 1,
+        "iteration": 8,
+        "scope": 0,
+        "ao_rms": 5.379077960639786e-07,
+        "ao_max": 1.4127012375075854e-05,
+        "mo_gradient": 0.0002002348382746724,
+        "density_change": 8.340192629457155e-07,
+        "energy_change": 1.5873886877566786e-06
+      },
+      "accuracy_qualified": false
+    },
+    "A100/baseline": {
+      "complete": true,
+      "cold_seconds": 111.94774618372321,
+      "warm_seconds": [
+        15.112418968230486
+      ],
+      "warm_median_seconds": 15.112418968230486,
+      "focks": 18,
+      "nonlocal_work": {
+        "provisional_focks": 13,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        2,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        7.13858601860314e-12,
+        3.552124336891893e-07,
+        1.557065921719957e-07
+      ],
+      "accuracy_qualified": true
+    },
+    "A100/rms": {
+      "complete": true,
+      "cold_seconds": 108.28634520620108,
+      "warm_seconds": [
+        15.112088475376368
+      ],
+      "warm_median_seconds": 15.112088475376368,
+      "focks": 16,
+      "nonlocal_work": {
+        "provisional_focks": 11,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        0,
+        2,
+        0,
+        2,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        8.981260180007666e-12,
+        1.0464820752176252e-06,
+        4.754375945980917e-07
+      ],
+      "accuracy_qualified": true
+    },
+    "A100/combined": {
+      "complete": true,
+      "cold_seconds": 107.98525976017118,
+      "warm_seconds": [
+        15.039265859872103
+      ],
+      "warm_median_seconds": 15.039265859872103,
+      "focks": 16,
+      "nonlocal_work": {
+        "provisional_focks": 12,
+        "target_focks": 4,
+        "pair_cache_probes": 3,
+        "pair_cache_hits": 0,
+        "pair_sweeps": 4
+      },
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        2,
+        2,
+        0,
+        2,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        6.83068416644043e-12,
+        2.071715197171642e-07,
+        7.768236641960955e-08
+      ],
+      "accuracy_qualified": true
+    },
+    "A100/history": {
+      "complete": true,
+      "cold_seconds": 119.20741741731763,
+      "warm_seconds": [
+        15.153363328427076
+      ],
+      "warm_median_seconds": 15.153363328427076,
+      "focks": 23,
+      "nonlocal_work": {
+        "provisional_focks": 19,
+        "target_focks": 4,
+        "pair_cache_probes": 3,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 3
+      },
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        0,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        8.2754543958193e-12,
+        1.1363991303525722e-06,
+        4.5191328773387897e-07
+      ],
+      "accuracy_qualified": true
+    },
+    "RTX5090/continuous": {
+      "complete": false,
+      "status": "running",
+      "process_exit_code": 124,
+      "timeboxed": true,
+      "completed_physical_observations": 7,
+      "last_observation": {
+        "owner": 1,
+        "epoch": 1,
+        "iteration": 7,
+        "scope": 0,
+        "ao_rms": 5.042160563625567e-06,
+        "ao_max": 0.00018727076690039368,
+        "mo_gradient": 0.0020092823651618992,
+        "density_change": 4.750033046550425e-06,
+        "energy_change": 2.6791823474259364e-05
+      },
+      "accuracy_qualified": false
+    },
+    "RTX5090/baseline": {
+      "complete": true,
+      "cold_seconds": 193.71604359522462,
+      "warm_seconds": [
+        14.316116116940975,
+        14.31481109932065,
+        14.33689196780324
+      ],
+      "warm_median_seconds": 14.316116116940975,
+      "focks": 18,
+      "nonlocal_work": {
+        "provisional_focks": 13,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        2,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        7.119638212316204e-12,
+        3.5521240793201514e-07,
+        1.5570659140170549e-07
+      ],
+      "accuracy_qualified": true
+    },
+    "A100-clean/baseline": {
+      "complete": true,
+      "cold_seconds": 111.88270738720894,
+      "warm_seconds": [
+        15.122251886874437,
+        15.021796077489853,
+        15.002935837954283
+      ],
+      "warm_median_seconds": 15.021796077489853,
+      "focks": 18,
+      "nonlocal_work": {
+        "provisional_focks": 13,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        2,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        7.119638212316204e-12,
+        3.552124656636124e-07,
+        1.5570659839314084e-07
+      ],
+      "accuracy_qualified": true
+    },
+    "A100-clean/default": {
+      "complete": true,
+      "cold_seconds": 108.18595892563462,
+      "warm_seconds": [
+        15.216158326715231,
+        15.034534063190222,
+        14.988108169287443
+      ],
+      "warm_median_seconds": 15.034534063190222,
+      "focks": 16,
+      "nonlocal_work": {
+        "provisional_focks": 11,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        0,
+        2,
+        0,
+        2,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        8.981260180007666e-12,
+        1.0464819970579242e-06,
+        4.754376115399116e-07
+      ],
+      "accuracy_qualified": true
+    },
+    "RTX5090-clean/baseline": {
+      "complete": true,
+      "cold_seconds": 193.6800820492208,
+      "warm_seconds": [
+        14.291802868247032,
+        14.299160961061716,
+        14.309734232723713
+      ],
+      "warm_median_seconds": 14.299160961061716,
+      "focks": 18,
+      "nonlocal_work": {
+        "provisional_focks": 13,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        2,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        7.1101643091727356e-12,
+        3.5521261487758693e-07,
+        1.5570659294740662e-07
+      ],
+      "accuracy_qualified": true
+    },
+    "RTX5090-clean/default": {
+      "complete": true,
+      "cold_seconds": 189.37963501736522,
+      "warm_seconds": [
+        14.375611960887909,
+        14.31037538126111,
+        14.340793784707785
+      ],
+      "warm_median_seconds": 14.340793784707785,
+      "focks": 16,
+      "nonlocal_work": {
+        "provisional_focks": 11,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        0,
+        2,
+        0,
+        2,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        8.981260180007666e-12,
+        1.0464819366617917e-06,
+        4.754375899231872e-07
+      ],
+      "accuracy_qualified": true
+    }
+  },
+  "clean_paired": {
+    "A100-clean": {
+      "cold_improvement_percent": 3.3041285359500905,
+      "paired_call_ratios": [
+        0.9669587146404991,
+        1.0062098185206332,
+        1.0008479668898886,
+        0.9990116821916062
+      ],
+      "within_declared_guard": true
+    },
+    "RTX5090-clean": {
+      "cold_improvement_percent": 2.220386828813248,
+      "paired_call_ratios": [
+        0.9777961317118675,
+        1.005864137185035,
+        1.000784271205138,
+        1.0021705191360608
+      ],
+      "within_declared_guard": true
+    }
+  },
+  "causal_initializer_focks_saved": 2
+}

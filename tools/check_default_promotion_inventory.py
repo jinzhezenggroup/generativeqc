@@ -765,6 +765,7 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
         )
     )
     names.extend(re.findall(r'"(GENERATIVEQC_KS_EARLY_FINAL_PROBE)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_VV10_RMS_HANDOFF)"', source))
     names.extend(
         re.findall(
             r'"(GENERATIVEQC_KS_(?:RANGE_)?(?:HOST|DISK)_(?:MAX_BYTES|TILE_BYTES|BUCKET_MASK))"',

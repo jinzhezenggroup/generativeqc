@@ -34,6 +34,24 @@ inline constexpr unsigned nonlocal_proposal_iteration_limit = 16;
  * to a more accurate solution of the deliberately incomplete seed operator. */
 inline constexpr unsigned nonlocal_seed_iteration_limit = 11;
 
+/** Only the independently qualified FP64 Standard Direct owner changes proposals. */
+inline constexpr bool admit_nonlocal_rms_handoff(bool outer, bool nonlocal_model,
+                                                 bool standard_convergence, bool fitted_coulomb,
+                                                 bool fitted_exchange) noexcept {
+  return outer && nonlocal_model && standard_convergence && !fitted_coulomb && !fitted_exchange;
+}
+
+/** Select progress of a provisional operator, never target stationarity.
+ * Qualified Standard full-Direct VV10 owners use their spin RMS to avoid
+ * oversolving temporary seed/frozen problems for isolated AO outliers. Strict
+ * and unqualified owners retain their original AO-element maximum; both
+ * policies still require fresh physical energy/MO and canonical E/F proofs.
+ */
+inline double nonlocal_proposal_residual(bool normalized, double residual,
+                                         double maximum_residual) noexcept {
+  return normalized ? residual : maximum_residual;
+}
+
 /** Bound one initializer, one mixed target, and one frozen-potential proposal.
  * Two iterations remain reserved for fresh strict targets. The provisional
  * inner residual selects a precision handoff, never physical convergence. */
