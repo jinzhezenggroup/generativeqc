@@ -4,7 +4,7 @@ Native owners admit the numerical domain, exclusive output leases and stream.
 The CUDA templates only schedule/reduce those already generated pair outputs.
 """
 
-VV10_PARALLEL_PAIR_SCHEDULE_VERSION = "vv10-parallel-bilateral-warp-packet-mixed-v5"
+VV10_PARALLEL_PAIR_SCHEDULE_VERSION = "vv10-parallel-bilateral-warp-packet-scf-v6"
 
 
 def native_parallel_pair_cuda() -> str:
@@ -178,8 +178,10 @@ __global__ void parallel_pair_kernel(ParallelPairInputs input, ParallelPairOutpu
 // This coalesces partner loads/stores and replaces a warp reduction per partner
 // with register exchange. All lanes, including padded partners, must rotate;
 // only scientific pair evaluation and publication may be predicated.
-template <bool Geometry, bool RetainScaleProofs = false>
+template <bool Geometry, bool RetainScaleProofs = false,
+          bool StrictFeatures = false, bool ArithmeticCensus = true>
 __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPairOutputs output) {
+  static_assert(!StrictFeatures || (!Geometry && !RetainScaleProofs));
   if (*input.rejected != 0) return;
   constexpr unsigned rows_per_lane = 4, tile = 32 * rows_per_lane;
   constexpr unsigned fields = Geometry ? 6 : 3;
@@ -243,7 +245,10 @@ __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPa
             BilateralPairValues pair{};
             // Scale proofs travel with their own rows; only distance varies.
             bool mixed_pair = false;
-            if constexpr (RetainScaleProofs) {
+            if constexpr (StrictFeatures) {
+              pair = pair_values_vv10_bilateral_scf(
+                  r2, row_omega[row], omega, row_kappa[row], kappa);
+            } else if constexpr (RetainScaleProofs) {
               mixed_pair = ((live & row_state[row]) & 2) && fp32_pair_radius_domain(r2);
               if (mixed_pair)
                 pair = pair_values_vv10_bilateral_fp32<Geometry>(
@@ -252,12 +257,14 @@ __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPa
               mixed_pair = input.mixed_pair_arithmetic && try_pair_values_vv10_bilateral_fp32<Geometry>(
                   r2, row_omega[row], omega, row_kappa[row], kappa, pair);
             }
-            if (mixed_pair) {
-              ++mixed_pairs;
-            } else {
-              pair = pair_values_vv10_bilateral<Geometry>(
-                  r2, row_omega[row], omega, row_kappa[row], kappa);
-              ++strict_pairs;
+            if constexpr (!StrictFeatures) {
+              if (!mixed_pair)
+                pair = pair_values_vv10_bilateral<Geometry>(
+                    r2, row_omega[row], omega, row_kappa[row], kappa);
+            }
+            if constexpr (ArithmeticCensus) {
+              if (mixed_pair) ++mixed_pairs;
+              else ++strict_pairs;
             }
             sum[row][0] += factor * pair.phi;
             sum[row][1] += factor * pair.dphi_domega;
@@ -309,7 +316,7 @@ __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPa
       }
     }
   }
-  if (input.arithmetic_work) {
+  if constexpr (ArithmeticCensus) if (input.arithmetic_work) {
     atomicAdd(reinterpret_cast<unsigned long long*>(input.arithmetic_work), mixed_pairs);
     atomicAdd(reinterpret_cast<unsigned long long*>(input.arithmetic_work + 1), strict_pairs);
   }

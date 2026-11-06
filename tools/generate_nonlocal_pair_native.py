@@ -16,6 +16,7 @@ from generativeqc_compiler.method.nonlocal_pair import (
     NONLOCAL_PAIR_MIXED_VERSION,
     NONLOCAL_PAIR_RATIONAL_VERSION,
     NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION,
+    NONLOCAL_PAIR_SHARED_RECIPROCAL_VERSION,
     PAIR_INPUT_ORDER,
     PAIR_OUTPUT_ORDER,
     ROW_FEATURE_INPUT_ORDER,
@@ -196,6 +197,32 @@ def native_header() -> str:
                 scalar_type="float",
             ).replace("inline bool ", "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ", 1)
         )
+    scf_pair = build_nonlocal_pair_program(
+        "vv10",
+        geometry=False,
+        rational_derivatives=True,
+        reciprocal_energy=True,
+        partner_features=True,
+        shared_reciprocal_derivatives=True,
+    )
+    bodies.append(
+        f"// TensorIR logical hash: {scf_pair.logical_hash}\n"
+        + emit_scalar_cpp(
+            scf_pair,
+            function_name="pair_vv10_bilateral_scf",
+            input_order=PAIR_INPUT_ORDER[:5],
+            output_order=(
+                "phi",
+                "dphi_domega",
+                "dphi_dkappa",
+                "dphi_domega_j",
+                "dphi_dkappa_j",
+            ),
+            caller_owned_checks=True,
+            ordered_native_sums=True,
+            output_dependency_order=True,
+        ).replace("inline bool ", "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ", 1)
+    )
     row = build_nonlocal_row_feature_program()
     row_body = emit_scalar_cpp(
         row,
@@ -233,6 +260,7 @@ namespace generativeqc::dft::nlc::generated {
         + f'inline constexpr const char* nonlocal_pair_lowering_version = "{NONLOCAL_PAIR_LOWERING_VERSION}";\n'
         + f'inline constexpr const char* nonlocal_pair_rational_version = "{NONLOCAL_PAIR_RATIONAL_VERSION}";\n'
         + f'inline constexpr const char* nonlocal_pair_admitted_version = "{NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION}";\n'
+        + f'inline constexpr const char* nonlocal_pair_shared_reciprocal_version = "{NONLOCAL_PAIR_SHARED_RECIPROCAL_VERSION}";\n'
         + f'inline constexpr const char* nonlocal_pair_mixed_version = "{NONLOCAL_PAIR_MIXED_VERSION}";\n'
         + """
 struct PairValues {
@@ -329,6 +357,16 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline BilateralPairValues pair_values_vv10_bilate
     pair_vv10_bilateral_g0(r2, wi, wj, ki, kj, result.phi, result.dphi_domega,
                           result.dphi_dkappa, result.dphi_domega_j,
                           result.dphi_dkappa_j);
+  return result;
+}
+
+/** Strict SCF-only closure on the existing admitted positive denominator domain.
+ * Geometry and mixed arithmetic keep their independently qualified roots. */
+GENERATIVEQC_NONLOCAL_PAIR_HD inline BilateralPairValues pair_values_vv10_bilateral_scf(
+    double r2, double wi, double wj, double ki, double kj) noexcept {
+  BilateralPairValues result{};
+  pair_vv10_bilateral_scf(r2, wi, wj, ki, kj, result.phi, result.dphi_domega,
+      result.dphi_dkappa, result.dphi_domega_j, result.dphi_dkappa_j);
   return result;
 }
 
