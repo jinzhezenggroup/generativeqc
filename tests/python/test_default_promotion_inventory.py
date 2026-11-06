@@ -45,6 +45,19 @@ def test_current_default_promotion_inventory_is_complete() -> None:
     assert len(payload["entries"]) >= 10
 
 
+def test_shared_force_grid_control_requires_registration() -> None:
+    """A device-work policy cannot become an unowned performance default."""
+    payload = _payload()
+    control = "dft-policy:GENERATIVEQC_STATIONARY_SHARED_GRID"
+    payload["entries"] = [
+        entry for entry in payload["entries"] if control not in entry["controls"]
+    ]
+    assert any(
+        "unregistered audited controls" in error and control in error
+        for error in validate_inventory(payload, root=ROOT)
+    )
+
+
 def test_occupied_xc_inventory_tracks_automatic_admission() -> None:
     """The public default must not remain documented as an opt-in experiment."""
     entry = next(
