@@ -152,6 +152,26 @@ fields gave a component win but no A100 endpoint benefit: cold
 reference gate was not completed, and missing UKS Python AOT artifacts prevented
 the supplemental UKS/sanitizer attempt; neither is claimed as passed.
 
+## Post-qualification typing fix
+
+PR #3024 initially fails `ty==0.0.82`: the optional reciprocal IR node is
+not narrowed by the separately validated boolean policies. Construct the node
+unconditionally; unreachable IR nodes are not emitted. A one-off comparison of
+the complete generated `native_header()` before and after this fix is byte
+identical, SHA-256
+`54a9b794e2262859984e7bf38afd4dd2fadab22d4cf773974a472f2b95edf1f6`.
+The pinned CI type checker passes, as do424 host cases (two compiler-dependent
+skips), compiler ownership and default-promotion audits.
+
+The checked native source identity changes to
+`dfb92b1b85e02d5823a275bd5bc4bc3f45980f332fe31b093eef0db600805381`.
+The measured images and their original source identities above are retained
+unchanged: no new GPU run or performance result is inferred from this typing
+fix. `post_qualification_typing_fix` in the evidence bundle preserves the
+one-off equality receipt and validation logs, not a permanent source-pinning
+test. Generated catalog identities are refreshed without qualifying stale
+Libxc campaigns.
+
 ## Replay
 
 ```bash

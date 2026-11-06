@@ -280,7 +280,7 @@ def build_nonlocal_pair_program(
         # A unit numerator selects the compiler's FP64 reciprocal lowering.
         # The admitted domain keeps both reciprocal and product normal/finite;
         # the extra rounding is deliberate and independently qualified.
-        energy_reciprocal = divide(one, denominator) if reciprocal_energy else None
+        energy_reciprocal = divide(one, denominator)
         phi = (
             multiply(minus_three_halves, energy_reciprocal)
             if reciprocal_energy

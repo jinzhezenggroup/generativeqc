@@ -74,6 +74,18 @@ integration observations with the original same-image paired timing. The A100
 submission transport timeout is audited as an already-completed allocation;
 no duplicate work is submitted.
 
+PR #3024's initial type check rejects an optional reciprocal IR node even
+though policy validation guarantees its presence whenever consumed. Construct
+the node unconditionally instead of weakening the type check. A one-off full
+`native_header()` comparison before/after is byte identical (SHA-256
+`54a9b794e2262859984e7bf38afd4dd2fadab22d4cf773974a472f2b95edf1f6`): dead
+IR nodes do not become extra runtime divisions. The checked native source
+identity nevertheless changes to `dfb92b1b...`; preserve all measured source
+and ELF identities, record the equality proof separately, and refresh generated
+catalog metadata rather than relabeling old GPU runs. Pinned `ty==0.0.82` and
+424 focused host cases pass (two explicit compiler-dependent skips). No repeated
+dual-card timing is needed for this code-generation-neutral typing fix.
+
 ## Rejected alternatives and failed gates
 
 Strict specialization alone improves the component roughly 6.8% on A100 but
