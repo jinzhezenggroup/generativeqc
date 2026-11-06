@@ -145,16 +145,16 @@ class Program:
         """Return a detached JSON snapshot, including nested lists/maps."""
         return json.loads(self._provenance_json)
 
-    @property
+    @cached_property
     def nodes(self) -> tuple[Node, ...]:
-        """Deterministic dependency order independent of builder/dict insertion."""
+        """Retain deterministic metadata for this immutable graph, never feed data."""
         nodes = _topological((*self.outputs.values(), *self.definitions))
         hashes, depth = node_hashes(nodes), {}
         for node in nodes:
             depth[node] = 1 + max((depth[n] for n in node.inputs), default=-1)
         return tuple(sorted(nodes, key=lambda n: (depth[n], hashes[n])))
 
-    @property
+    @cached_property
     def live_nodes(self) -> tuple[Node, ...]:
         """Return output-reachable nodes through shared compiler liveness."""
         nodes = self.nodes
@@ -199,9 +199,9 @@ class Program:
             }
         )
 
-    @property
-    def debug_names(self) -> dict[Node, str]:
-        """Stable, source-safe content names with duplicate occurrence suffixes."""
+    @cached_property
+    def _debug_names(self) -> Mapping[Node, str]:
+        """Retain immutable content names without rehashing every tensor action."""
         hashes = node_hashes(self.nodes)
         counts, result = {}, {}
         for node in self.nodes:
@@ -209,7 +209,12 @@ class Program:
             count = counts.get(digest, 0)
             counts[digest] = count + 1
             result[node] = f"n_{digest}_{count}"
-        return result
+        return MappingProxyType(result)
+
+    @property
+    def debug_names(self) -> dict[Node, str]:
+        """Return detached names; caller edits cannot poison later executions."""
+        return dict(self._debug_names)
 
     def to_payload(self) -> dict:
         """Persist replayable equations, conventions, hashes, and provenance."""

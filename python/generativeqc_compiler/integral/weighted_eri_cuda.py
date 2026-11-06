@@ -477,8 +477,15 @@ def emit_order4_weighted_header() -> str:
     coefficient, or queue policy belongs in this compiler boundary. The caller
     supplies Boys moments and recovers the fourth center by translation.
     """
-    return _emit_weighted_force_classes(
-        ((1, 1, 1, 1), (2, 0, 1, 1), (2, 0, 2, 0), (2, 1, 1, 0), (2, 2, 0, 0))
+    classes = (
+        (1, 1, 1, 1),
+        (2, 0, 1, 1),
+        (2, 0, 2, 0),
+        (2, 1, 1, 0),
+        (2, 2, 0, 0),
+    )
+    return _emit_weighted_force_classes(classes) + _emit_pair_separable_force_classes(
+        classes
     )
 
 
@@ -488,29 +495,48 @@ def emit_order5_weighted_header() -> str:
     All three classes exceed the bounded 64-component scalar lowering domain.
     Additive partitions retain global component weights and the same shared
     scientific IR; no new recurrence or physical screening is introduced.
-    DPPP additionally exposes a complete pair-separable FP64 helper. Native
+    Each class additionally exposes a complete pair-separable FP64 helper. Native
     admission owns its pure-J, full-mask, no-seed domain and strict fallback;
     the arbitrary-weight helpers and their differentiation choice remain intact.
     """
-    source = _emit_weighted_force_classes(
-        ((2, 1, 1, 1), (2, 1, 2, 0), (2, 2, 1, 0)),
+    classes = ((2, 1, 1, 1), (2, 1, 2, 0), (2, 2, 1, 0))
+    return _emit_weighted_force_classes(classes) + _emit_pair_separable_force_classes(
+        classes
     )
-    kernel = build_weighted_eri_kernel(
-        build_weighted_eri_ir((2, 1, 1, 1)),
-        derivative_basis="relative",
-        pair_separable=True,
-    )
-    return (
-        source
-        + "\nnamespace generativeqc::scf::generated_weighted_eri {\n"
-        + emit_weighted_eri_function(
-            kernel,
-            "dppp_force_separable",
-            include_value=False,
-            gradient_centers=(0, 1, 2),
-            result_type="IndependentGradient",
-            ordering=AlgebraOrdering.PRESSURE_AWARE,
+
+
+def _emit_pair_separable_force_classes(
+    classes: tuple[tuple[int, int, int, int], ...],
+) -> str:
+    """Project complete external pairs before the shared Coulomb contraction.
+
+    A one-component side cannot save contraction work, so it retains only the
+    arbitrary-weight roots. Native consumers own mask/symmetry admission; the
+    compiler neither assumes density structure nor approximates either pair.
+    """
+    functions = []
+    for angular in classes:
+        integral = build_weighted_eri_ir(angular)
+        shape = integral.signature.component_shape
+        if min(prod(shape[:2]), prod(shape[2:])) <= 1:
+            continue
+        kernel = build_weighted_eri_kernel(
+            integral, derivative_basis="relative", pair_separable=True
         )
+        name = "".join("spdf"[value] for value in angular) + "_force_separable"
+        functions.append(
+            emit_weighted_eri_function(
+                kernel,
+                name,
+                include_value=False,
+                gradient_centers=(0, 1, 2),
+                result_type="IndependentGradient",
+                ordering=AlgebraOrdering.PRESSURE_AWARE,
+            )
+        )
+    return (
+        "\nnamespace generativeqc::scf::generated_weighted_eri {\n"
+        + "\n".join(functions)
         + "}  // namespace generativeqc::scf::generated_weighted_eri\n"
     )
 

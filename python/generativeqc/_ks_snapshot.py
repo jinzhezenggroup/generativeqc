@@ -1583,17 +1583,16 @@ class NativeKsSnapshot:
             raise NotImplementedError(
                 "native point response requires matching CPU spin state"
             )
-        # The frozen v1 C ABI transports a two-slot LDA/PBE point-response
-        # kernel. Admit only the generated compatibility binding for this exact
-        # compiler-owned SCF family; do not interpret an arbitrary family code
-        # as a PBE boolean or promote new functional support silently.
+        # The scaled bridge preserves the native LDA/PBE point worker, including
+        # its C2 spin continuation. An exchange fraction belongs to J/K, not to
+        # this semilocal Hessian; only the authenticated X/C scales enter here.
         family = SEMILOCAL_FAMILY_BY_CODE.get(self.metadata[6])
         response_slot = (
             family["legacy_cpu_point_response_slot"] if family is not None else None
         )
-        if response_slot is None or self.coefficients != (1.0, 1.0, 0.0):
+        if response_slot is None:
             raise NotImplementedError(
-                "native point response requires a qualified unscaled legacy XC plan"
+                "native point response requires a qualified LDA/PBE XC plan"
             )
         if type(pbe) is not bool or int(pbe) != response_slot:
             raise ValueError("native response functional mismatch")
@@ -1615,13 +1614,15 @@ class NativeKsSnapshot:
         values = [np.ascontiguousarray(x, dtype=np.float64) for x in values]
         output = np.empty((n, 4 * spins), dtype=np.float64)
         evaluate = (
-            self._library.generativeqc_xc_rks_response_batch_v1
+            self._library.generativeqc_xc_rks_response_batch_v2
             if spins == 1
-            else self._library.generativeqc_xc_uks_response_batch_v1
+            else self._library.generativeqc_xc_uks_response_batch_v2
         )
         pointer = ct.POINTER(ct.c_double)
         evaluate.argtypes = [
             ct.c_uint32,
+            ct.c_double,
+            ct.c_double,
             pointer,
             pointer,
             pointer,
@@ -1635,6 +1636,7 @@ class NativeKsSnapshot:
             self._library,
             evaluate(
                 response_slot,
+                *self.coefficients[:2],
                 *(x.ctypes.data_as(pointer) for x in values),
                 n,
                 output.ctypes.data_as(pointer),

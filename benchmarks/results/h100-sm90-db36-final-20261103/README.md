@@ -41,3 +41,9 @@ The original numerical gates are energy/atom1e-5Hartree, maximum force1e-4Hartre
 Acceptance is limited to this frozen source, water48/96 matrix, original fit/basis/grids, policy and measured H100. It does not qualify newer main commits, other GPUs, general molecules or UKS, and does not establish H100-versus-RTX5090 rankings. Native33-artifact build/admission hashes and post-owner mappings do not prove that every AOT companion was mapped during every timed call. The intrusive Nsight capture and posthoc CPU observer are not clean timing votes or a before-importer independent witness.
 
 Nine owned old CD2B guard packets move to exact recovery from already merged Git, under unchanged storage limits; all original negative outcomes and the old fourteen proof-file chain/final20/30 remain reproducible. No other-owner science is retired, no release/external backup is created, and no GPU validation is repeated for publication.
+
+## Exact historical archive recovery
+
+The two original raw archive parts are retained in the already merged commit `40f126a74fcf527012f2f4b2a53b158a87334967`, authenticated by [historical-snapshot.json](historical-snapshot.json). The public reader resolves only these declared missing parts through the shared offline Git recovery API; present corrupt files, symlinks and other missing members still fail. Original archive hashes, all720 full E/F records, original failures and acceptance remain unchanged. The adjacent `cohort.json` declares this storage mapping.
+
+Recovery uses existing local Git objects and never fetches implicitly. A shallow clone may explicitly fetch the recorded commit before opting into historical replay. This storage change performs no GPU or old scientific validation and makes no current-main performance claim.

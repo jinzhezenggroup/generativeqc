@@ -120,6 +120,27 @@ relative responses. The prepared owner captures this arithmetic preference
 independently of the order-six/seven schedule, method and Fock policy. Changing
 the selector requires a new owner.
 
+### Complete-pair Direct force projection
+
+Full-range strict-FP64 pure-Coulomb force sources automatically try exact
+complete ordered-pair projection for PPPP, DSPP, DSDS, DPPS, DPPP, DPDS and
+DDPS. The compiler contracts the existing weighted-ERI graph with the outer
+product of the two external pair weights before differentiating. This is
+neither density fitting nor a density approximation. Same-shell and same-pair
+triangles retain their symmetry factors.
+
+Admission requires relative responses, no seed/exchange contribution, and a
+complete AO Schwarz mask. Each source must pass every finite check before
+publishing any force; a numerical decline retries the strict nuclear worker
+once. Unsupported classes, arbitrary weights, exchange, FP32 and long-range
+sources retain their existing routes. No GPU-model dispatch is used.
+
+`GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE` is captured by the prepared owner
+and included in resource/restart identity. Unset or `1` enables this preference;
+`0`, empty and unknown values disable it without disabling relative responses.
+Changing it requires a newly prepared owner. The old experimental selector is
+not an interface. See the [qualification and retained limitations](../../.agents/notes/implemented/performance/2026-11-06-direct-complete-pair-projection.md).
+
 ### Native streaming boundary
 
 `prepare_weighted_eri_stream` consumes a `BlockRequest` and a bounded weight

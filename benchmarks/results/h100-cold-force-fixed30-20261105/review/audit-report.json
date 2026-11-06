@@ -1,0 +1,1355 @@
+{
+  "schema": "generativeqc.fresh-scoped-experiment-audit.v1",
+  "review_completed": true,
+  "review_scope_complete": true,
+  "overall_verdict": "WARN_SCOPED_ACCEPTANCE_NO_BLOCKING_DEFECT_FOUND",
+  "audited_code_head": "8e31d0b19ccb4795229c05444267438e393f0022",
+  "requested_model": "gpt-6.1-sol",
+  "requested_effort": "ultra",
+  "requested_fork_turns": "none",
+  "actual_returned_model": "unknown",
+  "actual_returned_effort": "unknown",
+  "review_independence": "fresh same-family",
+  "assurance": "provisional",
+  "evaluation_classification": "Source-bound computational independent-numerical-reference qualification and real-device static-endpoint benchmark; not experimental chemical ground truth.",
+  "method": "Read-only primary source/Git and exact-byte inspection; independent standard-library arithmetic on retained complete vectors and timings. No GPU/job/build/compiler/solver/profiler/network fetch or production/evidence edits. Prior DF stage and historical DB36 science were not rerun.",
+  "checks": {
+    "A": {
+      "status": "WARN",
+      "title": "Independent-reference provenance and scientific identity",
+      "result": "All40 retained dense/CPU-spot references satisfy strict declared controls, exact geometry, matching CPU quadrature and quarter-gate stability/spot checks. All18 original frozen input tables and the two original WB DF exclusions remain exact. Native execution is independently calculated from its own H\u00fcckel/cold density; no oracle density is passed. Cross-revision/environment reuse binds every exact reference receipt to basis, spherical representation, charge/spin, driver hash and accepted package maps. Two inherited refined-oracle producer executable byte snapshots remain unavailable in the supplied/ boundedly searched retained sources. Oracle source02337e is scientific context and does not authenticate those executable bytes. This bounds reproducibility of old reference generation; current full-vector gates are recomputed from the accepted original receipts.",
+      "evidence": [
+        "received-fixed30-v1/oracles.json.xz:all40 records.samples.controls/geometry_bohr",
+        "received-fixed30-v1/reference-reuse.json:entries",
+        "received-fixed30-v1/current64de-final-inputs-frozen-v1.json:groups",
+        "received-fixed30-v1/fixed30-protocol-v1.json:excluded_rows",
+        "received-fixed30-v1/endpoint-fixed30-v1.py:34-38,118-123,180-184",
+        "code benchmarks/readme_defaults.py:195-224,299-327,379-383",
+        "code benchmarks/results/h100-cold-force-fixed30-20261105/README.md:144-162",
+        "oracle-refined-source-lookup-v1.json:target_hashes/matches",
+        "review oracle-controls-independent-v1.json; oracle-producer-git-independent-v1.json; reference-source-continuity-independent-v1.json"
+      ]
+    },
+    "B": {
+      "status": "PASS",
+      "title": "Full-vector arithmetic and process-paired timing",
+      "result": "Independent standard-library arithmetic verifies every720 frozen30 and72 later-WB2 E/F output, all closed-study independent/stronger matched gates, every three-process pair ratio, full denominators30/Direct16/DF14, strict median>1.05 and every-pair>1 rules, and complete-set geometric means. No failed/unfavorable case or successful first-call outlier is discarded. Current-WB2 every matched warm-call index passes1.05. Both WB2 cases meet the2% cold target; earlier rejected companion pilots remain rejected, including the anchor pilot with only1.7438% reduction. The combined work performance:false flag remains unchanged while the independently preregistered force study passes.",
+      "evidence": [
+        "received-fixed30-v1/fixed30-v1/*.json:samples.energy/forces/seconds/phase/repeat",
+        "received-fixed30-v1/fixed30-protocol-v1.json:order/numerical_gates/win_rule",
+        "received-main-integration-v2/main-integration-v2/*.json:samples and observed_execution_controls",
+        "received-main-integration-v2/main-integration-preparation-v2.json:matched_gates/warm_each_call_ratio_limit/cold_median_reduction_target",
+        "work-analysis-v1.json:performance_pass=false; work-candidate-decision-v1.json:studies",
+        "review independent-reduction-v1.json; closed-study-provenance-and-matched-v1.json; independent-wb2-v1.json"
+      ]
+    },
+    "C": {
+      "status": "WARN",
+      "title": "Execution, source/build/image and platform authentication",
+      "result": "All frozen180 populations/720 E/F are one physical H100 GPU-a21ed680 with measured source db0788b/native0ee and mapped versioned core6b48. Later18/72 are one different H100 GPU-a04c1eb0 with measured4ee/nativeed33 and mapped cored164. All supplied1398 public member bytes and1344 raw transport members across seven capsules authenticate. Actual mappings observe only libgenerativeqc.so.0.1.0 in both new cohorts; the25-artifact build/AOT inventory is separate. Observed76 frozen30 and69 WB2 distinct reference-site images match the old installation catalog. Old runtime/wheel catalog scope does not become a fresh all-library/before-import witness. V5 timestamp skip and V6 wrapper false negative authenticate; both platform jobs remain FAILED, and V7 is CPU-only inspection. The original WBv1 cancellation was quota-blocked/unstarted with zero E/F.",
+      "evidence": [
+        "received-fixed30-v1/fixed30-v1/campaign.json:device_uuid/source/build_artifacts/runs",
+        "received-main-integration-v2/main-integration-v2/campaign.json:device_uuid/source/runs",
+        "reference-installation-history-provenance-v1.json:scope",
+        "received-main-integration-v2/base/main-source-mtime-correction-v6.json:failed_receipt_sha256/source_sha256_before/source_sha256_after/source_mtime_before",
+        "received-main-integration-v2/base/build-receipts-v6/build.stdout:3/7 and4/7 CXX compiles",
+        "received-main-integration-v2/base/build-metadata/build_identity.hpp:5",
+        "received-main-integration-v2/base/build-metadata/c_api_tuning.cpp:2,16",
+        "main-build-platform-terminal-v5.json:data.status; main-build-platform-terminal-v6.json:data.status",
+        "main-integration-platform-terminal-v2.json:data.status=SUCCEEDED",
+        "received-main-integration-v2/main-integration-unstarted-v1-events.json:data.items FailedScheduling/StopJob",
+        "review transport-independent-v1.json; public-and-build-independent-v1.json"
+      ]
+    },
+    "D": {
+      "status": "PASS",
+      "title": "Live selector, defaults, bounded ownership and work meaning",
+      "result": "The live fused strict RKS capability now admits automatic Direct nonlocal force batching independently of fitted SCF admission. Explicit force requests retain the previous branch and explicit SCF inheritance; Direct SCF remains256. All-electron/through-d/48-128 atom/512AO/524288point/CC>=8/free1GiB/stationary/resource/strict-budget gates remain. Force fallback drains/resets the controller and last token once, retries at256 with the same authenticated density token, rechecks leases/allowances and propagates non-allocation faults. Resolved capacity queries use the same stationary_tile_points consumed by the actual controller. Native408 new E/F samples are Standard strict64 with one candidate solve. Selector cold work is18 iterations/19 Focks in both arms; warm1/1. In later-WB2, WB48 off/default work is17iterations/18 versus17Focks, WB96 is18iterations/19 versus18Focks, in every round; every native warm remains1/1. This supports the observed saved cold Fock without shifting it into first warm. Equal SCF counts and invalid quartet-work flags do not provide a semantic force/AO/quartet census; broad kernel-level mechanism confirmation remains unavailable.",
+      "evidence": [
+        "code src/methods/dft_method.cpp:651-715,2201-2229,2277-2296,2472-2485,2496-2523",
+        "code src/dft/ks_tile_policy.hpp:15-48",
+        "code docs/user/ks_options.md:213-239",
+        "code src/dft/cuda_ks.cpp:3136-3162,3177-3192",
+        "received-work-v1/work-study-v1/*force-tile*.json:samples.settings/fock_builds/iterations",
+        "received-main-integration-v2/main-integration-v2/*.json:samples.settings/fock_builds/iterations",
+        "received-force-host-v1/corrected/pytest.stdout:8passed; zero-test-failure/pytest.stdout:0items",
+        "review precision-observation-independent-v1.json; independent-wb2-v1.json; source-code-git-independent-v1.json"
+      ]
+    },
+    "E": {
+      "status": "WARN",
+      "title": "Source-qualified claims, storage migration and public delivery",
+      "result": "Public source/device separation is correct: selectorD60, frozen0ee original30, later4ee/ed33 affected-WB2, and current8e31 are distinct. The force-admission source section is byte-identical across frozen0ee, later4ee and8e31; the later head includes upstream Hessian/snapshot/B3LYP coefficient plumbing and remains unmeasured by either full matrix. Reuse of unchanged-source evidence is warranted within scope; neither new cohort becomes a latest-head30 aggregate. All five frozen cold nonwins remain explicit. Historical DB36 storage recovers only the two declared missing owned parts from already-merged40f126, with exact hashes/blobs; present corruption/symlink/directory/other missing members fail and no implicit fetch is added. Synthetic normal tests avoid historical science. Exactly the two retired exception entries were removed; all policy caps/other exceptions are unchanged. Libxc decompressed snapshot comparison changes only checked source/native IDs, preserving stale:true and all capability/scientific content. Prepared public bundle/readback is verified; its review attachment/status update follows this completed report and normal repository gates.",
+      "evidence": [
+        "code benchmarks/results/h100-cold-force-fixed30-20261105/README.md:3-19,73-92,123-133,156-162,191-230",
+        "upstream-hessian-integration-scope-v1.json:head/measured_frozen30/measured_later_WB2/scope",
+        "review source-code-git-independent-v1.json:force_admission_slices",
+        "code benchmarks/h100_db36_final_cohort.py:16-49,69-78",
+        "code tools/restore_retained_evidence.py:147-178,182-213",
+        "code tests/python/test_h100_db36_final_cohort.py:12-38,74-119",
+        "code benchmarks/results/h100-sm90-db36-final-20261103/historical-snapshot.json:files",
+        "review migration-metadata-independent-v1.json; evidence-policy-independent-v1.json",
+        "libxc-force-metadata-refresh-v1.json; libxc-main-integration-refresh-v1.json; libxc-hessian-integration-refresh-v1.json",
+        "code docs/reference/libxc_qualification.md:3-9; manifests/libxc/native-qualification-snapshot.json.xz:stale/summary"
+      ]
+    },
+    "F": {
+      "status": "PASS",
+      "title": "Appropriate evaluation classification",
+      "result": "This is source-bound computational numerical-reference qualification plus real-device endpoint performance measurement on static original-recipe water48/96 inputs. The numerical references include independent dense GPU calculations and matched CPU spots under explicit reuse contracts. They support scoped numerical agreement and the stated H100 timing regimes; they are not experimental chemical ground truth, a general molecular performance certificate, A100/5090/UKS/CBS/displaced-geometry acceptance, or cross-family scientific review. Requested reviewer route is gpt-6.1-sol/ultra/fork none; actual backend-reported identity is unknown. Assurance remains fresh same-family/provisional.",
+      "evidence": [
+        "received-fixed30-v1/fixed30-protocol-v1.json:scope",
+        "received-main-integration-v2/main-integration-preparation-v2.json:scope",
+        "code benchmarks/results/h100-cold-force-fixed30-20261105/README.md:135-162,201-230",
+        "cold-force-final-audit-dispatch-v1.json:requested_model/requested_effort/actual_reported_identity",
+        "review audit-request.json; audit-trace.json"
+      ]
+    }
+  },
+  "unresolved_blockers": [],
+  "readiness": {
+    "code": {
+      "status": "READY_WITH_SCOPED_REVIEW",
+      "detail": "No blocking defect found in force admission/default integration, bounded fallback, historical byte recovery or metadata changes. All later-head native behavior is not certified by this narrow code inspection."
+    },
+    "device": {
+      "status": "PASS_MEASURED_SOURCE_COHORTS",
+      "detail": "Frozen0ee180/720 and later4ee18/72 are actual H100/SM90 source/image-bound completed cohorts; other architectures remain outside acceptance."
+    },
+    "scientific": {
+      "status": "PASS_UNDER_ACCEPTED_RETAINED_REFERENCE_CONTRACT_WITH_PROVENANCE_LIMIT",
+      "detail": "All observed full-vector gates/stability/CPU-spots pass. Missing exact refined historical producer bytes bound regeneration provenance. No experimental ground-truth assertion."
+    },
+    "default_integration": {
+      "status": "PASS_FROZEN0EE_AND_AFFECTED4EE_WB2",
+      "detail": "Observed automatic force1024/SCF256 on WB96; laterWB48force256/WB96force1024 both observed with0/unset anchor control; strict64/scientific settings preserved. Later8e31 untouched force policy reuses scoped evidence without becoming a measured latest-head matrix."
+    },
+    "performance": {
+      "status": "SUPPORTED_SCOPED_GAINS_WITH_REMAINING_GAPS",
+      "detail": "Selector2.4086% cold gain and both laterWB2>=2% targets pass. Frozen25/30cold wins preserve5 nonwins and incomplete universal cold objective. No cross-device pooling."
+    },
+    "public_delivery": {
+      "status": "PREPARED_BUNDLE_AND_READBACK_VERIFIED_REVIEW_ATTACHMENT_PENDING",
+      "detail": "All1398 original members/1060blobs verify, public summary matches independent reductions, and supplied complete CPU readback passes. Public cohort still labels this fresh review pending at audited snapshot; append this actual report/request/trace/hashes and retain applicable repository checks before final delivery. No external publication performed."
+    }
+  },
+  "frozen30": {
+    "source": {
+      "native_source_identity": "0ee40c0ab15addfe978f93ae293c6ea5fd0cacec4147161b283ee5159134a73e",
+      "tree": "a5466875049c2a5de330029afb4b4bd019e9547d",
+      "revision": "db0788b2032ba99029d1e7a7a995380777d4981f",
+      "base_source": {
+        "revision": "87bbc0b4f20f7696cfd22974bbe5b207e7d69c38",
+        "tree": "99e47d472b89d3ce39c38d4aa3470cf7e82dc3b9",
+        "native_source_identity": "d60aea30bf2891a8d5c6976f59ee7f8a3505cd83af5c123dde48093e4b3ea604",
+        "base_source": {
+          "revision": "4370d6c4b1bf4033818f31a9fcc622d3045a33bf",
+          "tree": "dcc7f042b47984cd94bbba9e06edb46389724bc8",
+          "archive_sha256": "370f10ae6f6d450c9b42cab09df9f54fbcf1b1674a09ed5fa1a8216879545cb0",
+          "archive_name": "build-source.tar.gz",
+          "archive_scope": "Tracked native identity inputs, source/build tools, benchmark code and root files, plus separately bound complete tracked data/. No source edits. Historical results/tests/docs/notes/CI excluded.",
+          "supplemental_archives": [
+            {
+              "name": "build-data.tar.gz",
+              "sha256": "ad5f5739f8fed675065902f6fc4dd236ac704e31936983f585b29d6a2928e91a",
+              "scope": "Complete tracked data/ from identical4370d6c commit; fixes omitted parameter assets before compilation."
+            }
+          ]
+        },
+        "overlay_archive": "df-seed-source-v3.tar.gz",
+        "overlay_sha256": "fb7012f93b7ec138d7af0b6b25882206895a2a6b7b719ef88cece377cd48c1ea",
+        "overlay_files": {
+          "src/scf/rhf.cpp": "0fc400317364f6daa8d48796533ba62a7e8c12b306ec225583d3fc5d0bdaa8b7",
+          "src/scf/solver/validation_products.hpp": "a36a66cc1b0f38e4c541ea80ed733dcfb681b8881d747020e5fb2f7f76949a12"
+        },
+        "scope": "Frozen committed large CUDA DF cold seed product preference; incremental build only after original a243 captures terminate and original source/deployed binaries are copied and authenticated."
+      },
+      "overlay_archive": "force-default-source-v4.tar.gz",
+      "overlay_sha256": "462233abe102bd050b7fb9d122b9b4e4b1a961f812d80e66e458047f5aafa249",
+      "overlay_files": {
+        "src/methods/dft_method.cpp": "e130519a08d1d52ff2eb11ae14ea3057d8f38584060aed8585429cfcc68249aa"
+      },
+      "scope": "Committed independent Direct/nonlocal automatic force batching proposal. SCF/fitting/grid/precision unchanged; current-source native build/device integration pending. Additional original-matrix force AOT profiles use existing source and verified compiler cache, not stale artifact rebinding."
+    },
+    "device_uuid": "GPU-a21ed680-6184-b931-377d-81ff7cf9f52e",
+    "populations": 180,
+    "returned_EF": 720,
+    "summary": {
+      "cold": {
+        "all": {
+          "cases": 30,
+          "wins": 25,
+          "complete_set_geomean": 1.6460995826448517
+        },
+        "direct": {
+          "cases": 16,
+          "wins": 12,
+          "complete_set_geomean": 1.4942833813618015
+        },
+        "df": {
+          "cases": 14,
+          "wins": 13,
+          "complete_set_geomean": 1.8385800721011685
+        }
+      },
+      "warm": {
+        "all": {
+          "cases": 30,
+          "wins": 26,
+          "complete_set_geomean": 1.4383027605395597
+        },
+        "direct": {
+          "cases": 16,
+          "wins": 13,
+          "complete_set_geomean": 1.4698184633483036
+        },
+        "df": {
+          "cases": 14,
+          "wins": 13,
+          "complete_set_geomean": 1.4031114227480848
+        }
+      }
+    },
+    "cold_nonwins": [
+      {
+        "id": "hf-water-96-direct",
+        "route": "direct",
+        "phase": {
+          "cold": {
+            "ratios": [
+              0.6254852485215441,
+              0.6034334603271038,
+              2.486416676871775
+            ],
+            "median": 0.6254852485215441,
+            "win": false
+          },
+          "warm": {
+            "ratios": [
+              1.071127726005367,
+              1.0334933201721157,
+              2.2268011115465183
+            ],
+            "median": 1.071127726005367,
+            "win": true
+          }
+        }
+      },
+      {
+        "id": "hf-water-96-df",
+        "route": "df",
+        "phase": {
+          "cold": {
+            "ratios": [
+              0.8479192463847657,
+              1.0381767883418278,
+              3.9037356721155905
+            ],
+            "median": 1.0381767883418278,
+            "win": false
+          },
+          "warm": {
+            "ratios": [
+              0.8258326188772057,
+              0.8587643426328734,
+              0.8431664115235572
+            ],
+            "median": 0.8431664115235572,
+            "win": false
+          }
+        }
+      },
+      {
+        "id": "r2scan-3c-water-96-direct",
+        "route": "direct",
+        "phase": {
+          "cold": {
+            "ratios": [
+              1.0501541807522299,
+              1.0372905997126547,
+              1.0389778031354158
+            ],
+            "median": 1.0389778031354158,
+            "win": false
+          },
+          "warm": {
+            "ratios": [
+              0.7260546618330536,
+              0.7220629663935544,
+              0.7247455740836176
+            ],
+            "median": 0.7247455740836176,
+            "win": false
+          }
+        }
+      },
+      {
+        "id": "wb97m-v-water-48-direct",
+        "route": "direct",
+        "phase": {
+          "cold": {
+            "ratios": [
+              0.6777717723464749,
+              0.6802953016362722,
+              0.697102051434557
+            ],
+            "median": 0.6802953016362722,
+            "win": false
+          },
+          "warm": {
+            "ratios": [
+              0.7968222221681046,
+              0.7821614983266272,
+              0.8154985199138025
+            ],
+            "median": 0.7968222221681046,
+            "win": false
+          }
+        }
+      },
+      {
+        "id": "wb97m-v-water-96-direct",
+        "route": "direct",
+        "phase": {
+          "cold": {
+            "ratios": [
+              0.526747032330503,
+              0.5120457594005462,
+              0.5170693939285227
+            ],
+            "median": 0.5170693939285227,
+            "win": false
+          },
+          "warm": {
+            "ratios": [
+              0.8994799638692081,
+              0.8845088312375764,
+              0.894071492360295
+            ],
+            "median": 0.894071492360295,
+            "win": false
+          }
+        }
+      }
+    ],
+    "worst_endpoint_errors": {
+      "energy_abs_per_atom_hartree": 8.204134796111854e-06,
+      "force_max_abs_hartree_per_bohr": 5.6885556734442844e-05,
+      "force_rms_hartree_per_bohr": 2.5819326394557067e-05
+    },
+    "distinct_reference_images": 76,
+    "native_images_observed": [
+      "libgenerativeqc.so.0.1.0"
+    ]
+  },
+  "later_WB2": {
+    "status": "PASS_INDEPENDENT_WB2_SCIENCE_AND_RAW_REDUCTION",
+    "source_revision": "4ee811b567938df2d8200389b4918481297511cb",
+    "native_source_identity": "ed33e0ca6d2f06ec039545283699be2c668245021dfae13f11c7ce7ae2356d05",
+    "core_sha256": "d164314b4ad97818c906b96648fe6f22a2b23cd29f85ad29d43713688b39f58e",
+    "device_uuid": "GPU-a04c1eb0-72d5-2f4a-2ea4-d8c6e3e1db59",
+    "populations": 18,
+    "returned_EF": 72,
+    "worst_independent_errors": {
+      "energy_abs_per_atom_hartree": 4.86035792353808e-07,
+      "force_max_abs_hartree_per_bohr": 2.2948724423876854e-05,
+      "force_rms_hartree_per_bohr": 1.0514918008395403e-05
+    },
+    "observed_native_images": [
+      "libgenerativeqc.so.0.1.0"
+    ],
+    "distinct_reference_images": 69,
+    "studies": [
+      {
+        "id": "wb48-direct-current-main-anchor",
+        "expected_force_tile": 256,
+        "matched_gates": {
+          "energy_abs_per_atom_hartree": 1e-09,
+          "force_max_abs_hartree_per_bohr": 1e-07,
+          "force_rms_hartree_per_bohr": 3e-08
+        },
+        "pairs": [
+          {
+            "pair_index": 0,
+            "cold_candidate_over_off": 0.8952997102024984,
+            "warm_candidate_over_off": 0.9990605928936609,
+            "warm_each_call_ratios": [
+              0.9973114434151953,
+              1.0006034109807154,
+              1.0022440396321979
+            ],
+            "warm_each_call_guard": true,
+            "cold_reference_over_candidate": 0.96782143493785,
+            "warm_reference_over_candidate": 0.8223476955548265,
+            "matched_errors": [
+              {
+                "energy_abs_per_atom_hartree": 1.8947806286936004e-14,
+                "force_max_abs_hartree_per_bohr": 3.1796787425264483e-13,
+                "force_rms_hartree_per_bohr": 7.81240753956078e-14
+              },
+              {
+                "energy_abs_per_atom_hartree": 1.8947806286936004e-14,
+                "force_max_abs_hartree_per_bohr": 3.344546861683284e-13,
+                "force_rms_hartree_per_bohr": 7.219293932067043e-14
+              },
+              {
+                "energy_abs_per_atom_hartree": 1.8947806286936004e-14,
+                "force_max_abs_hartree_per_bohr": 2.8421709430404007e-13,
+                "force_rms_hartree_per_bohr": 7.905435104612951e-14
+              },
+              {
+                "energy_abs_per_atom_hartree": 2.3684757858670007e-14,
+                "force_max_abs_hartree_per_bohr": 3.1175062531474396e-13,
+                "force_rms_hartree_per_bohr": 6.324713029757395e-14
+              }
+            ],
+            "work": {
+              "off": [
+                [
+                  17,
+                  18
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "default": [
+                [
+                  17,
+                  17
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "reference": [
+                [
+                  9,
+                  10
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ]
+              ]
+            },
+            "one_fewer_cold_fock_same_iterations": true
+          },
+          {
+            "pair_index": 1,
+            "cold_candidate_over_off": 0.9132211877671343,
+            "warm_candidate_over_off": 0.9875159311686058,
+            "warm_each_call_ratios": [
+              0.9847373437336292,
+              0.9855783066569113,
+              0.9900612706099592
+            ],
+            "warm_each_call_guard": true,
+            "cold_reference_over_candidate": 0.8309959200592919,
+            "warm_reference_over_candidate": 0.8266216744277547,
+            "matched_errors": [
+              {
+                "energy_abs_per_atom_hartree": 4.736951571734001e-15,
+                "force_max_abs_hartree_per_bohr": 3.6665115388245795e-13,
+                "force_rms_hartree_per_bohr": 8.047656733836187e-14
+              },
+              {
+                "energy_abs_per_atom_hartree": 4.736951571734001e-15,
+                "force_max_abs_hartree_per_bohr": 2.9753977059954195e-13,
+                "force_rms_hartree_per_bohr": 7.429317026548567e-14
+              },
+              {
+                "energy_abs_per_atom_hartree": 4.736951571734001e-15,
+                "force_max_abs_hartree_per_bohr": 2.5912605394751154e-13,
+                "force_rms_hartree_per_bohr": 6.730998971881133e-14
+              },
+              {
+                "energy_abs_per_atom_hartree": 4.736951571734001e-15,
+                "force_max_abs_hartree_per_bohr": 3.2951419370874646e-13,
+                "force_rms_hartree_per_bohr": 7.531081773705293e-14
+              }
+            ],
+            "work": {
+              "off": [
+                [
+                  17,
+                  18
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "default": [
+                [
+                  17,
+                  17
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "reference": [
+                [
+                  9,
+                  10
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ]
+              ]
+            },
+            "one_fewer_cold_fock_same_iterations": true
+          },
+          {
+            "pair_index": 2,
+            "cold_candidate_over_off": 0.9105881725350551,
+            "warm_candidate_over_off": 0.9959842103884112,
+            "warm_each_call_ratios": [
+              0.9981245024738796,
+              0.9959842103884112,
+              0.9902760518973793
+            ],
+            "warm_each_call_guard": true,
+            "cold_reference_over_candidate": 0.7698284115776695,
+            "warm_reference_over_candidate": 0.8008583977541783,
+            "matched_errors": [
+              {
+                "energy_abs_per_atom_hartree": 0.0,
+                "force_max_abs_hartree_per_bohr": 3.9968028886505635e-13,
+                "force_rms_hartree_per_bohr": 8.104147588208337e-14
+              },
+              {
+                "energy_abs_per_atom_hartree": 9.473903143468002e-15,
+                "force_max_abs_hartree_per_bohr": 4.405364961712621e-13,
+                "force_rms_hartree_per_bohr": 8.192685331339462e-14
+              },
+              {
+                "energy_abs_per_atom_hartree": 0.0,
+                "force_max_abs_hartree_per_bohr": 4.3876013933186186e-13,
+                "force_rms_hartree_per_bohr": 8.383055351141496e-14
+              },
+              {
+                "energy_abs_per_atom_hartree": 0.0,
+                "force_max_abs_hartree_per_bohr": 5.693223670277803e-13,
+                "force_rms_hartree_per_bohr": 9.089274170149615e-14
+              }
+            ],
+            "work": {
+              "off": [
+                [
+                  17,
+                  18
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "default": [
+                [
+                  17,
+                  17
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "reference": [
+                [
+                  9,
+                  10
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ]
+              ]
+            },
+            "one_fewer_cold_fock_same_iterations": true
+          }
+        ],
+        "summary": {
+          "cold_ratios": [
+            0.8952997102024984,
+            0.9132211877671343,
+            0.9105881725350551
+          ],
+          "median_cold_reduction": 0.08941182746494492,
+          "warm_ratios": [
+            0.9990605928936609,
+            0.9875159311686058,
+            0.9959842103884112
+          ],
+          "median_warm_change": -0.0040157896115887715,
+          "every_warm_call_guard": true,
+          "max_warm_call_ratio": 1.0022440396321979,
+          "one_fewer_cold_fock": [
+            true,
+            true,
+            true
+          ],
+          "median_reference_over_default_cold": 0.8309959200592919,
+          "median_reference_over_default_warm": 0.8223476955548265,
+          "performance_2pct_target_pass": true
+        }
+      },
+      {
+        "id": "wb96-direct-current-main-anchor",
+        "expected_force_tile": 1024,
+        "matched_gates": {
+          "energy_abs_per_atom_hartree": 1e-09,
+          "force_max_abs_hartree_per_bohr": 1e-07,
+          "force_rms_hartree_per_bohr": 3e-08
+        },
+        "pairs": [
+          {
+            "pair_index": 0,
+            "cold_candidate_over_off": 0.896536052826765,
+            "warm_candidate_over_off": 0.9940646984145605,
+            "warm_each_call_ratios": [
+              0.9880144217393843,
+              1.0054503671638486,
+              0.9940646984145605
+            ],
+            "warm_each_call_guard": true,
+            "cold_reference_over_candidate": 0.6246459532256834,
+            "warm_reference_over_candidate": 0.9446153694869946,
+            "matched_errors": [
+              {
+                "energy_abs_per_atom_hartree": 9.473903143468002e-15,
+                "force_max_abs_hartree_per_bohr": 6.585842982076429e-13,
+                "force_rms_hartree_per_bohr": 1.3030785280238906e-13
+              },
+              {
+                "energy_abs_per_atom_hartree": 0.0,
+                "force_max_abs_hartree_per_bohr": 1.0267342531733448e-12,
+                "force_rms_hartree_per_bohr": 1.5520944648915898e-13
+              },
+              {
+                "energy_abs_per_atom_hartree": 9.473903143468002e-15,
+                "force_max_abs_hartree_per_bohr": 5.480060849549773e-13,
+                "force_rms_hartree_per_bohr": 1.2886993184780863e-13
+              },
+              {
+                "energy_abs_per_atom_hartree": 9.473903143468002e-15,
+                "force_max_abs_hartree_per_bohr": 7.229772336359019e-13,
+                "force_rms_hartree_per_bohr": 1.404488248704928e-13
+              }
+            ],
+            "work": {
+              "off": [
+                [
+                  18,
+                  19
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "default": [
+                [
+                  18,
+                  18
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "reference": [
+                [
+                  10,
+                  11
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ]
+              ]
+            },
+            "one_fewer_cold_fock_same_iterations": true
+          },
+          {
+            "pair_index": 1,
+            "cold_candidate_over_off": 0.8949658744482287,
+            "warm_candidate_over_off": 1.0043924893248566,
+            "warm_each_call_ratios": [
+              1.0072713100745767,
+              0.9967938190261653,
+              0.9925965217830677
+            ],
+            "warm_each_call_guard": true,
+            "cold_reference_over_candidate": 0.5931223497297393,
+            "warm_reference_over_candidate": 0.9029219626383882,
+            "matched_errors": [
+              {
+                "energy_abs_per_atom_hartree": 1.8947806286936004e-14,
+                "force_max_abs_hartree_per_bohr": 9.068301665138279e-13,
+                "force_rms_hartree_per_bohr": 1.543016480553626e-13
+              },
+              {
+                "energy_abs_per_atom_hartree": 1.8947806286936004e-14,
+                "force_max_abs_hartree_per_bohr": 9.094947017729282e-13,
+                "force_rms_hartree_per_bohr": 1.5709734463565647e-13
+              },
+              {
+                "energy_abs_per_atom_hartree": 1.8947806286936004e-14,
+                "force_max_abs_hartree_per_bohr": 1.0373923942097463e-12,
+                "force_rms_hartree_per_bohr": 1.6558416727220808e-13
+              },
+              {
+                "energy_abs_per_atom_hartree": 1.8947806286936004e-14,
+                "force_max_abs_hartree_per_bohr": 7.86926079854311e-13,
+                "force_rms_hartree_per_bohr": 1.305787185127222e-13
+              }
+            ],
+            "work": {
+              "off": [
+                [
+                  18,
+                  19
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "default": [
+                [
+                  18,
+                  18
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "reference": [
+                [
+                  10,
+                  11
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ]
+              ]
+            },
+            "one_fewer_cold_fock_same_iterations": true
+          },
+          {
+            "pair_index": 2,
+            "cold_candidate_over_off": 0.8904288605674295,
+            "warm_candidate_over_off": 0.9967559356074154,
+            "warm_each_call_ratios": [
+              0.9922941269034158,
+              0.9967559356074154,
+              0.9934716326826338
+            ],
+            "warm_each_call_guard": true,
+            "cold_reference_over_candidate": 0.6040455378954146,
+            "warm_reference_over_candidate": 0.9039184802634364,
+            "matched_errors": [
+              {
+                "energy_abs_per_atom_hartree": 9.473903143468002e-15,
+                "force_max_abs_hartree_per_bohr": 8.775202786637237e-13,
+                "force_rms_hartree_per_bohr": 1.4141705154059949e-13
+              },
+              {
+                "energy_abs_per_atom_hartree": 9.473903143468002e-15,
+                "force_max_abs_hartree_per_bohr": 6.368239269249898e-13,
+                "force_rms_hartree_per_bohr": 1.2635948008692394e-13
+              },
+              {
+                "energy_abs_per_atom_hartree": 9.473903143468002e-15,
+                "force_max_abs_hartree_per_bohr": 5.6754601018838e-13,
+                "force_rms_hartree_per_bohr": 1.1818880302790532e-13
+              },
+              {
+                "energy_abs_per_atom_hartree": 9.473903143468002e-15,
+                "force_max_abs_hartree_per_bohr": 1.2683187833317788e-12,
+                "force_rms_hartree_per_bohr": 1.5784500475235158e-13
+              }
+            ],
+            "work": {
+              "off": [
+                [
+                  18,
+                  19
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "default": [
+                [
+                  18,
+                  18
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              "reference": [
+                [
+                  10,
+                  11
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ]
+              ]
+            },
+            "one_fewer_cold_fock_same_iterations": true
+          }
+        ],
+        "summary": {
+          "cold_ratios": [
+            0.896536052826765,
+            0.8949658744482287,
+            0.8904288605674295
+          ],
+          "median_cold_reduction": 0.10503412555177127,
+          "warm_ratios": [
+            0.9940646984145605,
+            1.0043924893248566,
+            0.9967559356074154
+          ],
+          "median_warm_change": -0.0032440643925846224,
+          "every_warm_call_guard": true,
+          "max_warm_call_ratio": 1.0072713100745767,
+          "one_fewer_cold_fock": [
+            true,
+            true,
+            true
+          ],
+          "median_reference_over_default_cold": 0.6040455378954146,
+          "median_reference_over_default_warm": 0.9039184802634364,
+          "performance_2pct_target_pass": true
+        }
+      }
+    ]
+  },
+  "closed_studies": [
+    {
+      "study": "outer",
+      "id": "wb96-direct-full-target",
+      "pairs": [
+        {
+          "pair": 0,
+          "candidate": "full-target",
+          "candidate_over_off": {
+            "cold": 1.793557141032276,
+            "warm": 1.4557420179694402
+          },
+          "warm_call_ratios": [
+            1.4557420179694402,
+            1.4485634865656727,
+            1.460259868442844
+          ],
+          "off_builds": [
+            19,
+            1,
+            1,
+            1
+          ],
+          "candidate_builds": [
+            11,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "median_cold_reduction": -0.7935571410322759,
+      "median_warm_change": 0.45574201796944025,
+      "status": "PILOT_NOT_PROMOTED_NO_FOLLOWUP_ROUNDS"
+    },
+    {
+      "study": "anchor",
+      "id": "wb96-direct-fixed-anchor",
+      "pairs": [
+        {
+          "pair": 0,
+          "candidate": "anchor",
+          "candidate_over_off": {
+            "cold": 0.9825616318048263,
+            "warm": 0.9956831086032953
+          },
+          "warm_call_ratios": [
+            0.9979415391139551,
+            0.9908239963441697,
+            0.9971818362220112
+          ],
+          "off_builds": [
+            19,
+            1,
+            1,
+            1
+          ],
+          "candidate_builds": [
+            19,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "median_cold_reduction": 0.017438368195173748,
+      "median_warm_change": -0.0043168913967046585,
+      "status": "PILOT_NOT_PROMOTED_NO_FOLLOWUP_ROUNDS"
+    },
+    {
+      "study": "work",
+      "id": "wb96-direct-range-residency",
+      "pairs": [
+        {
+          "pair": 0,
+          "candidate": "resident32",
+          "candidate_over_off": {
+            "cold": 1.0015616164425656,
+            "warm": 0.9984989232637911
+          },
+          "warm_call_ratios": [
+            0.9985423204273474,
+            0.9981549673012714,
+            0.9973462506964026
+          ],
+          "off_builds": [
+            19,
+            1,
+            1,
+            1
+          ],
+          "candidate_builds": [
+            19,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "median_cold_reduction": -0.0015616164425655832,
+      "median_warm_change": -0.0015010767362089172,
+      "status": "PILOT_NOT_PROMOTED_NO_FOLLOWUP_ROUNDS"
+    },
+    {
+      "study": "work",
+      "id": "wb96-direct-force-tile",
+      "pairs": [
+        {
+          "pair": 0,
+          "candidate": "force1024",
+          "candidate_over_off": {
+            "cold": 0.9759138439872199,
+            "warm": 0.8858232124675834
+          },
+          "warm_call_ratios": [
+            0.885150927748378,
+            0.8837319838280193,
+            0.8904828718474376
+          ],
+          "off_builds": [
+            19,
+            1,
+            1,
+            1
+          ],
+          "candidate_builds": [
+            19,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "pair": 1,
+          "candidate": "force1024",
+          "candidate_over_off": {
+            "cold": 0.9799960226572006,
+            "warm": 0.8822353729522731
+          },
+          "warm_call_ratios": [
+            0.8740364061681756,
+            0.8822353729522731,
+            0.8849607146346997
+          ],
+          "off_builds": [
+            19,
+            1,
+            1,
+            1
+          ],
+          "candidate_builds": [
+            19,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "pair": 2,
+          "candidate": "force1024",
+          "candidate_over_off": {
+            "cold": 0.9754743745013382,
+            "warm": 0.8810855446802972
+          },
+          "warm_call_ratios": [
+            0.8873686039638958,
+            0.8762440185214588,
+            0.8857945315867182
+          ],
+          "off_builds": [
+            19,
+            1,
+            1,
+            1
+          ],
+          "candidate_builds": [
+            19,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "median_cold_reduction": 0.02408615601278008,
+      "median_warm_change": -0.11776462704772694,
+      "status": "COMPLETE_ALL_DECLARED_PAIRS_INDEPENDENT_AND_MATCHED_QUALIFIED"
+    },
+    {
+      "study": "hf-streaming",
+      "id": "hf96-direct-primary-streaming",
+      "pairs": [
+        {
+          "pair": 0,
+          "candidate": "streaming",
+          "candidate_over_off": {
+            "cold": 1.2207804692883946,
+            "warm": 1.1795153639913145
+          },
+          "warm_call_ratios": [
+            1.185521217777228,
+            1.1818589656375857,
+            1.178857589322007
+          ],
+          "off_builds": [
+            11,
+            1,
+            1,
+            1
+          ],
+          "candidate_builds": [
+            11,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "median_cold_reduction": -0.22078046928839457,
+      "median_warm_change": 0.1795153639913145,
+      "status": "PILOT_NOT_PROMOTED_NO_FOLLOWUP_ROUNDS"
+    },
+    {
+      "study": "full-cache",
+      "id": "wb96-direct-cached-full-target",
+      "pairs": [
+        {
+          "pair": 0,
+          "candidate": "fullcached",
+          "candidate_over_off": {
+            "cold": 1.0971054196555021,
+            "warm": 1.0015046832462284
+          },
+          "warm_call_ratios": [
+            1.0127562919200959,
+            1.0017270273753798,
+            0.9995303579490813
+          ],
+          "off_builds": [
+            19,
+            1,
+            1,
+            1
+          ],
+          "candidate_builds": [
+            12,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "median_cold_reduction": -0.09710541965550212,
+      "median_warm_change": 0.0015046832462284332,
+      "status": "PILOT_NOT_PROMOTED_NO_FOLLOWUP_ROUNDS"
+    }
+  ],
+  "public_and_build": {
+    "status": "PASS_PUBLIC_ORIGINAL_BYTES_AND_BUILD_FAILURE_PROVENANCE",
+    "public_members": 1398,
+    "public_distinct_blobs": 1060,
+    "public_stored_bytes": 1373032,
+    "public_decoded_bytes": 44542496,
+    "public_readback": "Existing CPU-only completed readback equals the public summary, independently cross-checked against my raw arithmetic. No replay/solver/compiler invoked by this reviewer.",
+    "new_transport_members": 156,
+    "build_v5_status": "FAILED_OR_INTERRUPTED",
+    "build_v6_stage_status": "BUILD_PASS_SCIENCE_NOT_RUN",
+    "build_v5_v6_platform_status": "FAILED",
+    "v7_scope": "CPU-only inspection of existing generated header, source owner, compiler stream, artifact/AOT receipt; not a new GPU build.",
+    "new_native_core_sha256": "d164314b4ad97818c906b96648fe6f22a2b23cd29f85ad29d43713688b39f58e",
+    "unstarted_v1": "CANCELLED while project quota blocked; zero returned E/F, no omitted successful timing sample.",
+    "public_review_status": {
+      "status": "PENDING_FRESH_REVIEW_NOT_ACCEPTED",
+      "review_independence": "unavailable",
+      "acceptance_status": "pending"
+    }
+  },
+  "claim_decisions": [
+    {
+      "claim": "Force1024 versus force256 causal selector reduction2.4086156013% cold and11.7764627048% warm",
+      "decision": "supported",
+      "scope": "87bbc0b/D60 on GPU-4b9a1102; same scientific settings,3 rotating pairs/36 E/F; each native warm ratio<=0.890482872. This remains slower than the reference on WB96 cold (medianreference/candidate0.519731997)."
+    },
+    {
+      "claim": "Automatic force default integrates into the frozen original30 and gives25 cold wins/26 warm wins",
+      "decision": "supported",
+      "scope": "db0788b/native0ee on GPU-a21ed680 only; original30/Direct16/DF14;180processes/720E/F. Ratios and GMs are distinct cold/warm complete-set statistics."
+    },
+    {
+      "claim": "Later4ee/ed33 WB2 integrates upstream3006 with automatic force batching and saves a cold Fock",
+      "decision": "supported",
+      "scope": "18processes/72E/F on GPU-a04c1eb0. Actual0/unset controls, force256/1024, SCF256, all independent/matched gates, both2% targets and every warm-call guard pass; one fewer cold Fock at equal iterations in all6 pairs."
+    },
+    {
+      "claim": "The latest8e31 head is measured by the frozen30 matrix or by a pooled latest30 aggregate",
+      "decision": "unsupported",
+      "scope": "Neither source-bound cohort measures8e31. Force-admission source is unchanged and may reuse its scoped evidence; later upstream changes retain their own qualification boundaries."
+    },
+    {
+      "claim": "Every original numerical target is fully regenerable from an exact old producer snapshot",
+      "decision": "qualified",
+      "scope": "Exact receipt/reuse contracts and independent raw observable/stability/CPU-spot checks are retained. Exact refined89c69772/de54b213 executable bytes remain unverified;02337e is scientific context."
+    },
+    {
+      "claim": "Mapped native images establish that all25 build/AOT artifacts loaded during each endpoint",
+      "decision": "unsupported",
+      "scope": "Only the versioned core is observed mapped in frozen30 and WB2. Separate package/AOT receipts authenticate25 build artifacts."
+    },
+    {
+      "claim": "Equal SCF work proves less semantic force/AO/quartet work",
+      "decision": "unsupported",
+      "scope": "SCF/Fock counters are executed and meaningful for total SCF work; invalid quartet flags and absent complete force/AO census remain explicit."
+    },
+    {
+      "claim": "Rejected residency/fixed-anchor/full-target/streaming/cache companions qualify as performance improvements",
+      "decision": "unsupported",
+      "scope": "All adverse pilots remain retained under unchanged stopping gates; work capsule combined performance:false remains correct. The force study independently passes."
+    },
+    {
+      "claim": "DB36 historical storage migration preserves original bytes/acceptance under unchanged limits",
+      "decision": "supported",
+      "scope": "Only two declared owned original parts move to authenticated merged-Git recovery. No old scientific replay, other-owner retirement or release publication was performed."
+    },
+    {
+      "claim": "Libxc metadata refresh provides new scientific qualification",
+      "decision": "unsupported",
+      "scope": "Only checked source/native identities changed; stale:true and all scientific capability/evidence fields remain unchanged."
+    },
+    {
+      "claim": "The result establishes universal chemistry performance, cross-GPU ranking or experimental truth",
+      "decision": "unsupported",
+      "scope": "Static water48/96, original recipes, per-cohort H100/SM90 devices and stated post-context/cache-retaining timers only."
+    }
+  ],
+  "scope_limitations": [
+    "Two refined historical oracle driver byte snapshots were not supplied/found in bounded retained-source lookup; exact receipt/reuse contracts remain the qualification boundary.",
+    "Only actual mapped versioned core and observed reference-site images are authenticated as runtime mappings;25-artifact AOT/package proof is separate. Old installation/runtime catalog is not a fresh before-import/all-library witness.",
+    "Static original-recipe water48/96 only. No A100/5090/UKS/CBS/displaced-geometry/general-molecule acceptance or cross-GPU ranking.",
+    "Current8e31 head and later upstream modifications are not relabelled as a measured30-case cohort. Unchanged force-policy source evidence is reused within its original measurement scope.",
+    "SCF/Fock counts do not measure every semantic AO/force/quartet operation; generic work counters retain invalid flags.",
+    "Fresh requestedsol/ultra identity is not backend-verified; assurance is same-family/provisional."
+  ],
+  "audited_inputs": {
+    "path": "audited-input-hashes.json",
+    "sha256": "8d912df6cdbd48cc162a3261c1c00a2d805a0ed462059fb094f1b7bac9eea85f",
+    "files": 1525
+  },
+  "reproducible_reader_artifacts": [
+    "independent-reduce.py",
+    "independent-reduction-v1.json",
+    "independent-wb2.py",
+    "independent-wb2-v1.json",
+    "public-and-build-independent.py",
+    "public-and-build-independent-v1.json",
+    "closed-study-provenance-and-matched-v1.json",
+    "transport-independent-v1.json",
+    "migration-metadata-independent-v1.json",
+    "evidence-policy-independent-v1.json",
+    "source-code-git-independent-v1.json",
+    "oracle-controls-independent-v1.json",
+    "oracle-producer-git-independent-v1.json",
+    "reference-source-continuity-independent-v1.json",
+    "precision-observation-independent-v1.json",
+    "source-mutation-terminals-independent-v1.json",
+    "git-review-snapshot.txt",
+    "audit-request.txt",
+    "audit-request.json",
+    "audit-trace.json"
+  ]
+}

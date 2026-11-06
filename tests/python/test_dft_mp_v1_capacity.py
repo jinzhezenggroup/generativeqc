@@ -382,8 +382,14 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "2 * self.packed.nbytes + 32 * self.natom + "
         "32 * len(self.shells) + 16 * self.nprimitive"
     )
+    basis_source = (ROOT / "src/molecule/basis.cpp").read_text()
     assert result["basis"]["spd_expansion_contract_sha256"] == (
-        "a482b3ace40fd01758f504c1e47bfa795dcabb5483149873fcd36e71c6b47ae0"
+        qualify_capacity._source_span_sha256(
+            basis_source,
+            begin="std::vector<CartesianComponent> cartesian_components",
+            end="  if (l == 3)",
+            label="native s/p/d expansion",
+        )
     )
     assert result["basis"]["sparse_spherical_component_terms"] == {
         "s": 1,
@@ -403,7 +409,9 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "4dea9a2041897bf843012c01f64c580b6b8696f444611a54c0d161141f1894fd"
     )
     assert result["basis"]["basis_shell_expansion_contract_sha256"] == (
-        "300a64c1815273cf31ed5b463eac2e32f24bf4a1db5938975ffbad5cfb27f60c"
+        current_python_owner_identity(
+            "python/generativeqc/basis.py", "shells_for", owner="BasisSet"
+        )
     )
     calculator_source = (ROOT / "python/generativeqc/calculator.py").read_text()
     calculator_functions = {
@@ -1979,8 +1987,8 @@ def test_memory_bounds_fail_closed_when_production_definition_moves(
         ),
         (
             "python/generativeqc/calculator.py",
-            "return (\n            selected_basis.shells_for(atoms)",
-            "return (\n            selected_basis.shells_for(atoms)[:1]",
+            "            )\n            if isinstance(selected_basis, BasisSet)",
+            "            )[:1]\n            if isinstance(selected_basis, BasisSet)",
             "_shells_for_atoms basis lowering contract changed",
         ),
         (
@@ -2021,9 +2029,17 @@ def test_basis_counts_fail_closed_when_production_lowering_moves(
     [
         (
             "_shells_for_atoms",
-            "selected_basis.shells_for(atoms)",
-            "selected_basis.shells_for(atoms)[:1]",
+            "            )\n            if isinstance(selected_basis, BasisSet)",
+            "            )[:1]\n            if isinstance(selected_basis, BasisSet)",
         ),
+        (
+            "_shells_for_atoms",
+            'role="auxiliary" if auxiliary else "orbital"',
+            'role="orbital"',
+        ),
+        ("_shells_for_atoms", "operator=selected_operator", "operator='overlap'"),
+        ("_shells_for_atoms", "else self._device_name", "else 'cpu'"),
+        ("_shells_for_atoms", "self._density_fitting_backend()", "self._device_name"),
         ("_basis_for_atoms", "self._representation_name)", "'cartesian')"),
         (
             "_basis_for_atoms",
@@ -2139,11 +2155,18 @@ def test_calculator_basis_semantics_accept_refactors_without_native_loading(
     original = qualify_capacity._calculator_basis_contract(tmp_path)
     target = tmp_path / relative
     source = target.read_text()
-    source = source.replace(
-        "return (\n            selected_basis.shells_for(atoms)",
-        "return (\n            tuple(selected_basis.shells_for(atoms))",
-        1,
-    ).replace(
+    forwarding = next(
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "selected_basis"
+        and node.func.attr == "shells_for"
+    )
+    call = ast.get_source_segment(source, forwarding)
+    assert call is not None
+    source = source.replace(call, f"tuple({call})", 1).replace(
         "shells = self._shells_for_atoms(atoms, basis)",
         "shells = tuple(self._shells_for_atoms(atoms, basis))",
         1,
@@ -2152,6 +2175,52 @@ def test_calculator_basis_semantics_accept_refactors_without_native_loading(
     observed = qualify_capacity._calculator_basis_contract(tmp_path)
     assert observed[0] != original[0]
     assert observed[1] != original[1]
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("for row in shell.coefficients:", "for row in shell.coefficients[:1]:"),
+        ("Primitive(float(e), float(c))", "Primitive(float(e), -float(c))"),
+        ("                            index,", "                            0,"),
+        ("role=role", 'role="orbital"'),
+        ("consumer=consumer", "consumer=None"),
+        ("derivative_order=derivative_order", "derivative_order=0"),
+        ("backend=backend", 'backend="cpu"'),
+        ("operator=operator", 'operator="eri"'),
+        ("        require_basis(", "        (lambda *args, **kwargs: None)("),
+    ],
+)
+def test_basis_shell_expansion_rejects_census_and_admission_mutations(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    relative = "python/generativeqc/basis.py"
+    copy_contract_files(tmp_path, (relative,))
+    target = tmp_path / relative
+    source = target.read_text()
+    assert old in source
+    target.write_text(source.replace(old, new, 1))
+    with pytest.raises(
+        RuntimeError, match="shells_for basis lowering contract changed"
+    ):
+        qualify_capacity._basis_shell_expansion_contract(tmp_path)
+
+
+def test_basis_shell_expansion_provenance_accepts_equivalent_refactoring(
+    tmp_path: Path,
+) -> None:
+    relative = "python/generativeqc/basis.py"
+    copy_contract_files(tmp_path, (relative,))
+    before = qualify_capacity._basis_shell_expansion_contract(tmp_path)
+    target = tmp_path / relative
+    source = target.read_text()
+    source = (
+        source.replace("result = []", "expanded_shells = []")
+        .replace("result.append(", "expanded_shells.append(")
+        .replace("return tuple(result)", "return tuple(expanded_shells)")
+    )
+    target.write_text(source)
+    assert qualify_capacity._basis_shell_expansion_contract(tmp_path) != before
 
 
 def test_grid_memory_fails_closed_when_production_plan_inputs_move(
@@ -2299,32 +2368,139 @@ def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
         qualify_capacity._basis_layout_contract(tmp_path)
 
 
-def test_spherical_component_count_fails_closed_when_d_expansion_moves(
-    tmp_path: Path,
+def assert_native_spd_expansion_contract(
+    repository: Path, tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Check actual native s/p/d output against independently stated AO tables."""
+    harness = tmp_path / "spd_expansion.cpp"
+    harness.write_text(
+        r"""
+#include <iomanip>
+#include <iostream>
+#include "molecule/basis.hpp"
+int main() {
+  using namespace generativeqc;
+  std::cout << std::setprecision(17);
+  for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN,
+                                    GENERATIVEQC_BASIS_SPHERICAL}) {
+    for (unsigned l = 0; l <= 2; ++l) {
+      const auto expansions = molecule::ao_expansions(l, representation);
+      std::cout << expansions.size() << '\n';
+      for (const auto& ao : expansions) {
+        std::cout << ao.size() << '\n';
+        for (const auto& term : ao)
+          std::cout << term.component[0] << ' ' << term.component[1] << ' '
+                    << term.component[2] << ' ' << term.coefficient << '\n';
+      }
+    }
+  }
+}
+""",
+        encoding="utf-8",
+    )
+    executable = native_cxx.build_executable(
+        [harness, repository / "src/molecule/basis.cpp"],
+        tmp_path / "spd_expansion",
+        compile_args=(
+            "-std=c++20",
+            "-O0",
+            f"-I{repository / 'src'}",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ),
+    )
+    output = iter(
+        subprocess.run(
+            [str(executable)], check=True, capture_output=True, text=True, timeout=30
+        ).stdout.splitlines()
+    )
+    cartesian = (
+        (((0, 0, 0, 1.0),),),
+        (((1, 0, 0, 1.0),), ((0, 1, 0, 1.0),), ((0, 0, 1, 1.0),)),
+        (
+            ((2, 0, 0, 1.0),),
+            ((1, 1, 0, 1.0),),
+            ((1, 0, 1, 1.0),),
+            ((0, 2, 0, 1.0),),
+            ((0, 1, 1, 1.0),),
+            ((0, 0, 2, 1.0),),
+        ),
+    )
+    root_three_over_two = 3.0**0.5 / 2.0
+    spherical_d = (
+        ((1, 1, 0, 1.0),),
+        ((0, 1, 1, 1.0),),
+        ((2, 0, 0, -0.5), (0, 2, 0, -0.5), (0, 0, 2, 1.0)),
+        ((1, 0, 1, 1.0),),
+        ((2, 0, 0, root_three_over_two), (0, 2, 0, -root_three_over_two)),
+    )
+    spherical = (*cartesian[:2], spherical_d)
+    try:
+        for expansions in (*cartesian, *spherical):
+            assert int(next(output)) == len(expansions)
+            for expected_ao in expansions:
+                assert int(next(output)) == len(expected_ao)
+                for expected_term in expected_ao:
+                    actual = tuple(map(float, next(output).split()))
+                    assert actual[:3] == expected_term[:3]
+                    assert actual[3] == pytest.approx(
+                        expected_term[3], abs=1e-15, rel=1e-15
+                    )
+        assert next(output, None) is None
+        assert {l: sum(map(len, aos)) for l, aos in enumerate(spherical)} == (
+            qualify_capacity.SPARSE_SPHERICAL_COMPONENT_TERMS
+        )
+    except (AssertionError, StopIteration, ValueError) as error:
+        raise AssertionError("native s/p/d expansion contract changed") from error
+
+
+def test_spherical_component_counts_match_actual_native_expansions(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
+) -> None:
+    assert_native_spd_expansion_contract(ROOT, tmp_path, required_native_cxx)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (", {{0, 2, 0}, -root_three_over_two}", ""),
+        (
+            "components.push_back({static_cast<unsigned>(lx), ly, lz});",
+            "components.push_back({0, ly, lz});",
+        ),
+        ("{{0, 0, 2}, 1.0}", "{{0, 0, 2}, -1.0}"),
+    ],
+)
+def test_spherical_component_count_rejects_native_expansion_regressions(
+    tmp_path: Path, required_native_cxx: "NativeCxx", old: str, new: str
 ) -> None:
     spd_contract_tree(tmp_path)
     target = tmp_path / "src/molecule/basis.cpp"
-    source = target.read_text(encoding="utf-8")
-    old = ", {{0, 2, 0}, -root_three_over_two}"
+    source = target.read_text()
     assert old in source
-    target.write_text(source.replace(old, "", 1), encoding="utf-8")
+    target.write_text(source.replace(old, new, 1))
+    with pytest.raises(AssertionError, match="s/p/d expansion contract changed"):
+        assert_native_spd_expansion_contract(tmp_path, tmp_path, required_native_cxx)
 
-    with pytest.raises(RuntimeError, match="s/p/d expansion contract changed"):
-        qualify_capacity._spd_expansion_contract(tmp_path)
 
-
-def test_spherical_component_count_fails_closed_when_cartesian_generator_moves(
-    tmp_path: Path,
+def test_spherical_component_provenance_accepts_native_refactoring(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
 ) -> None:
     spd_contract_tree(tmp_path)
+    before = qualify_capacity._spd_expansion_contract(tmp_path)
     target = tmp_path / "src/molecule/basis.cpp"
-    source = target.read_text(encoding="utf-8")
-    old = "components.push_back({static_cast<unsigned>(lx), ly, lz});"
-    assert old in source
-    target.write_text(source.replace(old, "components.push_back({0, ly, lz});", 1))
-
-    with pytest.raises(RuntimeError, match="s/p/d expansion contract changed"):
-        qualify_capacity._spd_expansion_contract(tmp_path)
+    source = target.read_text()
+    target.write_text(source.replace("root_three_over_two", "sqrt_three_halved"))
+    after = qualify_capacity._spd_expansion_contract(tmp_path)
+    assert (
+        after["spd_expansion_contract_sha256"]
+        != before["spd_expansion_contract_sha256"]
+    )
+    assert (
+        after["sparse_spherical_component_terms"]
+        == before["sparse_spherical_component_terms"]
+    )
+    assert_native_spd_expansion_contract(tmp_path, tmp_path, required_native_cxx)
 
 
 def test_spherical_component_count_fails_closed_when_ao_packer_moves(

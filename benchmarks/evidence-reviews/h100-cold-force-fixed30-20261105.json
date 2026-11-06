@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-cold-force-fixed30-20261105",
+  "owner": "H100 cold optimization source-bound force and original30 delivery",
+  "reason": "Retain complete unrounded new force-selector/negative/frozen30/later WB2 E/F records, all failures and source/work/image/oracle identities in one deduplicated lossless byte container. Reuse verified already-merged own historical DB36 archive blobs; unchanged storage limits and no other-owner retirement or external backup. Accepted storage does not imply every candidate is promoted.",
+  "review_document": "benchmarks/results/h100-cold-force-fixed30-20261105/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part00",
+      "bytes": 786432,
+      "sha256": "05cc76d2918c81c65a461c1089d1f408d7946083dac428902dd4a07c2dfefae3",
+      "family": "h100-cold-force-fixed30-20261105",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless content-addressed original complete E/F receipt bytes, producer/plan/science/work/image/source/oracle controls and adverse outcomes; compressed stream part."
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part01",
+      "bytes": 586600,
+      "sha256": "51a1eed1451826d447c1c1257fc77bfc7e1fd65dcdf7fe02e61437847f38938a",
+      "family": "h100-cold-force-fixed30-20261105",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless content-addressed original complete E/F receipt bytes, producer/plan/science/work/image/source/oracle controls and adverse outcomes; compressed stream part."
+    }
+  ]
+}

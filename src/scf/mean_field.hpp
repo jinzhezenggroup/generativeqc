@@ -111,8 +111,13 @@ FockBuildSpec make_rsh_correction_fock_spec(
     FockSpin spin, double short_range_exchange, double long_range_exchange, double omega,
     FockApproximation approximation = FockApproximation::Exact);
 
+/** Native B3 semilocal graph with an explicitly authenticated full-range weight.
+ * The prepared MethodIR owns the coefficient; a display name never supplies it.
+ * Exact equality with the supplied Fock strategy remains a preflight invariant.
+ */
 ScfResult run_b3lyp_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const dft::MolecularGrid& grid, const ScfOptions& options,
+                        double exact_exchange,
                         const std::vector<double>* initial_density = nullptr);
 
 /** Canonical generated B97M/RSH/VV10 contract. No independent SCF loop. */
@@ -178,6 +183,7 @@ ScfResult run_semilocal_uks(const PreparedFockPlan& plan, const dft::AoBasis& ba
 
 ScfResult run_b3lyp_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const dft::MolecularGrid& grid, const ScfOptions& options,
+                        double exact_exchange,
                         const std::vector<double>* initial_density = nullptr);
 
 ScfResult run_cam_b3lyp_uks(const PreparedFockPlan& primary,

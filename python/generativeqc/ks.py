@@ -745,6 +745,40 @@ def composite_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
     )
 
 
+def full_range_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
+    """Recognize qualified restricted full-range graphs, independently of names.
+
+    This is only the mathematical admission rule. The caller must also require
+    CPU FP64, direct all-electron integrals and the qualified AO domain. Retain
+    the independently checked PBE0/B3LYP semilocal compositions while allowing
+    their full-range coefficient to vary within the physical hybrid interval.
+    Other semilocal scales, spin layouts and additional primitives need their
+    own complete molecular qualification rather than inheriting this rule.
+    """
+    if not isinstance(method_ir, MethodIR) or method_ir.spin != "unpolarized":
+        return False
+    try:
+        plan = compile_ks_execution_plan(method_ir)
+    except (TypeError, ValueError, NotImplementedError):
+        return False
+    if (
+        len(method_ir.primitives) != 2
+        or len(plan.exchange) != 1
+        or plan.exchange[0].operator != "full-range"
+        or not 0 < plan.exchange[0].coefficient <= 1
+        or plan.nonlocal_correlation is not None
+        or plan.post_scf
+    ):
+        return False
+    return any(
+        plan.semilocal.semantic_payload()
+        == compile_ks_execution_plan(
+            resolve_method(profile)
+        ).semilocal.semantic_payload()
+        for profile in ("PBE0", "B3LYP")
+    )
+
+
 def uses_molecular_nonlocal_domain(method_ir: MethodIR) -> bool:
     """Return the generated molecular nonlocal-domain capability for one KS graph."""
     try:

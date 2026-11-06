@@ -6,10 +6,11 @@ import ctypes
 import math
 from dataclasses import replace
 from functools import cache
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pytest
+from generativeqc_compiler.integral.blocks import WeightedDerivative
 from generativeqc_compiler.integral.ir import (
     DerivativeSpec,
     NuclearCoordinates,
@@ -28,7 +29,16 @@ from generativeqc_compiler.integral.weighted_eri_cuda import (
 from tools.generate_validation_references import pyscf_molecule, quartet_data
 from tools.generativeqc_validation.weighted_eri import primitive_variables
 
-CLASSES = ((1, 1, 1, 1), (2, 1, 1, 1))
+Angular = tuple[int, int, int, int]
+CLASSES: tuple[Angular, ...] = (
+    (1, 1, 1, 1),
+    (2, 1, 1, 1),
+    (2, 0, 1, 1),
+    (2, 0, 2, 0),
+    (2, 1, 1, 0),
+    (2, 1, 2, 0),
+    (2, 2, 1, 0),
+)
 EXPONENTS = (0.6, 0.8, 1.1, 0.9)
 CENTERS = np.array(
     [
@@ -41,7 +51,9 @@ CENTERS = np.array(
 
 
 @cache
-def _kernel(angular: tuple[int, ...], basis: str = "relative") -> WeightedEriKernel:
+def _kernel(
+    angular: Angular, basis: Literal["nuclear", "relative"] = "relative"
+) -> WeightedEriKernel:
     return build_weighted_eri_kernel(
         build_weighted_eri_ir(angular), derivative_basis=basis, pair_separable=True
     )
@@ -56,6 +68,7 @@ def _fixture(
     elif case == "all_coincident":
         centers[:] = centers[0]
     generator = np.random.default_rng(6317)
+    assert kernel.pair_components is not None
     pairs = [generator.normal(size=len(pair)) for pair in kernel.pair_components]
     if case == "zero":
         pairs[1][:] = 0
@@ -89,11 +102,17 @@ def _primitive_norm(exponent: float, component: str) -> float:
 
 
 @cache
-def _libcint(angular: tuple[int, ...], case: str) -> tuple[np.ndarray, np.ndarray]:
+def _libcint(
+    angular: Angular,
+    case: str,
+    slots: tuple[int, ...] = (0, 1, 2, 3),
+) -> tuple[np.ndarray, np.ndarray]:
     """Use separately normalized libcint blocks, never the weighted factory."""
     pytest.importorskip("pyscf")
     kernel = _kernel(angular)
     centers, _ = _fixture(kernel, case)
+    centers = centers[list(slots)]
+    exponents = tuple(EXPONENTS[slot] for slot in slots)
     molecule, scales, _ = pyscf_molecule(
         {
             "atomic_numbers": [1] * 4,
@@ -105,7 +124,7 @@ def _libcint(angular: tuple[int, ...], case: str) -> tuple[np.ndarray, np.ndarra
                     "primitives": [[exponent, 1.0]],
                 }
                 for center, (degree, exponent) in enumerate(
-                    zip(angular, EXPONENTS, strict=True)
+                    zip(angular, exponents, strict=True)
                 )
             ],
             "basis_representation": "cartesian",
@@ -118,7 +137,7 @@ def _libcint(angular: tuple[int, ...], case: str) -> tuple[np.ndarray, np.ndarra
         [
             math.prod(
                 _primitive_norm(exponent, component)
-                for exponent, component in zip(EXPONENTS, components, strict=True)
+                for exponent, component in zip(exponents, components, strict=True)
             )
             for components in kernel.spec.components
         ]
@@ -135,11 +154,12 @@ def _libcint(angular: tuple[int, ...], case: str) -> tuple[np.ndarray, np.ndarra
     "case", ("regular", "pair_coincident", "all_coincident", "zero")
 )
 def test_pair_projection_matches_libcint(
-    angular: tuple[int, ...], basis: str, case: str
+    angular: Angular, basis: Literal["nuclear", "relative"], case: str
 ) -> None:
     """Check the complete shell beyond the arbitrary-weight partition bound."""
     kernel = _kernel(angular, basis)
     centers, pairs = _fixture(kernel, case)
+    assert kernel.pair_components is not None
     assert (
         tuple(
             bra + ket
@@ -158,12 +178,13 @@ def test_pair_projection_matches_libcint(
 
 @pytest.mark.parametrize("angular", CLASSES)
 def test_pair_projection_signed_scale_recovery_and_finite_difference(
-    angular: tuple[int, ...],
+    angular: Angular,
 ) -> None:
     """Weights stay fixed under AD, including a nonfinal recovered shell slot."""
     integral = build_weighted_eri_ir(angular)
     invariant = TranslationInvariant(dependent_center=1)
     consumer = integral.contractions[0]
+    assert isinstance(consumer, WeightedDerivative)
     changed = replace(
         integral,
         operator=replace(integral.operator, invariants=(invariant,)),

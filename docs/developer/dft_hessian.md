@@ -69,9 +69,109 @@ full-range exact-exchange fraction for CPU-side algebraic composition. It binds
 the resulting restricted spin-summed -a/2 raw K action into the response
 identity and **refuses nonzero exchange unless the backend explicitly declares
 raw full-range K support**. Semilocal a=0 keeps the same identity and behavior.
-This is a provider-checked, synthetic-oracle-tested response contract only;
-`NativeRKSResponse` remains restricted to native LDA/PBE, and no native PBE0,
-B3LYP, user-composed or CUDA hybrid molecular Hessian endpoint is promoted.
+This response contract alone does not grant a molecular capability.
+`NativeRKSResponse` remains restricted to native LDA/PBE; full-range hybrid
+molecular execution uses the shared composite owner described next.
+
+The shared `CompositeRKSResponse` owner also accepts
+CPU direct all-electron RKS full-range-exchange graphs with the native
+LDA/PBE or B88/VWN-RPA/LYP semilocal families. It binds the physical token-verified MethodIR,
+not the native carrier selector, to the mixed J/K/XC response, frozen K nuclear
+RHS and compiler-owned `exact_exchange` second-order source. Cartesian and
+real-spherical AOs reuse `HessianBasis`; the SCF, density and response remain in
+the original public variational space. The public wrapper separately admits
+strict-FP64 CPU direct all-electron restricted PBE0/B3LYP semilocal compositions
+with one full-range coefficient in `(0, 1]`, Cartesian/spherical AOs through f,
+and no additional primitive. Admission compares resolved mathematics rather
+than a user-controlled identifier. UKS, ECP, DF, dispersion and CUDA full-range
+variants remain excluded. An installed spherical Ni/def2-SVP fixture does not
+establish production-scale support for 25–40-atom Ni systems.
+The low-level receipt always reports `public_calculator_endpoint=False`;
+only the actual Calculator wrapper marks the endpoint public and adds native
+SCF counts, energy, backend and complete endpoint time.
+The CPU restricted composite owner conditions its existing shared response
+solve with signed occupied/virtual orbital gaps. Zero/near-zero gaps decline
+this scaling without modifying the physical operator or residual gates; see
+[the response contract](response.md). This is method-neutral conditioning,
+not a new hybrid response solver or additional endpoint qualification.
+CPU full-range integral sources reuse the compiler's factorized Hermite/Boys
+jets through a bounded host consumer, rather than compiling each ERI component
+tile separately. This consumer admits at most 128 primitive records and 64
+components per page; Cartesian normalization and physical atom scattering stay
+with their shared owners. Second-order execution reserves shell/publication
+buffers before lending the remaining numeric budget, and retains the original
+bounded component lowering when the factorized lease cannot fit. Generated
+scalar stack temporaries, compiler processes and library mappings are excluded
+from this numeric lease; it is not a complete endpoint memory/time bound.
+The compiler owns disjoint AO-component partitions for expanded second-source
+lowering. CPU scalar lowering uses at most eight components per artifact,
+independently of coordinate-output tiles, to bound the optimizer's CSE dimension
+for high-angular S/T/V and resource-fallback ERIs. The shared factorized host
+program retains 64-component pages; CUDA's existing 64-component schedule is
+unchanged. Every component is accumulated exactly once for each output tile.
+Artifact identities already bind both subsets; smaller tiles do not relax
+finite compiler deadlines, arithmetic or numeric-budget checks. Diagnostics
+report the scalar-lowering component limit separately from semantic work counts.
+The compiler owns the shared exact eightfold ERI permutation schedule. CPU
+directional sources reuse one canonical raw jet for full-range J and K, keeping
+their distinct density factors with the runtime consumer. Full-range weighted
+first/second sources sum each distinct ordered shell cotangent after transposing
+it into canonical component order; repeated shells do not imply a factor of
+eight. Second-order folding reserves the output and two weight blocks, or keeps
+the ordered bounded schedule if that additional storage does not fit. Every
+ordered weight is validated, including exact translation-zero quartets.
+Each stationary source prepares its density/energy-weighted-density pullbacks
+once per response and reuses the compiler's weight/JVP programs by term count.
+Shell callbacks evaluate only the requested fixed or moving cotangent. They do
+not retain rank-four weights, integrals or a geometry-replay numeric cache;
+MethodIR/TensorIR still owns all spin factors and exchange coefficients.
+The compiler partitions ordered terms under the same per-block symbolic element
+budget for both pair and quartet weights. Runtime gathers only each tile's
+indices and density feeds, preserving flattened component order and the complete
+shell-local output; a large shell does not raise the compiler admission cap.
+Its admitted AO-jet reserve includes native basis storage and tile/publication
+buffers and is passed explicitly to the native evaluator. The remaining grid
+budget excludes that reserve; raising the grid allowance does not remove the
+independent point/integral work or capacity checks.
+
+The native CPU preparation freezes the actual full-range coefficient from the
+physical execution plan and passes it to the shared RKS/UKS SCF wrappers. The
+wrapper still authenticates the complete prepared Fock strategy; it does not
+substitute a named functional's canonical fraction. Final-state validation
+binds the same coefficient through the immutable determinant, physical Fock
+and eigenframe identities while retaining the fixed semilocal graph/scales.
+This permits B3-family execution with a noncanonical coefficient without
+widening CUDA's matched-composition restriction. Molecular tests compare canonical and 37/100 exchange
+on H2 and asymmetric HeH+ against independently converged reference energies,
+densities and complete energy-difference Hessians at three steps. These small
+all-s fixtures do not qualify real-spherical Ni or installed endpoints.
+
+`StationaryGridSecondOrder` accepts an absent nonlocal primitive. In that case
+it allocates no VV10 pair program, executes zero pair evaluations and does not
+apply a VV10 pair-work cap to a semilocal calculation. The full-range
+B88/VWN-RPA/LYP feature Hessian differentiates the same production expression
+as native SCF, including its vacuum/tail convention; it does not inherit the
+different WB97M-V feature floors. Primitive fractions remain part of the graph
+and scientific identity. WB97M-V retains its existing work policy and VV10
+admission. Neither this grid source nor a complete small-molecule low-level
+HVP independently grants public capability: the complete molecular and installed
+gates remain separate. Full-range UKS, ECP, DF, D3 and CUDA are not promoted.
+
+Native LDA/PBE grid partials use a separate identity-bound point-provider
+contract inside the same grid/weight and molecular orchestration. The runtime
+provider executes the actual SCF point worker and its directional potential
+worker, including native scaled tail arithmetic and C2 spin continuation;
+it does not replace that numerical domain with the interior PBE Maple graph.
+The compiler remains independent of the runtime and reference engines. It
+tiles the injected provider under an explicit workspace reserve, checks every
+returned shape/value and composes grid-weight derivatives once. This provider
+does not admit a nonlocal primitive. The private scaled CPU response ABI carries
+the authenticated semilocal X/C weights; full-range K remains a separate source.
+Frozen unscaled ABI contracts are preserved. PBE0 and changed-fraction molecular
+tests use this same mixed J/K/XC path, not a named-functional Hessian solver.
+Independent point/grid tests exercise both spins and changed X/C scales; this
+alone is not a public endpoint qualification; the installed endpoint,
+independent molecular, lifecycle and resource checks are also required.
 
 The closed-shell nuclear-perturbation consumer follows the same rule. Its
 canonical installed owner is `generativeqc.stationary_nuclear`: metric-density

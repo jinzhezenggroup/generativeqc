@@ -21,6 +21,26 @@ struct Order4SourceRoots {
       ShellClass == kPpppShellClass                                    ? 81U
       : ShellClass == kDsppShellClass || ShellClass == kDppsShellClass ? 54U
                                                                        : 36U;
+  static constexpr unsigned bra_pair_components = ShellClass == kPpppShellClass   ? 9U
+                                                  : ShellClass == kDppsShellClass ? 18U
+                                                  : ShellClass == kDdssShellClass ? 36U
+                                                                                  : 6U;
+  static constexpr unsigned ket_pair_components = component_count / bra_pair_components;
+
+  /** Exact complete pair roots; DDSS has no nontrivial ket projection. */
+  __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate_separable(
+      const generated_weighted_eri::Geometry& geometry, const double* bra, const double* ket)
+    requires(ShellClass != kDdssShellClass)
+  {
+    if constexpr (ShellClass == kPpppShellClass)
+      return generated_weighted_eri::pppp_force_separable(geometry, bra, ket);
+    else if constexpr (ShellClass == kDsppShellClass)
+      return generated_weighted_eri::dspp_force_separable(geometry, bra, ket);
+    else if constexpr (ShellClass == kDsdsShellClass)
+      return generated_weighted_eri::dsds_force_separable(geometry, bra, ket);
+    else
+      return generated_weighted_eri::dpps_force_separable(geometry, bra, ket);
+  }
 
   __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate_relative(
       const generated_weighted_eri::Geometry& geometry, const double* weights) {

@@ -1,0 +1,6 @@
+{
+  "status": "passed",
+  "base_commit": "7fc4ae8f6a6e4e31509f0fa7b3409d7daa72d83d",
+  "reconstructed_source_identity": "4c54ccfb3d38e5ec86b147a019d8ef99e87c8b8247ca5a42bf50a84027dc61ed",
+  "scope": "base Git archive plus exact measured-source patch; no GPU build"
+}

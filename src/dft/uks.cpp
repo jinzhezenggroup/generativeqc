@@ -515,9 +515,10 @@ ScfResult run_uks_impl(
     }
     if (result.converged && options.retain_ks_state)
       result.ks_physical_fock = concatenate(final.fock.alpha, final.fock.beta);
-    // Only the generic ordinary owner retries a rejected final closure. Preserve
-    // every iteration/Fock count and reuse, rather than increase, its SCF budget.
-    if (result.converged || !evaluate_xc.program || options.max_iterations - used_iterations < 2)
+    // An ordinary CPU owner can exhaust the short physical closure before its
+    // SCF budget. Resume from that rejected physical state with fresh DIIS,
+    // preserving every gate, iteration/Fock count and the original budget.
+    if (result.converged || !ordinary_primary || options.max_iterations - used_iterations < 2)
       break;
     diis.clear();
   }
@@ -611,9 +612,9 @@ ScfResult run_r2scan_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis
 }
 ScfResult run_b3lyp_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const dft::MolecularGrid& grid, const ScfOptions& options,
-                        const std::vector<double>* initial_density) {
-  auto spec =
-      make_global_hybrid_fock_spec(FockSpin::Unrestricted, dft::generated::kB3lypExactExchange);
+                        double exact_exchange, const std::vector<double>* initial_density) {
+  auto spec = make_global_hybrid_fock_spec(FockSpin::Unrestricted, exact_exchange);
+  spec.exchange.present = exact_exchange != 0.0;
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
     spec.coulomb.approximation = FockApproximation::DensityFitted;
     spec.exchange.approximation = FockApproximation::DensityFitted;
