@@ -79,3 +79,8 @@ Fresh standalone device/resource/sanitizer gates pass, followed by a separately
 approved source-only replay against actual native rows/cache/bounds/offsets and
 output slots. Only actual-task cost including mapping/preparation, then complete
 endpoint evidence, can support integration or performance claims.
+
+The separately qualified [production compact-source integration](../implemented/performance/2026-11-06-shared-cold-range-source.md)
+shares this recurrence through a distinct compile-time sink. Its native row/rank
+ownership and complete A100/RTX5090 endpoint evidence do not relabel the retained
+fixture-only results as molecular performance measurements.

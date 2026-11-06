@@ -1,0 +1,24 @@
+{
+  "id": "scf.shared-range-source",
+  "classification": "already-default",
+  "controls": ["dft-policy:GENERATIVEQC_DIRECT_RESIDENT_COMPONENT_SOURCE"],
+  "owner_issues": [2976],
+  "sources": [
+    "src/scf/cuda/direct_jk.cpp",
+    "src/scf/cuda/direct_jk_kernels.cu",
+    "src/scf/cuda/direct_source_layout.hpp",
+    "src/scf/cuda/direct_jk_source_lease.cpp",
+    "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py"
+  ],
+  "rationale": "Strict SR/LR source-only owners share one FP64 shell recurrence across canonical AO components for orders three through nine. A compile-time production value sink preserves ordinary Fock specializations, exact zeros and the existing sorted compact source layout. Bounded primitive geometry and a temporary quadratic inverse retain scalar fallback; tighter consumer-threshold censuses use the AO consumer. The selection changes no automatic lease envelope, precision, SCF convergence, grids, full-range provider or force ownership. Explicit 1 restores component-source construction without disabling replay. Source-bound complete 96-atom WB97M-V Direct cold endpoints improve by 8.40% on A100 and 3.19% on RTX5090; warm changes are +0.67% and effectively zero, with unchanged Fock and VV10 sweep counts. This is a qualified cohort, not a universal ranking.",
+  "revisit_condition": "Require source-matched complete cold energy+analytic-force+host-export benefits on A100 and RTX5090, warm nonregression, independent signed SR/LR RKS/UKS raw-matrix gates including screened/f-shell cases, and memcheck. Preserve exact source-row censuses, resource accounting, explicit rollback, source identities and rejected results. No GPU-name specialization or CPU oracle work in production.",
+  "evidence": [
+    "tests/python/test_direct_source_layout.py",
+    "tests/python/test_range_resident_values_cuda.py",
+    "docs/developer/direct_pair_recurrence.md",
+    "issue:#2976",
+    "benchmarks/results/cold-range-shared-source-20261106/README.md",
+    "benchmarks/results/cold-range-shared-source-20261106/replay.py",
+    ".agents/notes/implemented/performance/2026-11-06-shared-cold-range-source.md"
+  ]
+}

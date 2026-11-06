@@ -111,6 +111,7 @@ PREFIX = r"""
 #include "runtime/compensated_atomic.cuh"
 #include "scatter.hpp"
 #include "scf/generated_shell_task.hpp"
+#include "scf/cuda/direct_source_layout.hpp"
 #include <array>
 #include <cassert>
 #include <cmath>
@@ -126,7 +127,7 @@ namespace generativeqc::scf::cuda_execution {
 struct { unsigned x{}; } threadIdx;
 struct { unsigned x{32}; } blockDim;
 enum class DirectScreeningPurpose { Fock, Force };
-enum class MaterializedDirectPairSink { Fock, CanonicalValues };
+enum class MaterializedDirectPairSink { Fock, CanonicalValues, ResidentValues };
 constexpr unsigned kDdddAngularOrder = 8;
 template<bool Materialized> constexpr unsigned kDdddStreamThreads = Materialized ? 256 : 32;
 template<bool Materialized> void synchronize_dddd_stream() {}
