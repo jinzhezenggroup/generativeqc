@@ -673,8 +673,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
             options_.xc_force_tile_points = options_.xc_tile_points;
             automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
           }
-        } else if (fitted_rks_fp64 && unconstrained && basis_.nao >= 512 &&
-                   grid_.point_count() >= (1U << 19)) {
+        } else if ((fitted_rks_fp64 || (automatic_force && fused_rks_fp64)) && unconstrained &&
+                   basis_.nao >= 512 && grid_.point_count() >= (1U << 19)) {
           cudaDeviceProp properties{};
           auto status = cudaGetDeviceProperties(&properties, device);
           if (status == cudaErrorNotSupported || status == cudaErrorInvalidValue) {
@@ -699,13 +699,15 @@ class KsPreparedState final : public KsSingleOwnerPort {
                 std::all_of(options_.application_precision_budget.begin(),
                             options_.application_precision_budget.end(),
                             [](double value) { return value == 0; });
+            // Nonlocal SCF panels keep their fitted admission. Force batching
+            // admits the same strict fused RKS owner independently of fitting.
             options_.xc_tile_points = dft::automatic_ks_scf_tile(
                 0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
                 execution_plan_.nonlocal_correlation, properties.major,
                 properties.singleToDoublePrecisionPerfRatio);
             if (automatic_force && strict_precision_budget && admitted_cuda_stationary_binding()) {
               options_.xc_force_tile_points = dft::automatic_ks_force_tile(
-                  fitted_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
+                  fused_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
                   basis_.natom, basis_.nao, grid_.point_count(), properties.major);
               automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
             }
@@ -3258,6 +3260,7 @@ class KsPreparedBatch final : public PreparedBatch,
       } catch (...) {
         items_[i].failure = std::current_exception();
         result.status = item_exception_status();
+        result.detail = item_exception_detail();
       }
     }
 
@@ -3316,6 +3319,7 @@ class KsPreparedBatch final : public PreparedBatch,
         }
         auto& item = items_[i];
         item.failure = nullptr;
+        result.detail.clear();
         const bool reuse = !attempt && result.warm_start_used;
         const auto* seed =
             reuse && !item.resident_warm
@@ -3359,6 +3363,7 @@ class KsPreparedBatch final : public PreparedBatch,
             result.calculation.ks_diagnostic->coulomb_exchange_work.complete = false;
           items_[i].failure = std::current_exception();
           result.status = item_exception_status();
+          result.detail = item_exception_detail();
         }
       }
 #if GENERATIVEQC_HAS_CUDA
@@ -3374,6 +3379,7 @@ class KsPreparedBatch final : public PreparedBatch,
               results[i].calculation.ks_diagnostic->coulomb_exchange_work.complete = false;
             items_[i].failure = std::current_exception();
             results[i].status = item_exception_status();
+            results[i].detail = item_exception_detail();
             running[i] = false;
           }
         }
@@ -3383,10 +3389,12 @@ class KsPreparedBatch final : public PreparedBatch,
             auto* cuda = items_[i].plan->cuda_plan();
             if (cuda->finish_iteration()) continue;
             running[i] = false;
-            if (cuda->failed())
-              throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
-                                "CUDA KS physical evaluation failed");
+            if (cuda->failed()) {
+              results[i].calculation = adapt_result(cuda->result(false), backend_);
+              throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, cuda->failure_detail());
+            }
             finish(i, cuda->result(false));
+            results[i].detail = cuda->failure_detail();
             results[i].target_fock_work->finish_attempt(cuda->completed_fock_builds());
           } catch (...) {
             target_coulomb_exchange_work[i].complete = false;
@@ -3394,6 +3402,7 @@ class KsPreparedBatch final : public PreparedBatch,
               results[i].calculation.ks_diagnostic->coulomb_exchange_work.complete = false;
             items_[i].failure = std::current_exception();
             results[i].status = item_exception_status();
+            results[i].detail = item_exception_detail();
             running[i] = false;
           }
         }

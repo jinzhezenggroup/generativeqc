@@ -1,13 +1,17 @@
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
 
 #include "scf/solver/proposal_control.hpp"
+#include "scf/solver/validation_products.hpp"
 
 int main() {
   using namespace generativeqc::scf;
   try {
+    const solver::ValidationProducts products(
+        {}, std::getenv("GENERATIVEQC_TEST_VALIDATION_PREFER_PROVIDER") != nullptr);
     // The density is built analytically in a rotated, nonidentity AO metric.
     // Its occupations are exactly {1, 1/2, 1/2}, with trace two. No native
     // eigensolver or validation product constructs this oracle.
@@ -37,7 +41,7 @@ int main() {
                            ProposalRepresentation kind = ProposalRepresentation::ensemble_density) {
       const auto original = candidate;
       const ScfProposal proposal{kind, 0, 0, candidate};
-      const auto result = solver::invalid_proposal(state, proposal);
+      const auto result = solver::invalid_proposal(state, proposal, {}, products);
       if (result != expected || candidate != original)
         throw std::runtime_error(std::string("proposal admission: ") + result + " expected " +
                                  expected);
@@ -56,7 +60,7 @@ int main() {
     check(density(1, .5, .5), "singular_metric");
     state.overlap = singular;
     const auto seed = density(1, .5, .5);
-    solver::validate_seed(state.overlap, seed, 3, {2}, 1);
+    solver::validate_seed(state.overlap, seed, 3, {2}, 1, {}, products);
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
     return 1;

@@ -67,11 +67,18 @@ def metadata(library: Any, method: str) -> Any:
 
 
 @pytest.mark.parametrize(
-    "method", ("rhf", "pbe-rks", "pbe0-rks", "b3lyp-rks", "r2scan-rks", "m06-2x-rks")
+    "method",
+    (
+        "rhf",
+        "pbe-rks",
+        "pbe0-rks",
+        "b3lyp-rks",
+        "r2scan-rks",
+        "m06-2x-rks",
+        "wb97m-v-rks",
+    ),
 )
-def test_native_defaults_use_complete_catalog_and_grid(
-    library: Any, method: str
-) -> None:
+def test_native_defaults_are_backend_independent(library: Any, method: str) -> None:
     calculator = metadata(library, method)
     assert transport.default_controls(calculator) == {
         "energy_tolerance": 1e-9,
@@ -79,21 +86,37 @@ def test_native_defaults_use_complete_catalog_and_grid(
         "screening_tolerance": 1e-12,
     }
     calculator._device_name = "cpu"
-    assert transport.default_controls(calculator)["density_tolerance"] == 1e-8
+    assert transport.default_controls(calculator)["density_tolerance"] == 1e-5
 
 
-@pytest.mark.parametrize("method", ("uhf", "mp2", "pbe-uks", "wb97m-v-rks"))
-def test_unqualified_models_keep_strict_defaults(library: Any, method: str) -> None:
+@pytest.mark.parametrize("method", ("uhf", "mp2", "pbe-uks"))
+def test_other_models_share_defaults(library: Any, method: str) -> None:
     assert (
         transport.default_controls(metadata(library, method))["density_tolerance"]
-        == 1e-8
+        == 1e-5
     )
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_scc_without_a_gpu4pyscf_counterpart_retains_its_controls(
+    library: Any, device: str
+) -> None:
+    calculator = SimpleNamespace(
+        _library=library,
+        _method=_native.METHOD_GFN2_XTB,
+        _device_name=device,
+    )
+    assert transport.default_controls(calculator) == {
+        "energy_tolerance": 1e-10,
+        "density_tolerance": 1e-8,
+        "screening_tolerance": 1e-12,
+    }
 
 
 @pytest.mark.parametrize(
     "change", ("level", "radius", "partition", "coincident", "schedule", "identity")
 )
-def test_altered_model_or_grid_cannot_reuse_qualified_defaults(
+def test_model_and_grid_do_not_change_default_tolerances(
     library: Any, change: str
 ) -> None:
     calculator = metadata(library, "pbe-rks")
@@ -121,7 +144,7 @@ def test_altered_model_or_grid_cannot_reuse_qualified_defaults(
         if change == "identity"
         else options.method_ir,
     )
-    assert transport.default_controls(calculator)["density_tolerance"] == 1e-8
+    assert transport.default_controls(calculator)["density_tolerance"] == 1e-5
 
 
 def test_native_failure_and_malformed_receipts_are_authoritative(library: Any) -> None:
@@ -145,6 +168,23 @@ def test_absent_protocol_rejects_the_selected_installation() -> None:
     with pytest.raises(
         NotImplementedError, match="required SCF default-controls query"
     ):
+        transport.default_controls(calculator)
+
+
+def test_legacy_policy_cannot_restore_backend_dependent_defaults(
+    library: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calculator = metadata(library, "rhf")
+    query = library.generativeqc_scf_defaults_query_v1
+
+    def legacy(*args: Any) -> int:
+        status = query(*args)
+        receipt = ctypes.cast(args[-1], ctypes.POINTER(transport._Controls)).contents
+        receipt.policy_version = 1
+        return status
+
+    monkeypatch.setattr(library, "generativeqc_scf_defaults_query_v1", legacy)
+    with pytest.raises(RuntimeError, match="invalid receipt"):
         transport.default_controls(calculator)
 
 

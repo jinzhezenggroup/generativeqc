@@ -135,7 +135,7 @@ template <class... Args> void launch_update_diis_kernel(Args...) { ++legacy_call
   const unsigned diis_history=4, history=4;
   double value{};
   double *fock=&value, *residual=&value, *fock_history=&value, *residual_history=&value,
-         *diis_linear_system=&value, *diis_coefficients=&value, *eigensystem=&value,
+         *history_residual=&value, *diis_linear_system=&value, *diis_coefficients=&value, *eigensystem=&value,
          *gram=&value, *weights=&value, *effective=&value;
   double *diis_raw_gram=incremental?&value:nullptr, *raw_gram=diis_raw_gram;
   unsigned count{}, head{};

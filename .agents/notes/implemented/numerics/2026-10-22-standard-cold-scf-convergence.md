@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-10-22
 
+The default-control whitelist described here is superseded by
+[uniform SCF defaults](2026-11-05-uniform-scf-defaults.md). Historical endpoint
+qualification and the distinction between AO and MO norms remain relevant;
+uniform defaults do not expand physical-owner qualification.
+
 ## Problem
 
 Cold local HF/KS spent extra iterations tightening residuals after energies and

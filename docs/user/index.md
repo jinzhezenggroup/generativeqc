@@ -26,6 +26,7 @@ methods
 :caption: Run and reuse calculations
 
 geometry_optimization
+vibrations
 electronic_properties
 correlated_methods
 unrestricted_cc

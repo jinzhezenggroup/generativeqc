@@ -7,10 +7,14 @@ import base64
 import hashlib
 import json
 import lzma
+import sys
 from pathlib import Path
 from statistics import median, stdev
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT))
+
+from benchmarks._exact_fp64_evidence import load
 
 
 def paired_errors(candidate: dict, control: dict, *, tile_change: bool) -> list[dict]:
@@ -63,7 +67,8 @@ def main() -> None:
             else:
                 continue
             assert hashlib.sha256(raw).hexdigest() == value["sha256"]
-    bundles = json.loads(lzma.decompress(Path(__file__).with_name("receipts.json.xz").read_bytes()))
+    storage, originals = load(Path(__file__).resolve().parent)
+    bundles = json.loads(originals[storage["original_container"]])
     for device, bundle in bundles.items():
         analysis = bundle["analysis"]
         rows = {row["name"]: row for row in analysis["populations"]}

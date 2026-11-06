@@ -11,7 +11,7 @@ using reference::Matrix;
  */
 class Diis {
  public:
-  /** KS can normalize the residual Gram block before the pivot test. A common
+  /** KS and CUDA DF normalize the residual Gram block before the pivot test. A common
    * scale preserves DIIS coefficients while allowing physical residuals well
    * below 1e-7. The default preserves historical HF iteration behavior. */
   explicit Diis(std::size_t capacity, bool normalize_metric = false);

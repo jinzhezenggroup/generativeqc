@@ -1,0 +1,25 @@
+{
+  "status": "PASS_CHECKED_IDENTITIES_ONLY_AND_RKS_POLICY_INPUTS_UNCHANGED",
+  "generated_changes": {
+    "native_source_identity": {
+      "before": "124ad1e99725b1c15b995969a3e9ada3ef45c7673136d761a39241c8019c3cbe",
+      "after": "64f637d1ae39241cac42c7484f7d2840283a29861e3adfb91325d5adab2dbc6e"
+    },
+    "source_identity": {
+      "before": "5e3ef29b4091e7d5b40f00bb998f7ff63f497f5d043395ef7e7511fcd1774fa9",
+      "after": "b6f4297bc4cd701cb0b0fdf6932836ed7571382f4e6d990f125cec2381db8f03"
+    }
+  },
+  "stale_unchanged": true,
+  "capability_summary_unchanged": true,
+  "unchanged_RKS_inputs": {
+    "src/methods/dft_method.cpp": "90c1ddff1fe48c75db6041c3c796ea669050c49891913f47b85700ebd42c53b0",
+    "src/dft/ks_tile_policy.hpp": "cfdc46fbfe6556513c9d869a129e5c7fe6371d05b512efc598a984d85f07540e",
+    "src/dft/cuda_ks.cpp": "fa51c59c75c022f6e6c46e8305729824bb6f298eb0bb17b81a50298b5697447e",
+    "src/dft/rks.cpp": "84e9d204c2f20f91a28d2a08feccc0c7bc4c37f9a872e909b2390a12387f4de0",
+    "src/methods/dft_method_preparation.cpp": "26831f98ccd9f6f994df5310e6d71f4508792080cf419c97dd0b8cf7d9280a61",
+    "python/generativeqc/ks.py": "ad7540595e8907ca3836255c5a9f132b304171923e4126f11b2eceda4ef36e84",
+    "benchmarks/readme_defaults.py": "e79ae3e71e82681f4549e29747dc5bf5e0c51736fbf4f8260fbacc5559ea3d08"
+  },
+  "scope": "Actual new upstream CPU UKS input requires checked metadata refresh only; no scientific promotion or H100 remeasurement."
+}

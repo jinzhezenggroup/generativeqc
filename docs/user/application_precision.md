@@ -6,6 +6,22 @@ from an application error budget: supported routes can use FP32 arithmetic,
 relaxed stopping limits, or both, without asking users to select kernels.
 Fast need not execute approximate work or be faster on every input.
 
+Both profiles use the same candidate execution, native scheduling and publication
+pipeline. Successful unaudited scalar calls retain their candidate's native
+workspace for subsequent calls in either profile. `clear_cache()` releases it;
+execution/publication failures and transitions to an independent audit also
+release candidate residency. Precision policy changes arithmetic admission and
+evidence, not this resource lifetime. Prepared batches likewise use the same
+policy owner and retain their independently managed `close()` lifetime.
+
+Shared drivers are not a dtype-only parity guarantee. Fast can also change SCF
+stopping and provisional screening, and its required fallback/audit work may add
+complete solves. Some native execution optimizations and resource admissions
+still depend on the application budget. The VV10 fixed-anchor implementation is
+shared, but its strict route remains explicitly selected rather than automatic.
+Equal FP64 arithmetic alone therefore does not establish identical
+internal schedules, work counts, memory requirements or endpoint cost.
+
 `policy="fp64"` remains a backward-compatible name for Standard: both use
 identical controls and execution, and the serialized `profile` preserves the
 name requested by the caller for compatibility. The native CLI
@@ -154,19 +170,28 @@ unchanged: this does not promise FP64-mode observable accuracy.
 
 The anchor lease is optional, allocated after mandatory preparation and included
 in the native state capacity. It requires five additional FP64 AO matrices and
-one scalar. Device allocation failure keeps the ordinary Fast path; host
+one scalar. Device allocation failure keeps the ordinary selected-precision path; host
 reservation and non-allocation errors remain explicit failures. At a pressured
 force handoff the idle anchor is retired before optional ERIs; density, stationary
 weights, XC, the final-state token and the warm seed remain valid. Subsequent
-warm and cold solves on that owner use ordinary Fast without reallocating anchors.
-Fixed anchors in strict FP64 remain off by default. Explicit `GENERATIVEQC_KS_FAST_ANCHOR_DELTA=1`
-also admits one-spin exact full/range Direct VV10 owners in FP64, without mixed
-arithmetic or changed convergence tolerances. AUTO alone does not admit this
-strict path. DF/UKS, public resource-ledger owners, device chunks and same-owner
-warm replays retain their incumbent path.
-`GENERATIVEQC_KS_FAST_ANCHOR_DELTA=0` disables the optimization before preparation;
-unset selects the Fast default at 192 or more AOs; `1` opts in within the scientific
-eligibility domain, including smaller owners, without forcing unsupported domains.
+warm and cold solves on that owner use the incumbent route without reallocating anchors.
+Both policies use the same FP64 anchor implementation and complete-model/provider
+guards. `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` also opts strict FP64 WB97M-V
+single-spin exact-Direct VV10 owners into provisional anchor reuse, without
+relaxing their tolerances, narrowing arithmetic or changing final physical closure.
+Strict AUTO requests alone are not admission. Other models, DF/UKS, public
+resource-ledger owners, device chunks and same-owner warm replays retain their
+incumbent path. The selector replaces `GENERATIVEQC_KS_FAST_ANCHOR_DELTA`; no
+compatibility alias is retained.
+`GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=0` disables the optimization before preparation;
+unset retains automatic admission only for the budget-qualified Fast domain at
+192 or more AOs. Strict owners remain default-off pending endpoint qualification.
+Explicit `1` never forces unsupported domains. The selector is part of new
+checkpoint execution identities.
+The native C++ transfer diagnostics retain their `fast_anchor_builds` and
+`fast_delta_builds` member names and count the shared strict route as well.
+These counters are not exposed by Python's public KS transport diagnostics;
+public-endpoint qualification must obtain separate execution-work evidence.
 There is no universal iteration-count or speed guarantee.
 
 The shared nonlocal initializer and frozen-potential proposal stages also admit
@@ -440,25 +465,51 @@ It does not imply FP32 execution or promise a speedup for every workload.
 
 Standard (or legacy `fp64`) without `target` reports `strict_fp64`, with `target=None` and no measured
 errors. Native convergence/final-state checks are retained, but **no independent
-observable-budget audit is claimed**. Its CUDA solver defaults are `1e-9` energy change, `1e-5` density change and
-`1e-12` screening for all-electron RHF and canonical restricted PBE, PBE0,
-B3LYP, r2SCAN (including r2SCAN-3c), and M06-2X on the default grid. CPU,
-unrestricted, correlated and other model/grid domains, and older native
-libraries, retain `1e-10` energy and `1e-8` density. `Calculator` and Fast's
-Standard fallback resolve the same defaults. Explicit tighter controls are
-preserved; neither FP64 arithmetic nor solver thresholds bound force error.
+observable-budget audit is claimed**. Shared public SCF defaults are `1e-9`
+energy change, `1e-5` density change and `1e-12` screening, independent of backend,
+spin, ECP, model or grid. `Calculator`, native mean-field descriptors, `FockPlan.solve`
+and the CLI share these convergence defaults. Explicit tighter controls are preserved;
+post-HF references, response solves and Hessian endpoints retain their stricter
+method-owned requirements. A compatible native default-policy query is required.
+GFN2-xTB is an SCC method with no GPU4PySCF counterpart and retains its own
+`1e-10` energy and `1e-8` density defaults.
+
+The energy default matches GPU4PySCF's `conv_tol=1e-9`. GPU4PySCF's ordinary SCF
+test additionally requires an MO-gradient norm below `sqrt(conv_tol)` (about
+`3.1623e-5` at the default); its density change is diagnostic, not a stopping
+threshold. GenerativeQC's density control and physical final-state gates are
+additional native conditions, not a relabeling of that MO-gradient norm. These
+shared settings do not imply identical SCF trajectories or iteration counts.
+Neither FP64 arithmetic nor solver thresholds bound observable energy/force error.
 
 Eligible CUDA owners cap the physical AO commutator at `1e-5`. KS must also
 pass its complete canonical final-state proof before accepting convergence;
 a rejected proof continues SCF without publishing a warm seed. Either tighter
 energy or density controls restore the strict physical residual ceiling.
 Trace, idempotency, ownership and force-token checks remain mandatory.
+Shared defaults do not grant physical-owner qualification: other owners retain
+their stricter physical ceilings, including UHF's final-state requirements.
 This AO norm is different from GPU4PySCF's orbital-gradient norm. Qualification
 compares complete energies and forces against independent, tightly converged
 same-grid/same-fitted-model references. It does not remove quadrature or fitting
 error, and it does not turn a failed dense-reference comparison into a pass.
 For an explicit stringent request, use e.g. `energy_tolerance=1e-12` and
 `density_tolerance=1e-10`.
+
+Canonical restricted CUDA WB97M-V instead uses the molecular GPU4PySCF-style
+**energy AND orbital-gradient** SCF candidate test: `|delta E| < 1e-9` and
+`||2 C_vir^T F[D] C_occ||_F < sqrt(1e-9)`. Density change remains diagnostic,
+not an extra SCF candidate gate. The native owner evaluates this norm from
+`X^T(FDS-SDF)X/sqrt(2)` with `X^T S X = I`, without equating AO RMS or AO maximum
+thresholds to MO thresholds. Consecutive fresh full-target energy history,
+the complete canonical publication proof, electron trace/idempotency and force
+token checks still apply; frozen/provisional VV10 operators cannot publish.
+The final proof retains the Standard `1e-5` density/stationarity ceilings, so
+matching SCF candidate thresholds does not imply identical algorithms or cycle
+counts. Either explicit tighter energy/density request restores the historical
+strict WB97M-V gates and strict VV10 inner tolerances. CPU, UKS, custom models
+or grids, mixed arithmetic, chunked owners and missing validation resources
+retain the bounded conservative path.
 
 Supplying an explicit `TargetAccuracy`, including with Fast or FP64, requests a complete
 same-backend comparison. Balanced, Strict and `audit_auto` also request these

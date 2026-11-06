@@ -123,6 +123,7 @@ struct DeviceBatch {
   bool direct_dddd_force_class_major{}, direct_force_split_low{};
   bool direct_force_relative_response{true};
   bool direct_force_pair_separable{};
+  bool direct_force_lr_weighted{};
   bool direct_fp32_block_screening{};
   float* direct_fp32_block_bounds{};
   float* direct_fp32_density_bounds{};
@@ -206,18 +207,27 @@ int main(int argc,char** argv) {
     assert(unsetenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES")==0);
     return 0;
   }
-  if(argc==2 && std::strcmp(argv[1],"--separable-policy-only")==0) {
-    const auto* name="GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_PAIR_SEPARABLE";
+  if(argc==2 && (std::strcmp(argv[1],"--separable-policy-only")==0 ||
+                 std::strcmp(argv[1],"--lr-weighted-policy-only")==0)) {
+    const bool long_range=std::strcmp(argv[1],"--lr-weighted-policy-only")==0;
+    const auto* name=long_range ? "GENERATIVEQC_DIRECT_LR_WEIGHTED_FORCES"
+                                : "GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE";
+    assert(unsetenv("GENERATIVEQC_DIRECT_LR_WEIGHTED_FORCES")==0);
+    assert(unsetenv("GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE")==0);
     assert(unsetenv(name)==0);
     DeviceBatch original;
     configure_direct_coulomb_recurrence(original);
-    assert(!original.direct_force_pair_separable);
+    assert(original.direct_force_pair_separable);
+    assert(original.direct_force_lr_weighted);
     for(const auto* selector : {"0", "unknown", "", "1", "01"}) {
       assert(setenv(name,selector,1)==0);
       DeviceBatch prepared;
       configure_direct_coulomb_recurrence(prepared);
-      assert(prepared.direct_force_pair_separable==(std::strcmp(selector,"1")==0));
-      assert(!original.direct_force_pair_separable);
+      if(long_range)
+        assert(prepared.direct_force_lr_weighted==(std::strcmp(selector,"1")==0));
+      else
+        assert(prepared.direct_force_pair_separable==(std::strcmp(selector,"1")==0));
+      assert(original.direct_force_pair_separable && original.direct_force_lr_weighted);
     }
     assert(unsetenv(name)==0);
     return 0;
@@ -396,12 +406,15 @@ def test_weighted_response_policy_is_captured_per_prepared_owner(
     )
 
 
-def test_separable_force_policy_is_default_off_and_captured_per_prepared_owner(
+@pytest.mark.parametrize(
+    "control", ("--separable-policy-only", "--lr-weighted-policy-only")
+)
+def test_separable_force_policy_is_default_on_and_captured_per_prepared_owner(
     allocation_probe: Path,
+    control: str,
 ) -> None:
-    subprocess.run(
-        [str(allocation_probe), "--separable-policy-only"], check=True, timeout=10
-    )
+    """Rollback selectors cannot mutate an already prepared default-on owner."""
+    subprocess.run([str(allocation_probe), control], check=True, timeout=10)
 
 
 def test_compensated_j_exact_and_one_byte_short_budget(allocation_probe: Path) -> None:

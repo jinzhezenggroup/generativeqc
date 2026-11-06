@@ -120,7 +120,7 @@ declared CsH fixture, all six actual unscaled native columns and independent
 native bilinear checks now pass; the original coarse-grid rejection remains
 recorded rather than being relabeled. Raw matrices, independent references,
 limits and work observations are in
-`benchmarks/results/scalar-ecp-hessian-2993/qualification.json`.
+`benchmarks/results/scalar-ecp-hessian-2993/qualification.json.xz`.
 
 This is low-level electronic-only candidate admission, not completion of #2847.
 IH molecular HVPs, independent rotation checks, broader failure/lifetime/resource

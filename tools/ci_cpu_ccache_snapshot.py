@@ -33,14 +33,39 @@ CACHE_FILE = re.compile(r"(?:[0-9a-f]/){1,8}[0-9A-Za-z]{16,128}")
 PROFILE = "cpu"
 LABEL = "CPU"
 STAGE_ENV = "CPU_CACHE_STAGE"
+SHARD: str | None = None
+PROBE_SHARDS = frozenset(
+    {
+        "core-a",
+        "core-b",
+        "core-c",
+        "uccsd-forces",
+        "runtime-heavy",
+        "posthf",
+        "compiler-heavy",
+        "ecp-forces",
+    }
+)
+PROBE_EVENTS = frozenset({"schedule", "workflow_dispatch"})
 CANONICAL_REPOSITORY = "jinzhezenggroup/generativeqc"
 WHEEL_IMAGE = "quay.io/manylinux_cuda/manylinux_2_28_x86_64_cuda12_9:2026.06.30-1"
 
 
-def select_profile(name: str) -> None:
+def select_profile(name: str, shard: str | None = None) -> None:
     """Select a closed CLI profile; CPU remains the unchanged default."""
-    global PROFILE, LABEL, STAGE_ENV, ARTIFACT, WORKFLOW
+    global PROFILE, LABEL, STAGE_ENV, ARTIFACT, WORKFLOW, SHARD
     global MAX_ARTIFACT, MAX_ARCHIVE, MAX_DECODED
+    if name == "probe":
+        if shard not in PROBE_SHARDS:
+            raise ValueError("probe snapshots require a supported shard")
+        PROFILE, LABEL, STAGE_ENV, SHARD = "probe", "probe", "PROBE_CACHE_STAGE", shard
+        ARTIFACT = f"python-probe-ccache-master-ubuntu24-x86_64-v1-{shard}"
+        WORKFLOW = ".github/workflows/ci.yml"
+        MAX_ARTIFACT = MAX_DECODED = 256 * 1024 * 1024
+        MAX_ARCHIVE = MAX_ARTIFACT - 1024 * 1024
+        return
+    if shard is not None:
+        raise ValueError("only probe snapshots accept a shard")
     if name != "wheel":
         raise ValueError("unsupported snapshot profile")
     PROFILE, LABEL, STAGE_ENV = "wheel", "wheel", "WHEEL_CACHE_STAGE"
@@ -52,16 +77,17 @@ def select_profile(name: str) -> None:
 
 
 def cache_root() -> Path:
-    if PROFILE == "wheel":
+    if PROFILE in {"wheel", "probe"}:
         root = Path(os.environ["RUNNER_TEMP"])
         if not root.is_absolute():
-            raise ValueError("wheel snapshot requires an absolute runner temp")
-        return root / "ccache"
+            raise ValueError(f"{LABEL} snapshot requires an absolute runner temp")
+        return root / ("ccache-python-probes" if PROFILE == "probe" else "ccache")
     return Path.home() / ".cache" / "ccache"
 
 
 def stage_prefix() -> str:
-    return f"gqc-{PROFILE}-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-"
+    profile = f"probe-{SHARD}" if PROFILE == "probe" else PROFILE
+    return f"gqc-{profile}-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-"
 
 
 def wheel_toolchain() -> dict[str, str]:
@@ -105,7 +131,7 @@ def output(**values: object) -> None:
         handle.writelines(f"{key}={value}\n" for key, value in values.items())
 
 
-def identity() -> dict[str, str]:
+def identity(producer_event: str | None = None) -> dict[str, str]:
     result = {
         "format": ARTIFACT,
         "repository": os.environ["GITHUB_REPOSITORY"],
@@ -114,10 +140,23 @@ def identity() -> dict[str, str]:
         "ref": "refs/heads/master",
         "image_os": "ubuntu24",
         "arch": "X64",
-        "ccache_version": os.environ["CCACHE_VERSION"] if PROFILE == "cpu" else "4.14",
+        "ccache_version": os.environ["CCACHE_VERSION"]
+        if PROFILE != "wheel"
+        else "4.14",
     }
     if PROFILE == "wheel":
         result.update(wheel_toolchain())
+    elif PROFILE == "probe":
+        event = (
+            os.environ["GITHUB_EVENT_NAME"]
+            if producer_event is None
+            else producer_event
+        )
+        if event not in PROBE_EVENTS or SHARD not in PROBE_SHARDS:
+            raise ValueError("unsupported probe snapshot producer event/shard")
+        # Python is the declared workflow contract, not a substitute for
+        # ccache's ordinary compiler/input validation on every lookup.
+        result.update(event=event, shard=SHARD, python_version="3.11")
     return result
 
 
@@ -128,10 +167,10 @@ def check_platform() -> None:
     ):
         raise ValueError(f"unsupported {LABEL} snapshot runner")
     if (
-        PROFILE == "wheel"
+        PROFILE in {"wheel", "probe"}
         and os.environ.get("GITHUB_REPOSITORY") != CANONICAL_REPOSITORY
     ):
-        raise ValueError("wheel snapshots require the canonical repository")
+        raise ValueError(f"{LABEL} snapshots require the canonical repository")
 
 
 def positive(value: object) -> bool:
@@ -140,8 +179,9 @@ def positive(value: object) -> bool:
 
 def trusted_run(run: dict[str, Any], repository: str) -> bool:
     return (
-        run.get("path") == WORKFLOW
-        and run.get("event") == "push"
+        (PROFILE != "probe" or repository == CANONICAL_REPOSITORY)
+        and run.get("path") == WORKFLOW
+        and run.get("event") in (PROBE_EVENTS if PROFILE == "probe" else {"push"})
         and run.get("head_branch") == "master"
         and run.get("status") == "completed"
         and run.get("conclusion") == "success"
@@ -175,7 +215,8 @@ def trusted_artifact(artifact: dict[str, Any], run: dict[str, Any]) -> bool:
 
 def api(endpoint: str, **fields: str) -> dict[str, Any]:
     # No pagination/retry loop; an overall discovery deadline additionally bounds
-    # the initial request and at most three candidate artifact requests.
+    # the initial request(s) and at most three candidate artifact requests.
+    # Probe uses two event queries, for at most five requests in total.
     command = ["gh", "api", "--method", "GET", endpoint]
     for key, value in fields.items():
         command.extend(["-f", f"{key}={value}"])
@@ -187,16 +228,35 @@ def api(endpoint: str, **fields: str) -> dict[str, Any]:
 
 def find_snapshot() -> tuple[dict[str, Any], dict[str, Any]] | None:
     repository = os.environ["GITHUB_REPOSITORY"]
-    runs = api(
-        f"/repos/{repository}/actions/workflows/{Path(WORKFLOW).name}/runs",
-        branch="master",
-        event="push",
-        status="success",
-        per_page="20",
-    )
-    for run in [r for r in runs.get("workflow_runs", []) if trusted_run(r, repository)][
-        :3
-    ]:
+    runs = []
+    for event in sorted(PROBE_EVENTS) if PROFILE == "probe" else ["push"]:
+        try:
+            response = api(
+                f"/repos/{repository}/actions/workflows/{Path(WORKFLOW).name}/runs",
+                branch="master",
+                event=event,
+                status="success",
+                per_page="20",
+            )
+        except (OSError, subprocess.SubprocessError, ValueError):
+            if PROFILE != "probe":
+                raise
+            # The other approved event can still provide a bounded fallback.
+            continue
+        runs.extend(
+            run
+            for run in response.get("workflow_runs", [])
+            if trusted_run(run, repository)
+        )
+    if PROFILE == "probe":
+        # Many master pushes can occur between nightly producers. Query each
+        # allowed event explicitly, then prefer the newest immutable run ID.
+        runs = sorted(
+            {run["id"]: run for run in runs}.values(),
+            key=lambda run: run["id"],
+            reverse=True,
+        )
+    for run in runs[:3]:
         try:
             artifacts = api(
                 f"/repos/{repository}/actions/runs/{run['id']}/artifacts",
@@ -224,7 +284,7 @@ def discover() -> None:
         run, artifact = found
         target.parent.mkdir(parents=True, exist_ok=True)
         stage = Path(tempfile.mkdtemp(prefix=stage_prefix(), dir=target.parent))
-        expected = identity() | {
+        expected = identity(run["event"] if PROFILE == "probe" else None) | {
             "run_id": str(run["id"]),
             "run_attempt": str(run["run_attempt"]),
             "source_sha": run["head_sha"],
@@ -343,11 +403,23 @@ def bounded_wheel_files(
 def package() -> None:
     check_platform()
     if (
-        os.environ.get("GITHUB_EVENT_NAME") != "push"
+        os.environ.get("GITHUB_EVENT_NAME")
+        not in (PROBE_EVENTS if PROFILE == "probe" else {"push"})
         or os.environ.get("GITHUB_REF") != "refs/heads/master"
     ):
-        raise ValueError(f"only master push jobs may package {LABEL} snapshots")
+        events = "scheduled/manual" if PROFILE == "probe" else "push"
+        raise ValueError(f"only master {events} jobs may package {LABEL} snapshots")
+    if PROFILE == "probe" and (
+        SHA.fullmatch(os.environ.get("GITHUB_SHA", "")) is None
+        or any(
+            re.fullmatch(r"[1-9][0-9]*", os.environ.get(key, "")) is None
+            for key in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")
+        )
+    ):
+        raise ValueError("invalid probe snapshot source/run identity")
     source = cache_root()
+    if PROFILE == "probe" and source.is_symlink():
+        raise ValueError("probe snapshot source must not be a symlink")
     if PROFILE == "wheel":
         receipt = source.with_name("ccache-wheel-toolchain.json")
         expected = wheel_toolchain() | {
@@ -538,10 +610,13 @@ def main() -> None:
             "record_wheel_toolchain",
         ),
     )
-    parser.add_argument("--profile", choices=("cpu", "wheel"), default="cpu")
+    parser.add_argument("--profile", choices=("cpu", "wheel", "probe"), default="cpu")
+    parser.add_argument("--shard", choices=sorted(PROBE_SHARDS))
     args = parser.parse_args()
+    if (args.profile == "probe") != (args.shard is not None):
+        parser.error("--shard is required for probe snapshots and forbidden otherwise")
     if args.profile != "cpu":
-        select_profile(args.profile)
+        select_profile(args.profile, args.shard)
     globals()[args.command]()
 
 

@@ -5,10 +5,12 @@
 #include <cmath>
 #include <map>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
 #include "cc/uccsd_executor.hpp"
+#include "core/work_budget.hpp"
 #include "generated_uccsd_response.hpp"
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
@@ -19,6 +21,7 @@
 #include "posthf/native_provider.hpp"
 #include "posthf/ump2_energy.hpp"
 #include "response/solve.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::cc {
@@ -28,7 +31,6 @@ using Values = graph::ResponseFeeds;
 using Shape = std::array<std::size_t, 4>;
 constexpr std::array<const char*, 5> amplitudes{"t1a", "t1b", "t2aa", "t2ab", "t2bb"};
 constexpr std::array<const char*, 5> residuals{"r1a", "r1b", "r2aa", "r2ab", "r2bb"};
-constexpr std::size_t maximum_work = 100000000000ULL;
 
 std::size_t add(std::size_t left, std::size_t right) { return posthf::checked_add(left, right); }
 std::size_t mul(std::size_t left, std::size_t right) { return posthf::checked_mul(left, right); }
@@ -79,10 +81,14 @@ class Runtime {
     for (const auto& [name, count] : input_sizes(program)) result[name].resize(count);
     return result;
   }
-  Values run(const std::string& program, const Values& inputs) {
+  Values run(const std::string& program, const Values& inputs,
+             unsigned phase_iteration_ceiling = 0) {
+    const auto phase = "uccsd_graph/" + program;
+    runtime::df_progress::Scope trace(phase.c_str(), cuda ? "cuda" : "host");
     executed_work = add(executed_work, work(program));
-    if (executed_work > maximum_work)
-      throw std::length_error("native unrestricted response exceeds scalar-work bound");
+    core::admit_correlation_work(
+        "uccsd_response/" + program, executed_work, numeric_capacity_bytes, nbf, sizes[0], sizes[1],
+        phase_iteration_ceiling ? phase_iteration_ceiling : iteration_ceiling);
     for (const auto& [name, count] : input_sizes(program)) {
       const auto found = inputs.find(name);
       if (found == inputs.end() || found->second.size() != count || !finite(found->second))
@@ -103,6 +109,8 @@ class Runtime {
 
   Shape sizes;
   std::size_t nbf, executed_work{};
+  std::size_t numeric_capacity_bytes{};
+  unsigned iteration_ceiling{};
   std::vector<double> arena;
   bool cuda{};
   int device{};
@@ -383,6 +391,36 @@ std::vector<double> derivative(const hf::UnrestrictedPhysicalReference& referenc
 #endif
   } else
     gradient = integrals::contract_weighted_one_electron_derivative(system, overlap, one, true);
+  if (fitted) {
+    fitted->validate_frame(reference.electronic_reference());
+    const auto factor_count = fitted->spin_factors(0).size();
+    std::array<std::vector<double>, 2> seeds{std::vector<double>(factor_count),
+                                             std::vector<double>(factor_count)};
+    for (const auto& pair : std::array<std::string, 3>{"aa", "ab", "bb"}) {
+      const auto left = pair[0] == 'a' ? 0U : 1U, right = pair[1] == 'a' ? 0U : 1U;
+      const auto& cotangent = weights.at("g_" + pair);
+      for (std::size_t flat = 0; flat < cotangent.size(); ++flat)
+        if (cotangent[flat] != 0)
+          fitted->add_pair_cotangent(seeds, left, right, coordinates(flat, {nbf, nbf, nbf, nbf}, 4),
+                                     cotangent[flat]);
+    }
+    std::vector<double> raw(factor_count), root(mul(fitted->naux(), fitted->naux()));
+    for (unsigned spin = 0; spin < 2; ++spin) {
+      const auto bars = fitted->pullback_factors(spin, seeds[spin]);
+      for (std::size_t index = 0; index < raw.size(); ++index)
+        raw[index] += bars.three_center[index];
+      for (std::size_t index = 0; index < root.size(); ++index)
+        root[index] += bars.inverse_root[index];
+    }
+    const auto fitted_gradient = fitted->nuclear_derivative(raw, root);
+    for (std::size_t coordinate = 0; coordinate < gradient.size(); ++coordinate)
+      gradient[coordinate] += fitted_gradient.at(coordinate);
+    if (!separate_reference) {
+      if (!finite(gradient)) throw std::runtime_error("nonfinite unrestricted fitted force");
+      for (auto& value : gradient) value = -value;
+      return gradient;
+    }
+  }
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<posthf::CudaEriDerivativeBatch> cuda_derivative;
   if (cuda)
@@ -409,16 +447,7 @@ std::vector<double> derivative(const hf::UnrestrictedPhysicalReference& referenc
       for (std::size_t flat = 0; flat < n4; ++flat) ao[flat] += first[flat];
     }
   };
-  transform("g_");
-  if (fitted) {
-    const auto fitted_gradient = fitted->nuclear_derivative(ao);
-    for (std::size_t coordinate = 0; coordinate < gradient.size(); ++coordinate)
-      gradient[coordinate] += fitted_gradient.at(coordinate);
-    if (separate_reference)
-      transform("reference_g_");
-    else
-      std::fill(ao.begin(), ao.end(), 0.0);
-  }
+  transform(fitted ? "reference_g_" : "g_");
   std::vector<std::size_t> offsets{0};
   for (const auto& shell : system.shells)
     offsets.push_back(
@@ -555,6 +584,8 @@ UnrestrictedForce unrestricted_force(
 #endif
   }
   auto raw = raw_inputs(runtime, reference, source, options.max_bytes, independent_reference);
+  runtime.numeric_capacity_bytes = result.numeric_capacity_bytes;
+  runtime.iteration_ceiling = options.max_iterations;
   auto fields = runtime.run("raw" + suffix, raw);
   const auto n2 = mul(reference.nbf, reference.nbf);
   double electronic = 0.0;
@@ -584,6 +615,7 @@ UnrestrictedForce unrestricted_force(
   for (unsigned block = 0; block < amplitudes.size(); ++block)
     amplitude_bars["bar_" + std::string(amplitudes[block])].resize(parent.amplitudes[block].size());
   if (triples) {
+    runtime::df_progress::Scope trace("uccsd_triples_response", cuda ? "cuda" : "host");
     double energy = 0;
     energy += triples_response("aaa", {0, 0, 0}, graph::kBindings_aaa, runtime, reference, fields,
                                parameter_seeds, amplitude_bars);
@@ -596,19 +628,22 @@ UnrestrictedForce unrestricted_force(
     if (!std::isfinite(energy) || std::abs(energy - parent.triples_energy) > 1e-10)
       throw std::runtime_error("unrestricted triples response/energy replay mismatch");
   }
-  auto bars = runtime.run("lambda", lambda_inputs);
-  accumulate(bars, amplitude_bars);
-  const auto entries = excitations(runtime);
-  auto rhs = pullback(bars, entries);
-  for (auto& value : rhs) value = -value;
+  std::optional<runtime::df_progress::Scope> lambda_trace;
+  lambda_trace.emplace("uccsd_lambda", cuda ? "cuda" : "host");
   response::GmresOptions controls;
   controls.absolute_tolerance = 1e-11;
   controls.relative_tolerance = 1e-11;
   controls.max_iterations = 300;
+  auto bars = runtime.run("lambda", lambda_inputs, controls.max_iterations);
+  accumulate(bars, amplitude_bars);
+  const auto entries = excitations(runtime);
+  auto rhs = pullback(bars, entries);
+  for (auto& value : rhs) value = -value;
   const auto action = [&](std::span<const double> input, std::span<double> output) {
     lambda_inputs.at("bar_correlation_energy")[0] = 0.0;
     lift(lambda_inputs, input, entries);
-    const auto values = pullback(runtime.run("lambda", lambda_inputs), entries);
+    const auto values =
+        pullback(runtime.run("lambda", lambda_inputs, controls.max_iterations), entries);
     std::copy(values.begin(), values.end(), output.begin());
   };
   result.lambda.status = response::GmresStatus::initial_residual;
@@ -620,10 +655,11 @@ UnrestrictedForce unrestricted_force(
   }
   lambda_inputs.at("bar_correlation_energy")[0] = 1.0;
   lift(lambda_inputs, result.lambda.solution, entries);
-  bars = runtime.run("lambda", lambda_inputs);
+  bars = runtime.run("lambda", lambda_inputs, controls.max_iterations);
   accumulate(bars, amplitude_bars);
   if (response::stable_norm(pullback(bars, entries)) > 1e-9)
     throw std::runtime_error("fresh unrestricted Lagrangian amplitude stationarity failed");
+  lambda_trace.reset();
   auto physical = runtime.zero_inputs("physical" + suffix);
   for (auto& [name, values] : physical) {
     if (const auto found = raw.find(name); found != raw.end()) values = found->second;
@@ -645,6 +681,7 @@ UnrestrictedForce unrestricted_force(
   }
   result.orbital.status = response::GmresStatus::initial_residual;
   if (!orbital_rhs.empty()) {
+    runtime::df_progress::Scope trace("uccsd_orbital_response", cuda ? "cuda" : "host");
     if (!orbital_problem || orbital_problem->dimension() != orbital_rhs.size())
       throw std::invalid_argument("unrestricted force orbital owner/dimension mismatch");
     const auto plan = response::prepare_response(*orbital_problem, controls);
@@ -663,6 +700,23 @@ UnrestrictedForce unrestricted_force(
       result.stationarity_residual = std::max(result.stationarity_residual, std::abs(value));
   if (!std::isfinite(result.stationarity_residual) || result.stationarity_residual > 1e-7)
     throw std::runtime_error("fresh unrestricted full orbital stationarity failed");
+  if (fitted) {
+    std::size_t nonzero_seeds = 0;
+    for (const auto* name : {"g_aa", "g_ab", "g_bb"}) {
+      const auto& values = weights.at(name);
+      nonzero_seeds =
+          add(nonzero_seeds,
+              static_cast<std::size_t>(std::count_if(values.begin(), values.end(),
+                                                     [](double value) { return value != 0; })));
+    }
+    // Each Gram seed updates both factor legs with one FMA per auxiliary.
+    // Admit cumulatively before derivative() can start traversing the seeds.
+    runtime.executed_work = add(runtime.executed_work, mul(mul(2, fitted->naux()), nonzero_seeds));
+    core::admit_correlation_work("uccsd_response/df_pair_cotangent", runtime.executed_work,
+                                 result.numeric_capacity_bytes, reference.nbf, reference.nocc[0],
+                                 reference.nocc[1], options.max_iterations);
+  }
+  runtime::df_progress::Scope derivative_trace("uccsd_nuclear_response", cuda ? "cuda" : "host");
   result.forces =
       derivative(reference, source.orbital(), weights, cuda, device, derivative_capacity, fitted,
                  independent_reference != nullptr, backend);

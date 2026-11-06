@@ -1,11 +1,16 @@
 """Host-side negative controls for shared Hessian publication/response gates."""
 
+from types import SimpleNamespace
+from typing import NoReturn
+
 import numpy as np
 import pytest
+from generativeqc import composite_rks_hessian as response
 from generativeqc._cuda_hessian_response import resident_gmres
 from generativeqc.ecp_hessian import ECPSecondOrder
 from generativeqc.response_problem import ResponseSolveError
 from generativeqc.response_solver import GMRESOptions
+from generativeqc_compiler.method import resolve_method
 
 
 @pytest.mark.parametrize("value", (np.nan, np.inf, 1e308))
@@ -75,3 +80,47 @@ def test_ecp_quadrature_finite_convergence_control(difference: float) -> None:
         for value in result.values():
             np.testing.assert_array_equal(value, 0.0)
             assert not value.flags.writeable
+
+
+@pytest.mark.parametrize("functional", ("B3LYP", "PBE0"))
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("hamiltonian", ("all-electron", "scalar-semilocal-ecp"))
+@pytest.mark.parametrize("backend", ("cpu", "cuda"))
+@pytest.mark.parametrize("provider", ("exact", "density-fitted"))
+def test_full_range_spin_domain_before_owner_allocation(
+    monkeypatch: pytest.MonkeyPatch,
+    functional: str,
+    spins: int,
+    hamiltonian: str,
+    backend: str,
+    provider: str,
+) -> None:
+    closed = []
+    source = SimpleNamespace(
+        range_density_fitted=False,
+        backend=backend,
+        hamiltonian=hamiltonian,
+        method_ir=resolve_method(
+            functional, spin="unpolarized" if spins == 1 else "polarized"
+        ),
+        fock_provider_proof=lambda: (provider, provider),
+        close=lambda: closed.append(True),
+    )
+    state = SimpleNamespace(_source=source, density=np.zeros((spins, 1, 1)))
+    monkeypatch.setattr(response.StationaryKsState, "from_native", lambda *args: state)
+
+    class AllocationReached(Exception):
+        pass
+
+    def allocate(*args: object, **kwargs: object) -> NoReturn:
+        raise AllocationReached
+
+    monkeypatch.setattr(response, "StationaryHVPPlan", allocate)
+    admitted = (
+        backend == "cpu"
+        and provider == "exact"
+        and (hamiltonian == "all-electron" or spins == 1)
+    )
+    with pytest.raises(AllocationReached if admitted else NotImplementedError):
+        response.CompositeRKSResponse.from_native(object(), object())
+    assert closed == [True]

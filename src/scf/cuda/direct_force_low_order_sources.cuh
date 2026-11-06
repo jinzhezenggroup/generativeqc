@@ -540,9 +540,9 @@ __device__ inline void contract_two_electron_force_low_order_sources_task(
                            const double* weights) {
                     Roots::evaluate_separable(geometry, weights, weights);
                   }) {
-      if (batch.direct_force_pair_separable && !batch.direct_force_fp32 &&
-          batch.direct_force_seed == nullptr && exchange_coefficient == 0.0 &&
-          coulomb_coefficient != 0.0) {
+      if (batch.direct_force_pair_separable && batch.direct_force_relative_response &&
+          !batch.direct_force_fp32 && batch.direct_force_seed == nullptr &&
+          exchange_coefficient == 0.0 && coulomb_coefficient != 0.0) {
         if (contract_two_electron_force_low_order_sources_impl<
                 Unrestricted, ShellClass, false, Roots, Mode, ResidentBra, false, false, true>(
                 batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
@@ -567,21 +567,22 @@ __device__ inline void contract_two_electron_force_low_order_sources_task(
               resident_first_pair_count))
         return;
     }
-    if constexpr (Roots::angular_order != 0U &&
-                  requires(const generated_weighted_eri::Geometry& geometry,
-                           const double* weights) {
-                    Roots::evaluate_relative(geometry, weights);
-                  }) {
-      // Retry the original nuclear graph before any atom scatter if the
-      // relative factorization or its primitive reduction becomes nonfinite.
-      if (batch.direct_force_relative_response && !batch.direct_force_fp32 &&
-          contract_two_electron_force_low_order_sources_impl<Unrestricted, ShellClass, LongRange,
-                                                             Roots, Mode, ResidentBra, false, true>(
-              batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
-              coulomb_coefficient, exchange_coefficient, omega, resident_first_pairs,
-              resident_first_pair_count))
-        return;
-    }
+  }
+  if constexpr ((!LongRange || Roots::angular_order == 4U || Roots::angular_order == 5U) &&
+                Roots::angular_order != 0U &&
+                requires(const generated_weighted_eri::Geometry& geometry, const double* weights) {
+                  Roots::evaluate_relative(geometry, weights);
+                }) {
+    // Screened moments obey dF_n(T)/dT = -F_{n+1}(T) at fixed rho/omega.
+    // The same relative graph is valid for LR; retry nuclear coordinates
+    // before any atom scatter if its primitive reduction becomes nonfinite.
+    if (batch.direct_force_relative_response && !batch.direct_force_fp32 &&
+        contract_two_electron_force_low_order_sources_impl<Unrestricted, ShellClass, LongRange,
+                                                           Roots, Mode, ResidentBra, false, true>(
+            batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
+            coulomb_coefficient, exchange_coefficient, omega, resident_first_pairs,
+            resident_first_pair_count))
+      return;
   }
   contract_two_electron_force_low_order_sources_impl<Unrestricted, ShellClass, LongRange, Roots,
                                                      Mode, ResidentBra, false>(

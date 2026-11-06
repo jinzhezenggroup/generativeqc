@@ -66,8 +66,8 @@ def normalized_radial_primitives(
     needed to normalize fixed basis coefficients.
     """
     primitives = tuple(tuple(row) for row in primitives)
-    if type(angular) is not int or not 0 <= angular <= 4 or not primitives:
-        raise ValueError("a nonempty s/p/d/f/g primitive shell is required")
+    if type(angular) is not int or not 0 <= angular <= 5 or not primitives:
+        raise ValueError("a nonempty primitive shell through h is required")
     if any(
         len(row) != 2 or not all(math.isfinite(x) for x in row) or row[0] <= 0
         for row in primitives

@@ -1,6 +1,6 @@
 {
   "path": "src/dft/cuda_ks_kernels.cu",
-  "reason": "Semilocal physical Fock/energy, per-spin diagnostics and CPU-compatible virtual-projector proposal stabilization; numerical glue remains maintained and is not claimed as retired code.",
+  "reason": "Semilocal physical Fock/energy, per-spin diagnostics, CPU-compatible virtual-projector stabilization and bounded native cold-start Fock proposal averaging; numerical glue remains maintained and is not claimed as retired code. Proposal averaging never changes the physical Fock or publication gates and reuses an idle DIIS slot without host copies.",
   "regions": [
     {
       "start": "void assemble_fock(cudaStream_t",

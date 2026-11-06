@@ -3,20 +3,50 @@
 import io
 import json
 import lzma
+import subprocess
 import tarfile
 from pathlib import Path
 
 from benchmarks import h100_db36_profile_cohort as profile
+from tools.restore_retained_evidence import read_evidence_bytes
 
 safety = profile.safety
 DIRECTORY = safety.ROOT / "benchmarks/results/h100-sm90-db36-final-20261103"
 READERS = {"unpack-final-v1.py", "replay-final-pairs-v3.py"}
+HISTORICAL = {
+    "final-pairs-v1-completed.tar.xz.part00",
+    "final-pairs-v1-completed.tar.xz.part01",
+}
 REQUIRED = {
     "final-pairs-v1-completed.tar.xz.part00",
     "final-pairs-v1-completed.tar.xz.part01",
     "final-pairs-v1-download-manifest.json.xz",
     "actual-result-audit.tar.xz",
 } | {"readers/" + name for name in READERS}
+
+
+def artifact_bytes(name: str) -> bytes:
+    """Read a current member or an explicitly retained original archive part."""
+    relative = Path(name)
+    path = DIRECTORY / relative
+    profile.check(
+        not relative.is_absolute()
+        and ".." not in relative.parts
+        and not path.is_symlink(),
+        "Unsafe final evidence path",
+    )
+    if path.is_file():
+        return path.read_bytes()
+    profile.check(not path.exists() and name in HISTORICAL, "Missing final evidence")
+    original = (
+        safety.ROOT / "benchmarks/results/h100-sm90-db36-final-20261103" / relative
+    )
+    try:
+        return read_evidence_bytes(
+            original, manifest=DIRECTORY / "historical-snapshot.json"
+        )
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise ValueError("Missing historical final evidence: " + name) from error
 
 
 def checked_publication() -> dict:
@@ -39,14 +69,12 @@ def checked_publication() -> dict:
     entries = {b["path"]: b for b in p["files"]}
     for b in p["files"]:
         name = Path(b["path"])
-        path = DIRECTORY / name
+        raw = artifact_bytes(b["path"])
         profile.check(
             not name.is_absolute()
             and ".." not in name.parts
-            and path.is_file()
-            and not path.is_symlink()
-            and path.stat().st_size == b["bytes"]
-            and profile.sha(path.read_bytes()) == b["sha256"],
+            and len(raw) == b["bytes"]
+            and profile.sha(raw) == b["sha256"],
             "Final original differs: " + str(name),
         )
     profile.check(
@@ -149,7 +177,7 @@ def extend(base: Path, task: Path) -> dict:
         safety.support.copy_exact(DIRECTORY / "readers" / name, task / name)
     with (task / p["archive"]["name"]).open("xb") as stream:
         for b in p["parts"]:
-            stream.write((DIRECTORY / b["path"]).read_bytes())
+            stream.write(artifact_bytes(b["path"]))
     archive = task / p["archive"]["name"]
     profile.check(
         archive.stat().st_size == p["archive"]["bytes"]

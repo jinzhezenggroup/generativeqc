@@ -11,13 +11,15 @@ from statistics import median
 
 from benchmarks.readme_defaults_qualification import _comparison, qualify
 from benchmarks.readme_defaults_report import load_records
+from tools.restore_retained_evidence import read_evidence_bytes
 
 ROOT = Path(__file__).resolve().parent
 
 
 def read(path: Path) -> dict:
-    """Decode a retained lossless evidence bundle."""
-    return json.loads(lzma.decompress(path.read_bytes()))
+    """Decode live inputs or the byte-verified published historical capsule."""
+    payload = read_evidence_bytes(path, manifest=ROOT / 'historical-snapshot.json')
+    return json.loads(lzma.decompress(payload))
 
 
 def timing(before: list[float], after: list[float]) -> dict:

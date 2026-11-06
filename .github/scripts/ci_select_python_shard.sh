@@ -430,6 +430,31 @@ case "${GENERATIVEQC_CI_SHARD}" in
     for path in "${core_hotspots_c[@]}"; do
       pinned_core_owner["${path}"]=2
     done
+    # These new qualification files have no historical modulo slot. Route
+    # them without advancing the ordinary index: inserting the eleven files
+    # otherwise moved 1292 of 2163 existing core files on #2977's base.
+    # Keep the molecular matrix on worksteal, not a serial loadfile worker.
+    # The d/f compile remains on core-a and lifecycle cases on core-b.
+    # Earlier run 42040437186 moved molecular curvature out of core-c before
+    # fresh-frontier scheduling. Current cold queue 42137083928 instead has
+    # core-c at 806s and core-b beyond 35min; restore only that supplemental
+    # owner below. Preserve all cases, historical modulo slots and cache trust.
+    declare -A supplemental_core_owner=(
+      [tests/python/test_composite_integral_weights.py]=2
+      [tests/python/test_eri_symmetry.py]=0
+      [tests/python/test_factorized_host.py]=1
+      [tests/python/test_global_hybrid_grid_second_order.py]=0
+      [tests/python/test_global_hybrid_hessian_lifecycle.py]=1
+      # Queue 42137083928: core-b remained cold-overloaded after priority;
+      # this intact 1634-worker-second suite moves to core-c (806s total).
+      # Preserve its supplemental, non-modulo slot and all fresh case priority.
+      [tests/python/test_global_hybrid_molecular_hessian.py]=2
+      [tests/python/test_native_semilocal_grid_second_order.py]=2
+      [tests/python/test_orbital_gap_preconditioner.py]=2
+      [tests/python/test_second_component_schedule.py]=0
+      [tests/python/test_spherical_global_hybrid_basis.py]=1
+      [tests/python/test_stationary_one_center_integrals.py]=2
+    )
     # Keep the remaining function-scoped UKS HVP early.
     # The intact RKS Hessian suite now starts on the existing force lane.
     fresh_frontier_paths=(
@@ -439,6 +464,14 @@ case "${GENERATIVEQC_CI_SHARD}" in
       # Their native states/caches are function-scoped. Start the two cases on
       # separate existing worker frontiers; preserve their ordinary core owner.
       tests/python/test_global_hybrid_ecp_hessian.py
+      # Independent 103-136s curvature cases otherwise started at minute 28.
+      # Seed them across existing worker frontiers, never one serial tail.
+      tests/python/test_global_hybrid_molecular_hessian.py
+      # Queue 42128769441 reached 99% with these fresh Hessian cases still
+      # compiling at the 35-minute cap. Preserve their existing shard owners
+      # and seed cases early across the same four worksteal workers.
+      tests/python/test_global_hybrid_public_hessian.py
+      tests/python/test_global_hybrid_uks_hessian.py
     )
     case "${GENERATIVEQC_CI_SHARD}" in
       core-a) target_bucket=0 ;;
@@ -458,6 +491,13 @@ case "${GENERATIVEQC_CI_SHARD}" in
     core_index=0
     while IFS= read -r path; do
       if [[ -n "${slow_lookup[${path}]:-}" ]]; then
+        continue
+      fi
+      if [[ -n "${supplemental_core_owner[${path}]:-}" ]]; then
+        if (( supplemental_core_owner["${path}"] == target_bucket )); then
+          test_targets+=("${path}")
+          selected_core["${path}"]=1
+        fi
         continue
       fi
       current_index="${core_index}"

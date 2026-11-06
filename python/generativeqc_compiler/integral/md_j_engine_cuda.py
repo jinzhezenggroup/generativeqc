@@ -28,12 +28,17 @@ screening, density preparation, shell normalization, or launch policy.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from functools import cache
 from math import prod
+from typing import TYPE_CHECKING
 
 from .expr import Graph, RematerializationPolicy
 from .scalar_c import ScalarCEmitter
 from .shell_spec import cartesian_components
+
+if TYPE_CHECKING:
+    from .expr import Expr
 
 UPSTREAM_COMMIT = "9af748a71ca8f4881c604332c2f0cc1632e033ac"
 MAXIMUM_PAIR_ANGULAR = 4
@@ -52,6 +57,54 @@ def _hermite_states(order: int) -> tuple[tuple[int, int, int], ...]:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class MdRadialStep:
+    """One compact Cartesian recurrence with previous-stage source addresses."""
+
+    destination: int
+    axis: int
+    first: int
+    second: int | None
+    multiplicity: int
+
+
+@cache
+def build_md_radial_stage(stage: int) -> tuple[MdRadialStep, ...]:
+    """Share the established MD dependencies between scalar and CTA lowerings.
+
+    The zero-degree destination is a caller-supplied Boys seed. All other
+    destinations read only the previous stage, permitting either descending
+    in-place stores or disjoint, collectively published CTA buffers.
+    """
+    if type(stage) is not int or not 1 <= stage <= 11:
+        raise ValueError("MD radial stage must be between one and eleven")
+    previous = {state: slot for slot, state in enumerate(_hermite_states(stage - 1))}
+    steps = []
+    for destination, powers in enumerate(_hermite_states(stage)):
+        if destination == 0:
+            continue
+        axis = next(axis for axis, power in enumerate(powers) if power)
+        source = list(powers)
+        source[axis] -= 1
+        first = previous[(source[0], source[1], source[2])]
+        second = None
+        if powers[axis] > 1:
+            source[axis] -= 1
+            second = previous[(source[0], source[1], source[2])]
+        if first >= destination or (second is not None and second >= destination):
+            raise ValueError("MD radial stage would overwrite a live dependency")
+        steps.append(MdRadialStep(destination, axis, first, second, powers[axis] - 1))
+    return tuple(steps)
+
+
+def _radial_step_expression(graph: Graph, multiplicity: int | Expr | None) -> Expr:
+    """Use one scientific expression for both in-place and collective stores."""
+    expression = graph.variable("coordinate") * graph.variable("first")
+    if multiplicity is not None:
+        expression = expression + multiplicity * graph.variable("second")
+    return expression
+
+
 def _emit_radial_stage(stage: int) -> list[str]:
     """Lower R(n+1) -> R(n) without retaining the fourth simplex dimension.
 
@@ -61,38 +114,141 @@ def _emit_radial_stage(stage: int) -> list[str]:
     This replaces upstream's parallel temporary copy with scalar dependency
     ordering, not a second radial mathematical model.
     """
-    previous = {state: slot for slot, state in enumerate(_hermite_states(stage - 1))}
-    current = _hermite_states(stage)
     lines = [f"  if constexpr (Order >= {stage}) {{"]
-    for destination in range(len(current) - 1, 0, -1):
-        powers = current[destination]
-        axis = next(axis for axis, power in enumerate(powers) if power)
-        source = list(powers)
-        source[axis] -= 1
-        first = previous[(source[0], source[1], source[2])]
-        if first >= destination:
-            raise ValueError("MD radial stage would overwrite a live dependency")
+    for step in reversed(build_md_radial_stage(stage)):
         graph = Graph()
         variables = {
-            "coordinate": "difference." + "xyz"[axis],
-            "first": f"output[{first} * Stride]",
+            "coordinate": "difference." + "xyz"[step.axis],
+            "first": f"output[{step.first} * Stride]",
         }
-        expression = graph.variable("coordinate") * graph.variable("first")
-        if powers[axis] > 1:
-            source[axis] -= 1
-            second = previous[(source[0], source[1], source[2])]
-            if second >= destination:
-                raise ValueError("MD radial stage would overwrite a live dependency")
-            variables["second"] = f"output[{second} * Stride]"
-            expression = expression + (powers[axis] - 1) * graph.variable("second")
+        if step.second is not None:
+            variables["second"] = f"output[{step.second} * Stride]"
+        expression = _radial_step_expression(
+            graph, step.multiplicity if step.second is not None else None
+        )
         plan = graph.materialization_plan(
             (expression,), RematerializationPolicy.inline_single_use_values()
         )
         emitter = ScalarCEmitter(graph, variables, plan)
-        emitter.emit_assignment(expression, f"output[{destination} * Stride]")
+        emitter.emit_assignment(expression, f"output[{step.destination} * Stride]")
         lines.extend("  " + line for line in emitter.lines)
     lines.extend((f"    output[0] = seeds[Order - {stage}];", "  }"))
     return lines
+
+
+def cooperative_md_radial_workspace(order: int) -> int:
+    """Charge both disjoint stage buffers and every unscaled-input Boys seed."""
+    if type(order) is not int or not 1 <= order <= MAXIMUM_RADIAL_ORDER:
+        raise ValueError("cooperative MD radial order must be between one and eight")
+    return 2 * len(_hermite_states(order)) + order + 1
+
+
+def emit_cooperative_md_radial_support() -> str:
+    """Lower the existing compact MD stages to finite, CTA-wide publications.
+
+    Unlike scalar descending stores, simultaneous lanes cannot overwrite live
+    prior-stage values. Two bounded buffers retire together at each barrier.
+    Callers supply their existing Boys ladder; this adds no moment algorithm,
+    precision policy, allocation, screening, or GPU-model dispatch.
+    """
+    instructions = []
+    offsets = [0]
+    for stage in range(1, MAXIMUM_RADIAL_ORDER + 1):
+        for step in build_md_radial_stage(stage):
+            if step.first >= 256 or (step.second is not None and step.second >= 256):
+                raise ValueError("cooperative MD radial source exceeds packed address")
+            instructions.append(
+                step.first
+                | ((step.second or 0) << 8)
+                | (step.axis << 16)
+                | (step.multiplicity << 18)
+            )
+        offsets.append(len(instructions))
+    tables = (
+        "static __device__ const unsigned kCooperativeMdRadialSteps[] = {"
+        + ", ".join(f"{value}U" for value in instructions)
+        + "};\nstatic __device__ __constant__ unsigned kCooperativeMdRadialOffsets[] = {"
+        + ", ".join(f"{value}U" for value in offsets)
+        + "};\n"
+    )
+    for degree in (5, 6, 7, 8):
+        mappings = (
+            axis_x | (axis_y << 4) | (axis_z << 8)
+            for axis_x, axis_y, axis_z in _hermite_states(degree)
+        )
+        tables += (
+            f"static __device__ const unsigned kCooperativeMdRadialRoots{degree}[] = {{"
+            + ", ".join(f"{mapping}U" for mapping in mappings)
+            + "};\n"
+        )
+    assignments = []
+    for include_second in (False, True):
+        graph = Graph()
+        expression = _radial_step_expression(
+            graph, graph.variable("multiplicity") if include_second else None
+        )
+        variables = {
+            "coordinate": "coordinate",
+            "first": "previous[first]",
+            "second": "previous[second]",
+            "multiplicity": "double(multiplicity)",
+        }
+        plan = graph.materialization_plan(
+            (expression,), RematerializationPolicy.inline_single_use_values()
+        )
+        emitter = ScalarCEmitter(graph, variables, plan)
+        emitter.emit_assignment(expression, "current[destination]")
+        assignments.append("\n".join("        " + line for line in emitter.lines))
+    return tables + _COOPERATIVE_RADIAL.replace("@SINGLE@", assignments[0]).replace(
+        "@DOUBLE@", assignments[1]
+    )
+
+
+_COOPERATIVE_RADIAL = r"""
+/** Every lane participates, including stages narrower than the CTA. The
+ * returned shared prefix remains live until the caller's publication barrier. */
+template <unsigned Order, bool Warp = false>
+__device__ inline const double* cooperative_md_radial(
+    double rho, Vec3<double> difference, const double* boys, double* workspace) {
+  static_assert(Order >= 1U && Order <= 8U);
+  const unsigned lane = Warp ? threadIdx.x % 32U : threadIdx.x;
+  const unsigned lanes = Warp ? 32U : blockDim.x;
+  constexpr unsigned Count = (Order + 1U) * (Order + 2U) * (Order + 3U) / 6U;
+  double* seeds = workspace + 2U * Count;
+  if (lane == 0U) {
+    double factor = 1.0;
+    for (unsigned order = 0; order <= Order; ++order) {
+      seeds[order] = factor * boys[order];
+      factor *= -2.0 * rho;
+    }
+    workspace[0] = seeds[Order];
+  }
+  if constexpr (Warp) __syncwarp();
+  else __syncthreads();
+  for (unsigned stage = 1; stage <= Order; ++stage) {
+    const double* previous = workspace + ((stage - 1U) & 1U) * Count;
+    double* current = workspace + (stage & 1U) * Count;
+    const unsigned offset = kCooperativeMdRadialOffsets[stage - 1U];
+    const unsigned count = kCooperativeMdRadialOffsets[stage] - offset + 1U;
+    if (lane == 0U) current[0] = seeds[Order - stage];
+    for (unsigned destination = lane + 1U; destination < count;
+         destination += lanes) {
+      const unsigned instruction = __ldg(kCooperativeMdRadialSteps + offset + destination - 1U);
+      const unsigned first = instruction & 255U, second = (instruction >> 8) & 255U;
+      const unsigned axis = (instruction >> 16) & 3U, multiplicity = instruction >> 18;
+      const double coordinate = axis == 0U ? difference.x : axis == 1U ? difference.y : difference.z;
+      if (multiplicity) {
+@DOUBLE@
+      } else {
+@SINGLE@
+      }
+    }
+    if constexpr (Warp) __syncwarp();
+    else __syncthreads();
+  }
+  return workspace + (Order & 1U) * Count;
+}
+"""
 
 
 def _emit_contraction_tables() -> str:

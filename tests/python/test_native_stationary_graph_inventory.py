@@ -289,6 +289,13 @@ int main() {
   options.precision_mode = GENERATIVEQC_PRECISION_AUTO;
   if (select(24, 3, 2)) return 21;
   options.application_precision_budget = {1e-5, 1e-4, 3e-5};
+  // Public defaults do not qualify strict mixed-gradient admission.
+  options.energy_tolerance = 1e-9;
+  options.density_tolerance = 1e-5;
+  if (select(24, 3, 2)) return 35;
+  // This fixture tests the separately qualified strict-control route.
+  options.energy_tolerance = 1e-10;
+  options.density_tolerance = 1e-8;
   if (select(24, 3, 2) != expected) return 22;
 }
 """

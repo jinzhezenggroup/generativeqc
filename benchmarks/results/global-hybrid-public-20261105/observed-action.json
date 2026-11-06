@@ -1,0 +1,143 @@
+{
+  "complete": true,
+  "solves": [
+    {
+      "converged": true,
+      "residual_norm": 8.110805132056192e-12,
+      "relative_residual": 7.33880655972219e-11,
+      "iterations": 17,
+      "operator_actions": 34,
+      "preconditioner_actions": 17,
+      "operator_seconds": 27.809408406,
+      "orthogonalization_seconds": 0.00025622300000000003,
+      "workspace_bytes": 342952,
+      "reason": "converged"
+    }
+  ],
+  "endpoint": {
+    "wall_seconds": 1331.3579100100324,
+    "peak_process_tree_rss_bytes": 972709888,
+    "memory_sampling_seconds": 0.05
+  },
+  "diagnostics": {
+    "schema": "generativeqc.stationary-second-order-result/v1",
+    "plan_identity": "f2796bf2da29bf962fa8ea2013cb15ac2dcf1a96e47b1c12a40cb20b3b73c1b2",
+    "executor_identity": "9e58cd3f5c3337bf308b8acbd1fcec658f6cccc3c8bc29a765202b3845197783",
+    "source_order": [
+      "one_electron",
+      "coulomb",
+      "xc_ao",
+      "xc_grid",
+      "xc_weight",
+      "exact_exchange",
+      "overlap_pulay",
+      "nuclear"
+    ],
+    "perturbation_provider": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+    "response_driver": "a1c34fc20b1a4d3fc47b14266f30ecf8f1216ff3937031b827f4143549e95676",
+    "contributors": [
+      [
+        "one_electron",
+        "e7c69e92c3639950b7c4a0d37e7078c84dbb1f64cf81de7eb3eeed8ab5cba993"
+      ],
+      [
+        "coulomb",
+        "326d9a4a29953baa99e2ae6484abd3a5443049becd9f04ebf5f637f26a8cee2c"
+      ],
+      [
+        "xc_ao",
+        "39ac172cdff45c2d9918558c936c82e58aa17a5dfa3b6906a1d14f38d0e7826b"
+      ],
+      [
+        "xc_grid",
+        "21fa547b62f9821b12b0ef880e10ff93cbe2589c33c0961785e86a1e0cef1d23"
+      ],
+      [
+        "xc_weight",
+        "9b45b9a6e412f553ad9ab98af336f79ac2262d881b6c470fb539f00ff5225b1a"
+      ],
+      [
+        "exact_exchange",
+        "c7d10896428a36f5dc693ddecf1d89dbbac25a3d2ee91c78fb9b7b9ad3e73455"
+      ],
+      [
+        "overlap_pulay",
+        "125ca8a12f8a9a5bc4747eebb674624a9bf8d1bd8669d39478391f5b30f3518c"
+      ],
+      [
+        "nuclear",
+        "f2d3172b25f102f14efcc7549a7574133063f6ffe2d76f19b436085f5f44349a"
+      ]
+    ],
+    "complete_source_coverage": true,
+    "method_dispatch": "none",
+    "derivative_method": "compiler-automatic-differentiation",
+    "public_calculator_endpoint": true,
+    "backend": "cpu",
+    "spin": "unpolarized",
+    "representation": "real_spherical",
+    "first_integral_backend": "cpu",
+    "second_integral_backend": "cpu",
+    "grid_ad_backend": "cpu",
+    "ecp_ad_backend": null,
+    "df_integral_ad_backend": null,
+    "density_fitting": "none",
+    "df_metric_threshold": null,
+    "execution_residency": "host",
+    "nuclear_response_solves": 1,
+    "response_preconditioner": "orbital-gap",
+    "displaced_scf_evaluations": 0,
+    "response_residual_norm": 8.110805132056192e-12,
+    "response_iterations": 17,
+    "source_names": [
+      "one_electron",
+      "coulomb",
+      "xc_ao",
+      "xc_grid",
+      "xc_weight",
+      "exact_exchange",
+      "overlap_pulay",
+      "nuclear"
+    ],
+    "pair_evaluations": 0,
+    "assembly_seconds": 1316.4514538627118,
+    "scf_energy": -1510.2368466096882,
+    "scf_iterations": 97,
+    "scf_fock_builds": 113,
+    "scf_executed_backend": "cpu_reference",
+    "endpoint_seconds": 1331.2483547283337
+  },
+  "gradient_errors": [
+    2.6253144744138862e-08,
+    7.2917214011548655e-09,
+    1.0925655369008865e-08
+  ],
+  "component_errors": [
+    [
+      5.5612667237518024e-08,
+      3.568013184680162e-08,
+      3.8529796475063543e-10,
+      7.242796154831677e-10,
+      2.5861471489369173e-08,
+      2.040377562656433e-08
+    ],
+    [
+      2.6035978959948573e-07,
+      2.678734054294922e-07,
+      2.6580489845321262e-09,
+      4.90558574339527e-09,
+      5.494513960322294e-09,
+      2.267116516462074e-09
+    ],
+    [
+      2.3795568326488e-06,
+      2.5684420900325615e-06,
+      3.2843636817403215e-08,
+      3.260532493953885e-08,
+      9.542027378026846e-08,
+      2.0433075112701201e-10
+    ]
+  ],
+  "native_rotation_covariance_error": 6.095827597110042e-14,
+  "scope": "One fresh public action with solver-owned counts; not an inferred raw-matrix matvec count."
+}

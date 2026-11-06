@@ -1,0 +1,112 @@
+{
+  "status": "COMPLETED_READONLY_PRIMARY_AUDIT",
+  "actions": [
+    {
+      "phase": "instruction",
+      "result": "Read supplied audit prompt, repository AGENTS/docs rules and user git.md."
+    },
+    {
+      "phase": "frozen30",
+      "result": "Standard-library independent 40-oracle checks, 720 full E/F comparisons, exact18 frozen inputs, original30/Direct16/DF14 contract, all90 cold and all90 warm paired ratios, complete-set geometric means, seal/build/runtime-image bindings."
+    },
+    {
+      "phase": "closed-studies",
+      "result": "Raw reduction, original sealed controls/build/producers, stronger matched gates, force selector every warm-call guard; preserve combined performance false and all failed pilots."
+    },
+    {
+      "phase": "transport",
+      "result": "Exact six completed archives/manifests/extracted members verified; 1188 total members across frozen30 and five closed-study packets."
+    },
+    {
+      "phase": "code",
+      "result": "Inspected live dft_method.cpp policy branch, force fallback/lifetime, ks_tile_policy.hpp, defaults, benchmark producer and host export timing; compared frozen30 to4ee and later8e31 Git source."
+    },
+    {
+      "phase": "storage",
+      "result": "Independently verified both historical DB36 blobs at merged40f126a against exact original bytes/size/SHA256/Git object IDs; read fail-closed recovery and synthetic tests without executing historical science."
+    },
+    {
+      "phase": "libxc",
+      "result": "Independently compared decompressed current snapshot to earlier preforce,4ee and upstream a970 snapshots. Only source_identity/native_source_identity change; all scientific content and stale flag equal."
+    },
+    {
+      "phase": "host/build",
+      "result": "Read zero-test import failure, corrected8pass CPU receipts, V4 actual97-step build/cache/AOT records; read V5/V6 failed-platform logs and pending V7 witnesses."
+    },
+    {
+      "phase": "oracle-driver-provenance",
+      "result": "Original3559d86 producer bytes found at committed3928aea6. Oracle source02337e predates this file and is not treated as a producer commit. Refined89c69772/de54b213 exact executable bytes not found; retain original raw receipt/reuse-contract provenance boundary. Parent bounded52-file lookup independently agrees; requested public disclosure."
+    },
+    {
+      "phase": "source-independence",
+      "result": "Pinned measured source dft_method.cpp/hash matches source-v4; benchmark driver/current helpers equal measured Git bytes. Force-admission section is byte-identical across measureddb0788b, measured4ee, current8e31; later head still not relabelled as measured."
+    },
+    {
+      "phase": "readiness",
+      "result": "Parent delivered PUBLIC_AND_WB2_READY before any final WB2/public conclusion. All156 newly received members authenticated."
+    },
+    {
+      "phase": "WB2",
+      "result": "Independent standard-library raw72 E/F recomputation and stronger matched gates; all18 rotating populations,0/unset observed controls, automatic256/1024 force/SCF256 settings, every warm call, cold SCF/Fock counts and runtime bytes. Both2percent targets pass; one fewer cold Fock at equal iterations in all rounds; all first/warm builds unchanged at one."
+    },
+    {
+      "phase": "public",
+      "result": "All1398 public members/1060 content-addressed blobs authenticated and byte-equal to supplied originals; existing completed CPU readback equals published summary and independent arithmetic. Both public parts within786432-byte unchanged bound. No public replay executed by this reviewer."
+    },
+    {
+      "phase": "build-V5-V7",
+      "result": "Authenticated actual timestamp correction JSON, unchanged source hashes, V5 identity failure, V6 actualtwoCXX compiler lines, generated header/ABI owner/AOT hashes and unchanged24 stationary artifacts/new core. Actual V5/V6 FAILED retained; V7 is CPU-only inspection. Original v1 project-quota cancellation is unstarted zero-E/F."
+    },
+    {
+      "phase": "final-policy",
+      "result": "Independently compare JSON toHEAD: exactly two retired own DB36 exceptions removed; every other policy field/cap/exception equal. Read final staged README actualWB2-pass wording and supplied pre-commit passed logs; no source changes made by reviewer."
+    }
+  ],
+  "tool_errors": [
+    {
+      "action": "initial Python reader",
+      "error": "python executable unavailable; used python3 afterward; no input mutation."
+    },
+    {
+      "action": "source grep/diff",
+      "error": "One read attempted in run-directory instead of code checkout; rerun in code checkout."
+    },
+    {
+      "action": "transport inventory reader",
+      "error": "Assumed common manifest schema; corrected for closed-study name/members schema before successful exact authentication."
+    },
+    {
+      "action": "oracle producer commit lookup",
+      "error": "The declared old scientific context02337e lacks readme_defaults_accuracy.py. Investigated separate retained driver identities, rather than treating context as executable provenance."
+    }
+  ],
+  "constraints_observed": {
+    "GPU_jobs_started": 0,
+    "builds_or_compilers_invoked": 0,
+    "solvers_or_profilers_invoked": 0,
+    "network_fetches": 0,
+    "production_or_evidence_edits": 0,
+    "external_publication": 0
+  },
+  "outputs": [
+    "independent-reduction-v1.json",
+    "independent-reduce.py",
+    "migration-metadata-independent-v1.json",
+    "closed-study-provenance-and-matched-v1.json",
+    "transport-independent-v1.json",
+    "audited-hashes-partial-v1.json",
+    "independent-wb2.py",
+    "independent-wb2-v1.json",
+    "public-and-build-independent.py",
+    "public-and-build-independent-v1.json",
+    "evidence-policy-independent-v1.json",
+    "source-code-git-independent-v1.json",
+    "oracle-controls-independent-v1.json",
+    "oracle-producer-git-independent-v1.json",
+    "reference-source-continuity-independent-v1.json",
+    "precision-observation-independent-v1.json",
+    "source-mutation-terminals-independent-v1.json"
+  ],
+  "review_completed": true,
+  "review_scope_complete": true
+}

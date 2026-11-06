@@ -7,13 +7,17 @@ KS calculations. `auto` follows the calculation backend; explicit
 uses the orbital basis as the auxiliary basis, as in the existing HF interface;
 choose an appropriate fitting basis for scientific production calculations.
 
-CUDA HF/KS accepts orbital shells through f and fitting auxiliaries through g
-(`l=4`) for energies and first nuclear derivatives, including spherical JKFIT
-bases. Auxiliary-center and metric response use the native bounded derivative
-owner. This does not extend orbital-g or higher-derivative support.
+CUDA HF/KS accepts orbital shells through f and full-range SCF fitting
+auxiliaries through h (`l=5`) for energies and first nuclear derivatives,
+including the complete Se/Br `def2-universal-JKFIT` spaces. Auxiliary-center
+and metric response use the native bounded derivative owner. The h domain
+is specific to SCF auxiliary inputs: it does not extend orbital-g,
+correlation auxiliary, long-range auxiliary-h, or higher-derivative support.
 The generated shell derivative consumer includes auxiliary g, reusing its
 primitive geometry across shell components. Generic and bounded panel paths
-remain available; mixed shell arithmetic remains limited to auxiliary s/p/d/f.
+remain available; auxiliary h uses the bounded FP64 panel consumer rather
+than a shell specialization. Mixed shell arithmetic remains limited to
+auxiliary s/p/d/f.
 For explicitly fitted LR, `GENERATIVEQC_DF_WEIGHTED_EXECUTION=shell` selects
 the strict FP64 shell response candidate. It shares the generated omega-aware
 radial algebra and disables Coulomb-only screening. Automatic LR response
@@ -341,6 +345,15 @@ and successful compilation are not substitutes for that execution.
 against libcint. `test_df_md_raw_cuda.py` independently qualifies Coulomb and
 erf packed values, mixed basis representations, dirty graph replay and
 transactional resource refusal.
+`test_df_auxiliary_g.py` and `test_df_auxiliary_g_derivatives.py` also compare
+full-range h values and center derivatives with libcint in Cartesian and
+spherical representations. `test_se_br_ks_cuda.py` retains the original six
+Se/Br inputs and complete fitting spaces. Its opt-in Slurm qualification
+(`GENERATIVEQC_SE_BR_KS_CUDA_TEST=1`) requires native cold/warm E/F,
+independent matched-root PySCF/D3 E/F and two-step native finite differences;
+primitive coverage alone does not establish complete-endpoint acceptance.
+The [Se/Br fitting-space decision](../../.agents/notes/implemented/numerics/2026-11-05-se-br-auxiliary-h-and-cold-uks.md)
+records the role-specific admission and bounded h response policy.
 
 See the [ownership note](../../.agents/notes/implemented/architecture/2026-09-22-public-df-ks-provider.md)
 for the retained boundaries.

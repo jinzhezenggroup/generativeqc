@@ -92,5 +92,9 @@ and complete-endpoint requirements under #2844–#2847.
 
 ## References
 
+The public-admission deferral is superseded by
+[qualified public full-range execution](2026-11-05-full-range-public-second-order.md).
+The earlier failures and low-level-only evidence above remain historical facts.
+
 - Issues #2224 and #2843–#2849.
 - `docs/developer/dft_hessian.md`.

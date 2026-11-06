@@ -1,4 +1,4 @@
-"""Independent full-block gates for the generated auxiliary-g value domain."""
+"""Independent full-block gates for auxiliary-g/h values and native metadata."""
 
 from __future__ import annotations
 
@@ -21,9 +21,119 @@ from generativeqc_compiler.integral.df_derivatives import axis_polynomial
 from tools.generativeqc_validation.df_values import make_df_value_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
-SIGNATURES = [a for a in product(range(5), repeat=2) if 4 in a] + [
-    (a, b, 4) for a, b in product(range(4), repeat=2)
-]
+SIGNATURES = (
+    [a for a in product(range(5), repeat=2) if 4 in a]
+    + [(a, b, 4) for a, b in product(range(4), repeat=2)]
+    + [(0, 5), (4, 5), (5, 5), (0, 0, 5), (2, 1, 5), (3, 3, 5)]
+)
+
+
+@pytest.fixture(scope="module")
+def native_h_ao_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
+    """Exercise actual native normalization/expansions without loading CUDA."""
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
+    if not compiler or not cache:
+        pytest.skip("compiler and compiler cache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True, timeout=30)
+    directory = tmp_path_factory.mktemp("native-h-ao")
+    source = directory / "probe.cpp"
+    source.write_text(r"""
+#include <cmath>
+#include "molecule/basis.hpp"
+extern "C" int evaluate(bool spherical, std::size_t count,
+                        const double* points, double* output) {
+  using namespace generativeqc;
+  core::System system;
+  system.atoms = {{1, {0, 0, 0}}};
+  system.shells = {{0, 5, {{0.7, 1.0}}}};
+  system.basis_representation = spherical ? GENERATIVEQC_BASIS_SPHERICAL
+                                           : GENERATIVEQC_BASIS_CARTESIAN;
+  std::string detail;
+  const auto status = molecule::validate_and_normalize(system, detail, 5);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  const auto expansions = molecule::ao_expansions(5, system.basis_representation);
+  for (std::size_t point = 0; point < count; ++point) {
+    const auto* position = points + 3 * point;
+    const double radius2 = position[0] * position[0] + position[1] * position[1] +
+                           position[2] * position[2];
+    for (std::size_t orbital = 0; orbital < expansions.size(); ++orbital) {
+      double value = 0.0;
+      for (const auto& term : expansions[orbital]) {
+        double monomial = term.coefficient *
+                          molecule::cartesian_component_normalization(term.component);
+        for (unsigned axis = 0; axis < 3; ++axis)
+          monomial *= std::pow(position[axis], term.component[axis]);
+        value += monomial;
+      }
+      output[point * expansions.size() + orbital] =
+          value * system.shells[0].primitives[0].coefficient * std::exp(-0.7 * radius2);
+    }
+  }
+  return 0;
+}
+""")
+    objects = []
+    for index, unit in enumerate((source, ROOT / "src/molecule/basis.cpp")):
+        obj = directory / f"probe-{index}.o"
+        subprocess.run(
+            [
+                cache,
+                compiler,
+                "-std=c++20",
+                "-O2",
+                "-fPIC",
+                "-I" + str(ROOT / "include"),
+                "-I" + str(ROOT / "src"),
+                "-c",
+                str(unit),
+                "-o",
+                str(obj),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=120,
+        )
+        objects.append(str(obj))
+    library = directory / "probe.so"
+    subprocess.run(
+        [compiler, "-shared", *objects, "-o", str(library)],
+        check=True,
+        capture_output=True,
+        timeout=60,
+    )
+    dll = ct.CDLL(str(library))
+    dll.evaluate.argtypes = [ct.c_bool, ct.c_size_t, ct.c_void_p, ct.c_void_p]
+    dll.evaluate.restype = ct.c_int
+    return dll
+
+
+@pytest.mark.parametrize("spherical", (False, True))
+def test_native_h_normalization_against_libcint(
+    native_h_ao_probe: typing.Any, spherical: bool
+) -> None:
+    """The six-term native packing must preserve every normalized public h AO."""
+    gto = pytest.importorskip("pyscf.gto")
+
+    molecule = gto.M(
+        atom="H 0 0 0",
+        basis={"H": [[5, [0.7, 1.0]]]},
+        spin=1,
+        cart=not spherical,
+        verbose=0,
+    )
+    points = np.random.default_rng(3000).normal(size=(200, 3))
+    representation = "sph" if spherical else "cart"
+    expected = molecule.eval_gto("GTOval_" + representation, points)
+    expected /= np.sqrt(np.diag(molecule.intor("int1e_ovlp_" + representation)))
+    actual = np.empty_like(expected, order="C")
+    assert (
+        native_h_ao_probe.evaluate(
+            spherical, len(points), points.ctypes.data, actual.ctypes.data
+        )
+        == 0
+    )
+    np.testing.assert_allclose(actual, expected, atol=2e-14, rtol=2e-13)
 
 
 @pytest.fixture(scope="module", params=["cpu", "cuda"])
@@ -41,9 +151,10 @@ def value_probe(
     if cuda:
         assert os.environ.get("SLURM_JOB_ID"), "allocate GPU through Slurm"
     compiler = shutil.which(os.environ.get("CUDACXX", "nvcc") if cuda else "c++")
-    cache = shutil.which("ccache")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
-        pytest.skip("compiler and ccache required")
+        pytest.skip("compiler and compiler cache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True, timeout=30)
     directory = tmp_path_factory.mktemp("df-g-" + request.param)
     header = emit_df_values_cuda() if cuda else emit_df_values_cpu()
     (directory / "values.h").write_text(header)
@@ -157,7 +268,7 @@ def test_all_added_cartesian_and_spherical_blocks(
     )
 
 
-@pytest.mark.parametrize("angular", [(4, 4), (3, 3, 4)])
+@pytest.mark.parametrize("angular", [(4, 4), (3, 3, 4), (5, 5), (3, 3, 5)])
 @pytest.mark.parametrize(
     "exponent_scale,separation_scale", [(0.02, 5), (20, 1), (1, 10)]
 )
@@ -179,7 +290,7 @@ def test_diffuse_tight_and_large_boys_argument(
     )
 
 
-def test_unsupported_orbital_g_and_auxiliary_h_fail_closed(
+def test_unsupported_orbital_g_and_auxiliary_i_fail_closed(
     value_probe: typing.Any,
 ) -> None:
     pytest.importorskip("pyscf")
@@ -187,5 +298,5 @@ def test_unsupported_orbital_g_and_auxiliary_h_fail_closed(
     records["angular"][:, 0, 0] = 4
     assert np.isnan(value_probe(records)).all()
     records["angular"][:, 0, 0] = 0
-    records["angular"][:, 2, 0] = 5
+    records["angular"][:, 2, 0] = 6
     assert np.isnan(value_probe(records)).all()

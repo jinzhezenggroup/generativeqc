@@ -199,8 +199,13 @@ class Calculator:
         unchanged. It never certifies an error from ``energy_tolerance``.
 
         Omitted SCF controls resolve to energy/density tolerances 1e-9/1e-5
-        on qualified CUDA RHF and default-grid restricted local KS owners.
-        Other admitted models/backends retain 1e-10/1e-8. A library without the
+        on every HF/KS backend, spin, model and grid. SCC retains its separate
+        1e-10/1e-8 defaults. The SCF energy tolerance matches
+        GPU4PySCF's default conv_tol; density is an additional native condition,
+        not GPU4PySCF's MO-gradient norm. Canonical CUDA WB97M-V uses energy plus
+        physical MO-gradient convergence; its density control still bounds final
+        canonical proof. Stricter post-HF reference and physical final-state gates
+        remain mandatory. A library without the
         required native default-controls query must be updated. Explicit
         values are preserved. Convergence controls are solver conditions, not
         observable-error bounds; see the application precision guide.
@@ -1251,11 +1256,21 @@ class Calculator:
                 and all(shell.angular_momentum <= 3 for shell in self._basis)
             )
         )
-        from .ks import composite_stationary_second_order_eligible
+        from .ks import (
+            composite_stationary_second_order_eligible,
+            full_range_stationary_second_order_eligible,
+        )
 
-        self._composite_rks_second_order = (
-            self._ks_options is not None
-            and composite_stationary_second_order_eligible(self._ks_options.method_ir)
+        self._composite_rks_second_order = self._ks_options is not None and (
+            composite_stationary_second_order_eligible(self._ks_options.method_ir)
+            or (
+                self._device_name == "cpu"
+                and not basis_has_ecp
+                and density_fitting_mode == _native.DENSITY_FITTING_NONE
+                and full_range_stationary_second_order_eligible(
+                    self._ks_options.method_ir
+                )
+            )
         )
         public_rks_second_order = (
             (self._device_name == "cpu" or self._composite_rks_second_order)
@@ -1331,10 +1346,8 @@ class Calculator:
             self._ks_options is not None
             and self._ks_options.method_ir.spin == "unpolarized"
         )
-        native_per_item_guess = False
         if self._automatic_initial_guess:
             from .initial_guess import (
-                _uses_native_automatic_cpu,
                 automatic_initial_guess_candidate,
             )
 
@@ -1344,16 +1357,9 @@ class Calculator:
                 has_ecp=False,
             )
             if candidate is not None:
+                # Unused ECP records do not change the target. CUDA checks actual
+                # atoms in initial_guess_for_systems; CPU resolves each native item.
                 self._initial_guess = candidate
-                # A basis package can contain unused ECP records. Only the qualified
-                # native per-item path may defer those facts to actual target admission.
-                native_per_item_guess = basis_has_ecp and _uses_native_automatic_cpu(
-                    self
-                )
-                if not basis_has_ecp or native_per_item_guess:
-                    self._initial_guess = candidate
-                else:
-                    self._initial_guess = None
 
         if self._initial_guess is not None:
             from .initial_guess import (
@@ -1382,10 +1388,7 @@ class Calculator:
                     and self._initial_guess.kind != "huckel"
                 )
                 or not restricted
-                or (
-                    basis_has_ecp
-                    and not (self._automatic_initial_guess and native_per_item_guess)
-                )
+                or (basis_has_ecp and not self._automatic_initial_guess)
                 or self._capabilities.family
                 not in ("hartree_fock", "density_functional")
             ):
@@ -1787,8 +1790,23 @@ class Calculator:
         selected_basis = self._basis_for_atoms(
             atoms, basis, operator=operator, derivative_order=derivative_order
         )
+        auxiliary = basis is not None
+        selected_operator = operator or ("df_metric" if auxiliary else "eri")
         return (
-            selected_basis.shells_for(atoms)
+            selected_basis.shells_for(
+                atoms,
+                backend=self._density_fitting_backend()
+                if auxiliary
+                else self._device_name,
+                operator=selected_operator,
+                derivative_order=derivative_order,
+                role="auxiliary" if auxiliary else "orbital",
+                consumer=self._auxiliary_basis_consumer(
+                    selected_operator, derivative_order
+                )
+                if auxiliary
+                else None,
+            )
             if isinstance(selected_basis, BasisSet)
             else tuple(selected_basis)
         )
@@ -2849,7 +2867,9 @@ class Calculator:
             raise NotImplementedError(
                 f"method {self._method_name!r} does not expose public {endpoint}; "
                 "qualified domains are CPU direct all-electron Cartesian FP64 "
-                "closed-shell LDA/PBE, or canonical FP64 WB97M-V RKS/UKS with "
+                "closed-shell LDA/PBE; CPU direct all-electron FP64 "
+                "Cartesian/spherical restricted PBE0/B3LYP compositions with "
+                "full-range exchange in (0, 1]; or canonical FP64 WB97M-V RKS/UKS with "
                 "CPU/CUDA, Cartesian/spherical, full-rank DF and scalar ECPs"
             )
         if multiplicity != 1 and not (
@@ -2904,7 +2924,7 @@ class Calculator:
             multiplicities=[multiplicity],
             warm_start=False,
         ) as batch:
-            batch.execute(strict=True, properties=("energy",))
+            primal = batch.execute(strict=True, properties=("energy",)).items[0]
             with (
                 NativeAO(
                     atoms,
@@ -2922,6 +2942,11 @@ class Calculator:
                 _diagnostics=MappingProxyType(
                     {
                         **result.diagnostics,
+                        "public_calculator_endpoint": True,
+                        "scf_energy": primal.energy,
+                        "scf_iterations": primal.iterations,
+                        "scf_fock_builds": primal.fock_builds,
+                        "scf_executed_backend": primal.executed_backend,
                         "endpoint_seconds": time.perf_counter() - started,
                     }
                 ),
@@ -2941,9 +2966,11 @@ class Calculator:
         grid_budget_bytes: int = 128 << 20,
         max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
-        """Compute a bounded analytic Cartesian HVP for LDA/PBE or WB97M-V.
+        """Compute a bounded analytic Cartesian semilocal or hybrid HVP.
 
         LDA/PBE require CPU direct all-electron Cartesian closed-shell FP64.
+        Qualified PBE0/B3LYP compositions also admit spherical AOs on CPU with
+        direct all-electron restricted FP64 and full-range exchange in (0, 1].
         Canonical WB97M-V also admits UKS, CUDA, spherical AOs, full-rank DF
         and scalar semilocal ECPs. CUDA Hessian numerics, including grid/DF/ECP
         AD and coupled response, remain in linked native C++/CUDA code. A
@@ -3027,11 +3054,14 @@ class Calculator:
         grid_budget_bytes: int = 128 << 20,
         max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
-        """Assemble a raw analytic Cartesian Hessian for LDA/PBE or WB97M-V.
+        """Assemble a bounded raw analytic semilocal or hybrid Cartesian Hessian.
 
         The matrix is never post-hoc symmetrized. The output budget must hold
         both the dense matrix and immutable publication; integral/response
         resources retain their independently checked contracts.
+
+        PBE0/B3LYP compositions require CPU direct all-electron restricted FP64;
+        Cartesian/spherical AOs and full-range exchange in (0, 1] are admitted.
 
         WB97M-V uses compiler automatic differentiation and implicit CPKS, not
         displaced SCFs. Its RKS/UKS owner assembles scalar columns
@@ -3091,11 +3121,11 @@ class Calculator:
                 type(block_size) is not int or block_size != 1
             ):
                 raise ValueError(
-                    "WB97M-V Hessian currently requires block_size=None or 1"
+                    "composite Hessian currently requires block_size=None or 1"
                 )
             if strategy not in (None, "recycled"):
                 raise ValueError(
-                    "WB97M-V Hessian currently uses the default scalar response strategy"
+                    "composite Hessian currently uses the default scalar response strategy"
                 )
             return self._run_public_rks_second_order(
                 native_atoms,

@@ -8,6 +8,40 @@
 
 namespace generativeqc::dft::cuda_ks_detail {
 namespace {
+__global__ void core_guess_frontier_tie_kernel(std::size_t dimension, int occupied_beta,
+                                               const double* energies, int* tied) {
+  *tied = 0;
+  if (occupied_beta <= 0 || static_cast<std::size_t>(occupied_beta) >= dimension) return;
+  const auto first = occupied_beta > 1 ? static_cast<std::size_t>(occupied_beta - 2) : 0U;
+  const auto last = min(dimension - 2, static_cast<std::size_t>(occupied_beta));
+  for (auto orbital = first; orbital <= last; ++orbital) {
+    const double gap = energies[orbital + 1] - energies[orbital];
+    if (gap >= 0.0 && gap <= 1e-10) *tied = 1;
+  }
+}
+
+__global__ void break_core_guess_ties_kernel(std::size_t dimension, double* core_guess) {
+  const auto row = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (row < dimension)
+    core_guess[row * (dimension + 1)] += 1e-8 * static_cast<double>(row) / dimension;
+}
+
+__global__ void orient_core_guess_orbitals_kernel(std::size_t dimension, double* coefficients) {
+  const auto column = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (column >= dimension) return;
+  double maximum = 0.0;
+  for (std::size_t row = 0; row < dimension; ++row)
+    maximum = fmax(maximum, fabs(coefficients[column * dimension + row]));
+  for (std::size_t pivot = 0; pivot < dimension; ++pivot) {
+    const double value = coefficients[column * dimension + pivot];
+    if (fabs(value) < maximum * (1.0 - 1e-12)) continue;
+    if (value < 0.0)
+      for (std::size_t row = 0; row < dimension; ++row)
+        coefficients[column * dimension + row] = -coefficients[column * dimension + row];
+    return;
+  }
+}
+
 __global__ void merge_grid_contributions_kernel(std::size_t elements, double* potential,
                                                 double* totals, int* error,
                                                 const double* nonlocal_potential,
@@ -49,6 +83,16 @@ __global__ void fock_kernel(std::size_t matrix, unsigned spins, const double* hc
   }
 }
 
+__global__ void cold_start_fock_kernel(std::size_t elements, const double* physical_fock,
+                                       double* previous_proposal, double* proposal, bool damp) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < elements;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    const double value =
+        damp ? 0.5 * (physical_fock[index] + previous_proposal[index]) : physical_fock[index];
+    previous_proposal[index] = proposal[index] = value;
+  }
+}
+
 __global__ void stabilize_uks_kernel(std::size_t matrix, const double* overlap,
                                      const double* occupied_projector, const std::uint8_t* enabled,
                                      double* proposal_fock) {
@@ -82,7 +126,8 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
                                   const double* xc_totals, const int* xc_error, const int* jk_error,
                                   const int* range_jk_error, const int* nonlocal_domain_error,
                                   const int* nonlocal_pair_error, const int* solver_info,
-                                  const std::uint8_t* enabled, Scalars* output) {
+                                  const std::uint8_t* enabled, Scalars* output,
+                                  bool retain_orbital_gradient) {
   // The mask is immutable for this launch, so inactive blocks exit collectively.
   if (enabled != nullptr && *enabled == 0) return;
   __shared__ DiagnosticPartial partials[kDiagnosticThreads];
@@ -136,6 +181,7 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
     total.maximum_residual = fmax(total.maximum_residual, part.maximum_residual);
   }
   Scalars result{};
+  if (retain_orbital_gradient) result.orbital_gradient = output->orbital_gradient;
   result.failure = (*xc_error != 0 ? 1 : 0) | (*jk_error != 0 ? 2 : 0) |
                    (range_jk_error != nullptr && *range_jk_error != 0 ? 16 : 0) |
                    (nonlocal_domain_error != nullptr && *nonlocal_domain_error != 0 ? 32 : 0) |
@@ -262,12 +308,55 @@ void merge_grid_contributions(cudaStream_t stream, std::size_t elements, double*
       elements, potential, totals, error, nonlocal_potential, nonlocal_totals, nonlocal_error);
 }
 
+void core_guess_frontier_tie(cudaStream_t stream, std::size_t dimension, int occupied_beta,
+                             const double* energies, int* tied) {
+  core_guess_frontier_tie_kernel<<<1, 1, 0, stream>>>(dimension, occupied_beta, energies, tied);
+}
+
+void break_core_guess_ties(cudaStream_t stream, std::size_t dimension, double* core_guess) {
+  break_core_guess_ties_kernel<<<static_cast<unsigned>((dimension + 127) / 128), 128, 0, stream>>>(
+      dimension, core_guess);
+}
+
+void orient_core_guess_orbitals(cudaStream_t stream, std::size_t dimension, double* coefficients) {
+  orient_core_guess_orbitals_kernel<<<static_cast<unsigned>((dimension + 127) / 128), 128, 0,
+                                      stream>>>(dimension, coefficients);
+}
+
+void cold_start_fock(cudaStream_t stream, std::size_t elements, const double* physical_fock,
+                     double* previous_proposal, double* proposal, bool damp) {
+  const auto blocks = std::min<std::size_t>((elements + 127) / 128, 65535);
+  cold_start_fock_kernel<<<static_cast<unsigned>(blocks), 128, 0, stream>>>(
+      elements, physical_fock, previous_proposal, proposal, damp);
+}
+
 void stabilize_uks_proposal(cudaStream_t stream, std::size_t n, const double* overlap,
                             const double* occupied_projector, const std::uint8_t* enabled,
                             double* proposal_fock) {
   const auto blocks = std::min<std::size_t>((2 * n * n + 127) / 128, 65535);
   stabilize_uks_kernel<<<static_cast<unsigned>(blocks), 128, 0, stream>>>(
       n * n, overlap, occupied_projector, enabled, proposal_fock);
+}
+
+__global__ void orbital_gradient_kernel(std::size_t matrix, const double* residual,
+                                        const std::uint8_t* enabled, Scalars* output) {
+  if (enabled != nullptr && *enabled == 0) return;
+  __shared__ double partials[kDiagnosticThreads];
+  double sum = 0.0;
+  for (std::size_t index = threadIdx.x; index < matrix; index += blockDim.x)
+    sum += residual[index] * residual[index];
+  partials[threadIdx.x] = sum;
+  __syncthreads();
+  if (threadIdx.x != 0) return;
+  double total = 0.0;
+  for (unsigned index = 0; index < blockDim.x; ++index) total += partials[index];
+  output->orbital_gradient = sqrt(0.5 * total);
+}
+
+void orbital_gradient(cudaStream_t stream, std::size_t n, const double* transformed_residual,
+                      const std::uint8_t* enabled, Scalars* output) {
+  orbital_gradient_kernel<<<1, kDiagnosticThreads, 0, stream>>>(n * n, transformed_residual,
+                                                                enabled, output);
 }
 
 void diagnostics(cudaStream_t stream, std::size_t n, unsigned spins, const double* density,
@@ -277,12 +366,12 @@ void diagnostics(cudaStream_t stream, std::size_t n, unsigned spins, const doubl
                  double range_exchange_coefficient, const double* xc_totals, const int* xc_error,
                  const int* jk_error, const int* range_jk_error, const int* nonlocal_domain_error,
                  const int* nonlocal_pair_error, const int* solver_info,
-                 const std::uint8_t* enabled, Scalars* output) {
+                 const std::uint8_t* enabled, Scalars* output, bool retain_orbital_gradient) {
   diagnostic_kernel<<<1, kDiagnosticThreads, 0, stream>>>(
       n * n, spins, density, proposal, residual, hcore, overlap, coulomb, exchange,
       exchange_coefficient, range_exchange, range_exchange_coefficient, xc_totals, xc_error,
       jk_error, range_jk_error, nonlocal_domain_error, nonlocal_pair_error, solver_info, enabled,
-      output);
+      output, retain_orbital_gradient);
 }
 
 void advance(cudaStream_t stream, std::size_t n, unsigned spins, double nuclear_repulsion,

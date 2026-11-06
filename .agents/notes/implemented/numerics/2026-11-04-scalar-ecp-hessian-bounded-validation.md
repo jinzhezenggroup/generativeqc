@@ -40,7 +40,7 @@ production. Already accepted actions use the original integration work.
 
 ## Independent CPU qualification
 
-`benchmarks/results/scalar-ecp-hessian-2993/qualification.json` preserves the
+`benchmarks/results/scalar-ecp-hessian-2993/qualification.json.xz` preserves the
 original failing contractions, diagnostic grids, all six native unit columns,
 three raw independent matrices, source identities, work observations, and
 scope limits. Inputs remain the canonical neutral singlet CsH physical
@@ -96,3 +96,5 @@ I/mixed Ni-ECP Hessians, UKS candidate admission, default grids, GPU execution,
 installed public endpoints, total D3 curvature, stationary modes, and
 25-40-atom workflows remain unqualified. Retained mixed-domain force failures
 are not waived by this CsH Hessian result.
+
+Integration retention (2026-11-06): the qualification record is losslessly XZ-compressed; decompression restores all 18,558 original bytes, SHA-256 `6997aa2353de6e0315f9bbb38ab2d3abe72caa1993568f9071f72beecae7cc7a`. No measurement, failed gate or provenance field changed. This preserves the unchanged aggregate evidence budget after master integration.

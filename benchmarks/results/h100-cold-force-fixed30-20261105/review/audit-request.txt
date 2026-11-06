@@ -1,0 +1,56 @@
+You are a fresh, adversarial experiment integrity and scoped code auditor. Start from the assumption that an error may exist. Independently read the primary files below; do not rely on the executor's conclusions or stored PASS flags. The user requires every subagent to use gpt-6.1-sol; do not delegate or switch models. This is the experiment-audit skill's fresh read-only final slot, with same-family/provisional assurance unless actual returned identities establish otherwise. Do not claim verified backend identity when unavailable.
+
+Working code checkout:
+/Users/xshengrui/Projects/generativeqc-code/generativeqc-h100-cold-force-20261105
+Private run and evidence directory:
+/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105
+Allowed report output directory:
+/Users/xshengrui/Projects/generativeqc-code/h100-cold-20261105/cold-force-final-audit-sol-v1
+
+Read these primary inputs:
+- Code checkout AGENTS.md and applicable nested rules.
+- Code checkout src/methods/dft_method.cpp and src/methods/ks_tile_policy.hpp (resolve its actual tracked path if needed); inspect the current branch diff against origin/master, and the measured commit's code where relevant.
+- Code checkout docs/user/ks_options.md and the H100 force-batching Agent Note under .agents/notes/{proposed,implemented/performance}/2026-11-05-h100-nonlocal-force-batching.md (use the actual existing path).
+- Code checkout benchmarks/results/h100-cold-force-fixed30-20261105/{README.md,cohort.json,replay.py,summary.json.xz,records.json.xz.part*}.
+- Code checkout benchmarks/evidence-reviews/h100-cold-force-fixed30-20261105.json.
+- Run directory received-fixed30-v1, fixed30-analysis-v1.json, fixed30-platform-terminal-v1.json, completed-fixed30-v1-manifest.json, and fixed30-watch-completion-v1.json.
+- Run directory analyze-fixed30-v1.py, replay-cold-v2.py, prepare-cold-records-v2.py, prepare-public-cold-v2.py and public-cold-readback-v2.{json,stdout,stderr}.
+- Run directory received-{outer,anchor,work,hf-streaming,full-cache}-v1; their actual numbered *.plan.json, raw *.json, *.qualification.json and stdout/stderr records; original declarations, source contracts, build receipts and frozen inputs.
+- Run directory {outer,anchor,work,hf-streaming,full-cache}-analysis-v1.json and work-candidate-decision-v1.json; analyze-wb-study-v{1,2,3}.py.
+- Run directory reference-installation-history-v1.json and reference-installation-history-provenance-v1.json.
+- Run directory received-force-host-v1/{zero-test-failure,corrected}, force-host-overlay-v2.json, force-host-preparation-failure-v1.json, run-force-host-v2.py, resume-force-host-v3.py and force-host-resume-v3.stdout.
+- Run directory build-receipts-v4, build-observation-v4.json, source-v4.json, source-mutation-boundary-v4.json and force-source-proposal-v1.json.
+- Code checkout benchmarks/h100_db36_final_cohort.py; benchmarks/results/h100-sm90-db36-final-20261103/{README.md,cohort.json,historical-snapshot.json}; its family review and tests/python/test_h100_db36_final_cohort.py; .agents/notes/implemented/compatibility/2026-11-05-db36-final-offline-history.md.
+- Run directory db36-final-history-migration-v1.json and libxc-force-metadata-refresh-v1.json. Code checkout docs/reference/libxc_qualification.md and manifests/libxc/native-qualification-snapshot.json.xz.
+- Code checkout benchmarks/results/h100-cold-df-seed-20261105/README.md is a separately merged prior stage. Preserve its source identity; do not reopen or repeat the completed first-stage audit/scientific suite.
+
+Additional primary inputs for the later already-merged upstream3006 integration (keep its source/device separate from the frozen0ee matrix):
+- Run directory received-main-integration-v2 including all main-integration-v2 raw/plans/qualifications/logs and original declarations, unstartedv1 cancellation/events, source-v5, build-receipts-v5/v6 and main-build-observation-v7.
+- Run directory analyze-main-integration-v1.py, main-integration-analysis-v1.json, main-integration-platform-terminal-v2.json, main-integration-watch-completion-v2.json, completed-main-integration-v2-manifest.json.
+- Run directory main-build-platform-terminal-v{5,6}.{json,log}, verify-main-build-v7.py, main-build-observation-v7.json, libxc-main-integration-{parents,refresh}-v1.json.
+- Compare later upstream main commits only for actual interaction with the force policy. Do not demand replays of already qualified unaffected code; do not relabel measured4ee as an unmeasured later-main complete matrix.
+
+Additional checklist: independently recompute both current-main WB case ratios and every warm-call index <=1.05 guard, native automatic force256/1024 andSCF256 settings, actual observed lazy-anchor0/unset controls, original independent gates and existing3006 stronger matched gates. OFF means eager anchor with automatic force, not force batching disabled. Verify actual SCF/Fock counts before attributing a saved cold build; no moving work to first warm. Guard inactivity and failure of the2% target must stay visible and separate from scientific integration readiness. Authenticate the V5 timestamp skip and the V6 filename-assertion false negative without converting platform FAILED to SUCCEEDED. V7 is CPU-only inspection of existing build bytes, not a new GPU build. Keep the old v1 project-quota cancellation as unstarted zero-E/F; no dropped successful timing sample.
+
+The received current cohort includes exact original40 dense/CPU-spot oracle records, reference-reuse contract, original18 frozen input tables, original physical/pair protocol, current producer/seal, all raw populations and build/image identities. Inspect those files directly. Results are not established merely because an analyzer printed PASS.
+
+Allowed work: read-only file/Git inspection, byte/hash checks and independent offline arithmetic on existing outputs. You may run bounded CPU-only reader calculations if necessary. Do not start/stop/resubmit jobs or notebooks, run compilers/profilers/SCF/force solvers, invoke old complete scientific replays, access credentials/.env, fetch implicitly, edit production or public evidence, publish messages, or touch another owner's worktree. Write only your report/trace artifacts under the allowed report directory. No subagents.
+
+Audit checklist:
+A. Ground-truth provenance: trace independent dense/CPU-spot references, reuse contracts, geometry/basis/fitting/corrections and package/environment boundaries. Confirm native calculations are not oracle seeded. Distinguish explicit matched candidate/OFF diagnostics from independent scientific qualification.
+B. Metric integrity: independently recompute complete cold and warm E/F gates and all three process-paired ratios for each of the exact original30 cases. Check original exclusions, denominator30/Direct16/DF14, strict win thresholds, every-pair guard, complete-set geometric means, and no pooling across sources/devices or extra warm/screen/profile votes. No discarded failures/outliers/unfavorable cases or self-normalized accuracy.
+C. Existence and execution: authenticate actual raw outputs, producer/seal/driver/source/build identities, runtime mappings and platform termination. The frozen0ee matrix must be one physical H100 with all180 fresh processes/720 E/F. Treat the original historical installation catalog as old installation identity only, not a fresh runtime/before-import/all-library witness. Actual observed native core/AOT and reference-site mappings must have the stated identities; don't infer every AOT companion loaded. Preserve versioned native SONAME semantics.
+D. Live code and work: inspect actual selector execution, default integration, explicit/automatic force behavior, unchanged SCF/grid/precision/stopping controls and bounded resource/lifetime/fallback behavior. Determine whether counters are executed and meaningful. Equal SCF counts are not a semantic AO/force-work census; keep invalid work flags and diagnostic profiler scope explicit. No dead or bypassed scientific metric branches.
+E. Scope and claims: distinguish selector-source performance from frozen0ee default integration and fixed30 results, the later4ee/ed33 WB2 integration, and current repository head, all rejected companion studies, stage-one DF evidence and old DB36 results. Check that combined work performance false is preserved while each preregistered independent study is judged separately under unchanged gates. Assess H100-only evidence versus code behavior on other architectures; do not expand the user's A100/5090/UKS/CBS validation scope. Judge every public claim against actual evidence and note remaining cold gaps.
+F. Evaluation classification: state the appropriate classification and whether the hardware measurements and independent numerical references support the stated scope. Do not conflate numerical-reference qualification with experimental chemical ground truth or cross-family scientific review.
+
+Also inspect the byte-preserving storage migration and generated metadata refresh: only declared original historical parts may recover from a verified already-merged Git anchor, corrupt present files/symlinks/other missing members must fail, normal tests must not fetch/replay historical science, storage caps/other-owner data/release authority must remain unchanged. The Libxc snapshot refresh must not invent new scientific qualification or alter capability summaries/stale scope.
+
+Produce audit-report.json and audit-report.md with:
+- Per-check A-F PASS/WARN/FAIL, exact file:line or raw-record field evidence, and specific findings.
+- Overall verdict, unresolved blockers versus scope limitations, code/device/scientific/default-integration/public-delivery readiness separately.
+- Independently recomputed cold/warm overall/Direct/DF counts and geometric means, all remaining cold nonwins, causal selector gain and warm guard, where supported.
+- Claim-by-claim supported/qualified/unsupported decisions.
+- Audited input hashes, method and actual scope; review_completed and review_scope_complete truthfully.
+- Requested model/effort, actual returned identity if observable (otherwise unknown), same-family/provisional assurance.
+Do not fabricate a passing verdict to make the task complete. Report failures and incomplete evidence plainly. Send the final report paths and a concise verdict to the parent.

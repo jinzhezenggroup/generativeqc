@@ -770,6 +770,7 @@ macro(generativeqc_register_host_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ao_native.py"
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.hpp"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_uccsd_native.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_ao_source.py"
     ARGS --cpu-header "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.hpp")
 
@@ -1161,6 +1162,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_relative_response_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_cooperative_gradient_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_density_gradient_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/md_j_engine_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py"
     ARGS --output "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF source-contraction helper")
@@ -1508,6 +1510,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ao_native.py"
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.cu"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_uccsd_native.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_ao_source.py"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.hpp"
     ARGS --cuda-source "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ao_source.cu")

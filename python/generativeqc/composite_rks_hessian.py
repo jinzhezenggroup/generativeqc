@@ -8,11 +8,11 @@ device-resident numerical owner with no host derivative fallback. No
 displaced SCF or reference engine enters production; quadrature/active-set
 branches and occupations remain fixed during differentiation.
 
-CPU direct full-range RKS graphs with all-electron or scalar-ECP Hamiltonians
-can also enter the low-level qualification owner. Scalar ECPs reuse the existing
-effective-charge, perturbation and two-grid second-order sources. These graphs
-do not inherit WB97M-V's public capability admission: independent molecular,
-spherical/Ni and resource gates remain prerequisites.
+CPU direct all-electron full-range RKS/UKS and scalar-ECP RKS graphs can also
+enter the low-level qualification owner. Scalar ECPs reuse the existing
+effective-charge, perturbation and bounded second-order sources. They do not
+inherit WB97M-V's public capability admission:
+independent molecular, spherical/Ni and resource gates remain prerequisites.
 """
 
 from __future__ import annotations
@@ -699,6 +699,12 @@ class CompositeRKSResponse(CPKSResponseOperator):
         grid_budget_bytes: int = 128 << 20,
         max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Self:
+        """Bind qualified or explicitly low-level candidate graphs to native state.
+
+        Full-range candidates reuse the existing physical RKS/UKS response and
+        source owners. Admission here does not promote a public capability or
+        relax the native state, Fock-provenance, or resource checks.
+        """
         state = StationaryKsState.from_native(batch, basis)
         backend = None
         integral_basis = None
@@ -716,9 +722,13 @@ class CompositeRKSResponse(CPKSResponseOperator):
             method = state._source.method_ir
             full_range_candidate = (
                 state._source.backend == "cpu"
-                and state.density.shape[0] == 1
-                and state._source.hamiltonian
-                in ("all-electron", "scalar-semilocal-ecp")
+                and (
+                    state._source.hamiltonian == "all-electron"
+                    or (
+                        state._source.hamiltonian == "scalar-semilocal-ecp"
+                        and state.density.shape[0] == 1
+                    )
+                )
                 and state._source.fock_provider_proof()[:2] == ("exact", "exact")
                 and {primitive.kind for primitive in method.primitives}
                 == {"semilocal_xc", "exact_exchange"}
@@ -729,7 +739,7 @@ class CompositeRKSResponse(CPKSResponseOperator):
             ):
                 raise NotImplementedError(
                     "composite molecular Hessian requires canonical WB97M-V or "
-                    "a CPU direct RKS full-range qualification candidate"
+                    "a CPU direct full-range all-electron RKS/UKS or scalar-ECP RKS qualification candidate"
                 )
             if state._source.backend == "cuda":
                 from .cuda_composite_hessian import CudaCompositeResponse
@@ -1230,9 +1240,7 @@ def composite_rks_hvp(
     diagnostics = {
         **executed.diagnostics,
         "derivative_method": "compiler-automatic-differentiation",
-        "public_calculator_endpoint": composite_stationary_second_order_eligible(
-            operator.state._source.method_ir
-        ),
+        "public_calculator_endpoint": False,
         "backend": operator.backend.device,
         "spin": operator.state.identity.spin,
         "representation": operator.basis.representation,
@@ -1310,9 +1318,7 @@ def composite_rks_hessian(
         residuals.append(result.diagnostics["response_residual_norm"])
     diagnostics = {
         "derivative_method": "compiler-automatic-differentiation",
-        "public_calculator_endpoint": composite_stationary_second_order_eligible(
-            operator.state._source.method_ir
-        ),
+        "public_calculator_endpoint": False,
         "backend": operator.backend.device,
         "spin": operator.state.identity.spin,
         "representation": operator.basis.representation,

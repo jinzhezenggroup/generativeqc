@@ -21,6 +21,10 @@ Resource planning charges only admitted seeds. CUDA and older-library admission
 remains conservative at batch scope: an unsupported element or ECP keeps that
 whole batch on Hcore. Where the target has a qualified resource plan, eligible
 items include the same Hückel numeric inventory as an explicit request.
+Only ECP records belonging to atoms actually present in that batch affect this
+decision; an unused ECP-bearing element in a basis snapshot does not disable an
+otherwise admitted automatic seed. Explicit preliminary requests still retain
+their fail-closed ECP checks.
 Automatic selection does not qualify additional resource-planner
 domains (in particular, CUDA global-hybrid plans remain unsupported).
 `calc.initial_guess` exposes the
@@ -62,6 +66,57 @@ borrows its prepared ordinary eigensystem; CUDA DF KS borrows the KS owner.
 An admitted cold seed is published directly, without warm-density normalization.
 Preparation failure keeps Hcore; seeded-target failure permits one ordinary
 DF Hcore attempt after releasing the failed arena, not an exact-HF retry.
+
+## CUDA UKS core-orbital gauge
+
+Small (at most 64 spherical AOs), all-electron, strict-FP64, full-range
+density-fitted B3LYP UKS cold starts resolve numerical core-spectrum ties touching
+the beta frontier before the ordinary metric-preserving frontier rotation.
+A core gap at most `1e-10` Eh triggers a second native CUDA core eigensolve with
+a deterministic diagonal tie-break smaller than `1e-8` Eh in the orthogonal
+guess basis. Nondegenerate frontiers and domains outside this qualification keep
+the original seed. The operation borrows setup scratch; it introduces neither
+reference-oracle work nor a retained molecular operator.
+
+Within this domain the first AO among numerically tied largest components also
+sets each core orbital's sign before mixing columns. An unmixed orbital's sign
+does not change its projector, but an undefined relative sign changes the
+frontier-rotation density. Neither sign selection nor core tie-breaking is
+applied to physical SCF or final-state orbitals.
+
+This chooses only a reproducible cold-start basin, not a ground state or a new
+occupation model. The physical Hamiltonian, integer occupations, energy, density,
+stationarity and unshifted canonical-state gates remain unchanged. Admitted
+full-range fitted CUDA KS and Direct global-hybrid UKS endpoints audit the actual
+canonical density before publishing convergence rather than applying a redundant
+corrective closure to an already valid physical state. Rejected proofs continue
+the existing bounded solve and never authorize a force or warm-state token.
+
+## Heavy-element UKS startup proposals
+
+Strict-FP64, all-electron, full-range CUDA B3LYP UKS cold solves containing an
+element beyond Ar use at most sixteen native Fock startup proposals before
+ordinary Pulay extrapolation. The first and last startup proposals use the
+current physical Fock unchanged; intervening proposals average it equally
+with the preceding proposal. This prevents a deep-core Hcore occupation cycle
+from becoming the initial Pulay history. The idle first DIIS slot retains
+only the startup proposal; it is overwritten before physical DIIS history
+is admitted, so no extra matrix storage is required.
+Subsequent cold-solve Pulay fitting uses the orthonormal residual
+`X^T(FDS-SDF)X`, with `X^T S X = I`, rather than weighting rotations by their
+raw AO magnitudes. Its two matrix products reuse existing scratch. Physical
+commutator diagnostics and acceptance continue to use the original AO residual.
+
+This is a solver proposal policy, not a different initial density or target
+Hamiltonian. Each sweep evaluates the complete physical F[D] and counts
+against the original iteration ceiling. Energy, density, commutator, electron
+count, idempotency and canonicality gates are unchanged. Imported/transported
+densities, authenticated warm replay, short iteration budgets, ECP, range-separated
+and lower-precision solves retain their existing policies. No CPU solution,
+reference-oracle work or altered occupations enter this startup.
+
+The [Se/Br solver decision](../../.agents/notes/implemented/numerics/2026-11-05-se-br-auxiliary-h-and-cold-uks.md)
+records the retained boundaries and rejected alternatives.
 
 ## Frozen-VV10 density proposals
 
