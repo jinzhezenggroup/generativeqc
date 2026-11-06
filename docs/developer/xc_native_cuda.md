@@ -1127,6 +1127,30 @@ Use `tests/python/test_native_stationary_nonlocal_reuse_cuda.py` with
 energy/force, movement, failure, schedule and capacity gates. Complete endpoint
 timing must run separately with tracing disabled.
 
+The native stationary owner also shares strict-FP64 AO derivative panels and
+density jets between semilocal and VV10 geometry when their device, exact point
+pointer/span, atom-prefix/radius topology and points-per-atom match. It prepares
+VV10 seeds from the authenticated final SCF features on the first valid grid
+view's stream; fresh grid owners need not have a view before that evaluation.
+Both geometry consumers enqueue on that stream before the next panel generation
+overwrites storage. Each model retains its own weights, atomic weights and source
+slots. No new resident panel allocation or resource tier is introduced, including
+for minimum-capacity owners. Exact-key pair reuse and its failure invalidation
+remain independent of panel sharing.
+
+Unset, empty or `1` for `GENERATIVEQC_STATIONARY_SHARED_GRID` enables this guarded
+default; other nonempty values, distinct grids/topologies and mixed grid or
+geometry precision retain the bounded two-pass path. The `stationary_force`
+trace reports `shared_nonlocal_grid` alongside executed grid/projection work.
+For automatic recipes, the automatic-artifact diagnostic exposes cumulative
+force-owner grid work without enabling intrusive timing traces; subtract adjacent
+receipts for per-call work. Curated recipes such as WB97M-V are not admitted by
+that ABI. Their trace-based work diagnostics must remain separate from clean
+timings, since DF tracing can disable optional MD-J.
+`tests/python/test_stationary_shared_grid_cuda.py` qualifies complete
+independent E/F and fallback behavior in a finite GPU allocation. Work reductions
+do not imply proportional complete-endpoint speedups or quadrature convergence.
+
 The explicit `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-wide` experiment uses
 eight rows per lane and retains row inputs for admitted VV10 domains with at
 least 65,536 active points. Smaller domains use the existing four-row schedule.

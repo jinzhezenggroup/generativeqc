@@ -1,0 +1,22 @@
+{
+  "id": "dft.shared-force-grid",
+  "classification": "already-default",
+  "controls": [
+    "dft-policy:GENERATIVEQC_STATIONARY_SHARED_GRID"
+  ],
+  "owner_issues": [
+    2976
+  ],
+  "sources": [
+    "src/dft/cuda_stationary_controller.cpp"
+  ],
+  "rationale": "Strict FP64 native stationary owners consume semilocal and VV10 geometry from the same AO/density-jet generation when device, exact coordinate pointer/span, atom-prefix/radius topology and points-per-atom match. Final SCF feature leases prepare VV10 seeds on the first valid panel stream before either geometry consumer. Each model retains its own quadrature weights, source slots and complete response. There is no extra full-grid cache or capacity tier, GPU-model/size whitelist, changed numerical gate or CPU production dependency. Nonmatching owners, mixed grid/geometry precision and explicit disable retain the two-pass path.",
+  "revisit_condition": "Preserve independent original/displaced E/F, distinct-grid and minimum-capacity fallbacks, exact-key pair replay and failure recovery, plus complete cold/warm endpoint and semantic-work qualification on actual A100/5090. A panel-work reduction is not a proportional whole-endpoint speedup or a universal device ranking.",
+  "evidence": [
+    "tests/python/test_stationary_shared_grid_cuda.py",
+    "tests/python/test_native_stationary_nonlocal_reuse_cuda.py",
+    "docs/developer/xc_native_cuda.md",
+    ".agents/notes/implemented/performance/2026-11-06-shared-stationary-force-grid.md",
+    "benchmarks/results/shared-force-grid-20261106/README.md"
+  ]
+}

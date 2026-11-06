@@ -837,7 +837,10 @@ def _discover_nonlocal_force_reuse(root: Path) -> dict[str, str]:
     source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
     return {
         f"dft-policy:{name}": relative.as_posix()
-        for name in re.findall(r'"(GENERATIVEQC_VV10_COMPONENT_REUSE)"', source)
+        for name in re.findall(
+            r'"(GENERATIVEQC_VV10_COMPONENT_REUSE|GENERATIVEQC_STATIONARY_SHARED_GRID)"',
+            source,
+        )
     }
 
 
