@@ -1,6 +1,6 @@
 # Decision: fixture-only shared unweighted Rys x/y tables
 
-Status: implemented compiler capability; CUDA qualification pending
+Status: implemented default-off compiler fixture; synthetic CUDA gates passed; production selection rejected
 Date: 2026-11-06
 
 ## Problem
@@ -55,8 +55,18 @@ full Fock matrix entry against independent Libcint contraction and candidate /
 private parity at the existing class-fixture atol=2e-11, rtol=2e-10. It prints
 register/local/shared attributes; ptxas and cuobjdump reports supply stack and
 spill evidence. Preparation binds generated source and independent input hashes.
-CUDA compilation, execution, resource deltas and sanitizer outcomes remain
-pending and cannot be inferred from host gates.
+At the phase-A source freeze, CUDA compilation, execution, resource deltas and
+sanitizer outcomes were pending and could not be inferred from host gates.
+
+The subsequent source-bound H100 qualification of `b56c2c935aa63f68049a116e420aa5a5dcb529e8`
+passed full independent Fock-matrix checks, ordinary/twice-replayed graphs and
+memcheck/racecheck/synccheck. Registers remain 166/thread; local bytes remain
+96/72 for DPPP/PPPP; static shared deltas are exactly +576/+432 bytes, with zero
+persistent RHF spill loads/stores. The original first attempt failed for a
+missing sanitizer path before compilation and remains failed. Its runner-only
+repair changed no scientific source or input. Exact device, source, executable,
+tool bindings, all reported numerical observations, resource rows and failure:
+[retained phase-A evidence](../../../../benchmarks/results/h100-shared-rys-xy-phase-a-20261106/README.md).
 
 This synthetic fixture is not an actual HF96 task replay or timing measurement.
 Actual native task/density payload capture remains mandatory before class
@@ -67,6 +77,6 @@ warm <=5% regression remain unchanged and unfulfilled by this slice.
 
 ## Revisit when
 
-Advance only after strict device parity, resource and supported memory/race
-checks pass, then separately capture bounded native HF96 task/density inputs
-and demonstrate actual-task savings. Synthetic timings never qualify HF96.
+The synthetic device gate is now passed. Separately capture bounded native HF96
+task/density inputs and demonstrate actual-task savings before considering
+production integration. Synthetic timings never qualify HF96.
