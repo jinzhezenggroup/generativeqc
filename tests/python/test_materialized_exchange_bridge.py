@@ -454,6 +454,8 @@ template<bool Unrestricted> unsigned qualify() {
           assert(screening_calls==(with_density_bounds ? 1U : 0U));
           assert(fallback_calls==(route==2 ? 8U : 0U));
         }
+        assert(work.bra_preparations==(route==2 ? 0U : 1U));
+        assert(work.ket_preparations==(route==2 ? 0U : 1U));
         assert(work.coulomb_preparations==(route==2 ? 0U : 1U));
         assert(work.published_components==(route==2 ? 0U : 1U));
         for(std::size_t item=0;item<actual.size();++item) {
