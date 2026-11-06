@@ -459,6 +459,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
       # Independent 103-136s curvature cases otherwise started at minute 28.
       # Seed them across existing worker frontiers, never one serial tail.
       tests/python/test_global_hybrid_molecular_hessian.py
+      # Queue 42128769441 reached 99% with these fresh Hessian cases still
+      # compiling at the 35-minute cap. Preserve their existing shard owners
+      # and seed cases early across the same four worksteal workers.
+      tests/python/test_global_hybrid_public_hessian.py
+      tests/python/test_global_hybrid_uks_hessian.py
     )
     case "${GENERATIVEQC_CI_SHARD}" in
       core-a) target_bucket=0 ;;
