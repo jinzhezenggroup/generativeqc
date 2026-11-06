@@ -73,6 +73,51 @@ scheduler-assigned. Transport failures do not trigger duplicate GPU work.
 The n1 borrowed image and owned A100 transfer process have explicit restoration
 and cleanup receipts.
 
+## What explains the observed 17/18 steps, and what remains unmeasured
+
+The user correctly challenged treating a stage count as a causal explanation.
+The measured native algorithm solves three successive fixed-point problems:
+`F0[D]` without VV10; `F0[D] + Vnl[D_anchor]` with a frozen VV10 potential;
+then the self-consistent `F0[D] + Vnl[D]`. The retained GPU4PySCF implementation
+instead updates the full target through one continuous CDIIS solve. These are
+different solver policies, not simply different guesses for the same policy.
+
+The initializer and frozen-inner refresh predicate compares the **AO-element
+maximum** commutator with its provisional tolerance, not the printed spin RMS.
+For this Standard outer route the seed tolerance is `1e-5`; the frozen-inner
+selector also resolves to `1e-5`. Thus a printed step-seven RMS `4.95e-6`
+does not establish that the initializer's refresh predicate already passed.
+Actual AO maxima were not retained: the branch outcomes can be inferred from
+the finite-budget controller, but their numerical values must not be invented.
+
+At step nine the incomplete-operator spin RMS reaches `1.46e-7`; introducing
+VV10 at ten raises it to `5.06e-5`, about **346x**. Therefore the initializer's
+late residual reduction is not an equivalent reduction of the full-target
+error. Handoffs after nine and fourteen also clear CDIIS history and restart
+the target energy epoch. Step fifteen is consequently ineligible for final
+convergence even if its residual were good: the target-ready contract needs
+two fresh target observations. The extra iterations are consequently produced
+by a deliberately staged solver, repeated operator correction, and restarted
+history, rather than demonstrated inferiority of its initial guess/metric.
+
+The existing diagnostic then identifies the tail predicates precisely: step
+sixteen passes the energy gate but fails the physical MO-gradient gate;
+seventeen passes stationarity but has `|delta E| ~= 1.215e-9 > 1e-9`.
+Eighteen checks unchanged density, passes energy, and accepts its first
+canonical probe. The seventeenth state and eighteenth confirmation must not
+be conflated; density-change stopping or repeated canonical rejections are
+not the demonstrated reason for that tail.
+
+This explains the controller decisions producing the observed trajectory,
+**not a quantified counterfactual attribution of seven avoidable steps**.
+No otherwise identical continuous-full-target run was measured here, and no
+experiment isolates the cost of each history reset. The smaller number of
+expensive VV10 evaluations may pay for additional cheap provisional iterations.
+Calling all provisional work waste, claiming these resets alone cause exactly
+seven lost steps, or claiming a ten-cycle alternative is necessarily faster
+would overstate the evidence. Initial-guess/metric rejection is complete;
+that broader causal/performance comparison is not.
+
 ## Consequences and revisit conditions
 
 The guess/metric differences are real, but **they do not explain a removable
