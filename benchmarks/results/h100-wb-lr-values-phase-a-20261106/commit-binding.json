@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.wb-lr-commit-binding.v1",
+  "commit": "1fa3ba2f9d579e868103bfd5877c83cc5d225f5d",
+  "tree": "4cb25a54dd8cad13bb03947103e30a7bb84a7144",
+  "base_revision": "6987eea5259563250d1e81684ac998b727b8a513",
+  "branch": "codex/h100-wb-lr-producer-phase-a-20261106",
+  "committed_files": [
+    "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py",
+    "tools/generativeqc_validation/materialized_lr_values.py",
+    "tests/native/test_materialized_lr_values.cu",
+    "tests/python/test_materialized_lr_values.py",
+    ".agents/notes/proposed/2026-11-06-bounded-materialized-lr-value-sink.md"
+  ],
+  "committed_file_hashes_match_review": true,
+  "source_review_manifest_sha256": "fd6c53ae5505aee520f2ef2892e6e84d5fbed30c7b9a383aee6d06a9ce0f71c5",
+  "execution_review_manifest_sha256": "c4608ec68a818bbf6a943bbae1d4897f292de2fa55529e011bcd23c234024b1e",
+  "bundle_manifest_sha256": "576802cd3906682b47808ae8d4b693ccdf4e02a743312fbc0e44dba07fc16357",
+  "commit_hooks": {
+    "path": "commit-hooks-v1.log",
+    "sha256": "b0f15392ccb60ec483ff62aed141abc87c97d8e2097e98f8fae34edc3aca1ffc",
+    "status": "all applicable hooks PASS"
+  },
+  "approved_source_and_runner_bytes_unchanged": true,
+  "gpu_or_cuda_compile": false
+}

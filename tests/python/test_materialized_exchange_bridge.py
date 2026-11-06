@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from _cpp_source_support import cpp_function_definition
+from _cpp_source_support import cpp_function_definition, cpp_record_definition
 from generativeqc_compiler.integral.direct_pair_materialized_cuda import (
     emit_direct_pair_materialized_support,
 )
@@ -32,10 +32,30 @@ def _write_materialized_headers(tmp_path: Path) -> None:
         "using std::isfinite;\n"
         "template<class T> T atomicAdd(T* p,T value) { T old=*p; *p+=value; return old; }\n"
         "inline double __dadd_rn(double a,double b) { volatile double s=a+b; return s; }\n"
+        "inline unsigned atomicOr(unsigned* p,unsigned value) { unsigned old=*p; *p|=value; return old; }\n"
         "inline void __syncthreads() {}\ninline void __syncwarp() {}\n"
         "inline bool __syncthreads_or(bool value) { return value; }\n"
     )
     (tmp_path / "scatter.hpp").write_text(emit_direct_fock_accumulation_header())
+
+
+def _materialized_fock_support() -> str:
+    """Compile the real Fock wrapper and shared consumer with host-only shims."""
+    support = emit_direct_pair_materialized_support()
+    return "\n".join(
+        [
+            cpp_record_definition(support, "MaterializedDirectPairValueSink") + ";",
+            *(
+                cpp_function_definition(support, name, include_template=templated)
+                for name, templated in (
+                    ("canonical_materialized_component_lanes", False),
+                    ("canonical_materialized_component_slots", False),
+                    ("consume_materialized_direct_pair", True),
+                    ("contract_materialized_direct_pair_fock", True),
+                )
+            ),
+        ]
+    )
 
 
 def test_materialized_exchange_bridge_matches_dense_contraction(
@@ -44,11 +64,7 @@ def test_materialized_exchange_bridge_matches_dense_contraction(
     native = (ROOT / "src/scf/cuda/direct_bounded_dddd.cu").read_text()
     # CUDA translation units need a host shim here; use named production
     # implementations instead of matching an entire template signature.
-    helper = cpp_function_definition(
-        emit_direct_pair_materialized_support(),
-        "contract_materialized_direct_pair_fock",
-        include_template=True,
-    )
+    helper = _materialized_fock_support()
     kernel = cpp_function_definition(
         native, "bounded_direct_dddd_streaming_kernel", include_template=True
     )
@@ -78,11 +94,7 @@ def test_bounded_materialized_compensation(
     stub; this host probe does not qualify CUDA barriers or integral accuracy.
     """
     _write_materialized_headers(tmp_path)
-    helper = cpp_function_definition(
-        emit_direct_pair_materialized_support(),
-        "contract_materialized_direct_pair_fock",
-        include_template=True,
-    )
+    helper = _materialized_fock_support()
     source = tmp_path / "bounded_materialized_compensation.cpp"
     binary = tmp_path / "bounded_materialized_compensation"
     source.write_text(PREFIX + helper + COMPENSATION_DRIVER)
@@ -112,7 +124,9 @@ constexpr unsigned direct_quartet_subtiles_per_tile(unsigned) { return 8; }
 }
 namespace generativeqc::scf::cuda_execution {
 struct { unsigned x{}; } threadIdx;
+struct { unsigned x{32}; } blockDim;
 enum class DirectScreeningPurpose { Fock, Force };
+enum class MaterializedDirectPairSink { Fock, CanonicalValues };
 constexpr unsigned kDdddAngularOrder = 8;
 template<bool Materialized> constexpr unsigned kDdddStreamThreads = Materialized ? 256 : 32;
 template<bool Materialized> void synchronize_dddd_stream() {}
@@ -440,6 +454,8 @@ template<bool Unrestricted> unsigned qualify() {
           assert(screening_calls==(with_density_bounds ? 1U : 0U));
           assert(fallback_calls==(route==2 ? 8U : 0U));
         }
+        assert(work.bra_preparations==(route==2 ? 0U : 1U));
+        assert(work.ket_preparations==(route==2 ? 0U : 1U));
         assert(work.coulomb_preparations==(route==2 ? 0U : 1U));
         assert(work.published_components==(route==2 ? 0U : 1U));
         for(std::size_t item=0;item<actual.size();++item) {
