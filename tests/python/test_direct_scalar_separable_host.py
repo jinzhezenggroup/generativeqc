@@ -101,6 +101,10 @@ def native_pair_owner(required_native_cxx: Any, tmp_path_factory: Any) -> Any:
         counts,
     )
     function.restype = None
+    long_range = loaded.scalar_lr_probe
+    long_range.argtypes = (*function.argtypes, ctypes.c_double)
+    long_range.restype = None
+    function.long_range = long_range
     mask = loaded.scalar_pair_full_mask_probe
     mask.argtypes = (
         ctypes.c_uint,
@@ -119,13 +123,16 @@ def native_pair_owner(required_native_cxx: Any, tmp_path_factory: Any) -> Any:
 
 
 def _inputs(
-    unrestricted: bool, system: int = 0, angular: tuple[int, ...] = (2, 1, 1, 1)
+    unrestricted: bool,
+    system: int = 0,
+    angular: tuple[int, ...] = (2, 1, 1, 1),
+    class_index: int | None = None,
 ) -> dict[str, Any]:
     generator = np.random.default_rng(8831)
     dimension = sum((degree + 1) * (degree + 2) // 2 for degree in angular)
     matrix = dimension**2
     return {
-        "class_index": CLASSES.index(angular),
+        "class_index": CLASSES.index(angular) if class_index is None else class_index,
         "unrestricted": unrestricted,
         "system": system,
         "atoms": np.array([0, 1, 2, 3], dtype=np.int32),

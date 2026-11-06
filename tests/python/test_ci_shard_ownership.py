@@ -1829,7 +1829,7 @@ def test_hybrid_qualification_insertion_preserves_existing_core_owners(
         "test_factorized_host.py": "core-b",
         "test_global_hybrid_grid_second_order.py": "core-a",
         "test_global_hybrid_hessian_lifecycle.py": "core-b",
-        "test_global_hybrid_molecular_hessian.py": "core-b",
+        "test_global_hybrid_molecular_hessian.py": "core-c",
         "test_native_semilocal_grid_second_order.py": "core-c",
         "test_orbital_gap_preconditioner.py": "core-c",
         "test_second_component_schedule.py": "core-a",
@@ -1865,7 +1865,7 @@ def test_hybrid_qualification_insertion_preserves_existing_core_owners(
             "--ci-fresh-priority=tests/python/test_global_hybrid_molecular_hessian.py"
         )
         expected_extra = list(before[shard][2])
-        if tracked and shard == "core-b":
+        if tracked and shard == "core-c":
             expected_extra += ["-p", "tools.pytest_ci_fresh_frontier", priority]
         assert after[shard][2] == expected_extra
         assert [p for p in after[shard][1] if p not in owners] == before[shard][1]
@@ -1879,12 +1879,16 @@ def test_hybrid_qualification_insertion_preserves_existing_core_owners(
 @pytest.mark.parametrize(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
+@pytest.mark.parametrize(
+    "suite",
+    ("molecular", "public", "uks"),
+)
 def test_real_hybrid_lane_starts_curvature_before_ordinary_queues(
-    event: str, tmp_path: Path
+    event: str, suite: str, tmp_path: Path
 ) -> None:
     """Execute the selector's real order and plugin without scientific workloads."""
     names = (
-        "test_global_hybrid_molecular_hessian.py",
+        f"test_global_hybrid_{suite}_hessian.py",
         "test_ordinary_a.py",
         "test_ordinary_b.py",
         "test_ordinary_c.py",
@@ -1916,7 +1920,17 @@ def test_real_hybrid_lane_starts_curvature_before_ordinary_queues(
         )
     subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
     subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
-    distribution, targets, extra = _selection(event, "core-b", root=tmp_path)
+    selections = [
+        _selection(event, shard, root=tmp_path)
+        for shard in ("core-a", "core-b", "core-c")
+    ]
+    owners = [
+        selection
+        for selection in selections
+        if f"tests/python/{names[0]}" in selection[1]
+    ]
+    assert len(owners) == 1
+    distribution, targets, extra = owners[0]
     result = subprocess.run(
         [
             sys.executable,
@@ -1951,7 +1965,7 @@ def test_real_hybrid_lane_starts_curvature_before_ordinary_queues(
         for path in tmp_path.glob("worker-*.jsonl")
     ]
     assert len(records) == 4
-    prefix = "tests/python/test_global_hybrid_molecular_hessian.py::"
+    prefix = f"tests/python/test_global_hybrid_{suite}_hessian.py::"
     assert all(entries[0].startswith(prefix) for entries in records)
     expected = Counter(
         f"tests/python/{name}::test_case[{value}]"
@@ -1967,3 +1981,44 @@ def test_real_hybrid_lane_starts_curvature_before_ordinary_queues(
     # Every selected case owns one fresh setup; no duplicate or shared fixture
     # is introduced by adding a complete module to the existing priority lane.
     assert Counter(node for node, _ in setups) == expected
+
+
+@pytest.mark.parametrize("event", ("pull_request", "merge_group", "schedule"))
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+@pytest.mark.parametrize("offset", range(3))
+def test_hybrid_tail_priority_preserves_modulo_owners(
+    event: str, presence: str, offset: int, tmp_path: Path
+) -> None:
+    """Fresh priority follows selection, never creates ownership or hides missing files."""
+    fresh = [
+        "tests/python/test_global_hybrid_public_hessian.py",
+        "tests/python/test_global_hybrid_uks_hessian.py",
+    ]
+    ordinary = [f"tests/python/test_aaa_{i}.py" for i in range(3 + offset)]
+    ordinary += [f"tests/python/test_zzz_{i}.py" for i in range(6)]
+    tracked = presence in {"tracked", "missing"}
+    inventory = sorted([*ordinary, *(fresh if tracked else [])])
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in inventory:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    for relative in fresh:
+        if presence == "untracked":
+            (tmp_path / relative).touch()
+        elif presence == "missing":
+            (tmp_path / relative).unlink()
+    for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
+        distribution, targets, extra = _selection(event, shard, root=tmp_path)
+        assert distribution == "worksteal"
+        assert targets == inventory[bucket::3]
+        assert [
+            a.split("=", 1)[1] for a in extra if a.startswith("--ci-fresh-priority=")
+        ] == [path for path in fresh if path in targets]
+        assert all(
+            path not in arg
+            for arg in extra
+            for path in fresh
+            if not arg.startswith("--ci-fresh-priority=")
+        )

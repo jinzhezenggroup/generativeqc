@@ -1,0 +1,12 @@
+{
+  "cache-version.txt": "sccache 0.16.0\n",
+  "started-at.txt": "2026-11-06T04:24:20+08:00\n",
+  "completed-at.txt": "2026-11-06T05:16:55+08:00\n",
+  "exit-code.txt": "0\n",
+  "identity": {
+    "source_identity": "c313decb8884e69c3b44b6fe2e72c9491869b64313db3e4fcdd56f8e5f52a2a1",
+    "base_commit": "b27caeec846b6fd28597c06cbbb55498c1e3d730",
+    "library_sha256": "d9b33f54155186cc3240ecd325a290bcd1fecadcc136ed9c8ce72107f88f3486"
+  },
+  "compiler_cache_statistics": "Compile requests                          590\nCompile requests executed                2172\nCache hits                                170\nCache hits (CUBIN)                        129\nCache hits (CUDA)                          41\nCache misses                             1733\nCache misses (C/C++)                      321\nCache misses (CUBIN)                      393\nCache misses (CUDA)                       228\nCache misses (CUDA (Device code))         269\nCache misses (PTX)                        522\nCache hits rate                          8.93 %\nCache hits rate (C/C++)                  0.00 %\nCache hits rate (CUBIN)                 24.71 %\nCache hits rate (CUDA)                  15.24 %\nCache hits rate (CUDA (Device code))     0.00 %\nCache hits rate (PTX)                    0.00 %\nCache timeouts                              0\nCache read errors                           0\nForced recaches                             0\nCache write errors                          0\nCache errors                                0\nCompilations                             2002\nCompilation failures                        0\nNon-cacheable compilations                269\nNon-cacheable calls                         0\nNon-compilation calls                       0\nUnsupported compiler calls                  0\nAverage cache write                     0.001 s\nAverage compiler                       17.381 s\nAverage cache read hit                  0.001 s\nFailed distributed compilations             0\nCache location                       Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                     (none)\nUse direct/preprocessor mode?        yes\nVersion (client)                     0.16.0\nCache size                                 10 GiB\nMax cache size                             10 GiB\n"
+}

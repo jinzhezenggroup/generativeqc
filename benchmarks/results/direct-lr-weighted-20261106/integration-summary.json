@@ -1,0 +1,204 @@
+{
+  "A100": {
+    "wb": {
+      "maximum_errors": [
+        0.0,
+        8.411049634560186e-13,
+        1.4725986708056862e-13
+      ],
+      "gates": [
+        1e-09,
+        1e-07,
+        3e-08
+      ],
+      "work": [
+        {
+          "iterations": 18,
+          "fock_builds": 18,
+          "warm_start_used": false,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        }
+      ],
+      "upstream_execution_schedule_delta": [],
+      "lr_only_attribution": false,
+      "cold": {
+        "before_seconds": [
+          113.21638705953956
+        ],
+        "after_seconds": [
+          111.97357731685042
+        ],
+        "before_median": 113.21638705953956,
+        "after_median": 111.97357731685042,
+        "ratio": 0.9890227044426392
+      },
+      "warm": {
+        "before_seconds": [
+          15.1557720862329,
+          15.051495723426342,
+          15.017576728016138
+        ],
+        "after_seconds": [
+          15.12909347936511,
+          14.983126565814018,
+          14.990246377885342
+        ],
+        "before_median": 15.051495723426342,
+        "after_median": 14.990246377885342,
+        "ratio": 0.9959306804674787
+      }
+    }
+  },
+  "RTX5090": {
+    "wb": {
+      "maximum_errors": [
+        9.473903143468002e-15,
+        1.092459456231154e-12,
+        1.796961666962619e-13
+      ],
+      "gates": [
+        1e-09,
+        1e-07,
+        3e-08
+      ],
+      "work": [
+        {
+          "iterations": 18,
+          "fock_builds": 18,
+          "warm_start_used": false,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        }
+      ],
+      "upstream_execution_schedule_delta": [],
+      "lr_only_attribution": false,
+      "cold": {
+        "before_seconds": [
+          195.3433158956468
+        ],
+        "after_seconds": [
+          194.41960213705897
+        ],
+        "before_median": 195.3433158956468,
+        "after_median": 194.41960213705897,
+        "ratio": 0.9952713316329631
+      },
+      "warm": {
+        "before_seconds": [
+          14.396560721099377,
+          14.406078781932592,
+          14.468739479780197
+        ],
+        "after_seconds": [
+          14.36536592245102,
+          14.37077346816659,
+          14.36508547887206
+        ],
+        "before_median": 14.406078781932592,
+        "after_median": 14.36536592245102,
+        "ratio": 0.9971739110900439
+      }
+    },
+    "semilocal": {
+      "maximum_errors": [
+        4.736951571734001e-15,
+        1.0409451078885468e-11,
+        2.611782661643478e-12
+      ],
+      "gates": [
+        1e-09,
+        1e-07,
+        3e-08
+      ],
+      "work": [
+        {
+          "iterations": 10,
+          "fock_builds": 10,
+          "warm_start_used": false,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        }
+      ],
+      "upstream_execution_schedule_delta": [],
+      "lr_only_attribution": false,
+      "cold": {
+        "before_seconds": [
+          28.863738905638456
+        ],
+        "after_seconds": [
+          28.85413159430027
+        ],
+        "before_median": 28.863738905638456,
+        "after_median": 28.85413159430027,
+        "ratio": 0.9996671494510952
+      },
+      "warm": {
+        "before_seconds": [
+          10.63543938845396,
+          10.613558165729046,
+          10.584778003394604
+        ],
+        "after_seconds": [
+          10.569690838456154,
+          10.569314815104008,
+          10.545233558863401
+        ],
+        "before_median": 10.613558165729046,
+        "after_median": 10.569314815104008,
+        "ratio": 0.9958314308986501
+      }
+    }
+  }
+}
