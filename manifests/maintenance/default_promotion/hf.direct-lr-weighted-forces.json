@@ -1,0 +1,26 @@
+{
+  "id": "hf.direct-lr-weighted-forces",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DIRECT_LR_WEIGHTED_FORCES"
+  ],
+  "owner_issues": [2976],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/direct_coulomb.cpp",
+    "src/scf/cuda/direct_bounded_fallback.cu",
+    "src/scf/cuda/direct_force_low_order_sources.cuh",
+    "src/scf/cuda/direct_force_order4_sources.cuh",
+    "src/scf/cuda/direct_force_order5_sources.cuh"
+  ],
+  "rationale": "Order-four/five strict-FP64 long-range force consumer precontracts the same screened arbitrary exchange weights and reuses the existing weighted-ERI relative graph. No pair approximation, new recurrence or AO admission change. Captured unset/1 enables the qualified default, while zero/empty/unknown selects the incumbent per-AO consumer; independent nuclear-response rollback remains available. Source-matched A100/RTX5090 endpoints, independent host/device Libcint and no-partial-publication retry gates pass. The corrected latest-master complete rebuild passes policy2 metadata, default-only A100/5090 endpoints, independent device sources and the unrelated 5090 semilocal non-regression gate. Initial stale-object integration and SSH-auth failures remain explicit and are not counted as qualification.",
+  "revisit_condition": "Require positive A100 complete E+force timing and no RTX5090 WB97M-V or semilocal compile-frame regression against the prior qualified image. Preserve exact masks, queue work, finite-before-publication, unsupported-class fallback, resource identity and independent device Libcint gates. Do not infer cold-gap closure from force-only savings.",
+  "evidence": [
+    "note:.agents/notes/implemented/performance/2026-11-06-lr-weighted-direct-forces.md",
+    "tests:tests/python/test_direct_lr_weighted_host.py",
+    "tests:tests/python/test_direct_lr_weighted_cuda.py",
+    "tests:tests/python/test_coulomb_optional_allocation.py",
+    "tests:tests/python/test_hf_resources.py",
+    "benchmarks:benchmarks/results/direct-lr-weighted-20261106/README.md"
+  ]
+}

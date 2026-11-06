@@ -1,0 +1,182 @@
+[
+  {
+    "arch": "sm_80",
+    "template": "false, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, 5, 1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        1616,
+        21464
+      ]
+    }
+  },
+  {
+    "arch": "sm_80",
+    "template": "false, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, 4, 1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        1552,
+        21400
+      ]
+    }
+  },
+  {
+    "arch": "sm_80",
+    "template": "true, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, 5, 1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        1616,
+        21464
+      ]
+    }
+  },
+  {
+    "arch": "sm_80",
+    "template": "true, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, 4, 1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        1552,
+        21400
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "false, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, 5, 1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        1440,
+        13744
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "false, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, 4, 1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        1344,
+        13632
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "true, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, 12, 1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        44648,
+        44632
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "true, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, 5, 1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        1440,
+        13744
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "true, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, 4, 1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        1328,
+        13632
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "false, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, -1, -1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        53040,
+        52744
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "false, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, -2, -1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        53040,
+        52744
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "false, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, -3, -1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        53040,
+        52744
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "false, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)0, true, -1, -1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        53040,
+        52744
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "false, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)0, true, -1, -1, true, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        53144,
+        53128
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "true, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, -1, -1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        53048,
+        52744
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "true, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, -2, -1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        53048,
+        52744
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "true, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, true, -3, -1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        53048,
+        52744
+      ]
+    }
+  },
+  {
+    "arch": "sm_120",
+    "template": "true, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)0, true, -1, -1, false, false, false, 12u",
+    "changes": {
+      "stack_bytes_per_thread": [
+        53040,
+        52744
+      ]
+    }
+  }
+]

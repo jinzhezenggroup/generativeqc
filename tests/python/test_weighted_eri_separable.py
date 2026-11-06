@@ -106,6 +106,8 @@ def _libcint(
     angular: Angular,
     case: str,
     slots: tuple[int, ...] = (0, 1, 2, 3),
+    *,
+    omega: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Use separately normalized libcint blocks, never the weighted factory."""
     pytest.importorskip("pyscf")
@@ -132,7 +134,11 @@ def _libcint(
             "multiplicity": 1,
         }
     )
-    reference = quartet_data(molecule, scales)
+    if omega is None:
+        reference = quartet_data(molecule, scales)
+    else:
+        with molecule.with_range_coulomb(omega):
+            reference = quartet_data(molecule, scales)
     normalization = np.array(
         [
             math.prod(
