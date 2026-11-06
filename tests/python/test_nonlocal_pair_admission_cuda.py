@@ -23,13 +23,15 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(
     scope="module",
-    params=(0, 4, 8, "packet", "packet-hoisted"),
+    params=(0, 4, 8, "packet", "packet-hoisted", "packet-scf", "packet-scf-no-census"),
     ids=(
         "ordered",
         "parallel",
         "parallel-wide",
         "parallel-packet",
         "parallel-packet-hoisted",
+        "parallel-packet-scf",
+        "parallel-packet-scf-no-census",
     ),
 )
 def admission_probe(
@@ -59,7 +61,12 @@ def admission_probe(
     )
     directory = tmp_path_factory.mktemp("vv10-admission-device")
     cpp, library = directory / "probe.cu", directory / "probe.so"
-    use_packet = request.param in ("packet", "packet-hoisted")
+    use_packet = request.param in (
+        "packet",
+        "packet-hoisted",
+        "packet-scf",
+        "packet-scf-no-census",
+    )
     pair_rows = request.param if request.param in (4, 8) else 4
     cpp.write_text(
         "#include <cuda_runtime.h>\n#include <cmath>\n#include <cstdint>\n"
@@ -75,11 +82,13 @@ def admission_probe(
         + f"constexpr bool use_packet = {str(use_packet).lower()};\n"
         + f"constexpr unsigned pair_rows = {pair_rows};\n"
         + f"constexpr bool retain_scale_proofs = {str(request.param == 'packet-hoisted').lower()};\n"
+        + f"constexpr bool strict_features = {str(request.param in ('packet-scf', 'packet-scf-no-census')).lower()};\n"
+        + f"constexpr bool feature_census = {str(request.param != 'packet-scf-no-census').lower()};\n"
         + r"""
 template<bool Geometry, bool Mask, bool Admit, Vv10Variant Variant = Vv10Variant::vv10>
 void launch(size_t n, const double* x, const uint64_t* indices,
             const uint64_t* count, double* out, int* error, int* rejected,
-            bool mixed, uint64_t* work) {
+            bool mixed, uint64_t* work, bool incumbent) {
   const int* gate = nullptr;
   if constexpr (Mask && Admit && Variant == Vv10Variant::vv10) {
     cudaMemsetAsync(rejected,0,sizeof(int));
@@ -93,12 +102,20 @@ void launch(size_t n, const double* x, const uint64_t* indices,
   if constexpr (Mask && Admit && Variant == Vv10Variant::vv10) {
     if constexpr(use_parallel) {
       const generated::ParallelPairInputs input{
-        n,x,x+3*n,x+4*n,x+5*n,x+6*n,x+7*n,x+8*n,x+9*n,indices,count,0.7,0.03125,rejected,mixed,work};
+        n,x,x+3*n,x+4*n,x+5*n,x+6*n,x+7*n,x+8*n,x+9*n,indices,count,0.7,0.03125,rejected,mixed,
+        strict_features && !Geometry && !mixed && !incumbent && !feature_census ? nullptr : work};
       const generated::ParallelPairOutputs output{out,out+n,out+2*n,out+3*n,out+6*n,error};
       generated::parallel_pair_initialize<Geometry><<<(n+127)/128,128>>>(input,output);
-      if constexpr(use_packet)
-        generated::parallel_pair_packet_kernel<Geometry, retain_scale_proofs><<<8,128>>>(input,output);
-      else
+      if constexpr(use_packet) {
+        if constexpr (strict_features && !Geometry) {
+          if (!mixed && !incumbent)
+            generated::parallel_pair_packet_kernel<false,false,true,feature_census><<<8,128>>>(input,output);
+          else
+            generated::parallel_pair_packet_kernel<false><<<8,128>>>(input,output);
+        } else {
+          generated::parallel_pair_packet_kernel<Geometry, retain_scale_proofs><<<8,128>>>(input,output);
+        }
+      } else
         generated::parallel_pair_kernel<Geometry, pair_rows, pair_rows == 8><<<8,128>>>(input,output);
       generated::parallel_pair_zero_rows<<<8,128>>>(input,output);
       generated::parallel_pair_finalize<Geometry><<<(n+127)/128,128>>>(input,output);
@@ -113,7 +130,7 @@ void launch(size_t n, const double* x, const uint64_t* indices,
 uint64_t last_work[2]{};
 template<Vv10Variant Variant>
 int evaluate(size_t n, int geometry, int mask, int stage,
-             const double* input, double* output, bool mixed) {
+             const double* input, double* output, bool mixed, bool incumbent = false) {
   std::vector<uint64_t> indices;
   for(size_t j=0;j<n;++j) if(input[9*n+j]!=0.0) indices.push_back(j);
   const uint64_t count=indices.size();
@@ -134,7 +151,7 @@ int evaluate(size_t n, int geometry, int mask, int stage,
   CHECK(cudaMemcpy(d.output,output,(7*n+2)*sizeof(double),cudaMemcpyHostToDevice));
   CHECK(cudaMemcpy(d.indices,indices.data(),indices.size()*sizeof(uint64_t),cudaMemcpyHostToDevice));
   CHECK(cudaMemset(d.failed,0,sizeof(int)));
-#define RUN(G,M,S) launch<G,M,S,Variant>(n,d.input,d.indices,d.indices+count,d.output+1,d.failed,d.rejected,mixed,d.work)
+#define RUN(G,M,S) launch<G,M,S,Variant>(n,d.input,d.indices,d.indices+count,d.output+1,d.failed,d.rejected,mixed,d.work,incumbent)
   if(geometry) {
     if(mask) { if(stage) RUN(true,true,true); else RUN(true,true,false); }
     else { if(stage) RUN(true,false,true); else RUN(true,false,false); }
@@ -156,6 +173,9 @@ extern "C" int run(size_t n,int geometry,int mask,int stage,const double* input,
 }
 extern "C" int run_mixed(size_t n,int geometry,int mask,int stage,const double* input,double* output) {
   return evaluate<Vv10Variant::vv10>(n,geometry,mask,stage,input,output,true);
+}
+extern "C" int run_incumbent(size_t n,int geometry,int mask,int stage,const double* input,double* output) {
+  return evaluate<Vv10Variant::vv10>(n,geometry,mask,stage,input,output,false,true);
 }
 extern "C" int run_rvv10(size_t n,int geometry,int mask,int stage,const double* input,double* output) {
   return evaluate<Vv10Variant::rvv10>(n,geometry,mask,stage,input,output,false);
@@ -201,7 +221,7 @@ extern "C" int run_rvv10_mixed(size_t n,int geometry,int mask,int stage,const do
         ct.POINTER(ct.c_double),
     ]
     probe.run.restype = ct.c_int
-    for name in ("run_mixed", "run_rvv10", "run_rvv10_mixed"):
+    for name in ("run_mixed", "run_incumbent", "run_rvv10", "run_rvv10_mixed"):
         getattr(probe, name).argtypes = probe.run.argtypes
         getattr(probe, name).restype = ct.c_int
     probe.pair_work.argtypes = [ct.c_int]
@@ -259,7 +279,25 @@ def test_mixed_pairs_count_executed_arithmetic_and_match_strict(
     assert (admission_probe.pair_work(0) > 0) == (extreme is not True)
     if extreme is True:
         assert admission_probe.pair_work(1) > 0
-        np.testing.assert_array_equal(results[1], results[0])
+        if variant == "vv10":
+            incumbent = np.full(7 * n + 2, 9182.5)
+            assert (
+                admission_probe.run_incumbent(
+                    n,
+                    geometry,
+                    True,
+                    True,
+                    values.ctypes.data_as(ct.POINTER(ct.c_double)),
+                    incumbent.ctypes.data_as(ct.POINTER(ct.c_double)),
+                )
+                == 0
+            )
+            # Mixed-domain refusal retains its old strict closure bit for bit;
+            # it must not be compared bitwise with the new SCF derivative order.
+            np.testing.assert_array_equal(results[1], incumbent)
+            np.testing.assert_allclose(results[0], incumbent, rtol=3e-14, atol=1e-11)
+        else:
+            np.testing.assert_array_equal(results[1], results[0])
     else:
         if extreme == "partial":
             assert admission_probe.pair_work(1) > 0

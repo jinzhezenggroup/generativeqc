@@ -34,6 +34,9 @@ NONLOCAL_PAIR_RATIONAL_VERSION = "nonlocal-pair-vv10-bounded-energy-denominator-
 NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION = (
     "nonlocal-pair-vv10-bounded-unit-reciprocal-fp64-v1"
 )
+NONLOCAL_PAIR_SHARED_RECIPROCAL_VERSION = (
+    "nonlocal-pair-vv10-shared-reciprocal-partials-fp64-v1"
+)
 NONLOCAL_PAIR_MIXED_VERSION = "nonlocal-pair-bounded-fp32-rational-fp64-sums-v2"
 PAIR_INPUT_ORDER = ("r2", "wi", "wj", "ki", "kj", "row_inverse_kappa")
 PAIR_OUTPUT_ORDER = ("phi", "dphi_domega", "dphi_dkappa", "dphi_dr2")
@@ -187,6 +190,7 @@ def build_nonlocal_pair_program(
     rational_derivatives: bool = False,
     reciprocal_energy: bool = False,
     partner_features: bool = False,
+    shared_reciprocal_derivatives: bool = False,
 ) -> Program:
     """Select live pair outputs without changing runtime admission semantics.
 
@@ -203,6 +207,9 @@ def build_nonlocal_pair_program(
     energy policy changes energy rounding too, under its own lowering identity.
     Partner features expose the same second-leg derivative nodes used by the
     radial root, allowing a schedule to consume both ends of an unordered pair.
+    Shared-reciprocal derivatives reuse -phi/D instead of (2/3)*phi^2.
+    This saves one multiplication in the admitted FP64 feature closure without
+    approximating the reciprocal; its changed rounding has a separate identity.
     """
     if variant not in (VV10, RVV10):
         raise UnsupportedNonlocalCorrelation(f"unsupported pair variant {variant!r}")
@@ -215,6 +222,7 @@ def build_nonlocal_pair_program(
             rational_derivatives,
             reciprocal_energy,
             partner_features,
+            shared_reciprocal_derivatives,
         )
     ):
         raise TypeError("pair representation and output demands must be Boolean")
@@ -224,6 +232,8 @@ def build_nonlocal_pair_program(
         raise ValueError("partner features require VV10 features")
     if reciprocal_energy and not rational_derivatives:
         raise ValueError("reciprocal energy requires bounded rational derivatives")
+    if shared_reciprocal_derivatives and not reciprocal_energy:
+        raise ValueError("shared reciprocal derivatives require reciprocal energy")
     scalar = TensorSpec((), role="input", differentiable=True)
     r2, wi, wj, ki, kj, row_inverse = (
         input_tensor(name, scalar) for name in PAIR_INPUT_ORDER
@@ -270,8 +280,9 @@ def build_nonlocal_pair_program(
         # A unit numerator selects the compiler's FP64 reciprocal lowering.
         # The admitted domain keeps both reciprocal and product normal/finite;
         # the extra rounding is deliberate and independently qualified.
+        energy_reciprocal = divide(one, denominator) if reciprocal_energy else None
         phi = (
-            multiply(minus_three_halves, divide(one, denominator))
+            multiply(minus_three_halves, energy_reciprocal)
             if reciprocal_energy
             else divide(minus_three_halves, denominator)
         )
@@ -283,8 +294,10 @@ def build_nonlocal_pair_program(
                 # Reuse the ordered energy's denominator without another divide.
                 # The generated caller bounds all positive factors before this
                 # reassociation; the original closure owns extreme inputs.
-                denominator_partial = multiply(
-                    constant("2/3"), multiply(negative_phi, negative_phi)
+                denominator_partial = (
+                    multiply(negative_phi, energy_reciprocal)
+                    if shared_reciprocal_derivatives
+                    else multiply(constant("2/3"), multiply(negative_phi, negative_phi))
                 )
                 dphi_dgi = multiply(multiply(denominator_partial, gj), add(gi, gsum))
             else:
@@ -323,7 +336,9 @@ def build_nonlocal_pair_program(
             "kind": "nonlocal-correlation-pair",
             "scientific_version": NONLOCAL_CORRELATION_VERSION,
             "lowering_version": (
-                NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION
+                NONLOCAL_PAIR_SHARED_RECIPROCAL_VERSION
+                if shared_reciprocal_derivatives
+                else NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION
                 if reciprocal_energy
                 else NONLOCAL_PAIR_RATIONAL_VERSION
                 if rational_derivatives
@@ -334,7 +349,9 @@ def build_nonlocal_pair_program(
             if preconditioned and variant == RVV10
             else "raw",
             "arithmetic": (
-                "bounded-unit-reciprocal-energy-fp64; caller-owned-failure-checks"
+                "bounded-shared-reciprocal-partials-fp64; caller-owned-failure-checks"
+                if shared_reciprocal_derivatives
+                else "bounded-unit-reciprocal-energy-fp64; caller-owned-failure-checks"
                 if reciprocal_energy
                 else "bounded-rational-derivatives-fp64; caller-owned-failure-checks"
                 if rational_derivatives
