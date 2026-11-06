@@ -1167,6 +1167,19 @@ fallback. `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-packet` explicitly selects t
 packet route, including small qualification fixtures; `parallel` restores the
 previous four-row bilateral schedule and `ordered` forces the ordered fallback.
 Unset and empty selectors both use automatic selection.
+Within that admitted packet route, strict FP64 SCF feature sweeps specialize
+away mixed-pair admission and unused per-pair arithmetic counters. A requested
+arithmetic census selects a counted specialization instead. The compiler-owned
+feature closure shares the energy reciprocal: for `phi = -3/(2*D)`, its common
+denominator derivative is `-phi/D`, rather than `(2/3)*phi*phi`. Both use the
+same correctly rounded FP64 reciprocal; the changed derivative rounding has a
+separate lowering identity and independent numerical acceptance gates.
+The explicit `parallel-packet` selection retains the previous feature closure;
+`parallel-packet-reciprocal` explicitly selects the SCF specialization, including
+small qualification fixtures. Geometry, mixed-pair arithmetic, CPU/rVV10 and
+refused-domain paths retain their existing closures. Selector changes still
+invalidate density-dependent pair reuse. No points, pairs, convergence checks,
+precision, workspace or synchronization are removed from the scientific contract.
 Each warp loads 32 adjacent compact partners and rotates their
 inputs and bilateral FP64 partials through all lanes. After 32 steps each
 partner returns to its original lane for publication. Four rows per lane keep
