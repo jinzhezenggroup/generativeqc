@@ -8,8 +8,12 @@ registry or default is enabled. The private UHF path remains the incumbent.
 
 The measured source is `b56c2c935aa63f68049a116e420aa5a5dcb529e8`, tree
 `0912d6a8f9ff85bdd5d3e5307978935478363c1b`, based on `b681a1fc3`.
-The staged code is an exact cherry-pick onto later main; this does not relabel
-the historical device execution as a test of the later whole-tree revision.
+The implementation was initially cherry-picked as `3a4b00fba`. Subsequent
+commit `c394f7021` adds a legacy-`ShellClassSpec` admission guard and a rejection
+test for general shell signatures; the branch also integrates later main.
+These source-admission changes are outside the measured `b56c` device run.
+The historical execution is not a device qualification of the amended branch
+or its later whole-tree revision.
 The [decision note](../../../.agents/notes/implemented/performance/2026-11-06-fixture-only-shared-rys-xy.md)
 records ownership, fixed fallbacks and the remaining actual-task gate.
 

@@ -1,0 +1,215 @@
+{
+  "base_commit": "32b4942de70ff4ac6ec4701063f4b537daf096a9",
+  "decision": "default strict shared-panel consumption; retain bounded two-pass fallback",
+  "fresh_gpu4pyscf_ranking": false,
+  "independent_pairs": 40,
+  "library_sha256": "9d89c53fbf5e98090c5738c1627610b174a0bd0b039b70d4843cf9a756fd913f",
+  "paired": {
+    "5090": {
+      "cold_plus_three_warm_ratio": 0.739341381908982,
+      "cold_ratio": 0.7113883852615476,
+      "warm_median_ratio": 0.9151392615744725,
+      "warm_per_call_ratios": [
+        0.9127934802150873,
+        0.922859999465903,
+        0.8882426428004977
+      ]
+    },
+    "A100": {
+      "cold_plus_three_warm_ratio": 1.0030383437520334,
+      "cold_ratio": 1.0088722249429172,
+      "warm_median_ratio": 0.9879947690141059,
+      "warm_per_call_ratios": [
+        0.9901621598803234,
+        0.9875386845065632,
+        0.9879947690141059
+      ]
+    }
+  },
+  "records": {
+    "5090/baseline": {
+      "cold_focks": 18,
+      "cold_plus_three_warm_seconds": 316.8840389214456,
+      "cold_scf_nonlocal_work": {
+        "pair_cache_hits": 1,
+        "pair_cache_probes": 4,
+        "pair_sweeps": 4,
+        "provisional_focks": 13,
+        "target_focks": 5
+      },
+      "cold_seconds": 271.77166702598333,
+      "scheduler": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LSB_HOSTS": null,
+        "LSB_JOBID": null,
+        "LSB_QUEUE": null,
+        "SLURM_JOB_ID": "16589",
+        "SLURM_JOB_NODELIST": "node1"
+      },
+      "separate_diagnostic_force_work": {
+        "cached_geometry": 1,
+        "grid_active_point_ao": 497699712,
+        "grid_ao_jet_values": 4976997120,
+        "grid_dense_point_ao": 1656324096,
+        "grid_discovery_ao_jet_values": 0,
+        "grid_discovery_passes": 0,
+        "grid_evaluation_points": 2156672,
+        "grid_evaluation_tiles": 2108,
+        "grid_projection_fma_pairs": 539021746688,
+        "grid_tile_points": 1024,
+        "indexed_grid": 1,
+        "nonlocal_pair_cache_hits": 1,
+        "nonlocal_pair_key_comparisons": 1,
+        "nonlocal_pair_sweeps": 0,
+        "shared_nonlocal_grid": 0
+      },
+      "warm_median_seconds": 14.915724787861109,
+      "warm_seconds": [
+        14.915724787861109,
+        14.8292635679245,
+        15.367383539676666
+      ]
+    },
+    "5090/default": {
+      "cold_focks": 18,
+      "cold_plus_three_warm_seconds": 234.28548324108124,
+      "cold_scf_nonlocal_work": {
+        "pair_cache_hits": 1,
+        "pair_cache_probes": 4,
+        "pair_sweeps": 4,
+        "provisional_focks": 13,
+        "target_focks": 5
+      },
+      "cold_seconds": 193.33520736545324,
+      "scheduler": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LSB_HOSTS": null,
+        "LSB_JOBID": null,
+        "LSB_QUEUE": null,
+        "SLURM_JOB_ID": "16589",
+        "SLURM_JOB_NODELIST": "node1"
+      },
+      "separate_diagnostic_force_work": {
+        "cached_geometry": 1,
+        "grid_active_point_ao": 248849856,
+        "grid_ao_jet_values": 2488498560,
+        "grid_dense_point_ao": 828162048,
+        "grid_discovery_ao_jet_values": 0,
+        "grid_discovery_passes": 0,
+        "grid_evaluation_points": 1078336,
+        "grid_evaluation_tiles": 1054,
+        "grid_projection_fma_pairs": 269510873344,
+        "grid_tile_points": 1024,
+        "indexed_grid": 1,
+        "nonlocal_pair_cache_hits": 1,
+        "nonlocal_pair_key_comparisons": 1,
+        "nonlocal_pair_sweeps": 0,
+        "shared_nonlocal_grid": 1
+      },
+      "warm_median_seconds": 13.64996536821127,
+      "warm_seconds": [
+        13.614976339042187,
+        13.685334168374538,
+        13.64996536821127
+      ]
+    },
+    "A100/baseline": {
+      "cold_focks": 18,
+      "cold_plus_three_warm_seconds": 157.02492288127542,
+      "cold_scf_nonlocal_work": {
+        "pair_cache_hits": 1,
+        "pair_cache_probes": 4,
+        "pair_sweeps": 4,
+        "provisional_focks": 13,
+        "target_focks": 5
+      },
+      "cold_seconds": 111.9049278087914,
+      "scheduler": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LSB_HOSTS": "gpu22 gpu22 gpu22 gpu22 gpu22 gpu22 gpu22 gpu22",
+        "LSB_JOBID": "225900",
+        "LSB_QUEUE": "gpu_chem",
+        "SLURM_JOB_ID": null,
+        "SLURM_JOB_NODELIST": null
+      },
+      "separate_diagnostic_force_work": {
+        "cached_geometry": 1,
+        "grid_active_point_ao": 497699712,
+        "grid_ao_jet_values": 4976997120,
+        "grid_dense_point_ao": 1656324096,
+        "grid_discovery_ao_jet_values": 0,
+        "grid_discovery_passes": 0,
+        "grid_evaluation_points": 2156672,
+        "grid_evaluation_tiles": 2108,
+        "grid_projection_fma_pairs": 539021746688,
+        "grid_tile_points": 1024,
+        "indexed_grid": 1,
+        "nonlocal_pair_cache_hits": 1,
+        "nonlocal_pair_key_comparisons": 1,
+        "nonlocal_pair_sweeps": 0,
+        "shared_nonlocal_grid": 0
+      },
+      "warm_median_seconds": 15.012092977762222,
+      "warm_seconds": [
+        15.116479702293873,
+        14.991422392427921,
+        15.012092977762222
+      ]
+    },
+    "A100/default": {
+      "cold_focks": 18,
+      "cold_plus_three_warm_seconds": 157.50201857462525,
+      "cold_scf_nonlocal_work": {
+        "pair_cache_hits": 1,
+        "pair_cache_probes": 4,
+        "pair_sweeps": 4,
+        "provisional_focks": 13,
+        "target_focks": 5
+      },
+      "cold_seconds": 112.89777350053191,
+      "scheduler": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LSB_HOSTS": "gpu22 gpu22 gpu22 gpu22 gpu22 gpu22 gpu22 gpu22",
+        "LSB_JOBID": "225900",
+        "LSB_QUEUE": "gpu_chem",
+        "SLURM_JOB_ID": null,
+        "SLURM_JOB_NODELIST": null
+      },
+      "separate_diagnostic_force_work": {
+        "cached_geometry": 1,
+        "grid_active_point_ao": 248849856,
+        "grid_ao_jet_values": 2488498560,
+        "grid_dense_point_ao": 828162048,
+        "grid_discovery_ao_jet_values": 0,
+        "grid_discovery_passes": 0,
+        "grid_evaluation_points": 1078336,
+        "grid_evaluation_tiles": 1054,
+        "grid_projection_fma_pairs": 269510873344,
+        "grid_tile_points": 1024,
+        "indexed_grid": 1,
+        "nonlocal_pair_cache_hits": 1,
+        "nonlocal_pair_key_comparisons": 1,
+        "nonlocal_pair_sweeps": 0,
+        "shared_nonlocal_grid": 1
+      },
+      "warm_median_seconds": 14.831869333982468,
+      "warm_seconds": [
+        14.96776619181037,
+        14.804609548300505,
+        14.831869333982468
+      ]
+    }
+  },
+  "source_identity": "391b1896a8cc8606cc22f0a1f7747c8bdd5480fd1242a677c03aefd2d73f84c8",
+  "tests": {
+    "host_passed": 271,
+    "initial_missing_hook_failures": 1,
+    "production_image_passed": 11,
+    "separate_hook_image_passed": 1
+  },
+  "worst_reference_errors": [
+    7.129112115459672e-12,
+    3.552127036954289e-07,
+    1.557066083485923e-07
+  ]
+}
