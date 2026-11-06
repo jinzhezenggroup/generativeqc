@@ -5,6 +5,10 @@ Each small archive contains only one test's exact raw source/API/activity inputs
 and scientific numerical controls. Readers never extract paths or trust saved
 diagnostic verdicts. No CUDA binary is retained or executed by these tests.
 
+`calibration.json.xz` and `source-controls.json.xz` retain the actual scheduled
+transfer/wait and publication-versus-hot-loop negative controls. They are live
+test inputs, not replaced by historical lookup or diagnostic summaries.
+
 - `n4-1506`: H2/LiH/water/F-HeH generated-DF compatibility with independent
   energy/amplitude fixtures, consumed by `test_cupti_df_compatibility_replay.py`.
 - `n4-1511`: H2/LiH/water actual metric host-transform links and RHF/UHF prepared

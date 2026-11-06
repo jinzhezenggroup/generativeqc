@@ -61,7 +61,7 @@ def test_retained_real_cuda_calibration_separates_bytes_waits_and_roles() -> Non
     """Re-audit Slurm 1504's actual work without granting residency coverage."""
     path = (
         Path(__file__).resolve().parents[2]
-        / "benchmarks/results/residency-n4-20261106/calibration.json.xz"
+        / "tests/reference_data/cupti/calibration.json.xz"
     )
     capture = json.loads(lzma.decompress(path.read_bytes()))
     result = summarize(

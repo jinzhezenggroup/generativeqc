@@ -1,7 +1,0 @@
-{
-  "reconstructed_tree": "4f2c2b475e905415baa1f7b9deada5d47eb01f20",
-  "matches_frozen_tree": true,
-  "native_build_input_files_checked": 1230,
-  "native_build_inputs_match_frozen_manifest": true,
-  "scope": "native build inputs only; later receipt replay tests and evidence retention are outside the frozen snapshot"
-}

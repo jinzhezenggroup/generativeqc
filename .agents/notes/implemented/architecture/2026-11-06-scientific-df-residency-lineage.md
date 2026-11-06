@@ -63,3 +63,21 @@ independent numerical gates, legal preparation/compatibility/publication roles
 and all unqualified coverage flags. Do not infer global residency or graph work
 from this scoped assertion. Expand owner/graph/implicit-wait contracts only with
 their own scientific lineage, clean endpoints and independent actual evidence.
+
+## Merge-base storage follow-up
+
+The first finished head passed local retention against its original base, but
+the authenticated CI test merge included newer base evidence: 85,973,776 bytes,
+leaving only 9,456 bytes below the unchanged 82 MiB cap. Do not assume the event
+base is the actual tested merge base; `check_evidence_change.sh` deliberately
+checks the latter. Raising the cap or deleting unrelated scientific evidence
+would conceal that integration constraint.
+
+Complete qualified benchmark snapshots remain in existing Git commit
+`e1922f36c0e449a8dbd4509a096f3d469c35087b`, with per-file hashes/recovery in
+`manifests/evidence_migrations/mp2-residency-qualified-snapshot-20261106.json`.
+Current benchmark directories retain small recovery indexes. Every live raw
+scientific, calibration and hot-loop negative replay input remains in permanent
+`tests/reference_data/cupti/`; no test or independent gate is removed. Full local
+source/build/profiler artifacts also remain ignored. This is storage compaction,
+not changed measurements, a new publication/Release, or a residency promotion.

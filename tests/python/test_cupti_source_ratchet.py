@@ -40,9 +40,7 @@ from tools.cupti_source_ratchet import (
 CASE = {"method": "synthetic", "basis": "fixture", "precision": "fp64"}
 ROOT = Path(__file__).resolve().parents[2]
 QUALIFIED = ROOT / "manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1.json"
-REAL_CONTROLS = (
-    ROOT / "benchmarks/results/residency-n4-20261106/source-controls.json.xz"
-)
+REAL_CONTROLS = ROOT / "tests/reference_data/cupti/source-controls.json.xz"
 
 
 def legacy_translation_workload(method: str) -> dict[str, Any]:
