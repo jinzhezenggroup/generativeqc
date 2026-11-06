@@ -36,6 +36,7 @@ def replay() -> dict[str, Any]:
         "worst_reference_errors": [0.0, 0.0, 0.0],
         "records": {},
         "clean_paired": {},
+        "latest_integrated": {},
     }
     for key, record in evidence["records"].items():
         journal = evidence["journals"].get(key, [])
@@ -90,6 +91,13 @@ def replay() -> dict[str, Any]:
             assert sample["precision"]["effective_bits"] == 64
             assert sample["precision"]["mixed_stage_fock_builds"] == 0
             assert sample["precision"]["final_residual_audits"] == 1
+            assert (
+                sum(
+                    solve["force_evaluations"]
+                    for solve in sample["precision_validation"]["solves"]
+                )
+                == 1
+            )
             diagnostic = sample["ks_diagnostic"]
             work = diagnostic["coulomb_exchange_work"]
             assert work["complete"]
@@ -159,6 +167,8 @@ def replay() -> dict[str, Any]:
             "warm_median_seconds": statistics.median(warm) if warm else None,
             "focks": cold["fock_builds"],
             "nonlocal_work": cold["ks_diagnostic"]["nonlocal_work"],
+            "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+            "analytic_force_evaluations_per_sample": 1,
             "scopes": sequence,
             "worst_reference_errors": worst,
             "accuracy_qualified": True,
@@ -192,6 +202,34 @@ def replay() -> dict[str, Any]:
             "paired_call_ratios": ratios,
             "within_declared_guard": True,
         }
+    for device in ("A100", "RTX5090"):
+        key = f"{device}-latest/default"
+        if key not in evidence["records"]:
+            continue
+        candidate = evidence["records"][key]
+        qualified = evidence["records"][f"{device}-clean/default"]
+        assert candidate["status"] == "complete"
+        assert candidate["stage_experiment"]["rms_handoff_override"] is None
+        assert len(candidate["samples"]) == 4
+        ratios = []
+        for current, previous in zip(
+            candidate["samples"], qualified["samples"], strict=True
+        ):
+            assert current["phase"] == previous["phase"]
+            assert current["fock_builds"] == previous["fock_builds"]
+            assert (
+                current["ks_diagnostic"]["nonlocal_work"]
+                == previous["ks_diagnostic"]["nonlocal_work"]
+            )
+            ratio = current["seconds"] / previous["seconds"]
+            assert ratio < evidence["qualification"]["paired_warm_guard"]
+            ratios.append(ratio)
+        summary["latest_integrated"][device] = {
+            "same_default_work": True,
+            "call_ratios_to_qualified_image": ratios,
+            "within_declared_guard": True,
+            "isolated_new_ablation": False,
+        }
     baseline_stages = evidence["journals"]["A100/baseline"][:18]
     assert [row["scope"] for row in baseline_stages[:9]] == [1] * 9
     assert baseline_stages[6]["ao_rms"] < 1e-5 < baseline_stages[6]["ao_max"]
@@ -212,6 +250,26 @@ def replay() -> dict[str, Any]:
     )
     assert summary["records"]["A100/history"]["focks"] == 23
     summary["causal_initializer_focks_saved"] = 2
+    continuous_key = "A100-latest/continuous-resident"
+    if continuous_key in evidence["records"]:
+        continuous = evidence["records"][continuous_key]
+        assert continuous["status"] == "complete"
+        assert continuous["stage_experiment"]["outer_override"] == "0"
+        assert continuous["stage_experiment"]["range_resident_override"] == "1"
+        work = summary["records"][continuous_key]
+        staged = summary["records"]["A100-latest/default"]
+        assert work["focks"] == 11 and work["scopes"] == [0] * 11
+        assert work["nonlocal_work"]["pair_sweeps"] == 11
+        summary["corrected_continuous_control"] = {
+            "complete_a100_full_target_focks": work["focks"],
+            "staged_focks": staged["focks"],
+            "continuous_scf_pair_sweeps": 11,
+            "staged_scf_pair_sweeps": 4,
+            "continuous_to_staged_cold_ratio": work["cold_seconds"]
+            / staged["cold_seconds"],
+            "isolates_history_loss_alone": False,
+            "identical_realized_storage_bytes_proven": False,
+        }
     return summary
 
 

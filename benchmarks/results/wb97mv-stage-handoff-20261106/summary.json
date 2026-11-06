@@ -2,7 +2,7 @@
   "decision": "default guarded provisional RMS handoff; retain operator-history resets",
   "production_changed": true,
   "fresh_gpu4pyscf_ranking": false,
-  "independent_pairs": 56,
+  "independent_pairs": 80,
   "worst_reference_errors": [
     8.981260180007666e-12,
     1.1363991303525722e-06,
@@ -43,6 +43,8 @@
         "pair_cache_hits": 1,
         "pair_sweeps": 4
       },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
       "scopes": [
         1,
         1,
@@ -85,6 +87,8 @@
         "pair_cache_hits": 1,
         "pair_sweeps": 4
       },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
       "scopes": [
         1,
         1,
@@ -125,6 +129,8 @@
         "pair_cache_hits": 0,
         "pair_sweeps": 4
       },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
       "scopes": [
         1,
         1,
@@ -165,6 +171,8 @@
         "pair_cache_hits": 1,
         "pair_sweeps": 3
       },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
       "scopes": [
         1,
         1,
@@ -233,6 +241,8 @@
         "pair_cache_hits": 1,
         "pair_sweeps": 4
       },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
       "scopes": [
         1,
         1,
@@ -277,6 +287,8 @@
         "pair_cache_hits": 1,
         "pair_sweeps": 4
       },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
       "scopes": [
         1,
         1,
@@ -321,6 +333,8 @@
         "pair_cache_hits": 1,
         "pair_sweeps": 4
       },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
       "scopes": [
         1,
         1,
@@ -363,6 +377,8 @@
         "pair_cache_hits": 1,
         "pair_sweeps": 4
       },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
       "scopes": [
         1,
         1,
@@ -407,6 +423,8 @@
         "pair_cache_hits": 1,
         "pair_sweeps": 4
       },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
       "scopes": [
         1,
         1,
@@ -431,6 +449,142 @@
         4.754375899231872e-07
       ],
       "accuracy_qualified": true
+    },
+    "A100-latest/default": {
+      "complete": true,
+      "cold_seconds": 107.00158957019448,
+      "warm_seconds": [
+        15.073060940951109,
+        14.942267894744873,
+        15.029037028551102
+      ],
+      "warm_median_seconds": 15.029037028551102,
+      "focks": 16,
+      "nonlocal_work": {
+        "provisional_focks": 11,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        0,
+        2,
+        0,
+        2,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        8.971786276864199e-12,
+        1.0464821684763592e-06,
+        4.7543760980604517e-07
+      ],
+      "accuracy_qualified": true
+    },
+    "A100-latest/continuous-resident": {
+      "complete": true,
+      "cold_seconds": 138.46918049827218,
+      "warm_seconds": [
+        15.087422672659159,
+        15.04130145534873,
+        15.003303952515125
+      ],
+      "warm_median_seconds": 15.04130145534873,
+      "focks": 11,
+      "nonlocal_work": {
+        "provisional_focks": 0,
+        "target_focks": 11,
+        "pair_cache_probes": 10,
+        "pair_cache_hits": 0,
+        "pair_sweeps": 11
+      },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
+      "scopes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        6.8970014884447055e-12,
+        2.533230509804696e-07,
+        9.16241041094173e-08
+      ],
+      "accuracy_qualified": true
+    },
+    "RTX5090-latest/default": {
+      "complete": true,
+      "cold_seconds": 189.0615837574005,
+      "warm_seconds": [
+        14.384058713912964,
+        14.351094625890255,
+        14.323800656944513
+      ],
+      "warm_median_seconds": 14.351094625890255,
+      "focks": 16,
+      "nonlocal_work": {
+        "provisional_focks": 11,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "nonlocal_work_scope": "SCF only; not an endpoint-wide force-pair census",
+      "analytic_force_evaluations_per_sample": 1,
+      "scopes": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        0,
+        2,
+        0,
+        2,
+        0,
+        0
+      ],
+      "worst_reference_errors": [
+        8.971786276864199e-12,
+        1.0464816888600126e-06,
+        4.7543758098584024e-07
+      ],
+      "accuracy_qualified": true
+    },
+    "RTX5090-latest/continuous-resident": {
+      "complete": false,
+      "status": "running",
+      "process_exit_code": 124,
+      "timeboxed": true,
+      "completed_physical_observations": null,
+      "last_observation": null,
+      "accuracy_qualified": false
     }
   },
   "clean_paired": {
@@ -455,5 +609,38 @@
       "within_declared_guard": true
     }
   },
-  "causal_initializer_focks_saved": 2
+  "latest_integrated": {
+    "A100": {
+      "same_default_work": true,
+      "call_ratios_to_qualified_image": [
+        0.9890524670003225,
+        0.990595695530265,
+        0.9938630510225622,
+        1.0027307555297424
+      ],
+      "within_declared_guard": true,
+      "isolated_new_ablation": false
+    },
+    "RTX5090": {
+      "same_default_work": true,
+      "call_ratios_to_qualified_image": [
+        0.9983205625043288,
+        1.000587575196662,
+        1.0028454351157319,
+        0.9988150497093549
+      ],
+      "within_declared_guard": true,
+      "isolated_new_ablation": false
+    }
+  },
+  "causal_initializer_focks_saved": 2,
+  "corrected_continuous_control": {
+    "complete_a100_full_target_focks": 11,
+    "staged_focks": 16,
+    "continuous_scf_pair_sweeps": 11,
+    "staged_scf_pair_sweeps": 4,
+    "continuous_to_staged_cold_ratio": 1.294085265971068,
+    "isolates_history_loss_alone": false,
+    "identical_realized_storage_bytes_proven": false
+  }
 }

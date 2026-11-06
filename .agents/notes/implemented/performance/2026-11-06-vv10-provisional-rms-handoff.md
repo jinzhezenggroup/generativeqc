@@ -24,7 +24,7 @@ and one frozen-seed warm endpoint. A private journal records already-returned
 host scalars without DF_TRACE, extra GPU transfers, or a different MD-J route.
 These host-journal timings are mechanism evidence, not clean final timings.
 
-| Arm | Cold/s | Molecular Focks | Provisional / target | VV10 sweeps |
+| Arm | Cold/s | Molecular Focks | Provisional / target | SCF VV10 sweeps |
 | --- | ---: | ---: | ---: | ---: |
 | Incumbent | 111.947746 | 18 | 13 / 5 | 4 |
 | Provisional RMS handoff | 108.286345 | 16 | 11 / 5 | 4 |
@@ -35,6 +35,12 @@ All eight completed A100 samples pass all 16 repeat-paired comparisons against
 the retained independent static reference with the original gates: energy
 1e-5 Eh/atom, maximum force 1e-4 and RMS force 3e-5 Eh/Bohr. This is sampled
 default-grid parity, not an independently grid-converged production ranking.
+
+The sweep column is the SCF `ks_diagnostic.nonlocal_work` census, not a claim
+that a complete cold E+F endpoint executes only four total sweeps. Each endpoint
+also includes one analytic-force evaluation; the retained Slurm16019 intrusive
+diagnostic reports one cold force-side sweep and zero on warm replay. Keep that
+historical diagnostic separate from clean current-image timing qualification.
 
 ### What oversolving actually costs here
 
@@ -73,7 +79,7 @@ pairs were not rebased to the new operator. A future exact/linearized secant
 transfer needs explicit density/storage ownership and an independently validated
 mapping. Do not cite this experiment as proof that every reset is optimal.
 
-### Continuous control has a resource-policy confound
+### Original outer-off control has a resource-policy confound
 
 The existing outer-off selector also disables automatic resident-LR source
 admission: `prepare_phase_source` requires `nonlocal_outer_active` for that
@@ -123,7 +129,7 @@ frozen-seed warm endpoints. The sole rollback is the RMS handoff selector.
 | RTX5090 / Slurm16584 | 193.680082 | 189.379635 | 14.299161 | 14.340794 |
 
 Cold improves 3.30% / 2.22%, with 18→16 Focks and four pair sweeps on both
-devices. Warm retains one Fock and zero pair sweeps; median increases of 0.085%
+devices. Warm retains one Fock and zero SCF pair sweeps; median increases of 0.085%
 / 0.291% are noise-scale observations, not proof of literally zero regression.
 Every matched call stays within the declared 1.05 guard. All 32 independent
 repeat-pair E/F checks pass unchanged gates. Actual Slurm16584 also passes both
@@ -140,6 +146,44 @@ Do not claim the separate warm 1.576s target or the entire 18-vs10 gap is solved
 by this cold two-Fock saving. Further history work must rebase across operators,
 not simply preserve stale Fock/error pairs.
 
+## Corrected continuous control and integrated result
+
+The latest-master source `ddb31eb6…`, based on `32b4942de…`, produces ELF
+`7ac0c7b2cd0489890389822e6d52094be0b1e567d6377e7a68431ff3f95d5c1d`.
+Host policy tests pass 23/23 before scheduling. Actual A100 LSF225866 completes
+both default and continuous-with-bounded-LR-admission arms, each cold plus three
+frozen-seed warm endpoints:
+
+- Default: 107.001590s cold / 15.029037s warm median; 16 Focks,
+  11 provisional / 5 target, four SCF pair sweeps.
+- Continuous: 138.469180s cold / 15.041301s warm median; 11 Focks,
+  zero provisional / 11 target, eleven SCF pair sweeps.
+
+This answers a major part of the printed-cycle question. Ordinary native
+full-target SCF does converge in 11 molecular Focks here, versus the retained
+reference's 10 reported cycles / 11 Veff builds (different counter scopes).
+The staged default trades five extra, mostly provisional, Focks for seven
+fewer SCF pair sweeps and is 22.7% faster cold than this continuous control
+(equivalently, continuous is 29.4% slower). The original native printed-step
+excess is not evidence for eight extra physical-target iterations. This
+combined sequence/resource-admission control still does not isolate history
+loss alone or prove identical realized source bytes. Exact history rebasing
+remains a separate opportunity, not a result of the stale-history experiment.
+
+Actual RTX5090 Slurm16585 default completes at 189.061584s cold / 14.351095s
+warm median, with unchanged 16-Fock work. Its corrected continuous arm reaches
+the declared 300s cap without a complete E+F sample: no converged count or
+warm ranking is assigned. That arm exits 124; the wrapper exits 1 while still
+executing the original/moved independent oracle tests (2 passed). Default and
+oracle each have their own exit-zero receipt. A100 wrapper exits zero.
+
+All 24 additional repeat-pair observable checks pass (80 total), and both
+latest defaults retain the qualified candidate's work and pass its 1.05
+per-call integration guard. These later-image results are not a fresh isolated
+speedup claim. The initial 30-minute CPU build timeout submitted no GPU job;
+the verified compiler cache completes the bounded retry. Preserve both build
+attempts and the authenticated restoration of the borrowed source/runtime.
+
 ## Evidence storage policy review
 
 The existing 82MiB aggregate checkout allowance has less than 10KiB headroom.
@@ -154,6 +198,7 @@ payload, rather than silently increasing it for an unbounded benchmark dump.
 
 ## Evidence and references
 
+- Implementation and complete final qualification: PR #3020.
 - Issue #2976: plan comment 6676386404, interim decision 6676959159, and clean
   qualification / corrected-control progress comment 6677438637.
 - `benchmarks/results/wb97mv-stage-handoff-20261106/` retains the experiment,
