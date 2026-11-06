@@ -238,6 +238,10 @@ measured_core_runtime_paths=(
 # worksteal, but count them in the existing core parity before
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
+  # Queue run 42164201724 exhausted core-c with late repeated LR owner builds.
+  # Compiler-heavy finished in 609 s; keep this intact module on loadfile
+  # while counting its original core slot and retaining all numerical cases.
+  tests/python/test_direct_lr_weighted_host.py
   # Run 40450776430 exhausted core-a twice; this intact corrected-Lambda
   # module used 269-351 s per worker while uccsd-forces finished in 559 s.
   # Preserve its ordinary core slot and all cases on existing worksteal workers.
@@ -712,7 +716,8 @@ case "${GENERATIVEQC_CI_SHARD}" in
     for path in \
       tests/python/test_cc_native_tensor_cpu.py \
       tests/python/test_uccsd_native.py \
-      tests/python/test_uccsd_triples_fock_response.py; do
+      tests/python/test_uccsd_triples_fock_response.py \
+      tests/python/test_direct_lr_weighted_host.py; do
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
         test_targets+=("$path")
       fi

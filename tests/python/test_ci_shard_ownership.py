@@ -60,15 +60,26 @@ def _selection(
 @pytest.mark.parametrize(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
-def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("module", "owner"),
+    (
+        ("tests/python/test_df_cc_mixed_precision.py", "runtime-heavy"),
+        ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
+    ),
+)
+def test_measured_transfer_snapshot(
+    event: str, module: str, owner: str, tmp_path: Path
+) -> None:
     """Source both actual Bash variants across all CI events and shards."""
-    module = "tests/python/test_df_cc_mixed_precision.py"
     selector = ROOT / ".github/scripts/ci_select_python_shard.sh"
     content = selector.read_text(encoding="utf-8")
     addition = f"  {module}\n"
     assert content.count(addition) == 1
     old_selector = tmp_path / "original-selector.sh"
-    old_selector.write_text(content.replace(addition, "", 1), encoding="utf-8")
+    previous = content.replace(addition, "", 1)
+    if owner == "compiler-heavy":
+        previous = previous.replace(f" \\\n      {module}; do", "; do", 1)
+    old_selector.write_text(previous, encoding="utf-8")
     shutil.copyfile(
         selector.with_name("ci_prioritize_posthf_files.sh"),
         old_selector.with_name("ci_prioritize_posthf_files.sh"),
@@ -112,7 +123,7 @@ def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> 
     assert old_counts[module] == 1
     original_owners = [shard for shard in SHARDS if module in old[shard][1]]
     assert len(original_owners) == 1 and original_owners[0].startswith("core-")
-    assert [shard for shard in SHARDS if module in new[shard][1]] == ["runtime-heavy"]
+    assert [shard for shard in SHARDS if module in new[shard][1]] == [owner]
     for shard in SHARDS:
         assert old[shard][0] == new[shard][0]  # distribution
         assert old[shard][2] == new[shard][2]  # coverage
@@ -120,7 +131,7 @@ def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> 
         assert Counter(old[shard][1]) - Counter([module]) == (
             Counter(new[shard][1]) - Counter([module])
         )
-        if shard not in {*original_owners, "runtime-heavy"}:
+        if shard not in {*original_owners, owner}:
             assert old[shard][1] == new[shard][1]
 
 
@@ -382,6 +393,7 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
         ("tests/python/test_treutler_endpoints.py", "posthf"),
         ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
         ("tests/python/test_native_stationary_phased_budget.py", "runtime-heavy"),
+        ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
     ),
 )
 def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
@@ -433,6 +445,7 @@ def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
         ("tests/python/test_treutler_endpoints.py", "posthf"),
         ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
         ("tests/python/test_native_stationary_phased_budget.py", "runtime-heavy"),
+        ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
     ),
 )
 def test_measured_module_executes_once_with_one_shared_fixture_owner(
@@ -563,6 +576,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_cc_native_tensor_cpu.py",
             "test_uccsd_native.py",
             "test_uccsd_triples_fock_response.py",
+            "test_direct_lr_weighted_host.py",
         ),
         "uccsd-forces": (
             "test_wb97mv_hessian.py",
