@@ -81,7 +81,7 @@ def test_capabilities_are_backend_operator_and_derivative_specific() -> None:
 
 @pytest.mark.parametrize("operator", ("df_metric", "df_three_center"))
 @pytest.mark.parametrize("order", (0, 1))
-def test_scf_auxiliary_g_admission_keeps_orbital_and_h_boundaries(
+def test_scf_auxiliary_h_admission_keeps_orbital_and_response_boundaries(
     operator: str, order: int
 ) -> None:
     """A qualified fitting role cannot widen the orbital or derivative domain."""
@@ -93,10 +93,16 @@ def test_scf_auxiliary_g_admission_keeps_orbital_and_h_boundaries(
         "role": "auxiliary",
         "consumer": "scf_df",
     }
-    for angular, eligible in ((3, True), (4, True), (5, False)):
+    for angular, eligible in ((3, True), (4, True), (5, True), (6, False)):
         shells = [Shell(0, angular, (Primitive(0.7, 1),))]
         assert basis_capability(shells, atoms, **request)["eligible"] is eligible
-    shells = [Shell(0, 4, (Primitive(0.7, 1),))]
+    shells = [Shell(0, 5, (Primitive(0.7, 1),))]
+    for consumer in (None, "correlation_df", "wb97mv_df_values"):
+        if consumer == "wb97mv_df_values" and order != 0:
+            continue
+        assert not basis_capability(
+            shells, atoms, **(request | {"consumer": consumer})
+        )["eligible"]
     for changed in (
         {"role": "orbital"},
         {"derivative_order": 2},

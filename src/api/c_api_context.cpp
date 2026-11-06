@@ -109,10 +109,12 @@ static generativeqc_status create_system_impl(generativeqc_context* context,
     for (std::uint32_t i = 0; i < descriptor->shell_count; ++i) {
       const generativeqc_shell& shell = descriptor->shells[i];
       if (context->state.executed_backend == GENERATIVEQC_BACKEND_CUDA &&
-          shell.angular_momentum >
-              (correlation_auxiliary || ks_auxiliary || scf_auxiliary ? 4U : 3U)) {
+          shell.angular_momentum > (scf_auxiliary                           ? 5U
+                                    : correlation_auxiliary || ks_auxiliary ? 4U
+                                                                            : 3U)) {
         context->last_detail =
-            correlation_auxiliary || ks_auxiliary || scf_auxiliary
+            scf_auxiliary ? "CUDA SCF source-only auxiliary shells support l<=5"
+            : correlation_auxiliary || ks_auxiliary
                 ? "CUDA source-only auxiliary shells support l<=4"
                 : "CUDA basis execution supports l<=3; g shells require CPU reference";
         return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -132,8 +134,8 @@ static generativeqc_status create_system_impl(generativeqc_context* context,
       }
       candidate->data.shells.push_back(std::move(native_shell));
     }
-    const generativeqc_status status =
-        generativeqc::molecule::validate_and_normalize(candidate->data, context->last_detail);
+    const generativeqc_status status = generativeqc::molecule::validate_and_normalize(
+        candidate->data, context->last_detail, scf_auxiliary ? 5U : 4U);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     *system = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -166,7 +168,7 @@ GENERATIVEQC_API generativeqc_status generativeqc_ks_auxiliary_system_create_v1(
   return create_system_impl(context, descriptor, system, false, true);
 }
 
-/** Private bridge to complete CUDA HF/KS DF, including auxiliary-g response.
+/** Private bridge to complete full-range CUDA HF/KS DF, including auxiliary-h response.
  * The handle remains forbidden as an orbital basis or a correlation auxiliary;
  * generic system creation and standalone bulk exports retain their own bounds. */
 GENERATIVEQC_API generativeqc_status generativeqc_scf_auxiliary_system_create_v1(

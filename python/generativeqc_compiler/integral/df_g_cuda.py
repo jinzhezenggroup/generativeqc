@@ -1,6 +1,6 @@
-"""Value-only auxiliary-g lowering of the common Gaussian moment algebra.
+"""Value-only auxiliary-g/h lowering of the common Gaussian moment algebra.
 
-The f/f/g class needs F10, beyond the qualified five-root Rys domain. Emit
+The f/f/g and f/f/h classes need F10/F11, beyond the five-root Rys domain. Emit
 polynomial coefficients from the existing moment DAG and integrate with the
 same Boys routine as DF response. Orbital g and g derivatives stay excluded.
 """
@@ -16,13 +16,17 @@ from .df_derivatives_cuda import (
 )
 
 
-def emit_df_g_values_cuda() -> str:
+def emit_df_g_values_cuda(*, maximum_auxiliary: int = 4) -> str:
     """Emit bounded value helpers inside the generated DF value namespace.
 
-    Only 85 axis cases are needed: f/f/g and g/s/g metric components. Each
-    primitive owns at most three eleven-coefficient polynomials and F0..F10.
+    The g domain has 85 axis cases; h adds only its role-checked moment cases.
+    A primitive owns three bounded polynomials and F0..F10 (g) or F0..F11 (h).
     No recurrence workspace grows with the molecular basis or batch size.
     """
+    if maximum_auxiliary not in (4, 5):
+        raise ValueError("bounded auxiliary values require g or h")
+    extent = maximum_auxiliary + 1
+    slots = max(6 + maximum_auxiliary, 2 * maximum_auxiliary) + 1
     lines = [
         "namespace auxiliary_g {",
         "__device__ __forceinline__ double component(Vec3 a,unsigned i) { return i==0?a.x:i==1?a.y:a.z; }",
@@ -32,13 +36,19 @@ def emit_df_g_values_cuda() -> str:
         "    double pa,double pb,double dx,double sx,double sy,double ip,double iq,double* out) {",
         "  switch(a*25U+b*5U+c) {",
     ]
-    for a, b, c in product(range(5), range(4), range(5)):
-        if a == 4 and b != 0:
+    for a, b, c in product(range(extent), range(4), range(extent)):
+        if a > 3 and b != 0:
             continue
-        graph, roots = axis_polynomial(a, b, c, auxiliary_g=True)
+        graph, roots = axis_polynomial(
+            a,
+            b,
+            c,
+            auxiliary_g=maximum_auxiliary == 4,
+            auxiliary_h=maximum_auxiliary == 5,
+        )
         emitter = CudaEmitter(graph, {})
         emitter.emit(roots)
-        lines += [f"    case {a * 25 + b * 5 + c}U: {{", *emitter.lines]
+        lines += [f"    case {a * extent**2 + b * extent + c}U: {{", *emitter.lines]
         lines += [
             f"      out[{i}]={emitter.reference(root)};" for i, root in enumerate(roots)
         ]
@@ -70,4 +80,13 @@ __device__ __noinline__ double evaluate(double alpha,Vec3 A,Angular a,
 } // namespace auxiliary_g
 """,
     ]
-    return "\n".join(lines)
+    source = "\n".join(lines)
+    if maximum_auxiliary == 5:
+        source = (
+            source.replace("auxiliary_g", "auxiliary_h")
+            .replace("a*25U+b*5U+c", "a*36U+b*6U+c")
+            .replace("i<11", f"i<{slots}")
+            .replace("f[11]", f"f[{slots}]")
+            .replace("base[3][11]", f"base[3][{slots}]")
+        )
+    return source

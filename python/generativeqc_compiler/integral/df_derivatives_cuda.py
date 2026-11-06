@@ -9,16 +9,19 @@ from .ir_serialization import integral_to_payload
 
 
 def df_derivative_inventory(
-    *, auxiliary_g: bool = False, scalar_type: str = "double"
+    *, auxiliary_g: bool = False, auxiliary_h: bool = False, scalar_type: str = "double"
 ) -> typing.Any:
     """Separate the external-response contract from native tiling decisions."""
     if scalar_type not in ("double", "float"):
         raise ValueError("scalar type must be double or float")
+    if auxiliary_g and auxiliary_h:
+        raise ValueError("select one auxiliary derivative domain")
+    auxiliary_extent = 6 if auxiliary_h else 5 if auxiliary_g else 4
     inventory = {
         "schema": "generativeqc.df_derivatives",
         "version": 1,
         "precision": "fp64",
-        "maximum_boys_order": 11 if auxiliary_g else 10,
+        "maximum_boys_order": 12 if auxiliary_h else 11 if auxiliary_g else 10,
         "lowering": "gaussian_moment_polynomials",
         "radial_kernels": {
             "coulomb": {"omega": "zero", "kernel": "1/r"},
@@ -34,8 +37,8 @@ def df_derivative_inventory(
                 build_df_derivative_ir(family, angular, weighted=weighted)
             )
             for family, extents in (
-                ("coulomb_metric", (5 if auxiliary_g else 4,) * 2),
-                ("three_center_eri", (4, 4, 5 if auxiliary_g else 4)),
+                ("coulomb_metric", (auxiliary_extent,) * 2),
+                ("three_center_eri", (4, 4, auxiliary_extent)),
             )
             for angular in product(*(range(size) for size in extents))
             for weighted in (False, True)
@@ -201,7 +204,7 @@ __device__ double dot(unsigned da,const double* a,unsigned db,const double* b,
 
 
 def emit_df_derivatives_cuda(
-    *, auxiliary_g: bool = False, scalar_type: str = "double"
+    *, auxiliary_g: bool = False, auxiliary_h: bool = False, scalar_type: str = "double"
 ) -> str:
     """Share base axis moments and Boys values across all independent centers.
 
@@ -212,6 +215,8 @@ def emit_df_derivatives_cuda(
     The explicit auxiliary-g variant shares this algebra but owns twelve slots,
     F_11 and role-checked internal raising. It is emitted into a separate
     namespace; requesting it does not promote any public force capability.
+    The separately selected h variant owns thirteen slots and F12. Both share
+    the same moment DAG and analytic single-center Gaussian derivative rule.
 
     Positive omega selects the same radial kernel in the metric and the
     three-center response. Zero preserves Coulomb. Long-range production uses
@@ -243,16 +248,25 @@ __device__ __noinline__ void axis_polynomial(unsigned a,unsigned b,unsigned c,
     __DF_ARITHMETIC__ pa,__DF_ARITHMETIC__ pb,__DF_ARITHMETIC__ dx,__DF_ARITHMETIC__ sx,__DF_ARITHMETIC__ sy,__DF_ARITHMETIC__ ip,__DF_ARITHMETIC__ iq,__DF_ARITHMETIC__* out) {
   switch(a*20U+b*4U+c) {
 """
+    if auxiliary_g and auxiliary_h:
+        raise ValueError("select one auxiliary derivative domain")
+    auxiliary_maximum = 5 if auxiliary_h else 4 if auxiliary_g else 3
     lines = [prefix.replace("__DF_BOYS__", emit_df_boys_cuda())]
     for a, b, c in product(
-        range(6 if auxiliary_g else 5), range(5), range(5 if auxiliary_g else 4)
+        range(auxiliary_maximum + 2), range(5), range(auxiliary_maximum + 1)
     ):
-        if a == b == 4 or (a == 5 and b != 0):
+        if a == b == 4 or (a > 4 and b != 0):
             continue
-        graph, roots = axis_polynomial(a, b, c, auxiliary_g_derivative=auxiliary_g)
+        graph, roots = axis_polynomial(
+            a,
+            b,
+            c,
+            auxiliary_g_derivative=auxiliary_g,
+            auxiliary_h_derivative=auxiliary_h,
+        )
         emitter = CudaEmitter(graph, {}, scalar_type=scalar_type)
         emitter.emit(roots)
-        key = a * 25 + b * 5 + c if auxiliary_g else a * 20 + b * 4 + c
+        key = a * 5 * (auxiliary_maximum + 1) + b * (auxiliary_maximum + 1) + c
         lines += [f"    case {key}U: {{", *emitter.lines]
         lines += [
             f"      out[{i}]={emitter.reference(root)};" for i, root in enumerate(roots)
@@ -367,6 +381,22 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
                 "order(a)>(metric?4U:3U) || order(b)>3 || order(c)>4",
             )
         )
+    if auxiliary_h:
+        source = (
+            source.replace(
+                "GENERATIVEQC_GENERATED_DF_DERIVATIVES",
+                "GENERATIVEQC_GENERATED_DF_AUXILIARY_H_DERIVATIVES",
+            )
+            .replace("generated_df_derivatives", "generated_df_auxiliary_h_derivatives")
+            .replace("a*20U+b*4U+c", "a*30U+b*6U+c")
+            .replace("f[11]", "f[13]")
+            .replace("base[3][11]", "base[3][13]")
+            .replace("raised[11],lowered[11]", "raised[13],lowered[13]")
+            .replace(
+                "order(a)>3 || order(b)>3 || order(c)>3",
+                "order(a)>(metric?5U:3U) || order(b)>3 || order(c)>5",
+            )
+        )
     if scalar_type == "float":
         source = source.replace(
             "GENERATIVEQC_GENERATED_DF_", "GENERATIVEQC_GENERATED_DF_FP32_"
@@ -375,7 +405,7 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
 
 
 def emit_df_derivatives_cpu(
-    *, auxiliary_g: bool = False, scalar_type: str = "double"
+    *, auxiliary_g: bool = False, auxiliary_h: bool = False, scalar_type: str = "double"
 ) -> str:
     """Lower the same generated DF derivative algebra to ordinary host C++.
 
@@ -384,7 +414,14 @@ def emit_df_derivatives_cpu(
     device-only qualifiers/includes without changing any generated arithmetic.
     """
 
-    source = emit_df_derivatives_cuda(auxiliary_g=auxiliary_g, scalar_type=scalar_type)
+    source = emit_df_derivatives_cuda(
+        auxiliary_g=auxiliary_g, auxiliary_h=auxiliary_h, scalar_type=scalar_type
+    )
+    if auxiliary_h:
+        source = source.replace(
+            "GENERATIVEQC_GENERATED_DF_AUXILIARY_H_DERIVATIVES_CUH",
+            "GENERATIVEQC_GENERATED_DF_AUXILIARY_H_DERIVATIVES_CPU_HPP",
+        )
     if auxiliary_g:
         source = source.replace(
             "GENERATIVEQC_GENERATED_DF_AUXILIARY_G_DERIVATIVES_CUH",

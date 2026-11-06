@@ -11,6 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 PREFIX = r"""
+#include <algorithm>
 #include <cstddef>
 #include <cstdlib>
 #include <memory>
@@ -24,7 +25,9 @@ bool retained_response=false;
 constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3, GENERATIVEQC_STATUS_INVALID_ARGUMENT=4;
 namespace core {
 using CorrelationConvergence = generativeqc::core::CorrelationConvergence;
-struct System { bool df_supported=true; int electron_count=2; std::size_t nbf=2; };
+struct Shell { unsigned angular_momentum=0; };
+struct System { bool df_supported=true; int electron_count=2; std::size_t nbf=2;
+  std::vector<Shell> shells{{4}}; };
 }
 namespace molecule {
 std::size_t ao_count(const core::System& system) { return system.nbf; }
@@ -158,6 +161,17 @@ int main(int argc,char** argv) {
   if (mode == 0) descriptor.budget=79;
   if (mode == 1) descriptor.valid=false;
   if (mode == 2) execution.cuda=true;
+  if (mode == 12) {
+    execution.cuda=true;
+    core::System auxiliary; auxiliary.shells={{5}};
+    try {
+      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,false,true,nullptr);
+      return 17;
+    } catch (const MethodError& error) {
+      return executions || allocations ||
+          std::string(error.what()).find("beyond g") == std::string::npos ? 18 : 0;
+    }
+  }
   if (mode == 5) {
     execution.cuda=true;
     core::System auxiliary; auxiliary.df_supported=false;
@@ -270,7 +284,7 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         text=True,
         timeout=30,
     )
-    for mode in range(12):
+    for mode in range(13):
         result = subprocess.run(
             [str(executable), str(mode)],
             capture_output=True,

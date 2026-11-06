@@ -87,10 +87,36 @@ applied to physical SCF or final-state orbitals.
 This chooses only a reproducible cold-start basin, not a ground state or a new
 occupation model. The physical Hamiltonian, integer occupations, energy, density,
 stationarity and unshifted canonical-state gates remain unchanged. Admitted
-full-range fitted CUDA KS endpoints audit the actual canonical density before
-publishing convergence rather than applying a redundant corrective closure to
-an already valid physical state. Rejected proofs continue the existing bounded
-solve and never authorize a force or warm-state token.
+full-range fitted CUDA KS and Direct global-hybrid UKS endpoints audit the actual
+canonical density before publishing convergence rather than applying a redundant
+corrective closure to an already valid physical state. Rejected proofs continue
+the existing bounded solve and never authorize a force or warm-state token.
+
+## Heavy-element UKS startup proposals
+
+Strict-FP64, all-electron, full-range CUDA B3LYP UKS cold solves containing an
+element beyond Ar use at most sixteen native Fock startup proposals before
+ordinary Pulay extrapolation. The first and last startup proposals use the
+current physical Fock unchanged; intervening proposals average it equally
+with the preceding proposal. This prevents a deep-core Hcore occupation cycle
+from becoming the initial Pulay history. The idle first DIIS slot retains
+only the startup proposal; it is overwritten before physical DIIS history
+is admitted, so no extra matrix storage is required.
+Subsequent cold-solve Pulay fitting uses the orthonormal residual
+`X^T(FDS-SDF)X`, with `X^T S X = I`, rather than weighting rotations by their
+raw AO magnitudes. Its two matrix products reuse existing scratch. Physical
+commutator diagnostics and acceptance continue to use the original AO residual.
+
+This is a solver proposal policy, not a different initial density or target
+Hamiltonian. Each sweep evaluates the complete physical F[D] and counts
+against the original iteration ceiling. Energy, density, commutator, electron
+count, idempotency and canonicality gates are unchanged. Imported/transported
+densities, authenticated warm replay, short iteration budgets, ECP, range-separated
+and lower-precision solves retain their existing policies. No CPU solution,
+reference-oracle work or altered occupations enter this startup.
+
+The [Se/Br solver decision](../../.agents/notes/implemented/numerics/2026-11-05-se-br-auxiliary-h-and-cold-uks.md)
+records the retained boundaries and rejected alternatives.
 
 ## Frozen-VV10 density proposals
 

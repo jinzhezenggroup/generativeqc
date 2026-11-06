@@ -91,7 +91,10 @@ double density_rms(const Matrix&,const Matrix&){return 1.0;}
 _TAIL = r"""namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& s) noexcept {return s.shells.size();}
 std::size_t cartesian_ao_count(const core::System& system) noexcept {return system.shells.size();}
-generativeqc_status validate_and_normalize(core::System&,std::string&){return GENERATIVEQC_STATUS_SUCCESS;}
+generativeqc_status validate_and_normalize(core::System&,std::string&,unsigned maximum_angular_momentum){
+  assert(maximum_angular_momentum == 4);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
 }
 namespace generativeqc::scf {
 std::size_t density_fitting_source_metadata_bytes(std::size_t, std::size_t, std::size_t,

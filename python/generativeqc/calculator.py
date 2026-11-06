@@ -1790,8 +1790,23 @@ class Calculator:
         selected_basis = self._basis_for_atoms(
             atoms, basis, operator=operator, derivative_order=derivative_order
         )
+        auxiliary = basis is not None
+        selected_operator = operator or ("df_metric" if auxiliary else "eri")
         return (
-            selected_basis.shells_for(atoms)
+            selected_basis.shells_for(
+                atoms,
+                backend=self._density_fitting_backend()
+                if auxiliary
+                else self._device_name,
+                operator=selected_operator,
+                derivative_order=derivative_order,
+                role="auxiliary" if auxiliary else "orbital",
+                consumer=self._auxiliary_basis_consumer(
+                    selected_operator, derivative_order
+                )
+                if auxiliary
+                else None,
+            )
             if isinstance(selected_basis, BasisSet)
             else tuple(selected_basis)
         )

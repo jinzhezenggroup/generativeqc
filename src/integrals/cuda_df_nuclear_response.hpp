@@ -18,7 +18,7 @@ struct CudaDfNuclearShape {
 /** Integer-only topology in normalized source order. Primitive ranges refer
  * to the combined orbital+auxiliary packing; public and Cartesian ranges are
  * local to each basis. Device metadata is checked against every field before
- * use. Orbital l<=3 and auxiliary l<=4 preserve their separate public ABIs. */
+ * use. Orbital l<=3 and full-range SCF auxiliary l<=5 preserve their scoped ABIs. */
 struct CudaDfNuclearShell {
   std::size_t atom{}, angular{}, primitive_begin{}, primitive_count{}, ao_begin{}, ao_count{},
       cartesian_begin{};

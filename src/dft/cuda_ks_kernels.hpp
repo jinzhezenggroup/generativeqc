@@ -49,6 +49,11 @@ void assemble_fock(cudaStream_t stream, std::size_t n, unsigned spins, const dou
                    const double* coulomb, const double* exchange, double exchange_coefficient,
                    const double* range_exchange, double range_exchange_coefficient,
                    const double* potential, const std::uint8_t* enabled, double* fock);
+/** Retain a cold-start proposal in otherwise idle DIIS storage. Physical F[D]
+ * is immutable; the first/last undamped sweeps never read uninitialized history.
+ * The owner must retire this scratch role before admitting Pulay history. */
+void cold_start_fock(cudaStream_t stream, std::size_t elements, const double* physical_fock,
+                     double* previous_proposal, double* proposal, bool damp);
 void stabilize_uks_proposal(cudaStream_t stream, std::size_t n, const double* overlap,
                             const double* occupied_projector, const std::uint8_t* enabled,
                             double* proposal_fock);

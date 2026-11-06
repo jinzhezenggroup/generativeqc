@@ -2812,6 +2812,46 @@ void rejected_api_requests_revoke_tokens() {
           "terminal KS diagnostic omitted distinct physical stopping gates");
 }
 
+void cold_fock_proposal_case() {
+  runtime::OwnedCudaStream stream(0);
+  constexpr std::size_t elements = 259;
+  runtime::OwnedCudaBuffer<double> physical(0, elements, stream.get());
+  runtime::OwnedCudaBuffer<double> retained(0, elements, stream.get());
+  runtime::OwnedCudaBuffer<double> proposal(0, elements, stream.get());
+  std::vector<double> previous(elements, std::nan("")), expected(elements), input(elements),
+      actual(elements), saved(elements), unchanged(elements);
+  require(cudaMemcpy(retained.get(), previous.data(), elements * sizeof(double),
+                     cudaMemcpyHostToDevice) == cudaSuccess,
+          "cold proposal sentinel upload failed");
+  unsigned sweep = 0;
+  for (bool damp : {false, true, true, false}) {
+    for (std::size_t index = 0; index < elements; ++index) {
+      input[index] = (static_cast<double>(index) - 3 * sweep) / 64.0;
+      expected[index] = damp ? 0.5 * (input[index] + previous[index]) : input[index];
+    }
+    require(cudaMemcpy(physical.get(), input.data(), elements * sizeof(double),
+                       cudaMemcpyHostToDevice) == cudaSuccess,
+            "physical Fock upload failed");
+    dft::cuda_ks_detail::cold_start_fock(stream.get(), elements, physical.get(), retained.get(),
+                                         proposal.get(), damp);
+    require(cudaGetLastError() == cudaSuccess && cudaStreamSynchronize(stream.get()) == cudaSuccess,
+            "cold proposal kernel failed");
+    for (const auto& [source, destination] :
+         {std::pair{proposal.get(), actual.data()}, std::pair{retained.get(), saved.data()},
+          std::pair{physical.get(), unchanged.data()}})
+      require(cudaMemcpy(destination, source, elements * sizeof(double), cudaMemcpyDeviceToHost) ==
+                  cudaSuccess,
+              "cold proposal readback failed");
+    require(unchanged == input, "startup damping changed physical F[D]");
+    for (std::size_t index = 0; index < elements; ++index)
+      require(std::isfinite(actual[index]) && std::abs(actual[index] - expected[index]) < 1e-14 &&
+                  saved[index] == actual[index],
+              "cold proposal ignored its bounded history or read an uninitialized slot");
+    previous = expected;
+    ++sweep;
+  }
+}
+
 void core_guess_gauge_case() {
   runtime::OwnedCudaStream stream(0);
   const std::array<double, 4> spectrum{-2.0, -0.5, -0.5, 0.2};
@@ -3028,6 +3068,7 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--recovery-controls") {
+      run_control("cold_fock_proposal_case()", [&] { cold_fock_proposal_case(); });
       run_control("core_guess_gauge_case()", [&] { core_guess_gauge_case(); });
       run_control("rejected_api_requests_revoke_tokens()",
                   [&] { rejected_api_requests_revoke_tokens(); });
@@ -3166,6 +3207,7 @@ int main(int argc, char** argv) {
     run_control("public_wb97mv_cuda_case(true)", [&] { public_wb97mv_cuda_case(true); });
     run_control("rejected_api_requests_revoke_tokens()",
                 [&] { rejected_api_requests_revoke_tokens(); });
+    run_control("cold_fock_proposal_case()", [&] { cold_fock_proposal_case(); });
     run_control("core_guess_gauge_case()", [&] { core_guess_gauge_case(); });
     run_control("run_exact_exchange_case(true)", [&] { run_exact_exchange_case(true); });
     run_control("run_exact_exchange_case(false)", [&] { run_exact_exchange_case(false); });

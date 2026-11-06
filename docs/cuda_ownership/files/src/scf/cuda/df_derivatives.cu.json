@@ -1,6 +1,6 @@
 {
   "path": "src/scf/cuda/df_derivatives.cu",
-  "reason": "Full dense weight indexing and bounded launch adapter to the shared generated response policy and generic normalized-basis traversal. The explicit distributed-sink diagnostic changes only destination addressing; both specializations call the same generated derivative policy.",
+  "reason": "Full dense weight indexing and bounded launch adapter to the shared generated response policy and generic normalized-basis traversal. Full-range SCF auxiliary h uses the generated high-auxiliary response policy and bounded six-term panel traversal, not the g-only shell schedules; no handwritten h integral or derivative equations are added. The explicit distributed-sink diagnostic changes only destination addressing; both specializations call the same generated derivative policy.",
   "regions": [],
   "role": "runtime",
   "subsystem": "df_derivatives"

@@ -62,7 +62,7 @@ def basis_capability(
     and nuclear sink's auxiliary-through-g contract for DF-MP2/DF-CCSD(T).
     ``consumer="wb97mv_df_values"`` admits only the CUDA KS source's auxiliary
     values through g; native Hessian derivatives require their own linked closure.
-    ``consumer="scf_df"`` admits CUDA HF/KS fitting auxiliaries through g for
+    ``consumer="scf_df"`` admits full-range CUDA HF/KS fitting auxiliaries through h for
     values and first derivatives, using the bounded six-term nuclear sink.
     Neither widens generic CUDA DF exports, orbital shells or higher derivatives.
     """
@@ -88,7 +88,7 @@ def basis_capability(
             raise ValueError(
                 "source-only consumer requires CUDA auxiliary DF values or qualified first derivatives"
             )
-        maximum = 4
+        maximum = 5 if consumer == "scf_df" else 4
     if maximum is None:
         reasons.append(
             f"{backend}/{operator}: derivative order {derivative_order} has no registered execution route"
