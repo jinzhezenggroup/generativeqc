@@ -1,11 +1,16 @@
 """Host-side negative controls for shared Hessian publication/response gates."""
 
+from types import SimpleNamespace
+from typing import NoReturn
+
 import numpy as np
 import pytest
+from generativeqc import composite_rks_hessian as response
 from generativeqc._cuda_hessian_response import resident_gmres
 from generativeqc.ecp_hessian import ECPSecondOrder
 from generativeqc.response_problem import ResponseSolveError
 from generativeqc.response_solver import GMRESOptions
+from generativeqc_compiler.method import resolve_method
 
 
 @pytest.mark.parametrize("value", (np.nan, np.inf, 1e308))
@@ -50,6 +55,7 @@ def test_resident_solver_accepts_only_true_residuals(scale: float) -> None:
 @pytest.mark.parametrize("value", (np.nan, np.inf, -np.inf))
 def test_ecp_quadrature_rejects_either_nonfinite_grid(grid: str, value: float) -> None:
     owner = ECPSecondOrder.__new__(ECPSecondOrder)
+    owner.statistics = {"hvp_validation_refinements": 0}
     coarse, fine = np.zeros((2, 1, 3)), np.zeros((2, 1, 3))
     (coarse if grid == "coarse" else fine)[0, 0, 0] = value
     results = iter((coarse, fine))
@@ -61,8 +67,9 @@ def test_ecp_quadrature_rejects_either_nonfinite_grid(grid: str, value: float) -
 @pytest.mark.parametrize("difference", (0.0, 1.0))
 def test_ecp_quadrature_finite_convergence_control(difference: float) -> None:
     owner = ECPSecondOrder.__new__(ECPSecondOrder)
+    owner.statistics = {"hvp_validation_refinements": 0}
     coarse, fine = np.zeros((2, 1, 3)), np.full((2, 1, 3), difference)
-    results = iter((coarse, fine))
+    results = iter((coarse, fine, coarse))
     owner._integrate = lambda *args, **kwargs: next(results)
     args = np.zeros((1, 3)), np.zeros((1, 1)), np.zeros((1, 1))
     if difference:
@@ -73,3 +80,47 @@ def test_ecp_quadrature_finite_convergence_control(difference: float) -> None:
         for value in result.values():
             np.testing.assert_array_equal(value, 0.0)
             assert not value.flags.writeable
+
+
+@pytest.mark.parametrize("functional", ("B3LYP", "PBE0"))
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("hamiltonian", ("all-electron", "scalar-semilocal-ecp"))
+@pytest.mark.parametrize("backend", ("cpu", "cuda"))
+@pytest.mark.parametrize("provider", ("exact", "density-fitted"))
+def test_full_range_spin_domain_before_owner_allocation(
+    monkeypatch: pytest.MonkeyPatch,
+    functional: str,
+    spins: int,
+    hamiltonian: str,
+    backend: str,
+    provider: str,
+) -> None:
+    closed = []
+    source = SimpleNamespace(
+        range_density_fitted=False,
+        backend=backend,
+        hamiltonian=hamiltonian,
+        method_ir=resolve_method(
+            functional, spin="unpolarized" if spins == 1 else "polarized"
+        ),
+        fock_provider_proof=lambda: (provider, provider),
+        close=lambda: closed.append(True),
+    )
+    state = SimpleNamespace(_source=source, density=np.zeros((spins, 1, 1)))
+    monkeypatch.setattr(response.StationaryKsState, "from_native", lambda *args: state)
+
+    class AllocationReached(Exception):
+        pass
+
+    def allocate(*args: object, **kwargs: object) -> NoReturn:
+        raise AllocationReached
+
+    monkeypatch.setattr(response, "StationaryHVPPlan", allocate)
+    admitted = (
+        backend == "cpu"
+        and provider == "exact"
+        and (hamiltonian == "all-electron" or spins == 1)
+    )
+    with pytest.raises(AllocationReached if admitted else NotImplementedError):
+        response.CompositeRKSResponse.from_native(object(), object())
+    assert closed == [True]
