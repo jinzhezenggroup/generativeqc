@@ -94,5 +94,12 @@
     "source": "VV10 SCF feature-sweep PR #3024",
     "five_measured_source_files_changed": false,
     "new_full_tree_H100_qualification": false
+  },
+  "latest_publication_master_merge": {
+    "revision": "9fbb47085cb1f8b2abdb9fef6f729cdee95317f3",
+    "source": "shared-Rys fixture PR #3023",
+    "preserved_external_head": "dfcf70ecc08e19ca147abf0d56ed1fcf5bfcb7bf",
+    "five_measured_source_files_changed": false,
+    "new_full_tree_H100_qualification": false
   }
 }

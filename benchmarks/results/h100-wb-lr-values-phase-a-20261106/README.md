@@ -75,8 +75,8 @@ actual compile command pins compute90/sm90.
 
 The publication preparation applies the five reviewed source files unchanged to
 main `7109b3d208d23352f266e2bf7440fdfcc71df974`. That whole tree is not relabeled
-as the measured source or a new H100 qualification. The concurrent shared-Rys
-fixture and VV10 changes are separate PRs. These synthetic results establish no
+as the measured source or a new H100 qualification. The shared-Rys
+fixture and VV10 changes retain their separate measured scopes. These synthetic results establish no
 WB96 source cost, endpoint speedup, default promotion or completed all30 win.
 Any native source replay must first prove a compatible already-live primitive
 cache owner and charge mapping/preparation before a separate integration decision.
@@ -85,3 +85,10 @@ Publication synchronization then merges main `13c11aa026558ce437e4a9509f4e6f4880
 (VV10 SCF feature-sweep PR #3024) normally. That upstream change touches none
 of the five measured files or this evidence directory. Their bytes remain
 source-bound to `1fa3`; no new full-tree device qualification is inferred.
+
+A later normal synchronization merges main `9fbb47085cb1f8b2abdb9fef6f729cdee95317f3`
+(shared-Rys fixture PR #3023), preserving its source and evidence independently.
+The external publication-branch host bridge shim repair is preserved. The five
+measured WB source files remain exact `1fa3` bytes. The generated Libxc inventory
+is refreshed for the combined current inputs while retaining its historical
+measurements as stale; no new Libxc, H100 or endpoint qualification is inferred.
