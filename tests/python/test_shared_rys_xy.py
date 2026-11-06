@@ -208,3 +208,18 @@ def test_shared_xy_rejects_explicit_unrestricted_only_ir() -> None:
             target=TARGET,
             schedule=replace(plan.schedule, fock_shared_rys_xy=True),
         )
+
+
+def test_shared_xy_rejects_general_shell_signature() -> None:
+    from generativeqc_compiler.integral.shell_signature import ShellSignature
+
+    plan = value_plan("dppp")
+    integral = replace(
+        plan.kernel.integral, spec=ShellSignature.from_shell_class(plan.spec)
+    )
+    with pytest.raises(ValueError, match="ShellClassSpec compatibility adapter"):
+        replace(
+            plan.kernel,
+            integral=integral,
+            schedule=replace(plan.schedule, fock_shared_rys_xy=True),
+        )

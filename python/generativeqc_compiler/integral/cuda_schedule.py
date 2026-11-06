@@ -248,7 +248,8 @@ class CudaKernelIR:
         self.schedule.validate_for(self.target)
         component_count = self.integral.spec.component_count
         if self.schedule.fock_shared_rys_xy and (
-            self.integral.spec.name not in ("dppp", "pppp")
+            not isinstance(self.integral.spec, ShellClassSpec)
+            or self.integral.spec.name not in ("dppp", "pppp")
             or self.integral.operator.family != OperatorFamily.FOUR_CENTER_ERI
             or not any(
                 isinstance(item, ContractionSpec) and DensityModel.RHF in item.density
