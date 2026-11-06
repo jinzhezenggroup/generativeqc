@@ -183,7 +183,8 @@ generativeqc_status DirectJkSourceLease::prepare(
   CudaDirectJkDiagnostic diagnostic;
   capacity_bytes_ = overhead;
   auto status = create_cuda_direct_jk_resident_plan_on_stream(
-      device, systems, screening, direct_bound, stream_, &raw, diagnostic, reason_);
+      device, systems, screening, direct_bound, stream_, &raw, diagnostic, reason_,
+      !mixed_recurrence_ && source_operator_ != FockOperator::FullRange);
   direct_.reset(raw);
   if (optional_refusal(status)) return refuse_optional();
   if (status != GENERATIVEQC_STATUS_SUCCESS) return finish(status);

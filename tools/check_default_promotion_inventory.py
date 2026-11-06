@@ -864,6 +864,15 @@ def _discover_response_host_controls(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_direct_source_construction(root: Path) -> dict[str, str]:
+    """Keep the same-image component-source rollback in the default inventory."""
+    relative = Path("src/scf/cuda/direct_jk.cpp")
+    control = "GENERATIVEQC_DIRECT_RESIDENT_COMPONENT_SOURCE"
+    if f'"{control}"' not in _read(root / relative):
+        raise ValueError("Direct resident source construction rollback is missing")
+    return {f"dft-policy:{control}": relative.as_posix()}
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
@@ -875,6 +884,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_nonlocal_force_reuse(root),
         _discover_nonlocal_pair_controls(root),
         _discover_ks_phase_values(root),
+        _discover_direct_source_construction(root),
         _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),

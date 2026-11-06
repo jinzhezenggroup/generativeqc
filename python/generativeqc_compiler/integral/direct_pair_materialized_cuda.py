@@ -22,6 +22,7 @@ def emit_direct_pair_materialized_support() -> str:
 #include "scf/cuda/direct_fock_accumulation.cuh"
 #include "scf/cuda/direct_force_work.hpp"
 #include "scf/cuda/direct_screening.cuh"
+#include "scf/cuda/direct_source_layout.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -91,7 +92,7 @@ struct MaterializedDirectPairValueSink {
   unsigned* refusal{};  // 1: unsupported envelope, 2: malformed component map
 };
 
-enum class MaterializedDirectPairSink { Fock, CanonicalValues };
+enum class MaterializedDirectPairSink { Fock, CanonicalValues, ResidentValues };
 
 /** Uniform CTA entry: admission precedes every barrier. Inactive/tail lanes
  * still participate in publication/retirement but never read an invalid AO.
@@ -112,11 +113,14 @@ __device__ inline void consume_materialized_direct_pair(
     double omega = 0.0, double* separate_coulomb = nullptr, double* separate_exchange = nullptr,
     std::uint64_t* canonical_work = nullptr, std::uint64_t* mixed_work = nullptr,
     double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
-    MaterializedDirectPairValueSink source = {}) {
+    MaterializedDirectPairValueSink source = {}, CanonicalDirectSourceSink resident = {}) {
   constexpr bool value_only = Sink == MaterializedDirectPairSink::CanonicalValues;
+  constexpr bool resident_only = Sink == MaterializedDirectPairSink::ResidentValues;
   static_assert(!value_only || (std::is_same_v<Scalar, double> &&
       AngularOrder >= 3 && AngularOrder <= 5 && ComponentLanes == 32 &&
       ComponentSlots == canonical_materialized_component_slots(AngularOrder)));
+  static_assert(!resident_only || (std::is_same_v<Scalar, double> &&
+      AngularOrder >= 3 && AngularOrder <= 9));
   constexpr bool mixed = std::is_same_v<Scalar, MixedPrecisionFloat>;
   // Mixed owners already publish one complete recurrence per shell quartet.
   // Disjoint axis writers borrow immutable geometry and retire at the existing
@@ -311,6 +315,8 @@ __device__ inline void consume_materialized_direct_pair(
       const auto target = source.component_slots[slot * ComponentLanes + threadIdx.x];
       source.values[target] = value[slot];  // Publish exact zero, too; no density/scatter.
       if (source.visits) atomicAdd(source.visits + target, 1U);
+    } else if constexpr (resident_only) {
+      resident.store(i[slot], j[slot], k[slot], l[slot], value[slot]);
     } else {
       // Qualification may inspect each final component without affecting the
       // production storage contract, where this borrowed address is null.
