@@ -138,7 +138,10 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t,std::size_t,std::size_t
 generativeqc_status create_cuda_direct_jk_resident_plan_on_stream(
     int, const std::vector<core::System>& systems, double screening,
     std::size_t budget, cudaStream_t value, CudaDirectJkPlan** output,
-    CudaDirectJkDiagnostic& diagnostic, std::string&) {
+    CudaDirectJkDiagnostic& diagnostic, std::string&, bool shared_source_geometry) {
+  // Full-range phase owners and mixed-recurrence sources retain their own
+  // geometry rather than opting into the exact range-source sharing path.
+  require(!shared_source_geometry);
   const bool screened=mode==21 || mode>=26;
   require(value==stream && screening==(screened ? 1e-12 : 0.0) && systems.size()==1);
   require(budget==(screened ? 5120 : 4096));
