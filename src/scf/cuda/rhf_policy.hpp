@@ -190,8 +190,9 @@ struct ColdHfScreeningPolicy {
  * driver must reset DIIS and converge the original target operator before any
  * publication, charging both stages to the same user iteration allowance.
  * Zero policy keeps ordinary execution; warm/imported/moved owners never inherit
- * the preliminary graph. Only GENERATIVEQC_HF_COLD_SCREENING=1 opts in;
- * the unset/default route preserves the incumbent operator and page policy. */
+ * the preliminary graph. Unset/1 admits eligible cold owners; every other
+ * explicit value disables the proposal. Automatic admission requires the strict
+ * physical target gate; bounded scratch admission is independent of seed history. */
 ColdHfScreeningPolicy resolve_cold_hf_screening(const ColdHfScreeningDomain& domain,
                                                 double target_screening) noexcept;
 
