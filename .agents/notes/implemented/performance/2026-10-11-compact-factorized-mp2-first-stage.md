@@ -3,6 +3,11 @@
 Status: implemented, bounded CPU qualification
 Date: 2026-10-11
 
+The [second-stage extension](2026-11-06-compact-factorized-mp2-second-stage.md)
+later preserves occupied support through the next buffer and reduction. The
+measurements and unchanged-later-stage scope below describe this original
+first-stage decision, not the extended implementation.
+
 ## Problem and scope
 
 Conventional factorized MP2 derivative weights populate only structured regions

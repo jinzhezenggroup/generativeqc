@@ -63,10 +63,15 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
                                 bool compact_first) {
   const auto n = reference.nbf;
   const auto di = offsets[si + 1] - offsets[si];
+  // Factorized weights have an occupied third MO slot. Preserve that exact
+  // support through the second stage instead of storing and reducing virtual
+  // zeros. Dense inputs and the explicit staged route retain the full domain.
+  const auto second_rows = compact_first ? reference.nocc : n;
   for (std::size_t sj = 0; sj < system.shells.size(); ++sj) {
     if (canonical_shells && sj > si) continue;
     const auto dj = offsets[sj + 1] - offsets[sj];
-    std::vector<double> second(posthf::checked_mul(posthf::checked_mul(di, dj), square(n)), 0.0);
+    std::vector<double> second(
+        posthf::checked_mul(posthf::checked_mul(di, dj), posthf::checked_mul(second_rows, n)), 0.0);
     if (compact_first) {
       const auto occupied = reference.nocc, virtuals = n - occupied;
       const auto exchange_offset = di * n * occupied;
@@ -75,7 +80,7 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
         for (std::size_t jv = 0; jv < dj; ++jv)
           for (std::size_t r = 0; r < occupied; ++r)
             for (std::size_t s = 0; s < n; ++s) {
-              auto& target = second[((iu * dj + jv) * n + r) * n + s];
+              auto& target = second[((iu * dj + jv) * second_rows + r) * n + s];
               const auto nu = offsets[sj] + jv;
               if (s == r) {
                 for (std::size_t q = 0; q < n; ++q)
@@ -112,10 +117,10 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
         for (std::size_t jv = 0; jv < dj; ++jv)
           for (std::size_t kw = 0; kw < dk; ++kw)
             for (std::size_t s = 0; s < n; ++s)
-              for (std::size_t r = 0; r < n; ++r)
+              for (std::size_t r = 0; r < second_rows; ++r)
                 third[((iu * dj + jv) * dk + kw) * n + s] +=
                     reference.coefficients[(offsets[sk] + kw) * n + r] *
-                    second[((iu * dj + jv) * n + r) * n + s];
+                    second[((iu * dj + jv) * second_rows + r) * n + s];
       for (std::size_t sl = 0; sl < system.shells.size(); ++sl) {
         if (canonical_shells && (sl > sk || (si == sk && sl > sj))) continue;
         const auto dl = offsets[sl + 1] - offsets[sl];

@@ -96,9 +96,11 @@ void observe_source(const std::uint64_t* values, std::size_t count) {
   }
   const bool transfer = record[10] == 1;
   const bool sync = record[10] == 2 || record[10] == 3;
+  const bool transform = record[10] == 4;
   if (!record[2] || record[5] < 1 || record[5] > 7 || !record[6] || record[13] ||
-      (!transfer && !sync) ||
+      (!transfer && !sync && !transform) ||
       (transfer && (!record[7] || !record[8] || record[11] < 1 || record[11] > 3)) ||
+      (transform && (!record[7] || !record[8] || !record[9] || record[11])) ||
       (sync && (record[7] || record[8] || record[9] || record[11] || record[12]))) {
     fail(record, 4);
     return;

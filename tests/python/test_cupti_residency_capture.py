@@ -1,8 +1,11 @@
-"""Synthetic activity protocol tests, not CUDA coverage/qualification evidence."""
+"""Synthetic protocol controls and CPU replay of retained real-GPU activity."""
 
 from __future__ import annotations
 
 import copy
+import json
+import lzma
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -52,6 +55,36 @@ REGIONS = {
     1: {"name": "warm", "role": "replay"},
     8: {"name": "fence", "role": "observer"},
 }
+
+
+def test_retained_real_cuda_calibration_separates_bytes_waits_and_roles() -> None:
+    """Re-audit Slurm 1504's actual work without granting residency coverage."""
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "tests/reference_data/cupti/calibration.json.xz"
+    )
+    capture = json.loads(lzma.decompress(path.read_bytes()))
+    result = summarize(
+        capture["activity"],
+        {int(key): value for key, value in capture["regions"].items()},
+    )
+    assert result["activity_stream_intact"], result["issues"]
+    counters = ("h2d_bytes", "d2h_bytes", "d2d_bytes", "syncs", "event_waits")
+    assert {
+        (row["region"]["name"], row["region"]["role"]): tuple(
+            row[counter] for counter in counters
+        )
+        for row in result["regions"]
+    } == {
+        ("upload", "prepare"): (64, 0, 0, 1, 0),
+        ("deliberate-host-transform", "iteration"): (64, 64, 0, 2, 0),
+        ("tile-copy", "tile"): (0, 0, 64, 0, 1),
+        ("final-output", "publication"): (0, 64, 0, 1, 0),
+        ("observer-fence", "observer"): (0, 0, 0, 1, 0),
+    }
+    assert result["status"] == "INCOMPLETE"
+    assert result["zero_round_trip_assertion"] is None
+    assert result["payload_links_complete"] is False
 
 
 def test_real_activity_not_nested_api_calls_is_counted_and_fence_is_separate() -> None:
