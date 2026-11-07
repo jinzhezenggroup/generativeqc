@@ -1378,7 +1378,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     const auto provider_before =
         options.export_physical_reference ? reference_detail::free_bytes(resources.stream_) : 0;
     if (matrix_admission.requires_provider_context()) {
-      matrix_status = resources.prepare_matrix_context();
+      matrix_status = blas_status(resources.prepare_matrix_context());
       if (matrix_status != GENERATIVEQC_STATUS_SUCCESS) {
         plan.retry_without_matrix_context = true;
         fill_global_failure(outputs, matrix_status);
@@ -2117,7 +2117,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       }
     }
     if (matrix_admission.requires_provider_context()) {
-      matrix_status = resources.bind_matrix_workspace();
+      matrix_status = blas_status(resources.bind_matrix_workspace());
       if (matrix_status != GENERATIVEQC_STATUS_SUCCESS) {
         plan.retry_without_matrix_context = true;
         fill_global_failure(outputs, matrix_status);

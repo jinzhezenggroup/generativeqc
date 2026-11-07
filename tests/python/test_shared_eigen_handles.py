@@ -49,10 +49,10 @@ def _consumer_lifetimes() -> str:
         + _definition(rhf, "CudaResources::~CudaResources()")
         + "\n"
         + _definition(
-            rhf, "generativeqc_status CudaResources::prepare_matrix_context()"
+            rhf, "cublasStatus_t CudaResources::prepare_matrix_context()"
         )
         + "\n"
-        + _definition(rhf, "generativeqc_status CudaResources::bind_matrix_workspace()")
+        + _definition(rhf, "cublasStatus_t CudaResources::bind_matrix_workspace()")
         + "\n"
         + _definition(ordinary, "void OrdinaryStreamEigensolver::cleanup()")
         + "\n"

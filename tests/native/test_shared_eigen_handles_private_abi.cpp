@@ -67,12 +67,6 @@ extern "C" cublasStatus_t cublasSetWorkspace_v2(cublasHandle_t handle, void* wor
   return trace_blas_workspace(handle, workspace, bytes);
 }
 
-generativeqc_status blas_status(cublasStatus_t status) {
-  return status == CUBLAS_STATUS_SUCCESS        ? GENERATIVEQC_STATUS_SUCCESS
-         : status == CUBLAS_STATUS_ALLOC_FAILED ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
-                                                : GENERATIVEQC_STATUS_CUDA_ERROR;
-}
-
 namespace generativeqc::runtime {
 std::mutex allocation_measurement_mutex;
 cudaError_t resource_cuda_free(void* pointer) { return trace_release(pointer, false); }
@@ -100,8 +94,8 @@ struct CudaResources {
   void* reference_fock_correction_{};
   void* solver_host_workspace_{};
   std::size_t solver_workspace_bytes_{};
-  generativeqc_status prepare_matrix_context() noexcept;
-  generativeqc_status bind_matrix_workspace() noexcept;
+  cublasStatus_t prepare_matrix_context() noexcept;
+  cublasStatus_t bind_matrix_workspace() noexcept;
   ~CudaResources();
 };
 struct OrdinaryStreamEigensolver {
@@ -122,14 +116,16 @@ std::int32_t private_matrix_preparation(void* stream, bool& retained) {
   owner.stream_ = static_cast<cudaStream_t>(stream);
   auto status = owner.prepare_matrix_context();
   retained = owner.blas_ != nullptr;
-  if (status == GENERATIVEQC_STATUS_SUCCESS) {
+  if (status == CUBLAS_STATUS_SUCCESS) {
     owner.solver_workspace_ = reinterpret_cast<void*>(0x5000);
     owner.solver_workspace_bytes_ = 128;
     status = owner.bind_matrix_workspace();
   }
   owner.solver_workspace_ = nullptr;
   owner.stream_ = nullptr;
-  return status;
+  return status == CUBLAS_STATUS_SUCCESS        ? GENERATIVEQC_STATUS_SUCCESS
+         : status == CUBLAS_STATUS_ALLOC_FAILED ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
 
 void* private_gfn2_create(void* stream) {

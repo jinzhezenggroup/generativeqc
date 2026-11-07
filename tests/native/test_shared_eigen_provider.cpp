@@ -440,7 +440,7 @@ cudaError_t resource_cuda_malloc_async(void** output, std::size_t bytes, cudaStr
 }
 }  // namespace runtime
 struct RhfResources {
-  generativeqc_status bind_matrix_workspace() noexcept;
+  cublasStatus_t bind_matrix_workspace() noexcept;
   shared::PreparedSymmetricEigenHandles eigen_handles_;
   cudaStream_t stream_{};
   void* blas_{};

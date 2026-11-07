@@ -318,7 +318,7 @@ def _workspace_consumer_regions() -> str:
     ao = (ROOT / "src/scf/cuda/df_eigensystem.cpp").read_text()
     resource = (ROOT / "src/scf/cuda/resources.cpp").read_text()
     workspace = _definition(
-        resource, "generativeqc_status CudaResources::bind_matrix_workspace()"
+        resource, "cublasStatus_t CudaResources::bind_matrix_workspace()"
     )
     parts = [
         workspace.replace("CudaResources::", "RhfResources::"),

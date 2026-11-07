@@ -28,8 +28,8 @@ class CudaResources {
    * Partial setup remains owned here for the original teardown protocol;
    * default math mode and native first-error provenance are unchanged.
    */
-  generativeqc_status prepare_matrix_context() noexcept;
-  generativeqc_status bind_matrix_workspace() noexcept;
+  cublasStatus_t prepare_matrix_context() noexcept;
+  cublasStatus_t bind_matrix_workspace() noexcept;
   static ProviderOwnerSchema inventory_schema();
   ProviderOwnerInventory inventory() const;
   ProviderInitializationTeardownReport close_current_context(
