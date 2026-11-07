@@ -84,6 +84,7 @@ struct Consumer {
   bool incremental_energy_refinement=false;
   unsigned incremental_energy_full_builds=0;
   bool final_closure=false, strict_refinement=false, has_exchange=true, has_range_correction=true;
+  bool occupied_xc_executed=false;
   unsigned incremental_delta_updates=0;
   std::size_t elements=1,matrix=1;
   int stream=0;
@@ -174,6 +175,25 @@ struct Consumer {
 int main(int argc,char** argv) {
   if(argc!=2)return 99;
   try {
+    if(std::string(argv[1])=="occupied-handoff") {
+      for(bool strict:{false,true}) for(bool occupied:{false,true}) {
+        Consumer probe;
+        probe.build(false);
+        probe.strict_refinement=strict;
+        probe.occupied_xc_executed=occupied;
+        require(probe.incremental_delta_admitted()==(!strict || occupied),
+                "XC-only handoff changed the existing strict J/K schedule");
+        probe.build(false);
+        require(probe.output.incremental_direct_jk.delta_builds==unsigned(!strict || occupied),
+                "handoff did not execute the admitted full/delta action");
+        probe.incremental_energy_refinement=true;
+        require(!probe.incremental_delta_admitted(),"XC bypassed full-energy refinement");
+        probe.incremental_energy_refinement=false;
+        probe.final_closure=true;
+        require(!probe.incremental_delta_admitted(),"XC bypassed final full-density proof");
+      }
+      return 0;
+    }
     if(std::string(argv[1])=="automatic") {
       bool rejected=false;
       try { Consumer probe(false,true,false,3,true); }
@@ -435,6 +455,20 @@ def test_stationary_density_refines_full_energy_without_relaxing_its_gate(
     """Blocked delta energy must not prevent full-operator convergence work."""
     result = subprocess.run(
         [str(controller_probe), "refinement"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_xc_handoff_keeps_jk_reuse_and_full_density_final_gates(
+    controller_probe: Path,
+) -> None:
+    """Execute native delta/full accounting, including genuine precision handoffs."""
+    result = subprocess.run(
+        [str(controller_probe), "occupied-handoff"],
         check=False,
         capture_output=True,
         text=True,

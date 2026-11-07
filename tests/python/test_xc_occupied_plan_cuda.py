@@ -20,8 +20,19 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.mark.parametrize("spins", [1, 2])
 @pytest.mark.parametrize("mapped", [False, True])
 @pytest.mark.parametrize("compact", [False, True])
+@pytest.mark.parametrize(
+    "functional,provisional",
+    [(2, False), (0, True), (1, True), (2, True)],
+    ids=("exact-mgga", "provisional-lda", "provisional-gga", "provisional-mgga"),
+)
 def test_native_occupied_source_fallback_and_compact_domains(
-    tmp_path: Path, native_cxx: "NativeCxx", spins: int, mapped: bool, compact: bool
+    tmp_path: Path,
+    native_cxx: "NativeCxx",
+    spins: int,
+    mapped: bool,
+    compact: bool,
+    functional: int,
+    provisional: bool,
 ) -> None:
     assert os.environ.get("SLURM_JOB_ID") and os.environ.get("CUDA_VISIBLE_DEVICES")
     library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
@@ -48,7 +59,14 @@ def test_native_occupied_source_fallback_and_compact_domains(
         ],
     )
     subprocess.run(
-        [executable, str(spins), str(int(mapped)), str(int(compact))],
+        [
+            executable,
+            str(spins),
+            str(int(mapped)),
+            str(int(compact)),
+            str(functional),
+            str(int(provisional)),
+        ],
         check=True,
         timeout=90,
     )
@@ -88,6 +106,9 @@ int main(int argc, char** argv) {
     using namespace generativeqc;
     const size_t spins = std::stoul(argv[1]);
     const bool mapped = std::stoi(argv[2]), compact = std::stoi(argv[3]);
+    const unsigned functional = std::stoul(argv[4]);
+    const bool provisional = std::stoi(argv[5]);
+    const size_t alpha = provisional ? 9 : 31, beta = spins == 2 ? (provisional ? 5 : 17) : 0;
     core::System system;
     system.atoms = {{1, {0, 0, 0}}};
     system.multiplicity = 2;
@@ -99,7 +120,7 @@ int main(int argc, char** argv) {
     const dft::AoBasis basis(system);
     const dft::GridSpec spec{1, 4, 4, 4, 3, 1e-12};
     const dft::MolecularGrid grid(system, spec);
-    auto layout = dft::cuda_xc_layout(basis, grid, 2, spins == 2, 32);
+    auto layout = dft::cuda_xc_layout(basis, grid, functional, spins == 2, 32);
     dft::CudaXcAoTiles maps;
     if (mapped) {
       maps.derivative_order = 1;
@@ -114,7 +135,7 @@ int main(int argc, char** argv) {
     Buffer<double> density(elements), coefficients(elements);
     std::vector<double> frames(elements), matrices(elements);
     for (size_t spin = 0; spin < spins; ++spin) {
-      const size_t occupied = spin ? 17 : 33;
+      const size_t occupied = spin ? beta : alpha;
       for (size_t orbital = 0; orbital < occupied; ++orbital)
         for (size_t row = 0; row < basis.nao; ++row)
           frames[spin * matrix + orbital * basis.nao + row] =
@@ -137,12 +158,13 @@ int main(int argc, char** argv) {
       require(owner.point_batch_plan().compact_groups != 0, "compact route was not exercised");
     }
     using runtime::PrecisionPhase;
+    const auto phase = provisional ? PrecisionPhase::Admitted : PrecisionPhase::StrictAudit;
     owner.enqueue(density.value, elements, 1);
     const auto reference = owner.read_scalars(1);
     const auto potential = owner.download_potential(1);
     require(reference.error == 0, "reference matrix source failed");
     dft::CudaXcOccupiedDensity witness{density.value, coefficients.value, basis.nao, spins,
-                                      {33, spins == 2 ? size_t(17) : size_t(0)}, 2};
+                                      {alpha, beta}, 2, provisional};
     for (std::uint64_t generation = 2; generation < 9; ++generation) {
       auto view = witness;
       view.generation = generation;
@@ -152,7 +174,7 @@ int main(int argc, char** argv) {
       if (generation == 6) view.occupations[0] = basis.nao + 1;
       if (generation == 7) view.spins = 3;
       if (generation == 8) view.coefficients = nullptr;
-      owner.enqueue(density.value, elements, generation, PrecisionPhase::StrictAudit, view);
+      owner.enqueue(density.value, elements, generation, phase, view);
       const auto actual = owner.read_scalars(generation);
       const auto result = owner.download_potential(generation);
       require(actual.error == 0, "occupied or fallback source failed");
@@ -165,13 +187,13 @@ int main(int argc, char** argv) {
     witness.coefficients = density.value;
     bool rejected = false;
     try {
-      owner.enqueue(density.value, elements, 9, PrecisionPhase::StrictAudit, witness);
+      owner.enqueue(density.value, elements, 9, phase, witness);
     } catch (const std::invalid_argument&) {
       rejected = true;
     }
     require(rejected, "valid-identity frame/density alias was not rejected");
     witness.coefficients = coefficients.value;
-    owner.enqueue(density.value, elements, 9, PrecisionPhase::StrictAudit, witness);
+    owner.enqueue(density.value, elements, 9, phase, witness);
     require(owner.read_scalars(9).error == 0, "alias failure poisoned the next generation");
     // StrictAudit discards proposal-only frames before even validating their
     // borrowed storage. Exact-mode aliases above must still be rejected.

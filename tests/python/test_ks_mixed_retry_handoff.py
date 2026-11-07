@@ -44,10 +44,12 @@ def retry_probe(
     start = finish.index("const bool occupied_stage =")
     end = finish.index("if (occupied_stage) converged = false;", start)
     occupied_handoff = finish[start:end]
-    history_retirement = _block(
-        cpp_function_definition(source, "enqueue_legacy"),
-        "if ((experimental_mixed_history",
-    )
+    enqueue = cpp_function_definition(source, "enqueue_legacy")
+    history_retirement = enqueue[
+        enqueue.index("if (experimental_mixed_history") : enqueue.index(
+            "std::string detail;"
+        )
+    ]
     folder = tmp_path_factory.mktemp("ks-mixed-retry")
     cpp, binary = folder / "retry.cpp", folder / "retry"
     cpp.write_text(
@@ -68,8 +70,8 @@ def retry_probe(
             )
             + ";",
         )
-        + "bool occupied_handoff() { bool converged = false;\n"
-        + "struct { double residual_rms = 1.0; } physical;\n"
+        + "bool occupied_handoff(double residual = 1.0) { bool converged = false;\n"
+        + "struct { double residual_rms; } physical{residual};\n"
         + occupied_handoff
         + "return enter_occupied_audit; }\n"
         + "bool retry() {\n"
@@ -246,8 +248,8 @@ struct Owner {
   double* tmp1{};
   std::size_t n{1}, spins{1}, occupations[2]{1, 0};
   unsigned final_corrections = 2, nonlocal_exact_epoch_iterations = 7;
-  int history_count_data = 4, history_head_data = 2;
-  int *history_count = &history_count_data, *history_head = &history_head_data;
+  std::uint32_t history_count_data = 4, history_head_data = 2;
+  std::uint32_t *history_count = &history_count_data, *history_head = &history_head_data;
   double previous_energy = 3, previous_energy_correction = 4;
   struct { struct { unsigned execution_retries{}; } precision;
     unsigned iterations = 5, fock_builds = 5;
@@ -280,7 +282,7 @@ struct Owner {
   double *nonlocal_vrho{}, *nonlocal_vsigma{}, *nonlocal_energy{};
   int *nonlocal_domain_error{};
   std::size_t elements = 1;
-  struct { std::size_t npoint = 24, feature_terms = 5;
+  struct { std::size_t npoint = 24, feature_terms = 5, jets = 4, work_jets = 4;
     CudaXcAoPrecision ao_precision = CudaXcAoPrecision::Fp64; } xc_layout;
   struct { std::size_t point_ao_visits = 24, point_ao_square_sum = 24, max_active = 8; } prepared_ao_work;
   struct { std::size_t point_count() const { return 12; } } nonlocal_grid;
@@ -396,7 +398,8 @@ int main(int argc, char** argv) {
             "proposal handoff left no finite strict energy comparison");
   }
   for (unsigned spins : {1U, 2U}) {
-    for (unsigned active : {0U, 1U, 2U, 3U}) {
+    for (unsigned active : {0U, 1U, 2U, 3U, 4U, 5U}) {
+     for (unsigned terms : {1U, 4U, 5U}) {
       Owner capacity;
       capacity.device_nonlocal = false;
       capacity.occupied_xc_requested = capacity.occupied_xc_frame_ready = true;
@@ -405,22 +408,33 @@ int main(int argc, char** argv) {
       capacity.occupations[0] = 1;
       capacity.occupations[1] = spins == 2 ? 2 : 0;
       capacity.prepared_ao_work.max_active = active;
+      capacity.xc_layout.feature_terms = terms;
+      capacity.xc_layout.jets = terms == 1 ? 1 : 4;
+      capacity.xc_layout.work_jets = terms == 5 ? 4 : 1;
       expected_density = capacity.density;
       capacity.stage_xc(8, Phase::Admitted);
-      const bool projection_fits = active > spins;
+      const bool projection_fits = active > spins * (terms == 4 ? 2 : 1);
       require(capacity.pending_occupied_xc == projection_fits &&
                   capacity.occupied_xc_executed == projection_fits,
               "matrix-only AO domains started a provisional energy epoch");
+     }
     }
   }
+  Owner tail;
+  tail.occupied_xc_executed = true;
+  tail.output.iterations = 4;
+  require(tail.occupied_handoff(1e-5), "near-stationary proposals delayed the strict energy epoch");
   Owner history;
   history.occupied_xc_executed = history.strict_refinement = true;
   for (unsigned sweep = 0; sweep <= 6; ++sweep) {
-    history.history_count_data = 4; history.history_head_data = 2;
-    history.occupied_xc_refinement_iterations = sweep;
-    history.retire_provisional_history();
-    require((history.history_count_data == 0) == (sweep == 6),
-                "provisional predictor history exceeded its strict refinement bound");
+    for (unsigned count = 0; count <= 64; ++count) {
+      history.history_count_data = count; history.history_head_data = 2;
+      history.occupied_xc_refinement_iterations = sweep;
+      history.retire_provisional_history();
+      require(history.history_count_data == count &&
+                  history.history_head_data == 2,
+                  "occupied handoff discarded the strict predictor history");
+    }
   }
  } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

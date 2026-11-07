@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "occupied-xc-families-20261105",
+  "owner": "Occupied-XC feature-family endpoint qualification",
+  "reason": "One compressed source-bound capsule retains complete independent and paired force vectors, original-workload replication, distinct-host confirmations, three handoff diagnoses and neutral/regressing discarded populations. Raw profiler events, incomplete runs, native libraries and build artifacts remain outside Git. This exact-byte storage review changes no size budget, numerical gate or method capability.",
+  "review_document": "benchmarks/results/occupied-xc-families-20261105/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/occupied-xc-families-20261105/endpoints.json.xz",
+      "family": "occupied-xc-families-20261105",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete current-image endpoint populations, independent references, original-workload qualification and separately identified negative/semantic-work diagnostics; replayable without CUDA or a native library.",
+      "bytes": 650544,
+      "sha256": "5b9edbbdbc6a389faefc7c1591c49df28773f730a9bf750d11a8fda3de9dd79d"
+    }
+  ]
+}
