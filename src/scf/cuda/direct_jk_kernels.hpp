@@ -150,7 +150,8 @@ void launch_canonical_jk_kernel(
     const double* bounds, const double* density, double* coulomb, double* exchange,
     std::uint64_t* work_count, double* source_values = nullptr,
     double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
-    std::size_t work_limit = std::numeric_limits<std::size_t>::max(), std::size_t work_begin = 0);
+    std::size_t work_limit = std::numeric_limits<std::size_t>::max(), std::size_t work_begin = 0,
+    double source_full_range_scale = 0.0);
 
 /** Shared whole-shell FP32 recurrence with FP64 contraction/products/scatter.
  * Optional shell bounds borrow geometry storage and density maxima refreshed

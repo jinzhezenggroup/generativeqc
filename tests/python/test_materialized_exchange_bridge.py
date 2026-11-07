@@ -185,7 +185,7 @@ void prepare_materialized_direct_pair(const PrimitivePairData&, unsigned, unsign
     double, double, int (&)[3]) {}
 template<unsigned Order> void fill_coulomb(double, double, double, CoulombState&) {}
 template<unsigned Order> bool fill_range_coulomb(double, double, double,
-    generativeqc::integrals::CoulombRange, double, CoulombState&) {
+    generativeqc::integrals::CoulombRange, double, CoulombState&, int = {}, double = 0.0) {
   assert(false && "full-range bridge must not request a range recurrence");
   return false;
 }

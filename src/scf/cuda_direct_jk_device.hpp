@@ -101,12 +101,12 @@ generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
  * residency. SR/LR values can serve only matching pure-exchange requests; full
  * J/K and a different omega keep their ordinary exact provider. A successful
  * lease never changes operator identity, even when preparation is repeated.
+ * Nonzero full_range_scale instead constructs LR + scale*Full in one allocation;
+ * this requires a fresh, complete Cartesian LR layout and strict FP64 values.
  */
-generativeqc_status prepare_cuda_direct_jk_range_resident_values(CudaDirectJkPlan* plan,
-                                                                 std::size_t maximum_bytes,
-                                                                 std::uint32_t bucket_mask,
-                                                                 FockOperator source_operator,
-                                                                 double omega, std::string& detail);
+generativeqc_status prepare_cuda_direct_jk_range_resident_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::uint32_t bucket_mask,
+    FockOperator source_operator, double omega, std::string& detail, double full_range_scale = 0.0);
 
 /** Select whole immutable angular buckets, numbered first*(first+1)/2+second.
  * The mask is shared across batch items. Unselected buckets retain the native
