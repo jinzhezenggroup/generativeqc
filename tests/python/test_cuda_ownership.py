@@ -45,6 +45,19 @@ def test_shared_execution_qualifiers_have_exact_runtime_ownership() -> None:
         ownership_report(root, ledger)
 
 
+def test_weighted_dispatch_declarations_have_explicit_runtime_ownership() -> None:
+    """The private launch interface stays inventoried without hiding mathematics."""
+    root = Path(__file__).resolve().parents[2]
+    ledger = load_ledger(root / "docs/cuda_ownership")
+    path = "src/scf/shared_rys_weighted_z.hpp"
+    record = next(row for row in ledger["files"] if row["path"] == path)
+    assert record["role"] == record["subsystem"] == "runtime"
+    assert record["regions"] == []
+    ledger["files"].remove(record)
+    with pytest.raises(ValueError, match="unclassified=.*shared_rys_weighted_z"):
+        ownership_report(root, ledger)
+
+
 def ledger_for(tmp_path: typing.Any) -> typing.Any:
     (tmp_path / "src").mkdir()
     (tmp_path / "src/sample.cu").write_text(

@@ -1,4 +1,5 @@
 #include "scf/aot_shell_registry.hpp"
+#include "scf/shared_rys_weighted_z.hpp"
 
 namespace generativeqc::scf::generated {
 namespace {
@@ -31,6 +32,7 @@ std::uint64_t preferred_streaming_fock_shell_class_mask() noexcept { return 0; }
 
 std::uint64_t enabled_rys_fock_shell_class_mask() noexcept { return 0; }
 std::uint64_t enabled_shared_rys_xy_fock_shell_class_mask() noexcept { return 0; }
+std::uint64_t enabled_shared_rys_weighted_z_fock_shell_class_mask() noexcept { return 0; }
 
 std::uint64_t enabled_k_block_fock_shell_class_mask() noexcept { return 0; }
 std::uint64_t enabled_rys_task_fock_shell_class_mask() noexcept { return 0; }
@@ -59,6 +61,13 @@ cudaError_t launch_shell_class_shared_rys_xy_fock(unsigned, cudaStream_t, bool, 
                                                   const void*, double, const double*, const double*,
                                                   runtime::CompensatedOutput, const std::uint32_t*,
                                                   std::uint32_t*) noexcept {
+  return cudaErrorInvalidValue;
+}
+
+cudaError_t launch_shell_class_shared_rys_weighted_z_fock(
+    unsigned, cudaStream_t, bool, unsigned, const void*, const std::uint32_t*, const std::int64_t*,
+    const void*, const double*, const void*, double, const double*, const double*,
+    runtime::CompensatedOutput, const std::uint32_t*, std::uint32_t*) noexcept {
   return cudaErrorInvalidValue;
 }
 
