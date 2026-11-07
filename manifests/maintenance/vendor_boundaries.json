@@ -12,15 +12,6 @@
         "cublasDaxpy": 1
       }
     },
-    "python/generativeqc_compiler/method/df_occupied_response_cuda.py": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Occupied DF response borrows shared Tensor column GEMM views; its symmetric metric Gram retains direct SYRK and GEMM fallback pending canonical lowering.",
-      "references": {
-        "cublasDgemm": 1,
-        "cublasDsyrk": 2
-      }
-    },
     "python/generativeqc_compiler/tensor/cuda_emit.py": {
       "classification": "provider",
       "contract": "python/generativeqc_compiler/tensor/ir.py",
@@ -314,7 +305,7 @@
     "src/tensor/cuda_runtime.cuh": {
       "classification": "provider",
       "contract": "python/generativeqc_compiler/tensor/ir.py",
-      "reason": "Existing TensorIR CUDA prepared executor and shared borrowed strict-FP64 column-major GEMM/GEMV/GEAM/strided-GEMM provider submissions. Scientific response callers supply semantic views and borrow the existing plan handle/stream; error statuses retain original native provenance for draining cleanup, and CuMetal GEAM capability remains guarded.",
+      "reason": "Existing TensorIR CUDA prepared executor and shared borrowed strict-FP64 column-major GEMM/GEMV/GEAM/Gram/strided-GEMM provider submissions. Scientific response callers supply semantic views and borrow the existing plan handle/stream; error statuses retain original native provenance for draining cleanup. Optional GEAM and SYRK capabilities remain C++17-compatible, with the Gram provider retaining the full-GEMM fallback and actual-work report.",
       "references": {
         "cublasCreate": 1,
         "cublasDaxpy": 1,
@@ -322,6 +313,7 @@
         "cublasDestroy": 1,
         "cublasDgemm": 2,
         "cublasDgemmStridedBatched": 2,
+        "cublasDsyrk": 2,
         "cublasGetVersion": 1,
         "cublasSetMathMode": 1,
         "cublasSetPointerMode": 3,
