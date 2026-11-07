@@ -41,7 +41,11 @@
     {
       "path": "qualification.json",
       "bytes": 24546,
-      "sha256": "966afea8282672a0f0be799d33aa44740f0283ac18e4299cb2a457ebff40c951"
+      "sha256": "966afea8282672a0f0be799d33aa44740f0283ac18e4299cb2a457ebff40c951",
+      "encoding": "xz",
+      "stored_path": "qualification.json.xz",
+      "stored_bytes": 4068,
+      "stored_sha256": "54ca3c5598e5ff29cb218bb0148555114de0c4650b0ebcceefe52477e46fba57"
     },
     {
       "path": "failed-v1.json",
@@ -56,7 +60,11 @@
     {
       "path": "samples.json",
       "bytes": 37657,
-      "sha256": "50381261eeba1e4919555a6caf5050fd0a33bff895eb6fe8163b85c554ec1f1e"
+      "sha256": "50381261eeba1e4919555a6caf5050fd0a33bff895eb6fe8163b85c554ec1f1e",
+      "encoding": "xz",
+      "stored_path": "samples.json.xz",
+      "stored_bytes": 2432,
+      "stored_sha256": "c981eac54b1af7a5d552c6e388b343ad7b3b991c03d93f205cc1e75c9e8e2540"
     },
     {
       "path": "qualifier.py.xz",

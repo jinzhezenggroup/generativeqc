@@ -320,24 +320,47 @@ def audit(cohort: dict[str, Any], records: dict[str, bytes]) -> dict[str, Any]:
     }
 
 
+def read_member(item: dict) -> bytes:
+    """Decode bounded transport storage; original logical bytes stay authoritative."""
+    logical = Path(item["path"])
+    stored = Path(item.get("stored_path", item["path"]))
+    check(
+        len(logical.parts) == len(stored.parts) == 1
+        and not logical.is_absolute()
+        and not stored.is_absolute(),
+        "unsafe evidence member",
+    )
+    size = item.get("stored_bytes", item["bytes"])
+    check(
+        0 <= item["bytes"] <= 131072
+        and 0 <= size <= 131072
+        and (HERE / stored).stat().st_size == size,
+        "unbounded evidence member",
+    )
+    data = (HERE / stored).read_bytes()
+    if "encoding" in item:
+        check(
+            item["encoding"] == "xz"
+            and hashlib.sha256(data).hexdigest() == item["stored_sha256"],
+            "stored evidence hash differs",
+        )
+        decoder = lzma.LZMADecompressor(memlimit=96 << 20)
+        data = decoder.decompress(data, max_length=item["bytes"] + 1)
+        check(decoder.eof and not decoder.unused_data, "incomplete/oversized XZ member")
+    check(
+        len(data) == item["bytes"]
+        and hashlib.sha256(data).hexdigest() == item["sha256"],
+        "logical evidence bytes differ",
+    )
+    return data
+
+
 def replay() -> dict[str, Any]:
     cohort = json.loads((HERE / "cohort.json").read_text())
     records = {}
-    for row in cohort["files"]:
-        relative = Path(row["path"])
-        check(
-            len(relative.parts) == 1
-            and not relative.is_absolute()
-            and relative.name not in records,
-            "unsafe/duplicate evidence member",
-        )
-        check(0 <= row["bytes"] <= 131072, "unbounded compact evidence member")
-        data = (HERE / relative).read_bytes()
-        check(
-            len(data) == row["bytes"] and digest(data) == row["sha256"],
-            "retained evidence hash differs: " + str(relative),
-        )
-        records[str(relative)] = data
+    for item in cohort["files"]:
+        check(item["path"] not in records, "duplicate evidence member")
+        records[item["path"]] = read_member(item)
     return audit(cohort, records)
 
 

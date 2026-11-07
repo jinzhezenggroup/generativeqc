@@ -49,7 +49,11 @@
     {
       "path": "qualification.json",
       "bytes": 51380,
-      "sha256": "08b9f5e8c8e8d84c24437cdde079a6348a75996151c23ece02e2f4a940e31dc5"
+      "sha256": "08b9f5e8c8e8d84c24437cdde079a6348a75996151c23ece02e2f4a940e31dc5",
+      "encoding": "xz",
+      "stored_path": "qualification.json.xz",
+      "stored_bytes": 9008,
+      "stored_sha256": "6b5caf4373d767be496a40d526b2393c5c1d1ca4f3c2787b3e34d7f7f27a73e4"
     },
     {
       "path": "qualifier.py.xz",
@@ -64,7 +68,11 @@
     {
       "path": "reduction.json",
       "bytes": 24620,
-      "sha256": "c6a0f59ce45815b21a53a3c7ac9513c99c778f758a011d01c0b9570a799b493f"
+      "sha256": "c6a0f59ce45815b21a53a3c7ac9513c99c778f758a011d01c0b9570a799b493f",
+      "encoding": "xz",
+      "stored_path": "reduction.json.xz",
+      "stored_bytes": 3880,
+      "stored_sha256": "2ffc4b75ae926c26b818920b9a77e47bebe08c43a5d3b3de7bd6163fc5a40040"
     },
     {
       "path": "result-review.md",
@@ -74,7 +82,11 @@
     {
       "path": "sanitizer-selection.json",
       "bytes": 12949,
-      "sha256": "5d98f9c0fac83ff75ab932907e8057cda91fa95ee6c85249320803efa03c403d"
+      "sha256": "5d98f9c0fac83ff75ab932907e8057cda91fa95ee6c85249320803efa03c403d",
+      "encoding": "xz",
+      "stored_path": "sanitizer-selection.json.xz",
+      "stored_bytes": 1032,
+      "stored_sha256": "f65d2825bed95cc8645e281c4761ff1d9324a1bbe8cd1747a398248c4eb4efea"
     },
     {
       "path": "source-binding.json",
