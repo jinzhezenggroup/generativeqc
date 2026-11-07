@@ -20,6 +20,9 @@ namespace generativeqc::scf {
  * the accelerator evaluator independent from the reference transformation.
  * include_derivatives=false omits both complete dM and dA arrays for a fused
  * response consumer; value arrays and the physical coordinate count remain.
+ * Orbital shells through f and auxiliary shells through g are supported for
+ * values and coordinate derivatives. Auxiliary g requires generic value math,
+ * selected by default; specialized diagnostic value policies remain f-only.
  */
 generativeqc_status build_cuda_density_fitting_integrals(
     int device_id, const core::System& orbital_system, const core::System& auxiliary_system,
