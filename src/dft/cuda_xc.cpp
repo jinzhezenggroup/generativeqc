@@ -588,7 +588,8 @@ void CudaXcPlan::prepare_mixed_matrix_contractions() {
 }
 
 void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admitted,
-                                 std::uint64_t expected_replays, std::size_t provider_budget) {
+                                 std::uint64_t expected_replays, std::size_t provider_budget,
+                                 bool indexed_gemm) {
   check_device();
   if (evaluation_started_)
     throw std::invalid_argument("density binding is immutable after first evaluation");
@@ -596,6 +597,8 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   check(cudaStreamIsCapturing(stream_, &capture));
   if (capture != cudaStreamCaptureStatusNone)
     throw std::invalid_argument("density preparation cannot capture");
+  if (indexed_gemm && (!layout_.local_ao || layout_.response || !admitted.is_strict_fp64()))
+    throw std::invalid_argument("indexed density GEMM requires a physical strict-FP64 local map");
   if (!admitted.is_strict_fp64() &&
       !cuda_xc_execution_capabilities(layout_).mixed_density_contraction)
     throw std::invalid_argument("mixed density contraction is not qualified for this domain");
@@ -627,9 +630,9 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   // remain available for mixed arithmetic, signed response and empty maps.
   // An empty indexed domain needs no materialized matrix or provider handle.
   const bool nonempty = !layout_.local_ao || ao_offsets_.back() != 0;
-  auto provider = provider_budget && nonempty
-                      ? cuda_xc_detail::prepare_density_provider(layout_, stream_, provider_budget)
-                      : nullptr;
+  auto provider = provider_budget && nonempty ? cuda_xc_detail::prepare_density_provider(
+                                                    layout_, stream_, provider_budget, indexed_gemm)
+                                              : nullptr;
   std::unique_ptr<CudaXcDensityBinding> provider_binding;
   if (provider && provider->enabled()) {
     provider_binding = std::make_unique<CudaXcDensityBinding>(strict[0]);

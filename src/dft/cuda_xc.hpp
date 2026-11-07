@@ -306,9 +306,12 @@ class CudaXcPlan {
    * Before evaluation, generated/disabled bindings may be replaced. With an
    * enabled provider, another nonzero-budget preparation is rejected before
    * binding/provider setup; use zero budget to release it transactionally first.
-   * A failed preparation preserves the previous tables and provider. */
+   * A failed preparation preserves the previous tables and provider. Indexed
+   * GEMM additionally requires explicit method-owned endpoint qualification;
+   * a nonzero budget alone does not admit this recipe. */
   void prepare_density(generativeqc::runtime::PrecisionDirective admitted,
-                       std::uint64_t expected_replays = 1, std::size_t provider_budget = 0);
+                       std::uint64_t expected_replays = 1, std::size_t provider_budget = 0,
+                       bool indexed_gemm = false);
   const CudaXcDensityBinding& density_binding(generativeqc::runtime::PrecisionPhase phase) const;
   /** Optional owner charges are separate from the ordinary arena. A positive
    * device allowance alone does not qualify a new endpoint/provider profile. */
@@ -468,7 +471,8 @@ CudaXcDensityBinding prepare_density_binding(std::int64_t n, std::int64_t count,
                                              std::uint64_t expected_replays);
 std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(const CudaXcLayout& layout,
                                                                        cudaStream_t stream,
-                                                                       std::size_t provider_budget);
+                                                                       std::size_t provider_budget,
+                                                                       bool indexed_gemm = false);
 
 /** Populate one host flag per global AO from all actual jets in a point tile.
  * The caller lends full-capacity panels and owns stream/error lifetimes. */

@@ -233,7 +233,8 @@ struct Xc {
     throw std::logic_error("AUTO/FP64 must not prepare Fast-only matrix arithmetic");
   }
   void prepare_density(runtime::PrecisionDirective directive, std::uint64_t replays,
-                       std::size_t budget) {
+                       std::size_t budget, bool indexed_gemm) {
+    assert(!indexed_gemm);
     assert(replays == 50);
     // A mapped layout must receive the narrowed strict directive at setup.
     assert(capable || directive.is_strict_fp64());
@@ -434,7 +435,7 @@ struct PreparedPanelProduct {
 }
 namespace cuda_xc_detail {
 std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(
-    const Layout&, int, std::size_t) {
+    const Layout&, int, std::size_t, bool) {
   return {};
 }
 template<bool Mixed,bool Tiled>
@@ -457,7 +458,7 @@ struct CudaXcPlan {
   std::vector<std::size_t> ao_offsets_{0, 17, 17, 21};
   void check_device() const {}
   void prepare_density(PrecisionDirective, std::uint64_t expected_replays = 1,
-                       std::size_t provider_budget = 0);
+                       std::size_t provider_budget = 0, bool indexed_gemm = false);
   const tensor::PreparedPanelProduct* density_execution_provider(PrecisionPhase) const;
   const CudaXcDensityBinding& density_binding(PrecisionPhase) const;
 };

@@ -14,12 +14,12 @@ extern "C" void xc_density_indexed_provider_for_test(bool library) {
 }
 #endif
 std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(
-    const CudaXcLayout& l, cudaStream_t stream, std::size_t budget) {
+    const CudaXcLayout& l, cudaStream_t stream, std::size_t budget, bool indexed_gemm) {
   return std::make_unique<tensor::CudaPanelProduct>(
       density_lowering_request, density_lowering_candidates, density_lowering_target,
       density_lowering_compilation, l.nao, tensor::contraction_product(l.work_jets,l.tile_points),
       l.spins, stream, budget, tiled_xc_admitted(l.nao,l.tile_points,l.spins,l.work_jets) ? 1 : 0,
-      l.local_ao ? 5 : 4, !l.response);
+      l.local_ao ? 5 : 4, !l.response, indexed_gemm);
 }
 #if defined(GENERATIVEQC_TEST_HOOKS)
 extern "C" void xc_density_materialize_for_test(cudaStream_t stream, const double* density,

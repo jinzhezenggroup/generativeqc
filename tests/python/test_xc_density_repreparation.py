@@ -145,12 +145,13 @@ CudaXcDensityBinding prepare_density_binding(std::size_t, std::size_t count,
   return result;
 }
 std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(
-    const Layout& l, int, std::size_t budget) {
+    const Layout& l, int, std::size_t budget, bool indexed_gemm) {
   ++provider_calls;
   if (provider_failure) throw std::bad_alloc();
   const auto bytes = l.spins*l.nao*l.nao*sizeof(double);
   return std::make_unique<tensor::PreparedPanelProduct>(
-      qualified && !unavailable && !l.response && budget >= provider_allowance+bytes, bytes);
+      (qualified || indexed_gemm) && !unavailable && !l.response &&
+          budget >= provider_allowance+bytes, bytes);
 }
 void select_ao(const Layout& l, int, void*, const double*, std::size_t, double,
                void*, void*, int*, unsigned* flags) {
@@ -194,7 +195,7 @@ struct CudaXcPlan {
   struct { std::size_t setup_h2d_bytes{}, synchronizations{}; } transfers_;
   CudaXcAoSelectionWork ao_selection_work_;
   void check_device() const { check(device_failure); }
-  void prepare_density(PrecisionDirective, std::uint64_t = 1, std::size_t = 0);
+  void prepare_density(PrecisionDirective, std::uint64_t = 1, std::size_t = 0, bool = false);
   const tensor::PreparedPanelProduct* density_execution_provider(PrecisionPhase) const;
   const CudaXcDensityBinding& density_binding(PrecisionPhase) const;
   bool select_local_ao(double, std::size_t, CudaXcAoDiscovery = CudaXcAoDiscovery::HostTiles);
@@ -212,6 +213,7 @@ CASES = (
     "response",
     "discovery",
     "batched",
+    "indexed_qualification",
 )
 
 TESTS = r"""
@@ -381,6 +383,26 @@ void batched() {
   require(p.admitted_density_[0].precision.arithmetic.is_strict_fp64() &&
           p.point_batch_arena_ == &retained_panel, "strict rebind lost batched owner");
 }
+void indexed_qualification() {
+  qualified = false;
+  CudaXcPlan owner;
+  const Snapshot initial(owner);
+  require(rejected([&] { owner.prepare_density(strict, 3, budget, true); }),
+          "dense domain accepted indexed qualification");
+  initial.unchanged(owner);
+  owner.layout_.local_ao = true;
+  owner.layout_.response = true;
+  require(rejected([&] { owner.prepare_density(strict, 3, budget, true); }),
+          "response accepted physical indexed qualification");
+  owner.layout_.response = false;
+  require(rejected([&] { owner.prepare_density(mixed, 3, budget, true); }),
+          "mixed arithmetic accepted strict indexed qualification");
+  initial.unchanged(owner);
+  owner.prepare_density(strict, 3, 1, true);
+  require(!owner.density_provider_->enabled(), "small budget bypassed indexed admission");
+  owner.prepare_density(strict, 3, budget, true);
+  require(owner.density_provider_->enabled(), "explicit indexed qualification was lost");
+}
 int main(int argc, char** argv) {
   try {
     require(argc == 2, "expected case name"); const std::string name = argv[1];
@@ -394,6 +416,7 @@ int main(int argc, char** argv) {
     else if (name == "response") response();
     else if (name == "discovery") discovery();
     else if (name == "batched") batched();
+    else if (name == "indexed_qualification") indexed_qualification();
     else throw std::runtime_error("unknown case");
     require(!live_contexts && !live_cache && !live_host, "owner teardown leaked resources");
     std::cout << name << " PASS\n";
