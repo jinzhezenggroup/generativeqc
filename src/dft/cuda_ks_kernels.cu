@@ -414,9 +414,10 @@ __global__ void rebase_density_kernel(std::size_t elements, unsigned history, co
                                       const std::uint32_t* head, Key key, RebaseStorage s) {
   auto* tx = s.transaction;
   if (!tx->enabled || !*enabled) return;
-  if (!vv10_rebase::valid_window(history, *count, *head)) {
+  if (!vv10_rebase::valid_key(key) || !vv10_rebase::valid_window(history, *count, *head)) {
     if (threadIdx.x == 0) {
-      vv10_rebase::refuse(*tx, Error::InvalidWindow);
+      vv10_rebase::refuse(
+          *tx, vv10_rebase::valid_key(key) ? Error::InvalidWindow : Error::OwnerMismatch);
       tx->enabled = 0;
     }
     return;

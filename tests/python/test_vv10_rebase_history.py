@@ -97,7 +97,10 @@ void ring() {
   }
   std::array<p::SlotTag,4> tags{};p::Transaction missing{};missing.enabled=1;
   assert(!p::prepare_snapshot(missing,4,2,2,tags.data(),old));
-  tags.fill({old,1});tags[1].key.anchor++;
+  tags.fill({old,1});
+  p::Key missingOwner=old;missingOwner.owner=0;
+  assert(!p::prepare_snapshot(missing,4,2,2,tags.data(),missingOwner));
+  tags[1].key.anchor++;
   assert(!p::prepare_snapshot(missing,4,2,2,tags.data(),old));
 }
 void phase() {
@@ -269,11 +272,13 @@ def test_control_binds_even_an_unsupported_cuda_resource_identity(
         ks_resource_request([], backend="cuda", library=object())
 
 
-def test_linked_fixture_host_interface_syntax(tmp_path: Path, required_native_cxx: NativeCxx) -> None:
+def test_linked_fixture_host_interface_syntax(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
     """Compile its real caller against CUDA API type leaves; this is not NVCC/device proof."""
     leaves = tmp_path / "cuda-api-leaves"
     leaves.mkdir()
-    (leaves / "cuda_runtime_api.h").write_text(r'''
+    (leaves / "cuda_runtime_api.h").write_text(r"""
 #pragma once
 #include <cstddef>
 using cudaStream_t=void*;using cudaError_t=int;
@@ -287,11 +292,20 @@ cudaError_t cudaMemcpyAsync(void*,const void*,std::size_t,cudaMemcpyKind,cudaStr
 cudaError_t cudaStreamCreate(cudaStream_t*);cudaError_t cudaStreamDestroy(cudaStream_t);
 cudaError_t cudaStreamSynchronize(cudaStream_t);cudaError_t cudaGetLastError();
 struct dim3 {unsigned x,y,z;dim3(unsigned a=1,unsigned b=1,unsigned c=1):x(a),y(b),z(c){}};
-''')
+""")
     (leaves / "cuda_runtime.h").write_text('#include "cuda_runtime_api.h"\n')
     (leaves / "cublas_v2.h").write_text("#pragma once\nusing cublasHandle_t=void*;\n")
     required_native_cxx.compile_object(
         ROOT / "tests/native/vv10_rebase_cuda.cu",
         tmp_path / "fixture-host-interface.o",
-        args=["-x", "c++", "-std=c++20", "-UNDEBUG", f"-I{leaves}", f"-I{ROOT / 'src'}", f"-I{ROOT / 'include'}", f"-I{ROOT / 'tests/native'}"],
+        args=[
+            "-x",
+            "c++",
+            "-std=c++20",
+            "-UNDEBUG",
+            f"-I{leaves}",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+            f"-I{ROOT / 'tests/native'}",
+        ],
     )

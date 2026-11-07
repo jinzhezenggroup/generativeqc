@@ -249,6 +249,32 @@ void run(cudaStream_t stream, bool zero, bool seed, int refusal) {
         assert(std::isfinite(cache[a * H + b]) &&
                std::abs(cache[a * H + b] - expected) <= 2e-11 * (1 + std::abs(expected)));
       }
+  std::vector<double> denseGram(nextCount * nextCount), weights;
+  for (unsigned i = 0; i < nextCount; ++i)
+    for (unsigned j = 0; j < nextCount; ++j) {
+      const auto a = p::chronological_slot(H, nextCount, nextHead, i),
+                 b = p::chronological_slot(H, nextCount, nextHead, j);
+      denseGram[i * nextCount + j] = c::dot(physicalR[a], physicalR[b]);
+    }
+  c::Matrix expectedEffective{};
+  if (nextCount > 1) {
+    generativeqc::solver::detail::DiisCoefficientPolicy policy;
+    policy.metric_scaling = generativeqc::solver::detail::DiisMetricScaling::MaximumDiagonal;
+    policy.require_affine_constraint = true;
+    const auto action = generativeqc::solver::detail::solve_diis_coefficients(denseGram, nextCount,
+                                                                              policy, weights);
+    assert(action == generativeqc::solver::detail::DiisCoefficientAction::Extrapolate);
+    for (unsigned age = 0; age < nextCount; ++age) {
+      const auto slot = p::chronological_slot(H, nextCount, nextHead, age);
+      for (std::size_t i = 0; i < M; ++i) expectedEffective[i] += weights[age] * physicalF[slot][i];
+    }
+  } else
+    expectedEffective = physicalF[p::chronological_slot(H, nextCount, nextHead, 0)];
+  const auto proposed = read(stream, effective.pointer, M);
+  for (std::size_t i = 0; i < M; ++i)
+    assert(std::isfinite(proposed[i]) && std::abs(proposed[i] - expectedEffective[i]) <=
+                                             2e-10 * (1 + std::abs(expectedEffective[i])));
+  std::printf("VV10_REBASE_AFFINE_PASS count=%u\n", nextCount);
   std::printf("VV10_REBASE_GRAM_PASS zero=%d seed=%d refusal=%d count=%u head=%u\n", zero, seed,
               refusal, nextCount, nextHead);
   // New solve epoch revokes all old tags; a stale snapshot must refuse.

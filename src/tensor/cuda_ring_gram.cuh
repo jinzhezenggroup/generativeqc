@@ -67,7 +67,8 @@ __device__ inline void refresh_ring_gram(const double* history, std::size_t vect
 __device__ inline void rebuild_ring_gram(const double* history, std::size_t vector_size,
                                          unsigned capacity, unsigned count, unsigned head,
                                          double* cache, std::uint32_t* finite, RingGramWork* work) {
-  if (!*finite) return;
+  const auto admitted = __shfl_sync(0xffffffffU, threadIdx.x == 0 ? *finite : 0U, 0);
+  if (!admitted) return;
   const unsigned first = (head + capacity - count) % capacity;
   unsigned long long dots = 0;
   for (unsigned row = 0; row < count; ++row) {

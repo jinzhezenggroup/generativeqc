@@ -3943,7 +3943,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         "GENERATIVEQC_VV10_REBASE_HISTORY {\"owner\":%llu,\"solve\":%llu,"
         "\"request\":1,\"admission\":%u,\"allocated_bytes\":%zu,"
         "\"density_writes\":%llu,\"snapshots\":%llu,\"successful_rebases\":%llu,"
-        "\"entries_transferred\":%llu,\"refusals\":%llu,\"last_error\":%u}\n",
+        "\"entries_transferred\":%llu,\"refusals\":%llu,\"last_error\":%u,"
+        "\"bank_anchor\":%llu,\"target_anchor\":%llu,\"metric\":1,"
+        "\"converged\":%d,\"failed\":%d}\n",
         static_cast<unsigned long long>(owner), static_cast<unsigned long long>(solve_epoch),
         static_cast<unsigned>(rebase_admission), rebase_layout ? rebase_layout->total_bytes : 0,
         static_cast<unsigned long long>(work.density_writes),
@@ -3951,7 +3953,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         static_cast<unsigned long long>(work.successful_rebases),
         static_cast<unsigned long long>(work.entries_transferred),
         static_cast<unsigned long long>(work.refusals),
-        static_cast<unsigned>(rebase_readback.error));
+        static_cast<unsigned>(rebase_readback.error),
+        static_cast<unsigned long long>(rebase_readback.bank_key.anchor),
+        static_cast<unsigned long long>(rebase_readback.target_key.anchor),
+        static_cast<int>(output.converged), static_cast<int>(is_failed));
     rebase_receipt_published = true;
   }
 

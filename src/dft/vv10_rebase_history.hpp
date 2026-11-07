@@ -35,6 +35,9 @@ struct Key {
 GQC_REBASE_HD inline bool same_key(Key a, Key b) noexcept {
   return a.owner == b.owner && a.solve == b.solve && a.anchor == b.anchor && a.metric == b.metric;
 }
+GQC_REBASE_HD inline bool valid_key(Key key) noexcept {
+  return key.owner && key.solve && key.metric;
+}
 struct SlotTag {
   Key key{};
   std::uint64_t valid{};
@@ -118,6 +121,10 @@ GQC_REBASE_HD inline bool prepare_snapshot(Transaction& tx, unsigned capacity, u
   tx.target_key = {};
   tx.error = Error::None;
   if (!tx.enabled) return false;
+  if (!valid_key(key)) {
+    refuse(tx, Error::OwnerMismatch);
+    return false;
+  }
   if (!valid_window(capacity, count, head) || !count) {
     refuse(tx, Error::InvalidWindow);
     return false;
@@ -138,7 +145,11 @@ GQC_REBASE_HD inline bool prepare_snapshot(Transaction& tx, unsigned capacity, u
 }
 GQC_REBASE_HD inline bool prepare_target(Transaction& tx, unsigned capacity, unsigned count,
                                          unsigned head, const SlotTag* tags, Key key) noexcept {
-  if (!tx.ready || !tx.bank_count) return false;
+  if (!tx.ready) return false;
+  if (!tx.bank_count) {
+    refuse(tx, Error::InvalidWindow);
+    return false;
+  }
   if (!valid_window(capacity, count, head) || count != 1 || head != 1 ||
       tx.bank_count >= capacity || !tags[0].valid || !same_key(tags[0].key, key)) {
     refuse(tx, Error::TargetWindow);
