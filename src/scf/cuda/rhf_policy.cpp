@@ -10,6 +10,74 @@
 #include "generated_one_electron_derivative_policy.cuh"
 
 namespace generativeqc::scf::cuda_policy {
+
+SharedRysXyRequest parse_shared_rys_xy_request(const char* value) noexcept {
+  if (value == nullptr || *value == '\0' || std::strcmp(value, "0") == 0)
+    return SharedRysXyRequest::Off;
+  return std::strcmp(value, "1") == 0 ? SharedRysXyRequest::On : SharedRysXyRequest::Invalid;
+}
+
+SharedRysXyRequest shared_rys_xy_requested() noexcept {
+  return parse_shared_rys_xy_request(std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY"));
+}
+
+SharedRysXyPolicy resolve_shared_rys_xy_policy(SharedRysXyRequest request,
+                                               const SharedRysXyContext& c) noexcept {
+  using A = SharedRysXyAdmission;
+  A admission = A::Off;
+  if (request == SharedRysXyRequest::On) {
+    if (c.unrestricted)
+      admission = A::Unrestricted;
+    else if (c.mixed_precision)
+      admission = A::MixedPrecision;
+    else if (!c.sm90 || c.capability_mask == 0)
+      admission = A::UnsupportedProfile;
+    else if (c.persistent_eri)
+      admission = A::PersistentEri;
+    else if (!c.quartet_direct)
+      admission = A::NonPaged;
+    else if (c.incremental_jk)
+      admission = A::IncrementalJk;
+    else if (c.separate_jk)
+      admission = A::SeparateJk;
+    else if (c.streaming)
+      admission = A::Streaming;
+    else if (c.compensated_output)
+      admission = A::CompensatedOutput;
+    else
+      admission = A::Active;
+  }
+  return {request, admission, admission == A::Active ? c.capability_mask : 0};
+}
+
+const char* shared_rys_xy_admission_name(SharedRysXyAdmission admission) noexcept {
+  switch (admission) {
+    case SharedRysXyAdmission::Off:
+      return "off";
+    case SharedRysXyAdmission::Active:
+      return "active";
+    case SharedRysXyAdmission::Unrestricted:
+      return "unrestricted";
+    case SharedRysXyAdmission::MixedPrecision:
+      return "mixed_precision";
+    case SharedRysXyAdmission::UnsupportedProfile:
+      return "unsupported_profile";
+    case SharedRysXyAdmission::NonPaged:
+      return "non_paged";
+    case SharedRysXyAdmission::IncrementalJk:
+      return "incremental_jk";
+    case SharedRysXyAdmission::SeparateJk:
+      return "separate_jk";
+    case SharedRysXyAdmission::Streaming:
+      return "streaming";
+    case SharedRysXyAdmission::PersistentEri:
+      return "persistent_eri";
+    case SharedRysXyAdmission::CompensatedOutput:
+      return "compensated_output";
+  }
+  return "invalid";
+}
+
 namespace {
 
 constexpr std::size_t kUnknownTargetFixedTopologyArenaBytes = std::size_t{256} << 20;

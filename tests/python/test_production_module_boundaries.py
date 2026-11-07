@@ -20,6 +20,7 @@ PRODUCTION_MODULES = {
     "production_k_block",
     "production_registry",
     "production_selection",
+    "production_shared_rys_xy",
 }
 INTEGRAL_PACKAGE = "generativeqc_compiler.integral"
 EMISSION_IMPORTS = {
@@ -37,6 +38,7 @@ EMISSION_IMPORTS = {
     "production_profile",
     "production_registry",
     "production_selection",
+    "production_shared_rys_xy",
     "re",
     "shell_spec",
     "signature",
@@ -44,6 +46,16 @@ EMISSION_IMPORTS = {
     "generativeqc_compiler.common.cuda_target",
 }
 EXCHANGE_QUEUE_IMPORTS = {"__future__", "collections.abc", "typing"}
+SHARED_RYS_XY_IMPORTS = {
+    "__future__",
+    "capabilities",
+    "dataclasses",
+    "fused_schedule",
+    "ir",
+    "production_profile",
+    "production_selection",
+    "typing",
+}
 
 
 def _imports_from_source(source: str) -> set[str]:
@@ -140,6 +152,7 @@ def test_bundle_owner_does_not_import_cuda_emitters() -> None:
     [
         ("production_emission", EMISSION_IMPORTS),
         ("production_exchange_queue", EXCHANGE_QUEUE_IMPORTS),
+        ("production_shared_rys_xy", SHARED_RYS_XY_IMPORTS),
     ],
 )
 def test_emission_owner_does_not_import_bundle_or_filesystem_orchestration(
