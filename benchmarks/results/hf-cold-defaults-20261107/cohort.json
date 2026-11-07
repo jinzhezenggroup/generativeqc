@@ -1,0 +1,181 @@
+{
+  "schema": "generativeqc.hf-cold-defaults.v1",
+  "decision": "scoped-hf-default",
+  "master": "f27bdb3b02e9f9bcac6c8b8e818ad2e548c14459",
+  "images": {
+    "baseline": {
+      "source_identity": "993e79b24f60511370da9a3d4bb77c9182d4cb870f3d938c4eff035b3570c641",
+      "library_sha256": "70f25a2cca708b4d8a4604150544ab808839f19f7a0328d8284380b1ec401af7"
+    },
+    "accepted": {
+      "source_identity": "318c580fcb985361a13af117880225209ddb4b25202efab807b9f6439ac4a707",
+      "library_sha256": "d2f3353d85677f1e9bb505c7e0dc4fa3ae6f6fe7a7a74d84fb999c230f3e2be1"
+    },
+    "rejected": {
+      "source_identity": "b2fed9a7ec1a77a4003c363b243c692d914154e3986118af597959f17c21cc66",
+      "library_sha256": "dc97e53ff6c82e2cd2aa7cc51d97c0d755a290308ddd58e9865d89e46f7bd931"
+    }
+  },
+  "cohorts": {
+    "rejected": {
+      "A100": {
+        "file": "rejected-a100.json.xz",
+        "sha256": "1b0bfec682f253b5e821cbcd78ff6fde86d91dc78d2fc9945fa3d46f8ba2edb6",
+        "device": "A100",
+        "job_id": "227637"
+      },
+      "RTX5090": {
+        "file": "rejected-rtx5090.json.xz",
+        "sha256": "cd42bc24481b5ae3dcd99b7724632778271cf150f85b63fec935cab2625a19ce",
+        "device": "RTX5090",
+        "job_id": "16671"
+      }
+    },
+    "accepted": {
+      "A100": {
+        "file": "accepted-a100.json.xz",
+        "sha256": "a996c3657c1c6f81b6fee713f79b5c9cac9ee21ff35264b3030508a29fd92b47",
+        "device": "A100",
+        "job_id": "227737"
+      },
+      "RTX5090": {
+        "file": "accepted-rtx5090.json.xz",
+        "sha256": "b5be15600398902102f5b58ab12bf728d39cbf230fd5eb173724719634861587",
+        "device": "RTX5090",
+        "job_id": "16672"
+      }
+    }
+  },
+  "history": {
+    "A100": {
+      "file": "history-a100.json.xz",
+      "sha256": "3e59d22c291c764e0bcc05bb0e0e8f080ba2fbec277ada4895e095993e992479"
+    },
+    "RTX5090": {
+      "file": "history-rtx5090.json.xz",
+      "sha256": "84dff8eec4419f02c8531528e9ec5bb8b0f2cd09b866bc82830e12bb28f31e0e"
+    }
+  },
+  "build": {
+    "exit_code": 0,
+    "identity": {
+      "source_identity": "318c580fcb985361a13af117880225209ddb4b25202efab807b9f6439ac4a707",
+      "library_sha256": "d2f3353d85677f1e9bb505c7e0dc4fa3ae6f6fe7a7a74d84fb999c230f3e2be1"
+    },
+    "source_receipt": {
+      "base": "df1ba852942e4b77991a04343bdaafab81b3f67d",
+      "master": "f27bdb3b02e9f9bcac6c8b8e818ad2e548c14459",
+      "source_identity": "318c580fcb985361a13af117880225209ddb4b25202efab807b9f6439ac4a707",
+      "overlays": {
+        ".agents/notes/proposed/2026-11-07-cold-hf-strict-screened-tail.md": "0a872915fa3184078811abcd0603bf369d0475a34492ed8167c5cb04dea36a9c",
+        ".agents/notes/proposed/2026-11-07-density-force-relative-map.md": "5ffc4dc09768f3b0bad40e72c54d4b54477b845df24cf66971a41145d82bb742",
+        "docs/developer/hf_force_finalization.md": "99e77a01940897dae3868232c00ef1810b4419470f1fe543c1067700cf169d62",
+        "src/scf/cuda/hf_bounded_page_policy.hpp": "e5a1062eef76d61a77390bb70cfb4677fa35c648a309cab1796f1f37c19d4e98",
+        "src/scf/cuda/rhf_policy.cpp": "88c70f22bef997931729a78d7c17e1accd7d22e357af90333de778a22a7d7c95",
+        "src/scf/cuda/rhf_policy.hpp": "07fe37df4bae2d315d53034b079164f64bd9bfb8b88ce09fb4e73cfad93318f2",
+        "src/scf/cuda_rhf.cpp": "51bac7af40face1a95fb67c00431c0d1cdb66df26dc63527947847e79a6aac2e",
+        "tests/native/test_precision_policy.cpp": "16ce303ffcaba480d7a415653b27b057972ea6eece149f65db90dcba0f990692",
+        "tests/python/test_cuda_hybrid_snapshot.py": "2c21274af930d5f36a9e5fba270ea26c7203827c53c60a268b5ec1d3d6495d2e",
+        "tests/python/test_direct_density_gradient.py": "dd8ff96b6ab36720ee36a3e5b74bdc1fec6e7cdbcaa801fd7e4e46d07fc0364b",
+        "tests/python/test_direct_density_gradient_cuda.py": "c3fc6bcff1c1b42731f3d3d43702cad96a53e56ac86e73474973b0e5b92031c7",
+        "tests/python/test_hf_cold_screening_cuda.py": "80a5c3b806654d50ab33245beb096e9147f7e8af67cdbfd4de9fe853d84615ff",
+        "tests/python/test_scf_convergence_defaults.py": "3c9d8beba98938d82fb54e010aab6103c4d27788687253aefc464036eb9d9186"
+      }
+    },
+    "cache_before": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n",
+    "cache_after": "Compile requests                          591\nCompile requests executed                2179\nCache hits                               1814\nCache hits (C/C++)                        250\nCache hits (CUBIN)                        524\nCache hits (CUDA)                         264\nCache hits (CUDA (Device code))           264\nCache hits (PTX)                          512\nCache misses                               95\nCache misses (C/C++)                       71\nCache misses (CUDA)                         6\nCache misses (CUDA (Device code))           6\nCache misses (PTX)                         12\nCache hits rate                         95.02 %\nCache hits rate (C/C++)                 77.88 %\nCache hits rate (CUBIN)                100.00 %\nCache hits rate (CUDA)                  97.78 %\nCache hits rate (CUDA (Device code))    97.78 %\nCache hits rate (PTX)                   97.71 %\nCache timeouts                              0\nCache read errors                           0\nForced recaches                             0\nCache write errors                          0\nCache errors                                0\nCompilations                              365\nCompilation failures                        0\nNon-cacheable compilations                270\nNon-cacheable calls                         0\nNon-compilation calls                       0\nUnsupported compiler calls                  0\nAverage cache write                     0.001 s\nAverage compiler                        2.361 s\nAverage cache read hit                  0.001 s\nFailed distributed compilations             0\nCache location                       Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                     (none)\nUse direct/preprocessor mode?        yes\nVersion (client)                     0.16.0\nCache size                                 10 GiB\nMax cache size                             10 GiB\n",
+    "cache_version": "sccache 0.16.0\n",
+    "restored_runtime": "4c73bcf8a409a15362355d290695e7866c3a2b28753a42a1d61c91aba4ffe83a  /data/jzzeng/direct-lr-weighted-20261106/source/build/libgenerativeqc.so\n",
+    "runner": "#!/usr/bin/env bash\nset -euo pipefail\ntrial=/data/jzzeng/hf-cold-master-qualified-20261107\nprevious=/data/jzzeng/direct-lr-weighted-20261106\nsource=$previous/source\nout=$trial/build-receipt\nexec 9>/data/jzzeng/direct-range-anchor-20261105/compile-owner.lock\nflock -w 60 9\ntest -s \"$trial/source.tar.gz\"\nmkdir -p \"$out\" \"$trial/tmp\"\nexec > \"$out/driver.log\" 2>&1\nexport PATH=/home/jzzeng/.local/bin:/home/jzzeng/miniconda3/bin:/group/software/cuda-12.9.1/bin:/usr/bin:/bin\ncache=/home/jzzeng/.local/bin/sccache\n\"$cache\" --version > \"$out/cache-version.txt\"\nexport SCCACHE_SERVER_UDS=\"$trial/tmp/cache-$$.sock\" SCCACHE_IDLE_TIMEOUT=3600\nsetsid env SCCACHE_START_SERVER=1 SCCACHE_NO_DAEMON=1 \"$cache\" 9>&- > \"$out/cache-server.log\" 2>&1 &\nserver=$!\nmodified=0\nfinish() {\n  status=$?\n  trap - EXIT\n  set +e\n  \"$cache\" --show-stats > \"$out/cache-after.txt\" 2>&1 || true\n  if [[ \"$modified\" == 1 ]]; then\n    tar -mxzf \"$previous/integrated-source.tar.gz\" -C \"$source\"\n    python - \"$previous/integrated-source.tar.gz\" \"$trial/source.tar.gz\" \"$source\" \"$out/restored-extra-files.json\" <<'PY'\nimport hashlib, json, sys, tarfile\nfrom pathlib import Path\nwith tarfile.open(sys.argv[1]) as original, tarfile.open(sys.argv[2]) as candidate:\n    old = {Path(member.name).as_posix().removeprefix('./') for member in original if member.isfile()}\n    removed = []\n    for member in candidate:\n        relative = Path(member.name)\n        assert not relative.is_absolute() and '..' not in relative.parts\n        name = relative.as_posix().removeprefix('./')\n        if not member.isfile() or name in old:\n            continue\n        destination = Path(sys.argv[3]) / relative\n        if destination.exists():\n            payload = candidate.extractfile(member).read()\n            assert hashlib.sha256(destination.read_bytes()).digest() == hashlib.sha256(payload).digest(), name\n            destination.unlink()\n            removed.append(name)\nPath(sys.argv[4]).write_text(json.dumps(removed, indent=2) + '\\n')\nPY\n    tar -xzf \"$previous/integrated-repaired-runtime.tar.gz\" -C \"$source\"\n    sha256sum \"$source/build/libgenerativeqc.so\" > \"$out/restored-runtime.sha256\"\n  fi\n  kill -- \"-$server\" 2>/dev/null || true\n  wait \"$server\" 2>/dev/null || true\n  printf '%s\\n' \"$status\" > \"$out/exit-code.txt\"\n  date -Is > \"$out/completed-at.txt\"\n  exit \"$status\"\n}\ntrap finish EXIT\ntrap 'exit 130' INT\ntrap 'exit 143' TERM\nfor attempt in {1..100}; do\n  [[ -S \"$SCCACHE_SERVER_UDS\" ]] && break\n  kill -0 \"$server\"\n  sleep .1\ndone\n[[ -S \"$SCCACHE_SERVER_UDS\" ]]\n\"$cache\" --show-stats > \"$out/cache-before.txt\"\ncd \"$source\"\ntest \"$(sha256sum build/libgenerativeqc.so | cut -d ' ' -f 1)\" = '4c73bcf8a409a15362355d290695e7866c3a2b28753a42a1d61c91aba4ffe83a'\ntest ! -e src/scf/cuda/direct_source_layout.hpp\nmodified=1\ntar -mxzf \"$trial/source.tar.gz\" -C .\npython - \"$trial/source-identity.txt\" <<'PY'\nimport sys\nfrom pathlib import Path\nfrom tools.generate_build_identity import _inventory, _source_identity\nroot = Path.cwd()\nactual = _source_identity(root, _inventory(root, root / 'cmake/GenerativeQCSourceIdentity.json'))\nassert actual == Path(sys.argv[1]).read_text().strip(), actual\nPY\ntimeout --kill-after=20s 180 cmake -S . -B build -G Ninja \\\n  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=/usr/bin/g++-12 \\\n  -DCMAKE_CUDA_COMPILER=/group/software/cuda-12.9.1/bin/nvcc \\\n  -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12 \\\n  -DCMAKE_CXX_COMPILER_LAUNCHER=\"$cache\" -DCMAKE_CUDA_COMPILER_LAUNCHER=\"$cache\" \\\n  '-DCMAKE_CUDA_ARCHITECTURES=80-real;120-real' \\\n  -DGENERATIVEQC_BUILD_TESTS=OFF -DGENERATIVEQC_BUILD_CLI=OFF \\\n  -DGENERATIVEQC_ENABLE_CUDA=ON -DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON \\\n  -DGENERATIVEQC_CUDA_DIRECT_DEVICE_LINK=ON -DGENERATIVEQC_COMPRESS_CUDA_FATBINS=OFF \\\n  -DOpenBLAS_DIR=/data/jzzeng/portable-integration-20261101/provider/scipy_openblas32/lib/cmake/openblas \\\n  -DPython3_EXECUTABLE=/home/jzzeng/miniconda3/bin/python > \"$out/configure.log\" 2>&1\ntimeout --kill-after=30s 5400 cmake --build build --verbose --target generativeqc -j 12 > \"$out/build.log\" 2>&1\nmkdir -p \"$trial/source/build\"\ncp -L build/libgenerativeqc.so \"$trial/source/build/libgenerativeqc.so.0.1.0\"\nln -sf libgenerativeqc.so.0.1.0 \"$trial/source/build/libgenerativeqc.so.0\"\nln -sf libgenerativeqc.so.0 \"$trial/source/build/libgenerativeqc.so\"\nexport LD_LIBRARY_PATH=\"$source/build:/data/jzzeng/portable-integration-20261101/provider/scipy_openblas32/lib:/group/software/cuda-12.9.1/lib64\"\npython - \"$trial/source-identity.txt\" \"$out/identity.json\" <<'PY'\nimport ctypes, hashlib, json, sys\nfrom pathlib import Path\nlibrary = ctypes.CDLL(str(Path('build/libgenerativeqc.so').resolve()))\nlibrary.generativeqc_get_source_identity.restype = ctypes.c_char_p\nidentity = Path(sys.argv[1]).read_text().strip()\nassert library.generativeqc_get_source_identity().decode() == identity\nPath(sys.argv[2]).write_text(json.dumps({'source_identity': identity,\n    'library_sha256': hashlib.file_digest(Path('build/libgenerativeqc.so').open('rb'), 'sha256').hexdigest()}, indent=2)+'\\n')\nPY\ntar -czf \"$trial/runtime.tar.gz\" -C \"$source\" build/libgenerativeqc.so build/libgenerativeqc.so.0 build/libgenerativeqc.so.0.1.0\ntar -xzf \"$trial/source.tar.gz\" -C \"$trial/source\"\n\ntimeout --kill-after=20s 600 \"$cache\" /group/software/cuda-12.9.1/bin/nvcc \\\n  -ccbin=/usr/bin/g++-12 -std=c++20 -O2 -lineinfo \\\n  '--generate-code=arch=compute_80,code=sm_80' \\\n  '--generate-code=arch=compute_120,code=sm_120' \\\n  -Isrc -Iinclude -Ibuild/generated -c tests/native/test_direct_pair_materialized.cu \\\n  -o \"$trial/density-probe.o\" > \"$out/probe-compile.log\" 2>&1\ntimeout --kill-after=10s 60 /usr/bin/g++-12 \"$trial/density-probe.o\" \\\n  -L/group/software/cuda-12.9.1/lib64 -lcudart -o \"$trial/density-probe\" \\\n  > \"$out/probe-link.log\" 2>&1\nsha256sum \"$trial/density-probe\" > \"$out/probe.sha256\"\ntouch \"$trial/build-ready\"\n"
+  },
+  "owned_transfers_stopped": true,
+  "transfer_stop_receipts": {
+    "accepted": " \nOWNED_TRANSFER_STOPPED\n\n",
+    "rejected": " \nOWNED_TRANSFER_STOPPED\n\n"
+  },
+  "rejected_dft": {
+    "decision": "rejected-no-endpoint-benefit",
+    "patch": "--- a/python/generativeqc_compiler/integral/direct_density_gradient_cuda.py\n+++ b/python/generativeqc_compiler/integral/direct_density_gradient_cuda.py\n@@ -187,6 +187,11 @@\n       const double prefactor = recurrence.coefficients[0] * recurrence.coefficients[1] *\n           recurrence.coefficients[2] * recurrence.coefficients[3] * 2.0 * pow(kPi, 2.5) /\n           (recurrence.p * recurrence.q * sqrt(recurrence.p + recurrence.q));\n+      // The primitive's relative-to-atom map is independent of Hermite state.\n+      // Reduce its three response channels first, then apply that map once per\n+      // primitive and lane. Keep the common prefactor inside the accumulation;\n+      // the existing finite-result refusal still precedes every force scatter.\n+      double relative_responses[3][3]{};\n       for (unsigned state = threadIdx.x; state < bra_states * ket_states;\n            state += blockDim.x) {\n         const unsigned bra_state = state / ket_states, ket_state = state % ket_states;\n@@ -206,13 +211,18 @@\n           const double product_response = bra_item.value * ket_item.value *\n               recurrence.coulomb.at(0, axis_x + (axis == 0U), axis_y + (axis == 1U),\n                                     axis_z + (axis == 2U));\n-          for (unsigned center = 0; center + 1U < centers; ++center) {\n-            const auto* scales = recurrence.response_scales[center];\n-            gradients[center][0][axis] += sign * prefactor * (scales[0] * bra_response +\n-                scales[1] * ket_response + scales[2] * product_response);\n-          }\n+          relative_responses[0][axis] += sign * prefactor * bra_response;\n+          relative_responses[1][axis] += sign * prefactor * ket_response;\n+          relative_responses[2][axis] += sign * prefactor * product_response;\n         }\n         if (census) atomicAdd(&census->hermite_products, 1ULL);\n+      }\n+      for (unsigned center = 0; center + 1U < centers; ++center) {\n+        const auto* scales = recurrence.response_scales[center];\n+        for (unsigned axis = 0; axis < 3U; ++axis)\n+          gradients[center][0][axis] += scales[0] * relative_responses[0][axis] +\n+              scales[1] * relative_responses[1][axis] +\n+              scales[2] * relative_responses[2][axis];\n       }\"\"\"\n \n _CONSUMER = r\"\"\"\n",
+    "patch_sha256": "10921247a70e27b9f2598150a0edf36648ffef5925c2922842db7e30821ed38a",
+    "source_receipt": {
+      "base": "76dc330e0868fab3326c0aca34f585635e56a80f",
+      "master": "0a178776c5a739786ee9767198c3f08b20045e59",
+      "source_identity": "b2fed9a7ec1a77a4003c363b243c692d914154e3986118af597959f17c21cc66",
+      "overlays": {
+        ".agents/notes/implemented/performance/2026-11-06-hf-shared-rys-xy-opt-in.md": "0b229c298a9c603f55fcbb14d3d94a75bef930ddf4c98e5ebc255498542dd430",
+        ".agents/notes/proposed/2026-11-07-cold-hf-strict-screened-tail.md": "0a872915fa3184078811abcd0603bf369d0475a34492ed8167c5cb04dea36a9c",
+        ".agents/notes/proposed/2026-11-07-density-force-relative-map.md": "5ffc4dc09768f3b0bad40e72c54d4b54477b845df24cf66971a41145d82bb742",
+        "benchmarks/results/h100-hf-shared-xy-opt-in-20261107/README.md": "6ab852b72035d56ee4200fec250be82f91a56b0f5cf8cc7947b93fdac86c2c03",
+        "benchmarks/results/h100-hf-shared-xy-opt-in-20261107/cohort.json": "9874e8ae0fe7d5930e742d34d4e97840e60b109902c8d0ce1c2dd72e9e231f3f",
+        "benchmarks/results/h100-hf-shared-xy-opt-in-20261107/evidence.json.xz": "a6403d4c1a57752a87c79adbf0ef3703aa1df847040936dda6800217532ee5cd",
+        "benchmarks/results/h100-hf-shared-xy-opt-in-20261107/replay.py": "507e541bf1c86fc98e4cd6de56e6ca77bd25a61c88446a311e899fc73aade3aa",
+        "benchmarks/results/h100-hf-shared-xy-opt-in-20261107/summary.json": "e68d27d564f69167723da68a3e6e7e947516584b7be466c5e79b6a80d21b7279",
+        "benchmarks/results/h100-shared-rys-xy-phase-a-20261106/README.md": "28e1143d305142b9566d7dcd44b11d1e67fc1bc2a9bc5306d744952c1856f590",
+        "benchmarks/results/h100-shared-rys-xy-phase-a-20261106/cohort.json": "d4fa533a3a1bdf88381a05491cb6b713bc741634e5ffbc72a549ae87823ea06d",
+        "benchmarks/results/h100-shared-rys-xy-phase-a-20261106/qualification.json": null,
+        "benchmarks/results/h100-shared-rys-xy-phase-a-20261106/qualification.json.xz": "54ca3c5598e5ff29cb218bb0148555114de0c4650b0ebcceefe52477e46fba57",
+        "benchmarks/results/h100-shared-rys-xy-phase-a-20261106/replay.py": "5222b957175d64fafb1d9278590664f6daec44b9eb4d6b9a72b654d3d2b22a97",
+        "benchmarks/results/h100-shared-rys-xy-phase-a-20261106/samples.json": null,
+        "benchmarks/results/h100-shared-rys-xy-phase-a-20261106/samples.json.xz": "c981eac54b1af7a5d552c6e388b343ad7b3b991c03d93f205cc1e75c9e8e2540",
+        "benchmarks/results/h100-wb-lr-values-phase-a-20261106/README.md": "3263c16bfc083ed3370c5a6cc431cb5cb71b92f8530155cf48fcbd13b5556405",
+        "benchmarks/results/h100-wb-lr-values-phase-a-20261106/cohort.json": "f758ec41924fa2b19ec72a5274e1f572392b0ef5776fc1531aa4abf940484593",
+        "benchmarks/results/h100-wb-lr-values-phase-a-20261106/qualification.json": null,
+        "benchmarks/results/h100-wb-lr-values-phase-a-20261106/qualification.json.xz": "6b5caf4373d767be496a40d526b2393c5c1d1ca4f3c2787b3e34d7f7f27a73e4",
+        "benchmarks/results/h100-wb-lr-values-phase-a-20261106/reduction.json": null,
+        "benchmarks/results/h100-wb-lr-values-phase-a-20261106/reduction.json.xz": "2ffc4b75ae926c26b818920b9a77e47bebe08c43a5d3b3de7bd6163fc5a40040",
+        "benchmarks/results/h100-wb-lr-values-phase-a-20261106/replay.py": "23cc80d6e8188ee095dee7dd2520dc3d9514bc83cf221659aa346562848b7dab",
+        "benchmarks/results/h100-wb-lr-values-phase-a-20261106/sanitizer-selection.json": null,
+        "benchmarks/results/h100-wb-lr-values-phase-a-20261106/sanitizer-selection.json.xz": "f65d2825bed95cc8645e281c4761ff1d9324a1bbe8cd1747a398248c4eb4efea",
+        "docs/reference/libxc_qualification.md": "c603c2a8b7004862b7068744a90513d594784d46d56faca77f5042a2adaf0899",
+        "manifests/libxc/native-qualification-snapshot.json.xz": "d79102c708e801d5ba50c24135b824cc160641e1e83a4995234947e02057d649",
+        "manifests/maintenance/default_promotion/hf.shared-rys-xy.json": "f5f53dcf411525f29df61cd7dc8351626222afdf91e1448c126f04599e6ce38a",
+        "manifests/maintenance/direct_jk_aot_resource_ledger.json": "55b5d34edd618acff5d40d3a33c782a3fca85e3113a3d4b1045d698e1c9ac5c5",
+        "python/generativeqc/resources_hf.py": "b9b2f9c87f7d354f4ebed2ffc888bf1fc2a1f1f015152e85f61058edb80c35b6",
+        "python/generativeqc_compiler/integral/capabilities.py": "185b30f9a050f735252b34d409ca13c9fab05639bea1008112d306d9b270d141",
+        "python/generativeqc_compiler/integral/direct_density_gradient_cuda.py": "39404b194bcd940e2acc983c7e9103c59ed5946340d74331665c9f40040f0653",
+        "python/generativeqc_compiler/integral/production_bundle.py": "953b85a81191e72d68497ac374856214439ad1c912bba489d4077e7307d3bb06",
+        "python/generativeqc_compiler/integral/production_emission.py": "3d64a1a4f088f711aa0a2620772f22a5f9787a262b67ebbaffbabe6ea91b8b4e",
+        "python/generativeqc_compiler/integral/production_registry.py": "26120865521111697c3a503dcff962becc8df2df2ad7a9239ad1d03e6de5a210",
+        "python/generativeqc_compiler/integral/production_shared_rys_xy.py": "98690204c6d744397c38d24b69ea914f9902064066874e1d829e158d353701ae",
+        "python/generativeqc_compiler/integral/production_shell_classes.json": "292ac429c54e0f70b14fef0629ec7a0fadcf9a454ac7139d87d756322e9db6d0",
+        "src/scf/aot_shell_registry.hpp": "8f743f2a1aa139124733317188b9098431eff7deb6ecbe77244272d6e81b0a0e",
+        "src/scf/aot_shell_registry_stub.cpp": "afe28d153ab545d3d12caf7c07138c6f66a3ab1b8b02db00cbe22aa30544e520",
+        "src/scf/cuda/hf_bounded_page_policy.hpp": "e5a1062eef76d61a77390bb70cfb4677fa35c648a309cab1796f1f37c19d4e98",
+        "src/scf/cuda/rhf_bucket_internal.hpp": "9d78c64e446036032faef91d3e52954e4f44ea72b646731ee9868273e4d5c90a",
+        "src/scf/cuda/rhf_policy.cpp": "88c70f22bef997931729a78d7c17e1accd7d22e357af90333de778a22a7d7c95",
+        "src/scf/cuda/rhf_policy.hpp": "07fe37df4bae2d315d53034b079164f64bd9bfb8b88ce09fb4e73cfad93318f2",
+        "src/scf/cuda_rhf.cpp": "51bac7af40face1a95fb67c00431c0d1cdb66df26dc63527947847e79a6aac2e",
+        "tests/native/test_precision_policy.cpp": "95dd4798f4a71b06cfc854f5934fcc01c2e403c316f2d960f7881361e6d897bc",
+        "tests/python/test_cuda_hybrid_snapshot.py": "2c21274af930d5f36a9e5fba270ea26c7203827c53c60a268b5ec1d3d6495d2e",
+        "tests/python/test_direct_density_gradient.py": "3c2996008313e751908625aafd082919e1654bc16892c2228e7e0ee7309cc851",
+        "tests/python/test_direct_density_gradient_cuda.py": "c3fc6bcff1c1b42731f3d3d43702cad96a53e56ac86e73474973b0e5b92031c7",
+        "tests/python/test_hf_cold_screening_cuda.py": "80a5c3b806654d50ab33245beb096e9147f7e8af67cdbfd4de9fe853d84615ff",
+        "tests/python/test_ordered_diis_endpoint_contract.py": "d1b5a013332bfc3d313de83daeccab77bcacb5ac40616c8e21737bfa6c7f9cab",
+        "tests/python/test_production_module_boundaries.py": "89a13db50bda72ebb5d7e65bf1c9c3972a86d104e5ce64da3b975069692c3066",
+        "tests/python/test_scf_convergence_defaults.py": "3c9d8beba98938d82fb54e010aab6103c4d27788687253aefc464036eb9d9186",
+        "tests/python/test_shared_rys_xy_integration.py": "40b6494a168c2e53cfa0006d5c63a80fdb3f95d7d6621a421237bc557b0498a0",
+        "tools/generativeqc_validation/shared_rys_xy_dispatch_fixture.py": "3d87088631eee42444fb64090b49af6317a7df718ac56001fa401a84335b0899"
+      }
+    },
+    "a100_archive_sha256": "b736c27ff2cd3916cf21bf267be10ab37a495a497f29889ae0488e462b460ca3"
+  },
+  "acceptance": {
+    "hf_energy_absolute": 1e-08,
+    "hf_force_max": 1e-07,
+    "paired_dft_energy_absolute": 1e-08,
+    "paired_dft_force_max": 1e-07,
+    "protected_endpoint_ratio_maximum": 1.03,
+    "cold_population_per_arm": 1,
+    "warm_population_per_arm": 3
+  },
+  "hf_oracle": {
+    "backend": "gpu4pyscf.scf.RHF",
+    "basis": "def2-svp",
+    "unit": "Bohr",
+    "conv_tol": 1e-10,
+    "conv_tol_grad": 1e-08,
+    "threads": 1,
+    "native_density_seed": false,
+    "source": "tests/python/test_hf_cold_screening_cuda.py"
+  }
+}

@@ -696,6 +696,8 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
     "scf/cuda_batch.hpp",
     "scf/fock_build.hpp",
 )
+CUDA_MODULES["cuda_hf_bounded_page_policy"] = ("hf_bounded_page_policy",)
+CUDA_ALLOWED["cuda_hf_bounded_page_policy"] = ("scf/cuda/rhf_policy.hpp",)
 CUDA_MODULES["cuda_hf_graph"] = ("rhf_graph",)
 CUDA_ALLOWED["cuda_hf_graph"] = (
     "scf/provider_initialization_teardown.hpp",
@@ -805,6 +807,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/rhf_bucket_internal.hpp",
     "scf/cuda/rhf_policy.hpp",
     "scf/cuda/rhf_resident_values.hpp",
+    "scf/cuda/hf_bounded_page_policy.hpp",
     "scf/cuda/runtime_support.hpp",
     "scf/cuda/scf_convergence_kernels.hpp",
     "scf/cuda/scf_density_kernels.hpp",

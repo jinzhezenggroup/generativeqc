@@ -46,12 +46,11 @@ contracts.
 
 ## Work and diagnostics
 
-Only `GENERATIVEQC_HF_COLD_SCREENING=1` selects the optional cold-HF experiment:
-a bounded screened FP64 operator and larger reusable task pages. The unset
-default, `0`, `none`, empty and invalid values preserve the incumbent operator
-and 8M-task / 1.5-GiB HF page policy.
+Eligible large cold restricted owners automatically use a bounded screened FP64
+proposal when `GENERATIVEQC_HF_COLD_SCREENING` is unset. Exact `1` also admits
+the proposal; `0`, `none`, empty and invalid explicit values preserve the ordinary
+operator and conservative page policy. This is not mixed-precision arithmetic.
 
-Opted-in large cold restricted owners can use a bounded screened FP64 operator.
 Admission requires at least 512 AOs, one system, shells through d, at least 24
 allowed iterations, and the bounded quartet provider. Warm/imported seeds,
 physical-reference export, resident ERIs/values, mixed precision, incremental
@@ -60,8 +59,10 @@ at or above `8e-8` also retains the ordinary route.
 
 The proposal uses a screening tolerance of `8e-8` for at most eight iterations.
 The driver then resets operator-dependent DIIS and energy state and converges
-the requested target operator under the original acceptance criteria. Both
-stages consume the same user iteration allowance. The proposal graph is local
+the requested target operator. Its target tail does not use the ordinary
+Standard-owner residual relaxation: the physical AO-maximum residual must meet
+`min(density_tolerance, 1e-8)`. Public controls and observable acceptance gates
+are not relaxed. Both stages consume the same user iteration allowance. The proposal graph is local
 to the cold execution; retained warm graphs always represent the target.
 The switch is part of prepared-HF resource identity; changing it does not reuse
 an owner prepared under the other policy.
@@ -69,18 +70,26 @@ an owner prepared under the other policy.
 Screened proposals still use FP64 arithmetic: their work contributes to
 `strict_stage_fock_builds` and the public iteration total, never to
 `mixed_stage_fock_builds`. `refinement_iterations` counts only the target tail.
-The retained default-tolerance experiment failed the additional `1e-7` force
-diagnostic (3.02e-7 versus the incumbent 5.10e-8 Eh/Bohr). Explicitly tighter
-requests qualified the optional route; they did not resolve that default failure.
-The measured speedup is therefore not a claim about the restored default.
 
-The bounded task page is independent of fixed-topology storage. When opted in, targets with
-at least 24 GiB may use up to one quarter of device memory, capped at 32M tasks
-and 6 GiB. Smaller targets retain the one-sixteenth memory budget and unknown
-targets use 256 MiB. If the larger arena allocation is refused, the owner
+The bounded task page is independent of fixed-topology storage and proposal seed
+history. Automatic larger-page admission covers singleton FP64 RHF through-d
+bounded owners with at least 512 AOs and 24 allowed iterations. Small, batch,
+UHF, higher-l, mixed, incremental and physical-reference owners keep their
+conservative defaults. Generic Direct/KS resource policy is unchanged.
+The existing explicit `1` diagnostic retains its broader page-selection behavior.
+
+Admitted targets with at least 24 GiB may use up to one quarter of device memory,
+capped at 32M tasks and 6 GiB. Smaller targets retain the one-sixteenth memory
+budget and unknown targets use 256 MiB. If the larger arena allocation is refused,
+the owner
 recomputes its layout and queue offsets and retries at most once with the old
 8M-task ceiling before any upload or graph capture. Physical-reference export
 retains the old 8M-task/1.5-GiB profile even when opted in.
+
+The [strict-tail decision](../../.agents/notes/implemented/performance/2026-11-07-cold-hf-strict-screened-tail.md)
+and [source-bound qualification capsule](../../benchmarks/results/hf-cold-defaults-20261107/README.md)
+preserve the independent default-request gates, endpoint/work receipts, bounded
+page-refusal tests and superseded negative evidence.
 
 Force finalization adds one density projection, one physical Fock build, four
 matrix products for residual validation, and two matrix products for the Pulay

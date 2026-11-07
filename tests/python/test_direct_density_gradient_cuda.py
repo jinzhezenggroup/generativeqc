@@ -11,7 +11,7 @@ from test_cuda_hybrid_snapshot import (
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
-    reason="requires a finite Slurm allocation and independent Libcint",
+    reason="requires a finite GPU scheduler allocation and independent Libcint",
 )
 
 
@@ -26,7 +26,8 @@ def test_density_projection_matches_independent_sources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Retain both signed source exports and combined-force realization."""
-    assert os.environ.get("SLURM_JOB_ID") and os.environ.get("CUDA_VISIBLE_DEVICES")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
+    assert os.environ.get("CUDA_VISIBLE_DEVICES")
     census = tmp_path / "density-work.jsonl"
     monkeypatch.setenv("GENERATIVEQC_DIRECT_FORCE_CENSUS", str(census))
     monkeypatch.setenv(
