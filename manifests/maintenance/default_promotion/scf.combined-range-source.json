@@ -1,0 +1,22 @@
+{
+  "id": "scf.combined-range-source",
+  "classification": "already-default",
+  "controls": ["ks-runtime:GENERATIVEQC_KS_COMBINED_RANGE_SOURCE"],
+  "owner_issues": [2976],
+  "sources": [
+    "src/dft/cuda_ks.cpp",
+    "src/scf/cuda/direct_jk_source_lease.cpp",
+    "src/scf/cuda/direct_jk.cpp"
+  ],
+  "rationale": "Automatic repeated cold range-source admission may bind strict restricted full-Direct exchange coefficients into a complete GPU LR source. An independently admitted temporary full source uses identical canonical rows, is FP64-combined in place, finite-audited and released before SCF. One weighted K contraction replaces separately recomputed full K without changing the persistent source ceiling, precision, grids, convergence, energy assembly or analytic-force owners. Incomplete residency, transient capacity refusal, DF, mixed, incremental, graph-chunk and application-ledger owners retain the ordinary route. Explicit 0 restores raw LR replay; explicit 1 still passes resource and scientific identity gates. Fatal mutation failures retire the source rather than falling back.",
+  "revisit_condition": "Retain source-bound complete cold E/F/host-export and frozen-own-density warm evidence on A100 and RTX5090, independent signed Full/LR matrices including screening and f shells, capacity and immutable coefficient/operator/spin gates, actual K action counts and finite auditing. Do not infer a universal GPU ranking or extend to partial/host/disk/DF/mixed sources without separate qualification.",
+  "evidence": [
+    "tests/python/test_range_resident_values_cuda.py",
+    "tests/native/ks_phase_values_probe.cpp",
+    "issue:#2976",
+    ".agents/notes/implemented/performance/2026-11-07-coefficient-bound-range-source.md",
+    "benchmarks/results/combined-range-source-20261107/replay.py",
+    "benchmarks/results/combined-range-source-20261107/README.md",
+    "benchmarks/results/combined-range-source-20261107/summary.json"
+  ]
+}

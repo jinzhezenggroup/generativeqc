@@ -1,0 +1,121 @@
+{
+  "fresh_reference_latency_ranking": false,
+  "cohorts": {
+    "pilot": {
+      "image": {
+        "source_identity": "d2172162b5a713a1d301ce4d0aefa100b1325a5d64f2ef3210f8cb17d2f9398c",
+        "library_sha256": "68912cf573d10259a01c0b6c975833393925673742b43b5157a90e92f1742869"
+      },
+      "devices": {
+        "RTX5090": {
+          "scheduler_job": 16623,
+          "samples": [
+            {
+              "phase": "cold",
+              "baseline_seconds": 179.06253013014793,
+              "candidate_seconds": 179.4378763847053,
+              "ratio": 1.002096174192806,
+              "paired_energy_error_per_atom": 0.0,
+              "paired_max_force_error": 5.631051180898794e-13,
+              "baseline_k_actions": 32,
+              "candidate_k_actions": 32
+            },
+            {
+              "phase": "warm",
+              "baseline_seconds": 13.704063840210438,
+              "candidate_seconds": 13.695091493427753,
+              "ratio": 0.9993452783869586,
+              "paired_energy_error_per_atom": 0.0,
+              "paired_max_force_error": 7.7982065249671e-13,
+              "baseline_k_actions": 2,
+              "candidate_k_actions": 2
+            }
+          ]
+        },
+        "A100": {
+          "scheduler_job": 226270,
+          "samples": [
+            {
+              "phase": "cold",
+              "baseline_seconds": 96.27174162864685,
+              "candidate_seconds": 89.83437721431255,
+              "ratio": 0.9331333960990815,
+              "paired_energy_error_per_atom": 2.842170943040401e-14,
+              "paired_max_force_error": 7.407408020299044e-13,
+              "baseline_k_actions": 32,
+              "candidate_k_actions": 16
+            },
+            {
+              "phase": "warm",
+              "baseline_seconds": 14.961187645792961,
+              "candidate_seconds": 13.908841662108898,
+              "ratio": 0.9296616011643982,
+              "paired_energy_error_per_atom": 2.842170943040401e-14,
+              "paired_max_force_error": 1.1377565556358604e-12,
+              "baseline_k_actions": 2,
+              "candidate_k_actions": 1
+            }
+          ]
+        }
+      }
+    },
+    "final": {
+      "image": {
+        "source_identity": "b9c0e6d609dfae6ef2dc9721e896c13e19a4d239b3d029ae264de4c59f67e83b",
+        "library_sha256": "2b867f8aba56371f155af043c3b34bdec7b75c73321ba1dfd44ef52ea4741fc9"
+      },
+      "devices": {
+        "RTX5090": {
+          "scheduler_job": 16631,
+          "samples": [
+            {
+              "phase": "cold",
+              "baseline_seconds": 178.3615994937718,
+              "candidate_seconds": 178.61936957761645,
+              "ratio": 1.001445210653954,
+              "paired_energy_error_per_atom": 1.8947806286936004e-14,
+              "paired_max_force_error": 8.046896482483135e-13,
+              "baseline_k_actions": 32,
+              "candidate_k_actions": 32
+            },
+            {
+              "phase": "warm",
+              "baseline_seconds": 13.620169848203659,
+              "candidate_seconds": 13.624872297048569,
+              "ratio": 1.0003452562557822,
+              "paired_energy_error_per_atom": 1.8947806286936004e-14,
+              "paired_max_force_error": 5.773159728050814e-13,
+              "baseline_k_actions": 2,
+              "candidate_k_actions": 2
+            }
+          ]
+        },
+        "A100": {
+          "scheduler_job": 226273,
+          "samples": [
+            {
+              "phase": "cold",
+              "baseline_seconds": 96.1897663064301,
+              "candidate_seconds": 89.77635370194912,
+              "ratio": 0.9333254165100071,
+              "paired_energy_error_per_atom": 2.3684757858670007e-14,
+              "paired_max_force_error": 9.07718344933528e-13,
+              "baseline_k_actions": 32,
+              "candidate_k_actions": 16
+            },
+            {
+              "phase": "warm",
+              "baseline_seconds": 15.019810654222965,
+              "candidate_seconds": 13.879518277943134,
+              "ratio": 0.9240807755483105,
+              "paired_energy_error_per_atom": 2.3684757858670007e-14,
+              "paired_max_force_error": 9.201528428093297e-13,
+              "baseline_k_actions": 2,
+              "candidate_k_actions": 1
+            }
+          ]
+        }
+      }
+    }
+  }
+}

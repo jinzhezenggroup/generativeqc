@@ -124,6 +124,26 @@ def test_md_j_host_borrows_interface_not_recurrence(tmp_path: Path, owner: str) 
     assert "forbidden cuda_direct_provider_host" in errors[0]
 
 
+@pytest.mark.parametrize("owner", ["direct_jk.cpp", "direct_jk_plan.hpp"])
+def test_combined_source_borrows_only_its_semantic_vector_provider(
+    tmp_path: Path, owner: str
+) -> None:
+    """The new vector boundary neither imports Tensor kernels nor widens plan ownership."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / "tensor").mkdir()
+    header = source / "tensor/cuda_vector_accumulation.hpp"
+    header.write_text("\n")
+    adapter = source / "scf/cuda" / owner
+    adapter.write_text('#include "tensor/cuda_vector_accumulation.hpp"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert bool(errors) == (owner != "direct_jk.cpp")
+    runtime = source / "tensor/cuda_runtime.cuh"
+    runtime.write_text("\n")
+    adapter.write_text('#include "tensor/cuda_runtime.cuh"\n')
+    assert audit_scf_structure(tmp_path)["errors"]
+
+
 @pytest.mark.parametrize("kernel", ["direct_md_j.cu", "direct_md_jk.cu"])
 def test_md_j_device_consumers_cannot_acquire_host_provider(
     tmp_path: Path, kernel: str
