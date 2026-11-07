@@ -99,6 +99,7 @@
 #include "scf/direct_task_layout.hpp"
 #include "scf/generated_shell_task.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/rhf_block_convergence_policy.hpp"
 #include "scf/shared_rys_weighted_z.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
 #include "solver/cuda/symmetric_eigen_workspace.hpp"
@@ -508,6 +509,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
+  const auto block_convergence_request = cuda_policy::rhf_block_convergence_requested();
+  if (block_convergence_request == cuda_policy::RhfBlockConvergenceRequest::Invalid) {
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    return outputs;
+  }
   plan.last_shell_class_profile.reset();
   plan.last_ppps_queue_profile.reset();
   plan.last_inactive_eigensolver_profile.reset();
@@ -823,6 +829,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const bool requested_ordered_diis_gram =
       requested_incremental_diis_gram && hf_ordered_diis_gram_requested();
   const bool requested_fp32_block_screening = direct_fp32_block_screening_requested();
+  const bool requested_block_convergence = cuda_policy::resolve_rhf_block_convergence(
+      block_convergence_request, unrestricted, requested_mixed_precision_fock,
+      requested_incremental_direct_jk, requested_quartet_direct, options.export_physical_reference);
   if (diis_history > 64) {
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
@@ -842,6 +851,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
        plan.primary_streaming_fock_mask != requested_primary_streaming_fock_mask ||
        plan.graph_native_eigensolver_override != requested_graph_native_eigensolver_override ||
        plan.reuse_converged_fock != requested_reuse_converged_fock ||
+       plan.block_convergence != requested_block_convergence ||
        plan.incremental_direct_jk != requested_incremental_direct_jk ||
        plan.incremental_diis_gram != requested_incremental_diis_gram ||
        plan.ordered_diis_gram != requested_ordered_diis_gram ||
@@ -1073,6 +1083,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     plan.primary_streaming_fock_mask = requested_primary_streaming_fock_mask;
     plan.graph_native_eigensolver_override = requested_graph_native_eigensolver_override;
     plan.reuse_converged_fock = requested_reuse_converged_fock;
+    plan.block_convergence = requested_block_convergence;
     plan.mixed_precision_fock = requested_mixed_precision_fock;
     plan.incremental_direct_jk = requested_incremental_direct_jk;
     plan.mixed_precision_fock_threshold = requested_mixed_precision_fock_threshold.value_or(0.0);
@@ -3757,21 +3768,23 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
         if (reuse_converged_fock) {
           launch_update_convergence_kernel(
-              true, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
-              resources.stream_, static_cast<std::int32_t>(batch_size),
-              static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
-              iteration_density_tolerance, true, energy, previous_energy, next_density, density,
-              active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census, qualified_iteration_owner, incremental_energy_refinement_updates,
+              true, static_cast<unsigned>(batch_size),
+              plan.block_convergence ? 256U : matrix_reduction_threads, 0, resources.stream_,
+              static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(nbf),
+              iteration_energy_tolerance, iteration_density_tolerance, true, energy,
+              previous_energy, next_density, density, active, converged, iterations, energy_change,
+              density_rms, force_convergence_residual, approximate_census,
+              qualified_iteration_owner, incremental_energy_refinement_updates,
               incremental_energy_refinement_census);
         } else {
           launch_update_convergence_kernel(
-              false, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
-              resources.stream_, static_cast<std::int32_t>(batch_size),
-              static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
-              iteration_density_tolerance, true, energy, previous_energy, next_density, density,
-              active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census, qualified_iteration_owner, incremental_energy_refinement_updates,
+              false, static_cast<unsigned>(batch_size),
+              plan.block_convergence ? 256U : matrix_reduction_threads, 0, resources.stream_,
+              static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(nbf),
+              iteration_energy_tolerance, iteration_density_tolerance, true, energy,
+              previous_energy, next_density, density, active, converged, iterations, energy_change,
+              density_rms, force_convergence_residual, approximate_census,
+              qualified_iteration_owner, incremental_energy_refinement_updates,
               incremental_energy_refinement_census);
         }
       }

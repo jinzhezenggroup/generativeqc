@@ -59,6 +59,31 @@ def test_hf_driver_weighted_dispatch_is_one_exact_leaf(
 
 @pytest.mark.parametrize(
     "unrelated",
+    (
+        "rhf_block_convergence_policy_impl.hpp",
+        "rhf_block_convergence_policy.hpp_impl.hpp",
+    ),
+)
+def test_hf_driver_block_convergence_borrows_only_the_exact_private_policy(
+    tmp_path: Path, unrelated: str
+) -> None:
+    source = tmp_path / "src/scf"
+    source.mkdir(parents=True)
+    (source / "rhf_block_convergence_policy.hpp").write_text(
+        "// Host declarations only\n"
+    )
+    (source / unrelated).write_text("// Unrelated implementation\n")
+    owner = source / "cuda_rhf.cpp"
+    owner.write_text('#include "scf/rhf_block_convergence_policy.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "scf/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert f"forbidden cuda_hf_driver dependency on scf/{unrelated}" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "unrelated",
     ("range_exchange_runtime.hpp", "execution_qualifiers.hpp_impl.hpp", "eri.hpp"),
 )
 def test_cuda_integral_numerics_borrows_only_exact_execution_qualifiers(

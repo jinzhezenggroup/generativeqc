@@ -9,8 +9,26 @@
 
 #include "generated_one_electron_derivative_policy.cuh"
 #include "scf/cuda/hf_bounded_page_policy.hpp"
+#include "scf/rhf_block_convergence_policy.hpp"
 
 namespace generativeqc::scf::cuda_policy {
+
+RhfBlockConvergenceRequest parse_rhf_block_convergence_request(const char* value) noexcept {
+  if (value == nullptr || std::strcmp(value, "0") == 0) return RhfBlockConvergenceRequest::Off;
+  return std::strcmp(value, "1") == 0 ? RhfBlockConvergenceRequest::On
+                                      : RhfBlockConvergenceRequest::Invalid;
+}
+
+RhfBlockConvergenceRequest rhf_block_convergence_requested() noexcept {
+  return parse_rhf_block_convergence_request(std::getenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE"));
+}
+
+bool resolve_rhf_block_convergence(RhfBlockConvergenceRequest request, bool unrestricted,
+                                   bool mixed_precision, bool incremental, bool quartet_direct,
+                                   bool physical_reference) noexcept {
+  return request == RhfBlockConvergenceRequest::On && !unrestricted && !mixed_precision &&
+         !incremental && quartet_direct && !physical_reference;
+}
 
 SharedRysXyRequest parse_shared_rys_xy_request(const char* value) noexcept {
   if (value == nullptr || *value == '\0' || std::strcmp(value, "0") == 0)
