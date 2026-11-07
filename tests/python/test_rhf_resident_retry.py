@@ -145,7 +145,10 @@ PREFIX = r"""
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "runtime/df_progress_trace.hpp"
+#include "scf/cuda/direct_source_layout.hpp"
 #include "scf/cuda/reference_eri_policy.hpp"
+using generativeqc::scf::cuda_execution::CanonicalDirectSourceSink;
 using cudaStream_t = void*;
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorLaunchFailure };
 enum generativeqc_status {
@@ -261,8 +264,17 @@ struct Diagnostic {
 struct CanonicalBatch {
   int nbf{64};
 };
+struct CanonicalPairRows {
+  const int* order{};
+  const std::uint64_t* prefix{};
+};
 struct CudaDirectJkPlan {
   const int* canonical_pairs{reinterpret_cast<const int*>(1)};
+  const int* canonical_pair_order{};
+  const int* materialized_pair_order{};
+  const std::uint64_t* materialized_row_prefix{};
+  const double* materialized_bounds{};
+  std::vector<std::array<size_t, 8>> materialized_pair_offsets;
   double screening_tolerance{};
   const std::uint64_t* canonical_row_prefix{};
   std::vector<std::array<std::uint64_t, 28>> resident_bucket_counts;
@@ -279,7 +291,7 @@ struct CudaDirectJkPlan {
   cudaStream_t stream{reinterpret_cast<void*>(1)};
   int numerical_value{};
   int* numerical_failure{&numerical_value};
-  CanonicalBatch canonical_batch;
+  CanonicalBatch canonical_batch, materialized_batch;
   int canonical_cartesian{};
   double* canonical_bounds{};
   Slots allocations;
@@ -287,8 +299,21 @@ struct CudaDirectJkPlan {
     for (auto p : allocations) runtime::resource_cuda_free(p);
   }
 };
-int direct_jk_pair_rows(CudaDirectJkPlan*, unsigned, size_t) { return 0; }
-void launch_canonical_jk_kernel(cudaStream_t, CanonicalBatch, int, int, unsigned, const int*, int, size_t,
+CanonicalPairRows direct_jk_pair_rows(CudaDirectJkPlan*, unsigned, size_t) { return {}; }
+// Exact retry fixtures have no optional whole-shell schedule. Refuse an
+// accidental dispatch instead of letting a no-op hide missing source writes.
+void launch_canonical_pair_inverse(cudaStream_t, CanonicalBatch, const int*, const int*,
+                                   size_t, std::int32_t*) {
+  throw std::logic_error("exact retry fixture dispatched an optional inverse");
+}
+void launch_materialized_canonical_jk_kernel(
+    cudaStream_t, CanonicalBatch, unsigned, CanonicalPairRows, size_t, size_t, size_t, size_t,
+    bool, DirectCoulombRange, double, double, const double*, const double*, const std::uint8_t*,
+    double*, double*, std::uint64_t*, double*, double*, CanonicalDirectSourceSink) {
+  throw std::logic_error("exact retry fixture dispatched a whole-shell source");
+}
+void launch_canonical_jk_kernel(cudaStream_t, CanonicalBatch, int, int, unsigned, const int*,
+                                CanonicalPairRows, size_t,
                                 size_t n, size_t, size_t m, bool same, bool, bool, bool,
                                 DirectCoulombRange, double, double, const double*, const double*,
                                 double*, double*, std::uint64_t*, double* target,
@@ -303,7 +328,8 @@ void launch_independent_jk_finite_kernel(cudaStream_t, const double* v, size_t n
     if (!std::isfinite(v[i])) *e = 1;
 }
 void launch_canonical_mixed_resident_values_kernel(
-    cudaStream_t, CanonicalBatch, int, std::int32_t, unsigned, const int*, int, size_t, size_t n,
+    cudaStream_t, CanonicalBatch, int, std::int32_t, unsigned, const int*, CanonicalPairRows,
+    size_t, size_t n,
     size_t, size_t m, bool same, double, const double*, float* target, size_t work_limit,
     DirectCoulombRange range, double omega) {
   assert(range == DirectCoulombRange::Full && omega == 0.0);

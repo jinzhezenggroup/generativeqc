@@ -1,0 +1,22 @@
+{
+  "id": "dft.nonlocal-scf-features",
+  "classification": "already-default",
+  "controls": ["dft-policy:GENERATIVEQC_VV10_PAIR_SCHEDULE"],
+  "owner_issues": [2976],
+  "sources": [
+    "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu",
+    "python/generativeqc_compiler/method/nonlocal_pair.py",
+    "python/generativeqc_compiler/method/nonlocal_pair_cuda.py",
+    "tools/generate_nonlocal_pair_native.py"
+  ],
+  "rationale": "Automatic admitted packet execution specializes strict FP64 SCF features, sharing the correctly rounded energy reciprocal in denominator derivatives and removing unused mixed/census work. Explicit parallel-packet retains the previous feature arithmetic; parallel-packet-reciprocal selects the candidate. Geometry, mixed, CPU/rVV10, small automatic and rejected-domain owners retain their established closures. Counts, grids, precision, convergence, O(N) storage and device visibility are unchanged; no GPU-name hardcoding or CPU/reference production work.",
+  "revisit_condition": "Preserve independent scalar/discrete-functional and complete clean cold/warm E+analytic-force+host-export gates on actual A100/RTX5090 when changing this default. The qualified 96-atom full-Direct WB97M-V cohort is not a universal performance ranking. Kernel timing alone does not qualify a default. Preserve exact comparison/fallback and count actual physical pairs when a census is requested.",
+  "evidence": [
+    "tests/python/test_nonlocal_bilateral_pair_codegen.py",
+    "tests/python/test_nonlocal_pair_admission_cuda.py",
+    "docs/developer/xc_native_cuda.md",
+    "benchmarks/results/vv10-scf-features-20261106/README.md",
+    "benchmarks/results/vv10-scf-features-20261106/replay.py",
+    ".agents/notes/implemented/performance/2026-11-06-vv10-scf-shared-reciprocal.md"
+  ]
+}

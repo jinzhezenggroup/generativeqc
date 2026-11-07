@@ -35,12 +35,12 @@ void require_error(Function operation, const char* detail) {
 }
 
 void source_capability_boundaries() {
-  for (unsigned l : {5U, std::numeric_limits<unsigned>::max()}) {
+  for (unsigned l : {6U, std::numeric_limits<unsigned>::max()}) {
     require_error<std::invalid_argument>(
-        [=] { (void)generativeqc::molecule::cartesian_components(l); }, "l<=4");
+        [=] { (void)generativeqc::molecule::cartesian_components(l); }, "l<=5");
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
       require_error<std::invalid_argument>(
-          [=] { (void)generativeqc::molecule::ao_expansions(l, representation); }, "l<=4");
+          [=] { (void)generativeqc::molecule::ao_expansions(l, representation); }, "l<=5");
     }
   }
   for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
@@ -67,10 +67,10 @@ void source_capability_boundaries() {
 }
 
 void representation_dimensions() {
-  const std::size_t cartesian[]{1, 3, 6, 10, 15};
-  const std::size_t spherical[]{1, 3, 5, 7, 9};
+  const std::size_t cartesian[]{1, 3, 6, 10, 15, 21};
+  const std::size_t spherical[]{1, 3, 5, 7, 9, 11};
   auto basis = system();
-  for (unsigned angular = 0; angular <= 4; ++angular) {
+  for (unsigned angular = 0; angular <= 5; ++angular) {
     basis.shells[0].angular_momentum = angular;
     basis.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
     require(generativeqc::molecule::ao_count(basis) == cartesian[angular],
@@ -80,6 +80,13 @@ void representation_dimensions() {
             "normalized system must retain each real-spherical shell dimension");
     require(generativeqc::molecule::cartesian_ao_count(basis) == cartesian[angular],
             "spherical systems must retain the distinct Cartesian work dimension");
+    const auto expansions =
+        generativeqc::molecule::ao_expansions(angular, GENERATIVEQC_BASIS_SPHERICAL);
+    require(expansions.size() == spherical[angular], "spherical shell inventory is incomplete");
+    for (const auto& expansion : expansions)
+      require(!expansion.empty() &&
+                  expansion.size() <= generativeqc::molecule::kMaximumAuxiliaryAoExpansionTerms,
+              "auxiliary expansion exceeds the bounded metadata stride");
   }
 }
 

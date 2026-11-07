@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_source_layout.hpp",
+  "reason": "Borrowed sorted AO-pair ranks and screened row prefixes map shared shell publications into existing immutable resident-source slots; no integral recurrence or new screening policy.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "direct_integrals"
+}

@@ -6,14 +6,15 @@
     "dft-policy:ks-force-tile-points"
   ],
   "owner_issues": [
-    2929
+    2929,
+    3004
   ],
   "sources": [
     "python/generativeqc/ks.py",
     "src/dft/ks_tile_policy.hpp",
     "src/methods/dft_method.cpp"
   ],
-  "rationale": "Ordinary automatic CUDA semilocal XC uses 1024 SCF and force points without a profile, shape gate or FP64-throughput restriction, applying the 96-atom complete cold/warm winner directly. CPU, numeric resource promises and nonlocal CUDA retain their separate existing schedules. Explicit sizes, scientific controls and bounded 256-point allocation-failure fallbacks remain authoritative. Historical endpoint gains do not imply a universal workload speedup.",
+  "rationale": "Ordinary automatic CUDA semilocal XC uses 1024 SCF and force points without a profile, shape gate or FP64-throughput restriction, applying the 96-atom complete cold/warm winner directly. CPU and numeric resource promises retain their separate conservative schedules. Nonlocal strict fused RKS Direct and fitted owners independently admit automatic force1024 under the existing geometry, memory, device and stationary guards; Direct SCF remains256. The source-qualified H100 force selector improves complete cold E/F by a paired median2.408616% and warm by11.776463%, with separate frozen30 default integration and later-main affected WB2 qualification. These cohorts keep their own source/device identities. Explicit sizes, scientific controls and bounded 256-point allocation-failure fallbacks remain authoritative. Historical endpoint gains do not imply a universal workload speedup.",
   "revisit_condition": "Use complete endpoint and independent-observable evidence to investigate default-path regressions. Preserve explicit SCF inheritance, force overrides, conservative promised capacity and bounded resource-failure retries; do not infer universal performance from the retained 96-atom campaign.",
   "evidence": [
     "docs/user/ks_options.md",
@@ -26,6 +27,8 @@
     "benchmarks/results/dft96-cold-autotune-20261103/README.md",
     "benchmarks/results/default-cuda-xc-1024-20261103/README.md",
     ".agents/notes/implemented/performance/2026-11-03-default-cuda-xc-1024.md",
-    ".agents/notes/implemented/performance/2026-11-04-portable-direct-ks-tiles.md"
+    ".agents/notes/implemented/performance/2026-11-04-portable-direct-ks-tiles.md",
+    "benchmarks/results/h100-cold-force-fixed30-20261105/README.md",
+    ".agents/notes/implemented/performance/2026-11-05-h100-nonlocal-force-batching.md"
   ]
 }

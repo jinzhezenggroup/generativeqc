@@ -1,0 +1,101 @@
+{
+  "decision": "promote",
+  "devices": {
+    "A100": {
+      "cold_change_percent": -0.7262399565925559,
+      "cold_focks": 16,
+      "cold_nonlocal_work": {
+        "pair_cache_hits": 1,
+        "pair_cache_probes": 4,
+        "pair_sweeps": 4,
+        "provisional_focks": 11,
+        "target_focks": 5
+      },
+      "cold_seconds": {
+        "baseline": 108.43513006716967,
+        "default": 107.64763082563877
+      },
+      "warm_change_percent": 0.5476395645015675,
+      "warm_median_seconds": {
+        "baseline": 15.010081615298986,
+        "default": 15.092282760888338
+      },
+      "warm_per_call_ratios": [
+        1.0024882271764157,
+        1.0037056710520242,
+        1.007109010091066
+      ]
+    },
+    "RTX5090": {
+      "cold_change_percent": -1.48019236638246,
+      "cold_focks": 16,
+      "cold_nonlocal_work": {
+        "pair_cache_hits": 1,
+        "pair_cache_probes": 4,
+        "pair_sweeps": 4,
+        "provisional_focks": 11,
+        "target_focks": 5
+      },
+      "cold_seconds": {
+        "baseline": 188.442831851542,
+        "default": 185.65351543948054
+      },
+      "warm_change_percent": 0.12227056794924529,
+      "warm_median_seconds": {
+        "baseline": 14.32076957821846,
+        "default": 14.338279664516449
+      },
+      "warm_per_call_ratios": [
+        1.0063948531560203,
+        1.000072994077113,
+        1.000639536109393
+      ]
+    }
+  },
+  "fresh_gpu4pyscf_ranking": false,
+  "independent_pairs": 32,
+  "latest_integration": {
+    "base_commit": "f1212d5aa9020def4aecd47a450792eef59da28b",
+    "devices": {
+      "A100": {
+        "cold_seconds": 106.36449399590492,
+        "focks": [
+          16,
+          1
+        ],
+        "scope": "default-only latest-master integration; not a new paired performance ranking",
+        "warm_seconds": 14.867499720305204
+      },
+      "RTX5090": {
+        "cold_seconds": 188.67834541201591,
+        "focks": [
+          16,
+          1
+        ],
+        "scope": "default-only latest-master integration; not a new paired performance ranking",
+        "warm_seconds": 13.930641297250986
+      }
+    },
+    "image": {
+      "library_sha256": "ef29a74ec63fe73f39a64ecac527eb736caa661951deef78cde0d1cd25a9aa7f",
+      "source_identity": "85c68f6b865ccddd9d22f0cf193b0bb6ec9d26290d6902d4391302f9c97da324"
+    },
+    "independent_pairs": 8,
+    "worst_cross_image_errors": [
+      9.473903143468002e-15,
+      8.988365607365267e-13,
+      1.4147269639331607e-13
+    ]
+  },
+  "source_identity": "f4006c165078b71f1b358734a72a828abc6df7b6963552327256307fe75acfaa",
+  "worst_paired_errors": [
+    9.473903143468002e-15,
+    9.450218385609332e-13,
+    1.4146824217607297e-13
+  ],
+  "worst_reference_errors": [
+    8.981260180007666e-12,
+    1.0464821507127908e-06,
+    4.754376053052299e-07
+  ]
+}

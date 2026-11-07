@@ -1,0 +1,74 @@
+{
+  "schema": "generativeqc.master-integration-audit.v1",
+  "base": "051a157c64061eac4fd9ee90d7becfa982f80161",
+  "head": "1e3169c064bea377ec018975703b5889b673f19a",
+  "files": [
+    {
+      "status": "A",
+      "path": ".agents/notes/implemented/performance/2026-11-05-hybrid-ci-routing.md",
+      "before_sha256": null,
+      "after_sha256": "3b7b782fce8546a1abc9f1e3b152dc260ad8bb3df9fb25390f8282af7c08c93d"
+    },
+    {
+      "status": "A",
+      "path": ".github/actions/restore-python-probe-ccache/action.yml",
+      "before_sha256": null,
+      "after_sha256": "3fb480b7f0926bc1dddee4f46dd78d7cfd834f1cc7cc0f2899b66644b9931da9"
+    },
+    {
+      "status": "M",
+      "path": ".github/scripts/ci_select_python_shard.sh",
+      "before_sha256": "c519f9050f5d40b892e2ad84d7dba4d67320d7c919219fca3030d93ec216f1f6",
+      "after_sha256": "78202f5d9a4474638eedda1f83cf5f05b9000c00f5b68bfa33a99f37ad9cedc5"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/ci.yml",
+      "before_sha256": "42a6c294b69bedf7642126a64707b7899d39127693dd484269ba2e02fa272941",
+      "after_sha256": "766e7891711530fe020bda8206fe608f6e10ab04690bc2b10fcd4476ac4f1ac4"
+    },
+    {
+      "status": "M",
+      "path": "tests/python/test_ci_native_probe_cache.py",
+      "before_sha256": "dd6b4858e069923ea2097cd1e4a0db94168f8b96307656a0f4ecaafa05a7b329",
+      "after_sha256": "12bc4c88807761f0f285313f047f9a89d684932dbe430f6324ac3ad95df2a216"
+    },
+    {
+      "status": "M",
+      "path": "tests/python/test_ci_shard_ownership.py",
+      "before_sha256": "4bbe286900d50772a44ab8fcaa8d8c7f0a2403e3a5bf26d06140b8c48babcfa2",
+      "after_sha256": "12ab22d8fb0b020877924c92259a19617eaba5d1434bdb8b378d02e3f2b23e68"
+    },
+    {
+      "status": "M",
+      "path": "tests/python/test_df_shell_units.py",
+      "before_sha256": "5ff26a6791c945c19ac8615986184ab04fc11a8f4d397d2ba33a7ecd40cfc451",
+      "after_sha256": "b0eb4d6476094ec07e7084c35eef193ac506abb21072d3b9e1b3cb2ae5ff1e33"
+    },
+    {
+      "status": "A",
+      "path": "tests/test_ci_probe_snapshot.py",
+      "before_sha256": null,
+      "after_sha256": "244e8f58e14f07a89c6874fd352147346a4b146c51f80616aa46643cbe8447c2"
+    },
+    {
+      "status": "A",
+      "path": "tests/test_ci_python_probe_key.py",
+      "before_sha256": null,
+      "after_sha256": "e6b2fe031462f90dbc0b6a0d6249bb160449b90248bce8709d8f89487e9e561e"
+    },
+    {
+      "status": "M",
+      "path": "tools/ci_cpu_ccache_snapshot.py",
+      "before_sha256": "40c5d42ca61e2eb6ffce73f0b29a2e288b706e7baf4c2ad42e7441563db9aba4",
+      "after_sha256": "ecc64245dd344e78291bdd1b73a1b31391b112a286c3f2c1eee0b8f9baaa306d"
+    },
+    {
+      "status": "A",
+      "path": "tools/ci_python_probe_key.py",
+      "before_sha256": null,
+      "after_sha256": "0fd0d5e07b7cef8cab93d8093e66ced99d278d9a7fa0d057258a466af0389565"
+    }
+  ],
+  "interpretation": "CI-only shard/cache routing and host tests; no measured CUDA generator, force consumer, native source, or endpoint runner changes. Existing timing images are not relabelled as newly rebuilt master."
+}

@@ -41,7 +41,7 @@ generativeqc_status create_cuda_direct_jk_plan_on_stream(
 generativeqc_status create_cuda_direct_jk_resident_plan_on_stream(
     int device_id, const std::vector<core::System>& systems, double screening_tolerance,
     std::size_t device_budget_bytes, cudaStream_t stream, CudaDirectJkPlan** output,
-    CudaDirectJkDiagnostic& diagnostic, std::string& detail);
+    CudaDirectJkDiagnostic& diagnostic, std::string& detail, bool shared_source_geometry = false);
 
 /** Bound optional Schwarz row/sort storage for a Cartesian source shape.
  * Queries CUB workspace on the current CUDA device without allocating or

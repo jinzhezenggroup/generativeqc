@@ -228,8 +228,9 @@ and 1 GiB free device memory. Other nonlocal owners retain 256.
 points). When omitted, an explicit SCF tile is inherited. With automatic SCF,
 ordinary CUDA semilocal XC also defaults to 1024 force points, so a bare call
 uses the same two-consumer schedule as an explicit 1024-point SCF tile.
-Nonlocal large fitted strict-FP64, gradient-dependent RKS owners independently
-use 1024 force points on compute capability 8 or newer. This requires the same AO/grid
+Nonlocal large strict-FP64, gradient-dependent RKS owners, both Direct and
+density-fitted, independently use 1024 force points on compute capability 8 or newer.
+This requires the same AO/grid
 size and free-memory thresholds, all-electron basis shells through d, 48–128
 atoms, native stationary admission and no resource promise. Other owners use
 256. An automatic force owner that exceeds an allowance or cannot allocate
@@ -274,6 +275,10 @@ this arithmetic; `GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES=0` or an unknown
 nonempty value retains the nuclear-coordinate rollback. `ssss`, FP32 and
 long-range roots are unchanged. See the
 [compiler and finite-fallback contract](../developer/weighted_eri.md#relative-coordinate-force-responses).
+
+Eligible pure-Coulomb sources also use exact complete-pair projection by
+default. `GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE=0` disables only that
+preference; see its [admission and prepared-identity contract](../developer/weighted_eri.md#complete-pair-direct-force-projection).
 
 Independently, qualified full-range exact-Direct restricted FP64 force producers
 with at least 384 public AOs automatically request relative-response order-six

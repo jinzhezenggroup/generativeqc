@@ -34,6 +34,9 @@ extern "C" void pair(const double* x, double* out) {
   const auto f=pair_values_vv10_bilateral<false>(x[0],x[1],x[2],x[3],x[4]);
   out[6]=f.phi; out[7]=f.dphi_domega; out[8]=f.dphi_dkappa;
   out[9]=f.dphi_domega_j; out[10]=f.dphi_dkappa_j;
+  const auto shared=pair_values_vv10_bilateral_scf(x[0],x[1],x[2],x[3],x[4]);
+  out[11]=shared.phi; out[12]=shared.dphi_domega; out[13]=shared.dphi_dkappa;
+  out[14]=shared.dphi_domega_j; out[15]=shared.dphi_dkappa_j;
 }
 """
     )
@@ -71,7 +74,8 @@ def test_both_feature_legs_match_independent_decimal(
         dj = -phi * (1 / gj + 1 / (gi + gj))
         expected = [phi, r2 * di, di, r2 * dj, dj, wi * di + wj * dj]
         expected += expected[:5]
-    actual = (ct.c_double * 11)()
+        expected += expected[:5]
+    actual = (ct.c_double * 16)()
     bilateral_pair((ct.c_double * 5)(*values), actual)
     assert list(actual) == pytest.approx(list(map(float, expected)), rel=3e-14, abs=0)
 
@@ -84,6 +88,16 @@ def test_partner_demand_refuses_unsupported_science() -> None:
             build_nonlocal_pair_program("vv10", partner_features=True, **options)
     with pytest.raises(ValueError):
         build_nonlocal_pair_program("rvv10", partner_features=True)
+
+
+def test_shared_derivatives_require_the_admitted_energy_reciprocal() -> None:
+    """The reassociation must not escape the separately bounded lowering."""
+    from generativeqc_compiler.method.nonlocal_pair import build_nonlocal_pair_program
+
+    with pytest.raises(ValueError, match="shared reciprocal derivatives"):
+        build_nonlocal_pair_program("vv10", shared_reciprocal_derivatives=True)
+    with pytest.raises(TypeError, match="Boolean"):
+        build_nonlocal_pair_program("vv10", shared_reciprocal_derivatives=1)
 
 
 def test_parallel_output_leases_preserve_live_inputs(

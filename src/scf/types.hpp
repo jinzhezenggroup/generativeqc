@@ -11,6 +11,7 @@
 #include "dft/scf_diagnostic.hpp"
 #include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
+#include "scf/default_controls.hpp"
 #include "scf/fock_build.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
 #include "scf/precision_work.hpp"
@@ -112,9 +113,9 @@ struct ScfOptions {
   const dft::MolecularGrid* nonlocal_grid{};
   unsigned max_iterations{100};
   unsigned diis_history{8};
-  double energy_tolerance{1.0e-10};
-  double density_tolerance{1.0e-8};
-  double screening_tolerance{1.0e-12};
+  double energy_tolerance{defaults::energy_tolerance};
+  double density_tolerance{defaults::density_tolerance};
+  double screening_tolerance{defaults::screening_tolerance};
   /** Optional screened FP64 iteration stage for a nonresident CUDA physical
    * reference. Schwarz and density-weighted J/K gates share this cutoff;
    * final reference publication requires a fresh unscreened SCF refinement.

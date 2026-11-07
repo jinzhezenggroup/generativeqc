@@ -92,7 +92,7 @@ __global__ void materialized_pair_keys_kernel(DeviceBatch batch, const double* b
   }
 }
 
-template <bool Unrestricted, unsigned AngularOrder, bool MixedJ = false>
+template <bool Unrestricted, unsigned AngularOrder, bool MixedJ = false, bool SourceOnly = false>
 __global__ void materialized_canonical_jk_kernel(
     DeviceBatch batch, CanonicalPairRows rows, std::size_t first_begin, std::size_t first_count,
     std::size_t second_begin, std::size_t second_count, generativeqc::integrals::CoulombRange range,
@@ -100,7 +100,8 @@ __global__ void materialized_canonical_jk_kernel(
     const std::uint8_t* active, double* coulomb, double* exchange, std::uint64_t* work_census,
     std::uint64_t* mixed_work = nullptr, double* coulomb_correction = nullptr,
     double* exchange_correction = nullptr, const double* shell_bounds = nullptr,
-    const ShellPairDensityBounds* shell_density_bounds = nullptr) {
+    const ShellPairDensityBounds* shell_density_bounds = nullptr,
+    CanonicalDirectSourceSink source = {}) {
   using Scalar = std::conditional_t<MixedJ, MixedPrecisionFloat, double>;
   using Recurrence = MaterializedDirectPairRecurrence<AngularOrder, Scalar>;
   static_assert(std::is_trivially_copyable_v<Recurrence> && alignof(Recurrence) <= 16);
@@ -144,11 +145,18 @@ __global__ void materialized_canonical_jk_kernel(
         if (!__syncthreads_or(survives)) continue;
       }
     }
-    contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots,
-                                           component_lanes>(
-        batch, task, screening, bounds, density, active, nullptr, nullptr, shared, nullptr, false,
-        false, nullptr, false, range, omega, coulomb, exchange, work_census, mixed_work,
-        coulomb_correction, exchange_correction);
+    if constexpr (SourceOnly)
+      consume_materialized_direct_pair<false, AngularOrder, component_slots, component_lanes,
+                                       double, MaterializedDirectPairSink::ResidentValues>(
+          batch, task, screening, bounds, nullptr, active, nullptr, nullptr, shared, nullptr, false,
+          false, nullptr, false, range, omega, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+          {}, source);
+    else
+      contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots,
+                                             component_lanes>(
+          batch, task, screening, bounds, density, active, nullptr, nullptr, shared, nullptr, false,
+          false, nullptr, false, range, omega, coulomb, exchange, work_census, mixed_work,
+          coulomb_correction, exchange_correction);
   }
 }
 
@@ -164,6 +172,22 @@ __global__ void canonical_pair_keys_kernel(DeviceBatch batch, const std::int32_t
     keys[pair] =
         bounds[item * dimension * dimension + pairs[2U * pair] * dimension + pairs[2U * pair + 1U]];
     order[pair] = static_cast<std::int32_t>(pair);
+  }
+}
+
+__global__ void canonical_pair_inverse_kernel(DeviceBatch batch, const std::int32_t* pairs,
+                                              const std::int32_t* order, std::size_t pair_count,
+                                              std::int32_t* inverse) {
+  const std::size_t dimension = batch.nbf;
+  const auto pairs_per_item = dimension * (dimension + 1) / 2;
+  for (std::size_t rank = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; rank < pair_count;
+       rank += std::size_t(blockDim.x) * gridDim.x) {
+    const auto pair = static_cast<std::size_t>(order[rank]);
+    const auto first = static_cast<std::size_t>(pairs[2 * pair]);
+    const auto second = static_cast<std::size_t>(pairs[2 * pair + 1]);
+    const auto item = rank / pairs_per_item;
+    inverse[item * dimension * dimension + first * dimension + second] =
+        static_cast<std::int32_t>(rank);
   }
 }
 
@@ -923,7 +947,7 @@ void launch_materialized_canonical_jk_kernel(
     std::size_t second_count, bool unrestricted, DirectCoulombRange range, double omega,
     double screening, const double* bounds, const double* density, const std::uint8_t* active,
     double* coulomb, double* exchange, std::uint64_t* work_count, double* coulomb_correction,
-    double* exchange_correction) {
+    double* exchange_correction, CanonicalDirectSourceSink source) {
   if (!first_count || !second_count) return;
   // Dense shell-pair products bound screened work without a device-to-host
   // count read. Clamp each factor before multiplication to avoid overflow;
@@ -933,18 +957,40 @@ void launch_materialized_canonical_jk_kernel(
       std::min(first_count, maximum_blocks) * std::min(second_count, maximum_blocks);
   const auto blocks = static_cast<unsigned>(std::min(dense_upper_bound, maximum_blocks));
   const unsigned threads = canonical_materialized_component_lanes(angular_order);
-#define GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(order)                                       \
-  case order:                                                                                  \
-    if (unrestricted)                                                                          \
-      materialized_canonical_jk_kernel<true, order><<<blocks, threads, 0, stream>>>(           \
-          batch, rows, first_begin, first_count, second_begin, second_count,                   \
-          integral_range(range), omega, screening, bounds, density, active, coulomb, exchange, \
-          work_count, nullptr, coulomb_correction, exchange_correction);                       \
-    else                                                                                       \
-      materialized_canonical_jk_kernel<false, order><<<blocks, threads, 0, stream>>>(          \
-          batch, rows, first_begin, first_count, second_begin, second_count,                   \
-          integral_range(range), omega, screening, bounds, density, active, coulomb, exchange, \
-          work_count, nullptr, coulomb_correction, exchange_correction);                       \
+  // Source instantiations have no density/scatter path. Ordinary Fock kernels
+  // retain their compile-time sink rather than paying a per-component branch.
+  if (source.values) {
+#define GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(order)                                             \
+  case order:                                                                                     \
+    materialized_canonical_jk_kernel<false, order, false, true><<<blocks, threads, 0, stream>>>(  \
+        batch, rows, first_begin, first_count, second_begin, second_count, integral_range(range), \
+        omega, screening, bounds, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,  \
+        nullptr, nullptr, nullptr, source);                                                       \
+    break
+    switch (angular_order) {
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(3);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(4);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(5);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(6);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(7);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(8);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(9);
+    }
+#undef GENERATIVEQC_MATERIALIZED_SOURCE_ORDER
+    return;
+  }
+#define GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(order)                                           \
+  case order:                                                                                      \
+    if (unrestricted)                                                                              \
+      materialized_canonical_jk_kernel<true, order><<<blocks, threads, 0, stream>>>(               \
+          batch, rows, first_begin, first_count, second_begin, second_count,                       \
+          integral_range(range), omega, screening, bounds, density, active, coulomb, exchange,     \
+          work_count, nullptr, coulomb_correction, exchange_correction, nullptr, nullptr, source); \
+    else                                                                                           \
+      materialized_canonical_jk_kernel<false, order><<<blocks, threads, 0, stream>>>(              \
+          batch, rows, first_begin, first_count, second_begin, second_count,                       \
+          integral_range(range), omega, screening, bounds, density, active, coulomb, exchange,     \
+          work_count, nullptr, coulomb_correction, exchange_correction, nullptr, nullptr, source); \
     break
   switch (angular_order) {
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(0);
@@ -962,6 +1008,17 @@ void launch_materialized_canonical_jk_kernel(
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(12);
   }
 #undef GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER
+}
+
+void launch_canonical_pair_inverse(cudaStream_t stream, DeviceBatch batch,
+                                   const std::int32_t* pairs, const std::int32_t* order,
+                                   std::size_t pair_count, std::int32_t* inverse) {
+  if (!pair_count) return;
+  constexpr unsigned threads = 128;
+  const auto blocks =
+      static_cast<unsigned>(std::min<std::size_t>((pair_count + threads - 1) / threads, 4096));
+  canonical_pair_inverse_kernel<<<blocks, threads, 0, stream>>>(batch, pairs, order, pair_count,
+                                                                inverse);
 }
 
 /** Whole-shell FP32 recurrence; optional K shares J's source, with FP64 scatter. */

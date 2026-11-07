@@ -1,0 +1,23 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "40f126a74fcf527012f2f4b2a53b158a87334967",
+  "file_count": 2,
+  "total_bytes": 1225848,
+  "purpose": "Preserve exact historical DB36 original180process720EF raw archive in already merged Git while admitting current-source H100 cold evidence under unchanged live storage limits. No old scientific rerun or relabelled acceptance.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-db36-final-20261103/final-pairs-v1-completed.tar.xz.part00",
+      "bytes": 786432,
+      "sha256": "fd3cb8cd8c38682c2751b948a12c1268db5bc1b049477fd749861ff9825b2ebf",
+      "git_blob_sha1": "1d4ea096027fa159183a27ae07cf06be579e3377",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-db36-final-20261103/final-pairs-v1-completed.tar.xz.part01",
+      "bytes": 439416,
+      "sha256": "0c6cbf0801e81028a230091abaabe1a79c21ab7ba7717923cc271e29b2ad407a",
+      "git_blob_sha1": "d27d418e8dba12928ef9d49a88fe57b52d640799",
+      "git_mode": "100644"
+    }
+  ]
+}

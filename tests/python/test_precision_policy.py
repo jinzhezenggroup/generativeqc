@@ -375,7 +375,7 @@ def test_standard_tightens_loose_controls_without_loosening_explicit_strict_ones
         density_tolerance=1e-12,
         screening_tolerance=None,
     )
-    assert calculator._candidate._energy_tolerance == 1e-10
+    assert calculator._candidate._energy_tolerance == 1e-9
     assert calculator._candidate._density_tolerance == 1e-12
     assert calculator._candidate._screening_tolerance == 1e-12
 

@@ -765,6 +765,7 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
         )
     )
     names.extend(re.findall(r'"(GENERATIVEQC_KS_EARLY_FINAL_PROBE)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_VV10_RMS_HANDOFF)"', source))
     names.extend(
         re.findall(
             r'"(GENERATIVEQC_KS_(?:RANGE_)?(?:HOST|DISK)_(?:MAX_BYTES|TILE_BYTES|BUCKET_MASK))"',
@@ -836,7 +837,20 @@ def _discover_nonlocal_force_reuse(root: Path) -> dict[str, str]:
     source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
     return {
         f"dft-policy:{name}": relative.as_posix()
-        for name in re.findall(r'"(GENERATIVEQC_VV10_COMPONENT_REUSE)"', source)
+        for name in re.findall(
+            r'"(GENERATIVEQC_VV10_COMPONENT_REUSE|GENERATIVEQC_STATIONARY_SHARED_GRID)"',
+            source,
+        )
+    }
+
+
+def _discover_nonlocal_pair_controls(root: Path) -> dict[str, str]:
+    """Track the pair schedule's automatic/default and explicit rollback owner."""
+    relative = Path("src/dft/nonlocal_correlation/vv10_runtime_cuda.cu")
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
+    return {
+        f"dft-policy:{name}": relative.as_posix()
+        for name in re.findall(r'"(GENERATIVEQC_VV10_PAIR_SCHEDULE)"', source)
     }
 
 
@@ -850,6 +864,15 @@ def _discover_response_host_controls(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_direct_source_construction(root: Path) -> dict[str, str]:
+    """Keep the same-image component-source rollback in the default inventory."""
+    relative = Path("src/scf/cuda/direct_jk.cpp")
+    control = "GENERATIVEQC_DIRECT_RESIDENT_COMPONENT_SOURCE"
+    if f'"{control}"' not in _read(root / relative):
+        raise ValueError("Direct resident source construction rollback is missing")
+    return {f"dft-policy:{control}": relative.as_posix()}
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
@@ -859,7 +882,9 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_runtime_controls(root),
         _discover_prepared_df_controls(root),
         _discover_nonlocal_force_reuse(root),
+        _discover_nonlocal_pair_controls(root),
         _discover_ks_phase_values(root),
+        _discover_direct_source_construction(root),
         _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),

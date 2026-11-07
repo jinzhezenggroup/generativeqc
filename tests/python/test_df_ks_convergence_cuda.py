@@ -118,15 +118,35 @@ def _matched_reference_seed(basis: typing.Any, state: typing.Any) -> typing.Any:
         verbose=0,
     )
     rng = np.random.default_rng(2984)
+    # Unit-radius samples miss tight Se/Br core orbitals entirely. Resolve
+    # each atom from its tightest primitive out to the valence sampling scale.
     samples = np.concatenate(
         [
-            np.asarray(atom.position) + rng.normal(size=(basis.nao + 20, 3))
-            for atom in basis.atoms
+            np.asarray(atom.position) + scale * rng.normal(size=(basis.nao + 20, 3))
+            for index, atom in enumerate(basis.atoms)
+            for scale in np.geomspace(
+                1.0,
+                1.0
+                / np.sqrt(
+                    max(
+                        primitive.exponent
+                        for shell in basis.shells
+                        if shell.atom_index == index
+                        for primitive in shell.primitives
+                    )
+                ),
+                6,
+            )
         ]
     )
     native_ao = basis.evaluate(samples, order=0)[0]
     reference_ao = molecule.eval_gto("GTOval_sph", samples)
-    transform, _, rank, _ = np.linalg.lstsq(native_ao, reference_ao, rcond=1e-13)
+    native_scale = np.linalg.norm(native_ao, axis=0)
+    reference_scale = np.linalg.norm(reference_ao, axis=0)
+    transform, _, rank, _ = np.linalg.lstsq(
+        native_ao / native_scale, reference_ao / reference_scale, rcond=1e-13
+    )
+    transform *= reference_scale[None, :] / native_scale[:, None]
     assert rank == basis.nao
     np.testing.assert_allclose(
         native_ao @ transform, reference_ao, atol=2e-11, rtol=2e-11

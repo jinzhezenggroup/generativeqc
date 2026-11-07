@@ -1,0 +1,191 @@
+{
+  "status": "rejected",
+  "comparisons": {
+    "A100/wb97m-v": {
+      "cold_single_observations": [
+        111.79814279079437,
+        113.15272243320942
+      ],
+      "cold_ratio": 1.01211629825506,
+      "warm_samples": [
+        [
+          15.063438542187214,
+          15.038729455322027,
+          14.995218452066183
+        ],
+        [
+          15.158786859363317,
+          15.01361071318388,
+          15.015639372169971
+        ]
+      ],
+      "warm_medians": [
+        15.038729455322027,
+        15.015639372169971
+      ],
+      "warm_ratio": 0.9984646254046492,
+      "maximum_errors": [
+        0.0,
+        1.0960121699099545e-12,
+        1.3747490099705402e-13
+      ],
+      "gates": [
+        1e-09,
+        1e-07,
+        3e-08
+      ],
+      "work": [
+        {
+          "iterations": 18,
+          "fock_builds": 18,
+          "warm_start_used": false,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        }
+      ]
+    },
+    "RTX5090/wb97m-v": {
+      "cold_single_observations": [
+        193.94727816805243,
+        194.4174608886242
+      ],
+      "cold_ratio": 1.0024242810985176,
+      "warm_samples": [
+        [
+          14.365584421902895,
+          14.350757855921984,
+          14.31504251807928
+        ],
+        [
+          14.383342944085598,
+          14.3760125041008,
+          14.374545086175203
+        ]
+      ],
+      "warm_medians": [
+        14.350757855921984,
+        14.3760125041008
+      ],
+      "warm_ratio": 1.0017598128567402,
+      "maximum_errors": [
+        9.473903143468002e-15,
+        9.29034627006331e-13,
+        1.4364341789595552e-13
+      ],
+      "gates": [
+        1e-09,
+        1e-07,
+        3e-08
+      ],
+      "work": [
+        {
+          "iterations": 18,
+          "fock_builds": 18,
+          "warm_start_used": false,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        }
+      ]
+    },
+    "RTX5090/r2scan-3c": {
+      "cold_single_observations": [
+        28.61105703562498,
+        28.61510955914855
+      ],
+      "cold_ratio": 1.0001416418665876,
+      "warm_samples": [
+        [
+          10.53671509027481,
+          10.53407684341073,
+          10.558717634528875
+        ],
+        [
+          10.53424746543169,
+          10.566761579364538,
+          10.535369716584682
+        ]
+      ],
+      "warm_medians": [
+        10.53671509027481,
+        10.535369716584682
+      ],
+      "warm_ratio": 0.9998723156431011,
+      "maximum_errors": [
+        4.736951571734001e-15,
+        9.269252032595432e-12,
+        2.1720271946224047e-12
+      ],
+      "gates": [
+        1e-09,
+        1e-07,
+        3e-08
+      ],
+      "work": [
+        {
+          "iterations": 10,
+          "fock_builds": 10,
+          "warm_start_used": false,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        },
+        {
+          "iterations": 1,
+          "fock_builds": 1,
+          "warm_start_used": true,
+          "warm_start_fallback": false
+        }
+      ]
+    }
+  },
+  "reference_pairs": 32,
+  "reference_maximum_errors": [
+    7.129112115459672e-12,
+    3.5521262553572797e-07,
+    1.5570660726860517e-07
+  ]
+}

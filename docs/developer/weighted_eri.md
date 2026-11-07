@@ -108,8 +108,10 @@ The public builder default remains `"nuclear"` for arbitrary-leaf consumers.
 
 Native full-range Direct FP64 low-order force workers use the generated
 relative roots for angular orders one through five by default, including
-separate and combined J/K sources. `ssss`, FP32 and long-range workers retain
-their original roots. Component partitions, primitive-pair preparation,
+separate and combined J/K sources. The bounded long-range order-four/five
+shell-weighted consumer also uses relative roots; `ssss`, FP32 and the existing
+long-range order-zero-through-three workers retain their original roots.
+Component partitions, primitive-pair preparation,
 screening and source/atom accumulation semantics are unchanged. Every source's
 primitive reduction must be finite before any atom scatter; a declined
 relative attempt retries the original nuclear FP64 worker once.
@@ -119,6 +121,51 @@ unknown nonempty values also select it. Unset, empty, `1` and `relative` select
 relative responses. The prepared owner captures this arithmetic preference
 independently of the order-six/seven schedule, method and Fock policy. Changing
 the selector requires a new owner.
+
+### Complete-pair Direct force projection
+
+Full-range strict-FP64 pure-Coulomb force sources automatically try exact
+complete ordered-pair projection for PPPP, DSPP, DSDS, DPPS, DPPP, DPDS and
+DDPS. The compiler contracts the existing weighted-ERI graph with the outer
+product of the two external pair weights before differentiating. This is
+neither density fitting nor a density approximation. Same-shell and same-pair
+triangles retain their symmetry factors.
+
+Admission requires relative responses, no seed/exchange contribution, and a
+complete AO Schwarz mask. Each source must pass every finite check before
+publishing any force; a numerical decline retries the strict nuclear worker
+once. Unsupported classes, arbitrary weights, exchange, FP32 and long-range
+sources retain their existing routes. No GPU-model dispatch is used.
+
+`GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE` is captured by the prepared owner
+and included in resource/restart identity. Unset or `1` enables this preference;
+`0`, empty and unknown values disable it without disabling relative responses.
+Changing it requires a newly prepared owner. The old experimental selector is
+not an interface. See the [qualification and retained limitations](../../.agents/notes/implemented/performance/2026-11-06-direct-complete-pair-projection.md).
+
+### Long-range shell-weighted responses
+
+The canonical omega=0.3 Direct RSH owner uses the existing arbitrary-weight
+shell graphs for long-range PPPP, DSPP, DSDS, DPPS, DDSS, DPPP, DPDS and DDPS
+force tasks. It precontracts the exact screened AO exchange weights before
+evaluating each primitive's geometry and screened Boys ladder. Unlike pure-J
+pair projection, this route does not assume separable weights or a complete
+Schwarz mask. At fixed rho and omega the screened moments satisfy
+`dF_n(T)/dT = -F_(n+1)(T)`, so the same relative-coordinate graph applies.
+
+The shell worker consumes each supported queued task once and its warp fallback
+skips only those consumed classes. Unsupported f-containing classes, higher
+orders, short range and the existing low-order LR workers keep their bounded
+routes. This does not broaden the RSH owner's omega admission or change grids,
+screening, density factors, source coefficients or physical-atom folding.
+
+`GENERATIVEQC_DIRECT_LR_WEIGHTED_FORCES` is captured by the prepared owner and
+included in resource/restart identity. Unset or `1` selects shell weighting;
+`0`, empty and unknown values select the previous per-AO consumer. The separate
+relative-response selector still requests nuclear coordinates, and a nonfinite
+relative reduction retries the strict nuclear weighted graph before atom scatter.
+Changing it requires a newly prepared owner. See the
+[qualified default and retained integration failures](../../.agents/notes/implemented/performance/2026-11-06-lr-weighted-direct-forces.md).
 
 ### Native streaming boundary
 

@@ -1,0 +1,8 @@
+{
+  "command_sha256": "a912a14bd5b27119ec22fab76db73cf535164360a95d7fa1d7924f7b2beed415",
+  "started_utc": "2026-11-05T18:49:07.102128+00:00",
+  "remote_returncode": 0,
+  "client_returncode": 255,
+  "elapsed_seconds": 16.45300388801843,
+  "completed_utc": "2026-11-05T18:49:23.555123+00:00"
+}
