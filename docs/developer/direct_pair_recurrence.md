@@ -86,6 +86,38 @@ alter SCF convergence, grids, precision, full-range J/K or force ownership.
 The [source-construction decision](../../.agents/notes/implemented/performance/2026-11-06-shared-cold-range-source.md)
 records ownership, qualification and the retained stricter-threshold fallback.
 
+## Coefficient-bound resident exchange
+
+Automatic repeated cold range-source admission can retain
+`LR + (c_full / c_LR) Full` in place of a complete GPU LR source. This applies
+only to strict restricted full Direct, with fixed scientific exchange terms and
+enough independently admitted transient storage for one full source. Partial,
+host/disk, fitted, mixed, incremental, graph-chunk and application-ledger consumers
+keep their existing providers. Admission uses resource/capability predicates,
+not GPU names.
+
+Both source producers use the same plan's immutable canonical rows. A temporary
+full source is finite-audited, combined in FP64 and released before SCF. Persistent
+source storage does not grow. Capacity refusal before mutation preserves ordinary
+LR replay; failure after mutation retires the source and propagates a numerical
+error rather than attempting raw-LR fallback.
+
+One K contraction then supplies both radial terms through the existing range
+slot, while the ordinary full-K slot is zero. Fock/energy assembly applies the
+range coefficient once. Actual K action counts decrease; the scientific equation,
+SCF convergence, grids, precision and analytic-force owners do not change. Raw LR/J
+borrowers reject the composite identity, and fixed-density component profiling
+and incumbent warm rebasing use independent raw providers.
+
+`GENERATIVEQC_KS_COMBINED_RANGE_SOURCE=0` before preparing a new owner restores
+ordinary raw-LR replay for same-image qualification. Explicit `1` can exercise
+non-automatic source owners but never bypasses resource or scientific identity
+gates. Leaving it unset uses
+only the already-qualified automatic repeated-source domain.
+
+The [coefficient-bound source decision](../../.agents/notes/implemented/performance/2026-11-07-coefficient-bound-range-source.md)
+records the resource/failure bounds and retained qualification.
+
 ## Bounded long-range force scheduling
 
 Ordinary long-range exchange force launches use the established 128-thread
