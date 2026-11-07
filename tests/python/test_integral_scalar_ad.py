@@ -172,6 +172,28 @@ def test_native_channels_against_complex_primal(scalar_probe: Any, kind: int) ->
         np.testing.assert_allclose(actual, expected, rtol=2e-13, atol=2e-13)
 
 
+def test_erf_extreme_finite_tangents_against_high_precision_primal(
+    scalar_probe: Any,
+) -> None:
+    """Finite tangent seeds must not overflow before a small erf slope acts."""
+    mp = pytest.importorskip("mpmath").mp.clone()
+    mp.dps = 100
+    limits = np.finfo(np.float64)
+    for value in (-10.0, -0.5, 0.0, 0.5, 10.0):
+        slope = mp.diff(mp.erf, mp.mpf(value))
+        for magnitude in (limits.max, limits.tiny, np.nextafter(0.0, 1.0)):
+            inputs = np.zeros(10)
+            inputs[0] = value
+            inputs[2:5] = (magnitude, -magnitude, 0.0)
+            actual = scalar_probe(6, inputs)
+            expected = np.array(
+                [float(slope * mp.mpf(float(seed))) for seed in inputs[2:5]]
+            )
+            np.testing.assert_allclose(
+                actual[1:], expected, rtol=4e-14, atol=2 * np.nextafter(0.0, 1.0)
+            )
+
+
 def test_primal_only_does_not_require_finite_tangent_invariants(
     scalar_probe: Any,
 ) -> None:

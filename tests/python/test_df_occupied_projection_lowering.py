@@ -38,9 +38,12 @@ STANDIN = r"""
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <type_traits>
+#include <utility>
 #include <vector>
 #include "cublas_v2.h"
 static int calls, fail_on;
+static bool triangular;
 static void product(cublasOperation_t ta,cublasOperation_t tb,int m,int n,int k,
                     double alpha,const double* a,int lda,const double* b,int ldb,
                     double beta,double* c,int ldc) {
@@ -125,9 +128,19 @@ extern "C" std::size_t symmetric_pair(std::size_t r,std::size_t i,std::size_t j)
   return generativeqc::scf::generated::df_occupied_symmetric_pair(r,i,j);
 }
 extern "C" int symmetric_gram(int a,int r,double scale,const double* u,double* out,int fail) {
-  calls=0;fail_on=fail;
+  calls=0;fail_on=fail;triangular=false;
   return generativeqc::scf::generated::df_occupied_symmetric_metric_gram(
-      nullptr,a,r,scale,u,out);
+      nullptr,a,r,scale,u,out,&triangular);
+}
+extern "C" bool gram_is_triangular() { return triangular; }
+extern "C" int tensor_gram(bool transpose,bool lower,int order,int reduction,double alpha,
+                            const double* input,int input_ld,double beta,double* output,
+                            int output_ld,bool* triangle,int fail) {
+  calls=0;fail_on=fail;
+  return generativeqc_tensor::submit_column_gram(
+      generativeqc_tensor::ColumnGramView<cublasHandle_t>{
+          nullptr,transpose,lower,order,reduction,&alpha,input,input_ld,&beta,output,output_ld},
+      triangle);
 }
 """
 
@@ -164,7 +177,7 @@ def native(
     required_native_cxx.build_shared(
         [folder / "test.cpp"],
         output,
-        compile_args=("-std=c++20", "-Wall", "-Wextra", "-Werror", "-O2"),
+        compile_args=("-std=c++17", "-Wall", "-Wextra", "-Werror", "-O2"),
     )
     lib = ct.CDLL(str(output))
     lib.has_syrk = has_syrk
@@ -174,6 +187,14 @@ def native(
     lib.finish_project.argtypes = [ct.c_int] * 3 + [ptr] * 3 + [ct.c_int]
     lib.finish_project.restype = ct.c_int
     lib.call_count.restype = ct.c_int
+    lib.gram_is_triangular.restype = ct.c_bool
+    lib.tensor_gram.argtypes = (
+        [ct.c_bool] * 2
+        + [ct.c_int] * 2
+        + [ct.c_double, ptr, ct.c_int, ct.c_double, ptr, ct.c_int]
+        + [ct.POINTER(ct.c_bool), ct.c_int]
+    )
+    lib.tensor_gram.restype = ct.c_int
     lib.tile_size.argtypes = [ct.c_size_t] * 5 + [ct.c_bool]
     lib.tile_size.restype = ct.c_size_t
     lib.small_metric.argtypes = [ct.c_int] * 2 + [ptr] * 5 + [ct.c_int]
@@ -576,6 +597,7 @@ def test_symmetric_metric_gram_matches_full_occupied_contraction(
         np.testing.assert_array_equal(np.triu(actual, 1), np.triu(initial, 1))
     else:
         np.testing.assert_allclose(actual, expected, atol=4e-13, rtol=4e-13)
+    assert native.gram_is_triangular() == native.has_syrk
     assert native.call_count() == (1 if r == 1 else 2)
 
 
@@ -583,7 +605,7 @@ def test_symmetric_metric_gram_rejects_invalid_shapes_and_propagates_failures(
     native: ct.CDLL,
 ) -> None:
     """No invalid shape/alias reaches BLAS; either product can propagate its failure."""
-    factors = np.ones((3, 6))
+    factors = np.arange(18, dtype=float).reshape(3, 6) / 7
     output = np.zeros((3, 3), order="F")
     for a, rank in [(0, 3), (3, 0), (3, -1), (3, 65536), (3, 2**31 - 1)]:
         assert (
@@ -592,6 +614,8 @@ def test_symmetric_metric_gram_rejects_invalid_shapes_and_propagates_failures(
         )
         assert native.call_count() == 0
     assert native.symmetric_gram(3, 3, 1.0, pointer(factors), pointer(factors), 0) == 7
+    assert native.symmetric_gram(3, 3, 1.0, None, pointer(output), 0) == 7
+    assert native.symmetric_gram(3, 3, 1.0, pointer(factors), None, 0) == 7
     for failed_product in (1, 2):
         output.fill(0)
         assert (
@@ -601,3 +625,67 @@ def test_symmetric_metric_gram_rejects_invalid_shapes_and_propagates_failures(
             == 13
         )
         assert native.call_count() == failed_product
+        assert native.gram_is_triangular() == native.has_syrk
+        expected = np.zeros_like(output)
+        if failed_product == 2:
+            expected = factors[:, :3] @ factors[:, :3].T
+            if native.has_syrk:
+                expected = np.tril(expected)
+        np.testing.assert_allclose(output, expected, atol=2e-14, rtol=2e-14)
+
+
+@pytest.mark.parametrize("transpose", [False, True])
+@pytest.mark.parametrize("lower", [False, True])
+@pytest.mark.parametrize("alpha,beta", [(-0.75, 1.0), (0.5, 0.0), (0.0, -0.25)])
+def test_shared_gram_preserves_padding_triangle_and_accumulation(
+    native: ct.CDLL, transpose: bool, lower: bool, alpha: float, beta: float
+) -> None:
+    """Compare both physical layouts with an independent extended-precision Gram."""
+    rng = np.random.default_rng(1890)
+    order, reduction = 5, 3
+    rows, columns = (reduction, order) if transpose else (order, reduction)
+    input_ld, output_ld = rows + 2, order + 3
+    factors = np.full((input_ld, columns), np.nan, order="F")
+    factors[:rows] = rng.normal(size=(rows, columns))
+    original_factors = factors.copy()
+    initial = rng.normal(size=(output_ld, order))
+    actual = np.array(initial, order="F")
+    if beta == 0:
+        actual[:order] = np.nan
+    triangular = ct.c_bool(not native.has_syrk)
+    assert (
+        native.tensor_gram(
+            transpose,
+            lower,
+            order,
+            reduction,
+            alpha,
+            pointer(factors),
+            input_ld,
+            beta,
+            pointer(actual),
+            output_ld,
+            ct.byref(triangular),
+            0,
+        )
+        == 0
+    )
+    matrix = factors[:rows].astype(np.longdouble)
+    if transpose:
+        matrix = matrix.T
+    expected = alpha * (matrix @ matrix.T) + beta * initial[:order]
+    selected = np.tril_indices(order) if lower else np.triu_indices(order)
+    np.testing.assert_allclose(
+        actual[:order][selected], expected[selected], atol=2e-14, rtol=2e-14
+    )
+    if native.has_syrk:
+        untouched = np.triu_indices(order, 1) if lower else np.tril_indices(order, -1)
+        original = (
+            np.full_like(initial[:order], np.nan) if beta == 0 else initial[:order]
+        )
+        np.testing.assert_array_equal(actual[:order][untouched], original[untouched])
+    else:
+        np.testing.assert_allclose(actual[:order], expected, atol=2e-14, rtol=2e-14)
+    np.testing.assert_array_equal(actual[order:], initial[order:])
+    np.testing.assert_array_equal(factors, original_factors)
+    assert triangular.value == native.has_syrk

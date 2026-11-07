@@ -6,6 +6,7 @@ frontiers are evaluated once per operation, not once per Cartesian channel.
 """
 
 from fractions import Fraction
+from typing import cast
 
 from .expr import Expr, Graph
 from .scalar_c import ScalarCEmitter
@@ -55,6 +56,11 @@ def scalar_program(name: str) -> tuple[Graph, Expr, Expr]:
         response = -graph.differentiate(
             residual, direction, leaves
         ) / graph.differentiate(residual, value)
+    elif name == "erf":
+        # Retain the native slope-first schedule. Multiplying the direction
+        # by 2/sqrt(pi) before the Gaussian can overflow even when the final
+        # tangent is finite. AD still owns the complete scalar slope.
+        response = graph.differentiate(primal, left) * leaves["left"]
     else:
         response = graph.differentiate(primal, direction, leaves)
         (response,) = graph.replace_subexpressions(
@@ -147,7 +153,7 @@ def _moment_response() -> str:
         if root.identifier == integrand.identifier:
             return Fraction(1), 0, 1
         if node.operation == "constant":
-            return Fraction(node.payload), 0, 0
+            return Fraction(cast("Fraction | float", node.payload)), 0, 0
         if node.operation == "multiply":
             coefficient, power, gaussian = Fraction(1), 0, 0
             for child in node.arguments:

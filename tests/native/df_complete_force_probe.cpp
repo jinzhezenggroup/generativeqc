@@ -62,9 +62,9 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     const auto* cap_selected = std::getenv("GENERATIVEQC_TEST_CCSD_Q_CAP");
     const auto ccsd_cap = cap_selected ? std::stoull(cap_selected) : std::size_t{8};
     const auto result = methods::detail::run_df_ccsdt_native(
-        execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples, true, true, true, 8,
+        execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples, true, {}, 8,
         ccsd_cap, options, true, packed, parallel_gap, include_gap, scalar_fused, {}, 30, true,
-        true, true, nullptr, shared_scratch, false, false, resident_krylov);
+        nullptr, shared_scratch, false, false, resident_krylov);
     if (forces && resident_krylov && !result.lambda.resident_krylov)
       throw std::runtime_error("complete-force qualification did not exercise resident Lambda");
     if (forces && triples && scalar_fused && !include_gap && !result.triples_scalar_fusion.selected)

@@ -1,0 +1,79 @@
+{
+  "schema": "generativeqc.rhf-block-convergence-cohort.v1",
+  "measured_source": {
+    "revision": "513288b77bb6a654cffa33c9aa3aa6b39d134c16",
+    "tree": "9338a49061fc5a20a7474c438cf4a147731b415b",
+    "native_identity": "0138841399c776a2616f2af0d5be63076950ee70e16463f708a2392389c70811",
+    "core_sha256": "e3ef895c3a332103160cdbebd5fc5a13165788b6987f4bfe5422b42f6ad88ade",
+    "gpu_uuid": "GPU-fe8a7e35-47a3-b7bf-8493-d4fecd7c37be"
+  },
+  "scope": {
+    "default": "off",
+    "all30_complete": false,
+    "GPU4PySCF_timing_comparison": false,
+    "mechanism_or_kernel_speedup_claim": false,
+    "publication_tree_device_measured": false,
+    "population": "three native-only fresh process pairs; off/on,on/off,off/on; eachcold+3ownwarm"
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "prefix": "round1",
+      "order": [
+        "off",
+        "on"
+      ],
+      "result_sha256": "9945039f4f34325095b2e3cb29885ab53d8027cf971f47133d0fee0083f99ef2",
+      "original_files": 23,
+      "original_bytes": 325490
+    },
+    {
+      "round": 2,
+      "prefix": "round2",
+      "order": [
+        "on",
+        "off"
+      ],
+      "result_sha256": "2788e2169d56c024c28581f39e63f856a33d738ce2e22ba4803964c96e363701",
+      "original_files": 23,
+      "original_bytes": 325299
+    },
+    {
+      "round": 3,
+      "prefix": "round3",
+      "order": [
+        "off",
+        "on"
+      ],
+      "result_sha256": "c6b0c7e425f88703f556f35c40ad37f5e6f075c852d288e1b7f899b39524d566",
+      "original_files": 23,
+      "original_bytes": 325349
+    }
+  ],
+  "capsule": {
+    "path": "evidence.json.xz",
+    "bytes": 180940,
+    "sha256": "b55cc340c8284abd62f52f01d8e992d09771189490036353cee87767013ca8de",
+    "decoded_bytes": 1688376,
+    "original_files": 139,
+    "original_payload_bytes": 1251651
+  },
+  "oracle_reuse": {
+    "path": "support/oracles.json.xz",
+    "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4",
+    "source_capsule": "../h100-hf-shared-xy-opt-in-20261107/evidence.json.xz",
+    "source_capsule_sha256": "a6403d4c1a57752a87c79adbf0ef3703aa1df847040936dda6800217532ee5cd",
+    "new_oracle_runs": 0
+  },
+  "failure": {
+    "path": "failed-v1/result.json",
+    "sha256": "23ff20e74e7770182bfa5240f33ec4176b67e6703d5945007aa3adef31a1ea95",
+    "status": "FAILED_RETAINED",
+    "scope": "Wrong-purpose refusal before native load/E/F; no onstage; immutableoriginal not promoted"
+  },
+  "component_ceiling": {
+    "seconds": 0.262619628,
+    "measurement": "separateintrusive86d trace;15convergencecalls; not a predicted endpoint saving"
+  },
+  "omitted": "Native binaries/objects/cache/generatedsource/large build streams remain in bound owner; digests do not recover omittedbytes. Exact source513 is retained in Git and original archive32a9aa49."
+}

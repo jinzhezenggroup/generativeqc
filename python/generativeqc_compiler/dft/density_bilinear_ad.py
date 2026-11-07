@@ -10,6 +10,7 @@ from collections.abc import Callable
 from fractions import Fraction
 from functools import cache
 from math import factorial
+from typing import cast
 
 from generativeqc_compiler.integral.expr import AlgebraForm, Expr, Graph
 from generativeqc_compiler.integral.scalar_python import (
@@ -90,7 +91,8 @@ def density_bilinear_terms(directions: tuple[tuple[str, int], ...]) -> tuple[Ter
                 raise ValueError("density response retained a Taylor coordinate")
         if set(leg_fields) != {"left", "right"}:
             raise ValueError("density response lost an AO leg")
-        pair = tuple(sorted(leg_fields.values()))
+        first, second = sorted(leg_fields.values())
+        pair = first, second
         contractions[pair] = contractions.get(pair, Fraction(0)) + coefficient
     return tuple(
         (coefficient, *pair)
@@ -138,9 +140,9 @@ def density_gradient_callable() -> Callable:
             for coefficient, component in density_axis_schedule(axis)
         ]
         lines.append(f"    output[:, {axis}] = " + " + ".join(terms))
-    namespace = {"_sum": np.sum, "__builtins__": {}}
+    namespace: dict[str, object] = {"_sum": np.sum, "__builtins__": {}}
     exec(compile("\n".join(lines), "<generated-density-gradient>", "exec"), namespace)  # noqa: S102 -- validated integer AD schedule
-    return namespace["evaluate"]
+    return cast("Callable", namespace["evaluate"])
 
 
 @cache
@@ -232,6 +234,6 @@ def density_response_callable(
     source = "def evaluate(jets, products, owned):\n    return " + " + ".join(
         expressions
     )
-    namespace = {"_sum": np.sum, "__builtins__": {}}
+    namespace: dict[str, object] = {"_sum": np.sum, "__builtins__": {}}
     exec(compile(source, "<generated-density-contraction>", "exec"), namespace)  # noqa: S102 -- validated numeric AD schedule, never external source
-    return namespace["evaluate"]
+    return cast("Callable", namespace["evaluate"])

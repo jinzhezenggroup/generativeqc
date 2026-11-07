@@ -23,6 +23,7 @@ from generativeqc_compiler.method.nuclear_repulsion import (
     nuclear_repulsion_hvp,
 )
 
+from tools.generate_gfn2_pair_native import native_header as emit_gfn2_pair_header
 from tools.generativeqc_d3.generate_native_data import render as render_d3_tables
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -188,14 +189,26 @@ def test_cached_cartesian_norm_pullback_against_primal_only_oracle(
         ("generate_nuclear_repulsion.py", emit_nuclear_repulsion_header),
         ("generate_dispersion_scalar.py", emit_dispersion_scalar_header),
         ("generate_gcp_scalar.py", emit_gcp_scalar_header),
+        ("generate_gfn2_pair_native.py", emit_gfn2_pair_header),
     ],
 )
+@pytest.mark.parametrize("python_flags", [(), ("-I", "-S")])
 def test_uninstalled_generator_is_deterministic_from_another_directory(
-    tmp_path: Path, script: str, emit: Callable[[], str]
+    tmp_path: Path,
+    script: str,
+    emit: Callable[[], str],
+    python_flags: tuple[str, ...],
 ) -> None:
+    """Build-time generators need neither site packages nor inherited paths."""
     output = tmp_path / "generated.hpp"
     subprocess.run(
-        [sys.executable, str(ROOT / "tools" / script), "--output", str(output)],
+        [
+            sys.executable,
+            *python_flags,
+            str(ROOT / "tools" / script),
+            "--output",
+            str(output),
+        ],
         cwd=tmp_path,
         check=True,
         capture_output=True,

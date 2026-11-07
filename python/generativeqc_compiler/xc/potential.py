@@ -126,6 +126,7 @@ def assemble_coefficients_directional(
         )
         matrix = matrix_jvp(phi, base_measure, phi, dphi, moving_measure, dphi)
         if spatial is not None:
+            assert panel_jvp is not None
             panel, directional_panel = panel_jvp(
                 *(spatial[spin, :, axis, None] for axis in range(3)),
                 *derivatives,

@@ -8,6 +8,7 @@ einsums without constructing point-by-AO-by-AO tensors at runtime.
 from collections.abc import Callable
 from fractions import Fraction
 from functools import cache
+from typing import cast
 
 from generativeqc_compiler.integral.expr import Graph
 from generativeqc_compiler.integral.scalar_python import (
@@ -99,9 +100,9 @@ def geometry_feature_callable(family: str, direction: str) -> Callable:
         )
         output = "rho[:]" if row == 0 else f"gradient[:, {row - 1}]"
         lines.append(f"    {output} = {expression}")
-    namespace = {"__builtins__": {}}
+    namespace: dict[str, object] = {"__builtins__": {}}
     exec(compile("\n".join(lines), "<generated-geometry-features>", "exec"), namespace)  # noqa: S102 -- only validated AD leaf metadata
-    return namespace["evaluate"]
+    return cast("Callable", namespace["evaluate"])
 
 
 @cache
@@ -178,6 +179,6 @@ def matrix_jvp_callable() -> Callable:
         "def evaluate(left, measure, right, moving_left, moving_measure, moving_right):\n"
         "    return " + " + ".join(terms)
     )
-    namespace = {"__builtins__": {}}
+    namespace: dict[str, object] = {"__builtins__": {}}
     exec(compile(source, "<generated-matrix-jvp>", "exec"), namespace)  # noqa: S102 -- validated polynomial AD schedule
-    return namespace["evaluate"]
+    return cast("Callable", namespace["evaluate"])

@@ -7,6 +7,7 @@ another exponential or divides by a potentially underflowed Gaussian.
 
 from fractions import Fraction
 from functools import cache
+from typing import cast
 
 from generativeqc_compiler.integral.expr import AlgebraForm, Expr, Graph
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
@@ -84,14 +85,14 @@ def _polynomial_terms(power: int) -> tuple[Graph, dict[int, Expr]]:
 def _signed_coefficient(graph: Graph, coefficient: Expr) -> tuple[str, Expr]:
     """Expose a constant sign without changing the coefficient's IEEE product."""
     node = graph.node(coefficient)
-    if node.operation == "constant" and node.payload < 0:
-        return "-=", graph.constant(-node.payload)
+    if node.operation == "constant" and cast("Fraction", node.payload) < 0:
+        return "-=", graph.constant(-cast("Fraction", node.payload))
     if node.operation == "multiply":
         for child in node.arguments:
             factor = graph.nodes[child]
-            if factor.operation == "constant" and factor.payload < 0:
+            if factor.operation == "constant" and cast("Fraction", factor.payload) < 0:
                 return "-=", graph.multiply_many(
-                    graph.constant(-factor.payload)
+                    graph.constant(-cast("Fraction", factor.payload))
                     if argument == child
                     else Expr(graph, argument)
                     for argument in node.arguments
@@ -102,7 +103,7 @@ def _signed_coefficient(graph: Graph, coefficient: Expr) -> tuple[str, Expr]:
 def _coefficient_monomial(graph: Graph, root: Expr) -> tuple[Fraction, int]:
     node = graph.node(root)
     if node.operation == "constant":
-        return node.payload, 0
+        return cast("Fraction", node.payload), 0
     if node.operation == "variable" and node.payload == "a":
         return Fraction(1), 1
     if node.operation == "multiply":

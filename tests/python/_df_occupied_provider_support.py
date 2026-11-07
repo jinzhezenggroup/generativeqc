@@ -19,4 +19,9 @@ def column_adapters(*, witness: bool = False) -> str:
         if witness:
             body = body.replace("{", "{ provider_entry = true;", 1)
         result += cpp_record_definition(header, record) + ";\n" + body + "\n"
+    start = header.index("template <class Handle>\nauto column_syrk_capability")
+    submit = cpp_function_definition(
+        header, "submit_column_gram", include_template=True
+    )
+    result += header[start : header.index(submit) + len(submit)] + "\n"
     return result + "}\n"

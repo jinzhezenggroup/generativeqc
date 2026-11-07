@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-rhf-block-convergence-20261107",
+  "owner": "issue3004 default-off RHF convergence component",
+  "reason": "Losslessly retain all three native/native pairs, full force arrays, original failed-before-native attempt, oracle reuse and compact source/core/device/fixture provenance. No storage-limit increase, discarded adverse data or production/default qualification is implied.",
+  "review_document": "benchmarks/results/h100-rhf-block-convergence-20261107/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-rhf-block-convergence-20261107/evidence.json.xz",
+      "family": "h100-rhf-block-convergence-20261107",
+      "bytes": 180940,
+      "sha256": "b55cc340c8284abd62f52f01d8e992d09771189490036353cee87767013ca8de",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All24 full E/F observations,48 stage streams and original metadata failure with exact member hashes; offline arithmetic replay only"
+    }
+  ]
+}

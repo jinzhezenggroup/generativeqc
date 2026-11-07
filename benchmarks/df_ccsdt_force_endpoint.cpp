@@ -193,12 +193,16 @@ static int run_scientific_endpoint(int argc, char** argv) {
         auxiliary.atoms = orbital.atoms;
       }
       const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
-          execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
+          execution, orbital, auxiliary, descriptor, forces, true, reduction,
+          generativeqc::cc::DFContractionQualification{.ordered_iteration = !(matrix),
+                                                       .ordered_response = !(lambda_matrix),
+                                                       .ordered_audit = !(lambda_audit_matrix),
+                                                       .ordered_primal = !(lambda_primal_matrix)},
           batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
           parallel_gap_reduction, request_triples_gap_cotangents, fused_triples_scalar_response,
-          admitted_triples_w, lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix,
-          lambda_primal_matrix, nullptr, lambda_serial_scratch_reuse, ccsd_mixed_precision,
-          lambda_mixed_precision, false, ccsd_mixed_switch_residual);
+          admitted_triples_w, lambda_true_residual_interval, lambda_core_reuse, nullptr,
+          lambda_serial_scratch_reuse, ccsd_mixed_precision, lambda_mixed_precision, false,
+          ccsd_mixed_switch_residual);
       const char* suffix = repetition == 2 ? ".moved-warm.json" : repetition ? ".warm.json" : "";
       generativeqc::benchmarks::publish_df_ccsdt_force_report(
           std::string(argv[2]) + suffix, result,

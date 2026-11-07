@@ -44,9 +44,10 @@ def rational_radial_roots() -> tuple[Graph, tuple[Expr, Expr]]:
     radius = scale * unit / (1 - unit)
     pole_radius = scale * (1 / (1 - unit) - 1)
     jacobian = graph.differentiate(pole_radius, coordinate)
-    return graph.lower_small_integer_powers(
+    graph, (radius, measure) = graph.lower_small_integer_powers(
         (radius, weight * jacobian * radius * radius)
     )
+    return graph, (radius, measure)
 
 
 @cache

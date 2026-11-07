@@ -5,12 +5,16 @@ The same graph supplies first derivatives and directional second derivatives;
 neither native assembly nor the Hessian consumer maintains a Coulomb rule.
 """
 
-from functools import cache
+from __future__ import annotations
 
-from generativeqc_compiler.common.array_execution import arrays as np
-from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from functools import cache
+from typing import TYPE_CHECKING
+
 from generativeqc_compiler.integral.expr import Expr, Graph
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
+
+if TYPE_CHECKING:
+    from generativeqc_compiler.common.array_execution import arrays as np
 
 
 @cache
@@ -38,6 +42,9 @@ def nuclear_repulsion_hvp(
     centers: np.ndarray, charges: np.ndarray, direction: np.ndarray
 ) -> np.ndarray:
     """Apply generated pair Hessians with equal-and-opposite physical scatter."""
+    from generativeqc_compiler.common.array_execution import arrays as np
+    from generativeqc_compiler.common.array_graph import evaluate_array_graph
+
     first, second = np.triu_indices(len(centers), 1)
     result = np.zeros_like(centers)
     if not len(first):

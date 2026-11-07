@@ -6,6 +6,7 @@ quotient's implicit residual schedule that never squares a tiny denominator.
 """
 
 from fractions import Fraction
+from typing import cast
 
 from generativeqc_compiler.integral.expr import Expr, Graph
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter, format_constant
@@ -53,7 +54,7 @@ class _Emitter(ScalarCEmitter):
         if node.operation == "power":
             return (
                 f"point_power({self._reference(node.arguments[0])}, "
-                f"{format_constant(node.payload)})"
+                f"{format_constant(cast('Fraction | float', node.payload))})"
             )
         if node.operation in ("exp", "log", "log1p", "expm1"):
             return f"point_{node.operation}({self._reference(node.arguments[0])})"
@@ -68,7 +69,9 @@ def _emit(
     for identifier in graph.topological_order(roots):
         node = graph.nodes[identifier]
         if node.operation == "constant":
-            emitter.names[identifier] = f"{scalar}{{{format_constant(node.payload)}}}"
+            emitter.names[identifier] = (
+                f"{scalar}{{{format_constant(cast('Fraction | float', node.payload))}}}"
+            )
     emitter.emit(roots)
     return "\n".join(
         [line.replace("const double ", f"const {scalar} ") for line in emitter.lines]
@@ -91,6 +94,8 @@ def _program(name: str, exponent: Fraction | None = None) -> tuple:
     elif name == "divide":
         primal = left / right
     elif name == "power":
+        if exponent is None:
+            raise ValueError("power program requires an exponent")
         primal = left.pow(float(exponent))
     elif name in ("log1p", "expm1"):
         primal = graph.stable_unary(name, left)
@@ -204,7 +209,9 @@ def _first(name: str, exponent: Fraction | None = None) -> str:
     for identifier in graph.topological_order((response,)):
         node = graph.nodes[identifier]
         if node.operation == "constant":
-            emitter.names[identifier] = f"Arithmetic{{{format_constant(node.payload)}}}"
+            emitter.names[identifier] = (
+                f"Arithmetic{{{format_constant(cast('Fraction | float', node.payload))}}}"
+            )
     depends_on_channel = {}
     invariant_frontier = set()
     for identifier in graph.topological_order((response,)):

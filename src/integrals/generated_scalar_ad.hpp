@@ -137,12 +137,12 @@ struct Erf {
   const double v1 = left * left;
   const double v2 = v1 * -1.0;
   const double v3 = exp(v2);
-    invariant0 = v3;
+  const double v4 = 1.1283791670955126 * v3;
+    invariant0 = v4;
   }
   GENERATIVEQC_SCALAR_AD_HD double tangent(double dleft) const {
-  const double v0 = dleft * 1.1283791670955126;
-  const double v1 = v0 * invariant0;
-    return v1;
+  const double v0 = dleft * invariant0;
+    return v0;
   }
 };
 GENERATIVEQC_SCALAR_AD_HD inline double moment_tangent(double next_moment, double direction) {

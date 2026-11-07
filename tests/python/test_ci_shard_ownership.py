@@ -2083,3 +2083,54 @@ def test_hybrid_tail_priority_preserves_modulo_owners(
             for path in fresh
             if not arg.startswith("--ci-fresh-priority=")
         )
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+def test_derivative_ad_additions_preserve_existing_core_owners(
+    event: str, presence: str, tmp_path: Path
+) -> None:
+    """New AD modules have one owner without shifting the older test inventory."""
+    additions = {
+        "test_ao_response_ad.py": "core-a",
+        "test_classical_derivative_codegen.py": "core-b",
+        "test_cosx_scalar_ad.py": "core-c",
+        "test_density_bilinear_ad.py": "core-a",
+        "test_gfn2_origin_shift.py": "core-b",
+        "test_integral_scalar_ad.py": "core-c",
+        "test_nuclear_runtime_codegen_cuda.py": "core-a",
+        "test_quadrature_ad.py": "core-b",
+        "test_scalar_graph_ad.py": "core-c",
+    }
+    ordinary = [
+        f"tests/python/{name.removesuffix('.py')}_ordinary.py" for name in additions
+    ]
+    tracked = presence in {"tracked", "missing"}
+    modules = [f"tests/python/{name}" for name in additions]
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in [*ordinary, *(modules if tracked else [])]:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    for relative in modules:
+        if presence == "untracked":
+            (tmp_path / relative).touch()
+        elif presence == "missing":
+            (tmp_path / relative).unlink()
+    selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
+    for relative, owner in zip(modules, additions.values(), strict=True):
+        assert [
+            shard for shard, (_, paths, _) in selections.items() if relative in paths
+        ] == ([owner] if tracked else [])
+        assert not any(
+            relative in argument
+            for _, _, arguments in selections.values()
+            for argument in arguments
+        )
+    for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
+        assert [path for path in selections[shard][1] if path not in modules] == (
+            sorted(ordinary)[bucket::3]
+        )
