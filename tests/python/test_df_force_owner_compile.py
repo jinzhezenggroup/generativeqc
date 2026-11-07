@@ -66,7 +66,7 @@ cudaError_t cudaEventElapsedTime(float*, cudaEvent_t, cudaEvent_t);
 
 
 def test_complete_df_force_owner_compiles(
-    tmp_path: Path, native_cxx: NativeCxx
+    tmp_path: Path, native_cxx: NativeCxx, generated_classical_headers: Path
 ) -> None:
     (tmp_path / "cuda_runtime_api.h").write_text(
         CUDA_RUNTIME_DECLARATIONS, encoding="utf-8"
@@ -84,6 +84,7 @@ def test_complete_df_force_owner_compiles(
                 "-std=c++20",
                 "-DGENERATIVEQC_HAS_CUDA=1",
                 f"-I{tmp_path}",
+                f"-I{generated_classical_headers}",
                 f"-I{ROOT / 'src'}",
                 f"-I{ROOT / 'include'}",
             ),

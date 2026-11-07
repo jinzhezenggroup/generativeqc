@@ -1932,7 +1932,7 @@ def test_qualification_insertion_preserves_existing_core_owners(
     if presence == "missing":
         for relative in owners:
             (tmp_path / relative).unlink()
-    after = {shard: _selection(event, shard, root=tmp_path) for shard in shards}
+    after = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
     for shard in shards:
         assert after[shard][0] == before[shard][0] == "worksteal"
         priority = (
@@ -1947,7 +1947,24 @@ def test_qualification_insertion_preserves_existing_core_owners(
             p for p, owner in owners.items() if tracked and owner == shard
         )
     expected = Counter([*ordinary, *(owners if tracked else [])])
-    assert Counter(p for _, paths, _ in after.values() for p in paths) == expected
+    inventory = {*ordinary, *owners}
+    # Auxiliary lanes also list fixed fixtures absent from this synthetic tree.
+    assert (
+        Counter(
+            path
+            for _, paths, _ in after.values()
+            for path in paths
+            if path in inventory
+        )
+        == expected
+    )
+    if family == "derivative":
+        assert not any(
+            path in argument
+            for _, _, arguments in after.values()
+            for argument in arguments
+            for path in owners
+        )
 
 
 @pytest.mark.parametrize(

@@ -18,10 +18,10 @@
   "archives": [],
   "files": [
     {
-      "path": "source-snapshot.json",
+      "path": "source.patch.xz",
       "role": "source-patch",
-      "sha256": "d8ef5c1c56e69b4faabffad2ef384bd88410b6248e7348f6fb6eb7a437b4a42d",
-      "bytes": 722
+      "sha256": "527accd56ea564cd7ae8b8a98e8a680bb0f109ebc6b6405e61177704992ad3f4",
+      "bytes": 126184
     },
     {
       "path": "reproduction.patch.xz",
@@ -32,50 +32,50 @@
     {
       "path": "samples.json.xz",
       "role": "samples",
-      "sha256": "37b4c878d417a8e9dad353b590acedfcea8a7b0b8f580a27f235980f35fdedb5",
-      "bytes": 211576
+      "sha256": "daf2c384b7a10c40df0d2f39961e940f169a4e8925d6524f12ddacdee3d6bb8f",
+      "bytes": 201436
     },
     {
-      "path": "summary.json",
+      "path": "summary.json.xz",
       "role": "summary",
-      "sha256": "26c8cfc8c826553eda8a003086297e2f83ab0eb9823dc7a0e6bd7c544223b1ee",
-      "bytes": 21709
+      "sha256": "845b9e4da815e5bceba15631209bd2a21819997fc87f570398ac437257feb64a",
+      "bytes": 3624
     },
     {
-      "path": "inputs.json",
+      "path": "inputs.json.xz",
       "role": "input",
-      "sha256": "da9e9ce6efb3bb7a8d397fae5831e1f3603637bdd65b83c4500e8133f5694e83",
-      "bytes": 3620
+      "sha256": "db731cae0fd1f4528ce3502a95e8c18ac12d8368608ee592f21344636ccd9bcc",
+      "bytes": 1556
     },
     {
-      "path": "provenance.json",
+      "path": "provenance.json.xz",
       "role": "input",
-      "sha256": "564e62f1b2f5d3d302d2844513036cdcb7a8c993ea305ab1d53c22ddff549ef8",
-      "bytes": 38946
+      "sha256": "f9c4bd3ded55a004bf5bcb9b242b5d70108d4c209987e7a7ee14fbcf2621792f",
+      "bytes": 6756
     },
     {
-      "path": "qualification.json",
+      "path": "qualification.json.xz",
       "role": "summary",
-      "sha256": "1421501c3d398d5dfb18974c98405aa3dcdc2c78bfb4d3d74ff961675153bb57",
-      "bytes": 37790
+      "sha256": "a218bba846abbe4c29f72dceeafd7c75440b72b90ba27c420dbddc1f580ddce1",
+      "bytes": 5140
     },
     {
       "path": "README.md",
       "role": "reproduction",
-      "sha256": "3793a3a569ae979342a766a566bccd5e072dab843c33ed08d5410931466a5260",
-      "bytes": 11675
+      "sha256": "10ab3044639ee3ca39884f02a58e85860f20c533f34dbdaa4a837ec58540c0a4",
+      "bytes": 11371
     },
     {
       "path": "replay.py",
       "role": "reproduction",
-      "sha256": "3e48818139b4eb0609f1062ded679d7068b28c2b52be52ba5c5820cfa2a0aeb4",
-      "bytes": 12103
+      "sha256": "36c796c5993794487eefe5ccaa7161e7244a8bab6eb982f6a65ad7e7b6ef1844",
+      "bytes": 11964
     },
     {
-      "path": "evidence.json",
+      "path": "evidence.json.xz",
       "role": "evidence",
-      "sha256": "e085f2bd5a092ed955db7797ccb799c7a778f9cb0664377c66c039c67aa4674a",
-      "bytes": 8707
+      "sha256": "619df0a6330db2339713b5d6d2ad2d1348ec10937df35e6dd6d0af8bcb8a874b",
+      "bytes": 2548
     }
   ]
 }

@@ -444,9 +444,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # core-c at 806s and core-b beyond 35min; restore only that supplemental
     # owner below. Preserve all cases, historical modulo slots and cache trust.
     declare -A supplemental_core_owner=(
-      # PR #3044 inserted nine AD suites and moved 1272 existing owners,
-      # including the Cs ECP Hessian from core-a into core-c's timed-out lane.
-      # Preserve master routing and every gate without widening time limits.
+      # Derivative AD adds nine files. In PR run 42410861878 their insertion
+      # moved 1272 existing modules, including scalar-ECP HVPs from core-a
+      # into core-c's molecular Hessian queue, which exhausted the 30m cap.
+      # Give only the new modules non-modulo slots; preserve every existing
+      # owner, case, priority and time budget on the merged base inventory.
       [tests/python/test_ao_response_ad.py]=0
       [tests/python/test_classical_derivative_codegen.py]=1
       [tests/python/test_cosx_scalar_ad.py]=2

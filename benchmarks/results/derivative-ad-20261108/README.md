@@ -14,23 +14,18 @@ special-function primitives, linear contractions and implicit solves remain.
   owners, generators, generated headers, consumers and tests; this publication is
   excluded, together with its storage-review record, to avoid self-reference.
   Apply it to a clean checkout of the baseline.
-- `source-snapshot.json` authenticates the exact original compressed patch retained
-  in local Git at `4f555d074700fdb0d340de90f57a9f8d7e4f58cf`. That commit is a
-  storage carrier, not a replacement measured producer revision. The checkout
-  omits this redundant blob to stay within the shared evidence storage budget;
-  no measured samples or source bytes are discarded.
 - `samples.json.xz` losslessly retains all selected complete endpoint timings,
   first-use observations, numerical outputs and semantic work counters. Large
   nonlocal CUDA feature vectors are replaced by their element count and measured
   maximum absolute baseline/candidate difference, without dropping any timings.
-- `summary.json` records every endpoint ratio, not just aggregate speedups.
-  `qualification.json` preserves the executed scientific test output and cache
-  receipts. `provenance.json` distinguishes libraries, Python owners, stationary
+- `summary.json.xz` records every endpoint ratio, not just aggregate speedups.
+  `qualification.json.xz` preserves the executed scientific test output and cache
+  receipts. `provenance.json.xz` distinguishes libraries, Python owners, stationary
   DSOs, scheduler allocations and the shared private runtime.
 - `reproduction.patch.xz` restores the historical campaign scripts under the ignored
   `.artifacts/classical-derivatives/` directory. They are execution receipts, not
   a new required-CI framework or a replacement for the production APIs.
-- `evidence.json` accepts numerical parity. Formal autotuner/default-selector
+- `evidence.json.xz` accepts numerical parity. Formal autotuner/default-selector
   performance promotion is **not run**: this cleanup changes no selector and does
   not claim universally significant speedups, compilation-cost or peak-memory
   qualification. Descriptive no-regression measurements remain fully retained.
@@ -42,12 +37,18 @@ PYTHONPATH=python:. python benchmarks/results/derivative-ad-20261108/replay.py
 ```
 
 The reader first verifies the shared publication schema, every member checksum,
-the numerical acceptance decision and reconstruction provenance, including the
-recovered patch's compressed and decompressed identities. Replay needs NumPy
-and the recorded Git object locally, but no GPU, native library, private cluster
-directory or external archive. A shallow/partial clone missing the carrier must
-explicitly fetch its recorded revision first; replay never fetches automatically.
+the numerical acceptance decision and reconstruction provenance. Replay needs
+NumPy, but no GPU, native library, private cluster directory or external archive.
 There is no source-fingerprint CI test and no Release/archive dependency.
+The smaller JSON metadata is also retained losslessly as XZ, and the original
+sample bytes are recompressed with the same decompressed content. Publication
+checksums bind the stored files; no timing or numerical sample is removed.
+
+These measurements describe the reconstructed historical candidate above.
+Subsequent PR review repairs to scalar tangent ordering, generator imports and
+namespace/type declarations are covered by focused host tests and CI, not new
+GPU endpoint measurements. Replaying this archive does not requalify the current
+checkout or promote its performance defaults.
 
 ## Executed scientific gates
 
@@ -70,7 +71,7 @@ There is no source-fingerprint CI test and no Release/archive dependency.
 ## Endpoint design and interpretation
 
 Ratios are candidate/baseline, so smaller is faster. Do not offset a regression
-in one cohort with a speedup in another. `summary.json` and `replay.py` expose the
+in one cohort with a speedup in another. `summary.json.xz` and `replay.py` expose the
 individual cohorts, work checks, tolerances and uncertainty.
 
 | Cohort | Complete measured work | Sampling |
@@ -112,7 +113,7 @@ the n3 maintenance host. Scheduler-assigned device visibility is preserved.
 Both baseline and candidate use Release builds, CUDA 12.9.86/GCC 13.3 on sm120
 and verified sccache 0.16.0. CPU builds use the same local compiler/cache for both
 trees. The exact CMake options and selected receipt identities are retained in
-`provenance.json`; cache statistics are in `qualification.json`.
+`provenance.json.xz`; cache statistics are in `qualification.json.xz`.
 
 n5 has glibc 2.35 while the n1-built libraries need 2.39. Both selections execute
 with the **same private n1 loader/glibc/libstdc++ runtime**, whose hashes are
@@ -120,17 +121,8 @@ retained; no system installation is modified. Slurm on n5 does not implement CPU
 binding. Final n5 jobs use `taskset` on one CPU from the allocation's inherited
 allowed affinity instead; old unpinned experiments are not described as pinned.
 
-For a fresh measurement, recover the exact patch with the shared offline restorer:
-
-```bash
-python tools/restore_retained_evidence.py \
-  benchmarks/results/derivative-ad-20261108/source.patch.xz \
-  --manifest benchmarks/results/derivative-ad-20261108/source-snapshot.json \
-  --output /tmp/derivative-ad-source.patch.xz
-```
-
-Decompress and apply that recovered patch to a clean baseline checkout and
-`reproduction.patch.xz` to recover the scripts. Build both libraries from the
+For a fresh measurement, decompress and apply `source.patch.xz` to a clean baseline
+checkout and `reproduction.patch.xz` to recover the scripts. Build both libraries from the
 corresponding trees with the same options and verified compiler cache. Copy the
 benchmark harness into the baseline tree too, without copying candidate compiler
 or production Python modules. Build the six stationary profiles separately for
@@ -138,7 +130,7 @@ each selection. Adapt cluster paths in the historical scripts to the new
 checkout/runtime; these paths are not hidden scientific inputs. For example:
 
 ```bash
-xz -dc /tmp/derivative-ad-source.patch.xz | git apply
+xz -dc /path/to/publication/source.patch.xz | git apply
 xz -dc /path/to/publication/reproduction.patch.xz | git apply
 sccache --version
 sccache --show-stats

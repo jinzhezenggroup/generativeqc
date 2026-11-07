@@ -54,13 +54,15 @@ All functional inventories, qualified/ready/blocked stage sets and public method
 selection remain identical. Historical campaign identities remain historical;
 the refresh does not promote, demote or freshly qualify any native endpoint.
 
-The original 126184-byte `source.patch.xz` remains byte-recoverable from commit
-`4f555d074700fdb0d340de90f57a9f8d7e4f58cf`. Replace only its redundant checkout
+The intermediate integration kept the original 126184-byte `source.patch.xz`
+byte-recoverable from commit
+`4f555d074700fdb0d340de90f57a9f8d7e4f58cf` and replaced its redundant checkout
 storage with `source-snapshot.json`, using the established Git snapshot schema
-and shared offline restorer. The publication authenticates that capsule; replay
-also authenticates both compressed patch bytes and the decompressed measured
-source hash. Preserve the measured baseline, original source hash, samples,
-first-use observations, negative results and all numerical/work gates.
+and shared offline restorer. That intermediate publication authenticated the
+capsule; replay also authenticated compressed patch bytes and the measured
+source hash. This storage choice is superseded by the self-contained lossless
+compression below. The measured baseline, original source hash, samples,
+first-use observations, negative results and all numerical/work gates are kept.
 
 The carrier revision is not a new measured producer revision. A shallow clone
 missing the carrier must explicitly obtain its Git object; replay fails closed
@@ -89,8 +91,9 @@ release assets, new hosts or scientific sample deletions are required.
   independent PySCF/libcint reference values.
 - Ownership checks pass for 601 compiler modules, 266 shared SCF modules and
   431 CUDA inventory entries.
-- A one-off comparison against the published implementation finds all 62 native
-  generated headers and compiled Python response schedules byte-identical.
+- Before the separate erf finite-range repair, a one-off comparison against the
+  published implementation finds all 62 native generated headers and compiled
+  Python response schedules byte-identical after type/import integration.
 - The atomic-grid namespace repair produces the same Release host object before
   and after qualification (`-O3 -DNDEBUG`, GCC, verified sccache), SHA-256
   `6ac64eda0e53d7776878bbc5b4c717a959e23521eef0522e8b784aa752f0cf51`.
@@ -101,6 +104,58 @@ Local receipts live under `.artifacts/classical-derivatives/pr-final-*`,
 The frozen performance and scientific campaign remains in
 `benchmarks/results/derivative-ad-20261108/`; these CI repairs do not claim a new
 timing campaign for the merged master tree.
+
+## Superseding integration
+
+The concurrent PR repair is merged without discarding either branch's work.
+Its [review integration note](2026-11-07-derivative-ad-review-integration.md)
+records an explicit numerical change: differentiate the erf primal before
+contracting its slope with the direction, avoiding intermediate overflow for
+large finite seeds. Its independent high-precision oracle is retained. The
+earlier byte-preservation comparison does not cover this deliberate generated
+mathematics change, and the frozen endpoint timings are not relabelled as a new
+post-repair GPU campaign.
+
+Self-contained lossless XZ compression of the small JSON records and denser
+compression of the unchanged sample JSON fit the same aggregate budget while
+retaining the original `source.patch.xz` directly. This supersedes the capsule
+above: remove `source-snapshot.json` and its replay/restorer dependency. The
+decoded input, provenance, qualification, summary and sample records remain
+identical; only the evidence attachment's compressed-sample checksum changes.
+Replay verifies the publication's compressed files and the decompressed
+measured-source hash. No Git-object recovery is required for this bundle.
+
+Keep the canonical nuclear array executor and generator cleanup described above.
+Merge the bare isolated-generator and host-generated-header fixture tests, and
+consolidate duplicate CI insertion tests while checking all shard owners.
+
+The follow-up CI run also exposed the standalone AO jet oracle's missing
+generated-axis include and the bulk Libxc catalog's stale scalar-owner digest.
+The AO probe now includes the actual production generated header and compiles
+through the shared verified cache fixture; the independent Leibniz reference is
+unchanged. Rebuilding the complete pinned bulk catalog reproduces both catalog
+and report bytes exactly (544 registrations, 222 imported, 322 blocked), allowing
+its scalar-owner provenance to be refreshed without weakening offline freshness
+checks or mutation rejection.
+
+The final erf/integral scalar probe was freshly compiled and executed on n1
+through Slurm job 16768 with assigned device visibility unchanged: 26 host/CUDA
+tests passed without skips, including the high-precision extreme-seed oracle.
+The earlier job 16767 skipped because the optional host-probe cache executable
+was not selected; it is not counted as GPU coverage. Selecting verified sccache
+explicitly fixes that validation environment, without bypassing the scheduler.
+
+Final integration validation passes 975 routing/AO cases, 150 scalar-owner,
+source-registry, Libxc and publication cases, and 113 focused host cases with
+13 explicitly opt-in CUDA skips. The separately scheduled 26-case scalar run
+covers those host/CUDA schedules without skips. Workflow-pinned type checking,
+all three ownership inventories and the 74-endpoint historical replay pass.
+
+A separate complete Cs ECP unit-x HVP diagnostic passed on both frozen CPU
+libraries with matched Python trees and one-thread BLAS: baseline 847.86 s,
+candidate 849.71 s. This single pair (ratio about 1.00218) is diagnostic, not a
+statistical performance claim or post-erf qualification. Both jobs completed
+before the concurrent repair was integrated.
 
 ## Rejected alternatives
 
