@@ -1,0 +1,71 @@
+{
+  "image": {
+    "library_sha256": "5a9331731c148f589819f7dfd87ba396d9e333ff3bba7d7e0b8f85c442bb2793",
+    "source_identity": "5efc4cf4e871609dc6f6819ea45232a0c2bfe8b672e457a950d8b6a3ae57e2df"
+  },
+  "decision": "rejected-not-promoted",
+  "fresh_gpu4pyscf_ranking": false,
+  "devices": {
+    "A100": {
+      "scheduler_job": "227134",
+      "samples": [
+        {
+          "phase": "cold",
+          "repeat": 0,
+          "baseline_seconds": 82.69526957347989,
+          "default_seconds": 82.0427500270307,
+          "ratio": 0.9921093485780419,
+          "paired_energy_error_per_atom": 0.0,
+          "paired_force_max": 1.0018652574217413e-12
+        },
+        {
+          "phase": "warm",
+          "repeat": 0,
+          "baseline_seconds": 13.935682393610477,
+          "default_seconds": 13.798379089683294,
+          "ratio": 0.9901473569754907,
+          "paired_energy_error_per_atom": 0.0,
+          "paired_force_max": 6.430411758628907e-13
+        },
+        {
+          "phase": "warm",
+          "repeat": 1,
+          "baseline_seconds": 13.781841110438108,
+          "default_seconds": 13.686627641320229,
+          "ratio": 0.9930913824680676,
+          "paired_energy_error_per_atom": 0.0,
+          "paired_force_max": 5.551115123125783e-13
+        },
+        {
+          "phase": "warm",
+          "repeat": 2,
+          "baseline_seconds": 13.816298082470894,
+          "default_seconds": 13.647129990160465,
+          "ratio": 0.987755903115245,
+          "paired_energy_error_per_atom": 0.0,
+          "paired_force_max": 6.501466032204917e-13
+        }
+      ],
+      "cold_ratio": 0.9921093485780419,
+      "warm_median_ratio": 0.9906146754813302,
+      "baseline_warm_median": 13.816298082470894,
+      "default_warm_median": 13.686627641320229,
+      "default_warm_min": 13.647129990160465,
+      "default_warm_max": 13.798379089683294
+    },
+    "RTX5090": {
+      "scheduler_job": "16644",
+      "baseline_cold_seconds": 168.31018102541566,
+      "baseline_warm_seconds": [
+        12.744729802012444,
+        12.755008786916733,
+        12.806459356099367
+      ],
+      "candidate_endpoint_complete": false,
+      "candidate_seconds": null,
+      "outcome": "out-of-memory; not performance-qualified"
+    }
+  },
+  "a100_geometry_bytes": 6989834240,
+  "handoff_repair_gpu_qualified": false
+}
