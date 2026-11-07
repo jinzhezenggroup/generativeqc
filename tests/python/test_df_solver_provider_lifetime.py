@@ -81,6 +81,7 @@ def test_provider_release_waits_for_other_owner_measurement(
 
 PREFIX = r"""
 #include "cc/phase_observation.hpp"
+#include <optional>
 #include <chrono>
 #include <algorithm>
 #include <cstddef>
@@ -145,11 +146,11 @@ struct Owner {
   unsigned char *base=reinterpret_cast<unsigned char*>(3);
   // Histories are a second numeric owner; their release shares the lock.
   unsigned char *history_base=reinterpret_cast<unsigned char*>(5);
-  struct Plan { bool matrix_gemm=true; std::size_t auxiliary_batch_size=1; } plan;
+  struct Plan { std::optional<int> contractions=1; std::size_t auxiliary_batch_size=1; } plan;
   struct { std::size_t nocc=1,nvir=1; } p;
   struct { bool df_auxiliary_reduction=true; } options;
   std::size_t naux=1,combined=0;
-  Plan df_iteration_plan(std::size_t,std::size_t,std::size_t,bool,bool,bool) { return {}; }
+  Plan df_iteration_plan(std::size_t,std::size_t,std::size_t,bool,bool) { return {}; }
   std::size_t build_layout() { return layout.total; }
   bool conventional_prepared=false;
   bool replay_matrix=false;
@@ -160,7 +161,7 @@ struct Owner {
            bool df_pair_resource_refused=false; } diagnostic;
   int replans=0;
   void scalar_plan() {
-    conventional_prepared=false; plan.matrix_gemm=false; layout.total=512; ++replans;
+    conventional_prepared=false; plan.contractions.reset(); layout.total=512; ++replans;
   }
 """
 
@@ -179,7 +180,7 @@ int main(int argc,char** argv) {
   }
   if (operation=="conventional-fallback" || operation=="conventional-history-fallback") {
     owner.conventional_prepared=true;
-    owner.plan.matrix_gemm=false;
+    owner.plan.contractions.reset();
     owner.naux=0;
   }
   if(fail_history) {
@@ -217,7 +218,7 @@ int main(int argc,char** argv) {
   }
   if(destroys!=1 || owner.contractions.handle) return 2;
   if(fallback) {
-    if(owner.conventional_prepared || owner.plan.matrix_gemm || owner.replans!=1 || allocations!=(fail_history ? 4 : 2) ||
+    if(owner.conventional_prepared || owner.plan.contractions.has_value() || owner.replans!=1 || allocations!=(fail_history ? 4 : 2) ||
        cleared!=(fail_history ? 2 : 1) ||
        owner.layout.total!=512 || owner.base!=reinterpret_cast<unsigned char*>(4)) return 3;
     owner.cleanup();

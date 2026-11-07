@@ -124,8 +124,8 @@ struct CudaRhfBucketPlan {
   /** Exact per-system mixed-capable tile census the per-item budget divides. */
   std::vector<std::uint32_t> mixed_precision_system_census;
   bool warm_start_updates_enabled{true};
-  bool cublas_enabled{true};
-  bool retry_without_cublas{};
+  bool matrix_context_enabled{true};
+  bool retry_without_matrix_context{};
   bool initialized{};
 };
 

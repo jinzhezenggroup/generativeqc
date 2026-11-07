@@ -1,17 +1,21 @@
 """Compile native upload/cleanup control flow with deferred-copy lifetime probes."""
 
-import shutil
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
+if TYPE_CHECKING:
+    from conftest import NativeCxx
+
 
 @pytest.fixture(scope="module")
-def upload_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler is unavailable")
+def upload_probe(
+    tmp_path_factory: pytest.TempPathFactory, required_native_cxx: NativeCxx
+) -> Path:
     root = Path(__file__).resolve().parents[2]
     source = (root / "src/api/c_api_fock.cpp").read_text()
     create = source.split(
@@ -25,6 +29,10 @@ def upload_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     owner = source.split("struct generativeqc_uhf_response_resident {", 1)[1].split(
         "\n};", 1
     )[0]
+    provider = (root / "src/tensor/cuda_dense_operations.cu").read_text()
+    lifecycle = provider.split("cublasStatus_t CudaDenseOperations::create()", 1)[1]
+    lifecycle = lifecycle.split("cublasStatus_t CudaDenseOperations::copy(", 1)[0]
+    lifecycle = "cublasStatus_t CudaDenseOperations::create()" + lifecycle
     harness = r"""
 #include <cstdlib>
 #include <cstring>
@@ -34,9 +42,9 @@ def upload_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <utility>
+#include "tensor/cuda_dense_operations.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
-using cudaStream_t = int;
-using cublasHandle_t = void*;
 struct generativeqc_fock_plan;
 namespace generativeqc::scf { struct CudaDirectJkPlan; }
 struct generativeqc_uhf_response_resident { OWNER_BODY
@@ -53,12 +61,15 @@ struct TrackedVector : std::vector<double> {
       if(pending[i].src==data()) dead_source=true;
   }
 };
-constexpr int cudaMemcpyHostToDevice=1, CUBLAS_POINTER_MODE_HOST=0;
+constexpr int cudaMemcpyHostToDevice=1;
 int cudaSetDevice(int) { return 0; }
 int cublasCreate(void** p) { *p=reinterpret_cast<void*>(1); ++handles; return 0; }
 int cublasSetStream(void*,int) { return 0; }
 int cublasSetPointerMode(void*,int) { return 0; }
 int cublasDestroy(void*) { --handles; return 0; }
+namespace generativeqc::tensor {
+NATIVE_PROVIDER_LIFECYCLE
+}
 int cudaMemcpyAsync(void* dst,const void* src,std::size_t bytes,int,int) {
   ++copy_calls;
   if(copy_calls==fail_copy) return 2;
@@ -101,7 +112,7 @@ void create() {
   if(owner->coefficients_alpha[1]!=4 || owner->coefficients_beta[1]!=6)
     throw std::runtime_error("uploaded coefficient transpose changed");
   generativeqc::runtime::resource_cuda_free(owner->allocation);
-  cublasDestroy(owner->blas);
+  owner->operations.close();
 }
 int main(int argc,char** argv) {
   if(argc!=3) return 10;
@@ -114,12 +125,26 @@ int main(int argc,char** argv) {
   return 0;
 }
 """
-    harness = harness.replace("OWNER_BODY", owner).replace("NATIVE_BODY", body)
+    harness = (
+        harness.replace("OWNER_BODY", owner)
+        .replace("NATIVE_BODY", body)
+        .replace("NATIVE_PROVIDER_LIFECYCLE", lifecycle)
+    )
     directory = tmp_path_factory.mktemp("uhf-upload-lifetime")
+    (directory / "cublas_v2.h").write_text(
+        "#pragma once\nusing cudaStream_t=int;\nusing cublasHandle_t=void*;\n"
+        "using cublasStatus_t=int;\n"
+        "constexpr int CUBLAS_STATUS_SUCCESS=0, CUBLAS_STATUS_INVALID_VALUE=7;\n"
+        "constexpr int CUBLAS_POINTER_MODE_HOST=0;\n"
+        "int cublasCreate(void**); int cublasSetStream(void*,int);\n"
+        "int cublasSetPointerMode(void*,int); int cublasDestroy(void*);\n"
+    )
     cpp, executable = directory / "probe.cpp", directory / "probe"
     cpp.write_text(harness)
-    subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(cpp), "-o", str(executable)], check=True
+    required_native_cxx.build_executable(
+        [cpp],
+        executable,
+        compile_args=["-std=c++20", "-O0", f"-I{directory}", f"-I{root / 'src'}"],
     )
     return executable
 

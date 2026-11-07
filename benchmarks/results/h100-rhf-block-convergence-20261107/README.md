@@ -96,3 +96,14 @@ The reader authenticates every retained member and recomputes 24 dense E/F gates
 12 full strict comparisons, all nine warm guards, all six cold times, paired
 medians, source/core/device/control/phase-work bindings and the original failure.
 It loads no native library and runs no CUDA, SCF, reference engine or oracle.
+
+## Post-measurement integration boundary
+
+The PR also integrates master `7704dd93dec18db0cf506d78ce1c76f0d6d40fe1`
+(#3039's shared-provider migration). Its combined native input identity is
+`2c113229e644417e47abaf2d30a75a579a2f8096fe08e04a3ca66831cb4d80cc`.
+The measurements above still belong to source `513288b77` and native identity
+`0138841399`; they are not measurements of the combined source. Host integration
+checks and offline replay preserve those receipts without a new GPU run or any
+default/qualification promotion. Regenerated Libxc snapshots change checked
+source identities only and retain stale status with zero qualified products.

@@ -89,3 +89,19 @@ coree3ef, GPUfe8. Adding this evidence does not measure the publication tree.
 This supports a scoped default-off component; no new G4 comparison, automatic
 promotion or original fixed30 completion follows. Keep the original campaign
 and denominator requirements unchanged.
+
+## Post-measurement master integration
+
+Integrate master `7704dd93dec18db0cf506d78ce1c76f0d6d40fe1` after #3039's
+shared-provider migration. The RHF driver and private policy changes compose
+without a source conflict; only the generated Libxc qualification report and
+snapshot require regeneration. Recompute their checked-source identities with
+the canonical catalog tool, retaining stale status, zero qualified products,
+all original measurements and unchanged acceptance gates.
+
+The combined native input identity is
+`2c113229e644417e47abaf2d30a75a579a2f8096fe08e04a3ca66831cb4d80cc`.
+This is not the measured `013884` image. Focused host integration checks and
+offline replay do not freshly qualify the combined GPU source or relabel the
+original three H100 pairs. The control remains default-off, and normal remote
+CI and merge-queue checks remain required.

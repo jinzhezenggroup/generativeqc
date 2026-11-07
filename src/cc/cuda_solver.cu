@@ -186,16 +186,13 @@ struct Owner {
     history_elements = packed ? checked_add(n1, checked_add(n2, n1) / 2) : elements;
     naux = p.naux;
     conventional_prepared = !naux && generated::iteration_prepared_dimensions_fit(p.nocc, p.nvir);
-    // The compiler derives each flattened dimension from contraction labels;
-    // neither tensor rank nor o*v alone bounds the provider's signed extents.
-    const bool matrix_dimensions_fit =
-        !naux || (generated::dfhoist::prepare_packed_dimensions_fit(p.nocc, p.nvir) &&
-                  generated::dfhoist::auxiliary_packed_dimensions_fit(p.nocc, p.nvir) &&
-                  generated::dfhoist::iteration_packed_dimensions_fit(p.nocc, p.nvir));
-    if (naux)
-      plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction,
-                               options.df_matrix_gemm && matrix_dimensions_fit, 1,
-                               options.df_mixed_precision);
+    if (naux) {
+      plan = options.qualification.ordered_iteration
+                 ? df_ordered_iteration_plan(p.nocc, p.nvir, naux, true,
+                                             options.df_auxiliary_reduction)
+                 : df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction, 1,
+                                     options.df_mixed_precision);
+    }
     const std::array<const std::vector<double>*, 15> host = {
         &p.foo,  &p.fov,  &p.fvv, &p.ovov, &p.ovvo,       &p.oovv,       &p.ovvv,         &p.ovoo,
         &p.oooo, &p.vvvv, &p.d1,  &p.d2,   &p.initial_t1, &p.initial_t2, &p.canonical_eps};
@@ -300,7 +297,7 @@ struct Owner {
       if (plan.mixed_auxiliary)
         total = checked_add(total, generated::dfhoist::mixed_contraction_host_bytes(
                                        1 + (naux % plan.auxiliary_batch_size != 0)));
-      return plan.matrix_gemm
+      return plan.contractions.has_value()
                  ? checked_add(checked_add(total, kContractionProviderAllowance),
                                generated::dfhoist::contraction_host_bytes(
                                    plan.strict_auxiliary_batch_size > 1
@@ -309,7 +306,7 @@ struct Owner {
                  : total;
     };
     auto combined = build_layout();
-    if (plan.matrix_gemm) {
+    if (plan.contractions.has_value()) {
       const auto one_q = plan;
       // Trial plans are pure capacity queries. Failed/overflowing optional
       // tiles cannot consume the one-Q arena or weaken the complete budget.
@@ -317,7 +314,7 @@ struct Owner {
         try {
           if (!generated::dfhoist::auxiliary_batched_dimensions_fit(p.nocc, p.nvir, batch))
             continue;
-          plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction, true,
+          plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction,
                                    batch, options.df_mixed_precision);
           combined = build_layout();
           if (combined <= options.max_bytes) break;
@@ -336,25 +333,27 @@ struct Owner {
       if (!naux)
         conventional_prepared = false;
       else
-        plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction);
+        plan =
+            df_ordered_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction);
       combined = build_layout();
       if (plan.hoisted && combined > options.max_bytes) {
-        plan = df_iteration_plan(p.nocc, p.nvir, naux, true, false);
+        plan = df_ordered_iteration_plan(p.nocc, p.nvir, naux, true, false);
         combined = build_layout();
       }
       if (combined > options.max_bytes)
         throw std::length_error("RCCSD CUDA scalar fallback exceeds correlation memory budget");
     };
-    if ((conventional_prepared || plan.matrix_gemm) && combined > options.max_bytes) scalar_plan();
+    if ((conventional_prepared || plan.contractions.has_value()) && combined > options.max_bytes)
+      scalar_plan();
     if (plan.hoisted && combined > options.max_bytes) {
-      plan = df_iteration_plan(p.nocc, p.nvir, naux, true, false);
+      plan = df_ordered_iteration_plan(p.nocc, p.nvir, naux, true, false);
       combined = build_layout();
     }
     if (combined > options.max_bytes)
       throw std::length_error("RCCSD CUDA resident state exceeds correlation memory budget");
     // Optional audit storage cannot sacrifice the already admitted primal tile.
     // The scalar expanded replay remains available under the original budget.
-    if (plan.matrix_gemm && options.df_replay_matrix_gemm) {
+    if (plan.contractions.has_value() && !options.qualification.ordered_replay) {
       try {
         if (generated::df::virtual_replay_dimensions_fit(p.nocc, p.nvir)) {
           replay_matrix = true;
@@ -371,7 +370,7 @@ struct Owner {
     }
     // Pair storage is last in admission priority: it may not displace the
     // already selected original primal tile or independent replay provider.
-    if (pair_candidate && plan.hoisted && plan.matrix_gemm) {
+    if (pair_candidate && plan.hoisted && plan.contractions.has_value()) {
       try {
         if (generated::dfpairs::auxiliary_packed_dimensions_fit(p.nocc, p.nvir) &&
             (plan.strict_auxiliary_batch_size == 1 ||
@@ -443,10 +442,10 @@ struct Owner {
       }
       // The existing provider allowance covers the optional workspace. Ordinary
       // Q8/one-Q and conventional callers keep their zero-workspace contract.
-      const auto workspace_bytes = plan.matrix_gemm && plan.auxiliary_batch_size > 8
+      const auto workspace_bytes = plan.contractions.has_value() && plan.auxiliary_batch_size > 8
                                        ? tensor::CudaContractionContext::kOptionalWorkspaceBytes
                                        : 0;
-      if ((conventional_prepared || plan.matrix_gemm) &&
+      if ((conventional_prepared || plan.contractions.has_value()) &&
           !contractions.prepare(stream, workspace_bytes))
         scalar_plan();
       auto allocate_numeric = [&]() {
@@ -454,11 +453,11 @@ struct Owner {
         if (code) return code;
         // A later history refusal does not erase this successful allocation's
         // peak: the earlier, larger base really coexisted with retained state.
-        diagnostic.owned_device_bytes =
-            std::max(diagnostic.owned_device_bytes,
-                     checked_add(layout.total, (conventional_prepared || plan.matrix_gemm)
-                                                   ? kContractionProviderAllowance
-                                                   : 0));
+        diagnostic.owned_device_bytes = std::max(
+            diagnostic.owned_device_bytes,
+            checked_add(layout.total, (conventional_prepared || plan.contractions.has_value())
+                                          ? kContractionProviderAllowance
+                                          : 0));
         diagnostic.numeric_capacity_bytes =
             std::max(diagnostic.numeric_capacity_bytes, combined - layout.history_bytes);
         if (!layout.history_bytes) return code;
@@ -504,11 +503,12 @@ struct Owner {
         (void)cudaGetLastError();
         // The same admitted provider can execute one-Q work without the
         // optional batched outputs. Retry before abandoning matrix execution.
-        plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction, true);
+        plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction);
         combined = build_layout();
         allocation = allocate_numeric();
       }
-      if (allocation == cudaErrorMemoryAllocation && (conventional_prepared || plan.matrix_gemm)) {
+      if (allocation == cudaErrorMemoryAllocation &&
+          (conventional_prepared || plan.contractions.has_value())) {
         // Only optional-resource failure permits retry. Arithmetic and driver
         // failures are propagated, and a retry never changes the equations.
         (void)cudaGetLastError();
@@ -568,11 +568,11 @@ struct Owner {
         df_state.response_arena = reinterpret_cast<double*>(base + layout.df_arena);
         hoisted_state.prepare_arena = reinterpret_cast<double*>(base + layout.df_prepare);
         hoisted_state.auxiliary_arena = df_state.response_arena;
-        if (plan.matrix_gemm) {
+        if (plan.contractions.has_value()) {
           // Symbolic TensorIR requests are resolved/prepared once at owner
           // construction. Every iteration reuses these immutable bindings.
-          hoisted_state.o = p.nocc;
-          hoisted_state.v = p.nvir;
+          hoisted_state.o = plan.contractions->occupied;
+          hoisted_state.v = plan.contractions->virtuals;
           generated::dfhoist::prepare_contractions(
               hoisted_state, contractions, plan.strict_auxiliary_batch_size,
               naux % plan.strict_auxiliary_batch_size, diagnostic.df_gemm_calls,
@@ -665,7 +665,7 @@ struct Owner {
                                  stream));
       cuda_check(cudaStreamSynchronize(stream));
       ++diagnostic.synchronizations;
-      diagnostic.df_matrix_gemm = plan.matrix_gemm;
+      diagnostic.df_matrix_gemm = plan.contractions.has_value();
       diagnostic.df_mixed_precision_refused = options.df_mixed_precision && !mixed_active;
       diagnostic.df_replay_matrix_gemm = replay_matrix;
       diagnostic.conventional_prepared_contractions = conventional_prepared;
@@ -675,7 +675,8 @@ struct Owner {
           conventional_prepared ? tensor::PreparedContractions::storage_bytes(
                                       generated::iteration_prepared_contractions)
                                 : 0;
-      diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kContractionProviderAllowance : 0;
+      diagnostic.df_provider_capacity_bytes =
+          plan.contractions.has_value() ? kContractionProviderAllowance : 0;
       diagnostic.df_auxiliary_batch_size = plan.auxiliary_batch_size;
       diagnostic.df_strict_auxiliary_batch_size = plan.strict_auxiliary_batch_size;
       diagnostic.df_occupied_pairs = pairs_enabled;
@@ -1022,9 +1023,9 @@ struct Owner {
         diagnostic.df_virtual_operations +=
             use_pairs ? (batch > 1 ? generated::dfpairs::auxiliary_batched_cuda_operations
                                    : generated::dfpairs::auxiliary_packed_cuda_operations)
-            : batch > 1 || mixed_active ? generated::dfhoist::auxiliary_batched_operations
-            : plan.matrix_gemm          ? generated::dfhoist::auxiliary_packed_operations
-                                        : generated::dfhoist::auxiliary_operation_count;
+            : batch > 1 || mixed_active     ? generated::dfhoist::auxiliary_batched_operations
+            : plan.contractions.has_value() ? generated::dfhoist::auxiliary_packed_operations
+                                            : generated::dfhoist::auxiliary_operation_count;
         ++diagnostic.df_accumulation_calls;
         diagnostic.df_accumulation_bytes = checked_add(
             diagnostic.df_accumulation_bytes,
@@ -1041,7 +1042,7 @@ struct Owner {
             : batch > 1 || mixed_active
                 ? generated::dfhoist::auxiliary_batched_contraction_terms(state.o, state.v, batch)
                 : plan.auxiliary_terms);
-        if (plan.matrix_gemm) {
+        if (plan.contractions.has_value()) {
           const auto packing =
               use_pairs
                   ? (batch > 1
@@ -1058,7 +1059,7 @@ struct Owner {
       }
       cuda_check(cudaGetLastError());
       ++diagnostic.df_hoisted_evaluations;
-      if (plan.matrix_gemm) {
+      if (plan.contractions.has_value()) {
         // Every explicit transpose reads and writes its full tensor once.
         const auto packed =
             checked_add(generated::dfhoist::prepare_packing_elements(state.o, state.v),
@@ -1308,7 +1309,8 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
   if (phase_observation::enabled()) {
     const auto route =
         (owner.plan.hoisted ? static_cast<std::uint64_t>(phase_observation::hoisted) : 0ULL) |
-        (owner.plan.matrix_gemm ? static_cast<std::uint64_t>(phase_observation::matrix) : 0ULL) |
+        (owner.plan.contractions.has_value() ? static_cast<std::uint64_t>(phase_observation::matrix)
+                                             : 0ULL) |
         (owner.replay_matrix ? static_cast<std::uint64_t>(phase_observation::replay_matrix)
                              : 0ULL) |
         (owner.mixed_active ? static_cast<std::uint64_t>(phase_observation::mixed) : 0ULL) |

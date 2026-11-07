@@ -46,7 +46,7 @@ def capacity_probe(
         "struct dim3 { unsigned x=1,y=1,z=1; };\n"
     )
     (directory / "cublas_v2.h").write_text(
-        "#pragma once\nusing cublasHandle_t=void*;\n"
+        "#pragma once\nusing cublasHandle_t=void*;\nusing cublasStatus_t=int;\n"
     )
     eigen_units = empty_eigen_owner_units(directory)
     # The actual topology packer consumes this compiler-owned schedule.

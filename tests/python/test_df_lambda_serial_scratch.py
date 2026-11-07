@@ -76,8 +76,8 @@ Plan plan(bool sharing, bool reduction, bool matrix, bool audit, bool retention,
   generativeqc::cc::LambdaOptions options;
   options.serial_scratch_reuse = sharing;
   options.df_auxiliary_reduction = reduction;
-  options.df_matrix_gemm = matrix;
-  options.df_audit_matrix_gemm = audit;
+  options.qualification.ordered_response = !matrix;
+  options.qualification.ordered_audit = !audit;
   options.df_core_reuse = retention;
   options.max_bytes = budget;
   const std::size_t o=2,v=3,q=5,n1=o*v,n2=n1*n1,vv=v*v;
@@ -85,6 +85,7 @@ Plan plan(bool sharing, bool reduction, bool matrix, bool audit, bool retention,
   std::array<double*,6> cuts{};
   std::array<std::size_t,6> cut_sizes{};
   generativeqc::cc::LambdaDiagnostic metrics;
+  generativeqc::cc::DFPreparedRegions regions;
 """
         + planner
         + r"""
@@ -92,9 +93,10 @@ Plan plan(bool sharing, bool reduction, bool matrix, bool audit, bool retention,
   if (rollback == 2) drop_audit();
   if (rollback == 3) scalar_plan();
   if (rollback == 4) {
-    scalar_plan(); metrics.df_auxiliary_reduction=false;
+    scalar_plan(); regions.reduced=false;
     cursor=fallback_cursor; scratch_elements=scratch; capacity();
   }
+  regions.report(metrics);
   if (metrics.owned_device_bytes != allocation_bytes + metrics.df_provider_allowance_bytes)
     throw std::runtime_error("allocation disagrees with admission");
   if (sharing && (arena != staged_arena || arena != audit_offset))
@@ -238,6 +240,7 @@ PREFIX = r"""
 #include <mutex>
 #include <string>
 #include "cc/lambda_response.hpp"
+#include "cc/df_prepared_regions.hpp"
 #include "posthf/capacity.hpp"
 using generativeqc::posthf::checked_add;
 using generativeqc::posthf::checked_mul;

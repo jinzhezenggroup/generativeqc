@@ -971,10 +971,11 @@ RccsdNativeState run_rccsd_native_state(
     std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache,
     const std::vector<double>* initial_density, bool* warm_start_fallback,
     std::size_t external_reservation_bytes, const core::System* correlation_auxiliary,
-    bool retain_df_response, bool df_matrix_gemm, scf::CudaRhfBucketPlan** cuda_reference_plan,
-    std::size_t df_auxiliary_batch_limit, bool derived_denominators, bool packed_diis,
-    std::optional<bool> df_mixed_precision, double df_mixed_precision_switch_residual,
-    bool df_mp2_mode, bool df_reference, core::CorrelationConvergence convergence) {
+    bool retain_df_response, const cc::DFContractionQualification& qualification,
+    scf::CudaRhfBucketPlan** cuda_reference_plan, std::size_t df_auxiliary_batch_limit,
+    bool derived_denominators, bool packed_diis, std::optional<bool> df_mixed_precision,
+    double df_mixed_precision_switch_residual, bool df_mp2_mode, bool df_reference,
+    core::CorrelationConvergence convergence) {
   validate_descriptor(descriptor, execution);
   if (retain_df_response && !correlation_auxiliary)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -1004,7 +1005,7 @@ RccsdNativeState run_rccsd_native_state(
                       "RCCSD warm state exhausts correlation memory budget");
   const auto phase_budget = budget - external_reservation_bytes;
   auto solver_options = cc_options(descriptor, phase_budget, convergence);
-  solver_options.df_matrix_gemm = df_matrix_gemm;
+  solver_options.qualification = qualification;
   solver_options.df_auxiliary_batch_limit = df_auxiliary_batch_limit;
   solver_options.derived_denominators = derived_denominators;
   solver_options.packed_diis = packed_diis;

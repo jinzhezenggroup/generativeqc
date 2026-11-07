@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "cc/df_qualification.hpp"
 #include "core/correlation_convergence.hpp"
 
 namespace generativeqc::cc {
@@ -33,11 +34,8 @@ struct SolverOptions {
   // Internal DF scheduling control; dense/conventional paths are unaffected.
   // Admission retains the bounded original schedule when work or storage wins.
   bool df_auxiliary_reduction{true};
-  // Optional compiler-packed FP64 matrix contractions, with scalar fallback.
-  bool df_matrix_gemm{true};
-  // Independently admitted lowering of the original expanded physical replay.
-  // Disable for ablation; never reuse the primal's reduced intermediates.
-  bool df_replay_matrix_gemm{true};
+  // Explicit diagnostic exclusions; production selection is prepared admission.
+  DFContractionQualification qualification;
   // Optional free-occupied-spectator folding of the virtual ladder only.
   // Per-state projection bounds may refuse; the complete original arena and
   // independently expanded physical replay remain resident and unchanged.
