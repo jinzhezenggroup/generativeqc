@@ -1,0 +1,23 @@
+{
+  "id": "scf.combined-range-build",
+  "classification": "already-default",
+  "controls": ["ks-runtime:GENERATIVEQC_KS_COMBINED_RANGE_BUILD"],
+  "owner_issues": [2976],
+  "sources": [
+    "src/dft/cuda_ks.cpp",
+    "src/scf/cuda/direct_jk_source_lease.cpp",
+    "src/scf/cuda/direct_jk.cpp",
+    "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py"
+  ],
+  "rationale": "Complete strict restricted GPU LR sources may bind Full/LR coefficients at construction. Shared whole-shell consumers combine FP64 radial roots before the common recurrence; component fallback borrows the independent paired Full/LR evaluator. The retained allocation and Schwarz rows are unchanged, while the second complete source and mutation are avoided. Partial/mixed/DF/incremental/graph owners retain raw residency. Explicit 0 selects the incumbent two-producer combination and never disables an effective LR cache.",
+  "revisit_condition": "Require independent signed Full/LR matrix, screening, displaced geometry and f-shell gates plus source-bound complete A100/RTX5090 cold E/F/export and own-density-warm comparison against the incumbent combination. Retain immutable identity, finite auditing, bounded refusal and actual source work accounting.",
+  "evidence": [
+    "tests/python/test_range_resident_values_cuda.py",
+    "tests/native/ks_phase_values_probe.cpp",
+    "issue:#2976",
+    ".agents/notes/implemented/performance/2026-11-07-direct-composite-source-build.md",
+    "benchmarks/results/combined-range-build-20261107/README.md",
+    "benchmarks/results/combined-range-build-20261107/replay.py",
+    "benchmarks/results/combined-range-build-20261107/summary.json"
+  ]
+}
