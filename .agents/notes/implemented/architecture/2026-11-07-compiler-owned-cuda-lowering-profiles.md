@@ -96,11 +96,17 @@ native long-double/map/capture suites remain intact.
 The final focused host regression passes 819 cases, with 128 optional/toolchain
 skips. This includes 58 actual density/potential adapter admission/cost/fallback
 cases. Compiler structure (588 modules) and provider-selection ownership
-(14 files) report zero errors. Ruff and changed-line C++ formatting pass.
+(14 files) report zero errors. Ruff and pinned clang-format 23.1.3 pass.
 Compilation uses verified sccache 0.16.0 and retained shared caches. The successful
-incremental build reuses 130 cache entries in its preceding compilation stage;
-the final CMake/runtime-trace link fix needs only two further C++ compilations.
+incremental build retains receipts for 130 cache hits in its earlier compilation
+stage; subsequent link/format-only rebuilds reuse that same cache.
 No cache is cleared, disabled or weakened to obtain hits.
+
+The initial CI run exposed the pinned formatter's wrapping difference and a
+stale live-catalog snapshot. The supported catalog generator refreshes exactly
+the two current-input identity fields; capability summaries, retained campaign
+bytes, previous baseline and `stale=True` are unchanged. No historical receipt
+is promoted or relabeled. An additional 139 profile/panel/catalog tests pass.
 
 The full non-fast Release library and standalone native DFT driver compile,
 including production DF setup, occupied-exchange and DFT method units. The
@@ -120,8 +126,8 @@ provider/cache fallbacks.
 
 | Device/node | Final facts/Gram/native XC/public/precision job |
 | --- | --- |
-| RTX 5090 / node5 | 2010 |
-| RTX PRO 6000 Blackwell / node2 | 4111 |
+| RTX 5090 / node5 | 2011 |
+| RTX PRO 6000 Blackwell / node2 | 4113 |
 
 The Gram fixtures cover `(n,k)` = `(17,79)`, `(33,32769)`, `(385,65539)` and
 `(773,131075)`, signed weights and changed-input captured replay. They compare
@@ -137,11 +143,13 @@ about unsupported force properties, but the existing admission in
 `src/methods/dft_method_preparation.cpp` first rejects unqualified scaled/global
 composition with `NotImplementedError`/status 3. That failure occurs before the
 lowering changes and is retained, not weakened or counted as a pass. Endpoint
-suite elapsed times are 263.98 s (node5) and 241.06 s (node2), not paired
+suite elapsed times are 264.62 s (node5) and 241.39 s (node2), not paired
 performance comparisons. Both devices separately pass all 258 precision tests:
 232 host policy/ABI tests and 26 independent pinned native scientific endpoints.
 
-A supplementary node2 resource run (Slurm 4112) has 152 passes and nine failures.
+A supplementary pre-format node2 resource run (Slurm 4112, source identity
+`35dedcc0b4b25d299e543680b5715f8ce28399de003b5159826e605eff953f3b`)
+has 152 passes and nine failures.
 Two CUDA named-force tests need the omitted packaged `pbe_rks` stationary-force
 artifact. Seven CPU named-correction tests reach the existing compatibility
 correction owner, which those tests explicitly forbid. Neither frontend owner
@@ -150,16 +158,17 @@ The raw failures and all test coverage are retained rather than silently
 deselecting tests or promoting an unavailable production force path.
 
 Source identity:
-`35dedcc0b4b25d299e543680b5715f8ce28399de003b5159826e605eff953f3b`.
+`26f450c226dd16b4641629cf821d0f20fe5734051eba90424ead4704253b4a01`.
 The official inventory, retained source receipt and actual library getter agree
 on each device. Both use library SHA-256
-`bd7001056c3d0423ee0a7bf0e8078d9acc4d3eea48b6fcccc0c26b8e2d3ac174`
+`e5121ad29999c40cd37d0968b7d1f4f3de4eeaaecb14997dc9d843b35a42d3f6`
 and native XC driver SHA-256
 `748a312142113f14dfaca91cd07cc77f586d815ff7a624648667dee912e47d7f`.
 Raw build, cache, Slurm and qualification receipts are retained under
 `/data/jzzeng/compiler-lowering-20261107/` on the corresponding nodes, with
 `stacked-` prefixes for the final qualification and separate earlier attempts.
-Older master-based trial receipts are not relabeled as this source. Keep the
+Older master-based trials and the pre-format source-35 receipts are retained
+separately, not relabeled as this source. Keep the
 explicit toolkit ahead of the shared Conda environment's incomplete NVCC in
 `PATH`; the build pins `/group/software/cuda-12.9.1/bin/nvcc` directly.
 
