@@ -57,8 +57,12 @@ def independent_components(
     auxiliary: BasisSet | None = None,
     full_reference: bool = False,
     restricted: bool = False,
+    include_cc: bool = True,
 ) -> dict:
-    """Feed canonical input shells, never native orbitals/intermediates, to PySCF."""
+    """Feed canonical input shells, never native orbitals/intermediates, to PySCF.
+
+    High-cardinal CBS groups can omit CC, matching their HF/MP2-only workload.
+    """
     pyscf = pytest.importorskip("pyscf")
     from pyscf import cc, mp
 
@@ -148,15 +152,20 @@ def independent_components(
             reference.get_jk = exact_jk
         reference._eri = ao2mo.restore(8, fitted_eri, molecule.nao)
     perturbation = (mp.MP2 if restricted else mp.UMP2)(reference).run()
+    prefix = "" if restricted else "u"
+    result = {
+        "rhf" if restricted else "uhf": reference.e_tot,
+        prefix + "mp2": perturbation.e_tot,
+    }
+    if not include_cc:
+        return result
     coupled = (cc.CCSD if restricted else cc.UCCSD)(reference)
     coupled.conv_tol, coupled.conv_tol_normt, coupled.max_cycle = 1e-13, 1e-11, 200
     coupled.kernel()
     assert coupled.converged
     triples = coupled.ccsd_t()
-    prefix = "" if restricted else "u"
     return {
-        "rhf" if restricted else "uhf": reference.e_tot,
-        prefix + "mp2": perturbation.e_tot,
+        **result,
         prefix + "ccsd": coupled.e_tot,
         prefix + "ccsd(t)": coupled.e_tot + triples,
         "triples": triples,
@@ -704,12 +713,28 @@ def test_open_shell_cuda_convergence_failure_recovery(
     reason="real CUDA endpoint qualification must run under Slurm",
 )
 @pytest.mark.parametrize("hf_reference", ("exact", "df"))
+@pytest.mark.parametrize("auxiliary_g", (False, True))
 def test_open_shell_cuda_df_complete_cbs_force(
     compact_bases: tuple[CBSBasis, CBSBasis],
     hf_reference: str,
+    auxiliary_g: bool,
 ) -> None:
     """Qualify the complete fitted composite against independently fitted energies."""
     auxiliary = compact_bases[1].basis
+    if auxiliary_g:
+        element = auxiliary.by_element[1]
+        auxiliary = replace(
+            auxiliary,
+            elements=(
+                replace(
+                    element,
+                    shells=(
+                        *element.shells,
+                        BasisShell(4, ("0.65", "1.8"), (("0.8", "-0.1"),)),
+                    ),
+                ),
+            ),
+        )
     workflow = CCSDTCBSCalculator(
         compact_bases,
         device="cuda",
@@ -729,13 +754,15 @@ def test_open_shell_cuda_df_complete_cbs_force(
     )
     actual = workflow.singlepoint(ATOMS, multiplicity=2)
 
-    def composite(atoms: tuple) -> float:
-        values = [
+    def oracle(atoms: tuple) -> list[dict]:
+        return [
             independent_components(
                 record.basis, 0, 2, atoms, auxiliary, hf_reference == "df"
             )
             for record in compact_bases
         ]
+
+    def composite(values: list[dict]) -> float:
         ratio = math.exp(-1.63)
         return (
             (values[1]["uhf"] - ratio * values[0]["uhf"]) / (1 - ratio)
@@ -747,19 +774,44 @@ def test_open_shell_cuda_df_complete_cbs_force(
             - values[0]["ump2"]
         )
 
-    assert actual.energy == pytest.approx(composite(ATOMS), abs=1e-8)
-    step = 2e-4
-    energies = []
-    for sign in (-1, 1):
-        atoms = [(symbol, list(position)) for symbol, position in ATOMS]
-        atoms[1][1][0] += sign * step
-        energies.append(composite(tuple(atoms)))
-    assert actual.forces[1, 0] == pytest.approx(
-        -(energies[1] - energies[0]) / (2 * step), abs=3e-7
-    )
+    values = oracle(ATOMS)
+    assert actual.energy == pytest.approx(composite(values), abs=1e-8)
+    for component in actual.components:
+        index = int(component.basis_identity == compact_bases[1].basis.identity)
+        assert component.result.energy == pytest.approx(
+            values[index][component.method], abs=1e-8
+        )
+    direction = np.random.default_rng(3029).normal(size=(len(ATOMS), 3))
+    direction -= direction.mean(axis=0)
+    direction /= np.linalg.norm(direction)
+    for step in (2e-4, 6e-5):
+        displaced = [
+            oracle(
+                tuple(
+                    (symbol, np.asarray(position) + sign * step * shift)
+                    for (symbol, position), shift in zip(ATOMS, direction, strict=True)
+                )
+            )
+            for sign in (-1, 1)
+        ]
+        assert -np.vdot(actual.forces, direction) == pytest.approx(
+            (composite(displaced[1]) - composite(displaced[0])) / (2 * step), abs=3e-7
+        )
+        for component in actual.components:
+            index = int(component.basis_identity == compact_bases[1].basis.identity)
+            slope = (
+                displaced[1][index][component.method]
+                - displaced[0][index][component.method]
+            ) / (2 * step)
+            assert -np.vdot(component.result.forces, direction) == pytest.approx(
+                slope, abs=3e-7
+            )
     assert all(
         component.result.executed_backend == "cuda" for component in actual.components
     )
+    replay = workflow.singlepoint(ATOMS, multiplicity=2, properties=("energy",))
+    assert replay.energy == pytest.approx(actual.energy, abs=1e-10)
+    assert replay.forces is None
 
 
 def test_open_shell_cbs_correction_above_twelve_aos() -> None:
@@ -927,4 +979,179 @@ def test_physical_df_cbs_size_ladder(atom_count: int) -> None:
             (displaced[1] - displaced[0]) / (2 * step),
             atol=5e-7,
             rtol=0,
+        )
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_OPEN_SHELL_AUXILIARY_G_CUDA_TEST") != "1",
+    reason="requires allocated physical Na/B auxiliary-g UHF/UMP2 qualification",
+)
+@pytest.mark.parametrize(
+    "symbol,orbital_name,auxiliary_name",
+    (
+        ("Na", "cc-pvdz", "def2-universal-jkfit"),
+        ("B", "cc-pvtz", "cc-pvtz-jkfit"),
+    ),
+)
+def test_physical_auxiliary_g_full_df_ump2(
+    symbol: str, orbital_name: str, auxiliary_name: str
+) -> None:
+    """Isolate the reported failing cardinal without requiring atomic CC triples.
+
+    The separate full-CBS gate retains the complete requested workload. Compact
+    molecular CBS tests exercise nonzero CCSD(T)/MP2/HF directional responses.
+    """
+    from pyscf import gto
+
+    from tools.generativeqc_validation.correlation_df_oracle import basis_snapshot
+
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests must run through srun"
+    number = gto.charge(symbol)
+    atoms = ((symbol, (0.1, -0.2, 0.3)),)
+    basis = basis_snapshot(orbital_name, (number,))
+    fit = basis_snapshot(auxiliary_name, (number,))
+    assert max(shell.angular_momentum for shell in fit.by_element[number].shells) == 4
+    owner = Calculator(
+        method="ump2",
+        basis=basis,
+        auxiliary_basis=fit,
+        density_fitting="full_cuda",
+        device="cuda",
+        initial_guess=None,
+        correlation_memory_budget_bytes=32 << 30,
+        max_iterations=300,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-11,
+    )
+    try:
+        actual = owner.singlepoint_components(
+            atoms, companions=("uhf",), multiplicity=2, properties=("energy", "forces")
+        )
+    finally:
+        owner.clear_cache()
+
+    def oracle(geometry: tuple) -> dict:
+        return independent_components(
+            basis, 0, 2, geometry, fit, True, include_cc=False
+        )
+
+    expected = oracle(atoms)
+    for method, result in actual.items():
+        assert result.converged and result.executed_backend == "cuda"
+        assert result.energy == pytest.approx(expected[method], abs=3e-8)
+        np.testing.assert_allclose(result.forces, 0, atol=2e-8, rtol=0)
+    direction = np.array([[0.3, -0.4, 0.5]])
+    for step in (1e-3, 3e-4):
+        values = [
+            oracle(((symbol, np.asarray(atoms[0][1]) + sign * step * direction[0]),))
+            for sign in (-1, 1)
+        ]
+        for method, result in actual.items():
+            slope = (values[1][method] - values[0][method]) / (2 * step)
+            assert -np.vdot(result.forces, direction) == pytest.approx(slope, abs=5e-7)
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_OPEN_SHELL_AUXILIARY_G_CBS_CUDA_TEST") != "1",
+    reason="requires a long allocated physical Na/B auxiliary-g CBS qualification",
+)
+@pytest.mark.parametrize(
+    "symbol,auxiliary_names",
+    (
+        ("Na", ("def2-universal-jkfit", "def2-universal-jkfit")),
+        ("B", ("cc-pvdz-jkfit", "cc-pvtz-jkfit")),
+    ),
+)
+def test_physical_auxiliary_g_full_df_cbs(
+    symbol: str, auxiliary_names: tuple[str, str]
+) -> None:
+    """Preserve complete Na/B fitting bases and qualify the requested CBS route.
+
+    Atomic translations check the real reproducer's force contract. The compact
+    molecular g regression separately checks nonzero internal-coordinate slopes.
+    Only the low cardinal requires independent CCSD(T), matching the CBS work.
+    """
+    from tools.generativeqc_validation.correlation_df_oracle import basis_snapshot
+
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests must run through srun"
+    from pyscf import gto
+
+    number = gto.charge(symbol)
+    atoms = ((symbol, (0.1, -0.2, 0.3)),)
+    bases = tuple(
+        CBSBasis(basis_snapshot(name, (number,)), cardinal)
+        for name, cardinal in zip(("cc-pvdz", "cc-pvtz"), (2, 3), strict=True)
+    )
+    fits = tuple(basis_snapshot(name, (number,)) for name in auxiliary_names)
+    assert (
+        max(
+            shell.angular_momentum
+            for fit in fits
+            for shell in fit.by_element[number].shells
+        )
+        == 4
+    )
+    workflow = CCSDTCBSCalculator(
+        bases,
+        auxiliary_bases=fits,
+        hf_reference="df",
+        device="cuda",
+        policy="tight",
+        preconvergence="auto",
+        calculator_options={
+            "initial_guess": None,
+            "max_iterations": 300,
+            "ccsd_max_iterations": 200,
+            "correlation_memory_budget_bytes": 32 << 30,
+        },
+    )
+    actual = workflow.singlepoint(
+        atoms, multiplicity=2, properties=("energy", "forces")
+    )
+    assert actual.converged and actual.executed_backend == "cuda"
+
+    def oracle(geometry: tuple) -> list[dict]:
+        return [
+            independent_components(
+                basis.basis, 0, 2, geometry, fit, True, include_cc=index == 0
+            )
+            for index, (basis, fit) in enumerate(zip(bases, fits, strict=True))
+        ]
+
+    def component_values(values: list[dict]) -> np.ndarray:
+        return np.array(
+            [
+                values[int(component.basis_identity == bases[1].basis.identity)][
+                    component.method
+                ]
+                for component in actual.components
+            ]
+        )
+
+    expected = component_values(oracle(atoms))
+    coefficients = np.array([component.coefficient for component in actual.components])
+    assert actual.energy == pytest.approx(coefficients @ expected, abs=3e-8)
+    for component, energy in zip(actual.components, expected, strict=True):
+        assert (
+            component.result.converged and component.result.executed_backend == "cuda"
+        )
+        assert component.result.energy == pytest.approx(energy, abs=3e-8)
+        np.testing.assert_allclose(component.result.forces, 0, atol=2e-8, rtol=0)
+    direction = np.array([[0.3, -0.4, 0.5]])
+    for step in (1e-3, 3e-4):
+        values = [
+            component_values(
+                oracle(
+                    ((symbol, np.asarray(atoms[0][1]) + sign * step * direction[0]),)
+                )
+            )
+            for sign in (-1, 1)
+        ]
+        slopes = (values[1] - values[0]) / (2 * step)
+        for component, slope in zip(actual.components, slopes, strict=True):
+            assert -np.vdot(component.result.forces, direction) == pytest.approx(
+                slope, abs=5e-7
+            )
+        assert -np.vdot(actual.forces, direction) == pytest.approx(
+            coefficients @ slopes, abs=5e-7
         )

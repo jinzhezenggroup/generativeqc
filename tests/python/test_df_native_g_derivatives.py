@@ -33,7 +33,7 @@ def calculator(inputs: dict) -> Calculator:
     The validation bridge creates its own CUDA context and calls the standalone
     native weighted API. A CPU descriptor admits auxiliary g during metadata
     construction; no CPU value, derivative, or SCF calculation is performed.
-    Public CUDA method capability gates deliberately remain unchanged.
+    This bridge does not rely on a molecular method's admission or response.
     """
     return Calculator(
         device="cpu",
@@ -173,10 +173,12 @@ def test_g_weighted_tight_budget_and_nonfinite_rejection() -> None:
         ("spherical", "cartesian"),
     ],
 )
+@pytest.mark.parametrize("exporter", (False, True))
 def test_native_g_raw_metric_and_fixed_transform_tiles(
     tmp_path: Path,
     orbital_rep: str,
     auxiliary_rep: str,
+    exporter: bool,
 ) -> None:
     """The second batch item changes shell/atom offsets without changing sizes.
 
@@ -198,7 +200,14 @@ def test_native_g_raw_metric_and_fixed_transform_tiles(
     inputs, prefix = tmp_path / "systems.txt", tmp_path / "native"
     write_input(inputs, systems)
     subprocess.run(
-        [probe, str(inputs), str(prefix), "137", "11", "--source-derivatives"],
+        [
+            probe,
+            str(inputs),
+            str(prefix),
+            "137",
+            "11",
+            "--derivatives" if exporter else "--source-derivatives",
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -211,17 +220,27 @@ def test_native_g_raw_metric_and_fixed_transform_tiles(
             "metric",
             "raw_derivative",
             "metric_derivative",
-            "transformed_derivative",
         )
     }
+    if not exporter:
+        expected["transformed_derivative"] = []
     for orbital, auxiliary in systems:
         a, m, da, dm = reference_df_matrices(orbital, auxiliary)
         q = m.shape[0]
         transform = np.fromfunction(
             lambda p, r: np.where(p == r, 0.7, 0.02 / (1 + p + r)), (q, q)
         )
-        for key, value in zip(expected, (a, m, da, dm, da @ transform), strict=True):
+        values = (a, m, da, dm) if exporter else (a, m, da, dm, da @ transform)
+        for key, value in zip(expected, values, strict=True):
             expected[key].append(value)
+    if exporter:
+        for kind in ("bulk", "single"):
+            expected.update(
+                {
+                    f"{kind}_{key}": expected[key]
+                    for key in ("raw", "metric", "raw_derivative", "metric_derivative")
+                }
+            )
     for key, values in expected.items():
         reference = np.asarray(values)
         actual = np.fromfile(str(prefix) + f"-{key}.bin", dtype=np.float64).reshape(
