@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "readme-a100-20261108",
+  "owner": "A100 non-CBS README endpoint audit, issue 2976 and PR 3041",
+  "reason": "Lossless exact text and FP64-word capsule retains all 128 fresh processes, 512 complete endpoints, independent qualification failures, source/image identities and scheduler/transfer receipts. Offline replay recomputes the entire matrix and independent qualification without GPU execution. Storage classification is not a claim of universal performance or scientific acceptance. No evidence budget is increased.",
+  "review_document": "benchmarks/results/readme-a100-20261108/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/readme-a100-20261108/fp64.xz",
+      "family": "readme-a100-20261108",
+      "bytes": 286888,
+      "sha256": "20ddd0f77eff8a7128eddcef5ca77d6853ee18535ac1493793d6a50121d6f606",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact FP64 words for the complete original endpoint and diagnostic text receipts."
+    },
+    {
+      "path": "benchmarks/results/readme-a100-20261108/receipts.json.xz",
+      "family": "readme-a100-20261108",
+      "bytes": 184128,
+      "sha256": "5a4c0de7f1ebecf4d23fe87098588fde0d3002be1356f7219c23d0cadc55459c",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless original text recipes, checksums and complete source-bound acquisition/scientific receipts."
+    }
+  ]
+}
