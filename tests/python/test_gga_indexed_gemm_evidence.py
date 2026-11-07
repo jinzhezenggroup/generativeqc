@@ -60,6 +60,13 @@ def test_early_loss_is_not_replaced_by_a_later_point_win() -> None:
         "warm",
         "default_control",
         "missing_cohort",
+        "empty_inventory",
+        "incomplete_inventory",
+        "invalid_work_counters",
+        "lower_precision",
+        "incomplete_work",
+        "zero_coulomb",
+        "zero_exchange",
     ],
 )
 def test_gga_replay_rejects_semantic_corruption(corruption: str) -> None:
@@ -68,6 +75,40 @@ def test_gga_replay_rejects_semantic_corruption(corruption: str) -> None:
     evidence = module["load_evidence"]()
     if corruption == "missing_cohort":
         del evidence["groups"]["final-5090"]
+    elif corruption in {
+        "empty_inventory",
+        "incomplete_inventory",
+        "invalid_work_counters",
+        "lower_precision",
+        "incomplete_work",
+        "zero_coulomb",
+        "zero_exchange",
+    }:
+        # Both arms are changed so the paired policy/work equality still holds.
+        for arm in ("off", "default"):
+            name = f"raw/final-a100/pbe0-df-{arm}.json"
+            record = json.loads(evidence["files"][name])
+            for sample in record["samples"]:
+                precision = sample["precision"]
+                work = sample["ks_diagnostic"]["coulomb_exchange_work"]
+                if corruption == "empty_inventory":
+                    precision["operators"] = []
+                elif corruption == "incomplete_inventory":
+                    precision["operator_inventory_complete"] = False
+                elif corruption == "invalid_work_counters":
+                    precision["operator_work_counters_valid"] = False
+                elif corruption == "lower_precision":
+                    precision["operators"][0]["compute"] = "fp32"
+                elif corruption == "incomplete_work":
+                    work["complete"] = False
+                elif corruption == "zero_coulomb":
+                    work["coulomb_applications"] = 0
+                else:
+                    work["exchange_applications"] = 0
+            evidence["files"][name] = json.dumps(record, indent=2) + "\n"
+            evidence["sha256"][name] = hashlib.sha256(
+                evidence["files"][name].encode()
+            ).hexdigest()
     else:
         name = "raw/final-a100/pbe0-df-default." + (
             "env" if corruption == "default_control" else "json"

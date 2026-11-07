@@ -339,10 +339,49 @@ def replay(directory: Path = DIRECTORY, *, evidence: dict | None = None) -> dict
                             ),
                             "wrong native image",
                         )
+                        precision = sample["precision"]
                         require(
-                            sample["precision"]["effective_bits"] == 64
-                            and sample["precision"]["mixed_stage_fock_builds"] == 0,
+                            precision.get("complete") is True
+                            and precision.get("operator_inventory_complete") is True
+                            and precision.get("operator_work_counters_valid") is True
+                            and bool(precision.get("operators")),
+                            "incomplete operator inventory",
+                        )
+                        require(
+                            precision["requested_mode"] == "fp64"
+                            and precision["effective_bits"] == 64
+                            and precision["mixed_stage_fock_builds"] == 0
+                            and precision["execution_retries"] == 0
+                            and all(
+                                operator[key] == "fp64"
+                                for operator in precision["operators"]
+                                for key in (
+                                    "storage",
+                                    "compute",
+                                    "accumulation",
+                                    "reduction",
+                                )
+                            ),
                             "non-FP64 work",
+                        )
+                        expected_focks = (
+                            (10 if record["method"] == "pbe" else 9)
+                            if index == 0
+                            else 1
+                        )
+                        require(
+                            sample["fock_builds"] == expected_focks
+                            and precision["strict_stage_fock_builds"] == expected_focks
+                            and precision["post_scf_fock_builds"] == 0,
+                            "incomplete solver work",
+                        )
+                        work = sample["ks_diagnostic"]["coulomb_exchange_work"]
+                        require(
+                            work.get("complete") is True
+                            and work.get("coulomb_applications") == expected_focks
+                            and work.get("exchange_applications")
+                            == (0 if record["method"] == "pbe" else expected_focks),
+                            "incomplete Coulomb/exchange work",
                         )
                 if arm != "reference" and group.get("environments"):
                     control = dict(
