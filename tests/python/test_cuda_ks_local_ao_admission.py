@@ -438,6 +438,7 @@ struct Fixture {
  void *xc_arena=nullptr,*nonlocal_xc_arena=nullptr,*fast_anchor_arena=nullptr,*nonlocal_arena=nullptr,*arena=nullptr;
  // The optional frozen VV10 potential owns storage independently of the grid.
  void* nonlocal_anchor_arena=nullptr;
+ void* rebase_arena=nullptr;
  std::unique_ptr<CudaXcPlan> xc,nonlocal_xc,eigensolver;Resettable matrix_products;
  std::optional<runtime::DeviceProviderAllowance> matrix_provider_allowance;
  struct{void* stream=nullptr;}range_fock_binding;void retire_phase_source(bool){}
@@ -459,7 +460,10 @@ int main(){
    assert(ok && "independent grid must preserve the dense primary fallback");
    if(ok&&split){assert(f.resource.xc_device_bytes==192*1024);assert(f.resource.grid_device_bytes==1024);}
    if(maps&&split)assert(!f.admit_ao);
-   if(anchor)assert(runtime::resource_cuda_malloc(&f.nonlocal_anchor_arena,4096)==cudaSuccess);
+   if(anchor){
+    assert(runtime::resource_cuda_malloc(&f.nonlocal_anchor_arena,4096)==cudaSuccess);
+    assert(runtime::resource_cuda_malloc(&f.rebase_arena,2048)==cudaSuccess);
+   }
   }assert(runtime::owned.empty()&&runtime::free_bytes==208*1024);
   std::cout<<"success maps="<<maps<<" split="<<split<<" result="<<ok<<" cleanup=complete\n";
  }

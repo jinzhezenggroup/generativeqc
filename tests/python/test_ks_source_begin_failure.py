@@ -41,6 +41,8 @@ def test_phase_source_begin_failure_is_terminal_and_releases_the_lease(
 #include <vector>
 #include "scf/coulomb_exchange_work.hpp"
 #include "scf/diis_work.hpp"
+#include "dft/vv10_rebase_history.hpp"
+namespace vv10_rebase = generativeqc::dft::vv10_rebase;
 #include <cstring>
 constexpr int GENERATIVEQC_PRECISION_FP64 = 64;
 constexpr int cudaMemcpyDeviceToDevice = 0, cudaMemcpyHostToDevice = 1;
@@ -85,6 +87,13 @@ struct Family {
 };
 const Family* semilocal_family_metadata_from_code(int) { return nullptr; }
 struct Owner {
+  bool rebase_active = true, rebase_bank_pending = true, rebase_receipt_published = true;
+  vv10_rebase::Transaction rebase_readback = [] {
+    vv10_rebase::Transaction value{};
+    value.ready = 1;
+    value.work.snapshots = 3;
+    return value;
+  }();
   bool is_pending{}, diis_work_published = true, diis_work_ready = true;
   bool ordered_diis_gram = true, incremental_diis_gram = true;
   std::unique_ptr<scf::DiisWorkReadback> diis_work_readback =
@@ -175,12 +184,17 @@ struct Owner {
     if (scenario == 4) throw std::runtime_error("cold factor preparation failure");
   }
   void retire_phase_source(bool) { ++retired; phase_source.reset(); }
+  void prepare_rebase_history(bool native_cold, bool use_warm) {
+    // External cold input in this source-admission probe is not an eligible bridge.
+    assert(!native_cold && !use_warm);
+  }
   void restore_warm_seed() { throw std::logic_error("unexpected warm seed in cold begin probe"); }
   void rebase_warm_energy(bool) { throw std::logic_error("unexpected warm anchor in cold begin probe"); }
   void begin() {
     const std::vector<double>* input = nullptr;
     const auto seed_origin = CudaKsSeedOrigin::External;
     const bool use_warm = false, retain_range_source = false;
+    const bool native_cold_seed = seed_origin == CudaKsSeedOrigin::NativeColdGuess;
     // This probe exercises optional source-admission failures; its ordinary
     // begin transaction has no provisional nonlocal initializer.
     const bool nonlocal_initialization = false;
@@ -209,6 +223,8 @@ int main(int argc, char** argv) {
     assert(owner.diis_work_ready == (scenario == 4));
     if (scenario == 4) assert(owner.diis_work_readback->work.dots == 0);
     assert(owner.is_failed && !owner.is_active);
+    assert(!owner.rebase_active && !owner.rebase_bank_pending && !owner.rebase_receipt_published);
+    assert(owner.rebase_readback.ready == 0 && owner.rebase_readback.work.snapshots == 0);
     assert(owner.last_physical == 0 && owner.final_rejection_detail.empty() &&
            owner.final_probe_iteration == 0);
     assert(!owner.output.dft_diagnostic.coulomb_exchange_work.complete);

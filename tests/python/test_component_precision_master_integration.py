@@ -92,7 +92,12 @@ struct Owner {
   }
   unsigned configured_chunk_width() const { return width; }
   bool configured_replay_enabled() const { return true; }
+  void prepare_rebase_history(bool native_cold, bool use_warm) {
+    assert(!native_cold && !use_warm);
+  }
   bool chunk() {
+    // This guard probe has neither a native-cold solve nor a warm input.
+    const bool native_cold_seed = false, use_warm = false;
 """
         + chunk
         + "    return device_chunk_mode;\n  }\n  bool replay() {\n"
