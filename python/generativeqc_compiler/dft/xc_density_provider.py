@@ -14,12 +14,25 @@ extern "C" void xc_density_indexed_provider_for_test(bool library) {
 }
 #endif
 std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(
-    const CudaXcLayout& l, cudaStream_t stream, std::size_t budget, bool indexed_gemm) {
+    const CudaXcLayout& l, cudaStream_t stream, std::size_t provider_budget,
+    std::size_t automatic_budget, std::uint64_t expected_replays) {
+  if (!expected_replays) throw std::invalid_argument("density reuse must be positive");
+  // Automatic storage is a separate optional quote, not permission to expand
+  // the caller's ordinary generated/provider reservation after a profile miss.
+  const bool indexed_gemm=indexed_fp64_profile_rejection(l,automatic_budget).empty();
+  const auto budget=indexed_gemm ? automatic_budget : provider_budget;
+  bool qualified_indexed_gemm=indexed_gemm;
+#if defined(GENERATIVEQC_TEST_HOOKS)
+  // Small oracle fixtures exercise the exact production FP64 math policy,
+  // without exposing a public recipe bypass or expanding automatic admission.
+  qualified_indexed_gemm=qualified_indexed_gemm ||
+      (l.local_ao && tensor::panel_product_bounded_library_for_test);
+#endif
   return std::make_unique<tensor::CudaPanelProduct>(
       density_lowering_request, density_lowering_candidates, density_lowering_target,
       density_lowering_compilation, l.nao, tensor::contraction_product(l.work_jets,l.tile_points),
       l.spins, stream, budget, tiled_xc_admitted(l.nao,l.tile_points,l.spins,l.work_jets) ? 1 : 0,
-      l.local_ao ? 5 : 4, !l.response, indexed_gemm);
+      l.local_ao ? 5 : 4, !l.response, qualified_indexed_gemm, expected_replays);
 }
 #if defined(GENERATIVEQC_TEST_HOOKS)
 extern "C" void xc_density_materialize_for_test(cudaStream_t stream, const double* density,

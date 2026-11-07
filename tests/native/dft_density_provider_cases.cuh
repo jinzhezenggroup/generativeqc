@@ -26,7 +26,8 @@ void density_provider_scalar_cases(bool indexed = false) {
       const auto spins = layout.spins, jets = layout.work_jets;
       xc_density_provider_for_test(true, false);
       xc_density_indexed_provider_for_test(indexed);
-      auto product = cuda_xc_detail::prepare_density_provider(layout, stream.value, 128ULL << 20);
+      auto product =
+          cuda_xc_detail::prepare_density_provider(layout, stream.value, 128ULL << 20, 0, 1);
       xc_density_provider_for_test(false, false);
       xc_density_indexed_provider_for_test(false);
       require(product->enabled(), "scalar gate did not bind GEMM");

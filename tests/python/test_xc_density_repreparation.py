@@ -145,10 +145,12 @@ CudaXcDensityBinding prepare_density_binding(std::size_t, std::size_t count,
   return result;
 }
 std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(
-    const Layout& l, int, std::size_t budget, bool indexed_gemm) {
+    const Layout& l, int, std::size_t budget, std::size_t automatic_budget, std::uint64_t) {
   ++provider_calls;
   if (provider_failure) throw std::bad_alloc();
   const auto bytes = l.spins*l.nao*l.nao*sizeof(double);
+  const bool indexed_gemm=automatic_budget && l.local_ao && !l.response;
+  if(indexed_gemm) budget=automatic_budget;
   return std::make_unique<tensor::PreparedPanelProduct>(
       (qualified || indexed_gemm) && !unavailable && !l.response &&
           budget >= provider_allowance+bytes, bytes);
@@ -176,6 +178,7 @@ void select_ao_chunk(const Layout& l, int, void*, const double*, std::size_t,
 struct CudaXcPlan {
   Layout layout_;
   bool evaluation_started_{};
+  bool mixed_matrix_contractions_{}, mixed_pbe_ao_{};
   double* point_batch_arena_{};
   double* point_totals_{};
   int stream_{7};
@@ -195,7 +198,7 @@ struct CudaXcPlan {
   struct { std::size_t setup_h2d_bytes{}, synchronizations{}; } transfers_;
   CudaXcAoSelectionWork ao_selection_work_;
   void check_device() const { check(device_failure); }
-  void prepare_density(PrecisionDirective, std::uint64_t = 1, std::size_t = 0, bool = false);
+  void prepare_density(PrecisionDirective, std::uint64_t = 1, std::size_t = 0, std::size_t = 0);
   const tensor::PreparedPanelProduct* density_execution_provider(PrecisionPhase) const;
   const CudaXcDensityBinding& density_binding(PrecisionPhase) const;
   bool select_local_ao(double, std::size_t, CudaXcAoDiscovery = CudaXcAoDiscovery::HostTiles);
@@ -386,21 +389,20 @@ void batched() {
 void indexed_qualification() {
   qualified = false;
   CudaXcPlan owner;
-  const Snapshot initial(owner);
-  require(rejected([&] { owner.prepare_density(strict, 3, budget, true); }),
-          "dense domain accepted indexed qualification");
-  initial.unchanged(owner);
+  owner.prepare_density(strict, 3, 0, budget);
+  require(!owner.density_provider_->enabled(), "dense domain accepted indexed qualification");
   owner.layout_.local_ao = true;
   owner.layout_.response = true;
-  require(rejected([&] { owner.prepare_density(strict, 3, budget, true); }),
-          "response accepted physical indexed qualification");
+  owner.prepare_density(strict, 3, 0, budget);
+  require(!owner.density_provider_->enabled(), "response accepted physical indexed qualification");
   owner.layout_.response = false;
-  require(rejected([&] { owner.prepare_density(mixed, 3, budget, true); }),
+  const Snapshot before_mixed(owner);
+  require(rejected([&] { owner.prepare_density(mixed, 3, 0, budget); }),
           "mixed arithmetic accepted strict indexed qualification");
-  initial.unchanged(owner);
-  owner.prepare_density(strict, 3, 1, true);
+  before_mixed.unchanged(owner);
+  owner.prepare_density(strict, 3, 0, 1);
   require(!owner.density_provider_->enabled(), "small budget bypassed indexed admission");
-  owner.prepare_density(strict, 3, budget, true);
+  owner.prepare_density(strict, 3, 0, budget);
   require(owner.density_provider_->enabled(), "explicit indexed qualification was lost");
 }
 int main(int argc, char** argv) {

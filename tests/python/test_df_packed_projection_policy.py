@@ -28,11 +28,15 @@ int main() {
   using namespace generativeqc::scf;
   std::size_t n, a, rank, capacity;
   int ratio;
-  while (std::cin >> n >> a >> rank >> capacity >> ratio)
-    std::cout << df_packed_projection_preferred(n, a, rank, capacity, ratio) << " "
+  while (std::cin >> n >> a >> rank >> capacity >> ratio) {
+    generativeqc::runtime::CudaTargetInfo target;
+    target.compute_capability_major=7;
+    target.fp32_fp64_ratio=ratio;
+    std::cout << df_packed_projection_preferred(n, a, rank, capacity, target) << " "
               << df_packed_projection_policy_valid() << " "
               << df_packed_projection_auto_requested() << " "
               << df_packed_projection_blas_requested() << "\n";
+  }
 }
 """
     )

@@ -291,9 +291,10 @@ class CudaXcPlan {
    * numeric arena and covers opaque provider storage plus any compact-output
    * cache, reported separately by the binding. Discover maps before preparing
    * optional resources; a dense preparation does not qualify indexed scatter.
-   * The method owner must explicitly admit a qualified indexed GEMM recipe;
-   * budget alone never promotes a library path. */
-  void prepare_potential(std::size_t provider_budget = 0, bool indexed_gemm = false);
+   * The compiler adapter owns hardware/workload qualification; the method only
+   * supplies its admitted budget and expected reuse. Unknown costs preserve the
+   * existing qualified profile, without probing kernels or cold autotuning. */
+  void prepare_potential(std::size_t provider_budget = 0, std::uint64_t expected_replays = 1);
   const tensor::SymmetricProductDiagnostic& potential_lowering() const noexcept {
     return potential_binding_->diagnostic();
   }
@@ -307,11 +308,12 @@ class CudaXcPlan {
    * enabled provider, another nonzero-budget preparation is rejected before
    * binding/provider setup; use zero budget to release it transactionally first.
    * A failed preparation preserves the previous tables and provider. Indexed
-   * GEMM additionally requires explicit method-owned endpoint qualification;
-   * a nonzero budget alone does not admit this recipe. */
+   * GEMM qualification belongs to the compiler; automatic capacity is separate
+   * from the ordinary resource quote. Compiler
+   * admission checks hardware, workload and precision; budgets do not force GEMM. */
   void prepare_density(generativeqc::runtime::PrecisionDirective admitted,
                        std::uint64_t expected_replays = 1, std::size_t provider_budget = 0,
-                       bool indexed_gemm = false);
+                       std::size_t automatic_provider_budget = 0);
   const CudaXcDensityBinding& density_binding(generativeqc::runtime::PrecisionPhase phase) const;
   /** Optional owner charges are separate from the ordinary arena. A positive
    * device allowance alone does not qualify a new endpoint/provider profile. */
@@ -460,19 +462,17 @@ namespace cuda_xc_detail {
 bool compact_point_batch_admitted(const CudaXcLayout& layout,
                                   const std::vector<std::size_t>& ao_offsets,
                                   std::size_t first_tile, std::size_t end_tile, bool ragged);
-std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(const CudaXcLayout& layout,
-                                                                    cudaStream_t stream,
-                                                                    std::size_t provider_budget,
-                                                                    bool indexed_gemm = false);
+std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(
+    const CudaXcLayout& layout, cudaStream_t stream, std::size_t provider_budget,
+    std::uint64_t expected_replays = 1);
 /** Compiler-emitted bounded selection; no CUDA calls and no runtime probing. */
 CudaXcDensityBinding prepare_density_binding(std::int64_t n, std::int64_t count, std::int64_t spins,
                                              std::int64_t work_jets,
                                              generativeqc::runtime::PrecisionDirective admitted,
                                              std::uint64_t expected_replays);
-std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(const CudaXcLayout& layout,
-                                                                       cudaStream_t stream,
-                                                                       std::size_t provider_budget,
-                                                                       bool indexed_gemm = false);
+std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(
+    const CudaXcLayout& layout, cudaStream_t stream, std::size_t provider_budget,
+    std::size_t automatic_budget, std::uint64_t expected_replays);
 
 /** Populate one host flag per global AO from all actual jets in a point tile.
  * The caller lends full-capacity panels and owns stream/error lifetimes. */

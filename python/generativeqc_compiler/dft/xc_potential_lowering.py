@@ -15,6 +15,8 @@ from generativeqc_compiler.tensor.symmetric_product import (
     emit_symmetric_product_portfolio,
 )
 
+from .xc_lowering_profile import emit_indexed_fp64_profile
+
 
 def potential_panel_program(jets: int, points: int, columns: int) -> Program:
     """Publish A^T W + W^T A; compact_panel_program owns all XC coefficients.
@@ -35,16 +37,23 @@ def potential_panel_program(jets: int, points: int, columns: int) -> Program:
 
 
 def emit_potential_portfolio(source: str) -> str:
-    """Emit a prepared provider owner for bounded full/tail/local tiles."""
+    """Emit bounded full/tail/local execution and the existing FP64 profile.
+
+    Profile axes are AO columns, total grid points, work jets and tile points.
+    Bounds preserve the independently qualified large-local endpoint domain;
+    they are not timing estimates. Complete costs, when available, remain owned
+    by the common native selector, including preparation and expected reuse.
+    """
     portfolio = emit_symmetric_product_portfolio(
         potential_panel_program(4, 3, 2),
         "potential",
-        canonical_hash({"schedule": source}),
+        canonical_hash({"schedule": source, "profile": emit_indexed_fp64_profile()}),
         name="xc_potential",
     )
     return "\n".join(  # noqa: FLY002 - generated source is reviewed line by line
         (
             '#include "tensor/cuda_symmetric_product.cuh"',
+            emit_indexed_fp64_profile(),
             "#if defined(GENERATIVEQC_TEST_HOOKS)",
             'extern "C" void xc_potential_qualification_for_test(bool library, bool unavailable) {',
             "  generativeqc::tensor::symmetric_product_library_for_test=library;",
@@ -57,11 +66,21 @@ def emit_potential_portfolio(source: str) -> str:
             "namespace generativeqc::dft::cuda_xc_detail {",
             portfolio,
             "std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(",
-            "    const CudaXcLayout& l, cudaStream_t stream, std::size_t provider_budget, bool indexed_gemm) {",
+            "    const CudaXcLayout& l, cudaStream_t stream, std::size_t provider_budget, std::uint64_t expected_replays) {",
+            '  if (!expected_replays) throw std::invalid_argument("potential reuse must be positive");',
+            "  auto offers=xc_potential_candidates;",
+            "  auto rejection=indexed_fp64_profile_rejection(l,provider_budget);",
+            "  bool indexed_gemm=l.local_ao;",
+            "#if defined(GENERATIVEQC_TEST_HOOKS)",
+            "  if (tensor::symmetric_product_indexed_gemm_for_test) rejection={};",
+            "  if (tensor::symmetric_product_indexed_library_for_test &&",
+            "      !tensor::symmetric_product_indexed_gemm_for_test) indexed_gemm=false;",
+            "#endif",
+            "  offers[3].rejection=rejection;",
             "  return std::make_unique<tensor::CudaSymmetricProduct>(",
-            "      xc_potential_request,xc_potential_candidates,xc_potential_target,xc_potential_compilation,",
+            "      xc_potential_request,offers,xc_potential_target,xc_potential_compilation,",
             "      l.nao,tensor::contraction_product(l.work_jets,l.tile_points),l.spins,stream,provider_budget,",
-            "      l.local_ao,!l.local_ao || l.ao_map_entries!=0,indexed_gemm);",
+            "      l.local_ao,!l.local_ao || l.ao_map_entries!=0,indexed_gemm,expected_replays);",
             "}",
             "} // namespace generativeqc::dft::cuda_xc_detail",
         )

@@ -156,7 +156,8 @@ provider handle uses default math mode only for this recipe; it does not permit
 TF32, operand conversion, or a lower accumulation dtype. Mode selection precedes
 capture and never changes another owner's handle.
 
-The KS owner can admit indexed GEMM for local strict-FP64 panels with at least
+The compiler's XC density and potential adapters share an indexed-GEMM profile
+for local strict-FP64 panels with at least
 512 AOs, 2^19 points and four work jets when the reported FP32/FP64 throughput
 ratio is positive and at most two, with compute capability major at least eight.
 Older full-rate scalar FP64 devices retain generated execution because scalar
@@ -167,6 +168,48 @@ execution. Unknown capability and unadmitted resource/provider domains also keep
 the incumbent. The policy preserves user SCF and force tile sizes; it does not
 identify devices by GPU name or establish a universal performance guarantee.
 Dense and indexed SYR2K remain available to explicit native qualification.
+
+`runtime::CudaTargetInfo` is the shared capability record: compute capability,
+FP32/FP64 throughput ratio, shared-memory/register limits, SM count, clock rates,
+memory bus width and capacity come from `runtime::cuda_device_facts`. The selected
+attribute route and full-property fallback publish the same fields, with fresh
+device facts for each preparation. Clock/bus facts are not measured bandwidth,
+and neither architecture nor scalar throughput alone advertises Tensor Core
+arithmetic support. Unknown facts cannot qualify the optional FP64 recipe.
+
+The compiler adapter supplies declarative workload bounds to
+`runtime::CudaLoweringProfile`; generic runtime code applies these bounds and
+hardware admission without a GPU-name table. The KS owner supplies only its
+scientifically admitted precision, optional resource budget and expected reuse;
+it does not probe hardware or select a density/potential kernel. Density keeps
+the ordinary provider budget separate from the automatic optional quote;
+rejection of the latter cannot enlarge the former. Response, empty or dense
+domains keep their existing generated path. Workload and zero-budget exclusions
+precede capability queries, and unsupported optional queries retain generated
+execution; unrelated CUDA failures propagate.
+
+DF packed occupied projection reuses the same profile evaluator with its existing
+AO/auxiliary/rank/scratch-row bounds. Its scalar FP64-throughput qualification is
+separate from the stronger matrix-acceleration qualification used by occupied
+Gram and XC; a previously admitted pre-Ampere scalar-FP64 device is not excluded
+merely by sharing this evaluator. The DF owner freezes shared device facts before
+capture; projection overrides do not change the independent Gram qualification.
+Automatic DFT SCF/force tiling also reads this shared capability record, while
+retaining the existing tile policy and explicit user choices. These consumers
+share capability acquisition/admission, not a newly qualified universal latency
+model or a migration of Gram/tiling into the native candidate-cost selector.
+
+Both panel and symmetric-product preparation use `runtime::select_native_lowering`
+to rank admitted candidates **before** optional provider/cache allocation using
+prepare cost plus expected replay count times all replay phases, including
+packing, casting, refinement, audit and fallback.
+Allocation refusal re-enters that same selector with the failed offer rejected.
+No cold-start timing kernels or autotuning run. The existing qualified profile
+remains an explicit incumbent when complete costs are unavailable: missing costs
+are not zeros, and this is not a new throughput-derived performance promotion.
+Additional workload/tile/device performance models require complete-endpoint
+evidence before changing that admission. See the
+[ownership decision](../../.agents/notes/implemented/architecture/2026-11-07-compiler-owned-cuda-lowering-profiles.md).
 
 `CudaXcPlan::potential_lowering()` reports the selected candidate, preparation
 time, resource reservation and alternative rejection. Its 16 KiB host binding
