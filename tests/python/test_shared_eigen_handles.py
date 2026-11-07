@@ -48,9 +48,7 @@ def _consumer_lifetimes() -> str:
         + "\n};\n"
         + _definition(rhf, "CudaResources::~CudaResources()")
         + "\n"
-        + _definition(
-            rhf, "cublasStatus_t CudaResources::prepare_matrix_context()"
-        )
+        + _definition(rhf, "cublasStatus_t CudaResources::prepare_matrix_context()")
         + "\n"
         + _definition(rhf, "cublasStatus_t CudaResources::bind_matrix_workspace()")
         + "\n"
