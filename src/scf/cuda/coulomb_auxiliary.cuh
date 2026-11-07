@@ -164,7 +164,8 @@ template <unsigned MaximumAngular, typename Scalar>
 GENERATIVEQC_ERI_DEVICE inline bool fill_range_coulomb(
     double exponent, const Vec3<Scalar>& product, const Vec3<Scalar>& center,
     generativeqc::integrals::CoulombRange range, double omega,
-    CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary, CoulombComponentDomain domain = {}) {
+    CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary, CoulombComponentDomain domain = {},
+    double full_range_scale = 0.0) {
   static_assert(MaximumAngular <= kMaximumCoulombResponseOrder);
   if (range == generativeqc::integrals::CoulombRange::Full) return false;
   const bool reachable = domain.valid<MaximumAngular>();
@@ -181,6 +182,23 @@ GENERATIVEQC_ERI_DEVICE inline bool fill_range_coulomb(
   if (!generativeqc::integrals::bounded_range_moments<MaximumAngular + extra>(
           MaximumAngular + extra, scalar_value(argument), exponent, range, omega, moments))
     return false;
+
+  // A coefficient-bound FP64 value source is linear in these radial roots.
+  // Combine roots before the common recurrence, not two complete ERI tensors.
+  // Derivative and mixed-precision owners retain their ordinary radial seeds.
+  if (full_range_scale != 0.0) {
+    if constexpr (!std::is_same_v<Scalar, double>) {
+      return false;
+    } else {
+      if (range != generativeqc::integrals::CoulombRange::Long ||
+          !generativeqc::integrals::range_isfinite(full_range_scale))
+        return false;
+      double full_moments[MaximumAngular + 1];
+      boys_values<MaximumAngular>(argument, full_moments);
+      for (unsigned order = 0; order <= MaximumAngular; ++order)
+        moments[order] += full_range_scale * full_moments[order];
+    }
+  }
 
   double factor = 1.0;
   for (unsigned n = 0; n <= MaximumAngular; ++n) {

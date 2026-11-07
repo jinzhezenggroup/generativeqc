@@ -116,6 +116,12 @@ post-mutation failure policy and complete endpoint evidence.
 
 ## References
 
+Construction is superseded by the
+[direct composite producer](2026-11-07-direct-composite-source-build.md), which
+preserves this coefficient-bound contraction contract while avoiding the second
+complete source. This note's original images, timings and fallback rationale
+remain historical evidence, not measurements of the newer producer.
+
 - Tracking issue #2976, checkpoint comment6699812138.
 - Qualified pilot checkpoint comment6700363351.
 - `tests/python/test_range_resident_values_cuda.py` and its native probe.

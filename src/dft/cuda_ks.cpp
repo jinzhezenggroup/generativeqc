@@ -748,6 +748,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
             !nonlocal_correlation && standard_convergence_model && spins == 1 &&
             maximum_angular <= 2 && configured_chunk_width() == 1,
         source_strategy.screening_tolerance);
+    const char* combined_source = std::getenv("GENERATIVEQC_KS_COMBINED_RANGE_SOURCE");
+    const bool combine_source_requested =
+        combined_source ? std::strcmp(combined_source, "1") == 0 : automatic_range;
+    const bool combine_source_eligible =
+        combine_source_requested && has_range_correction && has_exchange && !mixed_source &&
+        !fitted_coulomb && !fitted_exchange && spins == 1 && !incremental_direct_jk &&
+        configured_chunk_width() == 1 && !runtime::active_device_resource_ledger;
+    const char* composite_build = std::getenv("GENERATIVEQC_KS_COMBINED_RANGE_BUILD");
+    std::optional<DirectJkExchangeCombination> combination;
+    if (combine_source_eligible && (!composite_build || std::strcmp(composite_build, "0") != 0))
+      combination = DirectJkExchangeCombination{provider.strategy().spec, range_correction->spec};
     check(phase_source->prepare(
               device, {system}, options.max_iterations, direct_nbf, required,
               options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
@@ -761,17 +772,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
                (has_exchange && (host.ceiling || disk.ceiling) && !mixed_source)) &&
                   !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
               has_exchange && !mixed_source ? host.ceiling : 0, host.mask, host_tile.ceiling,
-              has_exchange && !mixed_source ? disk.ceiling : 0, disk.mask, disk_directory),
+              has_exchange && !mixed_source ? disk.ceiling : 0, disk.mask, disk_directory,
+              combination ? &*combination : nullptr),
           phase_source->reason());
-    const char* combined_source = std::getenv("GENERATIVEQC_KS_COMBINED_RANGE_SOURCE");
     // Default only inside the existing repeated cold range-source admission;
     // explicit qualification may exercise smaller or non-automatic owners.
-    const bool combine_source_requested =
-        combined_source ? std::strcmp(combined_source, "1") == 0 : automatic_range;
-    if (combine_source_requested && phase_source->active() && has_range_correction &&
-        has_exchange && !mixed_source && !fitted_coulomb && !fitted_exchange && spins == 1 &&
-        !incremental_direct_jk && configured_chunk_width() == 1 &&
-        !runtime::active_device_resource_ledger) {
+    if (combine_source_eligible && phase_source->active() &&
+        !phase_source->combined_source_build()) {
       // The temporary full source must fit alongside the already admitted
       // complete consumer and LR lease. Retained storage keeps the LR ceiling.
       const auto live = sum(required, phase_source->capacity_bytes());

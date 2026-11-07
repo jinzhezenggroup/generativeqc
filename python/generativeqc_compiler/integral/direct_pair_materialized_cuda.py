@@ -279,7 +279,8 @@ __device__ inline void consume_materialized_direct_pair(
             fill_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
                                       shared.second.product_center, shared.coulomb);
           else if (!fill_range_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
-                      shared.second.product_center, range, omega, shared.coulomb))
+                      shared.second.product_center, range, omega, shared.coulomb, {},
+                      resident_only ? resident.full_range_scale : 0.0))
             shared.coulomb.at(0, 0, 0, 0) = NAN;
         }
         if (work) {

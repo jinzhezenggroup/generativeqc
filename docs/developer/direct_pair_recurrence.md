@@ -91,16 +91,28 @@ records ownership, qualification and the retained stricter-threshold fallback.
 Automatic repeated cold range-source admission can retain
 `LR + (c_full / c_LR) Full` in place of a complete GPU LR source. This applies
 only to strict restricted full Direct, with fixed scientific exchange terms and
-enough independently admitted transient storage for one full source. Partial,
+complete GPU source capacity. Partial,
 host/disk, fitted, mixed, incremental, graph-chunk and application-ledger consumers
 keep their existing providers. Admission uses resource/capability predicates,
 not GPU names.
 
-Both source producers use the same plan's immutable canonical rows. A temporary
-full source is finite-audited, combined in FP64 and released before SCF. Persistent
-source storage does not grow. Capacity refusal before mutation preserves ordinary
-LR replay; failure after mutation retires the source and propagates a numerical
-error rather than attempting raw-LR fallback.
+The default producer constructs the composite directly in one allocation using
+the same immutable canonical rows. Whole-shell order-3--9 consumers combine FP64
+Full/LR radial roots before the common Coulomb recurrence and component
+contraction. Other component consumers borrow the existing paired Full/LR
+evaluator. This avoids constructing a second complete source or mutating a
+published raw LR source. Every value is finite-audited before publication;
+driver and numerical failures propagate rather than silently falling back.
+Persistent source storage does not grow, and temporary inverse metadata remains
+bounded by the admitted source allowance.
+
+`GENERATIVEQC_KS_COMBINED_RANGE_BUILD=0` before preparing a new owner selects
+the incumbent two-producer construction. That route separately admits a full
+temporary source, finite-audits it, combines in FP64 and releases it before SCF.
+Capacity refusal before mutation preserves ordinary LR replay; failure after
+mutation retires the source and propagates a numerical error. It does not disable
+an effective LR cache. Direct construction need not satisfy this second-source
+transient capacity gate, but still requires complete strict GPU residency.
 
 One K contraction then supplies both radial terms through the existing range
 slot, while the ordinary full-K slot is zero. Fock/energy assembly applies the
@@ -117,6 +129,9 @@ only the already-qualified automatic repeated-source domain.
 
 The [coefficient-bound source decision](../../.agents/notes/implemented/performance/2026-11-07-coefficient-bound-range-source.md)
 records the resource/failure bounds and retained qualification.
+The [direct construction decision](../../.agents/notes/implemented/performance/2026-11-07-direct-composite-source-build.md)
+records the one-pass producer, unchanged scientific gates, and bilateral cold
+qualification against the incumbent construction.
 
 ## Bounded long-range force scheduling
 
