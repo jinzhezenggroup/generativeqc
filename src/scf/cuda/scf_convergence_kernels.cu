@@ -96,12 +96,12 @@ __global__ void update_convergence_kernel(
     iterations[system] = iteration;
     energy_change[system] = change;
     density_rms[system] = rms;
-    const bool enter_full_energy_refinement = begin_hf_full_energy_refinement(
-        system, energy[system], density_tolerance, rms, physical_maximum,
-        target_operator && physical_residual != nullptr, incremental_delta_updates,
+    const auto energy_refinement = begin_hf_full_energy_refinement(
+        system, energy[system], energy_tolerance, density_tolerance, rms, physical_maximum,
+        target_operator && physical_residual != nullptr, qualified_owner, incremental_delta_updates,
         incremental_delta_build_count);
     const bool did_converge =
-        !enter_full_energy_refinement &&
+        energy_refinement == HfEnergyRefinementTransition::none &&
         hf_iteration_converged(energy[system], previous_energy[system], energy_tolerance,
                                density_tolerance, rms, physical_maximum, guard_energy_roundoff,
                                qualified_owner);
@@ -109,7 +109,10 @@ __global__ void update_convergence_kernel(
       converged[system] = 1;
       active[system] = 0;
     } else {
-      previous_energy[system] = enter_full_energy_refinement ? CUDART_INF : energy[system];
+      previous_energy[system] =
+          energy_refinement == HfEnergyRefinementTransition::discard_delta_baseline
+              ? CUDART_INF
+              : energy[system];
       copy_next_density = 1;
     }
   }
@@ -169,13 +172,15 @@ __global__ void update_uhf_convergence_kernel(
     energy_change[system] = change;
     density_rms[system] = rms;
     ++iterations[system];
-    const bool enter_full_energy_refinement = begin_hf_full_energy_refinement(
-        system, energy[system], density_tolerance, rms, physical_maximum,
-        target_operator && physical_residual != nullptr, incremental_delta_updates,
+    const auto energy_refinement = begin_hf_full_energy_refinement(
+        system, energy[system], energy_tolerance, density_tolerance, rms, physical_maximum,
+        target_operator && physical_residual != nullptr, false, incremental_delta_updates,
         incremental_delta_build_count);
-    previous_energy[system] = enter_full_energy_refinement ? CUDART_INF : energy[system];
+    previous_energy[system] =
+        energy_refinement == HfEnergyRefinementTransition::discard_delta_baseline ? CUDART_INF
+                                                                                  : energy[system];
     const bool did_converge =
-        !enter_full_energy_refinement &&
+        energy_refinement == HfEnergyRefinementTransition::none &&
         hf_iteration_converged(energy[system], baseline, energy_tolerance, density_tolerance, rms,
                                physical_maximum, guard_energy_roundoff);
     if (did_converge) {

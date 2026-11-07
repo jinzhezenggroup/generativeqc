@@ -1099,9 +1099,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   }
   const bool bounded_direct_streaming = plan.bounded_direct_streaming;
   const bool incremental_direct_jk = plan.incremental_direct_jk;
-  // Screened incremental iterations cannot license retained-Fock publication.
-  // A provenance-matched warm solve may prove below that it used no deltas.
-  const bool reuse_converged_fock = plan.reuse_converged_fock && !incremental_direct_jk;
+  // Incremental convergence requires fresh full-density energy closure below.
+  // Retain that certified P_n/F(P_n) pair just as for ordinary direct HF; a
+  // reconstructed delta Fock alone can never license publication.
+  const bool reuse_converged_fock = plan.reuse_converged_fock;
   const bool mixed_precision_fock = plan.mixed_precision_fock;
   const double mixed_precision_fock_threshold = plan.mixed_precision_fock_threshold;
   if (first_setup) {
@@ -2226,8 +2227,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   }
   if (resident_value_requested &&
       (options.export_physical_reference || ordinary_resident_requested) && quartet_direct &&
-      !mixed_precision_fock && !incremental_direct_jk && !separate_fock_jk &&
-      !shell_class_profiling && !bounded_fock_class_timing && !direct_tile_validation &&
+      !mixed_precision_fock && !separate_fock_jk && !shell_class_profiling &&
+      !bounded_fock_class_timing && !direct_tile_validation &&
       !bounded_direct_fock_only_diagnostic && !bounded_direct_count_diagnostic &&
       !bounded_direct_aot_only_diagnostic) {
     auto required = resources.reference_peak_bytes_;
@@ -3677,20 +3678,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // energy and force endpoints. Coarse mixed stages still defer to refinement.
   const double* force_convergence_residual = residual;
   const bool qualified_standard_owner =
-      !unrestricted && !mixed_precision_fock && !incremental_direct_jk &&
-      !options.export_physical_reference &&
+      !unrestricted && !mixed_precision_fock && !options.export_physical_reference &&
       std::all_of(systems.begin(), systems.end(), [](const auto& system) {
         return system.ecp_terms.empty() &&
                std::none_of(system.atoms.begin(), system.atoms.end(),
                             [](const auto& atom) { return atom.ecp_core != 0; });
       });
-  // Screened deltas retire per item after physical stationarity. The device
-  // controller then stays full-only within the original iteration budget;
-  // unscreened providers and resident warm solves with no delta are unchanged.
+  // Deltas retire per item after physical stationarity. Full-only energy
+  // closure stays within the iteration budget and retains a usable current
+  // full-density baseline, including warm solves that never needed a delta.
   auto* incremental_energy_refinement_updates =
-      incremental_iteration_enabled && incremental_direct_jk_policy.fixed_full_density_anchor
-          ? incremental_delta_updates
-          : nullptr;
+      incremental_iteration_enabled ? incremental_delta_updates : nullptr;
   const auto* incremental_energy_refinement_census =
       incremental_energy_refinement_updates != nullptr ? incremental_delta_build_count : nullptr;
   const auto launch_iteration_post_eigensolver =
@@ -4187,52 +4185,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     }
   }
   std::vector<unsigned long long> host_incremental_delta_build_count(batch_size, 0ULL);
-  bool incremental_delta_counts_downloaded = false;
-  if (incremental_iteration_enabled && stationary_force_required && plan.reuse_converged_fock &&
-      all_systems_warm && force_ready_seed_provenance) {
-    // The option alone must not force canonicalization when the complete bucket
-    // used ordinary full-density Focks. Inspect actual work, not iteration count;
-    // any delta or unproven seed retains the strict bounded fallback.
-    cuda_error = runtime::residency_memcpy_async(
-        residency_execution, SourceRole::iteration, SourceSite::hf_final_fock_count,
-        SourcePayload::incremental_delta_count, host_incremental_delta_build_count.data(),
-        incremental_delta_build_count, batch_size * sizeof(unsigned long long),
-        cudaMemcpyDeviceToHost, resources.stream_);
-    if (cuda_error == cudaSuccess) {
-      cuda_error =
-          runtime::residency_stream_synchronize(residency_execution, SourceRole::iteration,
-                                                SourceSite::hf_final_fock_fence, resources.stream_);
-    }
-    if (cuda_error != cudaSuccess) {
-      fill_global_failure(outputs, cuda_status(cuda_error));
-      return outputs;
-    }
-    incremental_delta_counts_downloaded = true;
-    if (std::all_of(host_incremental_delta_build_count.begin(),
-                    host_incremental_delta_build_count.end(),
-                    [](unsigned long long count) { return count == 0ULL; })) {
-      // Incremental convergence normally advances to P_(n+1). Its full anchor
-      // still owns P_n, paired with the physical F(P_n), pre-DIIS residual,
-      // energy and tracked orbital frame. Restore that certified generation,
-      // rather than publishing F(P_n) alongside the proposed new density.
-      launch_select_converged_kernel(blocks_for(batch_size), threads, 0, resources.stream_,
-                                     static_cast<std::int32_t>(batch_size), converged, failed,
-                                     active);
-      launch_copy_selected_matrices_kernel(
-          blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
-          static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
-          static_cast<std::int32_t>(nbf), active, incremental_anchor_density, density);
-      cuda_error = cudaPeekAtLastError();
-      if (cuda_error != cudaSuccess) {
-        fill_global_failure(outputs, cuda_status(cuda_error));
-        return outputs;
-      }
-      scf_force_ready_state = true;
-      force_finalization_fallback = false;
-      plan.last_direct_final_state.route = CudaDirectFinalStateRoute::scf_force_ready;
-      plan.last_direct_final_state.fallback_reason = CudaDirectFinalStateFallbackReason::none;
-    }
-  }
   std::uint32_t post_scf_physical_fock_builds = 0;
   std::uint32_t post_scf_final_eigen_solves = 0;
   // Keep the final selection count through reference publication so diagnostics
@@ -5637,9 +5589,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       {host_incremental_delta_build_count.data(),
        incremental_direct_jk ? static_cast<const void*>(incremental_delta_build_count)
                              : static_cast<const void*>(iterations),
-       incremental_direct_jk && !incremental_delta_counts_downloaded
-           ? batch_size * sizeof(unsigned long long)
-           : 0U,
+       incremental_direct_jk ? batch_size * sizeof(unsigned long long) : 0U,
        SourcePayload::incremental_delta_count},
       {host_incremental_full_admitted_shell_quartets.data(),
        incremental_direct_jk ? static_cast<const void*>(incremental_full_admitted_shell_quartets)
@@ -5981,7 +5931,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       result.incremental_direct_jk.post_scf_full_builds = result.precision.post_scf_fock_builds;
       const bool build_counts_valid = full_builds + delta_builds == builds;
       result.incremental_direct_jk.quartet_work_counters_valid =
-          build_counts_valid && !bounded_direct_streaming && host_failed[system] == 0U;
+          build_counts_valid && !bounded_direct_streaming && !phase_resident_active &&
+          host_failed[system] == 0U;
       if (result.incremental_direct_jk.quartet_work_counters_valid) {
         const std::uint64_t candidate_shell_quartets =
             static_cast<std::uint64_t>(host.system_shell_quartet_offsets[system + 1] -
