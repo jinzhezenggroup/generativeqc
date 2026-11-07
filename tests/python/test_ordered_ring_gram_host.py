@@ -27,7 +27,7 @@ def test_ordered_ring_adapter_lifetime_and_work(
     # execution, warp synchronization, launch routing or endpoint performance.
     (tmp_path / "cuda_runtime.h").write_text(
         "#pragma once\n#define __device__\n"
-        "#include <stdexcept>\n"
+        "#include <stdexcept>\n#include <cmath>\nusing std::isfinite;\n"
         "struct Lane { unsigned x; }; inline Lane threadIdx{};\n"
         "inline void __syncwarp() {}\n"
         # The adjacent full rebuild is parsed, never host-executed. Refuse

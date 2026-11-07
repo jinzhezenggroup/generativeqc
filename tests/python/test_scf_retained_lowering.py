@@ -87,7 +87,7 @@ def test_generated_density_and_ring_combination_contracts(
     # No CUDA runtime, synchronization or device execution is claimed here.
     (tmp_path / "cuda_runtime.h").write_text(
         "#pragma once\n#define __device__\n#define __global__\n"
-        "#include <stdexcept>\n"
+        "#include <stdexcept>\n#include <cmath>\nusing std::isfinite;\n"
         "struct Coord { unsigned x = 0; };\n"
         "inline Coord threadIdx{}, blockIdx{}, blockDim{}, gridDim{};\n"
         "inline void __syncwarp() {}\n"
