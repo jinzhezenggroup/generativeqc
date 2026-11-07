@@ -1,0 +1,24 @@
+{
+  "id": "hf.shared-rys-xy",
+  "classification": "retained-opt-in",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_CUDA_HF_SHARED_RYS_XY"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/rhf_policy.cpp",
+    "src/scf/cuda/rhf_policy.hpp",
+    "src/scf/cuda/rhf_bucket_internal.hpp",
+    "src/scf/cuda_rhf.cpp"
+  ],
+  "rationale": "Default-off strict control for restricted FP64 HF SM90 materialized paged DPPP/PPPP companions. Only exact 1 requests admission; invalid values fail before graph preparation. Unsupported valid requests keep the incumbent. Native plan and CUDA-only prepared/restart identity bind the choice. Actual first-queue replay supports integration preparation, not endpoint/default qualification. The source-bound H100 production pilot passes full independent and strict paired E/F gates, with one fixed-order cold pair improving11.04% and three paired warm ratios below1.05. This qualifies a scoped opt-in, not default promotion or the original all30 goal.",
+  "revisit_condition": "Keep the control default-off. The accepted single-pair HF96 cold-plus-three-warm pilot does not replace the original paired endpoint qualification before any broader/default promotion; retain unsupported-domain fallback, strict ownership/resource gates and source-bound adverse histories.",
+  "evidence": [
+    ".agents/notes/implemented/performance/2026-11-06-hf-shared-rys-xy-opt-in.md",
+    "tests/python/test_shared_rys_xy_integration.py",
+    "benchmarks/results/h100-hf-shared-xy-opt-in-20261107/README.md"
+  ]
+}

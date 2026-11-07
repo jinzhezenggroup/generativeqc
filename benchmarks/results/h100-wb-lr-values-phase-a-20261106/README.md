@@ -92,3 +92,8 @@ The external publication-branch host bridge shim repair is preserved. The five
 measured WB source files remain exact `1fa3` bytes. The generated Libxc inventory
 is refreshed for the combined current inputs while retaining its historical
 measurements as stale; no new Libxc, H100 or endpoint qualification is inferred.
+
+Selected JSON receipts are stored as lossless `.json.xz` files. `cohort.json`
+retains each original logical filename, decoded length and SHA256, separately
+from the stored path/length/hash. The bounded reader decodes them before the
+unchanged scientific report audit; original failure bytes remain unchanged.

@@ -1292,7 +1292,8 @@
             "force"
           ],
           "capabilities": [
-            "streaming_fock"
+            "streaming_fock",
+            "shared_rys_xy_fock"
           ],
           "recurrence": "rys3",
           "schedule": {
@@ -1495,7 +1496,8 @@
             "force"
           ],
           "capabilities": [
-            "streaming_fock"
+            "streaming_fock",
+            "shared_rys_xy_fock"
           ],
           "recurrence": "rys4",
           "schedule": {

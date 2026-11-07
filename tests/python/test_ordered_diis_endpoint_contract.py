@@ -229,7 +229,9 @@ def test_reducer_is_owned_by_plan_and_invalidates_hf_replay(
 #include <vector>
 #include "generativeqc/generativeqc.h"
 #include "scf/cuda/arena.hpp"
+#include "scf/cuda/rhf_policy.hpp"
 #include "scf/diis_work.hpp"
+namespace cuda_policy=generativeqc::scf::cuda_policy;
 using generativeqc::scf::diis_work_requested;
 void diis_work_control(bool enabled) {
  if(enabled)setenv("GENERATIVEQC_DF_PROGRESS_TRACE","unused-host-probe-path",1);
@@ -246,6 +248,7 @@ struct Plan {
  bool one_electron_value_mapping{},mixed_precision_fock{},bounded_direct_streaming{},diis_work_enabled{};
  bool fp32_block_screening{},incremental_direct_jk{};
  double mixed_precision_fock_threshold{};
+ cuda_policy::SharedRysXyPolicy shared_rys_xy{};
 };
 template<class... T> bool same_topology(T&&...) {return true;}
 template<class... T> bool compatible_hf_bucket_options(T&&...) {return true;}
@@ -254,7 +257,9 @@ bool bounded_fock_class_timing_requested() {return false;}
 bool bounded_direct_streaming_override_requested() {return false;}
 bool bounded_direct_fock_only_diagnostic_requested() {return false;}
 std::optional<unsigned> bounded_direct_primary_streaming_fock_mask_requested() {return {};}
-namespace cuda_policy {bool one_electron_value_mapping_requested() {return false;}}
+namespace generativeqc::scf::cuda_policy {
+unsigned one_electron_value_mapping_requested() noexcept {return 0U;}
+}
 bool retirement_entered=false,retirement_allowed=true;
 bool try_retire_rhf_cuda_bucket_plan(Plan** plan) {
  retirement_entered=true;if(!retirement_allowed)return false;*plan=nullptr;return true;
@@ -282,7 +287,8 @@ void cached_probe(bool saved_incremental,bool saved_ordered,bool saved_work,bool
  if(refused)assert(value==&storage);
 }
 std::vector<int> replay_probe(bool saved_incremental,bool saved_ordered,bool saved_work,
- bool requested_incremental_diis_gram,bool requested_ordered_diis_gram,bool requested_work,bool first_setup) {
+ bool requested_incremental_diis_gram,bool requested_ordered_diis_gram,bool requested_work,bool first_setup,
+ bool changed_shared_policy=false) {
  Plan plan;plan.incremental_diis_gram=saved_incremental;plan.ordered_diis_gram=saved_ordered;
  plan.diis_work_enabled=saved_work;diis_work_control(requested_work);
  const int device_id=0,host=0,options=0;
@@ -292,6 +298,12 @@ std::vector<int> replay_probe(bool saved_incremental,bool saved_ordered,bool sav
  const bool requested_reuse_converged_fock=false,requested_incremental_direct_jk=false,requested_mixed_precision_fock=false;
  const unsigned requested_primary_streaming_fock_mask=0;
  const std::optional<double> requested_mixed_precision_fock_threshold;
+ const cuda_policy::SharedRysXyPolicy requested_shared_rys_xy{};
+ if(changed_shared_policy) {
+  plan.shared_rys_xy.request=cuda_policy::SharedRysXyRequest::On;
+  plan.shared_rys_xy.admission=cuda_policy::SharedRysXyAdmission::Active;
+  plan.shared_rys_xy.class_mask=1U;
+ }
  std::vector<int> outputs{GENERATIVEQC_STATUS_SUCCESS};
 """
         + replay
@@ -312,6 +324,8 @@ int main() {
   const bool reject=!first && (saved_incremental!=incremental || saved_ordered!=ordered || saved_work!=work);
   assert(result[0]==(reject?GENERATIVEQC_STATUS_INVALID_ARGUMENT:GENERATIVEQC_STATUS_SUCCESS));
  }
+ assert(replay_probe(false,false,false,false,false,false,false,true)[0]
+        ==GENERATIVEQC_STATUS_INVALID_ARGUMENT);
  diis_work_control(false);
  const auto arena=[](const char* reducer) {
   setenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION",reducer,1);
