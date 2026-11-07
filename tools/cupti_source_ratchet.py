@@ -8,10 +8,17 @@ dependencies and graph execution remain outside this deliberately named gate.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import re
-from typing import TYPE_CHECKING, Any
+import sys
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from tools.audit_replay_allocations import (
     InvalidReceipt,
@@ -23,11 +30,9 @@ from tools.audit_replay_allocations import (
 from tools.audit_residency_receipts import HOT_ROLES, _decode_json
 from tools.cupti_source_capture import ROLES, WORK_COUNTERS, summarize_sources
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 SCHEMA = "generativeqc.observed-source-work-ratchet.v2"
 LEGACY_SCHEMA = "generativeqc.observed-source-work-ratchet.v1"
+RESIDENT_SCHEMA = "generativeqc.observed-source-work-ratchet.v3"
 SCOPE = "verified source copy/fence calls and observed CUPTI memcpy/blocking synchronization activity"
 MAX_POLICY_BYTES = 1 << 20
 
@@ -61,7 +66,8 @@ def _profile(profile: Any, schema: str = SCHEMA) -> None:
             "baseline",
             "regions",
             "unannotated_activity_limit",
-        },
+        }
+        | ({"resident_boundaries"} if schema == RESIDENT_SCHEMA else set()),
         "ratchet profile",
     )
     _text(profile["name"], "profile name")
@@ -113,6 +119,65 @@ def _profile(profile: Any, schema: str = SCHEMA) -> None:
             _fields(row["max"], counters, "work limits")
             for counter, limit in row["max"].items():
                 _integer(limit, counter)
+    if schema == RESIDENT_SCHEMA:
+        boundaries = profile["resident_boundaries"]
+        _require(
+            type(boundaries) is list and 1 <= len(boundaries) <= 8192,
+            "invalid resident boundary contracts",
+        )
+        seen = set()
+        for boundary in boundaries:
+            _fields(
+                boundary,
+                {
+                    "region",
+                    "owner",
+                    "role",
+                    "site",
+                    "payload",
+                    "kind",
+                    "direction",
+                    "max_calls",
+                    "max_bytes",
+                },
+                "resident boundary",
+            )
+            for key in (
+                "region",
+                "owner",
+                "role",
+                "site",
+                "payload",
+                "kind",
+                "direction",
+            ):
+                _text(boundary[key], "resident " + key)
+            _require(
+                boundary["region"] in names and boundary["role"] in ROLES,
+                "resident boundary outside declared scopes",
+            )
+            _require(
+                boundary["kind"]
+                in {"transfer", "stream_sync", "event_sync", "host_transform"}
+                and boundary["direction"] in {"none", "h2d", "d2h", "d2d"},
+                "invalid resident operation/direction",
+            )
+            identity = tuple(
+                boundary[key]
+                for key in (
+                    "region",
+                    "owner",
+                    "role",
+                    "site",
+                    "payload",
+                    "kind",
+                    "direction",
+                )
+            )
+            _require(identity not in seen, "duplicate resident boundary")
+            seen.add(identity)
+            _integer(boundary["max_calls"], "resident calls")
+            _integer(boundary["max_bytes"], "resident bytes")
 
 
 def load_work_ratchet(path: Path, workload: dict[str, Any]) -> dict[str, Any]:
@@ -126,7 +191,8 @@ def load_work_ratchet(path: Path, workload: dict[str, Any]) -> dict[str, Any]:
         raise InvalidReceipt(f"invalid ratchet policy JSON: {error}") from error
     _fields(policy, {"schema", "scope", "profiles"}, "ratchet policy")
     _require(
-        policy["schema"] in (SCHEMA, LEGACY_SCHEMA) and policy["scope"] == SCOPE,
+        policy["schema"] in (SCHEMA, LEGACY_SCHEMA, RESIDENT_SCHEMA)
+        and policy["scope"] == SCOPE,
         "invalid ratchet schema/scope",
     )
     profiles = policy["profiles"]
@@ -172,7 +238,8 @@ def check_work_ratchet(
     """
     _fields(selected, {"schema", "sha256", "profile"}, "selected ratchet")
     _require(
-        selected["schema"] in (SCHEMA, LEGACY_SCHEMA), "invalid selected ratchet schema"
+        selected["schema"] in (SCHEMA, LEGACY_SCHEMA, RESIDENT_SCHEMA),
+        "invalid selected ratchet schema",
     )
     _hex(selected["sha256"], 64, "policy SHA-256")
     profile = selected["profile"]
@@ -256,6 +323,28 @@ def check_work_ratchet(
                 "maximum": 0,
             }
         )
+    resident = None
+    if selected["schema"] == RESIDENT_SCHEMA:
+        if any(
+            operation["region_id"] in selected_phases and operation["status"]
+            for operation in source["operations"]
+        ):
+            issues.append("failed source submission in declared resident region")
+        resident_violations = _check_resident_boundaries(
+            profile, source["operations"], regions
+        )
+        violations.extend(resident_violations)
+        resident = {
+            "owners": sorted({row["owner"] for row in profile["resident_boundaries"]}),
+            "regions": sorted(
+                {row["region"] for row in profile["resident_boundaries"]}
+            ),
+            "zero_unexpected_post_prepare_host_round_trips": None
+            if issues
+            else not bool(violations),
+            "scope": "all observed explicit copies and waits must match source-owned site/payload/direction budgets; not implicit/graph-wait or global scientific-lineage coverage",
+            "boundary_violations": resident_violations,
+        }
     return {
         "status": "INCOMPLETE"
         if issues
@@ -275,4 +364,169 @@ def check_work_ratchet(
         "implicit_wait_coverage_complete": False,
         "graph_wait_coverage_complete": False,
         "zero_round_trip_assertion": None,
+        "declared_resident_scopes": resident,
     }
+
+
+def _check_resident_boundaries(
+    profile: dict[str, Any],
+    operations: list[dict[str, Any]],
+    regions: dict[int, dict[str, str]],
+) -> list[dict[str, Any]]:
+    """Reject a same-byte replacement with a different source site or payload.
+
+    V1/V2 aggregate budgets intentionally cannot grant this scoped assertion.
+    V3 freezes explicit allowed source identities as well as bytes and waits;
+    preparation seeds and final publications are permitted only by named role.
+    """
+    keys = ("region", "owner", "role", "site", "payload", "kind", "direction")
+    limits = {
+        tuple(row[key] for key in keys): row for row in profile["resident_boundaries"]
+    }
+    selected = {row["name"] for row in profile["regions"]}
+    observed = {}
+    for operation in operations:
+        region = regions.get(operation["region_id"], {}).get("name")
+        if (
+            region not in selected
+            or not operation["source_call_verified"]
+            or operation["status"]
+        ):
+            continue
+        identity = tuple(region if key == "region" else operation[key] for key in keys)
+        totals = observed.setdefault(identity, {"calls": 0, "bytes": 0})
+        totals["calls"] += 1
+        totals["bytes"] += operation["requested_bytes"]
+    violations = []
+    for identity, totals in observed.items():
+        maximum = limits.get(identity, {"max_calls": 0, "max_bytes": 0})
+        if (
+            totals["calls"] > maximum["max_calls"]
+            or totals["bytes"] > maximum["max_bytes"]
+        ):
+            violations.append(
+                {
+                    "counter": "unreviewed_resident_boundary",
+                    **dict(zip(keys, identity, strict=True)),
+                    "observed": totals,
+                    "maximum": {
+                        "calls": maximum["max_calls"],
+                        "bytes": maximum["max_bytes"],
+                    },
+                }
+            )
+    return violations
+
+
+def reaudit_capture(
+    expected: dict[str, Any],
+    policy: Path,
+    raw_source: dict[str, Any],
+    raw_activity: dict[str, Any],
+) -> dict[str, Any]:
+    """Recompute a retained capture against its independently pinned policy.
+
+    This consumes the existing prepared-capture contract and raw journals, not
+    its derived diagnostics. The declared build/device identity is retained for
+    review, not authenticated by offline replay. Numerical, graph, implicit-wait
+    and payload-link qualification cannot be granted by this explicit-work gate.
+    """
+    _require(
+        type(expected) is dict
+        and expected.get("schema") == "generativeqc.cupti-prepared.v2",
+        "unsupported prepared capture contract",
+    )
+    identity = expected.get("identity")
+    _require(type(identity) is dict, "missing capture identity")
+    for name in ("source_commit", "source_tree"):
+        _hex(identity.get(name), 40, name)
+    for name in ("library_sha256", "collector_sha256", "cupti_sha256"):
+        _hex(identity.get(name), 64, name)
+    for name in ("device", "toolchain"):
+        _text(identity.get(name), name)
+    _require(
+        type(identity.get("cupti_api_version")) is int
+        and identity["cupti_api_version"] == 28
+        and type(identity.get("source_observer_layout")) is int
+        and identity["source_observer_layout"] == 2,
+        "unsupported capture observer versions",
+    )
+    case = expected.get("workload")
+    selected = load_work_ratchet(policy, case)
+    _require(
+        selected == expected.get("observed_work_ratchet"),
+        "independent contract/policy pin mismatch",
+    )
+    declared_regions = expected.get("regions")
+    _require(
+        type(declared_regions) is dict and bool(declared_regions),
+        "missing capture regions",
+    )
+    regions = {}
+    for key, region in declared_regions.items():
+        _require(
+            type(key) is str
+            and key.isascii()
+            and key.isdecimal()
+            and str(int(key)) == key
+            and 0 < int(key) < 1 << 64,
+            "invalid capture region identity",
+        )
+        _fields(region, {"name", "role"}, "capture region")
+        _text(region["name"], "capture region name")
+        _text(region["role"], "capture region role")
+        regions[int(key)] = region
+    result = check_work_ratchet(selected, raw_source, raw_activity, regions, case)
+    return {
+        **result,
+        "declared_identity": dict(identity),
+        "identity_authenticated": False,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Provide a CPU-only CI gate over retained raw CUDA capture journals."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--expected", type=Path, required=True)
+    parser.add_argument("--work-ratchet", type=Path, required=True)
+    parser.add_argument("--source-boundaries", type=Path, required=True)
+    parser.add_argument("--activity", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
+    arguments = parser.parse_args(argv)
+    if arguments.output is not None:
+        for source in (
+            arguments.expected,
+            arguments.work_ratchet,
+            arguments.source_boundaries,
+            arguments.activity,
+        ):
+            if arguments.output.resolve() == source.resolve() or (
+                arguments.output.exists()
+                and source.exists()
+                and arguments.output.samefile(source)
+            ):
+                parser.error("output must not overwrite a re-audit input")
+    try:
+        result = reaudit_capture(
+            _decode_json(arguments.expected.read_bytes()),
+            arguments.work_ratchet,
+            _decode_json(arguments.source_boundaries.read_bytes()),
+            _decode_json(arguments.activity.read_bytes()),
+        )
+    except (OSError, ValueError, TypeError, KeyError, OverflowError) as error:
+        result = {
+            "status": "INCOMPLETE",
+            "residency_status": "INCOMPLETE",
+            "issues": [str(error)],
+            "zero_round_trip_assertion": None,
+        }
+    encoded = json.dumps(result, indent=2, allow_nan=False) + "\n"
+    if arguments.output is not None:
+        arguments.output.write_text(encoded)
+    else:
+        print(encoded, end="")
+    return {"WITHIN_OBSERVED_RATCHET": 0, "VIOLATION": 1}.get(result["status"], 2)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

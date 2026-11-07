@@ -48,7 +48,12 @@ SOURCE_EXACT_ALLOWED = {
     "scf/cuda/direct_md_j.cu": ("scf/cuda/md_j_engine.cuh",),
     # The host tier shares the lease's scalar bucket fitter, without importing
     # a consumer, mutable source lease, or method-specific execution owner.
-    "scf/cuda/direct_jk.cpp": ("scf/cuda/direct_jk_source_policy.hpp",),
+    # Source preparation also borrows an admitted FP64 vector equation; its
+    # narrow Tensor provider owns BLAS lifetime, not integral recurrences.
+    "scf/cuda/direct_jk.cpp": (
+        "scf/cuda/direct_jk_source_policy.hpp",
+        "tensor/cuda_vector_accumulation.hpp",
+    ),
     # The immutable DF basis lease is exported only by its actual source owner;
     # it does not authorize dependencies on KS consumers or mutable plan state.
     "scf/cuda/df_source.cpp": ("scf/cuda_density_fitting_basis.hpp",),
@@ -453,11 +458,14 @@ CUDA_MODULES["cuda_provider_kernel_interfaces"] = (
     "one_electron_export_kernels.hpp",
 )
 CUDA_ALLOWED["cuda_provider_kernel_interfaces"] = (
+    "scf/cuda/direct_source_layout.hpp",
     "scf/cuda/direct_force_schedule.hpp",
     "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/cuda/packed_basis.",
     "scf/direct_block_domain.hpp",
 )
+CUDA_MODULES["canonical_source_layout"] = ("direct_source_layout.hpp",)
+CUDA_ALLOWED["canonical_source_layout"] = ()
 # Retained numerical primitives have no queue policy or host plan dependency.
 # One-electron consumers share only these bounded scientific building blocks.
 CUDA_MODULES["cuda_integral_numerics"] = (

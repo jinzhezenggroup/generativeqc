@@ -92,7 +92,7 @@ __global__ void materialized_pair_keys_kernel(DeviceBatch batch, const double* b
   }
 }
 
-template <bool Unrestricted, unsigned AngularOrder, bool MixedJ = false>
+template <bool Unrestricted, unsigned AngularOrder, bool MixedJ = false, bool SourceOnly = false>
 __global__ void materialized_canonical_jk_kernel(
     DeviceBatch batch, CanonicalPairRows rows, std::size_t first_begin, std::size_t first_count,
     std::size_t second_begin, std::size_t second_count, generativeqc::integrals::CoulombRange range,
@@ -100,7 +100,8 @@ __global__ void materialized_canonical_jk_kernel(
     const std::uint8_t* active, double* coulomb, double* exchange, std::uint64_t* work_census,
     std::uint64_t* mixed_work = nullptr, double* coulomb_correction = nullptr,
     double* exchange_correction = nullptr, const double* shell_bounds = nullptr,
-    const ShellPairDensityBounds* shell_density_bounds = nullptr) {
+    const ShellPairDensityBounds* shell_density_bounds = nullptr,
+    CanonicalDirectSourceSink source = {}) {
   using Scalar = std::conditional_t<MixedJ, MixedPrecisionFloat, double>;
   using Recurrence = MaterializedDirectPairRecurrence<AngularOrder, Scalar>;
   static_assert(std::is_trivially_copyable_v<Recurrence> && alignof(Recurrence) <= 16);
@@ -144,11 +145,18 @@ __global__ void materialized_canonical_jk_kernel(
         if (!__syncthreads_or(survives)) continue;
       }
     }
-    contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots,
-                                           component_lanes>(
-        batch, task, screening, bounds, density, active, nullptr, nullptr, shared, nullptr, false,
-        false, nullptr, false, range, omega, coulomb, exchange, work_census, mixed_work,
-        coulomb_correction, exchange_correction);
+    if constexpr (SourceOnly)
+      consume_materialized_direct_pair<false, AngularOrder, component_slots, component_lanes,
+                                       double, MaterializedDirectPairSink::ResidentValues>(
+          batch, task, screening, bounds, nullptr, active, nullptr, nullptr, shared, nullptr, false,
+          false, nullptr, false, range, omega, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+          {}, source);
+    else
+      contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots,
+                                             component_lanes>(
+          batch, task, screening, bounds, density, active, nullptr, nullptr, shared, nullptr, false,
+          false, nullptr, false, range, omega, coulomb, exchange, work_census, mixed_work,
+          coulomb_correction, exchange_correction);
   }
 }
 
@@ -164,6 +172,22 @@ __global__ void canonical_pair_keys_kernel(DeviceBatch batch, const std::int32_t
     keys[pair] =
         bounds[item * dimension * dimension + pairs[2U * pair] * dimension + pairs[2U * pair + 1U]];
     order[pair] = static_cast<std::int32_t>(pair);
+  }
+}
+
+__global__ void canonical_pair_inverse_kernel(DeviceBatch batch, const std::int32_t* pairs,
+                                              const std::int32_t* order, std::size_t pair_count,
+                                              std::int32_t* inverse) {
+  const std::size_t dimension = batch.nbf;
+  const auto pairs_per_item = dimension * (dimension + 1) / 2;
+  for (std::size_t rank = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; rank < pair_count;
+       rank += std::size_t(blockDim.x) * gridDim.x) {
+    const auto pair = static_cast<std::size_t>(order[rank]);
+    const auto first = static_cast<std::size_t>(pairs[2 * pair]);
+    const auto second = static_cast<std::size_t>(pairs[2 * pair + 1]);
+    const auto item = rank / pairs_per_item;
+    inverse[item * dimension * dimension + first * dimension + second] =
+        static_cast<std::int32_t>(rank);
   }
 }
 
@@ -242,7 +266,7 @@ __device__ CartesianRangePair<double> canonical_range_quartet(
  * Bucket homogeneity removes the runtime 0..12 recurrence dispatch from the
  * inner ERI loop. Triangular work enumerates each physical ERI only once. */
 template <unsigned AngularOrder, bool Unrestricted, bool Cartesian, bool PairedRanges = false,
-          bool MixedJ = false>
+          bool MixedJ = false, bool CombinedSource = false>
 __global__ void canonical_jk_kernel(
     DeviceBatch batch, std::int32_t system, const std::int32_t* pairs, CanonicalPairRows rows,
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
@@ -251,9 +275,11 @@ __global__ void canonical_jk_kernel(
     const double* bounds, const double* density, double* coulomb, double* exchange,
     std::uint64_t* work_census, double* range_exchange,
     std::conditional_t<MixedJ, float, double>* source_values, double* coulomb_correction,
-    double* exchange_correction, std::uint64_t* mixed_coulomb_work_count, std::size_t work_begin) {
+    double* exchange_correction, std::uint64_t* mixed_coulomb_work_count, std::size_t work_begin,
+    double source_full_range_scale) {
   static_assert(!PairedRanges || Cartesian);
   static_assert(!MixedJ || !PairedRanges);
+  static_assert(!CombinedSource || (Cartesian && !MixedJ && !PairedRanges));
   const std::size_t dimension = static_cast<std::size_t>(batch.nbf);
   const std::size_t matrix = dimension * dimension;
   const std::size_t physical_offset = static_cast<std::size_t>(system) * matrix;
@@ -315,9 +341,18 @@ __global__ void canonical_jk_kernel(
         // density or output matrices: publish its precision-bound scalar
         // before ordinary J/K scatter, including strict SR/LR K sources.
         using Scalar = std::conditional_t<MixedJ, MixedPrecisionFloat, double>;
-        source_values[work] = static_cast<std::conditional_t<MixedJ, float, double>>(
-            scalar_value(canonical_quartet<AngularOrder, Cartesian, Scalar>(
-                batch, system, first, second, third, fourth, -1, exchange_range, exchange_omega)));
+        if constexpr (CombinedSource) {
+          // Component fallback shares the existing paired scientific evaluator.
+          // Only whole-shell resident consumers combine radial roots directly.
+          const auto values = canonical_range_quartet<AngularOrder>(
+              batch, system, first, second, third, fourth, exchange_range, exchange_omega);
+          source_values[work] = values.selected + source_full_range_scale * values.full;
+        } else {
+          source_values[work] = static_cast<std::conditional_t<MixedJ, float, double>>(
+              scalar_value(canonical_quartet<AngularOrder, Cartesian, Scalar>(
+                  batch, system, first, second, third, fourth, -1, exchange_range,
+                  exchange_omega)));
+        }
         continue;
       }
       double full_value = 0.0;
@@ -923,7 +958,7 @@ void launch_materialized_canonical_jk_kernel(
     std::size_t second_count, bool unrestricted, DirectCoulombRange range, double omega,
     double screening, const double* bounds, const double* density, const std::uint8_t* active,
     double* coulomb, double* exchange, std::uint64_t* work_count, double* coulomb_correction,
-    double* exchange_correction) {
+    double* exchange_correction, CanonicalDirectSourceSink source) {
   if (!first_count || !second_count) return;
   // Dense shell-pair products bound screened work without a device-to-host
   // count read. Clamp each factor before multiplication to avoid overflow;
@@ -933,18 +968,40 @@ void launch_materialized_canonical_jk_kernel(
       std::min(first_count, maximum_blocks) * std::min(second_count, maximum_blocks);
   const auto blocks = static_cast<unsigned>(std::min(dense_upper_bound, maximum_blocks));
   const unsigned threads = canonical_materialized_component_lanes(angular_order);
-#define GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(order)                                       \
-  case order:                                                                                  \
-    if (unrestricted)                                                                          \
-      materialized_canonical_jk_kernel<true, order><<<blocks, threads, 0, stream>>>(           \
-          batch, rows, first_begin, first_count, second_begin, second_count,                   \
-          integral_range(range), omega, screening, bounds, density, active, coulomb, exchange, \
-          work_count, nullptr, coulomb_correction, exchange_correction);                       \
-    else                                                                                       \
-      materialized_canonical_jk_kernel<false, order><<<blocks, threads, 0, stream>>>(          \
-          batch, rows, first_begin, first_count, second_begin, second_count,                   \
-          integral_range(range), omega, screening, bounds, density, active, coulomb, exchange, \
-          work_count, nullptr, coulomb_correction, exchange_correction);                       \
+  // Source instantiations have no density/scatter path. Ordinary Fock kernels
+  // retain their compile-time sink rather than paying a per-component branch.
+  if (source.values) {
+#define GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(order)                                             \
+  case order:                                                                                     \
+    materialized_canonical_jk_kernel<false, order, false, true><<<blocks, threads, 0, stream>>>(  \
+        batch, rows, first_begin, first_count, second_begin, second_count, integral_range(range), \
+        omega, screening, bounds, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,  \
+        nullptr, nullptr, nullptr, source);                                                       \
+    break
+    switch (angular_order) {
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(3);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(4);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(5);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(6);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(7);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(8);
+      GENERATIVEQC_MATERIALIZED_SOURCE_ORDER(9);
+    }
+#undef GENERATIVEQC_MATERIALIZED_SOURCE_ORDER
+    return;
+  }
+#define GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(order)                                           \
+  case order:                                                                                      \
+    if (unrestricted)                                                                              \
+      materialized_canonical_jk_kernel<true, order><<<blocks, threads, 0, stream>>>(               \
+          batch, rows, first_begin, first_count, second_begin, second_count,                       \
+          integral_range(range), omega, screening, bounds, density, active, coulomb, exchange,     \
+          work_count, nullptr, coulomb_correction, exchange_correction, nullptr, nullptr, source); \
+    else                                                                                           \
+      materialized_canonical_jk_kernel<false, order><<<blocks, threads, 0, stream>>>(              \
+          batch, rows, first_begin, first_count, second_begin, second_count,                       \
+          integral_range(range), omega, screening, bounds, density, active, coulomb, exchange,     \
+          work_count, nullptr, coulomb_correction, exchange_correction, nullptr, nullptr, source); \
     break
   switch (angular_order) {
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(0);
@@ -962,6 +1019,17 @@ void launch_materialized_canonical_jk_kernel(
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(12);
   }
 #undef GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER
+}
+
+void launch_canonical_pair_inverse(cudaStream_t stream, DeviceBatch batch,
+                                   const std::int32_t* pairs, const std::int32_t* order,
+                                   std::size_t pair_count, std::int32_t* inverse) {
+  if (!pair_count) return;
+  constexpr unsigned threads = 128;
+  const auto blocks =
+      static_cast<unsigned>(std::min<std::size_t>((pair_count + threads - 1) / threads, 4096));
+  canonical_pair_inverse_kernel<<<blocks, threads, 0, stream>>>(batch, pairs, order, pair_count,
+                                                                inverse);
 }
 
 /** Whole-shell FP32 recurrence; optional K shares J's source, with FP64 scatter. */
@@ -1089,7 +1157,8 @@ void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_byte
         exchange_omega, screening, bounds, density, beta, j_out, ka_out, kb_out, nullptr);
 }
 
-template <bool Cartesian, bool PairedRanges = false, bool MixedJ = false>
+template <bool Cartesian, bool PairedRanges = false, bool MixedJ = false,
+          bool CombinedSource = false>
 void launch_canonical_jk_source(
     cudaStream_t stream, DeviceBatch batch, std::int32_t system, unsigned angular_order,
     const std::int32_t* pairs, CanonicalPairRows rows, std::size_t first_begin,
@@ -1100,7 +1169,8 @@ void launch_canonical_jk_source(
     std::conditional_t<MixedJ, float, double>* source_values = nullptr,
     double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
     std::size_t work_limit = std::numeric_limits<std::size_t>::max(),
-    std::uint64_t* mixed_coulomb_work_count = nullptr, std::size_t work_begin = 0) {
+    std::uint64_t* mixed_coulomb_work_count = nullptr, std::size_t work_begin = 0,
+    double source_full_range_scale = 0.0) {
   const std::size_t work_count = std::min(
       same_bucket ? first_count * (first_count + 1U) / 2U : first_count * second_count, work_limit);
   if (!work_count) return;
@@ -1110,21 +1180,21 @@ void launch_canonical_jk_source(
 #define GENERATIVEQC_CANONICAL_JK_ORDER(order)                                                  \
   case order:                                                                                   \
     if (unrestricted)                                                                           \
-      canonical_jk_kernel<order, true, Cartesian, PairedRanges, MixedJ>                         \
+      canonical_jk_kernel<order, true, Cartesian, PairedRanges, MixedJ, CombinedSource>         \
           <<<blocks, threads, 0, stream>>>(                                                     \
               batch, system, pairs, rows, first_begin, first_count, second_begin, second_count, \
               same_bucket, work_count, want_j, want_k, integral_range(exchange_range),          \
               exchange_omega, screening, bounds, density, coulomb, exchange, work_census,       \
               range_exchange, source_values, coulomb_correction, exchange_correction,           \
-              mixed_coulomb_work_count, work_begin);                                            \
+              mixed_coulomb_work_count, work_begin, source_full_range_scale);                   \
     else                                                                                        \
-      canonical_jk_kernel<order, false, Cartesian, PairedRanges, MixedJ>                        \
+      canonical_jk_kernel<order, false, Cartesian, PairedRanges, MixedJ, CombinedSource>        \
           <<<blocks, threads, 0, stream>>>(                                                     \
               batch, system, pairs, rows, first_begin, first_count, second_begin, second_count, \
               same_bucket, work_count, want_j, want_k, integral_range(exchange_range),          \
               exchange_omega, screening, bounds, density, coulomb, exchange, work_census,       \
               range_exchange, source_values, coulomb_correction, exchange_correction,           \
-              mixed_coulomb_work_count, work_begin);                                            \
+              mixed_coulomb_work_count, work_begin, source_full_range_scale);                   \
     break
   switch (angular_order) {
     GENERATIVEQC_CANONICAL_JK_ORDER(0);
@@ -1184,16 +1254,26 @@ void launch_canonical_rsh_values_kernel(
       coulomb, full_exchange, work_census, range_exchange);
 }
 
-void launch_canonical_jk_kernel(
-    cudaStream_t stream, DeviceBatch batch, bool cartesian, std::int32_t system,
-    unsigned angular_order, const std::int32_t* pairs, CanonicalPairRows rows,
-    std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
-    std::size_t second_count, bool same_bucket, bool want_j, bool want_k, bool unrestricted,
-    DirectCoulombRange exchange_range, double exchange_omega, double screening,
-    const double* bounds, const double* density, double* coulomb, double* exchange,
-    std::uint64_t* work_census, double* source_values, double* coulomb_correction,
-    double* exchange_correction, std::size_t work_limit, std::size_t work_begin) {
-  if (cartesian)
+void launch_canonical_jk_kernel(cudaStream_t stream, DeviceBatch batch, bool cartesian,
+                                std::int32_t system, unsigned angular_order,
+                                const std::int32_t* pairs, CanonicalPairRows rows,
+                                std::size_t first_begin, std::size_t first_count,
+                                std::size_t second_begin, std::size_t second_count,
+                                bool same_bucket, bool want_j, bool want_k, bool unrestricted,
+                                DirectCoulombRange exchange_range, double exchange_omega,
+                                double screening, const double* bounds, const double* density,
+                                double* coulomb, double* exchange, std::uint64_t* work_census,
+                                double* source_values, double* coulomb_correction,
+                                double* exchange_correction, std::size_t work_limit,
+                                std::size_t work_begin, double source_full_range_scale) {
+  if (source_full_range_scale != 0.0)
+    launch_canonical_jk_source<true, false, false, true>(
+        stream, batch, system, angular_order, pairs, rows, first_begin, first_count, second_begin,
+        second_count, same_bucket, want_j, want_k, unrestricted, exchange_range, exchange_omega,
+        screening, bounds, density, coulomb, exchange, work_census, nullptr, source_values,
+        coulomb_correction, exchange_correction, work_limit, nullptr, work_begin,
+        source_full_range_scale);
+  else if (cartesian)
     launch_canonical_jk_source<true>(
         stream, batch, system, angular_order, pairs, rows, first_begin, first_count, second_begin,
         second_count, same_bucket, want_j, want_k, unrestricted, exchange_range, exchange_omega,

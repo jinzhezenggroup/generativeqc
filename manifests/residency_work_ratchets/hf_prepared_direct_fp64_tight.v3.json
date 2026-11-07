@@ -1,0 +1,1134 @@
+{
+  "schema": "generativeqc.observed-source-work-ratchet.v3",
+  "scope": "verified source copy/fence calls and observed CUPTI memcpy/blocking synchronization activity",
+  "profiles": [
+    {
+      "name": "prepared-rhf-direct-fp64-tight-scf-fixed-budget-v3",
+      "workload_sha256": "5623377bdf404054e737824eee3c885a706ba4b74e8433ffeb60e9e55aa127a4",
+      "baseline": {
+        "source_tree": "4f2c2b475e905415baa1f7b9deada5d47eb01f20",
+        "library_sha256": "65294ae48d260c4214920befa90650ef9c7fddf79ccd6e2450b5ecc4271ea25e",
+        "collector_sha256": "c46fcd6d5fa65f12282e580f7da942dea97a72e8eb1c049cc55f1b5e56e6a619",
+        "slurm_job_id": "1506"
+      },
+      "regions": [
+        {
+          "name": "energy-warm",
+          "role": "replay",
+          "owner_roles": [
+            {
+              "owner": "hf_bucket",
+              "role": "iteration",
+              "max": {
+                "source_transfer_calls": 2,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 2,
+                "source_event_fences": 0,
+                "h2d_bytes": 0,
+                "d2h_bytes": 8,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "prepare",
+              "max": {
+                "source_transfer_calls": 2,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 0,
+                "source_event_fences": 0,
+                "h2d_bytes": 24,
+                "d2h_bytes": 0,
+                "d2d_bytes": 0,
+                "activity_sync_records": 0,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "publication",
+              "max": {
+                "source_transfer_calls": 34,
+                "source_zero_byte_calls": 16,
+                "source_stream_fences": 2,
+                "source_event_fences": 0,
+                "h2d_bytes": 0,
+                "d2h_bytes": 1029,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "force-warm",
+          "role": "replay",
+          "owner_roles": [
+            {
+              "owner": "hf_bucket",
+              "role": "prepare",
+              "max": {
+                "source_transfer_calls": 4,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 0,
+                "source_event_fences": 0,
+                "h2d_bytes": 40,
+                "d2h_bytes": 0,
+                "d2d_bytes": 0,
+                "activity_sync_records": 0,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "publication",
+              "max": {
+                "source_transfer_calls": 36,
+                "source_zero_byte_calls": 18,
+                "source_stream_fences": 2,
+                "source_event_fences": 0,
+                "h2d_bytes": 0,
+                "d2h_bytes": 1194,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            }
+          ]
+        }
+      ],
+      "unannotated_activity_limit": 0,
+      "resident_boundaries": [
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "iteration",
+          "site": "hf.final-fock-count",
+          "payload": "final_fock_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 8
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "iteration",
+          "site": "hf.final-fock-fence",
+          "payload": "none",
+          "kind": "stream_sync",
+          "direction": "none",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "prepare",
+          "site": "hf.energy-seed-input",
+          "payload": "input.previous_energy_seed",
+          "kind": "transfer",
+          "direction": "h2d",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "converged",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 3
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "density",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 456
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "density_rms",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "energy",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "energy_change",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "failed",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 3
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_audit_mask",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_fock_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_fock_reuse_mask",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 3
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_quartets",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_tiles",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_quartets",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_tiles",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_max_delta",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "iterations",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 12
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results-fence",
+          "payload": "none",
+          "kind": "stream_sync",
+          "direction": "none",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "prepare",
+          "site": "hf.dynamic-inputs",
+          "payload": "input.generated_fock_shell_class_mask",
+          "kind": "transfer",
+          "direction": "h2d",
+          "max_calls": 2,
+          "max_bytes": 16
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "prepare",
+          "site": "hf.energy-seed-input",
+          "payload": "input.previous_energy_seed",
+          "kind": "transfer",
+          "direction": "h2d",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.forces",
+          "payload": "forces",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 168
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "converged",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 3
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "density",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 456
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "density_rms",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "energy",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "energy_change",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "failed",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 3
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_audit_mask",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_fock_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_fock_reuse_mask",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_quartets",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_tiles",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_quartets",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_tiles",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_max_delta",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "iterations",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 12
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results-fence",
+          "payload": "none",
+          "kind": "stream_sync",
+          "direction": "none",
+          "max_calls": 2,
+          "max_bytes": 0
+        }
+      ]
+    },
+    {
+      "name": "prepared-uhf-direct-fp64-tight-scf-fixed-budget-v3",
+      "workload_sha256": "9e7d2e83fce8e0baf40fa96d9c042aeeb0918c23b38a9d9b39c8ded47f311054",
+      "baseline": {
+        "source_tree": "4f2c2b475e905415baa1f7b9deada5d47eb01f20",
+        "library_sha256": "65294ae48d260c4214920befa90650ef9c7fddf79ccd6e2450b5ecc4271ea25e",
+        "collector_sha256": "c46fcd6d5fa65f12282e580f7da942dea97a72e8eb1c049cc55f1b5e56e6a619",
+        "slurm_job_id": "1506"
+      },
+      "regions": [
+        {
+          "name": "energy-warm",
+          "role": "replay",
+          "owner_roles": [
+            {
+              "owner": "hf_bucket",
+              "role": "iteration",
+              "max": {
+                "source_transfer_calls": 2,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 2,
+                "source_event_fences": 0,
+                "h2d_bytes": 0,
+                "d2h_bytes": 8,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "prepare",
+              "max": {
+                "source_transfer_calls": 2,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 0,
+                "source_event_fences": 0,
+                "h2d_bytes": 24,
+                "d2h_bytes": 0,
+                "d2d_bytes": 0,
+                "activity_sync_records": 0,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "publication",
+              "max": {
+                "source_transfer_calls": 34,
+                "source_zero_byte_calls": 16,
+                "source_stream_fences": 2,
+                "source_event_fences": 0,
+                "h2d_bytes": 0,
+                "d2h_bytes": 1029,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "force-warm",
+          "role": "replay",
+          "owner_roles": [
+            {
+              "owner": "hf_bucket",
+              "role": "prepare",
+              "max": {
+                "source_transfer_calls": 4,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 0,
+                "source_event_fences": 0,
+                "h2d_bytes": 40,
+                "d2h_bytes": 0,
+                "d2d_bytes": 0,
+                "activity_sync_records": 0,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "publication",
+              "max": {
+                "source_transfer_calls": 36,
+                "source_zero_byte_calls": 18,
+                "source_stream_fences": 2,
+                "source_event_fences": 0,
+                "h2d_bytes": 0,
+                "d2h_bytes": 1194,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            }
+          ]
+        }
+      ],
+      "unannotated_activity_limit": 0,
+      "resident_boundaries": [
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "iteration",
+          "site": "hf.final-fock-count",
+          "payload": "final_fock_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 8
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "iteration",
+          "site": "hf.final-fock-fence",
+          "payload": "none",
+          "kind": "stream_sync",
+          "direction": "none",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "prepare",
+          "site": "hf.energy-seed-input",
+          "payload": "input.previous_energy_seed",
+          "kind": "transfer",
+          "direction": "h2d",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "converged",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 3
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "density",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 912
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "density_rms",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "energy",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "energy_change",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "failed",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 3
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_audit_mask",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_fock_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_fock_reuse_mask",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 3
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_quartets",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_tiles",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_quartets",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_tiles",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_max_delta",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "iterations",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 12
+        },
+        {
+          "region": "energy-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results-fence",
+          "payload": "none",
+          "kind": "stream_sync",
+          "direction": "none",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "prepare",
+          "site": "hf.dynamic-inputs",
+          "payload": "input.generated_fock_shell_class_mask",
+          "kind": "transfer",
+          "direction": "h2d",
+          "max_calls": 2,
+          "max_bytes": 16
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "prepare",
+          "site": "hf.energy-seed-input",
+          "payload": "input.previous_energy_seed",
+          "kind": "transfer",
+          "direction": "h2d",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.forces",
+          "payload": "forces",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 168
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "converged",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 3
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "density",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 912
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "density_rms",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "energy",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "energy_change",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "failed",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 3
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_audit_mask",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_fock_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 24
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "final_fock_reuse_mask",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_quartets",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_delta_tiles",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_count",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_quartets",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_full_tiles",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "incremental_max_delta",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 0
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results",
+          "payload": "iterations",
+          "kind": "transfer",
+          "direction": "d2h",
+          "max_calls": 2,
+          "max_bytes": 12
+        },
+        {
+          "region": "force-warm",
+          "owner": "hf_bucket",
+          "role": "publication",
+          "site": "hf.results-fence",
+          "payload": "none",
+          "kind": "stream_sync",
+          "direction": "none",
+          "max_calls": 2,
+          "max_bytes": 0
+        }
+      ]
+    }
+  ]
+}

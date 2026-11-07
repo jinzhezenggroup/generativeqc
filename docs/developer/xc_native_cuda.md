@@ -762,10 +762,19 @@ between fixed-potential inner solves. Transported densities start with a target
 anchor. Provisional and full-target iterations share the caller's main SCF
 iteration budget; initialization gets no separate allowance. The existing ECP
 physical-final-closure policy retains its separate bound of four correction
-iterations. Only consecutive complete target evaluations passing the unchanged
-energy, density and physical residual gates can publish a successful state or
-forces. An already stationary target density is held for a further
+iterations. Only consecutive complete target evaluations passing the active
+physical convergence policy and canonical final-state checks can publish a
+successful state or forces. An already stationary target density is held for a further
 physical energy confirmation, instead of applying another sub-tolerance update.
+
+The existing qualified FP64 Standard full-Direct WB97M-V owner uses spin RMS,
+rather than the AO-element maximum, only to end provisional initializer/frozen
+solves at their existing tolerance. This does not change physical target energy
+or MO-gradient convergence, canonical density/force checks, fresh energy epochs,
+CDIIS resets or finite proposal/total budgets. Strict/tighter, fitted, mixed and
+other unqualified owners retain AO-maximum proposal control. Set
+`GENERATIVEQC_VV10_RMS_HANDOFF=0` to restore that control explicitly; `1` cannot
+bypass owner qualification. No GPU model or molecule-size branch is involved.
 
 Resident warm replays and unsupported spin, precision, incremental-J/K or
 budget cases retain their existing solve. A caller-selected device chunk also
@@ -773,6 +782,8 @@ keeps its existing solver. Set `GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED=0` to
 select the ordinary full-target fallback explicitly. Provisional history scopes
 and actual VV10 pair-work receipts distinguish initialization from accepted
 physical work; initialization is never a cached convergence result.
+Disabling initialization also withholds its automatic resident-LR source lease;
+that selector alone is not a resource-matched SCF operator-sequence benchmark.
 
 Strict-FP64 restricted VV10 initialization automatically admits bounded
 screened s/p/d range-ERI storage on grids of at least 65536 points, subject to
@@ -1116,6 +1127,30 @@ Use `tests/python/test_native_stationary_nonlocal_reuse_cuda.py` with
 energy/force, movement, failure, schedule and capacity gates. Complete endpoint
 timing must run separately with tracing disabled.
 
+The native stationary owner also shares strict-FP64 AO derivative panels and
+density jets between semilocal and VV10 geometry when their device, exact point
+pointer/span, atom-prefix/radius topology and points-per-atom match. It prepares
+VV10 seeds from the authenticated final SCF features on the first valid grid
+view's stream; fresh grid owners need not have a view before that evaluation.
+Both geometry consumers enqueue on that stream before the next panel generation
+overwrites storage. Each model retains its own weights, atomic weights and source
+slots. No new resident panel allocation or resource tier is introduced, including
+for minimum-capacity owners. Exact-key pair reuse and its failure invalidation
+remain independent of panel sharing.
+
+Unset, empty or `1` for `GENERATIVEQC_STATIONARY_SHARED_GRID` enables this guarded
+default; other nonempty values, distinct grids/topologies and mixed grid or
+geometry precision retain the bounded two-pass path. The `stationary_force`
+trace reports `shared_nonlocal_grid` alongside executed grid/projection work.
+For automatic recipes, the automatic-artifact diagnostic exposes cumulative
+force-owner grid work without enabling intrusive timing traces; subtract adjacent
+receipts for per-call work. Curated recipes such as WB97M-V are not admitted by
+that ABI. Their trace-based work diagnostics must remain separate from clean
+timings, since DF tracing can disable optional MD-J.
+`tests/python/test_stationary_shared_grid_cuda.py` qualifies complete
+independent E/F and fallback behavior in a finite GPU allocation. Work reductions
+do not imply proportional complete-endpoint speedups or quadrature convergence.
+
 The explicit `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-wide` experiment uses
 eight rows per lane and retains row inputs for admitted VV10 domains with at
 least 65,536 active points. Smaller domains use the existing four-row schedule.
@@ -1132,6 +1167,19 @@ fallback. `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-packet` explicitly selects t
 packet route, including small qualification fixtures; `parallel` restores the
 previous four-row bilateral schedule and `ordered` forces the ordered fallback.
 Unset and empty selectors both use automatic selection.
+Within that admitted packet route, strict FP64 SCF feature sweeps specialize
+away mixed-pair admission and unused per-pair arithmetic counters. A requested
+arithmetic census selects a counted specialization instead. The compiler-owned
+feature closure shares the energy reciprocal: for `phi = -3/(2*D)`, its common
+denominator derivative is `-phi/D`, rather than `(2/3)*phi*phi`. Both use the
+same correctly rounded FP64 reciprocal; the changed derivative rounding has a
+separate lowering identity and independent numerical acceptance gates.
+The explicit `parallel-packet` selection retains the previous feature closure;
+`parallel-packet-reciprocal` explicitly selects the SCF specialization, including
+small qualification fixtures. Geometry, mixed-pair arithmetic, CPU/rVV10 and
+refused-domain paths retain their existing closures. Selector changes still
+invalidate density-dependent pair reuse. No points, pairs, convergence checks,
+precision, workspace or synchronization are removed from the scientific contract.
 Each warp loads 32 adjacent compact partners and rotates their
 inputs and bilateral FP64 partials through all lanes. After 32 steps each
 partner returns to its original lane for publication. Four rows per lane keep

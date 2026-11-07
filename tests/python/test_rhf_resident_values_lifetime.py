@@ -138,7 +138,10 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t,std::size_t,std::size_t
 generativeqc_status create_cuda_direct_jk_resident_plan_on_stream(
     int, const std::vector<core::System>& systems, double screening,
     std::size_t budget, cudaStream_t value, CudaDirectJkPlan** output,
-    CudaDirectJkDiagnostic& diagnostic, std::string&) {
+    CudaDirectJkDiagnostic& diagnostic, std::string&, bool shared_source_geometry) {
+  // Full-range phase owners and mixed-recurrence sources retain their own
+  // geometry rather than opting into the exact range-source sharing path.
+  require(!shared_source_geometry);
   const bool screened=mode==21 || mode>=26;
   require(value==stream && screening==(screened ? 1e-12 : 0.0) && systems.size()==1);
   require(budget==(screened ? 5120 : 4096));
@@ -213,8 +216,13 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(
 }
 generativeqc_status prepare_cuda_direct_jk_range_resident_values(
     CudaDirectJkPlan* plan, std::size_t budget, std::uint32_t mask,
-    FockOperator, double, std::string& detail) {
+    FockOperator, double, std::string& detail, double full_range_scale) {
+  require(full_range_scale==0.0);
   return prepare_cuda_direct_jk_selected_resident_values(plan,budget,mask,detail);
+}
+generativeqc_status prepare_cuda_direct_jk_combined_range_values(
+    CudaDirectJkPlan*, double, std::size_t, std::string&) {
+  throw std::logic_error("HF lifetime fixture attempted combined range exchange");
 }
 generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
     CudaDirectJkPlan* plan, std::size_t budget, std::string& detail,

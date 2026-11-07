@@ -25,7 +25,7 @@ using AoExpansion = std::vector<CartesianExpansionTerm>;
 
 /** Maximum terms in the legacy through-f CUDA topology (CPU uses vectors). */
 inline constexpr std::size_t kMaximumAoExpansionTerms = 3;
-// Auxiliary spherical g has up to six Cartesian terms. Consumers must opt in
+// Auxiliary spherical g/h have up to six Cartesian terms. Consumers must opt in
 // with matching metadata stride; the established s/p/d/f packing stays at three.
 inline constexpr std::size_t kMaximumAuxiliaryAoExpansionTerms = 6;
 
@@ -73,8 +73,10 @@ inline constexpr std::size_t kMaximumAuxiliaryAoExpansionTerms = 6;
 [[nodiscard]] double cartesian_component_normalization(
     const CartesianComponent& component) noexcept;
 
-/** Validate and radially normalize contracted Cartesian Gaussian shells. */
-generativeqc_status validate_and_normalize(core::System& system, std::string& detail);
+/** Validate and radially normalize shells. Only the scoped SCF auxiliary
+ * bridge opts into h metadata; ordinary orbital/correlation owners retain g. */
+generativeqc_status validate_and_normalize(core::System& system, std::string& detail,
+                                           unsigned maximum_angular_momentum = 4);
 
 }  // namespace generativeqc::molecule
 

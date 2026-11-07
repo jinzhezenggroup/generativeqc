@@ -421,7 +421,12 @@ class RuntimeTests(unittest.TestCase):
                 "gfn2-xtb",
             ):
                 correlated = method in ("mp2", "ump2", "rccsd")
-                energy, density = (1e-12, 1e-10) if correlated else (1e-10, 1e-8)
+                if correlated:
+                    energy, density = 1e-12, 1e-10
+                elif method == "gfn2-xtb":
+                    energy, density = 1e-10, 1e-8
+                else:
+                    energy, density = 1e-9, 1e-5
                 screening = 0.0 if correlated or method == "gfn2-xtb" else 1e-14
                 cases = (
                     ((), energy, density, screening, 100),
@@ -485,9 +490,9 @@ class RuntimeTests(unittest.TestCase):
         self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
         self.env["GQC_TEST_CAPTURE_SCF"] = "1"
         cases = (
-            ((), 1e-10, 1e-8),
-            (("--energy-tolerance", "3e-11"), 3e-11, 1e-8),
-            (("--density-tolerance", "7e-9"), 1e-10, 7e-9),
+            ((), 1e-9, 1e-5),
+            (("--energy-tolerance", "3e-11"), 3e-11, 1e-5),
+            (("--density-tolerance", "7e-9"), 1e-9, 7e-9),
             (
                 ("--energy-tolerance", "3e-11", "--density-tolerance", "7e-9"),
                 3e-11,

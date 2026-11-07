@@ -224,3 +224,10 @@ from the current default; a two-arm toggle would confound solver/nonlocal
 changes with J/K savings. Keep coarse-screening/proposal relaxations disabled
 for a same-cutoff study and retain fresh complete-target closure. This is a
 design constraint, not a measured incremental speedup or default decision.
+
+## Superseding qualification
+
+The [seven-class complete-pair decision](../implemented/performance/2026-11-06-direct-complete-pair-projection.md)
+supersedes the DPPP-only candidate after new scheduled A100/5090 complete
+endpoints and independent science. It does not retroactively qualify this
+earlier small/inconclusive experiment or settle WB97M-V hybrid performance.

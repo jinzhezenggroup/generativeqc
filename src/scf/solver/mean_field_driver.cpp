@@ -212,14 +212,12 @@ unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralDat
                                            PreparedFockPlan::EigenUse::Finalization, target_eigen);
   EigenResult beta_orbitals = diagonalize(plan, beta_fock, ints, orthogonalizer,
                                           PreparedFockPlan::EigenUse::Finalization, target_eigen);
-  alpha_density = density_from_orbitals(alpha_orbitals.vectors, n, alpha_occupied, 1.0);
-  beta_density = density_from_orbitals(beta_orbitals.vectors, n, beta_occupied, 1.0);
   unsigned physical_fock_builds = 1;
 
   if (options.compute_forces || options.export_physical_reference) {
     const auto epoch = next_host_final_state_epoch();
     FinalStateIdentity identity{
-        {epoch, epoch, 2, 2}, epoch, plan.strategy(), {alpha_occupied, beta_occupied}};
+        {epoch, epoch, 2, 1}, epoch, plan.strategy(), {alpha_occupied, beta_occupied}};
     FinalFrameCandidate candidate{identity, 1, true, {alpha_orbitals, beta_orbitals}};
     const PhysicalFockOperation physical = [&](const auto& current, const auto& densities) {
       if (densities.size() != 2)
@@ -232,8 +230,10 @@ unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralDat
       return diagonalize(plan, fock, ints, orthogonalizer, PreparedFockPlan::EigenUse::Finalization,
                          target_eigen);
     };
-    // The #1790 standard-control determinant contracts by about 0.897 per
-    // physical projection and needs 24 corrections. Keep a finite margin:
+    // Validate the converged determinant before adopting a new projector.
+    // Pre-projecting here can amplify a slow or unstable spin fixed-point
+    // mode even when the retained determinant already passes the physical
+    // proof. Rejected candidates still receive the same bounded correction:
     // at most 33 selector evaluations plus the initial physical Fock above.
     auto selected = select_final_state(identity, ints.overlap, ints.hcore, orthogonalizer,
                                        ints.nuclear_repulsion, {alpha_density, beta_density},
@@ -278,6 +278,8 @@ unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralDat
           ints, alpha_density, beta_density, selected.state->weighted_density[0],
           selected.state->weighted_density[1], plan.energy_derivative(alpha_density, beta_density));
   } else {
+    alpha_density = density_from_orbitals(alpha_orbitals.vectors, n, alpha_occupied, 1.0);
+    beta_density = density_from_orbitals(beta_orbitals.vectors, n, beta_occupied, 1.0);
     std::tie(alpha_fock, beta_fock) =
         build_uhf_focks(plan, ints.hcore, alpha_density, beta_density);
     ++physical_fock_builds;
@@ -526,6 +528,14 @@ ScfResult run_uhf_host_plan(const core::System& system, const ScfOptions& option
         result.energy = progress.energy;
         result.energy_change = progress.energy_change;
         result.density_rms = progress.state_rms;
+      },
+      [&](const ::generativeqc::solver::SelfConsistentProgress&, const UhfEvaluation& evaluation) {
+        // Loose density controls cannot hand a nonstationary spin determinant
+        // to the bounded final selector. Refine under the same SCF budget
+        // until its existing physical commutator ceiling can pass; the full
+        // canonical/fixed-point proof remains owned by finalization.
+        return reference::residual_max_abs(evaluation.physical_residual) <=
+               std::min(1e-8, options.density_tolerance);
       });
   alpha_density = std::move(outcome.state.alpha);
   beta_density = std::move(outcome.state.beta);

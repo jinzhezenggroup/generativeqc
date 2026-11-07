@@ -1,0 +1,157 @@
+{
+  "schema": "generativeqc.scientific-evidence-storage-migration.v1",
+  "scope": "Permanent CPU replay reference inputs retain exact original member bytes; non-test run/build bundles remain in local ignored artifacts and existing Git history, not a Release. No scientific gate changed.",
+  "previous_commit": "12d5142a3c0c15d803704bfa2a4d6c8765b1ab1e",
+  "fixtures": {
+    "tests/reference_data/cupti/n4-1506/h2.tar.xz": {
+      "sha256": "c208f71a60e9bff6c9d294bf4e35ef189b2e4d952787b6b9c00ec8b3040cb3d2",
+      "source_archive_sha256": "b2682fd278c1fe25c2695ab169154ef6da300974f39085f3dc894bdc045f7dca",
+      "members_sha256": {
+        "df-compatibility/h2/activity.json": "1bce3c004cc456bbaed9d584de5b1c26d8edefebfd3c99268c77bf4d228a5d5c",
+        "df-compatibility/h2/graph-inventory.json": "c2cd1b64af352f420090960d18aa8e2e3ae7945caa73f4534dfba87a2e1844ee",
+        "df-compatibility/h2/numerical-and-work.json": "c98bd719be97915501d49ac9903a45eff63a04720abbaae203c7fb362c0eab4d",
+        "df-compatibility/h2/numerical.npz": "5196760d9fd9a258a31330ba24451e608964c163b9bebacd0f18dade6bfb9a23",
+        "df-compatibility/h2/regions.json": "54157d82818ffd98f5771c73e0b22c1346a6086762a061ae22b0029b38e253ca",
+        "df-compatibility/h2/source-boundaries.json": "e6e2b3b23683e4b7036f63020886dd469b73681fbc51c98aa428562ab6e8c917",
+        "df-compatibility/h2/source-diagnostics.json": "273dab617aa92bd2fd1a150fcdcf947f8ee6f53aced213b58b540e1879f7291e"
+      }
+    },
+    "tests/reference_data/cupti/n4-1506/lih.tar.xz": {
+      "sha256": "50630a5f87a0d3bd3ea19c8b12637809ad552b98c5a96ff04b48c0f5dfbc8f57",
+      "source_archive_sha256": "b2682fd278c1fe25c2695ab169154ef6da300974f39085f3dc894bdc045f7dca",
+      "members_sha256": {
+        "df-compatibility/lih/activity.json": "0503c2cfcc2506583f2f9b7b6a3e16534973078d8940045e8cff68e8cb13d397",
+        "df-compatibility/lih/graph-inventory.json": "c2cd1b64af352f420090960d18aa8e2e3ae7945caa73f4534dfba87a2e1844ee",
+        "df-compatibility/lih/numerical-and-work.json": "c2ff42443c08de7cbe4c2436e9c244a5fec6e487acf80d400861083917d1596b",
+        "df-compatibility/lih/numerical.npz": "dfa6f5702bd1a958c418249d4df791963d28bd422c9a42e8cabbb1e5c74df382",
+        "df-compatibility/lih/regions.json": "54157d82818ffd98f5771c73e0b22c1346a6086762a061ae22b0029b38e253ca",
+        "df-compatibility/lih/source-boundaries.json": "0069ea7249b02f3ef8ad21af0eb2c06b1411b634bf2c256e6259c17d7291303a",
+        "df-compatibility/lih/source-diagnostics.json": "442b396c827d6faade60e2ff44715fb73b6db772f80fa7e3a648328a44608e6f"
+      }
+    },
+    "tests/reference_data/cupti/n4-1506/water.tar.xz": {
+      "sha256": "2ef88f7e834f39e18be8461e82fe5162b9229fe471eb27397519418d79a8b308",
+      "source_archive_sha256": "b2682fd278c1fe25c2695ab169154ef6da300974f39085f3dc894bdc045f7dca",
+      "members_sha256": {
+        "df-compatibility/water/activity.json": "fb5cfb472b255151920f491d6eeace4bca0ecf38658a186a41d9ff07e378dcf8",
+        "df-compatibility/water/graph-inventory.json": "c2cd1b64af352f420090960d18aa8e2e3ae7945caa73f4534dfba87a2e1844ee",
+        "df-compatibility/water/numerical-and-work.json": "993a09d449c4c7ff3d8ecc6d1a3e21474931125b7ac5bc4f3be938ee64bc1900",
+        "df-compatibility/water/numerical.npz": "abaea09da05ffdb752f2ff3305fd7b29e227b9a7b2864a7f2a774219b65ab662",
+        "df-compatibility/water/regions.json": "54157d82818ffd98f5771c73e0b22c1346a6086762a061ae22b0029b38e253ca",
+        "df-compatibility/water/source-boundaries.json": "7f45ad4c7a7301ece66f3f451108442f7a7dfb6395f372db336e02d9447b02a7",
+        "df-compatibility/water/source-diagnostics.json": "ece92ca8c2325f4770a56c5da3b2271c6156099b5659508179319b7771cd0ce1"
+      }
+    },
+    "tests/reference_data/cupti/n4-1506/f_heh.tar.xz": {
+      "sha256": "553baeb4777d0a9e1f3adc46e281edd0f336dadc5f2f303beb81e5ad6fa9097e",
+      "source_archive_sha256": "b2682fd278c1fe25c2695ab169154ef6da300974f39085f3dc894bdc045f7dca",
+      "members_sha256": {
+        "df-compatibility/f_heh/activity.json": "122cc648632f7fc288e2d58b28ae6dca8fdf78ef49fca5331480a76881532d87",
+        "df-compatibility/f_heh/graph-inventory.json": "c2cd1b64af352f420090960d18aa8e2e3ae7945caa73f4534dfba87a2e1844ee",
+        "df-compatibility/f_heh/numerical-and-work.json": "d8ca0f3759169d07d5e10d3514edb783fe5ea69340034dd982061044dc24e0e6",
+        "df-compatibility/f_heh/numerical.npz": "a65f086e51a32df64c4556580751055e65f3883ede09760d2d93e389248653f9",
+        "df-compatibility/f_heh/regions.json": "54157d82818ffd98f5771c73e0b22c1346a6086762a061ae22b0029b38e253ca",
+        "df-compatibility/f_heh/source-boundaries.json": "eedb73c4cf35696a833fcb2a67aa294307998d3ca06a759a34d5419d8363e270",
+        "df-compatibility/f_heh/source-diagnostics.json": "c11e408ef80872541b95c8b4c0148074d8a9abd17fe19307ba2c080fc4f9edc9"
+      }
+    },
+    "tests/reference_data/cupti/n4-1511/h2.tar.xz": {
+      "sha256": "3c81cad7f6a71706c47528104d923bb098701fcb26bf932928c7b62d0962a9ec",
+      "source_archive_sha256": "62a6d18c6a8161128ea634c3a341faa8a0efd8598ee93f5a671f85400ddc9c11",
+      "members_sha256": {
+        "df-metric/h2/activity.json": "cfbb37ca9529ca87b0e3e586fda73d60575e2f2dff6759bba6766b4a4f5a6bc8",
+        "df-metric/h2/graph-inventory.json": "c2cd1b64af352f420090960d18aa8e2e3ae7945caa73f4534dfba87a2e1844ee",
+        "df-metric/h2/numerical.json": "0fe456280101957ce121e080877e3f208a1fe28e678f0846b2ef5a27f17cfec8",
+        "df-metric/h2/regions.json": "2df84308019239e4398a21bc2d2053c4eaca2cac60895bd5c33041725a85d998",
+        "df-metric/h2/source-boundaries.json": "7beea78db6320fab9831f36847744fb13c4b285d584fc081dd9b8139c8d67432",
+        "df-metric/h2/source-diagnostics.json": "cadf65ebe1635ec6f10f8b3fe2932f08b2184b24d24e4906a8b6d9e05713dc1f"
+      }
+    },
+    "tests/reference_data/cupti/n4-1511/lih.tar.xz": {
+      "sha256": "2015db2b8776502775691aa967f695dd005b56cfea9c00641d3a05714e8e90e9",
+      "source_archive_sha256": "62a6d18c6a8161128ea634c3a341faa8a0efd8598ee93f5a671f85400ddc9c11",
+      "members_sha256": {
+        "df-metric/lih/activity.json": "406607cd4fe06e0c3a629e67eaf64b03c82be90c56623b9e0096ae2b3bcfbe15",
+        "df-metric/lih/graph-inventory.json": "c2cd1b64af352f420090960d18aa8e2e3ae7945caa73f4534dfba87a2e1844ee",
+        "df-metric/lih/numerical.json": "f65c114ea45d15c81cb1b4fc4b3b18f1ad695494b94dcb1141c37f4c3f7f9285",
+        "df-metric/lih/regions.json": "2df84308019239e4398a21bc2d2053c4eaca2cac60895bd5c33041725a85d998",
+        "df-metric/lih/source-boundaries.json": "2ffd3a4b6a26505f9484cc3cf4ee12334639a1c213aa23f60598e10f2e6b0236",
+        "df-metric/lih/source-diagnostics.json": "dcce946da9a40aba95be4e4e15e749ae5a5328ca7db503c1a02aec47ac4b2fca"
+      }
+    },
+    "tests/reference_data/cupti/n4-1511/water.tar.xz": {
+      "sha256": "1690efd924f51762899104794ee6a363057db298fcf148b86cce57c2d37a608e",
+      "source_archive_sha256": "62a6d18c6a8161128ea634c3a341faa8a0efd8598ee93f5a671f85400ddc9c11",
+      "members_sha256": {
+        "df-metric/water/activity.json": "2eae5c08ab6e1c1877b29b5c46489e947bba2cac9d6acd6092db691925b2f82d",
+        "df-metric/water/graph-inventory.json": "c2cd1b64af352f420090960d18aa8e2e3ae7945caa73f4534dfba87a2e1844ee",
+        "df-metric/water/numerical.json": "f9e87f48918750204003e1e8d25829c55da1aec4a0f876dc12dd5ba00d28cea9",
+        "df-metric/water/regions.json": "2df84308019239e4398a21bc2d2053c4eaca2cac60895bd5c33041725a85d998",
+        "df-metric/water/source-boundaries.json": "b1e298d4a3e70c0527308dacb5d467b402cff4749e5bc761467ca1f5568c5bab",
+        "df-metric/water/source-diagnostics.json": "9fc9500ef22636ca2904f4b87b1f3ba5a045dd65c40a1cefdc546b877042a00a"
+      }
+    },
+    "tests/reference_data/cupti/n4-1511/rhf.tar.xz": {
+      "sha256": "6f5b0dd331d287448054fe71599d5cc57940a1c4110641ada8ebda82ce5f0177",
+      "source_archive_sha256": "62a6d18c6a8161128ea634c3a341faa8a0efd8598ee93f5a671f85400ddc9c11",
+      "members_sha256": {
+        "rhf-capture/activity.json": "b85f5ead0f01e180c07b8970bd97592463d92fa2c3a0982c74697795c4528bd2",
+        "rhf-capture/diagnostics.json": "3e23e5858f6daf52cca56ba37b19e4cb56878edc05dc83b979f3f1623c65593b",
+        "rhf-capture/graph-diagnostics.json": "17cc9f59ef1d519d233476fe90b6b5cb37023b011277ea83a693c5ea35320fd9",
+        "rhf-capture/graphs.json": "240054342e82dd7910d738a4ebdd2a211fac65885ec6b5102775c217ee4b3fbe",
+        "rhf-capture/numerical.json": "1d5a7192fc8080aa96b2dcfcaf978d46b0e6867c5ce724d220d929d722cd5bd6",
+        "rhf-capture/source-boundaries.json": "df7420793468c06fbc43116538c2586a7a348649b8e946c1d7ea2cb66c7f2cf0",
+        "rhf-capture/source-diagnostics.json": "9b8653472c3ba3337619d4cdeb9ace12c07a542f185864ae3f3edf8ad55c4bb8",
+        "rhf-capture/source-work-ratchet.json": "c3227f4d48e98c5189b37a1578cc31c44b9050c9111d0f9666327524b9e0e9dc",
+        "rhf-expected.json": "8b289ef8577e3c2e41177298b9809279d17c6fe55f5b4207c5d5b601331c2560"
+      }
+    },
+    "tests/reference_data/cupti/n4-1511/uhf.tar.xz": {
+      "sha256": "3456d08bd40b7dacca0293696e86533be6876083123c447f3f086a641d7de6d7",
+      "source_archive_sha256": "62a6d18c6a8161128ea634c3a341faa8a0efd8598ee93f5a671f85400ddc9c11",
+      "members_sha256": {
+        "uhf-capture/activity.json": "005210d73804063b5aa8076c4b81aa0e5f963fd81e9dd17a463a03603f884869",
+        "uhf-capture/diagnostics.json": "f42015ae104c80cb4fcf570506a2d9a4ae65746492b6c17566f554fe44529727",
+        "uhf-capture/graph-diagnostics.json": "4f27823ef74dc50f9a28c49eae38c267684acfef78541088ef03a3daa9a7d766",
+        "uhf-capture/graphs.json": "b185bfa6da1f50a6b751857aa7f2e4c1da3af8f10482bfb6a94b28026e4a22f0",
+        "uhf-capture/numerical.json": "3287c52d40afcb638bcfe38b415276a10bb96d2f826d7fde21c3b1a4eebabdd3",
+        "uhf-capture/source-boundaries.json": "601155b0f7de478754c228bdbaa8b64ba82d649b52ea31701afb0626dfe50c13",
+        "uhf-capture/source-diagnostics.json": "90b65f4e4145c9328c0ff0ace50686b129c66dfeaf214eec2f3f8db04198a424",
+        "uhf-capture/source-work-ratchet.json": "6c07414cf1675432def8d591ed03d124631e6b80af84968e3c77ecc93562bce3",
+        "uhf-expected.json": "963eb8275abc49b08f4197893eca2816f46782931c1d9accce5a0dd452dae8ea"
+      }
+    }
+  },
+  "retired_bundles": {
+    "benchmarks/results/residency-n4-20261106/production-captures.tar.xz": {
+      "sha256": "b2682fd278c1fe25c2695ab169154ef6da300974f39085f3dc894bdc045f7dca",
+      "bytes": 1172440,
+      "recovery": "git:12d5142a3c0c15d803704bfa2a4d6c8765b1ab1e:benchmarks/results/residency-n4-20261106/production-captures.tar.xz"
+    },
+    "benchmarks/results/residency-n4-20261106/observer-controls-source.tar.xz": {
+      "sha256": "6b58d79ce178a8671b9aaf0cb39e238917a856733b29cd239aeedf0734e396fc",
+      "bytes": 14892,
+      "recovery": "git:12d5142a3c0c15d803704bfa2a4d6c8765b1ab1e:benchmarks/results/residency-n4-20261106/observer-controls-source.tar.xz"
+    },
+    "benchmarks/results/residency-n4-20261106/build-evidence.tar.xz": {
+      "sha256": "279007e3b467e526ea74db6c0e27dac1bf2a26dc9229b9cd4e570a3ee897ad4c",
+      "bytes": 82108,
+      "recovery": "git:12d5142a3c0c15d803704bfa2a4d6c8765b1ab1e:benchmarks/results/residency-n4-20261106/build-evidence.tar.xz"
+    },
+    "benchmarks/results/residency-n4-20261106/source-manifest.json.xz": {
+      "sha256": "75009dfa3b1ee98455f234c97ae3b83f384b34a6f9334838672a4d2272ee9a2c",
+      "bytes": 916848,
+      "recovery": "git:12d5142a3c0c15d803704bfa2a4d6c8765b1ab1e:benchmarks/results/residency-n4-20261106/source-manifest.json.xz"
+    },
+    "benchmarks/results/residency-qualified-n4-20261106/production-captures.tar.xz": {
+      "sha256": "62a6d18c6a8161128ea634c3a341faa8a0efd8598ee93f5a671f85400ddc9c11",
+      "bytes": 1111196,
+      "recovery": "/home/jzzeng/.codex/worktrees/b015/qc-df-jk/.artifacts/issue-1626-1629/evidence-before-compaction/residency-qualified-n4-20261106-production-captures.tar.xz"
+    },
+    "benchmarks/results/residency-qualified-n4-20261106/build-evidence.tar.xz": {
+      "sha256": "3279c3bfa18e95bc2a770f2f14f0c119dd59429420e47e8102fe2da7cf355489",
+      "bytes": 1012400,
+      "recovery": "/home/jzzeng/.codex/worktrees/b015/qc-df-jk/.artifacts/issue-1626-1629/evidence-before-compaction/residency-qualified-n4-20261106-build-evidence.tar.xz"
+    }
+  }
+}

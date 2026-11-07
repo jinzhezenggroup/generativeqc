@@ -57,6 +57,82 @@ records the complete six/nine-slot bounds and their resource/endpoint gates.
 The [low-order scheduling decision](../../.agents/notes/implemented/performance/2026-10-11-canonical-small-cta-scheduling.md)
 records the 32-thread ownership bounds and the retained full initialization.
 
+## Cold strict range-source construction
+
+Strict SR/LR resident-source preparation can use the same shared shell recurrence
+for total angular orders three through nine. A source-only plan prepares bounded
+primitive-pair geometry and screened shell rows after its canonical AO topology;
+it does not prepare a second generated Fock/force owner. Lower orders, higher
+orders, mixed-precision sources and unavailable optional storage retain their
+component-source preparation.
+
+A temporary quadratic inverse maps canonical AO pairs to their existing sorted
+ranks. Each admitted shell component writes its FP64 value, including exact zero,
+into the original screened compact source slot. Equal-bucket pair swaps are
+resolved by sorted rank, not by shell traversal order. Geometry, range, omega,
+Schwarz admission and replay layout remain immutable. A NaN-initialized source
+and the complete finite audit reject missing publications before lease admission.
+When a replay requests a stricter threshold and an immutable source-row census,
+uncached buckets retain the AO consumer: it counts the original compact rows
+before applying the stricter predicate.
+
+The inverse must fit alongside values within the preparation allowance; it is
+stream-fenced and released after construction. Allocation refusal preserves the
+component producer. `GENERATIVEQC_DIRECT_RESIDENT_COMPONENT_SOURCE=1` selects that
+producer explicitly for qualification without disabling resident replay. This is
+not the same experiment as disabling the LR lease entirely. The change does not
+alter SCF convergence, grids, precision, full-range J/K or force ownership.
+
+The [source-construction decision](../../.agents/notes/implemented/performance/2026-11-06-shared-cold-range-source.md)
+records ownership, qualification and the retained stricter-threshold fallback.
+
+## Coefficient-bound resident exchange
+
+Automatic repeated cold range-source admission can retain
+`LR + (c_full / c_LR) Full` in place of a complete GPU LR source. This applies
+only to strict restricted full Direct, with fixed scientific exchange terms and
+complete GPU source capacity. Partial,
+host/disk, fitted, mixed, incremental, graph-chunk and application-ledger consumers
+keep their existing providers. Admission uses resource/capability predicates,
+not GPU names.
+
+The default producer constructs the composite directly in one allocation using
+the same immutable canonical rows. Whole-shell order-3--9 consumers combine FP64
+Full/LR radial roots before the common Coulomb recurrence and component
+contraction. Other component consumers borrow the existing paired Full/LR
+evaluator. This avoids constructing a second complete source or mutating a
+published raw LR source. Every value is finite-audited before publication;
+driver and numerical failures propagate rather than silently falling back.
+Persistent source storage does not grow, and temporary inverse metadata remains
+bounded by the admitted source allowance.
+
+`GENERATIVEQC_KS_COMBINED_RANGE_BUILD=0` before preparing a new owner selects
+the incumbent two-producer construction. That route separately admits a full
+temporary source, finite-audits it, combines in FP64 and releases it before SCF.
+Capacity refusal before mutation preserves ordinary LR replay; failure after
+mutation retires the source and propagates a numerical error. It does not disable
+an effective LR cache. Direct construction need not satisfy this second-source
+transient capacity gate, but still requires complete strict GPU residency.
+
+One K contraction then supplies both radial terms through the existing range
+slot, while the ordinary full-K slot is zero. Fock/energy assembly applies the
+range coefficient once. Actual K action counts decrease; the scientific equation,
+SCF convergence, grids, precision and analytic-force owners do not change. Raw LR/J
+borrowers reject the composite identity, and fixed-density component profiling
+and incumbent warm rebasing use independent raw providers.
+
+`GENERATIVEQC_KS_COMBINED_RANGE_SOURCE=0` before preparing a new owner restores
+ordinary raw-LR replay for same-image qualification. Explicit `1` can exercise
+non-automatic source owners but never bypasses resource or scientific identity
+gates. Leaving it unset uses
+only the already-qualified automatic repeated-source domain.
+
+The [coefficient-bound source decision](../../.agents/notes/implemented/performance/2026-11-07-coefficient-bound-range-source.md)
+records the resource/failure bounds and retained qualification.
+The [direct construction decision](../../.agents/notes/implemented/performance/2026-11-07-direct-composite-source-build.md)
+records the one-pass producer, unchanged scientific gates, and bilateral cold
+qualification against the incumbent construction.
+
 ## Bounded long-range force scheduling
 
 Ordinary long-range exchange force launches use the established 128-thread

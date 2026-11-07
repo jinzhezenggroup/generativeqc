@@ -1,0 +1,34 @@
+{
+  "schema": "generativeqc.h100-diis-rejection.v1",
+  "decision": "REJECT_NOT_PROMOTABLE",
+  "source_revision": "d785a10d1e3d43e7e8167c7efa5c78a3b6f3594c",
+  "native_source_identity": "4b7a246cb162b8dfbd72a43a82a1f4788e85eea0f6eafb82dd85601a0c8d0a5f",
+  "core_sha256": "2610999fc1d6d714e58af533a546b5cd7534ad2523322dd172d00a9878796cbf",
+  "gpu_uuid": "GPU-d36c3a44-fb07-cfa1-bf66-7872e07d3366",
+  "campaign_sha256": "785ac6992a11bf8a9b119b511532ae55671e5595aa0f9c731b0dad9fb262858f",
+  "evidence": {
+    "path": "evidence.json.xz",
+    "bytes": 94424,
+    "decoded_bytes": 1317603,
+    "sha256": "bbd52f1915e1cd454dfd52169f930331ea1f936c9fe8ca67fa1f29c015693b52"
+  },
+  "source_patch": {
+    "base": "32b4942de70ff4ac6ec4701063f4b537daf096a9",
+    "candidate": "d785a10d1e3d43e7e8167c7efa5c78a3b6f3594c",
+    "tree": "c346c923a8a8f51fd5fed97ae154ae236a60ef18",
+    "path": "candidate.patch",
+    "bytes": 87851,
+    "sha256": "c4c192f51c7dcd995ec306005aae824986d9ee356368c8b3ac8dcef148efb7c0",
+    "stored_path": "candidate.patch.xz",
+    "stored_bytes": 20400,
+    "stored_sha256": "b9878951440a277a5747225b8e4a9f3931b5f94ac46fce0d530daaf5999128c9"
+  },
+  "reference_publication": {
+    "publication": "h100-cold-force-fixed30-20261105",
+    "member": "fixed30/oracles.json.xz",
+    "oracle_sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4",
+    "reuse_member": "fixed30/reference-reuse.json",
+    "reuse_sha256": "456259156907df84ee2af2d3c4f524e07aa42957bb6b20b9e30c625a2b173e23"
+  },
+  "scope": "One round, WB96Direct/HF96Direct only; six fresh processes and 24 full E/F outputs on one H100. No three-round, five-case or coherent 30 acceptance; no recomputation or default promotion."
+}

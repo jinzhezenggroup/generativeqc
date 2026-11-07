@@ -37,11 +37,14 @@ from .resources_planning import plan_resources
 # Preserve that distinction in restart provenance; absence is not a claim
 # that an older build implemented today's automatic execution policy.
 _CUDA_SCHEDULE_EXTENSION_VARIABLES = (
+    "GENERATIVEQC_CUDA_HF_SHARED_RYS_XY",
     # Optional in historical checkpoints, but part of every new resource and
     # restart identity: changing the force schedule requires explicit admission.
     "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
     "GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS",
     "GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES",
+    "GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE",
+    "GENERATIVEQC_DIRECT_LR_WEIGHTED_FORCES",
     "GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING",
     "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION",
     "GENERATIVEQC_KS_FIXED_ANCHOR_DELTA",

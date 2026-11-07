@@ -1,0 +1,117 @@
+{
+  "schema": "generativeqc.wb-lr-phase-a-publication.v1",
+  "source": {
+    "revision": "1fa3ba2f9d579e868103bfd5877c83cc5d225f5d",
+    "tree": "4cb25a54dd8cad13bb03947103e30a7bb84a7144",
+    "base_revision": "6987eea5259563250d1e81684ac998b727b8a513",
+    "clean": true
+  },
+  "integration_base": "7109b3d208d23352f266e2bf7440fdfcc71df974",
+  "scope": {
+    "standalone_fixture": "PASS",
+    "molecular_source_replay": "NOT_QUALIFIED",
+    "native_integration": "NOT_ADDED",
+    "endpoint_performance": "NOT_QUALIFIED",
+    "production_default": "NOT_PROMOTED",
+    "all30": "OPEN"
+  },
+  "compressed_sources": {
+    "qualifier.py.xz": {
+      "decoded_bytes": 20930,
+      "sha256": "9da7d3692c029f9dc2baa25e5e76bbfaf2205b1be00552fb0574d7408159ba56"
+    },
+    "reducer.py.xz": {
+      "decoded_bytes": 14939,
+      "sha256": "b6ef8627a26082da096e8b8d68c27090e6e7ffbb24116152a598197c900ec815"
+    }
+  },
+  "files": [
+    {
+      "path": "RESULTS.md",
+      "bytes": 4334,
+      "sha256": "1b87679bcdfc7a3640bd750eb90ccda085c2c811fb19f24c144782e9e00161b2"
+    },
+    {
+      "path": "commit-binding.json",
+      "bytes": 1256,
+      "sha256": "b5fffaa50c65c3a270176e35f215311ec987e92c077d2d1bc32cf48aa056e30b"
+    },
+    {
+      "path": "fixture-receipt.json",
+      "bytes": 3848,
+      "sha256": "c1ee255c5eb93e52c8854eb6b987bf903155c5926e43553ae7fb799985212d1c"
+    },
+    {
+      "path": "link-warning.txt",
+      "bytes": 187,
+      "sha256": "4a9039e3453232c01f7268ec2cf78f30738e225eb22be0155616a8713600c863"
+    },
+    {
+      "path": "qualification.json",
+      "bytes": 51380,
+      "sha256": "08b9f5e8c8e8d84c24437cdde079a6348a75996151c23ece02e2f4a940e31dc5",
+      "encoding": "xz",
+      "stored_path": "qualification.json.xz",
+      "stored_bytes": 9008,
+      "stored_sha256": "6b5caf4373d767be496a40d526b2393c5c1d1ca4f3c2787b3e34d7f7f27a73e4"
+    },
+    {
+      "path": "qualifier.py.xz",
+      "bytes": 5856,
+      "sha256": "38a02d56388258926fb3f9b810fce3a06627d24337d2f7fbfd058be1f22e1e85"
+    },
+    {
+      "path": "reducer.py.xz",
+      "bytes": 5200,
+      "sha256": "c2fafb1c7f4f2dee7b7b2d6928ce76ae23f6d635ae8c93783b71cc14bb5ab503"
+    },
+    {
+      "path": "reduction.json",
+      "bytes": 24620,
+      "sha256": "c6a0f59ce45815b21a53a3c7ac9513c99c778f758a011d01c0b9570a799b493f",
+      "encoding": "xz",
+      "stored_path": "reduction.json.xz",
+      "stored_bytes": 3880,
+      "stored_sha256": "2ffc4b75ae926c26b818920b9a77e47bebe08c43a5d3b3de7bd6163fc5a40040"
+    },
+    {
+      "path": "result-review.md",
+      "bytes": 1973,
+      "sha256": "32d09367facfd7899ecdb2a8c0bfeab4394b86d91cc9abbf3dd51b4dc85324b6"
+    },
+    {
+      "path": "sanitizer-selection.json",
+      "bytes": 12949,
+      "sha256": "5d98f9c0fac83ff75ab932907e8057cda91fa95ee6c85249320803efa03c403d",
+      "encoding": "xz",
+      "stored_path": "sanitizer-selection.json.xz",
+      "stored_bytes": 1032,
+      "stored_sha256": "f65d2825bed95cc8645e281c4761ff1d9324a1bbe8cd1747a398248c4eb4efea"
+    },
+    {
+      "path": "source-binding.json",
+      "bytes": 518,
+      "sha256": "734f14f229bd995ab8ea7b1a71c0230ddccdf66e7fa146238e7c7079df46742a"
+    },
+    {
+      "path": "source-review.json",
+      "bytes": 1844,
+      "sha256": "fd6c53ae5505aee520f2ef2892e6e84d5fbed30c7b9a383aee6d06a9ce0f71c5"
+    }
+  ],
+  "raw_artifact_note": "The original 43 MiB raw arrays/build streams remain in the bound owner run directory; their exact hashes and the completed CPU reduction are retained. This compact publication validates reports, not reconstructable device arrays.",
+  "raw_artifact_root": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/h100-cold/20261106-all30/wb-lr-cuda-qualification-1fa3ba2f9-v1",
+  "publication_master_merge": {
+    "revision": "13c11aa026558ce437e4a9509f4e6f488017ab57",
+    "source": "VV10 SCF feature-sweep PR #3024",
+    "five_measured_source_files_changed": false,
+    "new_full_tree_H100_qualification": false
+  },
+  "latest_publication_master_merge": {
+    "revision": "9fbb47085cb1f8b2abdb9fef6f729cdee95317f3",
+    "source": "shared-Rys fixture PR #3023",
+    "preserved_external_head": "dfcf70ecc08e19ca147abf0d56ed1fcf5bfcb7bf",
+    "five_measured_source_files_changed": false,
+    "new_full_tree_H100_qualification": false
+  }
+}

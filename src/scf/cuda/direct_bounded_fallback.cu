@@ -383,6 +383,23 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                 continue;
               }
             }
+            if (radial_operator == DirectRangeOperator::Long && batch.direct_force_lr_weighted &&
+                (angular_order == 4U || angular_order == 5U)) {
+              const unsigned shell_class = direct_quartet_shell_class_device(
+                  batch.shell_angular[first_shell], batch.shell_angular[second_shell],
+                  batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
+              if (weighted_order4_source_class(shell_class))
+                contract_two_electron_force_order4_sources<Unrestricted,
+                                                           DirectForceOutputMode::Separate, true>(
+                    shell_class, batch, task, screening_tolerance, schwarz_bounds, density, active,
+                    output, 0.0, exchange_coefficient, omega);
+              else if (weighted_order5_source_class(shell_class))
+                contract_two_electron_force_order5_sources<Unrestricted,
+                                                           DirectForceOutputMode::Separate, true>(
+                    shell_class, batch, task, screening_tolerance, schwarz_bounds, density, active,
+                    output, 0.0, exchange_coefficient, omega);
+              continue;
+            }
             if (radial_operator == DirectRangeOperator::Long && angular_order <= 3U) {
               const unsigned shell_class = direct_quartet_shell_class_device(
                   batch.shell_angular[first_shell], batch.shell_angular[second_shell],
@@ -455,6 +472,12 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
             }
             if ((radial_operator == DirectRangeOperator::FullSources ||
                  radial_operator == DirectRangeOperator::Full) &&
+                (weighted_order4_source_class(shell_class) ||
+                 weighted_order5_source_class(shell_class)))
+              continue;
+            // One shell consumer replaces the same queue entry's AO subtiles;
+            // no new candidate enumeration or screening predicate is introduced.
+            if (radial_operator == DirectRangeOperator::Long && batch.direct_force_lr_weighted &&
                 (weighted_order4_source_class(shell_class) ||
                  weighted_order5_source_class(shell_class)))
               continue;

@@ -41,10 +41,10 @@ def build_df_value_ir(
     *,
     recurrence: typing.Any = "subset_wick",
 ) -> IntegralIR:
-    """Declare a Cartesian s/p/d/f/g raw metric or three-center shell block.
+    """Declare raw DF blocks through orbital g and auxiliary h.
 
     Auxiliary basis roles and two-/three-center permutation groups are explicit.
-    The pruned Hermite component route supports g without enlarging production
+    The pruned Hermite component route supports g/h without enlarging production
     Rys tables. Higher shells are rejected, never silently truncated.
     """
     family = OperatorFamily(family)
@@ -57,10 +57,11 @@ def build_df_value_ir(
     angular = tuple(angular)
     if len(angular) != len(roles):
         raise ValueError("DF angular signature does not match its basis roles")
-    for l in angular:
-        if type(l) is not int or not 0 <= l <= 4:
+    for l, role in zip(angular, roles, strict=True):
+        maximum = 5 if role == ShellRole.AUXILIARY else 4
+        if type(l) is not int or not 0 <= l <= maximum:
             raise ValueError(
-                "generated DF values support orbital/auxiliary s/p/d/f/g shells only"
+                "generated DF values support orbital s/p/d/f/g and auxiliary s/p/d/f/g/h shells"
             )
     if any(l > 3 for l in angular) and recurrence != "subset_wick":
         raise ValueError("g DF components require the subset_wick recurrence")
@@ -126,10 +127,13 @@ def build_df_component_kernel(
             "DF value lowering requires raw values without derivative weights"
         )
     if any(
-        s.convention != BasisConvention.CARTESIAN or s.angular > 4
+        s.convention != BasisConvention.CARTESIAN
+        or s.angular > (5 if s.role == ShellRole.AUXILIARY else 4)
         for s in signature.shells
     ):
-        raise ValueError("DF component lowering requires Cartesian s/p/d/f/g shells")
+        raise ValueError(
+            "DF component lowering requires Cartesian orbital-through-g/auxiliary-through-h shells"
+        )
     components = tuple(components)
     if len(components) != len(signature.shells) or any(
         c not in cartesian_components(l)
@@ -280,6 +284,8 @@ def build_df_axis_moment(
     internal_derivative: bool = False,
     auxiliary_g: bool = False,
     auxiliary_g_derivative: bool = False,
+    auxiliary_h: bool = False,
+    auxiliary_h_derivative: bool = False,
     states: set[tuple[int, int, int]] | None = None,
 ) -> tuple[Graph, Expr]:
     """Build one-axis Gaussian moments used by a bounded Rys value schedule.
@@ -295,15 +301,36 @@ def build_df_axis_moment(
     ``auxiliary_g_derivative`` domain permits one internally raised orbital
     power in f/f/g, or a raised first g power in g/g metric (b=0). It does not
     admit public orbital g or raising the auxiliary power by a second route.
+    The h flags select the corresponding auxiliary-through-h domains: values
+    need F11 and a single independent derivative raise needs F12. Metric-only
+    first-center powers may reach five/six; orbital centers remain f/f.
     An optional diagnostic set collects the nonconstant recurrence states visited
     by this same builder, before expression simplification or backend CSE.
     """
     powers = (a, b, c)
     maximum = (
-        5 if auxiliary_g_derivative else 4 if internal_derivative or auxiliary_g else 3
+        6
+        if auxiliary_h_derivative
+        else 5
+        if auxiliary_h or auxiliary_g_derivative
+        else 4
+        if internal_derivative or auxiliary_g
+        else 3
     )
     invalid = any(type(n) is not int or not 0 <= n <= maximum for n in powers)
-    if auxiliary_g_derivative:
+    if auxiliary_h or auxiliary_h_derivative:
+        invalid = (
+            invalid
+            or internal_derivative
+            or auxiliary_g
+            or auxiliary_g_derivative
+            or (auxiliary_h and auxiliary_h_derivative)
+            or c > 5
+            or (b > (4 if auxiliary_h_derivative else 3))
+            or (a > (4 if auxiliary_h_derivative else 3) and b != 0)
+            or (a == 4 and b == 4)
+        )
+    elif auxiliary_g_derivative:
         invalid = (
             invalid
             or internal_derivative
@@ -318,6 +345,8 @@ def build_df_axis_moment(
     else:
         invalid = invalid or c > 3 or sum(n == 4 for n in powers) > 1
     if invalid:
+        if auxiliary_h or auxiliary_h_derivative:
+            raise ValueError("DF axis powers exceed the auxiliary-h domain")
         if auxiliary_g_derivative:
             raise ValueError("DF axis powers exceed the auxiliary-g derivative domain")
         raise ValueError("DF axis powers must lie within s/p/d/f")

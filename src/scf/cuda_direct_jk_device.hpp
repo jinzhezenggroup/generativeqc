@@ -41,7 +41,7 @@ generativeqc_status create_cuda_direct_jk_plan_on_stream(
 generativeqc_status create_cuda_direct_jk_resident_plan_on_stream(
     int device_id, const std::vector<core::System>& systems, double screening_tolerance,
     std::size_t device_budget_bytes, cudaStream_t stream, CudaDirectJkPlan** output,
-    CudaDirectJkDiagnostic& diagnostic, std::string& detail);
+    CudaDirectJkDiagnostic& diagnostic, std::string& detail, bool shared_source_geometry = false);
 
 /** Bound optional Schwarz row/sort storage for a Cartesian source shape.
  * Queries CUB workspace on the current CUDA device without allocating or
@@ -76,6 +76,16 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
                                                            std::size_t maximum_bytes,
                                                            std::string& detail);
 
+/** Replace a complete FP64 LR source by LR + full_scale * Full in place.
+ * A bounded temporary source uses the same canonical rows and compiler-owned
+ * producer; it is released before returning. The retained allocation does not
+ * grow. Refusal before mutation leaves the original LR source usable; errors
+ * after mutation must retire the source. Call only before the first consumer.
+ */
+generativeqc_status prepare_cuda_direct_jk_combined_range_values(
+    CudaDirectJkPlan* plan, double full_scale, std::size_t maximum_transient_bytes,
+    std::string& detail);
+
 /** Cache FP32 recurrence values in FP32 storage, never strict ERIs.
  * Restricted through-d sources share full/SR/LR identity and bounded angular
  * selection with strict sources. Unselected buckets evaluate mixed recurrences
@@ -91,12 +101,12 @@ generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
  * residency. SR/LR values can serve only matching pure-exchange requests; full
  * J/K and a different omega keep their ordinary exact provider. A successful
  * lease never changes operator identity, even when preparation is repeated.
+ * Nonzero full_range_scale instead constructs LR + scale*Full in one allocation;
+ * this requires a fresh, complete Cartesian LR layout and strict FP64 values.
  */
-generativeqc_status prepare_cuda_direct_jk_range_resident_values(CudaDirectJkPlan* plan,
-                                                                 std::size_t maximum_bytes,
-                                                                 std::uint32_t bucket_mask,
-                                                                 FockOperator source_operator,
-                                                                 double omega, std::string& detail);
+generativeqc_status prepare_cuda_direct_jk_range_resident_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::uint32_t bucket_mask,
+    FockOperator source_operator, double omega, std::string& detail, double full_range_scale = 0.0);
 
 /** Select whole immutable angular buckets, numbered first*(first+1)/2+second.
  * The mask is shared across batch items. Unselected buckets retain the native

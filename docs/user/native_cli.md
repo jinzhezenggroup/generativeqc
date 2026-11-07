@@ -247,7 +247,8 @@ for inventory, lifetime and observation boundaries.
 
 For ordinary Gaussian HF/KS methods, `run` and geometry `optimize` now use
 the same SCF stopping defaults as Python `Calculator`: 100 iterations,
-energy change `1e-10` Hartree and density RMS `1e-8`. The `resources`
+energy change `1e-9` Hartree and density RMS `1e-5`, matching the shared
+[SCF default policy](application_precision.md). The `resources`
 dry-run reports these same effective convergence controls. Explicit
 `--energy-tolerance` and `--density-tolerance` options take precedence
 in all three commands.

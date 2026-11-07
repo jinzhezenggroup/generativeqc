@@ -1,0 +1,180 @@
+{
+  "cohorts": {
+    "final": {
+      "base_commit": "b26a19f3cdc7ff2c594b4e8eaf99e42c7829cb1d",
+      "devices": {
+        "A100": {
+          "cold": {
+            "change_percent": -8.404075200181026,
+            "component_seconds": 106.30954681709409,
+            "default_seconds": 97.37521255761385,
+            "energy_abs_error": 9.094947017729282e-13,
+            "focks": 16,
+            "force_max_abs_error": 6.288303211476887e-13,
+            "force_rms_error": 1.2606204026441497e-13,
+            "nonlocal_work": {
+              "pair_cache_hits": 1,
+              "pair_cache_probes": 4,
+              "pair_sweeps": 4,
+              "provisional_focks": 11,
+              "target_focks": 5
+            },
+            "seconds_saved": 8.934334259480238
+          },
+          "warm": {
+            "change_percent": 0.6741719802789259,
+            "component_seconds": 14.906581815332174,
+            "default_seconds": 15.007077813148499,
+            "energy_abs_error": 9.094947017729282e-13,
+            "focks": 1,
+            "force_max_abs_error": 7.833733661755105e-13,
+            "force_rms_error": 1.4084025166947633e-13,
+            "nonlocal_work": {
+              "pair_cache_hits": 1,
+              "pair_cache_probes": 1,
+              "pair_sweeps": 0,
+              "provisional_focks": 0,
+              "target_focks": 1
+            },
+            "seconds_saved": -0.10049599781632423
+          }
+        },
+        "RTX5090": {
+          "cold": {
+            "change_percent": -3.192972755473744,
+            "component_seconds": 184.29883796349168,
+            "default_seconds": 178.41422627866268,
+            "energy_abs_error": 0.0,
+            "focks": 16,
+            "force_max_abs_error": 5.915268275202834e-13,
+            "force_rms_error": 1.128809333320522e-13,
+            "nonlocal_work": {
+              "pair_cache_hits": 1,
+              "pair_cache_probes": 4,
+              "pair_sweeps": 4,
+              "provisional_focks": 11,
+              "target_focks": 5
+            },
+            "seconds_saved": 5.884611684828997
+          },
+          "warm": {
+            "change_percent": -0.004823253230645808,
+            "component_seconds": 13.620036844164133,
+            "default_seconds": 13.619379915297031,
+            "energy_abs_error": 0.0,
+            "focks": 1,
+            "force_max_abs_error": 6.110667527536862e-13,
+            "force_rms_error": 1.2688018329190712e-13,
+            "nonlocal_work": {
+              "pair_cache_hits": 1,
+              "pair_cache_probes": 1,
+              "pair_sweeps": 0,
+              "provisional_focks": 0,
+              "target_focks": 1
+            },
+            "seconds_saved": 0.0006569288671016693
+          }
+        }
+      },
+      "image": {
+        "library_sha256": "948b333ef7abe5f4f75b427e3cb8a4b702ce0ff135f9d76685dbac87ccaac170",
+        "source_identity": "33b9650bd7a90bcc6c6b986512f75e2f39c7ea875860dbcf36f04293210870f2"
+      },
+      "independent_pairs": 16,
+      "worst_reference_errors": [
+        8.981260180007666e-12,
+        1.0464822262079565e-06,
+        4.7543760202446566e-07
+      ]
+    },
+    "initial": {
+      "base_commit": "9fbb47085cb1f8b2abdb9fef6f729cdee95317f3",
+      "devices": {
+        "A100": {
+          "cold": {
+            "change_percent": -8.45991969056058,
+            "component_seconds": 106.45189997553825,
+            "default_seconds": 97.44615472853184,
+            "energy_abs_error": 0.0,
+            "focks": 16,
+            "force_max_abs_error": 6.465938895416912e-13,
+            "force_rms_error": 1.2614929645165836e-13,
+            "nonlocal_work": {
+              "pair_cache_hits": 1,
+              "pair_cache_probes": 4,
+              "pair_sweeps": 4,
+              "provisional_focks": 11,
+              "target_focks": 5
+            },
+            "seconds_saved": 9.005745247006416
+          },
+          "warm": {
+            "change_percent": 0.6348506979545698,
+            "component_seconds": 14.903430975973606,
+            "default_seconds": 14.99804551154375,
+            "energy_abs_error": 0.0,
+            "focks": 1,
+            "force_max_abs_error": 7.531752999057062e-13,
+            "force_rms_error": 1.4612520437516188e-13,
+            "nonlocal_work": {
+              "pair_cache_hits": 1,
+              "pair_cache_probes": 1,
+              "pair_sweeps": 0,
+              "provisional_focks": 0,
+              "target_focks": 1
+            },
+            "seconds_saved": -0.09461453557014465
+          }
+        },
+        "RTX5090": {
+          "cold": {
+            "change_percent": -3.1821890122772922,
+            "component_seconds": 184.4965377934277,
+            "default_seconds": 178.62550923973322,
+            "energy_abs_error": 0.0,
+            "focks": 16,
+            "force_max_abs_error": 7.300826609935029e-13,
+            "force_rms_error": 1.3172245339834605e-13,
+            "nonlocal_work": {
+              "pair_cache_hits": 1,
+              "pair_cache_probes": 4,
+              "pair_sweeps": 4,
+              "provisional_focks": 11,
+              "target_focks": 5
+            },
+            "seconds_saved": 5.871028553694487
+          },
+          "warm": {
+            "change_percent": 0.22154254060580136,
+            "component_seconds": 13.614480078220367,
+            "default_seconds": 13.644641943275928,
+            "energy_abs_error": 0.0,
+            "focks": 1,
+            "force_max_abs_error": 1.0835776720341528e-12,
+            "force_rms_error": 1.445635710859292e-13,
+            "nonlocal_work": {
+              "pair_cache_hits": 1,
+              "pair_cache_probes": 1,
+              "pair_sweeps": 0,
+              "provisional_focks": 0,
+              "target_focks": 1
+            },
+            "seconds_saved": -0.030161865055561066
+          }
+        }
+      },
+      "image": {
+        "library_sha256": "4490dc1ee86bedb62e0585aab821696fe40601f184b301dac7e71b0130eb5987",
+        "source_identity": "362fb48621a638f873d605a466cde08f7e250b585e48f52df68904e76e3e3e0a"
+      },
+      "independent_pairs": 16,
+      "worst_reference_errors": [
+        8.981260180007666e-12,
+        1.0464821116329404e-06,
+        4.75437613138367e-07
+      ]
+    }
+  },
+  "decision": "promote",
+  "fresh_gpu4pyscf_ranking": false
+}

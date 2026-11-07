@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "vv10-scf-features-20261106",
+  "owner": "VV10 strict SCF feature sweep optimization, issue #2976 / PR #3024",
+  "reason": "Retain source-bound dual-card complete cold/warm vectors, independent-reference and paired-native gates, separate latest-master integration, component and rejected-force evidence, failed attempts, and the code-generation-neutral typing-fix receipt. The compressed bundle preserves prior measured source and ELF identities unchanged. This is a storage review, not new GPU qualification, a quota waiver, or a fresh GPU4PySCF ranking.",
+  "review_document": "benchmarks/results/vv10-scf-features-20261106/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/vv10-scf-features-20261106/evidence.json.xz",
+      "family": "vv10-scf-features-20261106",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete-endpoint and numerical-qualification evidence with source/image boundaries and post-qualification typing proof.",
+      "bytes": 242292,
+      "sha256": "b2183dc480a246c575301ecf517674d812d00bb2b905d7e25ed1ebaad0cc0602"
+    }
+  ]
+}

@@ -1,5 +1,11 @@
 # Independent CUDA stationary-force tiles and fitted AO maps
 
+The receipt container uses the shared exact-FP64 storage reader. `sha256.txt`
+authenticates both compressed streams; `report.py` reconstructs the original
+container and every embedded receipt byte-for-byte before replaying its gates.
+This storage-only compaction retains every population, failure and original
+checksum. It does not change any scientific observation or acceptance gate.
+
 `KsOptions.force_tile_points` independently bounds stationary CUDA force tiles.
 SCF tiles remain 256 in the public endpoint campaign; the production 16-MiB
 geometry scratch cap, grids, screening and numerical gates are unchanged. The

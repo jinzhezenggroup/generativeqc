@@ -392,8 +392,200 @@ void host_staging_budget_oracle(const Fixture& fixture, bool full_range = false,
 #endif
 }
 
-/** Independent SR/LR matrices protect radial identity, both spins and partial
- * caches. Invalid operator requests fail before any retained value is used. */
+/** Independent raw matrices protect weighted replay and its immutable identity. */
+/** Refused composites retain a numerically usable raw-LR source, not just a flag. */
+void combined_build_refusals(const Fixture& fixture) {
+  runtime::OwnedCudaStream stream;
+  stream.create(0);
+  const auto elements = fixture.density.size();
+  runtime::OwnedCudaBuffer<double> matrices;
+  runtime::OwnedCudaBuffer<int> error;
+  matrices.allocate(0, 2 * elements, stream.get());
+  error.allocate(0, 1, stream.get());
+  cuda_check(cudaMemcpyAsync(matrices.get(), fixture.density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  scf::FockBuildSpec full;
+  full.derivative_order = 0;
+  full.exchange.coefficient = -0.075;
+  auto range = full;
+  range.coulomb.present = false;
+  range.exchange.op = scf::FockOperator::LongRange;
+  range.exchange.omega = 0.3;
+  range.exchange.coefficient = -0.425;
+  for (const std::string refusal : {"partial", "spin", "coefficient", "omega"}) {
+    scf::cuda_execution::DirectJkExchangeCombination combination{full, range};
+    if (refusal == "spin") combination.full.spin = scf::FockSpin::Unrestricted;
+    if (refusal == "coefficient")
+      combination.full.exchange.coefficient = std::numeric_limits<double>::infinity();
+    if (refusal == "omega") combination.range.exchange.omega *= 2;
+    const auto mask = refusal == "partial" ? 1U : (1U << 28) - 1;
+    scf::cuda_execution::DirectJkSourceLease source(stream.get(), scf::FockOperator::LongRange,
+                                                    0.3);
+    require(source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                           2 * elements * sizeof(double), 8ULL << 30, "1", "combined-build-refusal",
+                           false, false, 1e-12, 8ULL << 30, false,
+                           scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
+                           mask, 1, false, 0, (1U << 28) - 1, 256ULL << 20, 0, (1U << 28) - 1, {},
+                           &combination) == GENERATIVEQC_STATUS_SUCCESS &&
+                source.active() && !source.combined_exchange(),
+            "unsupported composite did not retain raw LR: " + refusal);
+    std::string detail;
+    require(source.enqueue(range, matrices.get(), nullptr, matrices.get() + elements, error.get(),
+                           1e-12, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+            "refused composite lost its raw LR action: " + refusal + detail);
+    std::vector<double> actual(elements);
+    cuda_check(cudaMemcpy(actual.data(), matrices.get() + elements, elements * sizeof(double),
+                          cudaMemcpyDeviceToHost));
+    for (std::size_t element = 0; element < elements; ++element)
+      require(std::isfinite(actual[element]) &&
+                  std::abs(actual[element] - fixture.range_exchange[1][element]) < 2e-9,
+              "refused composite corrupted raw LR values: " + refusal);
+  }
+  std::cout << "combined build refusal checks 4\n";
+}
+
+void combined_range_oracle(const Fixture& fixture, bool direct_build = false) {
+  runtime::OwnedCudaStream stream;
+  stream.create(0);
+  const auto elements = fixture.density.size();
+  runtime::OwnedCudaBuffer<double> matrices;
+  runtime::OwnedCudaBuffer<int> error;
+  matrices.allocate(0, 2 * elements, stream.get());
+  error.allocate(0, 1, stream.get());
+  cuda_check(cudaMemcpyAsync(matrices.get(), fixture.density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  unsigned checks = 0;
+  for (const double screening : {0.0, 1e-12})
+    for (const double full_coefficient : {-0.075, 0.31}) {
+      scf::cuda_execution::DirectJkSourceLease source(stream.get(), scf::FockOperator::LongRange,
+                                                      0.3);
+      scf::FockBuildSpec full;
+      full.derivative_order = 0;
+      full.exchange.coefficient = full_coefficient;
+      auto range = full;
+      range.coulomb.present = false;
+      range.exchange.op = scf::FockOperator::LongRange;
+      range.exchange.omega = 0.3;
+      range.exchange.coefficient = -0.425;
+      const scf::cuda_execution::DirectJkExchangeCombination combination{full, range};
+      require(source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                             2 * elements * sizeof(double), 8ULL << 30, "1",
+                             "combined-source-oracle", false, false, screening, 8ULL << 30, false,
+                             scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
+                             (1U << 28) - 1, 1, false, 0, (1U << 28) - 1, 256ULL << 20, 0,
+                             (1U << 28) - 1, {}, direct_build ? &combination : nullptr) ==
+                      GENERATIVEQC_STATUS_SUCCESS &&
+                  source.active() && source.combined_source_build() == direct_build,
+              source.reason());
+      const auto retained_bytes = source.device_bytes();
+      if (!direct_build)
+        require(source.combine_full_exchange(full, range, source.value_bytes() - 1) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    !source.combined_exchange(),
+                "temporary ceiling did not retain raw LR fallback");
+      require(
+          source.combine_full_exchange(full, range, 8ULL << 30) == GENERATIVEQC_STATUS_SUCCESS &&
+              source.combined_exchange(),
+          source.reason());
+      require(source.device_bytes() == retained_bytes,
+              "combined source retained a second quartic allocation");
+      if (direct_build)
+        require(source.completed_value_count() == source.value_count(),
+                "direct construction evaluated a second complete source");
+      require(source.combine_full_exchange(full, range, 0) == GENERATIVEQC_STATUS_SUCCESS,
+              "identical combined source preparation was not idempotent");
+      std::string detail;
+      require(source.enqueue(range, matrices.get(), nullptr, matrices.get() + elements, error.get(),
+                             screening, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "raw LR action accepted composite values");
+      auto wrong_full = full;
+      wrong_full.exchange.coefficient *= 2;
+      require(source.combine_full_exchange(wrong_full, range, 8ULL << 30) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "changed coefficients mutated an already published source");
+      require(source.enqueue_combined_exchange(wrong_full, range, matrices.get(),
+                                               matrices.get() + elements, error.get(), screening,
+                                               detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "changed full coefficient reused composite values");
+      auto wrong_range = range;
+      wrong_range.exchange.omega *= 2;
+      require(source.enqueue_combined_exchange(full, wrong_range, matrices.get(),
+                                               matrices.get() + elements, error.get(), screening,
+                                               detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "changed range operator reused composite values");
+      auto wrong_spin = full;
+      wrong_spin.spin = scf::FockSpin::Unrestricted;
+      require(source.combine_full_exchange(wrong_spin, range, 0) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "changed spin reused composite preparation identity");
+      require(source.enqueue_combined_exchange(full, range, matrices.get(),
+                                               matrices.get() + elements, error.get(), screening,
+                                               detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail);
+      require(source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+              "combined source failed its independent finite/census audit");
+      std::vector<double> actual(elements);
+      cuda_check(cudaMemcpy(actual.data(), matrices.get() + elements, elements * sizeof(double),
+                            cudaMemcpyDeviceToHost));
+      for (std::size_t element = 0; element < elements; ++element) {
+        const double expected =
+            fixture.range_exchange[1][element] +
+            (full_coefficient / range.exchange.coefficient) * fixture.exchange[element];
+        require(std::isfinite(actual[element]) && std::abs(actual[element] - expected) < 2e-9,
+                "combined source differs from independent full/LR matrices");
+      }
+      ++checks;
+    }
+  std::cout << (direct_build ? "combined build oracle checks " : "combined range oracle checks ")
+            << checks << "\n";
+  unsigned maximum_angular = 0;
+  for (const auto& shell : fixture.system.shells)
+    maximum_angular = std::max(maximum_angular, shell.angular_momentum);
+  if (maximum_angular < 3) {
+    // Cover every populated bucket without selecting empty higher orders.
+    // Optional combination must preserve a usable raw LR fallback here.
+    const auto pair_orders = 2 * maximum_angular + 1;
+    const auto mask = (1U << (pair_orders * (pair_orders + 1) / 2)) - 1;
+    scf::cuda_execution::DirectJkSourceLease compact(stream.get(), scf::FockOperator::LongRange,
+                                                     0.3);
+    require(
+        compact.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                        2 * elements * sizeof(double), 8ULL << 30, "1",
+                        "compact-combined-source-oracle", false, false, 1e-12, 8ULL << 30, false,
+                        scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
+                        mask) == GENERATIVEQC_STATUS_SUCCESS &&
+            compact.active(),
+        compact.reason());
+    scf::FockBuildSpec full;
+    full.derivative_order = 0;
+    auto range = full;
+    range.coulomb.present = false;
+    range.exchange.op = scf::FockOperator::LongRange;
+    range.exchange.omega = 0.3;
+    const auto completed_values = compact.completed_value_count();
+    require(compact.combine_full_exchange(full, range, 8ULL << 30) == GENERATIVEQC_STATUS_SUCCESS &&
+                compact.active() && !compact.combined_exchange(),
+            "compact complete source lost its raw LR fallback");
+    require(compact.completed_value_count() == completed_values,
+            "compact refusal counted the retained LR construction twice");
+    std::string detail;
+    require(compact.enqueue(range, matrices.get(), nullptr, matrices.get() + elements, error.get(),
+                            1e-12, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    require(compact.audit() == GENERATIVEQC_STATUS_SUCCESS,
+            "compact fallback failed finite/census audit");
+    std::vector<double> actual(elements);
+    cuda_check(cudaMemcpy(actual.data(), matrices.get() + elements, elements * sizeof(double),
+                          cudaMemcpyDeviceToHost));
+    for (std::size_t element = 0; element < elements; ++element)
+      require(std::isfinite(actual[element]) &&
+                  std::abs(actual[element] - fixture.range_exchange[1][element]) < 2e-9,
+              "compact fallback differs from independent raw LR matrix");
+  }
+}
+
+/** Independent SR/LR matrices protect both spins and partial caches. */
 void raw_range_oracle(const Fixture& fixture, bool mixed = false, bool host = false,
                       bool disk = false) {
   runtime::OwnedCudaStream stream;
@@ -1096,6 +1288,8 @@ int main(int argc, char** argv) {
     require(argc == 2 ||
                 (argc == 3 &&
                  (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "range-oracle" ||
+                  std::string(argv[2]) == "combined-range-oracle" ||
+                  std::string(argv[2]) == "combined-build-oracle" ||
                   std::string(argv[2]) == "range-mixed-oracle" ||
                   std::string(argv[2]) == "range-host-oracle" ||
                   std::string(argv[2]) == "full-host-oracle" ||
@@ -1114,6 +1308,7 @@ int main(int argc, char** argv) {
     const bool tiered = mode == "full-tiered-oracle" || mode == "range-tiered-oracle";
     const bool full_host_oracle =
         mode == "full-host-oracle" || mode == "full-disk-oracle" || mode == "full-tiered-oracle";
+    const bool combined_oracle = mode == "combined-range-oracle" || mode == "combined-build-oracle";
     const bool mixed_range_oracle = argc == 3 && std::string(argv[2]) == "range-mixed-oracle";
     const bool host_range_oracle = argc == 3 && std::string(argv[2]) == "range-host-oracle";
     const bool range_oracle =
@@ -1123,8 +1318,8 @@ int main(int argc, char** argv) {
     const Fixture fixture(argv[1],
                           argc == 2 || std::string(argv[2]) == "mixed-refinement" ||
                               std::string(argv[2]) == "mixed-source" || range_oracle ||
-                              full_host_oracle,
-                          range_oracle);
+                              full_host_oracle || combined_oracle,
+                          range_oracle || combined_oracle);
     std::cout << std::setprecision(17);
     if (full_host_oracle) {
       raw_oracle(fixture, false, !disk || tiered, disk);
@@ -1135,6 +1330,9 @@ int main(int argc, char** argv) {
       raw_mixed_full_range_oracle(fixture);
       raw_mixed_range_oracle(fixture);
       raw_range_oracle(fixture, true);
+    } else if (combined_oracle) {
+      combined_range_oracle(fixture, mode == "combined-build-oracle");
+      if (mode == "combined-build-oracle") combined_build_refusals(fixture);
     } else if (range_oracle) {
       raw_range_oracle(fixture, false, host_range_oracle || tiered, disk);
       if (host_range_oracle || disk) host_staging_budget_oracle(fixture, false, disk);

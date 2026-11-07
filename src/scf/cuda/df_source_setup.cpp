@@ -182,8 +182,10 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   // Freeze the angular domain with this immutable basis owner. Auxiliary g
   // retains its explicit value lowering and the separate F11 response policy.
   for (const auto& auxiliary : auxiliary_systems)
-    for (const auto& shell : auxiliary.shells)
+    for (const auto& shell : auxiliary.shells) {
       candidate->has_auxiliary_g |= shell.angular_momentum == 4U;
+      candidate->has_auxiliary_h |= shell.angular_momentum == 5U;
+    }
   candidate->batch_size = batch_size;
   candidate->public_nbf = public_nbf;
   candidate->public_naux = public_naux;

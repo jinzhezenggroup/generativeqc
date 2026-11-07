@@ -17,6 +17,23 @@ bool optional_refusal(generativeqc_status status) {
   return status == GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
          status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
+
+/** Zero refuses a combination without changing the raw source's contract. */
+double combined_exchange_scale(FockBuildSpec full, FockBuildSpec range,
+                               FockOperator source_operator, double omega) {
+  if (source_operator != FockOperator::LongRange || full.spin != FockSpin::Restricted ||
+      range.spin != FockSpin::Restricted || !full.exchange.present ||
+      full.exchange.op != FockOperator::FullRange || full.exchange.omega != 0.0 ||
+      range.coulomb.present || !range.exchange.present || range.exchange.op != source_operator ||
+      range.exchange.omega != omega || !std::isfinite(full.exchange.coefficient) ||
+      !std::isfinite(range.exchange.coefficient) || full.exchange.coefficient == 0.0 ||
+      range.exchange.coefficient == 0.0 ||
+      full.exchange.approximation != FockApproximation::Exact ||
+      range.exchange.approximation != FockApproximation::Exact)
+    return 0.0;
+  const double scale = full.exchange.coefficient / range.exchange.coefficient;
+  return std::isfinite(scale) ? scale : 0.0;
+}
 }  // namespace
 
 DirectJkSourceLease::~DirectJkSourceLease() {
@@ -44,7 +61,8 @@ generativeqc_status DirectJkSourceLease::prepare(
     std::size_t value_ceiling, bool own_outputs, DirectJkSourceAutoPolicy auto_policy,
     std::uint32_t bucket_mask, unsigned spins, bool fit_buckets_to_capacity,
     std::size_t host_ceiling, std::uint32_t host_bucket_mask, std::size_t host_tile_bytes,
-    std::size_t disk_ceiling, std::uint32_t disk_bucket_mask, const std::string& disk_directory) {
+    std::size_t disk_ceiling, std::uint32_t disk_bucket_mask, const std::string& disk_directory,
+    const DirectJkExchangeCombination* combination) {
   using namespace posthf;
   if (prepared_) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   prepared_ = true;
@@ -183,7 +201,8 @@ generativeqc_status DirectJkSourceLease::prepare(
   CudaDirectJkDiagnostic diagnostic;
   capacity_bytes_ = overhead;
   auto status = create_cuda_direct_jk_resident_plan_on_stream(
-      device, systems, screening, direct_bound, stream_, &raw, diagnostic, reason_);
+      device, systems, screening, direct_bound, stream_, &raw, diagnostic, reason_,
+      !mixed_recurrence_ && source_operator_ != FockOperator::FullRange);
   direct_.reset(raw);
   if (optional_refusal(status)) return refuse_optional();
   if (status != GENERATIVEQC_STATUS_SUCCESS) return finish(status);
@@ -262,12 +281,24 @@ generativeqc_status DirectJkSourceLease::prepare(
       required_values / (mixed_recurrence_ ? sizeof(float) : sizeof(double)));
   runtime::df_progress::Scope::label("source_precision", mixed_recurrence_ ? "fp32" : "fp64");
   runtime::df_progress::Scope::number("admitted_optional_capacity_bytes", capacity_bytes_);
+  // Incomplete or mixed sources keep their raw identity, including exact
+  // uncached replay. Only a complete unpublished GPU allocation may bind both
+  // radial terms before its first value is constructed.
+  const double full_scale = combination && !mixed_recurrence_ && spins == 1 &&
+                                    bucket_mask == (1U << 28) - 1 &&
+                                    required_values / sizeof(double) == source_value_count_
+                                ? combined_exchange_scale(combination->full, combination->range,
+                                                          source_operator_, source_omega_)
+                                : 0.0;
+  runtime::df_progress::Scope::number("combined_source_build", full_scale != 0.0);
+  runtime::df_progress::Scope::number("source_radial_terms", full_scale != 0.0 ? 2U : 1U);
   status =
       mixed_recurrence_
           ? prepare_cuda_direct_jk_mixed_resident_values(
                 direct_.get(), allowance, reason_, source_operator_, source_omega_, bucket_mask)
           : prepare_cuda_direct_jk_range_resident_values(direct_.get(), allowance, bucket_mask,
-                                                         source_operator_, source_omega_, reason_);
+                                                         source_operator_, source_omega_, reason_,
+                                                         full_scale);
   if (optional_refusal(status)) {
     return refuse_optional();
   }
@@ -275,7 +306,15 @@ generativeqc_status DirectJkSourceLease::prepare(
   diagnostic = cuda_direct_jk_plan_diagnostic(direct_.get());
   value_bytes_ = diagnostic.resident_value_bytes;
   value_count_ = diagnostic.resident_value_count;
-  capacity_bytes_ = checked_add(overhead, value_bytes_);
+  if (full_scale != 0.0) {
+    combined_exchange_ = true;
+    combined_source_build_ = true;
+    combined_full_term_ = combination->full.exchange;
+    combined_range_term_ = combination->range.exchange;
+  }
+  // Direct construction may borrow a bounded inverse map within the source
+  // allowance. Retain that conservative transient bound, not just live ERIs.
+  capacity_bytes_ = checked_add(overhead, full_scale != 0.0 ? allowance : value_bytes_);
   // The existing GPU selection has priority. Host capacity is additional,
   // explicitly bounded storage, including both pinned and device staging pairs.
   if (host_ceiling && !mixed_recurrence_ &&
@@ -349,7 +388,9 @@ generativeqc_status DirectJkSourceLease::prepare(
     reason_ = "admitted FP64 GPU/RAM/disk values plus exact Direct buckets";
     return finish(GENERATIVEQC_STATUS_SUCCESS, true);
   }
-  reason_ = mixed_recurrence_
+  reason_ = combined_source_build_
+                ? "admitted directly constructed coefficient-bound complete FP64 exchange source"
+            : mixed_recurrence_
                 ? (value_count_ == source_value_count_
                        ? "admitted phase-local canonical FP32 values with FP64 contraction"
                        : "admitted partial canonical FP32 values plus mixed Direct buckets")
@@ -364,6 +405,82 @@ generativeqc_status DirectJkSourceLease::enqueue(FockBuildSpec spec, const doubl
                                                  int* numerical_error, double screening,
                                                  std::string& detail, const double* beta,
                                                  double* beta_exchange) {
+  if (combined_exchange_) {
+    detail = "raw action cannot consume a coefficient-bound combined exchange source";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return enqueue_impl(spec, density, coulomb, exchange, numerical_error, screening, detail, beta,
+                      beta_exchange);
+}
+
+generativeqc_status DirectJkSourceLease::combine_full_exchange(
+    FockBuildSpec full, FockBuildSpec range, std::size_t maximum_transient_bytes) {
+  if (combined_exchange_)
+    return full.spin == FockSpin::Restricted && range.spin == FockSpin::Restricted &&
+                   !range.coulomb.present && full.exchange == combined_full_term_ &&
+                   range.exchange == combined_range_term_
+               ? GENERATIVEQC_STATUS_SUCCESS
+               : GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!active() || last_error_ || mixed_recurrence_ || value_count_ != source_value_count_ ||
+      host_value_bytes_ || disk_value_bytes_)
+    return GENERATIVEQC_STATUS_SUCCESS;
+  const double scale = combined_exchange_scale(full, range, source_operator_, source_omega_);
+  if (scale == 0.0 || maximum_transient_bytes < value_bytes_) return GENERATIVEQC_STATUS_SUCCESS;
+  runtime::df_progress::Scope trace("cuda_ks_combined_range_source_prepare", "cuda_completed");
+  std::size_t available = 0, total = 0;
+  const auto error = cudaMemGetInfo(&available, &total);
+  if (error != cudaSuccess) return cuda_status(error);
+  constexpr std::size_t reserve = 512ULL << 20;
+  if (available <= reserve || value_bytes_ > available - reserve) {
+    trace.finish("capacity_refused");
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+  const auto ceiling = std::min(maximum_transient_bytes, available - reserve);
+  const auto previous_reason = reason_;
+  const auto status =
+      prepare_cuda_direct_jk_combined_range_values(direct_.get(), scale, ceiling, reason_);
+  completed_values_ += cuda_direct_jk_plan_diagnostic(direct_.get()).resident_values_completed;
+  if (optional_refusal(status)) {
+    reason_ = previous_reason;
+    trace.finish("capacity_refused");
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+  if (status != GENERATIVEQC_STATUS_SUCCESS) {
+    trace.finish("failed");
+    // A failed mutation cannot lend its poisoned values to a later raw action.
+    release_values();
+    return status;
+  }
+  combined_exchange_ = true;
+  combined_full_term_ = full.exchange;
+  combined_range_term_ = range.exchange;
+  reason_ = "admitted coefficient-bound complete FP64 full/LR exchange source";
+  runtime::df_progress::Scope::number("additional_full_source_values", source_value_count_);
+  runtime::df_progress::Scope::number("retained_source_value_bytes", value_bytes_);
+  runtime::df_progress::Scope::number("transient_source_allowance_bytes", ceiling);
+  trace.finish("accepted");
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+generativeqc_status DirectJkSourceLease::enqueue_combined_exchange(
+    FockBuildSpec full, FockBuildSpec range, const double* density, double* exchange,
+    int* numerical_error, double screening, std::string& detail) {
+  if (!combined_exchange_ || full.spin != FockSpin::Restricted ||
+      range.spin != FockSpin::Restricted || range.coulomb.present || !full.exchange.present ||
+      full.exchange.op != FockOperator::FullRange || full.exchange.omega != 0.0 ||
+      full.exchange != combined_full_term_ || range.exchange != combined_range_term_) {
+    detail = "combined exchange source coefficient or operator identity mismatch";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return enqueue_impl(range, density, nullptr, exchange, numerical_error, screening, detail,
+                      nullptr, nullptr);
+}
+
+generativeqc_status DirectJkSourceLease::enqueue_impl(FockBuildSpec spec, const double* density,
+                                                      double* coulomb, double* exchange,
+                                                      int* numerical_error, double screening,
+                                                      std::string& detail, const double* beta,
+                                                      double* beta_exchange) {
   if (!active()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   // An immutable lease never silently switches operator or range parameter.
   // This also prevents its census from treating fallback work as cache reuse.
@@ -377,6 +494,8 @@ generativeqc_status DirectJkSourceLease::enqueue(FockBuildSpec spec, const doubl
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   runtime::df_progress::Scope action("cuda_eri_source_action", "cuda_enqueued");
+  runtime::df_progress::Scope::number("combined_full_lr_exchange", combined_exchange_);
+  runtime::df_progress::Scope::number("radial_terms_per_exchange", combined_exchange_ ? 2U : 1U);
   runtime::df_progress::Scope::number("canonical_values", source_value_count_);
   runtime::df_progress::Scope::number(
       "gpu_cached_values", value_count_ - (host_value_bytes_ + disk_value_bytes_) / sizeof(double));

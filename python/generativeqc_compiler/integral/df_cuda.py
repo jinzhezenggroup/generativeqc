@@ -1,4 +1,4 @@
-"""Bounded CUDA DF values: Rys through f and moment polynomials for auxiliary g.
+"""Bounded CUDA DF values: Rys through f and moment polynomials for auxiliary g/h.
 
 The operator/signature records own root counts and auxiliary roles. Scalar
 Gaussian moment DAGs are lowered by the common expression emitter; audited
@@ -23,13 +23,13 @@ from .rys import (
 
 
 def df_program_inventory() -> dict:
-    """Expose the Rys and auxiliary-g polynomial value domains explicitly."""
+    """Expose the Rys and auxiliary-g/h polynomial value domains explicitly."""
     programs = []
     for family, count in (("coulomb_metric", 2), ("three_center_eri", 3)):
-        domains = (range(5),) * 2 if count == 2 else (range(4), range(4), range(5))
+        domains = (range(6),) * 2 if count == 2 else (range(4), range(4), range(6))
         for angular in product(*domains):
             nroots = sum(angular) // 2 + 1
-            recurrence = "subset_wick" if 4 in angular else f"rys{nroots}"
+            recurrence = "subset_wick" if max(angular) >= 4 else f"rys{nroots}"
             integral = build_df_value_ir(family, angular, recurrence=recurrence)
             programs.append(integral_to_payload(integral))
     return {
@@ -175,7 +175,9 @@ __device__ __forceinline__ double metric(
   const Vec3 difference{A.x - C.x, A.y - C.y, A.z - C.z};
   const Angular b{0, 0, 0};
   const unsigned total = order(a) + order(c);
-  if (order(a) > 4 || order(c) > 4) return NAN;
+  if (order(a) > 5 || order(c) > 5) return NAN;
+  if (order(a) == 5 || order(c) == 5)
+    return auxiliary_h::evaluate(alpha,A,a,0.0,A,b,gamma,C,c);
   if (order(a) == 4 || order(c) == 4)
     return auxiliary_g::evaluate(alpha,A,a,0.0,A,b,gamma,C,c);
   if (total <= 1) return value<1>(alpha, gamma, zero, zero, difference, a, b, c);
@@ -196,7 +198,8 @@ __device__ __forceinline__ double three_center(
   const Vec3 difference{A.x - C.x + pa.x, A.y - C.y + pa.y, A.z - C.z + pa.z};
   const double decay = exp(-alpha * beta / p * (ab.x * ab.x + ab.y * ab.y + ab.z * ab.z));
   const unsigned total = order(a) + order(b) + order(c);
-  if (order(a) > 3 || order(b) > 3 || order(c) > 4) return NAN;
+  if (order(a) > 3 || order(b) > 3 || order(c) > 5) return NAN;
+  if (order(c) == 5) return auxiliary_h::evaluate(alpha,A,a,beta,B,b,gamma,C,c);
   if (order(c) == 4) return auxiliary_g::evaluate(alpha,A,a,beta,B,b,gamma,C,c);
   double result;
   if (total <= 1) result = value<1>(p, gamma, pa, pb, difference, a, b, c);
@@ -214,7 +217,14 @@ __device__ __forceinline__ double three_center(
     from .df_compensated import emit_df_compensated
 
     return (
-        (prefix + tables + emit_df_axis_cuda() + emit_df_g_values_cuda() + suffix)
+        (
+            prefix
+            + tables
+            + emit_df_axis_cuda()
+            + emit_df_g_values_cuda()
+            + emit_df_g_values_cuda(maximum_auxiliary=5)
+            + suffix
+        )
         .replace("__device__", "static __device__")
         .replace(
             "// COMPENSATED_DF_VALUES",

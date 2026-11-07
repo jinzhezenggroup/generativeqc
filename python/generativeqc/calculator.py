@@ -199,10 +199,13 @@ class Calculator:
         unchanged. It never certifies an error from ``energy_tolerance``.
 
         Omitted SCF controls resolve to energy/density tolerances 1e-9/1e-5
-        on qualified CUDA RHF and default-grid restricted KS owners, including
-        canonical WB97M-V. WB97M-V uses energy plus physical MO-gradient
-        convergence; its density control still bounds final canonical proof.
-        Other admitted models/backends retain 1e-10/1e-8. A library without the
+        on every HF/KS backend, spin, model and grid. SCC retains its separate
+        1e-10/1e-8 defaults. The SCF energy tolerance matches
+        GPU4PySCF's default conv_tol; density is an additional native condition,
+        not GPU4PySCF's MO-gradient norm. Canonical CUDA WB97M-V uses energy plus
+        physical MO-gradient convergence; its density control still bounds final
+        canonical proof. Stricter post-HF reference and physical final-state gates
+        remain mandatory. A library without the
         required native default-controls query must be updated. Explicit
         values are preserved. Convergence controls are solver conditions, not
         observable-error bounds; see the application precision guide.
@@ -1787,8 +1790,23 @@ class Calculator:
         selected_basis = self._basis_for_atoms(
             atoms, basis, operator=operator, derivative_order=derivative_order
         )
+        auxiliary = basis is not None
+        selected_operator = operator or ("df_metric" if auxiliary else "eri")
         return (
-            selected_basis.shells_for(atoms)
+            selected_basis.shells_for(
+                atoms,
+                backend=self._density_fitting_backend()
+                if auxiliary
+                else self._device_name,
+                operator=selected_operator,
+                derivative_order=derivative_order,
+                role="auxiliary" if auxiliary else "orbital",
+                consumer=self._auxiliary_basis_consumer(
+                    selected_operator, derivative_order
+                )
+                if auxiliary
+                else None,
+            )
             if isinstance(selected_basis, BasisSet)
             else tuple(selected_basis)
         )

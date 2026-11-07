@@ -30,7 +30,7 @@ SIGNATURES = [a for a in product(range(5), repeat=2) if 4 in a] + [
 ]
 
 
-@pytest.fixture(scope="module", params=["cpu", "cuda"])
+@pytest.fixture(scope="module", params=["cpu", "cuda", "cpu-h", "cuda-h"])
 def derivative_probe(
     request: typing.Any, tmp_path_factory: pytest.TempPathFactory
 ) -> typing.Any:
@@ -39,20 +39,24 @@ def derivative_probe(
     Inputs use the validation fixture's 144-byte primitive ABI. CPU execution
     is an emission check; only the separate CUDA parameter exercises the GPU.
     """
-    cuda = request.param == "cuda"
+    cuda = request.param.startswith("cuda")
+    auxiliary_h = request.param.endswith("-h")
     if cuda and os.environ.get("GENERATIVEQC_DF_G_CUDA_TEST") != "1":
         pytest.skip("requires explicit finite Slurm allocation")
     if cuda:
         assert os.environ.get("SLURM_JOB_ID"), "allocate GPU through Slurm"
     compiler = shutil.which(os.environ.get("CUDACXX", "nvcc") if cuda else "c++")
-    cache = shutil.which("ccache")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
-        pytest.skip("compiler and ccache required")
+        pytest.skip("compiler and compiler cache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True, timeout=30)
     directory = tmp_path_factory.mktemp("df-g-derivative-" + request.param)
     header = (
-        emit_df_derivatives_cuda(auxiliary_g=True)
+        emit_df_derivatives_cuda(auxiliary_g=not auxiliary_h, auxiliary_h=auxiliary_h)
         if cuda
-        else emit_df_derivatives_cpu(auxiliary_g=True)
+        else emit_df_derivatives_cpu(
+            auxiliary_g=not auxiliary_h, auxiliary_h=auxiliary_h
+        )
     )
     (directory / "values.h").write_text(header)
     source = directory / ("probe.cu" if cuda else "probe.cpp")
@@ -104,7 +108,12 @@ extern "C" int probe(const Input* inputs,std::size_t n,double* output) {
 }
 """
     source.write_text(
-        common.replace("QUALIFIER", "__device__" if cuda else "")
+        common.replace("QUALIFIER", "__device__" if cuda else "").replace(
+            "generated_df_auxiliary_g_derivatives",
+            "generated_df_auxiliary_h_derivatives"
+            if auxiliary_h
+            else "generated_df_auxiliary_g_derivatives",
+        )
         + (gpu if cuda else cpu)
     )
     obj, library = directory / "probe.o", directory / "probe.so"
@@ -141,6 +150,7 @@ extern "C" int probe(const Input* inputs,std::size_t n,double* output) {
         assert dll.probe(records.ctypes.data, len(records), output.ctypes.data) == 0
         return output
 
+    evaluate.maximum_auxiliary = 5 if auxiliary_h else 4
     return evaluate
 
 
@@ -154,6 +164,20 @@ def test_explicit_g_derivative_axis_domain_preserves_old_boundaries() -> None:
     for powers in ((4, 4, 4), (5, 1, 4), (0, 5, 0), (0, 0, 5)):
         with pytest.raises(ValueError):
             axis_polynomial(*powers, auxiliary_g_derivative=True)
+
+
+def test_h_derivative_domain_has_one_independent_raise() -> None:
+    """H fitting never licenses orbital h or two simultaneously raised powers."""
+    for powers in ((4, 3, 5), (3, 4, 5), (6, 0, 5)):
+        assert (
+            len(axis_polynomial(*powers, auxiliary_h_derivative=True)[1])
+            == sum(powers) + 1
+        )
+        with pytest.raises(ValueError):
+            axis_polynomial(*powers, auxiliary_g_derivative=True)
+    for powers in ((5, 1, 5), (4, 4, 5), (6, 0, 6), (0, 5, 0)):
+        with pytest.raises(ValueError):
+            axis_polynomial(*powers, auxiliary_h_derivative=True)
 
 
 @pytest.mark.parametrize("angular", SIGNATURES)
@@ -180,3 +204,25 @@ def test_complete_cartesian_spherical_and_auxiliary_center_blocks(
     np.testing.assert_allclose(actual.sum(axis=0), 0, atol=2e-12, rtol=0)
     if variant == "asymmetric":
         assert np.max(np.abs(actual[-1])) > 1e-8
+
+
+@pytest.mark.parametrize(
+    "angular", [(0, 5), (4, 5), (5, 5), (0, 0, 5), (2, 1, 5), (3, 3, 5)]
+)
+@pytest.mark.parametrize("variant", ("coincident", "asymmetric"))
+def test_auxiliary_h_complete_center_blocks(
+    derivative_probe: typing.Any, angular: tuple[int, ...], variant: str
+) -> None:
+    """Qualify every Cartesian component, spherical transforms and translations."""
+    if derivative_probe.maximum_auxiliary != 5:
+        pytest.skip("requires the independently selected h domain")
+    fixture = make_df_derivative_fixture(angular, variant=variant)
+    primitive = derivative_probe(fixture.records)
+    if len(angular) == 2:
+        primitive = primitive[:, [0, 2]]
+    actual = fixture.contract(primitive)
+    np.testing.assert_allclose(actual, fixture.reference, atol=2e-10, rtol=2e-10)
+    np.testing.assert_allclose(
+        fixture.spherical(actual), fixture.spherical_reference, atol=2e-10, rtol=2e-10
+    )
+    np.testing.assert_allclose(actual.sum(axis=0), 0, atol=4e-12, rtol=0)

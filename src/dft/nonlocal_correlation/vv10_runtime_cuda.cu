@@ -126,7 +126,8 @@ bool prefer_parallel_pairs(std::size_t npoint) {
   if (selector && *selector)
     return std::string_view(selector) == "parallel" ||
            std::string_view(selector) == "parallel-wide" ||
-           std::string_view(selector) == "parallel-packet";
+           std::string_view(selector) == "parallel-packet" ||
+           std::string_view(selector) == "parallel-packet-reciprocal";
   return npoint >= 65536;
 }
 
@@ -438,11 +439,23 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
               <<<blocks, threads, 0, stream>>>(input, output);
           runtime::cuda_resource_check(cudaGetLastError());
           const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
-          if (!selector || !*selector || std::string_view(selector) == "parallel-packet") {
+          if (!selector || !*selector || std::string_view(selector) == "parallel-packet" ||
+              std::string_view(selector) == "parallel-packet-reciprocal") {
             // Keep the qualified strict schedule independent of FP32 admission
             // state. Mixed packets carry each point's immutable scale proof
             // through the existing rotation instead of retesting every pair.
-            if (mixed_pair_arithmetic)
+            if (!Geometry && !mixed_pair_arithmetic &&
+                (!selector || !*selector || std::string_view(selector) != "parallel-packet")) {
+              // Host-known strict arithmetic removes mixed admission and unused
+              // per-pair census from the hot loop. A requested census still
+              // counts every evaluated physical pair, including diagonal legs.
+              if (arithmetic_work)
+                generated::parallel_pair_packet_kernel<false, false, true, true>
+                    <<<680, threads, 0, stream>>>(input, output);
+              else
+                generated::parallel_pair_packet_kernel<false, false, true, false>
+                    <<<680, threads, 0, stream>>>(input, output);
+            } else if (mixed_pair_arithmetic)
               generated::parallel_pair_packet_kernel<Geometry, true>
                   <<<680, threads, 0, stream>>>(input, output);
             else

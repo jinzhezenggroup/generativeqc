@@ -52,12 +52,12 @@ def test_unset_is_automatic_and_explicit_controls_fail_closed(
     )
 
 
-def test_fitted_canonical_probe_excludes_provisional_xc(
+def test_canonical_probe_excludes_provisional_xc(
     tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
     """A physical final-state probe must wait for the stored-D target stage."""
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    beginning = source.index("const bool fitted_final_probe =")
+    beginning = source.index("const bool canonical_final_probe =")
     ending = source.index("// On a soft orbital manifold", beginning)
     driver, binary = tmp_path / "final_probe.cpp", tmp_path / "final_probe"
     driver.write_text(
@@ -67,14 +67,19 @@ def test_fitted_canonical_probe_excludes_provisional_xc(
         "struct Provider { System value; const System& system() const { return value; } };\n"
         "struct Schedule { bool lower{}; bool any_lower_precision() const { return lower; } };\n"
         "struct Probe {\n"
-        "  bool occupied_stage{}, fitted_exchange{true}, budget_fock{}, has_range_correction{}, nonlocal_correlation{};\n"
-        "  unsigned chunk_width{1}; Provider provider; Schedule precision_schedule;\n"
+        "  bool has_exchange{}, occupied_stage{}, fitted_exchange{true}, budget_fock{}, has_range_correction{}, nonlocal_correlation{};\n"
+        "  unsigned spins{1}, chunk_width{1}; Provider provider; Schedule precision_schedule;\n"
         "  unsigned configured_chunk_width() const { return chunk_width; }\n"
         "  bool eligible() const {\n"
         + source[beginning:ending]
-        + "return fitted_final_probe; }\n};\n"
+        + "return canonical_final_probe; }\n};\n"
         "int main() {\n"
         "  Probe target; if (!target.eligible()) return 1;\n"
+        "  Probe direct; direct.fitted_exchange = false; direct.spins = 2; direct.has_exchange = true;\n"
+        "  if (!direct.eligible()) return 5;\n"
+        "  direct.occupied_stage = true; if (direct.eligible()) return 6;\n"
+        "  direct.occupied_stage = false; direct.has_exchange = false; if (direct.eligible()) return 7;\n"
+        "  direct.has_exchange = true; direct.spins = 1; if (direct.eligible()) return 8;\n"
         "  Probe provisional; provisional.occupied_stage = true;\n"
         "  if (provisional.eligible()) return 2;\n"
         "  provisional.occupied_stage = false; if (!provisional.eligible()) return 3;\n"

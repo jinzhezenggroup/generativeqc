@@ -23,13 +23,20 @@ bool resolve_cuda_df_source_policy(CudaDfSourcePolicy& policy, std::string& deta
  */
 bool cuda_df_shell_domain(const core::System& system, const char* role, std::string& detail);
 
-/** Source value domain: orbital through f, auxiliary through g. Auxiliary g
- * requires generic generated value math. Raw source derivatives also have
- * explicit auxiliary-g polynomial lowering. Legacy exporters and method
- * force-capability queries retain their own stricter admission; creating this
- * source does not enable a molecular force.
+/** Source value domain: orbital through f, full-range auxiliary through h;
+ * erf auxiliaries remain through g. Both g/h require generic generated math
+ * and have explicit polynomial first derivatives. Raw exporters and method
+ * force-capability queries retain independently qualified admission; creating
+ * this source does not by itself enable a molecular force.
  */
 bool cuda_df_value_domain(const core::System& orbital, const core::System& auxiliary,
                           const CudaDfSourcePolicy& policy, std::string& detail);
+
+/** Raw Cartesian value/coordinate-response export: orbital through f, auxiliary
+ * through g with generic generated math. Source-only h qualification does not
+ * establish the complete correlation-response contract of these consumers.
+ */
+bool cuda_df_integral_export_domain(const core::System& orbital, const core::System& auxiliary,
+                                    const CudaDfSourcePolicy& policy, std::string& detail);
 
 }  // namespace generativeqc::scf::cuda_execution

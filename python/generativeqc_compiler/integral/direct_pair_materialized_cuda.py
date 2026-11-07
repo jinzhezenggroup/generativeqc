@@ -22,6 +22,7 @@ def emit_direct_pair_materialized_support() -> str:
 #include "scf/cuda/direct_fock_accumulation.cuh"
 #include "scf/cuda/direct_force_work.hpp"
 #include "scf/cuda/direct_screening.cuh"
+#include "scf/cuda/direct_source_layout.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -78,13 +79,29 @@ __device__ inline void prepare_materialized_direct_pair(
   }
 }
 
+/** Fixture-only, one-shell component map. No molecular plan or allocation owner.
+ * The map has exactly ComponentSlots*32 entries, including rejected/tail sentinels.
+ * Destination slots may retain screened holes; each live slot must be unique.
+ * Optional visit/refusal counters belong to qualification, never production. */
+struct MaterializedDirectPairValueSink {
+  static constexpr std::uint16_t rejected = 0xffffU;
+  const std::uint16_t* component_slots{};
+  std::size_t map_count{}, component_count{}, value_count{};
+  double* values{};
+  unsigned* visits{};
+  unsigned* refusal{};  // 1: unsupported envelope, 2: malformed component map
+};
+
+enum class MaterializedDirectPairSink { Fock, CanonicalValues, ResidentValues };
+
 /** Uniform CTA entry: admission precedes every barrier. Inactive/tail lanes
  * still participate in publication/retirement but never read an invalid AO.
  * All selected components consume one Coulomb recurrence per pair product.
  * J and K reuse each contracted ERI through the existing symmetry scatter. */
 template <bool Unrestricted, unsigned AngularOrder, unsigned ComponentSlots = 1,
-          unsigned ComponentLanes = detail::kDirectQuartetTileSize, typename Scalar = double>
-__device__ inline void contract_materialized_direct_pair_fock(
+          unsigned ComponentLanes = detail::kDirectQuartetTileSize, typename Scalar = double,
+          MaterializedDirectPairSink Sink = MaterializedDirectPairSink::Fock>
+__device__ inline void consume_materialized_direct_pair(
     DeviceBatch batch, const ActiveShellQuartetTile& task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active,
     double* fock, const std::uint64_t* generated_mask,
@@ -95,7 +112,15 @@ __device__ inline void contract_materialized_direct_pair_fock(
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
     double omega = 0.0, double* separate_coulomb = nullptr, double* separate_exchange = nullptr,
     std::uint64_t* canonical_work = nullptr, std::uint64_t* mixed_work = nullptr,
-    double* coulomb_correction = nullptr, double* exchange_correction = nullptr) {
+    double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
+    MaterializedDirectPairValueSink source = {}, CanonicalDirectSourceSink resident = {}) {
+  constexpr bool value_only = Sink == MaterializedDirectPairSink::CanonicalValues;
+  constexpr bool resident_only = Sink == MaterializedDirectPairSink::ResidentValues;
+  static_assert(!value_only || (std::is_same_v<Scalar, double> &&
+      AngularOrder >= 3 && AngularOrder <= 5 && ComponentLanes == 32 &&
+      ComponentSlots == canonical_materialized_component_slots(AngularOrder)));
+  static_assert(!resident_only || (std::is_same_v<Scalar, double> &&
+      AngularOrder >= 3 && AngularOrder <= 9));
   constexpr bool mixed = std::is_same_v<Scalar, MixedPrecisionFloat>;
   // Mixed owners already publish one complete recurrence per shell quartet.
   // Disjoint axis writers borrow immutable geometry and retire at the existing
@@ -128,6 +153,20 @@ __device__ inline void contract_materialized_direct_pair_fock(
   const auto second_count = shell_ao_pair_count(batch, second_pair);
   const auto count = first_pair == second_pair ? first_count * (first_count + 1) / 2
                                                : first_count * second_count;
+  if constexpr (value_only) {
+    // Refuse uniformly before any component address is read or value published.
+    // This is a strict, whole-shell, LR-only fixture envelope, not dispatch policy.
+    const bool invalid = blockDim.x != ComponentLanes || task.tile != 0 ||
+        li > 2 || lj > 2 || lk > 2 || ll > 2 || li + lj + lk + ll != AngularOrder ||
+        range != generativeqc::integrals::CoulombRange::Long || !isfinite(omega) || omega < 0 ||
+        !source.component_slots || !source.values || source.component_count != count ||
+        source.map_count != ComponentSlots * ComponentLanes || count > source.map_count ||
+        source.value_count > 192;
+    if (__syncthreads_or(invalid)) {
+      if (threadIdx.x == 0 && source.refusal) atomicOr(source.refusal, 1U);
+      return;
+    }
+  }
   // Each register slot owns one independently screened packet lane. Callers
   // may coalesce adjacent packets only after admitting the complete shell
   // quartet on the same precision/source route. The dddd stream supplies all
@@ -155,6 +194,26 @@ __device__ inline void contract_materialized_direct_pair_fock(
             n, physical, spin, density, i[slot], j[slot], k[slot], l[slot]);
     }
     any_admitted |= admitted[slot];
+  }
+  if constexpr (value_only) {
+    bool invalid = false;
+    for (unsigned slot = 0; slot < ComponentSlots; ++slot) {
+      const auto component = slot * ComponentLanes + threadIdx.x;
+      const auto target = source.component_slots[component];
+      if (!admitted[slot]) {
+        invalid |= target != MaterializedDirectPairValueSink::rejected;
+      } else {
+        invalid |= target >= source.value_count;
+        // Bounded fixture metadata (<=192 entries), validated before publication.
+        // Comparing earlier component ordinals detects aliases across lanes/slots.
+        for (unsigned previous = 0; previous < component; ++previous)
+          invalid |= source.component_slots[previous] == target;
+      }
+    }
+    if (__syncthreads_or(invalid)) {
+      if (threadIdx.x == 0 && source.refusal) atomicOr(source.refusal, 2U);
+      return;
+    }
   }
   if (!__syncthreads_or(any_admitted)) return;
   const auto first = atom_position<double>(batch, batch.shell_atoms[si], -1);
@@ -220,7 +279,8 @@ __device__ inline void contract_materialized_direct_pair_fock(
             fill_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
                                       shared.second.product_center, shared.coulomb);
           else if (!fill_range_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
-                      shared.second.product_center, range, omega, shared.coulomb))
+                      shared.second.product_center, range, omega, shared.coulomb, {},
+                      resident_only ? resident.full_range_scale : 0.0))
             shared.coulomb.at(0, 0, 0, 0) = NAN;
         }
         if (work) {
@@ -252,38 +312,89 @@ __device__ inline void contract_materialized_direct_pair_fock(
     if (!admitted[slot]) continue;
     const std::size_t ordinal = std::size_t(task.tile) * detail::kDirectQuartetTileSize +
                                 slot * ComponentLanes + threadIdx.x;
-    // Qualification may inspect each final component without affecting the
-    // production storage contract, where this borrowed address is null.
-    if (checked_components) checked_components[ordinal] = value[slot];
-    if (value[slot] != 0.0) {
-      // A canonical consumer publishes independent positive J/K sources, not
-      // HF's weighted Fock matrix. Both retain the authoritative orbit scatter.
-      if (separate_coulomb || separate_exchange) {
-        if (separate_coulomb)
+    if constexpr (value_only) {
+      const auto target = source.component_slots[slot * ComponentLanes + threadIdx.x];
+      source.values[target] = value[slot];  // Publish exact zero, too; no density/scatter.
+      if (source.visits) atomicAdd(source.visits + target, 1U);
+    } else if constexpr (resident_only) {
+      resident.store(i[slot], j[slot], k[slot], l[slot], value[slot]);
+    } else {
+      // Qualification may inspect each final component without affecting the
+      // production storage contract, where this borrowed address is null.
+      if (checked_components) checked_components[ordinal] = value[slot];
+      if (value[slot] != 0.0) {
+        // A canonical consumer publishes independent positive J/K sources, not
+        // HF's weighted Fock matrix. Both retain the authoritative orbit scatter.
+        if (separate_coulomb || separate_exchange) {
+          if (separate_coulomb)
+            accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
+                runtime::CompensatedOutput{separate_coulomb, coulomb_correction},
+                i[slot], j[slot], k[slot], l[slot], value[slot], true, false);
+          if (separate_exchange)
+            accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
+                runtime::CompensatedOutput{separate_exchange, exchange_correction},
+                i[slot], j[slot], k[slot], l[slot], value[slot], false, true);
+        } else {
+          // Exported-reference HF owns a correction plane; ordinary and
+          // independent J/K callers retain their existing accumulation sinks.
           accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
-              runtime::CompensatedOutput{separate_coulomb, coulomb_correction},
-              i[slot], j[slot], k[slot], l[slot], value[slot], true, false);
-        if (separate_exchange)
-          accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
-              runtime::CompensatedOutput{separate_exchange, exchange_correction},
-              i[slot], j[slot], k[slot], l[slot], value[slot], false, true);
-      } else {
-        // Exported-reference HF owns a correction plane; ordinary and
-        // independent J/K callers retain their existing accumulation sinks.
-        accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
-            runtime::CompensatedOutput{fock, batch.reference_fock_correction},
-            i[slot], j[slot], k[slot], l[slot], value[slot], coulomb_only, exchange_only, hf_exchange);
+              runtime::CompensatedOutput{fock, batch.reference_fock_correction},
+              i[slot], j[slot], k[slot], l[slot], value[slot], coulomb_only, exchange_only, hf_exchange);
+        }
       }
-    }
-    if (canonical_work) {
-      atomicAdd(reinterpret_cast<unsigned long long*>(canonical_work), 1ULL);
-      atomicAdd(reinterpret_cast<unsigned long long*>(canonical_work + 1), 1ULL);
-    }
-    if constexpr (mixed) {
-      if (mixed_work) atomicAdd(reinterpret_cast<unsigned long long*>(mixed_work), 1ULL);
+      if (canonical_work) {
+        atomicAdd(reinterpret_cast<unsigned long long*>(canonical_work), 1ULL);
+        atomicAdd(reinterpret_cast<unsigned long long*>(canonical_work + 1), 1ULL);
+      }
+      if constexpr (mixed) {
+        if (mixed_work) atomicAdd(reinterpret_cast<unsigned long long*>(mixed_work), 1ULL);
+      }
     }
     if (work) atomicAdd(&work->published_components, 1ULL);
   }
+}
+/** Existing Fock consumer: signature, admission, arithmetic and scatter retained. */
+template <bool Unrestricted, unsigned AngularOrder, unsigned ComponentSlots = 1,
+          unsigned ComponentLanes = detail::kDirectQuartetTileSize, typename Scalar = double>
+__device__ inline void contract_materialized_direct_pair_fock(
+    DeviceBatch batch, const ActiveShellQuartetTile& task, double screening_tolerance,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active,
+    double* fock, const std::uint64_t* generated_mask,
+    MaterializedDirectPairRecurrence<AngularOrder, Scalar>& shared,
+    MaterializedDirectPairWork* work = nullptr, bool coulomb_only = false,
+    bool exchange_only = false, double* checked_components = nullptr,
+    bool hf_exchange = false,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
+    double omega = 0.0, double* separate_coulomb = nullptr, double* separate_exchange = nullptr,
+    std::uint64_t* canonical_work = nullptr, std::uint64_t* mixed_work = nullptr,
+    double* coulomb_correction = nullptr, double* exchange_correction = nullptr) {
+  consume_materialized_direct_pair<Unrestricted, AngularOrder, ComponentSlots, ComponentLanes,
+                                  Scalar, MaterializedDirectPairSink::Fock>(
+      batch, task, screening_tolerance, schwarz_bounds, density, active, fock, generated_mask,
+      shared, work, coulomb_only, exchange_only, checked_components, hf_exchange, range, omega,
+      separate_coulomb, separate_exchange, canonical_work, mixed_work,
+      coulomb_correction, exchange_correction);
+}
+
+/** Candidate LR source publication. No density/Fock argument or runtime sink branch.
+ * A later native integration must resolve primitive-cache and inverse-rank ownership.
+ * This wrapper admits only the bounded fixture's strict FP64 SPD whole shells. */
+template <unsigned AngularOrder>
+__device__ inline void produce_materialized_direct_pair_values(
+    DeviceBatch batch, const ActiveShellQuartetTile& task, double screening_tolerance,
+    const double* schwarz_bounds, const std::uint8_t* active,
+    MaterializedDirectPairRecurrence<AngularOrder, double>& shared,
+    MaterializedDirectPairValueSink source, double omega,
+    MaterializedDirectPairWork* work = nullptr,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Long) {
+  static_assert(AngularOrder >= 3 && AngularOrder <= 5);
+  static_assert(sizeof(MaterializedDirectPairRecurrence<AngularOrder, double>) <= (16U << 10));
+  consume_materialized_direct_pair<false, AngularOrder,
+      canonical_materialized_component_slots(AngularOrder), 32, double,
+      MaterializedDirectPairSink::CanonicalValues>(
+          batch, task, screening_tolerance, schwarz_bounds, nullptr, active, nullptr, nullptr,
+          shared, work, false, false, nullptr, false, range, omega,
+          nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, source);
 }
 }  // namespace generativeqc::scf::cuda_execution
 #endif

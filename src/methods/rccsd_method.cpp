@@ -985,6 +985,12 @@ RccsdNativeState run_rccsd_native_state(
   scf::cuda_execution::CudaDfSourcePolicy correlation_policy;
 #if GENERATIVEQC_HAS_CUDA
   if (correlation_auxiliary) {
+    // SCF's full-range h source does not qualify correlation response or
+    // its retained-source ownership. Reject before reference/cache work.
+    if (std::any_of(correlation_auxiliary->shells.begin(), correlation_auxiliary->shells.end(),
+                    [](const auto& shell) { return shell.angular_momentum > 4; }))
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "CUDA DF correlation auxiliary shells beyond g (l > 4) are unsupported");
     std::string detail;
     if (!scf::cuda_execution::resolve_cuda_df_source_policy(correlation_policy, detail) ||
         !scf::cuda_execution::cuda_df_value_domain(system, *correlation_auxiliary,
