@@ -2370,10 +2370,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // is a capability/work gate, never a GPU model-name whitelist. Public
         // ledgers and explicit reference budgets keep their bounded incumbent
         // until a complete optional-provider quote has been qualified there.
+        const char* gga_gemm_control = std::getenv("GENERATIVEQC_CUDA_XC_GGA_GEMM");
+        if (gga_gemm_control && std::strcmp(gga_gemm_control, "0") != 0 &&
+            std::strcmp(gga_gemm_control, "1") != 0)
+          throw std::invalid_argument("GENERATIVEQC_CUDA_XC_GGA_GEMM accepts 0 or 1");
+        const bool qualified_indexed_gga =
+            spins == 1 && xc_layout.work_jets == 1 &&
+            (functional == semilocal_family_code(SemilocalFamily::Pbe) ||
+             functional == semilocal_family_code(SemilocalFamily::B3lyp));
+        const bool indexed_gga =
+            qualified_indexed_gga && (!gga_gemm_control || gga_gemm_control[0] != '0');
         bool fp64_indexed_matrix = false;
         if (!runtime::active_device_resource_ledger && !options.reference_memory_budget_bytes &&
             !precision_schedule.any_lower_precision() && xc_layout.local_ao &&
-            xc_layout.nao >= 512 && xc_layout.npoint >= (1U << 19) && xc_layout.work_jets >= 4) {
+            xc_layout.nao >= 512 && xc_layout.npoint >= (1U << 19) &&
+            (xc_layout.work_jets >= 4 || indexed_gga)) {
           cudaDeviceProp properties{};
           const auto capability = cudaGetDeviceProperties(&properties, device);
           if (capability == cudaErrorNotSupported || capability == cudaErrorInvalidValue) {

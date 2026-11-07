@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "gga-indexed-gemm-20261108",
+  "owner": "Restricted GGA indexed FP64 default qualification, issue 2976 and PR 3041",
+  "reason": "Lossless source-bound complete endpoint qualification retains all 70 GGA populations, 280 endpoints, first-screen losses and separate rejected HF observations. Offline replay recomputes independent dense/CPU accuracy, both timing orders, unchanged semantic work and every cold/warm protection gate without GPU execution. Distinct experimental and final-default images, build/restore/transfer/scheduler receipts are preserved. No evidence budget is increased.",
+  "review_document": "benchmarks/results/gga-indexed-gemm-20261108/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/gga-indexed-gemm-20261108/fp64.xz",
+      "family": "gga-indexed-gemm-20261108",
+      "bytes": 229464,
+      "sha256": "0da9b301ecbafd5c1b8f1cebe42ec8df433cab33c07e6cca7f9ba13643e8970a",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact original FP64 words for all retained complete E/F endpoints, including separately rejected HF arms."
+    },
+    {
+      "path": "benchmarks/results/gga-indexed-gemm-20261108/receipts.json.xz",
+      "family": "gga-indexed-gemm-20261108",
+      "bytes": 141516,
+      "sha256": "d1e1caf92ea03d1d78ec0d1838cd2c4b9f3cffb1fd21f202471d325ab6fed241",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless original text, checksums, source/image/acquisition receipts and declared qualification cohorts."
+    }
+  ]
+}

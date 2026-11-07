@@ -16,24 +16,28 @@
   "returned_EF": 720,
   "independent_dense_cpu_spot_oracles": 40,
   "records": {
-    "parts": [
-      {
-        "path": "records.json.xz.part00",
-        "bytes": 786432,
-        "sha256": "05cc76d2918c81c65a461c1089d1f408d7946083dac428902dd4a07c2dfefae3"
-      },
-      {
-        "path": "records.json.xz.part01",
-        "bytes": 586600,
-        "sha256": "51a1eed1451826d447c1c1257fc77bfc7e1fd65dcdf7fe02e61437847f38938a"
-      }
-    ],
-    "bytes": 1373032,
-    "sha256": "e23a61216834f3c2a66dc9f42bc70c576c208ec17510cd4af50deaf4d4e6db1e",
+    "exact_storage": "records",
     "decoded_bytes": 44542496,
+    "decoded_sha256": "49ec81dfda9483dd234130ed0dbf990f8895fb1459a1387e7a948483b7c9409f",
     "files": 1398,
     "distinct_blobs": 1060,
-    "original_member_bytes": 44723683
+    "original_member_bytes": 44723683,
+    "previous_storage": {
+      "parts": [
+        {
+          "path": "records.json.xz.part00",
+          "bytes": 786432,
+          "sha256": "05cc76d2918c81c65a461c1089d1f408d7946083dac428902dd4a07c2dfefae3"
+        },
+        {
+          "path": "records.json.xz.part01",
+          "bytes": 586600,
+          "sha256": "51a1eed1451826d447c1c1257fc77bfc7e1fd65dcdf7fe02e61437847f38938a"
+        }
+      ],
+      "bytes": 1373032,
+      "sha256": "e23a61216834f3c2a66dc9f42bc70c576c208ec17510cd4af50deaf4d4e6db1e"
+    }
   },
   "summary": {
     "path": "summary.json.xz",
