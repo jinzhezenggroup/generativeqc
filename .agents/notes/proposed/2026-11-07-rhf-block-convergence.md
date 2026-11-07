@@ -1,6 +1,6 @@
 # Decision: opt-in one-block RHF convergence matrix walk
 
-Status: proposed; local source preparation, CUDA/endpoint qualification pending
+Status: proposed for merge; default-off candidate qualified on measured513288
 Date: 2026-11-07
 
 ## Decision
@@ -47,7 +47,9 @@ null/coarse/nonfinite residuals, inactive state and current-main incremental
 transitions. The original fixture mode remains available. The selected
 `test_uhf --rhf-block-convergence-cache` mode checks actual cached RHF refusal
 in both directions and recovery of the unchanged warm owner, without rerunning
-the historical CPU/UHF oracle suite. All device execution remains pending.
+the historical CPU/UHF oracle suite. These selected real linked controls passed
+on the measured513288/e3ef core; selected racecheck/synccheck also passed. No
+old integral suite or memcheck repeat is claimed.
 
 The RMS fixture's finite/nonnegative arithmetic check uses a positive-sum
 roundoff bound based on per-thread term count and fixed reduction depth. That
@@ -58,8 +60,32 @@ comparison tolerance never enters the production physical stopping policy.
 This is a composable component candidate, not a claim to close the complete HF
 or fixed30 gap. Actual focused CUDA/sanitizer controls and one source-bound
 complete endpoint off/on cold-plus-three-warm comparison decide usefulness.
-Preserve failures, strict force diagnostics, independent physics gates, actual
+Preserve failures, strict full-force gates, independent physics gates, actual
 iteration/Fock work and each warm guard; do not tune a failed fixed proposal.
 
 References: issue #3004; `src/scf/cuda/scf_convergence_policy.cuh`;
 `docs/maintainer/performance_engineering.md`.
+
+
+## Measured component evidence
+
+The [retained three-pair evidence](../../../benchmarks/results/h100-rhf-block-convergence-20261107/README.md)
+compares32/256 threads in fixed off/on, on/off, off/on execution order on the same
+H100/core. All24 original independent E/F gates,12 strict full-force comparisons
+and nine individual warm guards pass. Every cold executes15 molecular Focks
+(8 proposal+7 strict target), and every warm executes one. No work equality was
+required to admit a changed reduction trajectory.
+
+Median paired cold reduction is2.63859281%, with median saved0.259096243s.
+All six cold times are retained; the first5.273% result is not singled out as a
+kernel speedup. Its wall-time saving exceeds the separate prior intrusive
+component time, so timing noise/source/device differences prevent that causal
+attribution. The two counterbalanced additions retain smaller gains. The
+original failed-before-native purpose check remains a failed historical receipt,
+with a separate reviewed metadata-only repair and fresh successful populations.
+
+The measured source remains513288b77bb6a654cffa33c9aa3aa6b39d134c16, native013884,
+coree3ef, GPUfe8. Adding this evidence does not measure the publication tree.
+This supports a scoped default-off component; no new G4 comparison, automatic
+promotion or original fixed30 completion follows. Keep the original campaign
+and denominator requirements unchanged.
