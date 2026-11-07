@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -155,8 +156,11 @@ def capacity_probe(
         assert result.returncode == 0, result.stdout + result.stderr
         objects.append(str(target))
     executable = directory / "probe"
+    dead_sections = (
+        "-Wl,-dead_strip" if sys.platform == "darwin" else "-Wl,--gc-sections"
+    )
     result = subprocess.run(
-        [compiler, *objects, "-Wl,--gc-sections", "-o", str(executable)],
+        [compiler, *objects, dead_sections, "-o", str(executable)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -228,6 +232,7 @@ PREFIX = r"""
 #include "scf/cuda/reference_eri_policy.hpp"
 #include "scf/cuda/rhf_bucket_internal.hpp"
 #include "scf/cuda/rhf_policy.hpp"
+#include "scf/rhf_block_convergence_policy.hpp"
 using namespace generativeqc;
 void require(bool good,const char* message) { if(!good) throw std::runtime_error(message); }
 int created=0, destroyed=0;
@@ -243,6 +248,10 @@ bool bounded_fock_class_timing_requested() noexcept { return false; }
 bool bounded_direct_fock_only_diagnostic_requested() noexcept { return false; }
 std::optional<std::uint64_t> bounded_direct_primary_streaming_fock_mask_requested() noexcept { return {}; }
 unsigned one_electron_value_mapping_requested() noexcept { return 0; }
+// This capacity-only driver never executes a convergence kernel.
+bool resolve_rhf_block_convergence(RhfBlockConvergenceRequest,bool,bool,bool,bool,bool) noexcept {
+  return false;
+}
 MixedPrecisionFockPolicy resolve_mixed_precision_fock_policy(
     std::optional<generativeqc_precision_mode>,double,double,double) noexcept { return {}; }
 }
@@ -264,6 +273,9 @@ DRIVER = r"""
 namespace generativeqc::scf {
 @DRIVER_SIGNATURE@ {
   const bool first_setup=!plan.initialized;
+  const auto block_convergence_request=cuda_policy::RhfBlockConvergenceRequest::Off;
+  const bool requested_mixed_precision_fock=false, requested_incremental_direct_jk=false;
+  const bool requested_quartet_direct=false;
 @DIIS_POLICY@
   // Preserve the real driver's exact-option invariant after lifecycle admission.
   require(first_setup || same_hf_bucket_options(plan.options,options),"stale driver budget");
