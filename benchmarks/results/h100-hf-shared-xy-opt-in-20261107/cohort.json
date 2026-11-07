@@ -30,5 +30,11 @@
     "actual_queue_replay": "source-bound 9be recovery and d56 failed-capture histories remain in original owner; exact approved local replay proof is referenced by dispatch/build review, not relabelled as this pilot",
     "native_source_commit": "https://github.com/jinzhezenggroup/generativeqc/commit/a694beec91645e0c7002bcb84976e2041ae02fa3"
   },
-  "omitted_artifacts": "native binaries, generated shards, large build/resource streams and CUDA caches remain in bound owner roots; their hashes do not make omitted files recoverable from this capsule"
+  "omitted_artifacts": "native binaries, generated shards, large build/resource streams and CUDA caches remain in bound owner roots; their hashes do not make omitted files recoverable from this capsule",
+  "latest_publication_master_merge": {
+    "revision": "dafa29f839c3f6e146c5f088bb5d5592bf14125a",
+    "source": "merged MP2 residency/current-main changes",
+    "new_device_measurement": false,
+    "measured_pilot_unchanged": true
+  }
 }

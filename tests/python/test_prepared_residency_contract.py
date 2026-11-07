@@ -104,6 +104,55 @@ def test_residency_contract_uses_runtime_visible_device(
 
 
 @pytest.mark.parametrize(
+    "energy,density",
+    [
+        (None, 1e-11),
+        (1e-12, None),
+        (0.0, 1e-11),
+        (float("nan"), 1e-11),
+        (1e-12, float("inf")),
+        (1.0, 1e-11),
+    ],
+)
+def test_qualification_controls_must_be_finite_and_paired(
+    monkeypatch: pytest.MonkeyPatch,
+    contract_inputs: Any,
+    energy: float | None,
+    density: float | None,
+) -> None:
+    monkeypatch.setattr(capture.ctypes, "CDLL", lambda _: device_runtime())
+    monkeypatch.setattr(
+        capture.subprocess,
+        "check_output",
+        lambda *_args, **_kwargs: "GPU-assigned, Disabled\n",
+    )
+    contract_inputs.energy_tolerance = energy
+    contract_inputs.density_tolerance = density
+    with pytest.raises(InvalidReceipt, match="both finite positive SCF tolerances"):
+        capture.contract(contract_inputs)
+
+
+def test_tighter_solver_controls_do_not_change_acceptance_gates(
+    monkeypatch: pytest.MonkeyPatch,
+    contract_inputs: Any,
+) -> None:
+    monkeypatch.setattr(capture.ctypes, "CDLL", lambda _: device_runtime())
+    monkeypatch.setattr(
+        capture.subprocess,
+        "check_output",
+        lambda *_args, **_kwargs: "GPU-assigned, Disabled\n",
+    )
+    contract_inputs.energy_tolerance = 1e-12
+    contract_inputs.density_tolerance = 1e-11
+    pinned = capture.contract(contract_inputs)["workload"]
+    assert pinned.pop("solver_controls") == {
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-11,
+    }
+    assert pinned == json.loads(json.dumps(workload("rhf")))
+
+
+@pytest.mark.parametrize(
     "options",
     [
         {"count_status": 1},
@@ -141,13 +190,20 @@ def test_residency_contract_rejects_numeric_mig_parent(
 
 
 @pytest.mark.parametrize("method", ["rhf", "uhf"])
+@pytest.mark.parametrize("tight", [False, True])
 def test_residency_histories_execute_exact_pinned_internal_displacement(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, method: str
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, method: str, tight: bool
 ) -> None:
     import generativeqc
 
     calls = []
+    configurations = []
     case = json.loads(json.dumps(workload(method)))
+    if tight:
+        case["solver_controls"] = {
+            "energy_tolerance": 1e-12,
+            "density_tolerance": 1e-11,
+        }
     arguments = SimpleNamespace(
         method=method,
         library=tmp_path / "native-double",
@@ -178,7 +234,8 @@ def test_residency_histories_execute_exact_pinned_internal_displacement(
             pass
 
     class Calculator:
-        def __init__(self, **_: Any) -> None:
+        def __init__(self, **options: Any) -> None:
+            configurations.append(options)
             self._library = SimpleNamespace(_name=str(arguments.library))
 
         def estimate_resources(self, _: Any) -> Any:
@@ -237,6 +294,10 @@ def test_residency_histories_execute_exact_pinned_internal_displacement(
     with pytest.raises(AfterObservedEndpoints):
         capture.capture(arguments, expected)
     assert len(calls) == 15
+    assert {config["device"] for config in configurations} == {"cuda", "cpu"}
+    for config in configurations:
+        for name, value in case.get("solver_controls", {}).items():
+            assert config[name] == value
     moved = [options["coordinates"] for options in calls if "coordinates" in options]
     assert moved == [case["moved_coordinates"]] * 3
     for atoms, coordinates in zip(case["systems"], moved[0], strict=True):

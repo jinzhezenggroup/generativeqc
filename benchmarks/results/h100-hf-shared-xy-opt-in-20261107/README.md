@@ -85,3 +85,7 @@ remains source-bound to b56. Its original missing-tool failure is retained there
 The later failed native capture and separate authenticated CPU recovery/actual
 queue replay remain in their bound owner histories; this pilot does not relabel
 those earlier sources or add terminal-gather work.
+
+A normal publication synchronization also merges current main
+`dafa29f839c3f6e146c5f088bb5d5592bf14125a`, preserving its independent MP2
+changes. This adds no device measurement or change to the retained HF pilot.

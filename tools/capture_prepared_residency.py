@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import json
+import math
 import os
 import subprocess
 import sys
@@ -88,6 +89,19 @@ def contract(arguments: argparse.Namespace) -> dict[str, Any]:
         "manifest omits collector source",
     )
     case = json.loads(json.dumps(workload(arguments.method)))
+    controls = {
+        name: getattr(arguments, name, None)
+        for name in ("energy_tolerance", "density_tolerance")
+    }
+    if any(value is not None for value in controls.values()):
+        _require(
+            all(
+                type(value) is float and math.isfinite(value) and 0 < value < 1
+                for value in controls.values()
+            ),
+            "explicit qualification requires both finite positive SCF tolerances",
+        )
+        case["solver_controls"] = controls
     ratchet = (
         load_work_ratchet(arguments.work_ratchet, case)
         if arguments.work_ratchet is not None
@@ -147,6 +161,7 @@ def capture(arguments: argparse.Namespace, expected: dict[str, Any]) -> int:
         key: case[key]
         for key in ("method", "basis", "precision", "density_fitting", "device_id")
     }
+    config.update(case.get("solver_controls", {}))
     native = ctypes.CDLL(str(arguments.library.resolve()))
     native.cudaSetDevice.argtypes, native.cudaSetDevice.restype = (
         [ctypes.c_int],
@@ -350,6 +365,8 @@ def main(argv: list[str] | None = None) -> int:
         help="independently reviewed explicit-work limits; never a full residency PASS",
     )
     parser.add_argument("--method", choices=("rhf", "uhf"), default="rhf")
+    parser.add_argument("--energy-tolerance", type=float)
+    parser.add_argument("--density-tolerance", type=float)
     parser.add_argument("--capacity", type=int, default=1 << 18)
     parser.add_argument("--graph-node-limit", type=int, default=4096)
     parser.add_argument("--graph-depth-limit", type=int, default=16)

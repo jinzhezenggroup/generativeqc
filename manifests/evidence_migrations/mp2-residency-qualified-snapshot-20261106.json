@@ -1,0 +1,131 @@
+{
+  "schema": "generativeqc.qualified-snapshot-recovery.v1",
+  "source_commit": "e1922f36c0e449a8dbd4509a096f3d469c35087b",
+  "recovery_repository": "https://github.com/jinzhezenggroup/generativeqc.git",
+  "recovery_ref": "refs/pull/3016/head",
+  "fetch_command": "git fetch --no-tags https://github.com/jinzhezenggroup/generativeqc.git refs/pull/3016/head",
+  "verify_ancestry_command": "git merge-base --is-ancestor e1922f36c0e449a8dbd4509a096f3d469c35087b FETCH_HEAD",
+  "reason": "The tested PR merge includes newer base evidence with only 9456 bytes of the unchanged 82 MiB aggregate budget free. Preserve complete qualified snapshots in existing Git history and ignored local artifacts, keep all actual replay fixtures in the current tree, and replace only our non-test-consumed benchmark reports with small recovery indexes. No reference, numerical, safety or lifetime test is removed; no storage guard is raised.",
+  "snapshot_files": {
+    "benchmarks/results/mp2-factorized-second-20261106/README.md": {
+      "bytes": 2105,
+      "sha256": "53eef51b3e8f65b1c63b9e27836014e1896d81d46dcf54216b98ab92c2b76339",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/mp2-factorized-second-20261106/README.md"
+    },
+    "benchmarks/results/mp2-factorized-second-20261106/qualification.json": {
+      "bytes": 26789,
+      "sha256": "194e6b05b9e4a1291ddf42af591b37b860dc209028bec0ef6565e9ed154a006b",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/mp2-factorized-second-20261106/qualification.json"
+    },
+    "benchmarks/results/residency-n4-20261106/source.patch.xz": {
+      "bytes": 12552,
+      "sha256": "3737f28a10234e9baecf5d3ca3b1e0fb0cb78fb3342e60c8779b840867519bc0",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-n4-20261106/source.patch.xz"
+    },
+    "benchmarks/results/residency-n4-20261106/README.md": {
+      "bytes": 8970,
+      "sha256": "5c3123221cf76623906486798ad9af813de84d98802072b4beada19b72250d79",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-n4-20261106/README.md"
+    },
+    "benchmarks/results/residency-n4-20261106/validation.json": {
+      "bytes": 1991,
+      "sha256": "2a4cda27eab6c34858e8c1ee33523d1ccc5d6c2346f3cf70411dc7b1eaf2a163",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-n4-20261106/validation.json"
+    },
+    "benchmarks/results/residency-n4-20261106/source-reconstruction.json": {
+      "bytes": 321,
+      "sha256": "dabf2fc633c51fbf5b541fca6bb85253862eef867da995abdeb737c96c635312",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-n4-20261106/source-reconstruction.json"
+    },
+    "benchmarks/results/residency-n4-20261106/calibration.json.xz": {
+      "bytes": 1860,
+      "sha256": "6c6bc819f195d27ef7ee8c4efec5671d905077b75c60fe292afb52f2006e9ead",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-n4-20261106/calibration.json.xz"
+    },
+    "benchmarks/results/residency-n4-20261106/control-provenance.json": {
+      "bytes": 4614,
+      "sha256": "0ca29302951caf42bb6b0bd4ba2b8360cc32aec13b32ec754b8708f57cea3c46",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-n4-20261106/control-provenance.json"
+    },
+    "benchmarks/results/residency-n4-20261106/source-controls.json.xz": {
+      "bytes": 3396,
+      "sha256": "cfe4d0ac9f899dacb257608f75673dd5687be850294e4db05f036cafb8a794b6",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-n4-20261106/source-controls.json.xz"
+    },
+    "benchmarks/results/residency-n4-20261106/qualification.json.xz": {
+      "bytes": 3628,
+      "sha256": "be85cb8539419454189bd342da9190739a0ab2f08feaf1231fd4c2517e8cc063",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-n4-20261106/qualification.json.xz"
+    },
+    "benchmarks/results/residency-n4-20261106/SHA256SUMS": {
+      "bytes": 687,
+      "sha256": "e3e214d156a17028ce57c90700104ec390471187bf9c11ad744adf12b70d48f9",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-n4-20261106/SHA256SUMS"
+    },
+    "benchmarks/results/mp2-six-site-20261106/independent-oracle.json.xz": {
+      "bytes": 1136,
+      "sha256": "8d0008ac4b552cc2fcd44c6ebb511c67d3c37f073065507660b02a75c3e27bef",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/mp2-six-site-20261106/independent-oracle.json.xz"
+    },
+    "benchmarks/results/mp2-six-site-20261106/component.json.xz": {
+      "bytes": 229764,
+      "sha256": "9852440c1b7ccad3ee8fd43a08fca2a388c44e7ac9b925439372fa4ccdf04d3e",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/mp2-six-site-20261106/component.json.xz"
+    },
+    "benchmarks/results/mp2-six-site-20261106/README.md": {
+      "bytes": 7206,
+      "sha256": "fcd2473adafcf5c83b101c12d529ebffb0ea351e5c4404e604bd2f56a27ce313",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/mp2-six-site-20261106/README.md"
+    },
+    "benchmarks/results/mp2-six-site-20261106/samples.json.xz": {
+      "bytes": 8408,
+      "sha256": "1a9769667970875b9b80a4fc10bd19a71ffdf987adc2bdd6dabab692e9e957a1",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/mp2-six-site-20261106/samples.json.xz"
+    },
+    "benchmarks/results/mp2-six-site-20261106/checksums.sha256": {
+      "bytes": 423,
+      "sha256": "cf50e5515ccea63a6f05043cfb3c6f9b97b114453dfbda9ba1633ebb5b81dc6c",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/mp2-six-site-20261106/checksums.sha256"
+    },
+    "benchmarks/results/mp2-six-site-20261106/qualification.json.xz": {
+      "bytes": 4312,
+      "sha256": "e9693c2ebe07765a02b094ad1ed0b9ac7aba4f64e7decbe92a47900915c579c0",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/mp2-six-site-20261106/qualification.json.xz"
+    },
+    "benchmarks/results/residency-qualified-n4-20261106/source.patch.xz": {
+      "bytes": 18488,
+      "sha256": "3cfd9ed94a12a9f9739f3e0318e5ea49be8c8c4bd2fd18d16f5fe85df11eaecb",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-qualified-n4-20261106/source.patch.xz"
+    },
+    "benchmarks/results/residency-qualified-n4-20261106/README.md": {
+      "bytes": 6567,
+      "sha256": "6ad667869fc4b75f12613bed3cf19c225a2c53edea5643cfc3f5f211b8171784",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-qualified-n4-20261106/README.md"
+    },
+    "benchmarks/results/residency-qualified-n4-20261106/validation.json": {
+      "bytes": 1071,
+      "sha256": "5c424e83ab364bfc692f4eca769b498066b61c326d600d25e25b3037ab5338a5",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-qualified-n4-20261106/validation.json"
+    },
+    "benchmarks/results/residency-qualified-n4-20261106/checksums.sha256": {
+      "bytes": 410,
+      "sha256": "3c8bb3314780ff5c0a9c204a8a6624bdba485ed2f165b394a8a0bf31a6f5e583",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-qualified-n4-20261106/checksums.sha256"
+    },
+    "benchmarks/results/residency-qualified-n4-20261106/provenance.json": {
+      "bytes": 855,
+      "sha256": "ae2c201d6932ce35e9a9e44009ca82965500ac3d3f768345968fd806bd51c7f7",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-qualified-n4-20261106/provenance.json"
+    },
+    "benchmarks/results/residency-qualified-n4-20261106/qualification.json.xz": {
+      "bytes": 3020,
+      "sha256": "7b8c65ce3ce72d77ff5b20000315e07342dbd096f165380354793a894195cafd",
+      "git_recovery": "e1922f36c0e449a8dbd4509a096f3d469c35087b:benchmarks/results/residency-qualified-n4-20261106/qualification.json.xz"
+    }
+  },
+  "live_reference_root": "tests/reference_data/cupti",
+  "source_controls": {
+    "calibration.json.xz": "6c6bc819f195d27ef7ee8c4efec5671d905077b75c60fe292afb52f2006e9ead",
+    "source-controls.json.xz": "cfe4d0ac9f899dacb257608f75673dd5687be850294e4db05f036cafb8a794b6"
+  }
+}
