@@ -57,4 +57,16 @@ bool cuda_df_value_domain(const core::System& orbital, const core::System& auxil
   return true;
 }
 
+bool cuda_df_integral_export_domain(const core::System& orbital, const core::System& auxiliary,
+                                    const CudaDfSourcePolicy& policy, std::string& detail) {
+  if (!cuda_df_value_domain(orbital, auxiliary, policy, detail)) return false;
+  for (const auto& shell : auxiliary.shells) {
+    if (shell.angular_momentum > 4U) {
+      detail = "CUDA DF auxiliary integral export shells beyond g (l > 4) are unsupported";
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace generativeqc::scf::cuda_execution

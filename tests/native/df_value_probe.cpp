@@ -236,6 +236,7 @@ int main(int argc, char** argv) {
       // libcint center derivatives. The second system catches accidental use
       // of a local coordinate as a packed fleet-global derivative seed.
       std::vector<double> da, dm, bulk_da, bulk_dm, transformed_da;
+      std::vector<double> bulk_raw, bulk_metric, single_raw, single_metric, single_da, single_dm;
       // A fixed symmetric transform isolates dA * X from metric response dX.
       // It is deliberately dense, so a wrong auxiliary offset cannot hide.
       std::vector<double> transform(naux * naux);
@@ -258,10 +259,29 @@ int main(int argc, char** argv) {
         if (!source_derivatives) {
           const auto projected = generativeqc::integrals::transform_density_fitting_integrals(
               bulk[system], orbital[system], auxiliary[system]);
+          bulk_raw.insert(bulk_raw.end(), projected.three_center.begin(),
+                          projected.three_center.end());
+          bulk_metric.insert(bulk_metric.end(), projected.metric.begin(), projected.metric.end());
           bulk_da.insert(bulk_da.end(), projected.three_center_derivative.begin(),
                          projected.three_center_derivative.end());
           bulk_dm.insert(bulk_dm.end(), projected.metric_derivative.begin(),
                          projected.metric_derivative.end());
+          // The unrestricted correlation owner uses the single-system export,
+          // not the batched source. Qualify its public transform independently.
+          generativeqc::integrals::DensityFittingIntegralData cartesian;
+          require(
+              build_cuda_density_fitting_integrals(0, orbital[system], auxiliary[system], cartesian,
+                                                   detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail);
+          const auto single = generativeqc::integrals::transform_density_fitting_integrals(
+              cartesian, orbital[system], auxiliary[system]);
+          single_raw.insert(single_raw.end(), single.three_center.begin(),
+                            single.three_center.end());
+          single_metric.insert(single_metric.end(), single.metric.begin(), single.metric.end());
+          single_da.insert(single_da.end(), single.three_center_derivative.begin(),
+                           single.three_center_derivative.end());
+          single_dm.insert(single_dm.end(), single.metric_derivative.begin(),
+                           single.metric_derivative.end());
         }
         const auto coordinates = 3 * orbital[system].atoms.size();
         const auto abase = da.size(), mbase = dm.size();
@@ -330,8 +350,14 @@ int main(int argc, char** argv) {
         write_values(prefix + "-transformed_derivative.bin", transformed_da);
         check(cudaFree(device_transform));
       } else {
+        write_values(prefix + "-bulk_raw.bin", bulk_raw);
+        write_values(prefix + "-bulk_metric.bin", bulk_metric);
         write_values(prefix + "-bulk_raw_derivative.bin", bulk_da);
         write_values(prefix + "-bulk_metric_derivative.bin", bulk_dm);
+        write_values(prefix + "-single_raw.bin", single_raw);
+        write_values(prefix + "-single_metric.bin", single_metric);
+        write_values(prefix + "-single_raw_derivative.bin", single_da);
+        write_values(prefix + "-single_metric_derivative.bin", single_dm);
       }
     }
     check(cudaFree(device));
