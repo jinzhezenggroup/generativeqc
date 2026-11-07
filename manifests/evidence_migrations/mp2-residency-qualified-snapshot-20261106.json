@@ -1,6 +1,10 @@
 {
   "schema": "generativeqc.qualified-snapshot-recovery.v1",
   "source_commit": "e1922f36c0e449a8dbd4509a096f3d469c35087b",
+  "recovery_repository": "https://github.com/jinzhezenggroup/generativeqc.git",
+  "recovery_ref": "refs/pull/3016/head",
+  "fetch_command": "git fetch --no-tags https://github.com/jinzhezenggroup/generativeqc.git refs/pull/3016/head",
+  "verify_ancestry_command": "git merge-base --is-ancestor e1922f36c0e449a8dbd4509a096f3d469c35087b FETCH_HEAD",
   "reason": "The tested PR merge includes newer base evidence with only 9456 bytes of the unchanged 82 MiB aggregate budget free. Preserve complete qualified snapshots in existing Git history and ignored local artifacts, keep all actual replay fixtures in the current tree, and replace only our non-test-consumed benchmark reports with small recovery indexes. No reference, numerical, safety or lifetime test is removed; no storage guard is raised.",
   "snapshot_files": {
     "benchmarks/results/mp2-factorized-second-20261106/README.md": {

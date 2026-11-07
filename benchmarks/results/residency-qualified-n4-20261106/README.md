@@ -1,5 +1,10 @@
 # Scientific DF links and named replay boundaries
 
+Before recovery in a fresh clone, fetch GitHub's retained PR head with
+`git fetch --no-tags https://github.com/jinzhezenggroup/generativeqc.git refs/pull/3016/head`.
+This fetch also works after a normal squash merge or source-branch deletion.
+The recovery manifest records the ancestry check and exact member hashes.
+
 Slurm n4 job 1511 qualifies actual H2/LiH/water DF metric host-transform links
 and named prepared RHF/UHF replay boundaries with unchanged scientific gates.
 All live raw replay fixtures remain in `tests/reference_data/cupti/n4-1511/`.

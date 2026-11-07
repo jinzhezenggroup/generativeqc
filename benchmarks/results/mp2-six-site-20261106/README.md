@@ -1,5 +1,10 @@
 # Six-site MP2 qualification
 
+Before recovery in a fresh clone, fetch GitHub's retained PR head with
+`git fetch --no-tags https://github.com/jinzhezenggroup/generativeqc.git refs/pull/3016/head`.
+This fetch also works after a normal squash merge or source-branch deletion.
+The recovery manifest records the ancestry check and exact member hashes.
+
 All six measured retention decisions, gates, timing scope and rejected
 alternatives are in the
 [Agent Note](../../../.agents/notes/implemented/performance/2026-11-06-mp2-six-site-dispositions.md).
