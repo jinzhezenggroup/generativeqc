@@ -74,7 +74,7 @@ Dim blockIdx{0},threadIdx{0},blockDim{1},gridDim{1};
 int atomicCAS(int* p,int old,int value){int before=*p;if(before==old)*p=value;return before;}
 using cublasHandle_t=void*;
 constexpr int CUBLAS_STATUS_ALLOC_FAILED=2, CUBLAS_POINTER_MODE_HOST=0;
-constexpr int CUBLAS_PEDANTIC_MATH=0, CUBLAS_OP_N=0;
+constexpr int CUBLAS_PEDANTIC_MATH=0, CUBLAS_DEFAULT_MATH=1, CUBLAS_OP_N=0;
 bool measurement_locked(){
   // A distinct thread avoids trying to acquire a mutex already owned by self.
   bool acquired=false;
@@ -94,7 +94,15 @@ int cublasDestroy(void* h){
 }
 int cublasSetStream(void*,cudaStream_t s){assert(s==stream);return 0;}
 int cublasSetPointerMode(void*,int){return 0;}
-int cublasSetMathMode(void*,int){return 0;}
+int default_math_calls=0;
+int cublasSetMathMode(void*,int mode){
+  assert(mode==CUBLAS_PEDANTIC_MATH || mode==CUBLAS_DEFAULT_MATH);
+  if(mode==CUBLAS_DEFAULT_MATH){
+    ++default_math_calls;
+    if(failure==3){failure=0;return 3;}
+  }
+  return 0;
+}
 int cublasSetWorkspace(void*,void* p,std::size_t n){assert(!p&&!n);return 0;}
 int cublasGetVersion(void*,int* p){*p=1;return 0;}
 int cublasDgemm(void*,int,int,int,int,int,const double*,const double*,int,
@@ -128,11 +136,13 @@ int main(int argc,char** argv){
   assert(argc==4);
   using namespace generativeqc::tensor;
   using namespace generativeqc::runtime;
-  const bool bounded=std::string(argv[1])=="bounded";
+  const bool qualified=std::string(argv[1])=="qualified";
+  const bool bounded=qualified || std::string(argv[1])=="bounded";
   const std::string route=argv[2], fault=argv[3];
-  failure=fault=="sync"?1:fault=="destroy"?2:0;
+  failure=fault=="sync"?1:fault=="destroy"?2:fault=="math"?3:0;
   const int expected_failure=failure;
-  panel_product_library_for_test=panel_product_bounded_library_for_test=route!="unqualified";
+  panel_product_library_for_test=panel_product_bounded_library_for_test=
+      route!="unqualified" && !qualified;
   constexpr std::size_t cache_bytes=2*2*sizeof(double);
   auto ledger=std::make_shared<DeviceResourceLedger>();
   ledger->device=1;ledger->limit=route=="ledger"?0:cache_bytes;
@@ -142,9 +152,11 @@ int main(int argc,char** argv){
   try{
     owner=std::make_unique<CudaPanelProduct>(probe_request,probe_candidates,
         probe_target,probe_compilation,2,1,1,stream,
-        CudaContractionContext::kProviderAllowance+cache_bytes,0,bounded?5:4,true);
+        CudaContractionContext::kProviderAllowance+cache_bytes,0,bounded?5:4,true,qualified);
   }catch(const generativeqc_tensor::DeviceRuntimeError&){propagated=true;}
-  if(expected_failure){
+  if(fault=="math"){
+    assert(propagated && !owner && default_math_calls==1);
+  }else if(expected_failure){
     if(!propagated){std::cerr<<"live cleanup failure admitted generated retry\n";return 1;}
     assert(!owner && failed_handle==1 && retried_handle==1);
     assert(sync_calls==2 && destroy_calls==(expected_failure==2?2:1));
@@ -159,6 +171,7 @@ int main(int argc,char** argv){
   }
   owner.reset();
   assert(device==1 && live_handles==0 && ledger->live==0 && device_allocation_owners.empty());
+  assert(default_math_calls==(qualified && route=="admit"?1:0));
   if(route=="ledger"||route=="device")assert(ledger->rejected==1);
   std::cout<<argv[1]<<" "<<route<<" "<<fault<<" passed\n";
 }
@@ -230,6 +243,21 @@ def test_panel_live_cleanup_propagates_before_fallback(
 ) -> None:
     result = subprocess.run(
         [str(panel_cleanup_probe), domain, route, fault],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("fault", ["none", "math"])
+def test_qualified_panel_math_policy_and_failure_cleanup(
+    panel_cleanup_probe: Path, fault: str
+) -> None:
+    """Production qualification owns math mode and cleans up a failed change."""
+    result = subprocess.run(
+        [str(panel_cleanup_probe), "qualified", "admit", fault],
         capture_output=True,
         text=True,
         timeout=10,

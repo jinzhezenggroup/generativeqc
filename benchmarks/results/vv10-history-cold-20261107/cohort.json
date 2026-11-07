@@ -1,0 +1,44 @@
+{
+  "schema": "generativeqc.vv10-history-cold-qualification.v1",
+  "source_head": "08f8abe1345e7f4f9a58858842ea63f2d8f7ad27",
+  "source_identity": "ef7f04bd77cae25a87aca1452c4640ac30ca95c7ff89817ae95e517fe24d9191",
+  "source_scope": "Existing draft #3037, including its unmerged #3036 dependency and master f27bdb3b0; not the #3038 HF image or a mainline-default qualification.",
+  "method": "WB97M-V",
+  "mode": "full Direct",
+  "basis": "def2-SVP spherical",
+  "atoms": 96,
+  "precision": "Standard FP64",
+  "public_tolerances": {
+    "energy": 1e-09,
+    "density": 1e-05,
+    "screening": 1e-12
+  },
+  "cold": "constructor+prepare+SCF+analytic-force+host-export; retain first call",
+  "warm": "three same-owner calls, frozen own cold density",
+  "arms": {
+    "baseline": "GENERATIVEQC_KS_VV10_REBASE_HISTORY=0",
+    "candidate": "GENERATIVEQC_KS_VV10_REBASE_HISTORY=1"
+  },
+  "advancement": "one forward pair; reverse only if cold ratio<0.99, paired E/F passes, and all three warm ratios<=1.03",
+  "reference_gates": {
+    "energy_per_atom": 1e-05,
+    "force_max": 0.0001,
+    "force_rms": 3e-05
+  },
+  "paired_native_gates": {
+    "energy_per_atom": 1e-09,
+    "force_max": 1e-07,
+    "force_rms": 3e-08
+  },
+  "protection_ratio": 1.03,
+  "reference_usage": "pinned independent E/F only; historical reference times excluded",
+  "unpublished_fields": [
+    "force pair sweeps in clean endpoint records",
+    "active compact point counts",
+    "exclusive rebase/Gram timing"
+  ],
+  "unpublished_policy": "No numerical values invented for missing work or exclusive times. No default promotion from a successful rebase counter or a saved Fock alone.",
+  "evidence_sha256": "2f1d6afaea582a2178bbcd620a7dd9ba8f6ac6b6a708a7df065c601697eba421",
+  "decision": "reject-default",
+  "publication_base": "b40b57be513115cf5476f3cc9d29769ab7f9493e"
+}
