@@ -36,6 +36,15 @@ Before submission, fast-forwarded to `17babea1beeced50a11254684b879cbf26157d72`
 (#3025); it adds only unrelated benchmark documents. The integrated native
 source identity remains exactly the qualified identity above.
 
+Subsequent PR review added an optional refusal for compact bucket masks that
+cover all populated buckets but omit empty ones. Such leases now retain usable
+raw LR values instead of failing combined-source admission. The qualified
+all-mask producer and contraction path are unchanged. This guard changes the
+native source identity; the timings and GPU receipts below belong only to the
+historical image identified above, not to the repaired source. The repair has a
+passing compiled host regression; its added compact-mask numerical oracle has
+not yet run on a GPU.
+
 ## Final complete endpoints
 
 Each pair uses the same final image: explicit
