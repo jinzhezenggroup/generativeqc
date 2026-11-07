@@ -415,17 +415,6 @@ def _label_dims(node: typing.Any) -> dict[typing.Any, str]:
     return result
 
 
-def _label_kinds(node: typing.Any) -> dict[typing.Any, str]:
-    result = {}
-    for operand, labels in zip(node.inputs, node.attrs["labels"], strict=True):
-        for index, label in zip(operand.spec.indices, labels, strict=True):
-            kind = _kind(index)
-            previous = result.setdefault(label, kind)
-            if previous != kind:
-                raise ValueError("einsum label crosses occupied/virtual spaces")
-    return result
-
-
 def _flat_index(labels: tuple[typing.Any, ...], spec: TensorSpec) -> str:
     if not labels:
         return "0"

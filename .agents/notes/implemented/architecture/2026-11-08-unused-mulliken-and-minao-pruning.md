@@ -74,3 +74,9 @@ repository-size savings.
 Add a whole-batch internal interface only if a real consumer needs it, with an
 explicit publication contract and executable numerical/failure coverage. Prefer
 sharing the current scientific kernels over restoring duplicate scalar loops.
+
+## Follow-up
+
+The broader audit and cumulative measurements are recorded in
+[the native pruning audit](2026-11-08-native-pruning-audit.md). The table above
+records the initial Mulliken/MINAO change, not the cumulative follow-up result.

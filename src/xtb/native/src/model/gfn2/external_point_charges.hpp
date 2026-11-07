@@ -54,35 +54,6 @@ generativeqc_xtb_status_t make_external_point_charge_plan(const BasisPlan& basis
                                                  ExternalPointChargePlan& plan, std::string& error);
 
 /*
- * Overwrite shell_potentials with the xTB 6.7.1 GFN2 shell-monopole shift
- *
- *   V_s^PC = sum_p Q_p / sqrt(r_Ap^2 + (2/(gamma_s + gamma_p))^2).
- *
- * Positions are atom/site-major xyz in bohr, charges use elementary-charge
- * units, and point_hardnesses are finite positive gamma_p values in Hartree.
- * For zero point sites, all point-site pointers may be NULL and the shell
- * output is still overwritten with zero.
- */
-generativeqc_xtb_status_t evaluate_external_point_charge_potential_cpu(
-    const ExternalPointChargePlan& plan, const double* qm_positions, const double* point_positions,
-    const double* point_charges, const double* point_hardnesses, double* shell_potentials,
-    std::string& error);
-
-/*
- * Accumulate the converged explicit embedding energy
- *
- *   E_PC = sum_s q_s V_s^PC
- *
- * into one Hartree value per batch member. shell_charges and shell_potentials
- * follow BasisPlan shell order. This routine deliberately consumes the
- * precomputed potential used by SCC instead of recomputing it.
- */
-generativeqc_xtb_status_t add_external_point_charge_energy_cpu(const ExternalPointChargePlan& plan,
-                                                      const double* shell_charges,
-                                                      const double* shell_potentials,
-                                                      double* energies, std::string& error);
-
-/*
  * Accumulate explicit external-charge forces for fixed converged shell
  * charges. QM and point-site force buffers use atom/site-major xyz in
  * Hartree/bohr and may independently be NULL. There is no point-charge to
