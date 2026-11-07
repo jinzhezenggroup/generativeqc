@@ -246,7 +246,7 @@ struct Plan {
  unsigned primary_streaming_fock_mask{};
  bool graph_native_eigensolver_override{},reuse_converged_fock{},incremental_diis_gram{},ordered_diis_gram{};
  bool one_electron_value_mapping{},mixed_precision_fock{},bounded_direct_streaming{},diis_work_enabled{};
- bool fp32_block_screening{},incremental_direct_jk{};
+ bool fp32_block_screening{},incremental_direct_jk{},block_convergence{};
  double mixed_precision_fock_threshold{};
  cuda_policy::SharedRysXyPolicy shared_rys_xy{};
 };
@@ -296,6 +296,7 @@ std::vector<int> replay_probe(bool saved_incremental,bool saved_ordered,bool sav
  const bool shell_class_profiling=false,inactive_eigensolver_profiling=false,bounded_fock_class_timing=false;
  const bool bounded_direct_fock_only_diagnostic=false,requested_graph_native_eigensolver_override=false;
  const bool requested_reuse_converged_fock=false,requested_incremental_direct_jk=false,requested_mixed_precision_fock=false;
+ const bool requested_block_convergence=false;
  const unsigned requested_primary_streaming_fock_mask=0;
  const std::optional<double> requested_mixed_precision_fock_threshold;
  const cuda_policy::SharedRysXyPolicy requested_shared_rys_xy{};

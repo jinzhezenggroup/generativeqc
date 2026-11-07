@@ -39,7 +39,10 @@ ALLOWED = {
 # projection and all reference modules retain their narrower dependency rules.
 SOURCE_EXACT_ALLOWED = {
     # Private generated-dispatch declarations expose no recurrence or owner state.
-    "scf/cuda_rhf.cpp": ("scf/shared_rys_weighted_z.hpp",),
+    "scf/cuda_rhf.cpp": (
+        "scf/shared_rys_weighted_z.hpp",
+        "scf/rhf_block_convergence_policy.hpp",
+    ),
     # Optional DIIS counters share CUDA-free size/enablement/readback metadata.
     # This header has no solver, provider or mutable device-owner dependency.
     "scf/cuda/arena.cpp": ("scf/diis_work.hpp",),
