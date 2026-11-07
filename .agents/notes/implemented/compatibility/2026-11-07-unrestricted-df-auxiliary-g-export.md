@@ -26,6 +26,12 @@ The source's separately qualified full-range auxiliary-h domain (#3015) is not
 permission to admit h into unrestricted correlation response. A compiled host
 preflight checks that source h remains available while raw exports reject it
 without CUDA work; the generic-only g and orbital-f boundaries remain intact.
+The offline Libxc catalog binds all native/frontend inputs, including these
+SCF exporters. Regenerate its checked-input snapshot with
+`tools/check_libxc_native_catalog.py --write` when those inputs change. This
+refresh changes only the checked source identities: the retained campaign,
+capability summary and already-stale evidence status remain unchanged. It is
+not new Libxc qualification or permission to relabel historical measurements.
 
 ## Rejected alternatives
 
