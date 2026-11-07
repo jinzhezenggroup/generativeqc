@@ -293,6 +293,51 @@ only that current identity/report: the retained campaign, measured binary,
 scientific capability summary, acknowledgements, and already-stale admission
 state remain unchanged. This is not a new Libxc numerical qualification.
 
+### Completed RTX PRO 6000 PR qualification, November 8
+
+The integrated production source at
+`3e879d1d7a584e5ea0839ec903ea01250f1cdf48` is rebuilt in Release mode with
+CUDA 12.9.1, `120-real`, fast compilation disabled, and verified sccache
+0.16.0. Its native library SHA-256 is
+`5bbca7b5a78518238b80336ae5753eef582002c6375dd033b3171f0258e3f474`.
+The exact linked scipy-openblas32 shared libraries are staged with the
+binary; a different node-local BLAS is not substituted or aliased. The first
+allocation, job 4117, stops before test startup because that runtime dependency
+is missing and is not counted as execution qualification.
+
+On n2's RTX PRO 6000 Blackwell Workstation Edition with 97887 MiB, Slurm job
+4118 uses a finite 45-minute allocation, preserved device visibility, default
+source selection and the original 43-GiB caller budget. It returns successfully
+at `2026-11-08T06:28:55+08:00`. All three permanent original-failure physical
+steps pass in 1123.60 seconds: the two reported HF references still take
+48 and 27 iterations, and the physical CCSD(T) energy/analytic-force step
+passes the independent PySCF and two-step directional checks. Native energy
+is `-793.57090801045229` hartree, and the force projection is
+`0.037302009445823986` hartree/Bohr. The maximum directional error is
+`1.3159259984463212e-7` hartree/Bohr, below the unchanged `3e-7` gate.
+The same job also passes all nine selected existing independent-oracle
+CUDA CBS/ECP regressions in 66.49 seconds. These timings describe the selected
+qualification suites, not complete pinned iodine-CBS endpoint performance.
+
+The production library is unchanged by the subsequent test-only integer
+promotion at `bb3f053bc680a4c8def4926c21b76fcf4c61eda4`. Its final native
+convergence executable is separately rebuilt through sccache and passes both
+the ordinary controller contracts and the 32/256-thread matrix-walk,
+full-energy-refinement and cold-start contracts in Slurm job 4119 with a
+finite three-minute allocation on the same device class. Both srun commands
+return zero; this node does not provide Slurm accounting storage. Three native
+host suites, 121 focused host tests, 82 catalog/transition tests and the source
+checks also pass. The 18 host opt-in skips are not counted as passes.
+
+The three complete pinned iodine-CBS endpoints remain unqualified. They are
+not replayed again for this integrated binary after the earlier generic TZ
+MP2 work amplification is established. The new successful physical-step and
+smaller-system regressions must not be substituted for those complete runs,
+nor for arbitrary element/geometry coverage. PR #3046 remains a draft and
+does not auto-close #3034. Raw source identities, exact binaries, traces and
+logs remain under ignored `.artifacts/issue-3034/` without publishing a Release
+or changing production resource/fallback policy.
+
 ## Revisit when
 
 Matrix-free curvature admission replaces the dense physical Hessian, or a new
