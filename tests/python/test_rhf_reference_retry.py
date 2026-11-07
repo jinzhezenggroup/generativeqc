@@ -95,6 +95,9 @@ void validate_physical_reference(PhysicalReference& ref) {
 
 _ACTIONS = r"""
 using namespace generativeqc::scf;
+void launch_physical_residual_rms(cudaStream_t, std::size_t, const double*, double* result) {
+  *result=9e-12;
+}
 struct MockHost {std::vector<std::size_t> occupied{1};};
 std::size_t hf_cuda_retained_host_numeric_bytes(const MockPlan&) {
   ++plan_capacity_samples;actions.push_back("snapshot-plan");
@@ -160,11 +163,12 @@ std::vector<Item> run() {
   };
   std::unique_ptr<MockResidentValues> resident_values;
   const MockHost host;
-  const std::size_t nbf=2,batch_size=1,spin_count=1,spin_matrix_elements=4;
+  const std::size_t nbf=2,batch_size=1,spin_count=1,spin_matrix_elements=4,matrix_size=4;
   const unsigned threads=32,matrix_reduction_threads=32;
   double overlap[4]{1,2,3,4},hcore[4]{},fock[4]{33},coefficients[4]{},density[4]{11};
   double next_density[4]{22},eigenvalues[2]{},orthogonalizer[4]{},temporary[4]{},eigensystem[4]{};
   double energy[1]{-77},energy_change[1]{1e-14},density_rms[1]{1e-13},nuclear_repulsion[1]{};
+  double residual[4]{},diis_coefficients[1]{};
   std::uint8_t converged[1]{1},failed[1]{0},active[1]{1};std::uint32_t iterations[1]{5};
   int solver_info[1]{},ordinary_eigensolver_family=0,lwork=0,cuda_error=0;
   generativeqc_status status=GENERATIVEQC_STATUS_SUCCESS;
@@ -205,6 +209,7 @@ int main(int argc,char**argv) {
       const auto& r=result[0];
       require(r.status==GENERATIVEQC_STATUS_SUCCESS && r.scf.converged && r.scf.reference,
               "successful final reference was not published");
+      require(r.scf.physical_residual_rms==9e-12,"physical residual diagnostic was lost");
       const unsigned total_iterations=screened ? 12U : 5U;
       require(r.scf.iterations==total_iterations && r.scf.reference->numeric_capacity_bytes==1000,
               "lost reference metadata");

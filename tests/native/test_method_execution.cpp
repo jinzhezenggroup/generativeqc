@@ -137,6 +137,37 @@ void reference_policy() {
           "nonstandard exception fabricated a provider message");
 }
 
+void reference_failure_diagnostics() {
+  scf::ScfResult failed;
+  failed.iterations = 200;
+  failed.energy = -442.994749181269;
+  failed.energy_change = 1e-12;
+  failed.density_rms = 7e-8;
+  failed.physical_residual_rms = 9e-9;
+  try {
+    methods::warm_reference::solve_reference(
+        nullptr, scf::FockSpin::Restricted, nullptr,
+        [&](const std::vector<double>*) { return failed; }, "reference failed");
+    throw std::logic_error("unconverged reference was accepted");
+  } catch (const methods::MethodError& error) {
+    const std::string detail = error.what();
+    require(methods::item_exception_status() == GENERATIVEQC_STATUS_NOT_CONVERGED,
+            "reference diagnostics changed failure status");
+    for (const char* field :
+         {"reference failed", "scf_status=", "stopping_reason=scf_not_converged", "iterations=200",
+          "energy=-442.994749", "energy_change=", "density_rms=", "physical_residual_rms="})
+      require(detail.find(field) != std::string::npos, "reference failure lost a diagnostic");
+  }
+  const auto numerical = scf::reference_failure_detail(
+      failed, GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "device eigensolver failed");
+  require(numerical.find("stopping_reason=numerical_failure") != std::string::npos,
+          "numerical failure was reported as iteration exhaustion");
+  const auto device = scf::reference_failure_detail(failed, GENERATIVEQC_STATUS_CUDA_ERROR,
+                                                    "device execution failed");
+  require(device.find("stopping_reason=cuda_error") != std::string::npos,
+          "CUDA execution failure was reported as iteration exhaustion");
+}
+
 core::System h2() {
   core::System system;
   system.atoms = {{1, {0, 0, -0.7}}, {1, {0, 0, 0.7}}};
@@ -335,6 +366,7 @@ void batch_policy(generativeqc_backend backend, bool unrestricted, bool cc_diagn
 int main() {
   try {
     reference_policy();
+    reference_failure_diagnostics();
     const auto source = h2();
     scf::ScfOptions options;
     options.export_physical_reference = true;

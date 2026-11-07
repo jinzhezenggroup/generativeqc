@@ -11,7 +11,9 @@
 
 #include "scf/cuda/df_scf_kernels.hpp"
 #include "scf/cuda/direct_density_bounds.hpp"
+#include "scf/cuda/scf_constants.hpp"
 #include "scf/cuda/scf_convergence_kernels.hpp"
+#include "scf/cuda/scf_diis_kernels.hpp"
 #include "scf/cuda/scf_incremental_policy.cuh"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 
@@ -137,8 +139,12 @@ void check_convergence(unsigned spins, bool retain, bool require_physical, bool 
       converged(std::vector<std::uint8_t>(batch, 0));
   Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 1));
   Device<std::uint32_t> census(std::vector<std::uint32_t>{0, 0, 1, 1, 0, 0});
-  const auto launch =
-      spins == 1 ? launch_update_convergence_kernel : launch_update_uhf_convergence_kernel;
+  const auto launch = [spins](auto... arguments) {
+    if (spins == 1)
+      launch_update_convergence_kernel(arguments...);
+    else
+      launch_update_uhf_convergence_kernel(arguments...);
+  };
   launch(retain, batch, 32, 0, nullptr, batch, n, energy_tolerance, tolerance, false, energy.data,
          previous.data, next.data, density.data, active.data, converged.data, iterations.data,
          change.data, rms.data, require_physical ? d_residual.data : nullptr,
@@ -230,9 +236,12 @@ void check_direct_df_acceptance(unsigned spins) {
     Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 0));
     if (!fitted) {
       Device<double> current(density), proposal(next);
-      const auto launch =
-          spins == 1 ? generativeqc::scf::cuda_execution::launch_update_convergence_kernel
-                     : generativeqc::scf::cuda_execution::launch_update_uhf_convergence_kernel;
+      const auto launch = [spins](auto... arguments) {
+        if (spins == 1)
+          generativeqc::scf::cuda_execution::launch_update_convergence_kernel(arguments...);
+        else
+          generativeqc::scf::cuda_execution::launch_update_uhf_convergence_kernel(arguments...);
+      };
       launch(false, batch, 32, 0, nullptr, batch, n, 1e-12, 1e-10, true, d_energy.data,
              previous.data, proposal.data, current.data, active.data, converged.data,
              iterations.data, change.data, rms.data, d_residual.data, nullptr, false, nullptr,
@@ -311,8 +320,12 @@ void check_incremental_energy_refinement(unsigned spins, bool retain, bool stand
       census(std::vector<std::uint32_t>{0, 0, 0, 0, 0, 1, 0, 0, 0, 0});
   Device<unsigned long long> full_count(std::vector<unsigned long long>(batch, 0)),
       delta_count(std::vector<unsigned long long>{2, 2, 0, 2, 2, 2, 2, 2, 0, 2});
-  const auto launch =
-      spins == 1 ? launch_update_convergence_kernel : launch_update_uhf_convergence_kernel;
+  const auto launch = [spins](auto... arguments) {
+    if (spins == 1)
+      launch_update_convergence_kernel(arguments...);
+    else
+      launch_update_uhf_convergence_kernel(arguments...);
+  };
   const auto converge = [&] {
     launch(retain, batch, reduction_threads, 0, nullptr, batch, basis_size, energy_tolerance,
            tolerance, true, energy.data, previous.data, next.data, density.data, active.data,
@@ -524,6 +537,112 @@ void check_rhf_matrix_walk(unsigned n, unsigned reduction_threads, bool retain, 
     }
   }
 }
+void check_reference_diis_scaling() {
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr unsigned matrix_size = 4, history = 3;
+  for (const double scale : {1.0, 1e-10, 1e-100, 1e100}) {
+    Device<double> fock{std::vector<double>(matrix_size)},
+        residual{std::vector<double>(matrix_size)};
+    Device<double> fock_history{std::vector<double>(matrix_size * history)};
+    Device<double> residual_history{std::vector<double>(matrix_size * history)};
+    Device<double> system{std::vector<double>((history + 1) * (history + 1))};
+    Device<double> coefficients{std::vector<double>(history + 1)};
+    Device<double> effective{std::vector<double>(matrix_size)};
+    Device<std::uint32_t> count({0}), head({0});
+    Device<std::uint8_t> active({1});
+    for (unsigned sample = 1; sample <= 6; ++sample) {
+      const std::vector<double> matrix{3.0 * sample - 2.0, 0, 0, 4.0 * sample - 1.0};
+      const std::vector<double> error{0, scale * sample, -scale * sample, 0};
+      check(cudaMemcpy(fock.data, matrix.data(), matrix_size * sizeof(double),
+                       cudaMemcpyHostToDevice));
+      check(cudaMemcpy(residual.data, error.data(), matrix_size * sizeof(double),
+                       cudaMemcpyHostToDevice));
+      launch_update_diis_kernel(1, 32, 0, nullptr, 1, 2, 1, history, fock.data, residual.data,
+                                active.data, fock_history.data, residual_history.data, system.data,
+                                coefficients.data, count.data, head.data, effective.data, true);
+      const auto result = effective.read();
+      if (sample >= 2 && (std::abs(result[0] + 2.0) > 1e-10 || std::abs(result[3] + 1.0) > 1e-10))
+        throw std::runtime_error(
+            "physical-reference DIIS lost scale invariance or ring retirement");
+    }
+  }
+}
+
+void check_reference_residual_diagnostics() {
+  using namespace generativeqc::scf::cuda_execution;
+  for (const double scale : {0.0, 1e-200, 1e-10, 1.0, 1e200}) {
+    std::vector<double> values(37, 0.0);
+    values[0] = scale;
+    values[36] = -2 * scale;
+    Device<double> residual(values), result({-1.0});
+    launch_physical_residual_rms(nullptr, values.size(), residual.data, result.data);
+    const double expected = std::hypot(values[0], values[36]) / std::sqrt(double(values.size()));
+    if (std::abs(result.read()[0] - expected) > std::abs(expected) * 1e-14)
+      throw std::runtime_error("physical commutator diagnostic overflowed or underflowed");
+  }
+  for (const double nonfinite :
+       {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+    Device<double> residual({0.0, nonfinite}), result({0.0});
+    launch_physical_residual_rms(nullptr, residual.size, residual.data, result.data);
+    if (std::isfinite(result.read()[0]))
+      throw std::runtime_error("nonfinite physical residual was hidden in diagnostics");
+  }
+}
+
+void check_reference_startup(bool retain, unsigned threads, unsigned basis_size) {
+  using namespace generativeqc::scf::cuda_execution;
+  const std::size_t matrix_size = basis_size * basis_size;
+  for (const unsigned before : {0U, kReferenceStartupIterations - 1, kReferenceStartupIterations}) {
+    std::vector<double> initial(2 * matrix_size, 97.0), next(2 * matrix_size, -4.0);
+    std::fill_n(initial.begin(), matrix_size, 0.0);
+    std::fill_n(next.begin(), matrix_size, 0.0);
+    initial[0] = 2.0;
+    next[matrix_size - 1] = 2.0;
+    Device<double> density(initial), proposal(next);
+    Device<double> physical(std::vector<double>(2 * matrix_size, 0.0));
+    Device<double> energy({-1, -1}), previous({-1, -1}), change({-1, -1}), rms({-1, -1});
+    Device<std::uint8_t> active({1, 0}), converged({0, 0});
+    Device<std::uint32_t> iterations({before, 0}), history({3, 7}), head({2, 5});
+    launch_update_convergence_kernel(
+        retain, 2, threads, 0, nullptr, 2, basis_size, 1e-9, 0.1, true, energy.data, previous.data,
+        proposal.data, density.data, active.data, converged.data, iterations.data, change.data,
+        rms.data, physical.data, nullptr, false, nullptr, nullptr, {history.data, head.data});
+    const bool mixed = before < kReferenceStartupIterations;
+    const auto values = density.read();
+    if (converged.read()[0] || std::abs(rms.read()[0] - std::sqrt(8.0 / matrix_size)) > 1e-14)
+      throw std::runtime_error("startup mixing manufactured density convergence");
+    for (std::size_t element = 0; element < values.size(); ++element) {
+      const double expected = element >= matrix_size ? initial[element]
+                              : mixed                ? 0.5 * (initial[element] + next[element])
+                                                     : next[element];
+      if (values[element] != expected)
+        throw std::runtime_error("cold reference lost convex density or inactive neighbor");
+    }
+    if (history.read()[0] != (mixed ? 0U : 3U) || head.read()[0] != (mixed ? 0U : 2U) ||
+        history.read()[1] != 7 || head.read()[1] != 5)
+      throw std::runtime_error("startup DIIS retirement escaped its bounded active item");
+  }
+  for (const double delta : {1e-12, 1e-2}) {
+    Device<double> density({1, 0, 0, 1}), proposal({1 + delta, 0, 0, 1 - delta});
+    Device<double> physical({0, 0, 0, 0});
+    Device<double> energy({-1}), previous({-1}), change({-1}), rms({-1});
+    Device<std::uint8_t> active({1}), converged({0});
+    Device<std::uint32_t> iterations({0}), history({3}), head({2});
+    launch_update_convergence_kernel(
+        retain, 1, threads, 0, nullptr, 1, 2, 1e-9, 1e-10, true, energy.data, previous.data,
+        proposal.data, density.data, active.data, converged.data, iterations.data, change.data,
+        rms.data, physical.data, nullptr, false, nullptr, nullptr, {history.data, head.data});
+    const bool accepted = delta < 1e-10;
+    const auto values = density.read();
+    if (bool(converged.read()[0]) != accepted || bool(active.read()[0]) == accepted)
+      throw std::runtime_error("small cold-reference proposals changed acceptance");
+    if (values[0] != (retain && accepted ? 1 : 1 + delta) ||
+        values[3] != (retain && accepted ? 1 : 1 - delta))
+      throw std::runtime_error("cold startup changed the retained converged density/Fock pair");
+    if (history.read()[0] != 3 || head.read()[0] != 2)
+      throw std::runtime_error("small cold-reference proposals unnecessarily retired DIIS");
+  }
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -535,6 +654,8 @@ int main(int argc, char** argv) {
     if (block_only) {
       for (unsigned threads : {32U, 256U}) {
         for (bool retain : {false, true}) {
+          for (unsigned basis_size : {2U, 17U})
+            check_reference_startup(retain, threads, basis_size);
           for (unsigned n : {1U, 3U, 17U, 33U, 768U})
             for (bool graph : {false, true}) check_rhf_matrix_walk(n, threads, retain, graph);
           for (unsigned route : {1U, 2U}) check_rhf_matrix_walk(33, threads, retain, true, route);
@@ -548,6 +669,11 @@ int main(int argc, char** argv) {
       std::cout << "RHF 32/256 matrix-walk and energy-refinement controls passed\n";
       return 0;
     }
+    check_reference_diis_scaling();
+    check_reference_residual_diagnostics();
+    for (unsigned threads : {32U, 256U})
+      for (bool retain : {false, true})
+        for (unsigned basis_size : {2U, 17U}) check_reference_startup(retain, threads, basis_size);
     for (unsigned spins : {1U, 2U})
       for (unsigned threads : {32U, 128U, 256U})
         for (bool masked : {false, true})

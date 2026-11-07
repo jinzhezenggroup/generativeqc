@@ -126,6 +126,7 @@ template <class... Args> void launch_update_diis_kernel(Args...) { ++legacy_call
 """
     bindings = r"""
   struct { bool ordered_diis_gram, incremental_diis_gram; } plan{ordered, incremental};
+  struct { bool export_physical_reference = false; } options;
   const bool ordered_diis_gram = ordered, incremental_diis_gram = incremental;
   struct { void* stream_ = nullptr; } resources;
   void* stream = nullptr;

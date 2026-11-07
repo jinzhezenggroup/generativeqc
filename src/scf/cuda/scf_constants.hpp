@@ -15,5 +15,8 @@ static_assert(kWarmDensityThreads % 32 == 0);
 // independent density and physical-residual gates are never widened by it.
 constexpr double kHfEnergyRoundoffFactor = 16.0;
 constexpr double kDoubleMachineEpsilon = 2.2204460492503131e-16;
+// Cold-reference proposal safeguards, not convergence/observable tolerances.
+constexpr unsigned kReferenceStartupIterations = 32;
+constexpr double kReferenceStartupDensityRms = 0.1;
 
 }  // namespace generativeqc::scf::cuda_execution

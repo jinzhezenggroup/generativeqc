@@ -103,12 +103,13 @@ std::size_t base_capacity(std::size_t arena, const Host& host, std::size_t matri
 
 /** Stage the final physical P/F/C/epsilon from the existing GPU solve.
  * Matrix slots are S,h,F,C,P in column-major storage, scalar slots are energy,
- * energy change and density RMS. Nothing is published on failure. */
+ * energy change, density RMS and physical commutator RMS. Failed solves retain
+ * scalar diagnostics only; no dense reference is allocated or published. */
 inline generativeqc_status download(cudaStream_t stream, std::size_t n, std::size_t occupied,
                                     std::size_t capacity,
                                     const std::array<const double*, 5>& matrix_sources,
                                     const double* epsilon,
-                                    const std::array<const double*, 3>& scalar_sources,
+                                    const std::array<const double*, 4>& scalar_sources,
                                     const std::uint8_t* converged, const std::uint8_t* failed,
                                     const std::uint32_t* iterations, ScfResult& result) {
   std::uint8_t ok = 0, bad = 0;
@@ -117,7 +118,7 @@ inline generativeqc_status download(cudaStream_t stream, std::size_t n, std::siz
   // before their buffers are destroyed. Allocate only after convergence.
   std::shared_ptr<PhysicalReference> ref;
   std::array<std::vector<double>, 5> matrices;
-  double scalars[3]{};
+  double scalars[4]{};
   struct Drain {
     cudaStream_t stream;
     bool done = false;
@@ -134,7 +135,16 @@ inline generativeqc_status download(cudaStream_t stream, std::size_t n, std::siz
   copy(&ok, converged, sizeof(ok));
   copy(&bad, failed, sizeof(bad));
   copy(&count, iterations, sizeof(count));
+  for (unsigned index = 0; index < 4; ++index)
+    copy(scalars + index, scalar_sources[index], sizeof(double));
   generativeqc_tensor::cuda_check(cudaStreamSynchronize(stream));
+  result.iterations = count;
+  result.energy = scalars[0];
+  result.energy_change = scalars[1];
+  result.density_rms = scalars[2];
+  result.physical_residual_rms = scalars[3];
+  result.converged = false;
+  result.reference.reset();
   if (bad || !ok)
     return bad ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE : GENERATIVEQC_STATUS_NOT_CONVERGED;
 
@@ -147,7 +157,6 @@ inline generativeqc_status download(cudaStream_t stream, std::size_t n, std::siz
   for (unsigned k = 0; k < 5; ++k)
     copy(matrices[k].data(), matrix_sources[k], matrix_size * sizeof(double));
   copy(ref->orbital_energies.data(), epsilon, n * sizeof(double));
-  for (unsigned k = 0; k < 3; ++k) copy(scalars + k, scalar_sources[k], sizeof(double));
   generativeqc_tensor::cuda_check(cudaStreamSynchronize(stream));
   drain.done = true;
   std::array<std::vector<double>*, 5> targets{&ref->overlap, &ref->hcore, &ref->fock,

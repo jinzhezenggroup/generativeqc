@@ -263,6 +263,25 @@ different HF state. The [retained qualification](../../benchmarks/results/cbs-ro
 includes an independently matched stretched-N2 branch and its original
 default-reference mismatch.
 
+Conventional CUDA correlated references use scale-normalized DIIS, including
+scalar-ECP references. This preserves useful small-residual history without
+relaxing energy, density or physical-stationarity gates. Cold restricted
+references also bound initial charge sloshing: during at most 32 iterations, an
+undamped density proposal with RMS change above `0.1` is half-mixed with the
+current density and its DIIS history is retired. Acceptance and reported density
+changes always use the undamped proposal; warm references keep their existing
+schedule. A rejected reference reports its SCF status, stopping reason, iteration
+count, energy change, density change and last evaluated physical commutator RMS;
+no correlated result is published. The final exported canonical reference is
+checked independently.
+
+Conventional CCSD(T) analytic forces right-precondition the physical orbital
+response with the diagonal of the independently checked positive-definite
+physical Hessian. Acceptance still requires the original unpreconditioned
+residual and a separate dense-action residual check. A failed solve reports
+its stopping reason, iterations, restarts, true residual and requested
+tolerance; it does not publish partial forces or a partial CBS composite.
+
 To isolate scheduling from stopping policy, compare the four combinations
 above at the same geometry, basis, resource budget and endpoint. FP64 final
 arithmetic checks the selected limits; it does not restore Tight convergence.
