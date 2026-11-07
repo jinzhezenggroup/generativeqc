@@ -396,6 +396,11 @@ The unrestricted UMP2/UCCSD owners also admit an explicitly requested native
 CPU-reference context with these fitting selectors; results report
 `cpu_reference`. This separate reference domain never substitutes CPU work for
 a requested CUDA context. The restricted full-DF owners remain CUDA-only.
+Unrestricted fitted components admit orbital shells through f and auxiliary
+shells through g for both values and analytic response, including unmodified
+Na def2-universal-JKFIT and B cc-pVTZ-JKFIT auxiliaries. See the
+[unrestricted fitting contract](unrestricted_cc.md) for diagnostic value-policy
+restrictions and the retained bounded coordinate-derivative staging.
 
 The positive `correlation_memory_budget_bytes` bounds complete numeric
 capacity, including simultaneous host/device owners and a conservative retained

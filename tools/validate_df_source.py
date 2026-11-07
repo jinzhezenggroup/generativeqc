@@ -163,7 +163,10 @@ def references(systems: typing.Any, *, derivatives: typing.Any = False) -> typin
         )
     if derivatives:
         result.update(responses)
-        result.update({"bulk_" + key: value for key, value in responses.items()})
+        for kind in ("bulk", "single"):
+            result.update(
+                {f"{kind}_{key}": result[key] for key in ("metric", "raw", *responses)}
+            )
     return {key: np.asarray(value) for key, value in result.items()}, diagnostics
 
 
@@ -227,8 +230,6 @@ def main() -> None:
     for case in args.cases:
         g_auxiliary = case.startswith("g-")
         base_case = case.removeprefix("g-")
-        if g_auxiliary and args.derivatives:
-            parser.error("g auxiliary source qualification covers values only")
         systems = fixture_systems(
             "cartesian"
             if base_case in ("long", "dependent")

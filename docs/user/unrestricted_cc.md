@@ -78,6 +78,14 @@ the fitted contract. All raw three-center and metric derivative contributions
 are included, including auxiliary-center motion and retained/discarded metric
 cross terms. CUDA fitted response currently materializes bounded coordinate
 derivative tensors and does not claim the conventional shell-streaming flags.
+Both CUDA fitting policies support orbital shells through f and auxiliary
+shells through g for energies and analytic forces, including same-basis
+companions and CBS components. Full fitting bases are retained; no auxiliary
+shell truncation or CPU integral fallback is used. Auxiliary g requires
+`GENERATIVEQC_DF_VALUE_MATH=auto` (the default) or `generic`; the specialized
+diagnostic value policies remain f-only. Numeric memory, finite scalar-work,
+metric-conditioning and convergence gates still apply independently of this
+angular-momentum domain.
 
 Scalar ECPs retain the checked local/nonlocal provider and its physical-center
 derivatives. Occupations and nuclear repulsion use ionic charges; all remaining
