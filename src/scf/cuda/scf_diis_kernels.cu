@@ -492,4 +492,24 @@ void launch_update_diis_cached_gram(
       normalize_metric, nullptr, 0, nullptr, gram_cache, work);
 }
 
+namespace {
+__global__ void rebuild_ordered_diis_gram_kernel(std::size_t vector_size, unsigned capacity,
+                                                 unsigned count, unsigned head,
+                                                 const double* residual, double* cache,
+                                                 std::uint32_t* finite,
+                                                 tensor::RingGramWork* work) {
+  tensor::rebuild_ring_gram(residual, vector_size, capacity, count, head, cache, finite, work);
+}
+}  // namespace
+
+void launch_rebuild_ordered_diis_gram(cudaStream_t stream, std::size_t vector_size,
+                                      unsigned capacity, unsigned count, unsigned head,
+                                      const double* residual, double* cache, std::uint32_t* finite,
+                                      tensor::RingGramWork* work) {
+  ordered_gram_admission::validate_rebuild(vector_size, capacity, count, head, residual, cache,
+                                           finite);
+  rebuild_ordered_diis_gram_kernel<<<1, 32, 0, stream>>>(vector_size, capacity, count, head,
+                                                         residual, cache, finite, work);
+}
+
 }  // namespace generativeqc::scf::cuda_execution

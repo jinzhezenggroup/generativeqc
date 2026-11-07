@@ -776,6 +776,13 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_XC_SPATIAL_ORDER)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_ERI_TMPDIR)"', source))
     controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
+    rebase = Path("src/dft/vv10_rebase_history.hpp")
+    if (root / rebase).is_file():
+        for name in re.findall(
+            r'"(GENERATIVEQC_KS_VV10_REBASE_HISTORY)"', _read(root / rebase)
+        ):
+            controls[f"ks-runtime:{name}"] = rebase.as_posix()
+
     method = Path("src/methods/dft_method.cpp")
     if (root / method).is_file():
         owner = re.sub(

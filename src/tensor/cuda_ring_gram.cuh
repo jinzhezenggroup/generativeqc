@@ -61,4 +61,33 @@ __device__ inline void refresh_ring_gram(const double* history, std::size_t vect
   }
 }
 
+/** Complete physical-window rebuild after an explicit history transaction.
+ * The live ring is not published yet. Every dot uses the incumbent ordered
+ * arithmetic, and a nonfinite dot clears the caller's publication vote. */
+__device__ inline void rebuild_ring_gram(const double* history, std::size_t vector_size,
+                                         unsigned capacity, unsigned count, unsigned head,
+                                         double* cache, std::uint32_t* finite, RingGramWork* work) {
+  if (!*finite) return;
+  const unsigned first = (head + capacity - count) % capacity;
+  unsigned long long dots = 0;
+  for (unsigned row = 0; row < count; ++row) {
+    const unsigned a = (first + row) % capacity;
+    for (unsigned column = threadIdx.x; column <= row; column += 32U) {
+      const unsigned b = (first + column) % capacity;
+      const double value =
+          generated::ordered_history_dot(history + std::size_t(a) * vector_size,
+                                         history + std::size_t(b) * vector_size, vector_size);
+      cache[std::size_t(a) * capacity + b] = value;
+      cache[std::size_t(b) * capacity + a] = value;
+      if (!isfinite(value)) atomicExch(finite, 0U);
+    }
+    dots += row + 1;
+  }
+  __syncwarp();
+  if (work && threadIdx.x == 0) {
+    work->dots += dots;
+    work->vector_elements += dots * vector_size;
+  }
+}
+
 }  // namespace generativeqc::tensor

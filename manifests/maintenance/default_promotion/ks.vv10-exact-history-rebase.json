@@ -1,0 +1,24 @@
+{
+  "id": "ks.vv10-exact-history-rebase",
+  "classification": "needs-qualification",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_KS_VV10_REBASE_HISTORY"
+  ],
+  "owner_issues": [
+    3004
+  ],
+  "sources": [
+    "src/dft/vv10_rebase_history.hpp",
+    "src/dft/cuda_ks.cpp",
+    "src/dft/cuda_ks_kernels.cu",
+    "src/scf/cuda/scf_diis_kernels.cu",
+    "src/tensor/cuda_ring_gram.cuh",
+    "python/generativeqc/resources_ks.py"
+  ],
+  "rationale": "Strict default-off exact fixed-VV10-operator history transfer on cold restricted full-Direct Standard FP64 ordinary owners with ordered raw-AO Gram. The fresh target proposal and all physical gates remain incumbent; complete finite, slot, epoch and isolated-anchor proofs precede publication. Optional one-lease storage is capped at256MiB; unsupported and warm owners retain the incumbent. No endpoint speedup or scientific device qualification is implied by source admission.",
+  "revisit_condition": "Require linked-helper numerical/resource/lifetime qualification and original complete E/F+three-warm gates before promotion; a null fixed pilot ends this contract without age/history/threshold sweeps.",
+  "evidence": [
+    "tests/python/test_vv10_rebase_history.py",
+    "note:.agents/notes/implemented/numerics/2026-11-07-vv10-exact-history-rebase.md"
+  ]
+}

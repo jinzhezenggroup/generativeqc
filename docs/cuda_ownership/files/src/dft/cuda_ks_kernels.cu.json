@@ -4,9 +4,15 @@
   "regions": [
     {
       "start": "void assemble_fock(cudaStream_t",
-      "stop": null,
+      "stop": "__device__ void rebase_finite_vote",
       "role": "runtime",
       "reason": "Host launch forwarding to the numerical component kernels."
+    },
+    {
+      "start": "void rebase_refuse(cudaStream_t",
+      "stop": null,
+      "role": "runtime",
+      "reason": "Stream-ordered launch forwarding for optional frozen-potential history transactions; transformation kernels above remain scientific."
     }
   ],
   "role": "scientific",
