@@ -15,6 +15,7 @@
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_fp64_matrix_policy.hpp"
 #include "runtime/df_progress_trace.hpp"
+#include "runtime/residency_df_cuda.cuh"
 #include "scf/cuda/df_generated_tiles.hpp"
 #include "scf/cuda/df_jk_kernels.hpp"
 #include "scf/cuda/df_metric_kernels.hpp"
@@ -685,8 +686,10 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   }
   if (status != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
 
-  cuda_error = cudaMemcpyAsync(setup.metrics, metrics.data(), metric_bytes, cudaMemcpyHostToDevice,
-                               candidate->stream);
+  runtime::ResidencyExecution metric_observation(runtime::df_metric_owner);
+  cuda_error = runtime::df_metric_memcpy_async(
+      metric_observation, runtime::df_metric_input_site, runtime::df_metric_input_payload,
+      setup.metrics, metrics.data(), metric_bytes, cudaMemcpyHostToDevice, candidate->stream);
   if (cuda_error == cudaSuccess && !candidate->streamed && !candidate->integral_source) {
     cuda_error = cudaMemcpyAsync(setup.raw_three_center, three_center.data(), tensor_bytes,
                                  cudaMemcpyHostToDevice, candidate->stream);
@@ -780,24 +783,39 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     detail = "host allocation for CUDA DF metric diagnostics failed";
     return fail_plan(candidate, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
   }
-  cuda_error =
-      cudaMemcpyAsync(eigenvalues.data(), setup.eigenvalues, eigenvalues.size() * sizeof(double),
-                      cudaMemcpyDeviceToHost, candidate->stream);
+  const auto eigenvalue_instance =
+      metric_observation.generation() ? runtime::next_residency_boundary_generation() : 0;
+  const auto scales_instance =
+      metric_observation.generation() ? runtime::next_residency_boundary_generation() : 0;
+  cuda_error = runtime::df_metric_memcpy_async(
+      metric_observation, runtime::df_metric_eigenvalues_site,
+      runtime::df_metric_eigenvalues_payload, eigenvalues.data(), setup.eigenvalues,
+      eigenvalues.size() * sizeof(double), cudaMemcpyDeviceToHost, candidate->stream,
+      eigenvalue_instance);
   if (cuda_error == cudaSuccess) {
-    cuda_error =
-        cudaMemcpyAsync(solver_info.data(), setup.solver_info, solver_info.size() * sizeof(int),
-                        cudaMemcpyDeviceToHost, candidate->stream);
+    cuda_error = runtime::df_metric_memcpy_async(
+        metric_observation, runtime::df_metric_status_site, runtime::df_metric_status_payload,
+        solver_info.data(), setup.solver_info, solver_info.size() * sizeof(int),
+        cudaMemcpyDeviceToHost, candidate->stream);
   }
   if (cuda_error == cudaSuccess) {
-    cuda_error = cudaStreamSynchronize(candidate->stream);
+    cuda_error =
+        runtime::residency_stream_synchronize(metric_observation, runtime::ResidencyRole::prepare,
+                                              runtime::df_metric_fence_site, candidate->stream);
   }
   if (cuda_error != cudaSuccess) {
     return fail_plan(candidate,
                      cuda_failure(cuda_error, "read CUDA DF metric eigensystem", detail));
   }
+  runtime::ResidencyBoundary scale_transform(
+      metric_observation, runtime::residency_host_transform, runtime::ResidencyRole::prepare,
+      runtime::df_metric_transform_site, runtime::df_metric_scales_payload,
+      runtime::ResidencyDirection::none, scales.size() * sizeof(double), scales_instance,
+      eigenvalue_instance);
   for (std::size_t system = 0; system < batch_size; ++system) {
     if (solver_info[system] != 0) {
       detail = "CUDA DF metric eigensolver did not converge for system " + std::to_string(system);
+      scale_transform.finish(cudaErrorUnknown);
       return fail_plan(candidate, GENERATIVEQC_STATUS_CUDA_ERROR);
     }
     const std::size_t offset = system * naux;
@@ -805,6 +823,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     if (!(largest > 0.0) || !std::isfinite(largest)) {
       detail =
           "CUDA DF metric has no finite positive eigenspace for system " + std::to_string(system);
+      scale_transform.finish(cudaErrorUnknown);
       return fail_plan(candidate, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     }
     auto& diagnostic = diagnostics[system];
@@ -817,6 +836,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       const double value = eigenvalues[offset + item];
       if (!std::isfinite(value)) {
         detail = "CUDA DF metric eigensolver returned a non-finite eigenvalue";
+        scale_transform.finish(cudaErrorUnknown);
         return fail_plan(candidate, GENERATIVEQC_STATUS_CUDA_ERROR);
       }
       if (std::abs(value - diagnostic.absolute_threshold) <=
@@ -829,12 +849,15 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     }
     if (diagnostic.effective_rank == 0) {
       detail = "CUDA DF metric threshold removed every auxiliary direction";
+      scale_transform.finish(cudaErrorUnknown);
       return fail_plan(candidate, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     }
     candidate->metric_full_rank[system] = diagnostic.effective_rank == naux;
     diagnostic.response_valid = candidate->metric_response_valid[system] != 0;
     diagnostic.condition_number = largest / smallest_retained;
   }
+
+  scale_transform.finish(cudaSuccess);
 
   // Keep raw A only after the unchanged metric cutoff has proved full rank.
   // The factor-first vector solve borrows existing K panel scratch. A rank or
@@ -852,8 +875,10 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       std::all_of(candidate->metric_full_rank.begin(), candidate->metric_full_rank.end(),
                   [](auto full_rank) { return full_rank != 0; });
 
-  cuda_error = cudaMemcpyAsync(setup.scales, scales.data(), scales.size() * sizeof(double),
-                               cudaMemcpyHostToDevice, candidate->stream);
+  cuda_error = runtime::df_metric_memcpy_async(
+      metric_observation, runtime::df_metric_scales_site, runtime::df_metric_scales_payload,
+      setup.scales, scales.data(), scales.size() * sizeof(double), cudaMemcpyHostToDevice,
+      candidate->stream, 0, scales_instance);
   if (cuda_error != cudaSuccess) {
     return fail_plan(candidate, cuda_failure(cuda_error, "upload CUDA DF metric scales", detail));
   }

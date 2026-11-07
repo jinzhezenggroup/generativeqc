@@ -1,9 +1,12 @@
-"""Synthetic review-gate tests; fixture histories are not real-GPU evidence."""
+"""Synthetic review gates and CPU replay of retained real-GPU wrapper controls."""
 
 from __future__ import annotations
 
 import copy
 import json
+import lzma
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -24,16 +27,20 @@ from tools.capture_prepared_allocations import workload
 from tools.cupti_source_capture import WORK_COUNTERS, summarize_sources
 from tools.cupti_source_ratchet import (
     LEGACY_SCHEMA,
+    RESIDENT_SCHEMA,
     SCHEMA,
     SCOPE,
     check_work_ratchet,
     load_work_ratchet,
+    main,
+    reaudit_capture,
     workload_digest,
 )
 
 CASE = {"method": "synthetic", "basis": "fixture", "precision": "fp64"}
 ROOT = Path(__file__).resolve().parents[2]
 QUALIFIED = ROOT / "manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1.json"
+REAL_CONTROLS = ROOT / "tests/reference_data/cupti/source-controls.json.xz"
 
 
 def legacy_translation_workload(method: str) -> dict[str, Any]:
@@ -123,6 +130,252 @@ def test_independent_observed_budget_is_never_a_residency_pass(tmp_path: Path) -
     assert result["counts"][0]["counters"]["source_stream_fences"] == 1
     result["counts"][0]["max"]["d2h_bytes"] = 0
     assert (raw, activity, limits, REGIONS) == before
+
+
+def resident_policy() -> dict[str, Any]:
+    """Pin named boundaries independently of the candidate's byte totals."""
+    value = policy()
+    value["schema"] = RESIDENT_SCHEMA
+    value["profiles"][0]["resident_boundaries"] = [
+        {
+            "region": "energy-warm",
+            "owner": "hf_bucket",
+            "role": "publication",
+            "site": "hf.results",
+            "payload": "density",
+            "kind": "transfer",
+            "direction": "d2h",
+            "max_calls": 1,
+            "max_bytes": 128,
+        },
+        {
+            "region": "energy-warm",
+            "owner": "hf_bucket",
+            "role": "publication",
+            "site": "hf.results-fence",
+            "payload": "none",
+            "kind": "stream_sync",
+            "direction": "none",
+            "max_calls": 1,
+            "max_bytes": 0,
+        },
+    ]
+    return value
+
+
+def test_resident_scope_requires_names_not_just_equal_byte_counts(
+    tmp_path: Path,
+) -> None:
+    raw, activity = fixture()
+    limits = selected(tmp_path, resident_policy())
+    result = check_work_ratchet(limits, raw, activity, REGIONS, CASE)
+    assert result["status"] == "WITHIN_OBSERVED_RATCHET"
+    assert (
+        result["declared_resident_scopes"][
+            "zero_unexpected_post_prepare_host_round_trips"
+        ]
+        is True
+    )
+    assert result["zero_round_trip_assertion"] is None
+    assert result["residency_status"] == "INCOMPLETE"
+    raw["catalog"]["payload"]["4"] = "unexpected-scientific-host-staging"
+    altered = check_work_ratchet(limits, raw, activity, REGIONS, CASE)
+    assert summarize_sources(raw, activity, REGIONS)["source_annotations_intact"]
+    assert altered["counts"] == result["counts"]
+    assert altered["status"] == "VIOLATION"
+    assert (
+        altered["declared_resident_scopes"][
+            "zero_unexpected_post_prepare_host_round_trips"
+        ]
+        is False
+    )
+    assert altered["zero_round_trip_assertion"] is None
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing", "duplicate", "negative", "unknown-region"]
+)
+def test_resident_boundary_contract_validation(tmp_path: Path, mutation: str) -> None:
+    value = resident_policy()
+    boundaries = value["profiles"][0]["resident_boundaries"]
+    if mutation == "missing":
+        boundaries.clear()
+    if mutation == "duplicate":
+        boundaries.append(dict(boundaries[0]))
+    if mutation == "negative":
+        boundaries[0]["max_calls"] = -1
+    if mutation == "unknown-region":
+        boundaries[0]["region"] = "unreviewed"
+    with pytest.raises(InvalidReceipt):
+        selected(tmp_path, value)
+
+
+def test_failed_resident_submission_cannot_grant_a_scoped_assertion(
+    tmp_path: Path,
+) -> None:
+    raw, activity = fixture()
+    for row in raw["records"]:
+        if row["kind"] == 2:
+            row["status"] = 1
+    result = check_work_ratchet(
+        selected(tmp_path, resident_policy()), raw, activity, REGIONS, CASE
+    )
+    assert result["status"] == "INCOMPLETE"
+    assert (
+        result["declared_resident_scopes"][
+            "zero_unexpected_post_prepare_host_round_trips"
+        ]
+        is None
+    )
+
+
+@pytest.mark.parametrize("mode", ["publication", "iteration", "tile", "extra-fence"])
+def test_real_gpu_source_wrapper_receipts_reaudit_without_gpu(
+    tmp_path: Path, mode: str
+) -> None:
+    """Replay Slurm 1505's real wrappers, not a production residency assertion."""
+    capture = json.loads(lzma.decompress(REAL_CONTROLS.read_bytes()))
+    assert capture["schema"] == "generativeqc.real-source-wrapper-controls.v1"
+    raw = capture["records"][mode]
+    policy_path = tmp_path / "reviewed-policy.json"
+    policy_path.write_text(json.dumps(raw["independently-declared-policy"]))
+    limits = load_work_ratchet(policy_path, capture["workload"])
+    maximum = dict.fromkeys(WORK_COUNTERS, 0)
+    maximum.update(
+        source_transfer_calls=1,
+        source_stream_fences=1,
+        d2h_bytes=64,
+        activity_sync_records=1,
+    )
+    assert limits["profile"]["regions"][0]["owner_roles"] == [
+        {"owner": "hf_bucket", "role": "publication", "max": maximum}
+    ]
+    result = check_work_ratchet(
+        limits,
+        raw["source-boundaries"],
+        raw["activity"],
+        {int(key): value for key, value in raw["regions"].items()},
+        capture["workload"],
+    )
+    assert not result["issues"]
+    assert result["status"] == (
+        "WITHIN_OBSERVED_RATCHET" if mode == "publication" else "VIOLATION"
+    )
+    assert result["residency_status"] == "INCOMPLETE"
+    assert result["zero_round_trip_assertion"] is None
+    if mode == "extra-fence":
+        assert {row["counter"] for row in result["violations"]} == {
+            "source_stream_fences",
+            "activity_sync_records",
+        }
+
+
+def capture_contract(tmp_path: Path) -> dict[str, Any]:
+    """Declare synthetic provenance explicitly; this is never GPU qualification."""
+    return {
+        "schema": "generativeqc.cupti-prepared.v2",
+        "identity": {
+            "source_commit": "1" * 40,
+            "source_tree": "2" * 40,
+            "library_sha256": "3" * 64,
+            "collector_sha256": "4" * 64,
+            "cupti_sha256": "5" * 64,
+            "device": "synthetic-not-a-GPU",
+            "toolchain": "synthetic-not-a-build",
+            "cupti_api_version": 28,
+            "source_observer_layout": 2,
+        },
+        "workload": CASE,
+        "observed_work_ratchet": selected(tmp_path),
+        "regions": {str(key): value for key, value in REGIONS.items()},
+    }
+
+
+@pytest.mark.parametrize("role", [2, 3])
+def test_retained_raw_hot_loop_work_cannot_reuse_publication_limits(
+    tmp_path: Path, role: int
+) -> None:
+    expected = capture_contract(tmp_path)
+    raw, activity = fixture()
+    published = reaudit_capture(expected, tmp_path / "policy.json", raw, activity)
+    assert published["status"] == "WITHIN_OBSERVED_RATCHET"
+    assert published["declared_identity"] == expected["identity"]
+    assert published["identity_authenticated"] is False
+    for row in raw["records"]:
+        if row["kind"] in (1, 2):
+            row["role"] = role
+    hot = reaudit_capture(expected, tmp_path / "policy.json", raw, activity)
+    assert hot["status"] == "VIOLATION"
+    counters = {row["counter"] for row in hot["violations"]}
+    assert {"d2h_bytes", "source_stream_fences"} <= counters
+    assert hot["residency_status"] == "INCOMPLETE"
+    assert hot["zero_round_trip_assertion"] is None
+
+
+@pytest.mark.parametrize("mutation", ["policy", "workload", "region", "identity"])
+def test_retained_capture_reaudit_rejects_changed_contract(
+    tmp_path: Path, mutation: str
+) -> None:
+    expected = capture_contract(tmp_path)
+    raw, activity = fixture()
+    if mutation == "policy":
+        changed = policy()
+        changed["profiles"][0]["regions"][0]["owner_roles"][0]["max"]["d2h_bytes"] += 1
+        (tmp_path / "policy.json").write_text(json.dumps(changed))
+    elif mutation == "workload":
+        expected["workload"] = {**CASE, "precision": "fp32"}
+    elif mutation == "region":
+        expected["regions"]["01"] = expected["regions"].pop("1")
+    else:
+        expected["identity"]["library_sha256"] = "not-a-build-hash"
+    with pytest.raises(InvalidReceipt):
+        reaudit_capture(expected, tmp_path / "policy.json", raw, activity)
+
+
+@pytest.mark.parametrize("mode,exit_code", [("intact", 0), ("growth", 1), ("loss", 2)])
+def test_raw_reaudit_cli_exit_codes_and_no_saved_summary_trust(
+    tmp_path: Path, mode: str, exit_code: int
+) -> None:
+    expected = capture_contract(tmp_path)
+    raw, activity = fixture()
+    if mode == "growth":
+        for row in raw["records"]:
+            if row["kind"] in (1, 2):
+                row["role"] = 2
+    elif mode == "loss":
+        raw["metadata"]["dropped_records"] = 1
+    arguments = ["--work-ratchet", str(tmp_path / "policy.json")]
+    for option, value in (
+        ("expected", expected),
+        ("source-boundaries", raw),
+        ("activity", activity),
+    ):
+        path = tmp_path / (option + ".json")
+        path.write_text(json.dumps(value))
+        arguments.extend(["--" + option, str(path)])
+    (tmp_path / "source-work-ratchet.json").write_text('{"status": "PASS"}')
+    output = tmp_path / "recomputed.json"
+    arguments.extend(["--output", str(output)])
+    assert main(arguments) == exit_code
+    result = json.loads(output.read_text())
+    assert (
+        result["status"]
+        == {0: "WITHIN_OBSERVED_RATCHET", 1: "VIOLATION", 2: "INCOMPLETE"}[exit_code]
+    )
+    assert result["residency_status"] == "INCOMPLETE"
+    assert result["zero_round_trip_assertion"] is None
+    invocation = subprocess.run(
+        [sys.executable, str(ROOT / "tools/cupti_source_ratchet.py"), *arguments],
+        check=False,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert invocation.returncode == exit_code, invocation.stderr
+    (tmp_path / "activity.json").write_text('{"schema": 1, "schema": 2}')
+    assert main(arguments) == 2
+    assert "duplicate JSON member" in json.loads(output.read_text())["issues"][0]
 
 
 @pytest.mark.parametrize("legacy", [False, True])
@@ -564,3 +817,36 @@ def test_capture_contract_pins_independent_profile_and_policy_changes_without_gp
     value["profiles"][0]["regions"][0]["owner_roles"][0]["max"]["h2d_bytes"] += 1
     limits.write_text(json.dumps(value))
     assert capture_prepared_residency.contract(arguments) != pinned
+
+
+@pytest.mark.parametrize(
+    "input_name", ["expected", "work-ratchet", "source-boundaries", "activity"]
+)
+@pytest.mark.parametrize("alias", ["same", "symlink", "hardlink"])
+def test_reaudit_rejects_output_aliases_before_reading_inputs(
+    tmp_path: Path, input_name: str, alias: str
+) -> None:
+    from tools.cupti_source_ratchet import main
+
+    inputs = {
+        name: tmp_path / name
+        for name in ("expected", "work-ratchet", "source-boundaries", "activity")
+    }
+    for path in inputs.values():
+        path.write_text("retained evidence, deliberately not JSON")
+    source = inputs[input_name]
+    output = tmp_path / "output.json"
+    if alias == "same":
+        output = source
+    elif alias == "symlink":
+        output.symlink_to(source)
+    else:
+        output.hardlink_to(source)
+    argv = [item for name, path in inputs.items() for item in ("--" + name, str(path))]
+    with pytest.raises(SystemExit) as error:
+        main([*argv, "--output", str(output)])
+    assert error.value.code == 2
+    assert all(
+        path.read_text() == "retained evidence, deliberately not JSON"
+        for path in inputs.values()
+    )

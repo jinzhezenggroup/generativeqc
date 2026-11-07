@@ -538,6 +538,27 @@ The original source-bound review design and why its CI gate was retired are
 preserved in the [historical decision](../../.agents/notes/implemented/performance/2026-10-09-materialization-candidate-review.md)
 and the [retirement decision](../../.agents/notes/implemented/performance/2026-11-03-retire-source-bound-materialization-gate.md).
 
+The five MP2 derivative-shell stages retain bounded materializations under their
+current reuse/callback contracts; the dense orbital-RHS/Lagrangian path remains
+an explicitly budget-gated validation oracle. Factorized first/second storage
+uses occupied support rather than zero-filled dense dimensions. These are
+measured retention decisions, not automatic fusion claims or permanent source
+fingerprint requirements. The [six-site decision](../../.agents/notes/implemented/performance/2026-11-06-mp2-six-site-dispositions.md)
+records rejected recomputation/view alternatives and conditions for revisiting
+them; [raw qualification](../../benchmarks/results/mp2-six-site-20261106/README.md)
+retains independent physical derivative/full-endpoint gates, work counts and
+simultaneous storage.
+
+`benchmarks/experiments/mp2_materialization/qualify.py` is an opt-in disposable
+translation-unit experiment, not a production rewrite or required-CI spelling
+test. It reuses a verified cached CMake build without overwriting production
+objects. Compare each storage alternative to the matched helper-retention
+control, and compare that control separately to production. Use `oracle.py` for
+independent PySCF/libcint complete-endpoint checks and `memory.py` in an isolated
+Memray environment for fresh-process simultaneous native-heap observations.
+Memory-instrumented runs are separate from timing qualification. Tiny-system
+oracle timings do not authorize switching production to a dense/reference path.
+
 ## Prefer source-driven reuse
 
 Expensive source work should normally be produced once and consumed by multiple

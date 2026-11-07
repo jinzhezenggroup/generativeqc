@@ -1,0 +1,173 @@
+// Opt-in qualification alternatives, never compiled into the production target.
+void transform_remaining_shells(const core::System& system, const hf::PhysicalReference& reference,
+                                const std::vector<std::size_t>& offsets, std::size_t si,
+                                std::span<const double> first,
+                                const EriShellDerivativeAccumulate& eri_shell,
+                                std::vector<double>& derivative, bool canonical_shells,
+                                bool compact_first, const LagrangianWeights& weights) {
+  constexpr int mode = @MODE@;
+  const auto orbitals = reference.nbf, occupied = reference.nocc;
+  const auto virtuals = orbitals - occupied;
+  const auto first_dimension = offsets[si + 1] - offsets[si];
+  const auto second_rows = compact_first ? occupied : orbitals;
+  const auto coefficient = [&](std::size_t ao, std::size_t mo) {
+    return reference.coefficients[ao * orbitals + mo];
+  };
+  const auto first_value = [&](std::size_t first_ao, std::size_t second_mo,
+                               std::size_t third_mo, std::size_t fourth_mo) {
+    if constexpr (mode != 1) {
+      if (!compact_first)
+        return first[((first_ao * orbitals + second_mo) * orbitals + third_mo) * orbitals + fourth_mo];
+      if (third_mo >= occupied) return 0.0;
+      if (third_mo == fourth_mo)
+        return first[(first_ao * orbitals + second_mo) * occupied + third_mo];
+      const auto exchange_offset = first_dimension * orbitals * occupied;
+      if (second_mo == third_mo)
+        return first[exchange_offset + (first_ao * occupied + third_mo) * orbitals + fourth_mo];
+      if (second_mo >= occupied && fourth_mo >= occupied)
+        return first[2 * exchange_offset +
+                     ((first_ao * virtuals + second_mo - occupied) * occupied + third_mo) * virtuals +
+                     fourth_mo - occupied];
+      return 0.0;
+    }
+    double value = 0.0;
+    const auto ao = offsets[si] + first_ao;
+    if (canonical_shells) {
+      for (std::size_t first_mo = 0; first_mo < orbitals; ++first_mo) {
+        MATERIALIZATION_COUNT(0);
+        value += coefficient(ao, first_mo) * symmetric_eri_weight(
+                     weights.two_electron, orbitals, first_mo, second_mo, third_mo, fourth_mo);
+      }
+    } else {
+      const auto& factors = weights.two_electron_factors;
+      for (std::size_t first_mo = 0; first_mo < orbitals; ++first_mo) {
+        const auto scale = coefficient(ao, first_mo);
+        if (scale == 0.0) continue;
+        for (std::size_t fock_mo = 0; fock_mo < orbitals; ++fock_mo) {
+          const auto weight = factors.fock[first_mo * orbitals + fock_mo];
+          if (weight == 0.0) continue;
+          if (third_mo < occupied && fourth_mo == third_mo && second_mo == fock_mo) {
+            MATERIALIZATION_COUNT(1);
+            value += 2.0 * scale * weight;
+          }
+          if (third_mo < occupied && second_mo == third_mo && fourth_mo == fock_mo) {
+            MATERIALIZATION_COUNT(2);
+            value -= scale * weight;
+          }
+        }
+      }
+      if (second_mo >= occupied && third_mo < occupied && fourth_mo >= occupied)
+        for (std::size_t first_mo = 0; first_mo < occupied; ++first_mo) {
+          const auto scale = coefficient(ao, first_mo);
+          if (scale == 0.0) continue;
+          MATERIALIZATION_COUNT(3);
+          value += scale * factors.correlation_iajb[
+              ((first_mo * occupied + third_mo) * virtuals + second_mo - occupied) * virtuals +
+              fourth_mo - occupied];
+        }
+    }
+    return value;
+  };
+  std::vector<double> reusable_local;
+  if constexpr (mode == 4) {
+    std::size_t maximum_shell = 0;
+    for (std::size_t shell = 0; shell < system.shells.size(); ++shell)
+      maximum_shell = std::max(maximum_shell, offsets[shell + 1] - offsets[shell]);
+    reusable_local.reserve(posthf::checked_mul(
+        first_dimension, posthf::checked_mul(maximum_shell, square(maximum_shell))));
+  }
+  for (std::size_t second_shell = 0; second_shell < system.shells.size(); ++second_shell) {
+    if (canonical_shells && second_shell > si) continue;
+    const auto second_dimension = offsets[second_shell + 1] - offsets[second_shell];
+    const auto second_value = [&](std::size_t first_ao, std::size_t second_ao,
+                                  std::size_t third_mo, std::size_t fourth_mo) {
+      double value = 0.0;
+      const auto ao = offsets[second_shell] + second_ao;
+      if (compact_first) {
+        if (fourth_mo == third_mo) {
+          for (std::size_t second_mo = 0; second_mo < orbitals; ++second_mo) {
+            MATERIALIZATION_COUNT(9);
+            value += coefficient(ao, second_mo) * first_value(first_ao, second_mo, third_mo, fourth_mo);
+          }
+        } else {
+          MATERIALIZATION_COUNT(10);
+          value += coefficient(ao, third_mo) * first_value(first_ao, third_mo, third_mo, fourth_mo);
+        }
+        if (fourth_mo >= occupied)
+          for (std::size_t second_mo = occupied; second_mo < orbitals; ++second_mo) {
+            MATERIALIZATION_COUNT(11);
+            value += coefficient(ao, second_mo) * first_value(first_ao, second_mo, third_mo, fourth_mo);
+          }
+      } else {
+        for (std::size_t second_mo = 0; second_mo < orbitals; ++second_mo) {
+          MATERIALIZATION_COUNT(4);
+          value += coefficient(ao, second_mo) * first_value(first_ao, second_mo, third_mo, fourth_mo);
+        }
+      }
+      return value;
+    };
+    std::vector<double> second;
+    if constexpr (mode != 2) {
+      second.resize(posthf::checked_mul(posthf::checked_mul(first_dimension, second_dimension),
+                                       posthf::checked_mul(second_rows, orbitals)));
+      for (std::size_t first_ao = 0; first_ao < first_dimension; ++first_ao)
+        for (std::size_t second_ao = 0; second_ao < second_dimension; ++second_ao)
+          for (std::size_t third_mo = 0; third_mo < second_rows; ++third_mo)
+            for (std::size_t fourth_mo = 0; fourth_mo < orbitals; ++fourth_mo)
+              second[((first_ao * second_dimension + second_ao) * second_rows + third_mo) * orbitals + fourth_mo] =
+                  second_value(first_ao, second_ao, third_mo, fourth_mo);
+    }
+    for (std::size_t third_shell = 0; third_shell < system.shells.size(); ++third_shell) {
+      if (canonical_shells && third_shell > si) continue;
+      const auto third_dimension = offsets[third_shell + 1] - offsets[third_shell];
+      const auto third_value = [&](std::size_t first_ao, std::size_t second_ao,
+                                   std::size_t third_ao, std::size_t fourth_mo) {
+        double value = 0.0;
+        for (std::size_t third_mo = 0; third_mo < second_rows; ++third_mo) {
+          const auto input = mode == 2
+              ? second_value(first_ao, second_ao, third_mo, fourth_mo)
+              : second[((first_ao * second_dimension + second_ao) * second_rows + third_mo) * orbitals + fourth_mo];
+          MATERIALIZATION_COUNT(5);
+          value += coefficient(offsets[third_shell] + third_ao, third_mo) * input;
+        }
+        return value;
+      };
+      std::vector<double> third;
+      if constexpr (mode != 3) {
+        third.resize(posthf::checked_mul(posthf::checked_mul(first_dimension, second_dimension),
+                                        posthf::checked_mul(third_dimension, orbitals)));
+        for (std::size_t first_ao = 0; first_ao < first_dimension; ++first_ao)
+          for (std::size_t second_ao = 0; second_ao < second_dimension; ++second_ao)
+            for (std::size_t third_ao = 0; third_ao < third_dimension; ++third_ao)
+              for (std::size_t fourth_mo = 0; fourth_mo < orbitals; ++fourth_mo)
+                third[((first_ao * second_dimension + second_ao) * third_dimension + third_ao) * orbitals + fourth_mo] =
+                    third_value(first_ao, second_ao, third_ao, fourth_mo);
+      }
+      for (std::size_t fourth_shell = 0; fourth_shell < system.shells.size(); ++fourth_shell) {
+        if (canonical_shells && (fourth_shell > third_shell || (si == third_shell && fourth_shell > second_shell))) continue;
+        const auto fourth_dimension = offsets[fourth_shell + 1] - offsets[fourth_shell];
+        std::vector<double> local_owner;
+        auto& local = mode == 4 ? reusable_local : local_owner;
+        local.assign(posthf::checked_mul(posthf::checked_mul(first_dimension, second_dimension),
+                                         posthf::checked_mul(third_dimension, fourth_dimension)), 0.0);
+        for (std::size_t first_ao = 0; first_ao < first_dimension; ++first_ao)
+          for (std::size_t second_ao = 0; second_ao < second_dimension; ++second_ao)
+            for (std::size_t third_ao = 0; third_ao < third_dimension; ++third_ao)
+              for (std::size_t fourth_ao = 0; fourth_ao < fourth_dimension; ++fourth_ao)
+                for (std::size_t fourth_mo = 0; fourth_mo < orbitals; ++fourth_mo) {
+                  const auto input = mode == 3 ? third_value(first_ao, second_ao, third_ao, fourth_mo)
+                      : third[((first_ao * second_dimension + second_ao) * third_dimension + third_ao) * orbitals + fourth_mo];
+                  MATERIALIZATION_COUNT(6);
+                  local[((first_ao * second_dimension + second_ao) * third_dimension + third_ao) * fourth_dimension + fourth_ao] +=
+                      coefficient(offsets[fourth_shell] + fourth_ao, fourth_mo) * input;
+                }
+        if (canonical_shells) {
+          const auto orbit = (si == second_shell ? 1 : 2) * (third_shell == fourth_shell ? 1 : 2) *
+                             (si == third_shell && second_shell == fourth_shell ? 1 : 2);
+          for (auto& value : local) { MATERIALIZATION_COUNT(8); value *= orbit; }
+        }
+        eri_shell({si, second_shell, third_shell, fourth_shell}, local, derivative);
+      }
+    }
+  }
+}
