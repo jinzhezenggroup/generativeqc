@@ -316,6 +316,24 @@ void provider_and_reference() {
     const auto single = provider.get(mixed[request]);
     require(single == mixed_values[request], "heterogeneous MO batch changed values or order");
   }
+  std::vector<std::array<std::size_t, 4>> mixed_shapes;
+  for (const auto& request : mixed)
+    mixed_shapes.push_back(
+        {request[0].size(), request[1].size(), request[2].size(), request[3].size()});
+  const auto mixed_bytes = provider.batch_bytes(mixed_shapes);
+  generativeqc::posthf::NativeBlockProvider exact_mixed(source, ref, mixed_bytes, 1);
+  require(exact_mixed.get_many(mixed) == mixed_values,
+          "exact heterogeneous batch admission changed the returned blocks");
+  generativeqc::posthf::ProviderWork short_work;
+  bool short_batch_rejected = false;
+  try {
+    generativeqc::posthf::NativeBlockProvider short_mixed(source, ref, mixed_bytes - 1, 1);
+    (void)short_mixed.get_many(mixed, false, 0, nullptr, &short_work);
+  } catch (const std::length_error&) {
+    short_batch_rejected = true;
+  }
+  require(short_batch_rejected && short_work.source_reads == 0,
+          "one-byte-short heterogeneous batch traversed the source before admission");
   auto invalid = slots;
   invalid[3][0] = ref.nbf;
   generativeqc::posthf::ProviderWork rejected_work;
@@ -541,6 +559,29 @@ void conventional_energy_reuses_ao_scans() {
           "batched MP2 energy rescanned the AO tensor");
   require(energy.provider_work.source_reads == full_ao_values,
           "batched MP2 energy source-read count changed unexpectedly");
+  generativeqc::posthf::NativeBlockProvider provider(source, *hf.reference, 256ULL << 20);
+  const auto ovov = provider.get({{{0}, {1}, {0}, {1}}});
+  ForwardingInteractionSource unread_source(source);
+  const auto borrowed = generativeqc::mp2::conventional_energy(
+      *hf.reference, unread_source, 256ULL << 20, 1e-10, 1, false, 0, ovov);
+  require(std::abs(borrowed.opposite_spin - energy.opposite_spin) < 1e-14 &&
+              std::abs(borrowed.same_spin - energy.same_spin) < 1e-14 &&
+              unread_source.reads() == 0 && borrowed.provider_work.source_values == 0,
+          "borrowed OVOV energy changed MP2 algebra or regenerated AO integrals");
+  const auto tight = generativeqc::mp2::conventional_energy(
+      *hf.reference, unread_source, borrowed.numeric_capacity_bytes, 1e-10, 1, false, 0, ovov);
+  require(tight.opposite_spin == borrowed.opposite_spin,
+          "borrowed energy unnecessarily reserved an AO provider workspace");
+  bool short_rejected = false;
+  try {
+    (void)generativeqc::mp2::conventional_energy(*hf.reference, unread_source,
+                                                 borrowed.numeric_capacity_bytes - 1, 1e-10, 1,
+                                                 false, 0, ovov);
+  } catch (const std::logic_error&) {
+    short_rejected = true;
+  }
+  require(short_rejected && unread_source.reads() == 0,
+          "borrowed energy accepted a short budget or traversed the AO source");
 }
 
 void shell_local_weighted_eri_derivative() {

@@ -107,21 +107,30 @@ timing. The public conventional CUDA path still stages MO blocks on the host;
 source reuse is not a claim that the complete response/adjoint is GPU-resident.
 
 Conventional CUDA E+F may additionally retain an optional six-block MO symmetry
-cover: OVOV, OOVV, OVOO, OVVV, OOOO, and VVVV. The energy adjoint, orbital RHS,
-response actions and relaxed-weight replay borrow compatible blocks in the
-same canonical frame instead of repeating their AO-to-MO transformations.
-Construction runs on CUDA; returned blocks remain host-owned. Admission limits
+cover: OVOV, OOVV, OVOO, OVVV, OOOO, and VVVV. Construction precedes the MP2
+energy reduction. The energy, energy adjoint, orbital RHS, response actions and
+relaxed-weight replay borrow compatible blocks in the same canonical frame
+instead of repeating their AO-to-MO transformations. One heterogeneous CUDA
+provider batch shares the AO scan across all admitted blocks, including their
+compatible transformation prefixes; returned blocks remain host-owned. Admission limits
 the cache to one quarter of the remaining correlation phase budget and charges
 its actual vector capacities alongside producer scratch and the full force
-consumer. A memory refusal drops the optional cache and restores bounded force
-reconstruction without changing the reference or swallowing numerical errors.
-CPU, energy-only and RI paths do not build this cache. Full VVVV storage is
+consumer. If the complete cover is refused, construction can instead admit
+OVOV alone for energy. CUDA energy-only calculations use that smaller store.
+Borrowed energy consumption reserves its own reduction workspace, not a second
+AO provider batch. A force memory refusal drops the optional cache and restores
+bounded force reconstruction without changing the reference or swallowing
+numerical errors. CPU and RI paths do not build this cache. Full VVVV storage is
 quartic, so admission is optional rather than an arbitrary-basis work bound.
 
 `GENERATIVEQC_MP2_FORCE_MO_CACHE=0` disables only this optional cache for
 qualification. Disabling force source tiling also disables its construction,
-preserving the diagnostic shell-sized route. The progress journal records
-`mp2_force_mo_cache_bytes` and actual `borrowed_mo_blocks` reads; positive cache
+preserving the diagnostic shell-sized force route. Set
+`GENERATIVEQC_MP2_ENERGY_MO_CACHE=0` as well to disable the independent OVOV-only
+energy store; an enabled complete force cover still supplies its existing OVOV
+to energy. The progress journal records `mp2_energy_mo_cache_bytes`,
+`mp2_force_mo_cache_bytes`, `mp2_primal_source_scans`, `mp2_primal_source_values`
+and actual `borrowed_mo_blocks` reads; positive cache
 storage alone is not evidence that a consumer reused it. Same-basis CBS groups
 can instead borrow the correction calculation's compatible CC blocks; see the
 [CBS workflow](../user/ccsdt_cbs.md).

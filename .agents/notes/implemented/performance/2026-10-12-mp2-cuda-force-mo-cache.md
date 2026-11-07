@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-12
 
+Construction ordering, sequential source scans and the energy-only exclusion
+are superseded by [shared energy/force primal admission](2026-11-08-mp2-energy-force-shared-primal-scan.md).
+The original qualification below remains evidence for the original schedule.
+
 ## Problem
 
 Sharing same-basis CBS references and the correction group's CC primal blocks
