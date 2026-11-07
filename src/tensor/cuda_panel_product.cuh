@@ -99,9 +99,9 @@ class CudaPanelProduct final : public PreparedPanelProduct {
       offer.rejection = "matrix-panel provider is unavailable";
     // Complete costs and expected reuse precede optional provider/cache storage.
     // Resource refusal returns to the same selector without relaxing precision.
-    auto decision = runtime::select_native_lowering(request, offers, target, compilation,
-                                                    expected_replays,
-                                                    offer.rejection.empty() ? alternative : incumbent);
+    auto decision =
+        runtime::select_native_lowering(request, offers, target, compilation, expected_replays,
+                                        offer.rejection.empty() ? alternative : incumbent);
     const bool prepare_library = decision.selected == alternative;
     if (prepare_library && !context_.prepare(stream))
       offer.rejection = "matrix-panel provider allocation unavailable";
