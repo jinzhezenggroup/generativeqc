@@ -118,7 +118,10 @@ def assemble_coefficients_directional(
     derivatives, directional_derivatives = jets[1:4], directional_jets[1:4]
     measure_jvp = weighted_pair_jvp_callable()
     matrix_jvp = matrix_jvp_callable()
-    panel_jvp = spatial_panel_jvp_callable() if spatial is not None else None
+    panel_jvp = typing.cast(
+        "typing.Callable",
+        spatial_panel_jvp_callable() if spatial is not None else None,
+    )
     matrices = []
     for spin in range(len(rho)):
         base_measure, moving_measure = measure_jvp(

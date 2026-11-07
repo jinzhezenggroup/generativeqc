@@ -247,17 +247,6 @@ DensityFittingIntegralData transform_density_fitting_integrals(
 /** Transform Cartesian one-electron tensors into a system's public AO basis. */
 IntegralData transform_integrals(const IntegralData& cartesian, const core::System& system);
 
-/** Compatibility name retained for callers that explicitly request Cartesian. */
-inline IntegralData build_cartesian_integrals(const core::System& system,
-                                              bool include_derivatives = true) {
-  return build_integrals(system, include_derivatives);
-}
-
-/** Backward-compatible name retained for the original s-shell test helpers. */
-inline IntegralData build_s_integrals(const core::System& system, bool include_derivatives = true) {
-  return build_integrals(system, include_derivatives);
-}
-
 }  // namespace generativeqc::integrals
 
 #endif

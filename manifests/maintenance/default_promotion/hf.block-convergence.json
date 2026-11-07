@@ -1,0 +1,22 @@
+{
+  "id": "hf.block-convergence",
+  "classification": "needs-qualification",
+  "controls": ["hf-runtime:GENERATIVEQC_HF_BLOCK_CONVERGENCE"],
+  "owner_issues": [3004],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/rhf_block_convergence_policy.hpp",
+    "src/scf/cuda/rhf_policy.cpp",
+    "src/scf/cuda/rhf_bucket_internal.hpp",
+    "src/scf/cuda_rhf.cpp",
+    "src/scf/cuda/scf_convergence_kernels.cu"
+  ],
+  "rationale": "Strict default-off one-block RHF matrix-walk candidate. Explicit1 selects256 threads only for restricted nonmixed nonincremental quartet Direct without physical-reference export; unsupported domains retain32. A frozen native plan bool rejects opposite launch selection before graph reuse, independently of Python schedule identity. FP64 RMS summation order changes, while lane-zero physical policy, retain-density semantics and all other reduction consumers stay unchanged.",
+  "revisit_condition": "Keep default-off pending actual32/256 matrix/lifecycle/refinement controls, sanitizers and complete cold-plus-three-warm endpoint qualification. The observed component ceiling is not a gain or a fixed30 claim. Never relax stationarity/energy/density limits to accept a different reduction trajectory.",
+  "evidence": [
+    ".agents/notes/proposed/2026-11-07-rhf-block-convergence.md",
+    "tests/native/test_cuda_force_convergence.cpp",
+    "tests/native/test_uhf.cpp",
+    "tests/python/test_scf_convergence_defaults.py"
+  ]
+}

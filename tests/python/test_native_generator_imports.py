@@ -11,6 +11,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 GENERATORS = (
+    "xc_cpu",
+    "nuclear_repulsion",
+    "dispersion_scalar",
+    "gcp_scalar",
     "gfn2_pair_native",
     "scf_array_native",
     "scf_density_cuda",
@@ -107,7 +111,7 @@ class BlockRuntime(importlib.abc.MetaPathFinder):
 
 sys.meta_path.insert(0, BlockRuntime())
 packages = ('generativeqc_compiler.tensor', 'generativeqc_compiler.method',
-            'generativeqc_compiler.dft')
+            'generativeqc_compiler.dft', 'generativeqc_compiler.geometry')
 before = {{name: importlib.import_module(name) for name in packages}} if {preload!r} else {{}}
 runpy.run_path('tools/generate_{generator}.py', run_name='import_generator')
 import generativeqc_compiler

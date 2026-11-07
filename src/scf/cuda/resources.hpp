@@ -24,6 +24,12 @@ struct DirectTileValidationRecord;
 class CudaResources {
  public:
   ~CudaResources();
+  /** Prepare the admitted matrix context on this owner's existing stream.
+   * Partial setup remains owned here for the original teardown protocol;
+   * default math mode and native first-error provenance are unchanged.
+   */
+  cublasStatus_t prepare_matrix_context() noexcept;
+  cublasStatus_t bind_matrix_workspace() noexcept;
   static ProviderOwnerSchema inventory_schema();
   ProviderOwnerInventory inventory() const;
   ProviderInitializationTeardownReport close_current_context(

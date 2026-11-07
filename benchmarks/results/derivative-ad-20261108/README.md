@@ -14,6 +14,11 @@ special-function primitives, linear contractions and implicit solves remain.
   owners, generators, generated headers, consumers and tests; this publication is
   excluded, together with its storage-review record, to avoid self-reference.
   Apply it to a clean checkout of the baseline.
+- `source-snapshot.json` authenticates the exact original compressed patch retained
+  in local Git at `4f555d074700fdb0d340de90f57a9f8d7e4f58cf`. That commit is a
+  storage carrier, not a replacement measured producer revision. The checkout
+  omits this redundant blob to stay within the shared evidence storage budget;
+  no measured samples or source bytes are discarded.
 - `samples.json.xz` losslessly retains all selected complete endpoint timings,
   first-use observations, numerical outputs and semantic work counters. Large
   nonlocal CUDA feature vectors are replaced by their element count and measured
@@ -37,8 +42,11 @@ PYTHONPATH=python:. python benchmarks/results/derivative-ad-20261108/replay.py
 ```
 
 The reader first verifies the shared publication schema, every member checksum,
-the numerical acceptance decision and reconstruction provenance. Replay needs
-NumPy, but no GPU, native library, private cluster directory or external archive.
+the numerical acceptance decision and reconstruction provenance, including the
+recovered patch's compressed and decompressed identities. Replay needs NumPy
+and the recorded Git object locally, but no GPU, native library, private cluster
+directory or external archive. A shallow/partial clone missing the carrier must
+explicitly fetch its recorded revision first; replay never fetches automatically.
 There is no source-fingerprint CI test and no Release/archive dependency.
 
 ## Executed scientific gates
@@ -112,8 +120,17 @@ retained; no system installation is modified. Slurm on n5 does not implement CPU
 binding. Final n5 jobs use `taskset` on one CPU from the allocation's inherited
 allowed affinity instead; old unpinned experiments are not described as pinned.
 
-For a fresh measurement, decompress and apply `source.patch.xz` to a clean baseline
-checkout and `reproduction.patch.xz` to recover the scripts. Build both libraries from the
+For a fresh measurement, recover the exact patch with the shared offline restorer:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/derivative-ad-20261108/source.patch.xz \
+  --manifest benchmarks/results/derivative-ad-20261108/source-snapshot.json \
+  --output /tmp/derivative-ad-source.patch.xz
+```
+
+Decompress and apply that recovered patch to a clean baseline checkout and
+`reproduction.patch.xz` to recover the scripts. Build both libraries from the
 corresponding trees with the same options and verified compiler cache. Copy the
 benchmark harness into the baseline tree too, without copying candidate compiler
 or production Python modules. Build the six stationary profiles separately for
@@ -121,7 +138,7 @@ each selection. Adapt cluster paths in the historical scripts to the new
 checkout/runtime; these paths are not hidden scientific inputs. For example:
 
 ```bash
-xz -dc /path/to/publication/source.patch.xz | git apply
+xz -dc /tmp/derivative-ad-source.patch.xz | git apply
 xz -dc /path/to/publication/reproduction.patch.xz | git apply
 sccache --version
 sccache --show-stats

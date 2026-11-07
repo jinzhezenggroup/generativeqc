@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import lzma
 import statistics
 import sys
 from collections import defaultdict
@@ -17,6 +19,7 @@ from generativeqc_compiler.common.evidence import block_error
 
 from tools.generativeqc_validation.publication import validate_publication
 from tools.generativeqc_validation.record import load_publication_record
+from tools.restore_retained_evidence import read_evidence_bytes
 
 
 def inspect(samples: dict) -> tuple[list[dict], dict]:
@@ -279,6 +282,15 @@ def main() -> None:
         for entry in manifest["files"]
     }
     validate_publication(manifest, files)
+    source = read_evidence_bytes(
+        directory / "source.patch.xz", manifest=directory / "source-snapshot.json"
+    )
+    evidence = load_publication_record(directory)
+    if (
+        hashlib.sha256(lzma.decompress(source)).hexdigest()
+        != evidence["hashes"]["source"]
+    ):
+        raise ValueError("recovered measured-source patch identity mismatch")
     samples = load_publication_record(directory, role="samples")
     rows, errors = inspect(samples)
     print(

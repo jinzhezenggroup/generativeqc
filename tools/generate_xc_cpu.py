@@ -1,27 +1,13 @@
 """Generate host FP64 XC expressions from the audited shared scalar DAG."""
 
-import sys as _compiler_sys
-import types as _compiler_types
-from pathlib import Path as _CompilerPath
+import argparse
+import sys
+from pathlib import Path
 from typing import Any
 
-_compiler_root = (
-    _CompilerPath(__file__).resolve().parents[1] / "python" / "generativeqc_compiler"
-)
-for _name, _path in (
-    ("generativeqc_compiler", _compiler_root),
-    ("generativeqc_compiler.common", _compiler_root / "common"),
-    ("generativeqc_compiler.integral", _compiler_root / "integral"),
-    ("generativeqc_compiler.xc", _compiler_root / "xc"),
-    ("generativeqc_compiler.dft", _compiler_root / "dft"),
-    ("generativeqc_compiler.method", _compiler_root / "method"),
-):
-    _module = _compiler_types.ModuleType(_name)
-    _module.__path__ = [str(_path)]
-    _compiler_sys.modules[_name] = _module
-
-import argparse
-from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]
+if __package__ in (None, ""):
+    sys.path.insert(0, str(ROOT / "python"))
 
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.dft.feature_policy import emit_feature_policy

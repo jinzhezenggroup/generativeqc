@@ -1,6 +1,6 @@
 """Compile the whole borrowed CUDA view boundary in runtime-supported C++17.
 
-Host recording providers expose GEAM or omit it. These tests cover capability,
+Host recording providers expose GEAM/SYRK or omit them. These tests cover capability,
 ABI forwarding and error provenance, not device numerics or CUDA execution.
 """
 
@@ -21,8 +21,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize("standard", ("c++17", "c++20"))
 @pytest.mark.parametrize("has_geam", (False, True))
+@pytest.mark.parametrize("has_syrk", (False, True))
 def test_borrowed_cuda_view_language_contract(
-    tmp_path: Path, required_native_cxx: NativeCxx, standard: str, has_geam: bool
+    tmp_path: Path,
+    required_native_cxx: NativeCxx,
+    standard: str,
+    has_geam: bool,
+    has_syrk: bool,
 ) -> None:
     source = (ROOT / "src/tensor/cuda_runtime.cuh").read_text()
     first = cpp_record_definition(source, "ColumnGemmView")
@@ -44,6 +49,7 @@ def test_borrowed_cuda_view_language_contract(
             "-pedantic-errors",
             "-I" + str(tmp_path),
             *(("-DGENERATIVEQC_TEST_HAS_GEAM",) if has_geam else ()),
+            *(("-DGENERATIVEQC_TEST_HAS_SYRK",) if has_syrk else ()),
         ),
     )
     subprocess.run([str(executable)], check=True, timeout=15)

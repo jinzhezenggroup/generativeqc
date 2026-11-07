@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 PREFIX = r"""
 #include "runtime/allocation_measurement.hpp"
+#include "cc/df_prepared_regions.hpp"
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -154,21 +155,22 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     fallback = (
         r"""
 void allocation_fallback(Storage& storage, bool core = false, bool audit = false) {
-  struct { bool df_matrix_gemm = true, df_auxiliary_reduction = true, df_core_reuse = false, df_audit_matrix_gemm = false; } metrics;
+  generativeqc::cc::DFPreparedRegions regions;
+  regions.response = 1; regions.reduced = true;
   std::size_t cursor = 16, fallback_cursor = 4, allocation_bytes = 16;
   std::size_t scratch_elements = 2, scratch = 2;
   auto capacity = [&] { allocation_bytes = cursor; };
-  auto scalar_plan = [&] { metrics.df_matrix_gemm = false; cursor = 8; capacity(); };
-  metrics.df_core_reuse = core;
-  metrics.df_audit_matrix_gemm = audit;
-  auto drop_core_reuse = [&] { metrics.df_core_reuse = false; cursor = 12; capacity(); };
-  auto drop_audit = [&] { metrics.df_audit_matrix_gemm = false; cursor = 10; capacity(); };
+  auto scalar_plan = [&] { regions.response.reset(); cursor = 8; capacity(); };
+  regions.retained_core = core;
+  if (audit) regions.audit = 1;
+  auto drop_core_reuse = [&] { regions.retained_core = false; cursor = 12; capacity(); };
+  auto drop_audit = [&] { regions.audit.reset(); cursor = 10; capacity(); };
   fail_first_allocation = true;
 """
         + source[start:end]
         + r"""
-  if (metrics.df_matrix_gemm != (core || audit) || !metrics.df_auxiliary_reduction ||
-      metrics.df_core_reuse || metrics.df_audit_matrix_gemm || cursor != (core ? 12 : audit ? 10 : 8))
+  if (regions.response.has_value() != (core || audit) || !regions.reduced ||
+      regions.retained_core || regions.audit.has_value() || cursor != (core ? 12 : audit ? 10 : 8))
     throw std::runtime_error("incorrect optional allocation fallback");
 }
 """

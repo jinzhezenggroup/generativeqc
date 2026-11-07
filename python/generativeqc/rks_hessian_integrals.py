@@ -79,7 +79,7 @@ from generativeqc_compiler.integral.weight_pullback import (
     normalized_radial_primitives,
 )
 from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
-from generativeqc_compiler.method.nuclear_repulsion import nuclear_repulsion_hvp
+from generativeqc_compiler.method.nuclear_repulsion_array import nuclear_repulsion_hvp
 
 __all__ = [
     "RKSIntegralTopology",

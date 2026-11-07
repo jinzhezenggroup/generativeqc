@@ -8,7 +8,7 @@ NumPy inputs execute the same program over the complete radial rule at once.
 from collections.abc import Callable, Sequence
 from fractions import Fraction
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 from .expr import Expr, Graph
 
@@ -25,8 +25,9 @@ def polynomial_terms(
     by_node: dict[int, dict[tuple[str, ...], Fraction]] = {}
     for identifier in graph.topological_order((root,)):
         node = graph.nodes[identifier]
+        current: dict[tuple[str, ...], Fraction]
         if node.operation == "constant":
-            coefficient = Fraction(node.payload)
+            coefficient = Fraction(cast("Fraction | float", node.payload))
             current = {(): coefficient} if coefficient else {}
         elif node.operation == "variable":
             current = {(str(node.payload),): Fraction(1)}
@@ -77,7 +78,7 @@ def scalar_callable(
         node = graph.nodes[identifier]
         operands = [references[child] for child in node.arguments]
         if node.operation == "constant":
-            references[identifier] = repr(float(node.payload))
+            references[identifier] = repr(float(cast("Fraction | float", node.payload)))
             continue
         if node.operation == "variable":
             references[identifier] = variables[str(node.payload)]
@@ -88,7 +89,9 @@ def scalar_callable(
         elif node.operation == "reciprocal":
             expression = f"1.0 / {operands[0]}"
         elif node.operation == "power":
-            expression = f"{operands[0]} ** {float(node.payload)!r}"
+            expression = (
+                f"{operands[0]} ** {float(cast('Fraction | float', node.payload))!r}"
+            )
         elif node.operation in ("exp", "expm1", "log", "log1p", "atan", "asinh", "erf"):
             expression = f"_library.{node.operation}({operands[0]})"
         else:
@@ -99,6 +102,6 @@ def scalar_callable(
     lines.append(
         "    return (" + ", ".join(references[root.identifier] for root in roots) + ",)"
     )
-    namespace = {"_library": library, "__builtins__": {}}
+    namespace: dict[str, Any] = {"_library": library, "__builtins__": {}}
     exec(compile("\n".join(lines), "<generated-scalar-dag>", "exec"), namespace)  # noqa: S102 -- only validated DAG operations and float literals
     return namespace["_evaluate"]

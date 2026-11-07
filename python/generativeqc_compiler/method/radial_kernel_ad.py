@@ -7,6 +7,7 @@ finite-range schedule rather than multiplying the two charges first.
 """
 
 from fractions import Fraction
+from typing import cast
 
 from generativeqc_compiler.integral.expr import AlgebraForm, Expr
 from generativeqc_compiler.method.scalar_graph_ad import scalar_graph
@@ -56,7 +57,7 @@ def cached_radial_weight(primal: Program, scaled_inputs: tuple[str, ...]) -> Nod
         nonlocal coefficient
         node = graph.node(root)
         if node.operation == "constant":
-            coefficient *= Fraction(node.payload) ** exponent
+            coefficient *= Fraction(cast("Fraction | float", node.payload)) ** exponent
         elif node.operation == "variable":
             powers[str(node.payload)] = powers.get(str(node.payload), 0) + exponent
         elif node.operation == "multiply":
@@ -64,8 +65,14 @@ def cached_radial_weight(primal: Program, scaled_inputs: tuple[str, ...]) -> Nod
                 collect(Expr(graph, child), exponent)
         elif node.operation == "reciprocal":
             collect(Expr(graph, node.arguments[0]), -exponent)
-        elif node.operation == "power" and float(node.payload).is_integer():
-            collect(Expr(graph, node.arguments[0]), exponent * int(node.payload))
+        elif (
+            node.operation == "power"
+            and float(cast("Fraction | float", node.payload)).is_integer()
+        ):
+            collect(
+                Expr(graph, node.arguments[0]),
+                exponent * int(cast("Fraction | float", node.payload)),
+            )
         else:
             raise ValueError(f"unfactored cached radial AD operation {node.operation}")
 

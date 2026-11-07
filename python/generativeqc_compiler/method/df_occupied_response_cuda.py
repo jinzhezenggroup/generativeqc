@@ -11,7 +11,7 @@ METRIC_EQUATIONS = ("pq,pij->qij", "pq,qij->pij")
 
 
 def emit_occupied_response_helpers() -> str:
-    """Return allocation-free C++ helpers for the established cuBLAS provider."""
+    """Return allocation-free C++ helpers using the shared Tensor provider."""
     return r"""
 /** Bounded auxiliary panel size. extra_raw=1 reserves a second raw panel
  * for source-major -> auxiliary-major conversion. All storage is already
@@ -139,28 +139,17 @@ inline cublasStatus_t df_occupied_symmetric_metric_gram(
   if (pairs > std::numeric_limits<int>::max()) return CUBLAS_STATUS_INVALID_VALUE;
   const auto stride = static_cast<int>(pairs);
   const double one = 1, twice = 2 * coefficient;
-  // Match the occupied-K provider contract: a provider without SYRK may
-  // update both triangles with GEMM. The caller consumes/mirrors the lower
-  // triangle and records the actual full-product work in that case.
-  const auto product = [&](auto handle, int count, const double* scale,
-                           const double* input) {
-    if constexpr (requires {
-        cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, auxiliary,
-                    count, scale, input, stride, &one, metric, auxiliary);
-    }) {
-      if (triangular) *triangular = true;
-      return cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, auxiliary,
-                         count, scale, input, stride, &one, metric, auxiliary);
-    } else {
-      if (triangular) *triangular = false;
-      return cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, auxiliary, auxiliary,
-                         count, scale, input, stride, input, stride, &one,
-                         metric, auxiliary);
-    }
+  // The shared provider owns triangular/full-product selection; its report
+  // preserves the response owner's semantic work accounting and mirroring.
+  const auto product = [&](int count, const double* scale, const double* input) {
+    return generativeqc_tensor::submit_column_gram(
+        generativeqc_tensor::ColumnGramView<cublasHandle_t>{
+            blas, true, true, auxiliary, count, scale, input, stride,
+            &one, metric, auxiliary}, triangular);
   };
-  auto status = product(blas, rank, &coefficient, factors);
+  auto status = product(rank, &coefficient, factors);
   if (status != CUBLAS_STATUS_SUCCESS || stride == rank) return status;
-  return product(blas, stride - rank, &twice, factors + rank);
+  return product(stride - rank, &twice, factors + rank);
 }
 
 inline cublasStatus_t df_occupied_from_metric_eigenbasis(

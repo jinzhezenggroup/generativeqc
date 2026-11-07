@@ -1,0 +1,270 @@
+{
+  "status": "THREE_NATIVE_PAIR_ARRAY_AND_PROVENANCE_REPLAY_PASS",
+  "measured_source": {
+    "revision": "513288b77bb6a654cffa33c9aa3aa6b39d134c16",
+    "tree": "9338a49061fc5a20a7474c438cf4a147731b415b",
+    "native_identity": "0138841399c776a2616f2af0d5be63076950ee70e16463f708a2392389c70811",
+    "core_sha256": "e3ef895c3a332103160cdbebd5fc5a13165788b6987f4bfe5422b42f6ad88ade",
+    "gpu_uuid": "GPU-fe8a7e35-47a3-b7bf-8493-d4fecd7c37be"
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "order": [
+        "off",
+        "on"
+      ],
+      "cold_off_seconds": 10.087750819977373,
+      "cold_on_seconds": 9.555821074987762,
+      "off_over_on": 1.0556655195629323,
+      "reduction_percent": 5.273026212505161,
+      "saved_seconds": 0.5319297449896112,
+      "warm_on_over_off": [
+        0.9906338855577402,
+        0.9843052738825594,
+        0.9866169454943756
+      ],
+      "work": {
+        "off": [
+          {
+            "phase": "cold",
+            "iterations": 15,
+            "focks": 15,
+            "proposal": 8,
+            "target": 7
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          }
+        ],
+        "on": [
+          {
+            "phase": "cold",
+            "iterations": 15,
+            "focks": 15,
+            "proposal": 8,
+            "target": 7
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          }
+        ]
+      }
+    },
+    {
+      "round": 2,
+      "order": [
+        "on",
+        "off"
+      ],
+      "cold_off_seconds": 9.79515600495506,
+      "cold_on_seconds": 9.536701723001897,
+      "off_over_on": 1.0271010134803513,
+      "reduction_percent": 2.6385928087558796,
+      "saved_seconds": 0.25845428195316344,
+      "warm_on_over_off": [
+        0.9902593747852462,
+        0.9884040911148015,
+        0.9805190611686717
+      ],
+      "work": {
+        "off": [
+          {
+            "phase": "cold",
+            "iterations": 15,
+            "focks": 15,
+            "proposal": 8,
+            "target": 7
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          }
+        ],
+        "on": [
+          {
+            "phase": "cold",
+            "iterations": 15,
+            "focks": 15,
+            "proposal": 8,
+            "target": 7
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          }
+        ]
+      }
+    },
+    {
+      "round": 3,
+      "order": [
+        "off",
+        "on"
+      ],
+      "cold_off_seconds": 9.866132671944797,
+      "cold_on_seconds": 9.607036428991705,
+      "off_over_on": 1.0269694244284535,
+      "reduction_percent": 2.6261175636716705,
+      "saved_seconds": 0.25909624295309186,
+      "warm_on_over_off": [
+        0.9900475464553291,
+        0.9872644078446491,
+        0.9769703998462226
+      ],
+      "work": {
+        "off": [
+          {
+            "phase": "cold",
+            "iterations": 15,
+            "focks": 15,
+            "proposal": 8,
+            "target": 7
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          }
+        ],
+        "on": [
+          {
+            "phase": "cold",
+            "iterations": 15,
+            "focks": 15,
+            "proposal": 8,
+            "target": 7
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          },
+          {
+            "phase": "warm",
+            "iterations": 1,
+            "focks": 1,
+            "proposal": 0,
+            "target": 1
+          }
+        ]
+      }
+    }
+  ],
+  "median_paired_off_over_on": 1.0271010134803513,
+  "median_paired_reduction_percent": 2.6385928087558796,
+  "median_saved_seconds": 0.25909624295309186,
+  "maximum_warm_on_over_off": 0.9906338855577402,
+  "independent_EF": 24,
+  "strict_full_force_pairs": 12,
+  "warm_guards": 9,
+  "maximum_dense_errors": {
+    "energy_abs_per_atom_hartree": 1.3737159558028603e-13,
+    "force_max_abs_hartree_per_bohr": 3.63726896171479e-09,
+    "force_rms_hartree_per_bohr": 1.6909805883065578e-09
+  },
+  "maximum_strict_errors": {
+    "energy_abs_per_atom_hartree": 1.0421293457814802e-13,
+    "force_max_abs_hartree_per_bohr": 4.880765930304065e-13,
+    "force_rms_hartree_per_bohr": 1.1072916477871613e-13
+  },
+  "default": "off",
+  "all30_complete": false,
+  "GPU4PySCF_comparison": false,
+  "new_native_or_oracle_execution": false
+}

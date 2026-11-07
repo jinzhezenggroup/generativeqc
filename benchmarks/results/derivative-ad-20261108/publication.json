@@ -18,10 +18,10 @@
   "archives": [],
   "files": [
     {
-      "path": "source.patch.xz",
+      "path": "source-snapshot.json",
       "role": "source-patch",
-      "sha256": "527accd56ea564cd7ae8b8a98e8a680bb0f109ebc6b6405e61177704992ad3f4",
-      "bytes": 126184
+      "sha256": "d8ef5c1c56e69b4faabffad2ef384bd88410b6248e7348f6fb6eb7a437b4a42d",
+      "bytes": 722
     },
     {
       "path": "reproduction.patch.xz",
@@ -62,14 +62,14 @@
     {
       "path": "README.md",
       "role": "reproduction",
-      "sha256": "d8e8d51ff1c6e2ce321ea8fba800afe0b67c170037a84a512f5aac5b2ef53ab8",
-      "bytes": 10760
+      "sha256": "3793a3a569ae979342a766a566bccd5e072dab843c33ed08d5410931466a5260",
+      "bytes": 11675
     },
     {
       "path": "replay.py",
       "role": "reproduction",
-      "sha256": "e8c8f4bada50189e8f4f582d11cf436c2dfbbb8c297db34b87657bbb4295ed8d",
-      "bytes": 11645
+      "sha256": "3e48818139b4eb0609f1062ded679d7068b28c2b52be52ba5c5820cfa2a0aeb4",
+      "bytes": 12103
     },
     {
       "path": "evidence.json",

@@ -372,7 +372,7 @@ class Expr:
     def __neg__(self) -> Expr:
         return self.graph.multiply(self.graph.constant(-1), self)
 
-    def pow(self, exponent: float) -> Expr:
+    def pow(self, exponent: Scalar) -> Expr:
         """Raise this expression to one compile-time scalar exponent."""
 
         return self.graph.power(self, exponent)
@@ -1130,7 +1130,7 @@ class Graph:
             )
         return self._intern(Node(operation, (value.identifier,)))
 
-    def power(self, value: Expr, exponent: float) -> Expr:
+    def power(self, value: Expr, exponent: Scalar) -> Expr:
         self._require_graph(value)
         exponent = float(exponent)
         if exponent == 0.0:

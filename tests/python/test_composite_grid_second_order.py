@@ -10,7 +10,7 @@ from generativeqc_compiler.dft.nonlocal_reference import (
     nonlocal_feature_derivatives_reference,
 )
 from generativeqc_compiler.method import resolve_method
-from generativeqc_compiler.method.nuclear_repulsion import nuclear_repulsion_hvp
+from generativeqc_compiler.method.nuclear_repulsion_array import nuclear_repulsion_hvp
 from generativeqc_compiler.method.stationary_grid_second import (
     StationaryGridSecondOrder,
     features,

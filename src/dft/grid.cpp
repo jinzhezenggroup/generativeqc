@@ -42,8 +42,8 @@ std::pair<std::vector<double>, std::vector<double>> gauss_legendre(std::size_t c
     for (unsigned iteration = 0; iteration < 100; ++iteration) {
       double previous = 1.0, current = root, dprevious = 0.0, dcurrent = 1.0;
       for (std::size_t degree = 2; degree <= count; ++degree) {
-        const auto next = generated::atomic_grid::legendre_step(degree, root, current, previous,
-                                                                dcurrent, dprevious);
+        const auto next = ::generativeqc::generated::atomic_grid::legendre_step(
+            degree, root, current, previous, dcurrent, dprevious);
         previous = current;
         current = next[0];
         dprevious = dcurrent;
@@ -60,8 +60,8 @@ std::pair<std::vector<double>, std::vector<double>> gauss_legendre(std::size_t c
     }
     double previous = 1.0, current = root, dprevious = 0.0, dcurrent = 1.0;
     for (std::size_t degree = 2; degree <= count; ++degree) {
-      const auto next = generated::atomic_grid::legendre_step(degree, root, current, previous,
-                                                              dcurrent, dprevious);
+      const auto next = ::generativeqc::generated::atomic_grid::legendre_step(
+          degree, root, current, previous, dcurrent, dprevious);
       previous = current;
       current = next[0];
       dprevious = dcurrent;
@@ -82,7 +82,7 @@ double distance(const double* a, const double* b) {
 }
 
 double radial_measure(double radius, double node, double weight) {
-  return generated::atomic_grid::rational_radial(node, radius, weight)[1];
+  return ::generativeqc::generated::atomic_grid::rational_radial(node, radius, weight)[1];
 }
 
 double owner_partition(const double* point, const core::System& system, std::size_t owner,
@@ -414,20 +414,22 @@ std::vector<double> MolecularGrid::contract_weight_derivative(
         const std::size_t a_block = pair_block(a);
         const std::size_t b_block = pair_block(b);
         if (separation > spec_.coincident_tolerance) {
-          const auto coordinate =
-              generated::atomic_grid::pair_coordinate(distance_a, distance_b, separation);
+          const auto coordinate = ::generativeqc::generated::atomic_grid::pair_coordinate(
+              distance_a, distance_b, separation);
           const double raw_mu = coordinate[0];
           mu = std::clamp(raw_mu, -1.0, 1.0);
           if (raw_mu > -1.0 && raw_mu < 1.0) {
             for (unsigned axis = 0; axis < 3; ++axis) {
-              const double unit_a =
-                  distance_a > 0.0 ? generated::atomic_grid::norm_axis(point_a[axis], distance_a)[0]
-                                   : 0.0;
-              const double unit_b =
-                  distance_b > 0.0 ? generated::atomic_grid::norm_axis(point_b[axis], distance_b)[0]
-                                   : 0.0;
-              const double unit_ab =
-                  generated::atomic_grid::norm_axis(separation_vector[axis], separation)[0];
+              const double unit_a = distance_a > 0.0
+                                        ? ::generativeqc::generated::atomic_grid::norm_axis(
+                                              point_a[axis], distance_a)[0]
+                                        : 0.0;
+              const double unit_b = distance_b > 0.0
+                                        ? ::generativeqc::generated::atomic_grid::norm_axis(
+                                              point_b[axis], distance_b)[0]
+                                        : 0.0;
+              const double unit_ab = ::generativeqc::generated::atomic_grid::norm_axis(
+                  separation_vector[axis], separation)[0];
               pair_derivative[0][axis] += coordinate[1] * unit_a + coordinate[2] * unit_b;
               pair_derivative[a_block][axis] += -coordinate[1] * unit_a + coordinate[3] * unit_ab;
               pair_derivative[b_block][axis] += -coordinate[2] * unit_b - coordinate[3] * unit_ab;
@@ -437,23 +439,24 @@ std::vector<double> MolecularGrid::contract_weight_derivative(
         if (spec_.version == 4 && separation > spec_.coincident_tolerance) {
           const auto adjustment = grid_radius_adjustment(spec_, system_.atoms[a].atomic_number,
                                                          system_.atoms[b].atomic_number);
-          const auto adjusted = generated::atomic_grid::treutler_adjust(mu, adjustment);
+          const auto adjusted =
+              ::generativeqc::generated::atomic_grid::treutler_adjust(mu, adjustment);
           for (std::size_t block = 0; block < pair_atom_count; ++block)
             for (double& derivative : pair_derivative[block]) derivative *= adjusted[1];
           mu = adjusted[0];
         }
         for (unsigned iteration = 0; iteration < spec_.partition_iterations; ++iteration) {
-          const auto following = generated::atomic_grid::becke_step(mu);
+          const auto following = ::generativeqc::generated::atomic_grid::becke_step(mu);
           for (std::size_t block = 0; block < pair_atom_count; ++block)
             for (double& derivative : pair_derivative[block]) derivative *= following[1];
           mu = following[0];
         }
-        const auto pair_map = generated::atomic_grid::becke_complement(mu);
+        const auto pair_map = ::generativeqc::generated::atomic_grid::becke_complement(mu);
         const double pair = std::clamp(pair_map[0], 0.0, 1.0);
         logs[a] += std::log(pair);
         logs[b] += std::log1p(-pair);
         if (pair > 0.0 && pair < 1.0) {
-          const auto log_partials = generated::atomic_grid::pair_log_partials(pair);
+          const auto log_partials = ::generativeqc::generated::atomic_grid::pair_log_partials(pair);
           for (std::size_t block = 0; block < pair_atom_count; ++block)
             for (unsigned axis = 0; axis < 3; ++axis) {
               const std::size_t coordinate = 3 * pair_atoms[block] + axis;
@@ -477,12 +480,12 @@ std::vector<double> MolecularGrid::contract_weight_derivative(
     std::fill(average.begin(), average.end(), 0.0);
     for (std::size_t atom = 0; atom < atoms; ++atom)
       for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)
-        average[coordinate] += generated::atomic_grid::normalized_log_tangent(
+        average[coordinate] += ::generativeqc::generated::atomic_grid::normalized_log_tangent(
             partition[atom], log_derivative[atom * ncoord + coordinate], 0.0)[0];
 
     const double scale = weight_sensitivity[point_index] * weights_[point_index];
     for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate) {
-      result[coordinate] += generated::atomic_grid::normalized_log_tangent(
+      result[coordinate] += ::generativeqc::generated::atomic_grid::normalized_log_tangent(
           scale, log_derivative[owner * ncoord + coordinate], average[coordinate])[0];
     }
   }

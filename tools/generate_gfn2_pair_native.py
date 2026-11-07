@@ -4,28 +4,12 @@ from __future__ import annotations
 
 import argparse
 import sys
-import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
     sys.path.insert(0, str(ROOT / "python"))
-
-# Keep build-time codegen independent of NumPy-backed interpreter packages.
-import generativeqc_compiler
-
-# Geometry still has eager numerical exports; TensorIR imports are canonical.
-for package_name in ("geometry",):
-    qualified = f"generativeqc_compiler.{package_name}"
-    if qualified not in sys.modules:
-        package = types.ModuleType(qualified)
-        package.__path__ = [
-            str(ROOT / "python" / "generativeqc_compiler" / package_name)
-        ]
-        package.__package__ = qualified
-        sys.modules[qualified] = package
-        setattr(generativeqc_compiler, package_name, package)
 
 from generativeqc_compiler.geometry.gfn2_pair import (
     GFN2_PAIR_RUNTIME_VERSION,

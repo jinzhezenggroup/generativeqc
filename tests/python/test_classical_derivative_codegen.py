@@ -20,8 +20,8 @@ from generativeqc_compiler.geometry.dispersion_scalar import (
 from generativeqc_compiler.geometry.gcp_scalar import emit_gcp_scalar_header
 from generativeqc_compiler.method.nuclear_repulsion import (
     emit_nuclear_repulsion_header,
-    nuclear_repulsion_hvp,
 )
+from generativeqc_compiler.method.nuclear_repulsion_array import nuclear_repulsion_hvp
 
 from tools.generativeqc_d3.generate_native_data import render as render_d3_tables
 
@@ -195,7 +195,7 @@ def test_uninstalled_generator_is_deterministic_from_another_directory(
 ) -> None:
     output = tmp_path / "generated.hpp"
     subprocess.run(
-        [sys.executable, str(ROOT / "tools" / script), "--output", str(output)],
+        [sys.executable, "-S", str(ROOT / "tools" / script), "--output", str(output)],
         cwd=tmp_path,
         check=True,
         capture_output=True,

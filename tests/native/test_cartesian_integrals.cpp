@@ -439,7 +439,7 @@ int main() {
                 spherical_shell_class_orders == spherical_tasks.angular_order_tile_counts,
             "spherical exact shell-class partitions are inconsistent");
     const generativeqc::integrals::IntegralData integrals =
-        generativeqc::integrals::build_cartesian_integrals(system);
+        generativeqc::integrals::build_integrals(system);
     require(integrals.nbf == 8, "integral engine reported the wrong AO count");
 
     // Values were generated independently with PySCF 2.11/libcint using

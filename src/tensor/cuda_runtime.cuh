@@ -255,7 +255,7 @@ inline void add_vector_in_place(Context& context, int count, const double* sourc
  *
  * Scientific CUDA callers supply physical dimensions, transposes, pointer
  * strides and alpha/beta; the provider executes the retained FP64 algorithm
- * without allocation, a secondary handle, stream mutation or fallback.
+ * without allocation, a secondary handle or stream mutation.
  * The raw submission status intentionally survives the response owner's
  * draining/exception boundary, which maps cuBLAS failures only after cleanup.
  * This is an execution adapter for already-qualified prepared resources,
@@ -305,6 +305,58 @@ inline cublasStatus_t submit_column_batched_gemm(const ColumnBatchedGemmView& vi
                                    view.left_ld, view.left_batch_stride, view.right, view.right_ld,
                                    view.right_batch_stride, view.beta, view.output, view.output_ld,
                                    view.output_batch_stride, view.batches);
+}
+
+// Keep optional-provider discovery dependent and C++17-compatible, including
+// runtimes whose BLAS headers do not declare SYRK at all.
+template <class Handle>
+auto column_syrk_capability(Handle handle, int order, int reduction, const double* input,
+                            double* output)
+    -> decltype(cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, order, reduction, input,
+                            input, reduction, input, output, order),
+                std::true_type{});
+auto column_syrk_capability(...) -> std::false_type;
+
+template <class Handle>
+inline constexpr bool column_syrk_available = decltype(column_syrk_capability(
+    std::declval<Handle>(), 0, 0, std::declval<const double*>(), std::declval<double*>()))::value;
+
+/** Borrowed FP64 Gram update: C = alpha op(A) op(A)^T + beta C.
+ * SYRK updates only the requested triangle. A provider without SYRK uses GEMM
+ * and updates both triangles without extra storage. Callers must consume only
+ * the requested triangle until they mirror it, regardless of the provider.
+ */
+template <class Handle>
+struct ColumnGramView {
+  Handle handle{};
+  bool transpose{}, lower{};
+  int order{}, reduction{};
+  const double* alpha{};
+  const double* input{};
+  int input_ld{};
+  const double* beta{};
+  double* output{};
+  int output_ld{};
+};
+
+/** Report triangular versus full-product work even on submission failure.
+ * A SYRK error is returned unchanged, never retried as GEMM: beta may preserve
+ * existing adjoints, so replay after a partial update would be unsafe.
+ */
+template <class Handle>
+inline cublasStatus_t submit_column_gram(const ColumnGramView<Handle>& view,
+                                         bool* triangular = nullptr) {
+  if (triangular) *triangular = column_syrk_available<Handle>;
+  if constexpr (column_syrk_available<Handle>) {
+    return cublasDsyrk(view.handle, view.lower ? CUBLAS_FILL_MODE_LOWER : CUBLAS_FILL_MODE_UPPER,
+                       view.transpose ? CUBLAS_OP_T : CUBLAS_OP_N, view.order, view.reduction,
+                       view.alpha, view.input, view.input_ld, view.beta, view.output,
+                       view.output_ld);
+  } else {
+    return submit_column_gemm({view.handle, view.transpose, !view.transpose, view.order, view.order,
+                               view.reduction, view.alpha, view.input, view.input_ld, view.input,
+                               view.input_ld, view.beta, view.output, view.output_ld});
+  }
 }
 
 struct ColumnGemvView {

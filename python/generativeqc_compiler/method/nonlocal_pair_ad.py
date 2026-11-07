@@ -7,6 +7,7 @@ No logarithm or exponential survives in the generated pair arithmetic.
 """
 
 from fractions import Fraction
+from typing import cast
 
 from generativeqc_compiler.integral.expr import AlgebraForm, Expr, Graph
 from generativeqc_compiler.integral.scalar_ad import _Emitter
@@ -64,9 +65,17 @@ def _rational_products(
             elif item.operation == "reciprocal":
                 collect(Expr(graph, item.arguments[0]), -exponent)
             elif item.operation == "constant":
-                coefficient *= Fraction(item.payload) ** exponent
-            elif item.operation == "power" and float(item.payload).is_integer():
-                collect(Expr(graph, item.arguments[0]), exponent * int(item.payload))
+                coefficient *= (
+                    Fraction(cast("Fraction | float", item.payload)) ** exponent
+                )
+            elif (
+                item.operation == "power"
+                and float(cast("Fraction | float", item.payload)).is_integer()
+            ):
+                collect(
+                    Expr(graph, item.arguments[0]),
+                    exponent * int(cast("Fraction | float", item.payload)),
+                )
             else:
                 atom = normalized(value) if item.operation == "add" else value
                 powers[atom.identifier] = powers.get(atom.identifier, 0) + exponent
@@ -271,7 +280,9 @@ def _log_primal(graph: Graph, root: Expr) -> Expr:
     if node.operation == "reciprocal":
         return -_log_primal(graph, Expr(graph, node.arguments[0]))
     if node.operation == "power":
-        return node.payload * _log_primal(graph, Expr(graph, node.arguments[0]))
+        return cast("Fraction | float", node.payload) * _log_primal(
+            graph, Expr(graph, node.arguments[0])
+        )
     return graph.stable_unary("log", root)
 
 

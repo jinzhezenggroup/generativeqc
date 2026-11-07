@@ -444,6 +444,18 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # core-c at 806s and core-b beyond 35min; restore only that supplemental
     # owner below. Preserve all cases, historical modulo slots and cache trust.
     declare -A supplemental_core_owner=(
+      # PR #3044 inserted nine AD suites and moved 1272 existing owners,
+      # including the Cs ECP Hessian from core-a into core-c's timed-out lane.
+      # Preserve master routing and every gate without widening time limits.
+      [tests/python/test_ao_response_ad.py]=0
+      [tests/python/test_classical_derivative_codegen.py]=1
+      [tests/python/test_cosx_scalar_ad.py]=2
+      [tests/python/test_density_bilinear_ad.py]=0
+      [tests/python/test_gfn2_origin_shift.py]=1
+      [tests/python/test_integral_scalar_ad.py]=2
+      [tests/python/test_nuclear_runtime_codegen_cuda.py]=0
+      [tests/python/test_quadrature_ad.py]=1
+      [tests/python/test_scalar_graph_ad.py]=2
       [tests/python/test_composite_integral_weights.py]=2
       [tests/python/test_eri_symmetry.py]=0
       [tests/python/test_factorized_host.py]=1

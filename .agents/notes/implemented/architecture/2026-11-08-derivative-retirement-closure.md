@@ -3,6 +3,10 @@
 Status: implemented; final scoped scientific and endpoint qualification complete
 Date: 2026-11-08
 
+Subsequent CI integration and storage-only recovery decisions are recorded in
+[the integration note](2026-11-08-derivative-ad-ci-integration.md). They do not
+relabel the frozen measurements in this closure.
+
 ## Scope and ownership census
 
 This closes the source-migration items identified in the November 7–8 notes.

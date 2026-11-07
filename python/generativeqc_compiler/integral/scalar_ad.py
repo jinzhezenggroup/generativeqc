@@ -6,6 +6,7 @@ frontiers are evaluated once per operation, not once per Cartesian channel.
 """
 
 from fractions import Fraction
+from typing import cast
 
 from .expr import Expr, Graph
 from .scalar_c import ScalarCEmitter
@@ -147,7 +148,7 @@ def _moment_response() -> str:
         if root.identifier == integrand.identifier:
             return Fraction(1), 0, 1
         if node.operation == "constant":
-            return Fraction(node.payload), 0, 0
+            return Fraction(cast("Fraction | float", node.payload)), 0, 0
         if node.operation == "multiply":
             coefficient, power, gaussian = Fraction(1), 0, 0
             for child in node.arguments:
