@@ -17,6 +17,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/residency_boundaries.hpp"
+#include "runtime/residency_df.hpp"
 #include "runtime/residency_observer.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "runtime/resource_usage.hpp"
@@ -177,6 +178,8 @@ int generativeqc_resource_d3_layout_v1(int backend, std::uint64_t systems, std::
 /** Read immutable source tags from this actual library, with no CUDA or heap
  * work. Null is an unknown tag, not an inferred role/payload classification. */
 const char* generativeqc_residency_boundary_name_v1(std::uint64_t category, std::uint64_t value) {
+  if (const auto* name = generativeqc::runtime::df_residency_boundary_name(category, value))
+    return name;
   return generativeqc::runtime::residency_boundary_name(category, value);
 }
 

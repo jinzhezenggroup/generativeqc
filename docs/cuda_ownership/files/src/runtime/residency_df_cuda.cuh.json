@@ -1,0 +1,7 @@
+{
+  "path": "src/runtime/residency_df_cuda.cuh",
+  "subsystem": "runtime",
+  "role": "runtime",
+  "reason": "DF-owned observation-only host-boundary adapter: preserves the original CUDA copy and adds source payload generations, without scientific formulas, new copies or synchronization.",
+  "regions": []
+}

@@ -56,7 +56,7 @@ ROLES = {
     "lifetime",
 }
 DIRECTIONS = {1: "h2d", 2: "d2h", 3: "d2d"}
-OPERATIONS = {1: "transfer", 2: "stream_sync", 3: "event_sync"}
+OPERATIONS = {1: "transfer", 2: "stream_sync", 3: "event_sync", 4: "host_transform"}
 WORK_COUNTERS = (
     "source_transfer_calls",
     "source_zero_byte_calls",
@@ -389,6 +389,14 @@ def summarize_sources(
                     and row["payload_instance"] > 0,
                     "missing transfer payload/direction",
                 )
+            elif row["operation_kind"] == 4:
+                _require(
+                    row["payload"] > 0
+                    and row["payload_instance"] > 0
+                    and row["dependency"] > 0
+                    and row["direction"] == 0,
+                    "missing host-transform payload/dependency",
+                )
             else:
                 _require(
                     all(
@@ -416,6 +424,7 @@ def summarize_sources(
             ),
             "source operation identity changed",
         )
+        operation_issue_count = len(issues)
         role = catalog["role"].get(str(row["role"]))
         site = catalog["site"].get(str(row["site"]))
         payload = catalog["payload"].get(str(row["payload"]))
@@ -426,6 +435,7 @@ def summarize_sources(
             1: {"cudaMemcpy", "cudaMemcpyAsync"},
             2: {"cudaStreamSynchronize"},
             3: {"cudaEventSynchronize"},
+            4: set(),
         }[row["operation_kind"]]
         runtime = [
             entry
@@ -434,7 +444,8 @@ def summarize_sources(
             and entry["api_name"]
             and entry["api_name"].split("_", 1)[0] in expected_names
         ]
-        if len(runtime) != 1:
+        host_transform = row["operation_kind"] == 4
+        if not host_transform and len(runtime) != 1:
             issues.append(
                 f"missing/ambiguous runtime API at source operation {operation}"
             )
@@ -451,14 +462,19 @@ def summarize_sources(
             for entry in runtime
             if entry["correlation_id"] in phase_by_correlation
         }
-        if len(phase_ids) != 1 or not phase_ids <= regions.keys():
+        if not host_transform and (
+            len(phase_ids) != 1 or not phase_ids <= regions.keys()
+        ):
             issues.append(f"missing/ambiguous phase at source operation {operation}")
         phase = next(iter(phase_ids)) if len(phase_ids) == 1 else None
         events = work.get(operation, [])
         if any(event["region_id"] != phase for event in events):
             issues.append(f"source/work phase disagreement at operation {operation}")
         transfers = [event for event in events if event["kind"] == "memcpy"]
-        if row["operation_kind"] == 1:
+        if host_transform:
+            if events or call_apis:
+                issues.append(f"CUDA work inside a host transform: {operation}")
+        elif row["operation_kind"] == 1:
             expected = row["bytes"] if row["status"] == 0 else 0
             if (
                 any(
@@ -487,10 +503,6 @@ def summarize_sources(
                 issues.append(
                     f"source/actual synchronization disagreement at operation {operation}"
                 )
-        if row["dependency"]:
-            issues.append(
-                f"source dependency has no qualified transform/link evidence: {operation}"
-            )
         completed.append(
             {
                 "operation_id": operation,
@@ -503,14 +515,26 @@ def summarize_sources(
                 "dependency_identity": row["dependency"] or None,
                 "region_id": phase,
                 "kind": OPERATIONS[row["operation_kind"]],
+                "direction": DIRECTIONS.get(row["direction"], "none"),
                 "requested_bytes": row["bytes"],
                 "status": row["status"],
-                "source_call_verified": len(runtime) == 1
-                and runtime[0]["start"] > 0
-                and runtime[0]["end"] >= runtime[0]["start"]
-                and runtime[0]["return_value"] == row["status"]
-                and len(phase_ids) == 1
-                and phase in regions,
+                "source_call_verified": len(issues) == operation_issue_count
+                and (
+                    (
+                        host_transform
+                        and row["status"] == 0
+                        and not events
+                        and not call_apis
+                    )
+                    or (
+                        len(runtime) == 1
+                        and runtime[0]["start"] > 0
+                        and runtime[0]["end"] >= runtime[0]["start"]
+                        and runtime[0]["return_value"] == row["status"]
+                        and len(phase_ids) == 1
+                        and phase in regions
+                    )
+                ),
                 "events": events,
                 "risk": "higher"
                 if role in ("iteration", "tile", "lifetime")
@@ -525,6 +549,7 @@ def summarize_sources(
         issues.append("CUPTI source correlation without a source operation")
     if not executions:
         issues.append("no source executions observed")
+    round_trips = _qualified_payload_links(completed, issues)
     counters = dict.fromkeys(WORK_COUNTERS, 0)
     by_role = {role: dict(counters) for role in sorted(ROLES)}
     by_owner = {
@@ -564,6 +589,7 @@ def summarize_sources(
         "scope": "source-owned HF bucket/graph/resource, device-ledger and post-HF DF compatibility boundary submissions matched to observed CUPTI transfer/sync work; not full residency coverage",
         "executions": list(executions.values()),
         "operations": completed,
+        "qualified_host_round_trips": round_trips,
         "by_role": by_role,
         "by_owner": by_owner,
         "by_phase_owner_role": [
@@ -581,3 +607,149 @@ def summarize_sources(
         "graph_wait_coverage_complete": False,
         "zero_round_trip_assertion": None,
     }
+
+
+def _qualified_payload_links(
+    operations: list[dict[str, Any]], issues: list[str]
+) -> list[dict[str, Any]]:
+    """Qualify the DF owner's actual checked eigenvalue→scale host boundary.
+
+    Equal bytes, timestamps and addresses never establish a dependency. The
+    source supplies generations at the real host computation; a joined prior
+    D2H and its completion fence, successful transform closure and subsequent
+    H2D must all agree. This narrow contract grants no global lineage coverage.
+    """
+    instances: dict[int, list[dict[str, Any]]] = {}
+    generation_counts: dict[int, int] = {}
+    for operation in operations:
+        instance = operation["payload_instance"]
+        if instance:
+            generation_counts[instance] = generation_counts.get(instance, 0) + 1
+    if any(count != 1 for count in generation_counts.values()):
+        issues.append("ambiguous source payload generation")
+    fences: dict[tuple[int, int | None, int, int], tuple[int, int]] = {}
+    positions = {}
+    round_trips = []
+    for position, operation in enumerate(operations):
+        dependency = operation["dependency_identity"]
+        previous = instances.get(dependency, []) if dependency else []
+        source = previous[0] if len(previous) == 1 else None
+        if dependency:
+            valid = (
+                source is not None
+                and generation_counts.get(dependency) == 1
+                and source["source_call_verified"]
+                and source["status"] == 0
+                and operation["source_call_verified"]
+                and operation["status"] == 0
+                and source["execution_id"] == operation["execution_id"]
+                and source["owner"] == operation["owner"] == "df_metric_setup"
+                and source["role"] == operation["role"] == "prepare"
+            )
+            if operation["kind"] == "host_transform":
+                valid = (
+                    valid
+                    and source["kind"] == "transfer"
+                    and source["site"] == "df.metric.eigenvalues"
+                    and source["payload"] == "df.metric.eigenvalues"
+                    and operation["site"] == "df.metric.inverse_sqrt_transform"
+                    and operation["payload"] == "df.metric.inverse_sqrt_scales"
+                    and operation["requested_bytes"] == source["requested_bytes"]
+                    and bool(source["events"])
+                    and all(
+                        event.get("direction") == "d2h" for event in source["events"]
+                    )
+                    and positions[source["operation_id"]]
+                    < min(
+                        (
+                            fences.get(
+                                (
+                                    source["execution_id"],
+                                    source["region_id"],
+                                    event["context"],
+                                    event["stream"],
+                                ),
+                                (-1, -1),
+                            )[0]
+                            for event in source["events"]
+                        ),
+                        default=-1,
+                    )
+                    < position
+                    and all(
+                        event["end"]
+                        <= fences.get(
+                            (
+                                source["execution_id"],
+                                source["region_id"],
+                                event["context"],
+                                event["stream"],
+                            ),
+                            (-1, -1),
+                        )[1]
+                        for event in source["events"]
+                    )
+                )
+                if valid:
+                    operation["region_id"] = source["region_id"]
+                    operation["host_input_operation_id"] = source["operation_id"]
+            else:
+                valid = (
+                    valid
+                    and operation["kind"] == "transfer"
+                    and source["kind"] == "host_transform"
+                    and "host_input_operation_id" in source
+                    and source["region_id"] == operation["region_id"]
+                    and operation["site"] == "df.metric.scales_upload"
+                    and operation["payload"] == source["payload"]
+                    and operation["requested_bytes"] == source["requested_bytes"]
+                    and bool(operation["events"])
+                    and all(
+                        event.get("direction") == "h2d" for event in operation["events"]
+                    )
+                )
+                if valid:
+                    round_trips.append(
+                        {
+                            "owner": operation["owner"],
+                            "role": operation["role"],
+                            "region_id": operation["region_id"],
+                            "d2h_operation_id": source["host_input_operation_id"],
+                            "host_transform_operation_id": source["operation_id"],
+                            "h2d_operation_id": operation["operation_id"],
+                        }
+                    )
+            if not valid:
+                operation["source_call_verified"] = False
+                issues.append(
+                    "source dependency has no qualified transform/link evidence: "
+                    + str(operation["operation_id"])
+                )
+        if (
+            operation["kind"] == "stream_sync"
+            and operation["owner"] == "df_metric_setup"
+            and operation["site"] == "df.metric.host_ready"
+            and operation["source_call_verified"]
+            and operation["status"] == 0
+        ):
+            for event in operation["events"]:
+                if (
+                    event["kind"] == "sync"
+                    and event["sync_subtype"] == 3
+                    and event["return_value"] == 0
+                    and event["start"] > 0
+                    and event["end"] >= event["start"]
+                ):
+                    fences[
+                        (
+                            operation["execution_id"],
+                            operation["region_id"],
+                            event["context"],
+                            event["stream"],
+                        )
+                    ] = (position, event["end"])
+        instance = operation["payload_instance"]
+        if instance:
+            instances.setdefault(instance, []).append(operation)
+        positions[operation["operation_id"]] = position
+    return round_trips
