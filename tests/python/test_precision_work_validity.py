@@ -28,7 +28,7 @@ def publication_binary(
 #include <cstdlib>
 #include <vector>
 int main(int argc, char** argv) {
-  if(argc != 3) return 90;
+  if(argc != 5) return 90;
   const int scenario = std::atoi(argv[1]);
   const bool screened_reference_iterations = std::atoi(argv[2]) != 0;
   const bool failed = scenario == 1, audited = scenario == 2;
@@ -45,12 +45,13 @@ int main(int argc, char** argv) {
   const std::vector<std::uint8_t> host_final_fock_reuse_mask{0};
   const struct { double item_budget_error; } requested_precision_policy{0};
   const generativeqc::scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
-  const bool incremental_iteration_enabled = false;
+  const bool incremental_iteration_enabled = std::atoi(argv[3]) != 0;
   const std::uint64_t incremental_rebuild_interval = 0;
   const std::vector<double> host_incremental_max_abs_delta_density{0.0};
-  const std::vector<std::uint64_t> host_incremental_full_build_count{0};
-  const std::vector<std::uint64_t> host_incremental_delta_build_count{0};
-  const bool bounded_direct_streaming = false;
+  const std::vector<std::uint64_t> host_incremental_full_build_count{3};
+  const std::vector<std::uint64_t> host_incremental_delta_build_count{2};
+  const bool bounded_direct_streaming = std::atoi(argv[4]) == 1;
+  const bool phase_resident_active = std::atoi(argv[4]) == 2;
   const struct { std::vector<std::size_t> system_shell_quartet_offsets; } host{{0, 0}};
   const std::vector<std::uint64_t> host_incremental_full_admitted_shell_quartets{0};
   const std::vector<std::uint64_t> host_incremental_full_admitted_quartet_tiles{0};
@@ -69,6 +70,13 @@ int main(int argc, char** argv) {
   if(result.precision.refinement_iterations != (screened_reference_iterations ? 5U : 0U)) return 6;
   if(!failed && result.precision.post_scf_fock_builds != (audited ? 2U : scenario == 0 ? 1U : 0U)) return 3;
   if(result.precision.final_residual_audits != (audited ? 1U : 0U)) return 4;
+  const bool quartet_census_available = incremental_iteration_enabled &&
+      !bounded_direct_streaming && !phase_resident_active && !failed;
+  if(bool(result.incremental_direct_jk.quartet_work_counters_valid) !=
+      quartet_census_available) return 7;
+  if(incremental_iteration_enabled &&
+      (result.incremental_direct_jk.anchor_full_builds != 3U ||
+       result.incremental_direct_jk.delta_builds != 2U)) return 8;
   return 0;
 }
 """
@@ -99,11 +107,25 @@ int main(int argc, char** argv) {
     ],
 )
 @pytest.mark.parametrize("screened", [False, True])
+@pytest.mark.parametrize("incremental", [False, True])
+@pytest.mark.parametrize(
+    "provider", [0, 1, 2], ids=["canonical", "bounded", "resident"]
+)
 def test_precision_work_validity_tracks_complete_item_accounting(
-    publication_binary: Path, scenario: int, screened: bool
+    publication_binary: Path,
+    scenario: int,
+    screened: bool,
+    incremental: bool,
+    provider: int,
 ) -> None:
     result = subprocess.run(
-        [str(publication_binary), str(scenario), str(int(screened))],
+        [
+            str(publication_binary),
+            str(scenario),
+            str(int(screened)),
+            str(int(incremental)),
+            str(provider),
+        ],
         check=False,
         capture_output=True,
         text=True,

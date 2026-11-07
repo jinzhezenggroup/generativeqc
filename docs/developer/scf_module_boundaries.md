@@ -90,7 +90,7 @@ f-containing domain with uncovered generic Fock work, at least 128 Cartesian
 AOs and an iteration limit of at least eight. Known warm/reused buckets,
 smaller sources and fully generated/lower-angular routes retain their existing
 schedule without rebuilding a phase source or recapturing ordinary graphs.
-Ordinary unrestricted HF, mixed/incremental Fock schedules and shell-work
+Ordinary unrestricted HF, mixed Fock schedules and shell-work
 diagnostics do not acquire this lease. Small references (fewer than 64 public AOs),
 iteration limits below four and incompatible canonical domains retain fallback.
 The automatic policy is a conservative cold/domain heuristic, not a universal
@@ -109,6 +109,13 @@ workloads. Optional values default to a 512-MiB ceiling in this ordinary domain;
 The final derivative consumer explicitly rebuilds its Cartesian density, pair
 bounds and queue metadata when its Fock used resident values. This preserves the
 same final density for energy, Pulay and integral-derivative terms.
+Incremental J/K can contract its full or delta input against the same admitted
+ordinary phase source. Its convergence still requires fresh full-density energy
+closure before final-state reuse. Full-only refinement starts within one decade
+of the ordinary density and physical-residual limits; this phase-selection
+margin never enters the final acceptance test. Resident contractions do not
+populate the streamed quartet census, so those incremental quartet counters are reported as
+unavailable, not as zero work.
 The [domain decision](../../.agents/notes/implemented/performance/2026-10-23-small-direct-cold-resident.md)
 records the qualification and larger-domain crossover rationale.
 

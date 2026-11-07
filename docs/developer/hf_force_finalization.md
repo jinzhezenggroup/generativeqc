@@ -12,9 +12,13 @@ Direct RHF/UHF force solves require the maximum physical AO commutator
 |F P S - S P F|
 ```
 
-to satisfy `min(1e-8, density_tolerance)` in addition to the ordinary energy
-and density-update criteria. The maximum includes both UHF spin channels.
-Non-finite residuals cannot pass.
+to satisfy the owner-qualified HF stationarity limit in addition to the energy
+and density-update criteria. All-electron restricted FP64 ordinary owners use
+`min(1e-5, density_tolerance)` when both public controls are Standard or looser
+(`energy_tolerance >= 1e-9`, `density_tolerance >= 1e-5`). Tighter requests and
+unqualified owners retain `min(1e-8, density_tolerance)`. Selecting incremental
+J/K does not change this limit. The maximum includes both UHF spin channels;
+UHF remains on the strict limit. Non-finite residuals cannot pass.
 
 Additional SCF updates remain within the requested iteration limit and are
 included in the public iteration count. A mixed-precision coarse stage retains
@@ -23,10 +27,32 @@ apply the physical force criterion.
 
 ## Final physical state
 
-Before publishing forces, finalization projects the final physical-Fock
-orbitals to a determinant, rebuilds the physical Fock for that determinant, and
-rechecks its commutator. Energy, forces, and the returned warm state therefore
-share the same physical `P/F(P)` state.
+An SCF-owned determinant with valid orbital-frame provenance retains the
+converged physical `P/F(P)` pair without projecting another density. Otherwise,
+finalization projects the final physical-Fock orbitals to a determinant,
+rebuilds its physical Fock, and rechecks its commutator. Arbitrary external
+seeds, changed-geometry seeds and the explicit final-rebuild diagnostic retain
+this bounded canonical fallback. Energy, forces, and the returned warm state
+share the same physical `P/F(P)` state in either route.
+
+Incremental J/K uses the same retention and finalization policy. Once density
+RMS and the physical residual are both within ten times their ordinary limits,
+the solver latches full-only refinement. This scheduling margin does not relax
+any convergence gate: it overlaps full-energy confirmation with the remaining
+SCF tail instead of waiting for stationarity to start confirmation. After any
+delta work, a reconstructed current energy baseline is discarded. At least two
+fresh full-density Fock evaluations must establish ordinary energy closure before
+convergence; a reconstructed Fock alone cannot license retained publication.
+An already full evaluation can supply the first usable baseline. Stationary
+no-delta warm solves keep ordinary convergence and stay full-only if an
+energy-only tail needs another step, rather than unnecessarily starting deltas.
+Screened reconstruction
+retains a fixed full-density anchor between refreshes; neither screening nor
+floating-point reduction order promises a bitwise-identical SCF trajectory.
+
+The experimental selector is documented in
+[batched HF](../user/batched_hf.md#incremental-direct-jk). It does not alter
+the closure or canonical fallback described here.
 
 The Pulay weight is
 
@@ -91,10 +117,10 @@ and [source-bound qualification capsule](../../benchmarks/results/hf-cold-defaul
 preserve the independent default-request gates, endpoint/work receipts, bounded
 page-refusal tests and superseded negative evidence.
 
-Force finalization adds one density projection, one physical Fock build, four
-matrix products for residual validation, and two matrix products for the Pulay
-weight. Existing device scratch owns those products; the work counter is copied
-at the existing completion fence.
+The canonical fallback adds a density projection, a physical Fock build and
+four matrix products for residual validation. Both routes use two matrix
+products for the Pulay weight. Existing device scratch owns those products;
+the work counter is copied at the existing completion fence.
 
 `GENERATIVEQC_DF_PROGRESS_TRACE` records final updates, physical Fock builds,
 residual checks, and rejections separately from iterative SCF updates. Complete
