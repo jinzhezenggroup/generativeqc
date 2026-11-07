@@ -42,7 +42,7 @@ Both former direct-vendor source entries are retired from the manifest.
 The same semantic adapter now owns the six ordinary GEMM submissions in
 `df_plan_setup.cpp` (two full-rank rotations, packed and generated value
 materialization, and the final truncated-rank tensor transform). Its batched inverse-root product now uses the same borrowed semantic provider
-boundary; prepared-handle setup remains separately classified migration debt.
+boundary; prepared-handle setup and lifetime stay in the reviewed provider owner.
 The existing DF SCF `scf_gemm_strided` path also delegates to the shared
 batched-view implementation. The new contract accepts independent transpose
 flags, bounded M/N/K/batch dimensions and physical strides in elements,
@@ -75,13 +75,29 @@ projection GEMMs and the final one-vector shard-reduction GEMV in
 ordering, response error propagation and gradient output layout; the gradient
 consumer's former direct-vendor entry is retired.
 
-This is a mechanical retained-provider migration; canonical
-precision/provider co-selection and method-level diagnostic algebra switches
-remain separate work.
+## Prepared selection and retained owners
 
-Retaining this adapter does not complete canonical binding integration
-for its surrounding callers. Other SCF adapters with upstream implementation
-selectors remain classified as migration work.
+DF solver and Lambda production callers request compiler contractions, not GEMM
+implementations. Shape, full-budget and provider preparation admit their layouts;
+optional refusal retains the original ordered graphs. Explicit benchmark/probe
+ablations use `cc::DFContractionQualification`. Lambda execution consumes admitted
+region extents and prepared descriptors in `DFPreparedRegions`, never its exported
+diagnostic booleans. The independent audit and primal replay remain distinct.
+
+RHF matrix work/context admission is owned by
+`tensor::CudaMatrixProductAdmission`; immutable canonical Tensor bindings select
+and execute the qualified recipes. `CudaResources` prepares and retires the
+already-admitted handle on the owner's existing stream. Missing optional context
+retains the bounded generated path without changing the scientific model.
+
+Retained SCF eigensystem and matrix adapters are reusable provider implementations.
+The optional eigensolver signature adapters are an ABI boundary. GFN's bucketed
+eigensystem executor retains overlap factorization, bounded tridiagonal/capture
+variants and shared solver reduction/recovery; its runtime only owns context
+lifetime. Occupation, SCC and molecular-force science do not select vendor APIs.
+The exact file contracts are authoritative in the machine-readable manifest.
+Generic joint precision/provider cost optimization is a separate lowering concern,
+not a reason to duplicate these legal owners.
 
 New files and symbols require an explicit classification and rationale. Existing
 migration, diagnostic and infrastructure entries have exact reference counts;
@@ -97,4 +113,7 @@ Function-address references, macro aliases and CUB/CUTLASS/CuTe namespace uses
 are covered. Dynamically assembled API names, arbitrary external templates and
 semantic changes at an existing callsite require review and runtime tests; this
 lexical inventory does not prove the executed provider or replace scientific
-acceptance. Implementation-selector API migration also remains separate work.
+acceptance. The companion `check_provider_selection_boundaries.py` rejects
+unclassified implementation selectors and inventories observational fields.
+Diagnostic classifications are not authorization to drive scientific execution
+from those fields.

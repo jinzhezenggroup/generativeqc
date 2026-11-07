@@ -22,6 +22,7 @@
 #include "solver/cuda/symmetric_eigen_handles.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
 #include "solver/cuda/symmetric_eigen_workspace.hpp"
+#include "tensor/cuda_matrix_product_admission.hpp"
 
 namespace shared = generativeqc::solver::cuda;
 std::uint32_t private_eigen_query(const shared::SymmetricEigenResources&,
@@ -439,6 +440,7 @@ cudaError_t resource_cuda_malloc_async(void** output, std::size_t bytes, cudaStr
 }
 }  // namespace runtime
 struct RhfResources {
+  generativeqc_status bind_matrix_workspace() noexcept;
   shared::PreparedSymmetricEigenHandles eigen_handles_;
   cudaStream_t stream_{};
   void* blas_{};
@@ -451,7 +453,7 @@ struct RhfResources {
 };
 struct RhfPlan {
   int lwork{};
-  bool retry_without_cublas{};
+  bool retry_without_matrix_context{};
 };
 struct RhfOptions {
   bool export_physical_reference{};
@@ -470,7 +472,10 @@ cublasStatus_t cublasSetWorkspace(void*, void*, std::size_t bytes) {
   counters.emplace_back("blas-workspace", bytes);
   return CUBLAS_STATUS_SUCCESS;
 }
-generativeqc_status blas_status(cublasStatus_t) { return GENERATIVEQC_STATUS_CUDA_ERROR; }
+generativeqc_status blas_status(cublasStatus_t status) {
+  return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
+                                         : GENERATIVEQC_STATUS_CUDA_ERROR;
+}
 struct OrdinaryResources {
   std::size_t solver_workspace_bytes_{}, solver_host_workspace_bytes_{};
 };

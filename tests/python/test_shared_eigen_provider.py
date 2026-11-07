@@ -316,8 +316,15 @@ def _workspace_consumer_regions() -> str:
     rhf = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
     ordinary = (ROOT / "src/scf/cuda/eigensolver.cpp").read_text()
     ao = (ROOT / "src/scf/cuda/df_eigensystem.cpp").read_text()
-    parts = [RHF_WORKSPACE_PREFIX]
-    parts.append(_definition(rhf, "if (first_setup && use_cusolver) {"))
+    resource = (ROOT / "src/scf/cuda/resources.cpp").read_text()
+    workspace = _definition(
+        resource, "generativeqc_status CudaResources::bind_matrix_workspace()"
+    )
+    parts = [
+        workspace.replace("CudaResources::", "RhfResources::"),
+        RHF_WORKSPACE_PREFIX,
+    ]
+    parts.append(_definition(rhf, "if (first_setup && provider_eigen_context) {"))
     parts.append("return outputs; } // prepare_rhf")
     begin = ordinary.index(
         "      const eigen_provider::SymmetricEigenQueryRange range{"
@@ -355,11 +362,12 @@ generativeqc_status prepare_rhf(
   using scf::solver_status; using scf::cuda_status;
   const auto ordinary_eigensolver_family = serial ? CudaEigensolverFamily::xsyevd
                                                  : CudaEigensolverFamily::xsyev_batched;
-  const bool first_setup = true, use_cusolver = true, use_cublas = true;
+  const bool first_setup = true, provider_eigen_context = true;
+  const auto matrix_admission = generativeqc::tensor::CudaMatrixProductAdmission::resolve({}, 5, 1, {1, {}});
   const std::size_t nbf = 5, reference_base_bytes = 19;
   const RhfOptions options;
   auto cuda_error = cudaSuccess;
-  auto blas_error = CUBLAS_STATUS_SUCCESS;
+  generativeqc_status matrix_status = GENERATIVEQC_STATUS_SUCCESS;
   generativeqc_status outputs = GENERATIVEQC_STATUS_SUCCESS;
 """
 

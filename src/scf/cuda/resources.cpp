@@ -8,8 +8,21 @@
 #include "runtime/allocation_measurement.hpp"
 #include "runtime/residency_cuda.cuh"
 #include "runtime/resource_cuda.cuh"
+#include "scf/cuda/runtime_support.hpp"
 
 namespace generativeqc::scf::cuda_execution {
+
+generativeqc_status CudaResources::prepare_matrix_context() noexcept {
+  auto status = cublasCreate(&blas_);
+  if (status == CUBLAS_STATUS_SUCCESS) status = cublasSetStream(blas_, stream_);
+  if (status == CUBLAS_STATUS_SUCCESS)
+    status = cublasSetPointerMode(blas_, CUBLAS_POINTER_MODE_HOST);
+  return blas_status(status);
+}
+
+generativeqc_status CudaResources::bind_matrix_workspace() noexcept {
+  return blas_status(cublasSetWorkspace(blas_, solver_workspace_, solver_workspace_bytes_));
+}
 
 CudaResources::~CudaResources() {
   if (explicit_retirement_managed_) {
