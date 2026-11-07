@@ -1,0 +1,14 @@
+{
+  "path": "src/dft/vv10_rebase_history.hpp",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Private strict policy, checked optional layout, scalar slot/epoch transaction guards and finite staged-add glue; residual products remain with the admitted matrix owner and transformation kernels retain scientific classification.",
+  "regions": [
+    {
+      "start": "GQC_REBASE_HD inline bool accumulate_finite",
+      "stop": "GQC_REBASE_HD inline void refuse",
+      "role": "scientific",
+      "reason": "Staged FP64 history add/subtract and finite-input/result acceptance. Pure layout, policy and slot/epoch state elsewhere remain runtime."
+    }
+  ]
+}

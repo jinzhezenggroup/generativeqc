@@ -29,6 +29,7 @@
 #include "dft/ks_incremental_policy.hpp"
 #include "dft/ks_stopping_policy.hpp"
 #include "dft/mixed_precision_warmup.hpp"
+#include "dft/vv10_rebase_history.hpp"
 #include "dft/xc.hpp"
 #include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
@@ -287,15 +288,22 @@ std::uint64_t next_ks_owner() noexcept {
 std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
                                 bool exact_exchange, bool range_correction,
                                 bool incremental_direct_jk) {
+  const auto request = vv10_rebase::requested();
+  if (request == vv10_rebase::Request::Invalid)
+    throw std::invalid_argument("GENERATIVEQC_KS_VV10_REBASE_HISTORY accepts only 0 or 1");
   if (!n || n > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
       (spins != 1 && spins != 2) || history > 64)
     throw std::invalid_argument("invalid CUDA KS resource shape");
+  const auto optional =
+      vv10_rebase::optional_state_bytes(request, n, spins, history, incremental_direct_jk);
   KsStateStorage layout;
   return sum(
-      layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
-                       incremental_direct_jk, cuda_ks_incremental_diis_gram_requested(n, history),
-                       scf::diis_work_requested(), nullptr),
-      n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
+      optional,
+      sum(layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
+                           incremental_direct_jk,
+                           cuda_ks_incremental_diis_gram_requested(n, history),
+                           scf::diis_work_requested(), nullptr),
+          n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n)));
 }
 
 std::size_t cuda_ks_point_batch_budget(const CudaXcLayout& layout) {
@@ -332,6 +340,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::size_t n{}, matrix{}, elements{};
   unsigned spins{}, history{};
   bool incremental_diis_gram{};
+  const vv10_rebase::Request rebase_request = vv10_rebase::requested();
+  vv10_rebase::Admission rebase_admission{vv10_rebase::Admission::Off};
+  std::optional<vv10_rebase::Layout> rebase_layout;
+  void* rebase_arena{};
+  cuda_ks_detail::RebaseStorage rebase_storage{};
+  vv10_rebase::Transaction rebase_readback{};
+  bool rebase_active{}, rebase_bank_pending{}, rebase_receipt_published{};
+
   bool ordered_diis_gram{};
   bool diis_work_enabled{}, diis_work_published{}, diis_work_ready{};
   std::unique_ptr<scf::DiisWorkReadback> diis_work_readback;
@@ -1645,6 +1661,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         range_correction(range ? std::optional<scf::ResolvedFockBuild>(*range) : std::nullopt),
         nonlocal_correlation(nonlocal),
         nonlocal_domain(domain) {
+    if (rebase_request == vv10_rebase::Request::Invalid)
+      throw std::invalid_argument("GENERATIVEQC_KS_VV10_REBASE_HISTORY accepts only 0 or 1");
     automatic_program = generated::automatic_cuda_point_entry(functional);
     if (!curated_cuda_ks_functional(functional) &&
         !generated::split_hybrid_registered(functional) && !automatic_program)
@@ -2500,6 +2518,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     matrix_provider_allowance.reset();
     if (fast_anchor_arena) runtime::resource_cuda_free(fast_anchor_arena);
     if (nonlocal_anchor_arena) runtime::resource_cuda_free(nonlocal_anchor_arena);
+    if (rebase_arena) runtime::resource_cuda_free(rebase_arena);
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
     if (xc_arena) runtime::resource_cuda_free(xc_arena);
     if (nonlocal_xc_arena) runtime::resource_cuda_free(nonlocal_xc_arena);
@@ -2508,6 +2527,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     nonlocal_xc_arena = nullptr;
     fast_anchor_arena = nullptr;
     nonlocal_anchor_arena = nullptr;
+    rebase_arena = nullptr;
     cudaSetDevice(previous);
   }
   ~Impl() { cleanup(); }
@@ -2582,6 +2602,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void begin(const std::vector<double>* input, bool reuse_warm, CudaKsSeedOrigin seed_origin) {
     if (is_pending) throw std::logic_error("cannot replace a pending CUDA KS iteration");
+    rebase_active = rebase_bank_pending = rebase_receipt_published = false;
+    rebase_readback = {};
     // Invalidate the old census before any preparation or seed validation can
     // fail. Device storage belongs to this attempt only after its reset below.
     diis_work_published = diis_work_ready = false;
@@ -2837,6 +2859,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
           (pure_semilocal_chunk || curated_global_hybrid_chunk || rsh_chunk) &&
           provider.system().ecp_terms.empty() && configured_chunk_width() == kCudaKsChunkCapacity;
       if (nonlocal_initialization) device_chunk_mode = false;
+      prepare_rebase_history(native_cold_seed, use_warm);
+
       // Host enqueue during capture is not proof of a replayed application.
       // This census stays unavailable for the separately owned device chunks.
       // AUTO/mixed operators have independent conditional-dispatch paths; do
@@ -3744,6 +3768,198 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return {next_generation, n, spins, tmp1, staged_xc_totals, staged_xc_error, stream};
   }
 
+  /** The prepared owner binds basis/overlap, both grids, model coefficients,
+   * spin and precision. solve_epoch revokes every prior density association;
+   * the isolated-potential generation distinguishes frozen operators. */
+  vv10_rebase::Key rebase_key() const {
+    return {owner, solve_epoch, nonlocal_seed_stage ? 0 : nonlocal_anchor_generation, 1};
+  }
+
+  bool rebase_ordinary_stream() {
+    cudaStreamCaptureStatus status{};
+    check(cudaStreamIsCapturing(stream, &status));
+    if (status == cudaStreamCaptureStatusNone) return true;
+    rebase_active = rebase_bank_pending = false;
+    rebase_admission = vv10_rebase::Admission::Topology;
+    return false;
+  }
+
+  void prepare_rebase_history(bool native_cold, bool use_warm) {
+    rebase_active = rebase_bank_pending = false;
+    if (rebase_request == vv10_rebase::Request::Off) {
+      rebase_admission = vv10_rebase::Admission::Off;
+      return;
+    }
+    const auto available =
+        !runtime::active_device_resource_ledger || runtime::active_device_capacity_promise
+            ? runtime::device_resource_available(device)
+            : 0;
+    const auto retained = rebase_layout ? rebase_layout->total_bytes : 0;
+    vv10_rebase::Context context{
+        native_cold && !use_warm,
+        !native_cold,
+        spins == 1,
+        !fitted_coulomb && !fitted_exchange,
+        standard_nonlocal_model && standard_convergence_active() && device_nonlocal,
+        !precision_schedule.any_lower_precision() &&
+            xc_layout.ao_precision == CudaXcAoPrecision::Fp64,
+        nonlocal_outer_active,
+        !device_chunk_mode && configured_chunk_width() == 1,
+        incremental_direct_jk,
+        !cold_fock_startup,
+        ordered_diis_gram,
+        history,
+        n,
+        rebase_arena ? retained : available};
+    rebase_admission = vv10_rebase::admit(rebase_request, context);
+    if (rebase_admission != vv10_rebase::Admission::Active) return;
+    if (!nonlocal_xc && !nonlocal_anchor_arena) {
+      rebase_admission = vv10_rebase::Admission::MissingAnchor;
+      return;
+    }
+    if (!rebase_ordinary_stream()) return;
+    if (!rebase_arena) {
+      const auto bound = vv10_rebase::layout(n, history);
+      if (!bound || bound->total_bytes > available) {
+        rebase_admission = vv10_rebase::Admission::Capacity;
+        return;
+      }
+      // cuda_ks_state_bytes reserved this exact optional upper bound. Consume
+      // only this owner's promise, after mandatory preparation; never borrow
+      // another owner's reserved force/provider capacity without a promise.
+      bool host_oom = false;
+      const auto status =
+          runtime::resource_cuda_malloc(&rebase_arena, bound->total_bytes, &host_oom);
+      if (status == cudaErrorMemoryAllocation && !host_oom) {
+        const auto pending = cudaGetLastError();
+        if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
+        rebase_admission = vv10_rebase::Admission::Capacity;
+        return;
+      }
+      check(status);
+      rebase_layout = bound;
+      resource.state_device_bytes = sum(resource.state_device_bytes, bound->total_bytes);
+      auto* bytes = static_cast<unsigned char*>(rebase_arena);
+      rebase_storage = {reinterpret_cast<double*>(bytes + bound->density),
+                        reinterpret_cast<double*>(bytes + bound->bank_density),
+                        reinterpret_cast<double*>(bytes + bound->bank_fock),
+                        reinterpret_cast<double*>(bytes + bound->bank_residual),
+                        reinterpret_cast<double*>(bytes + bound->old_potential),
+                        reinterpret_cast<vv10_rebase::SlotTag*>(bytes + bound->density_tags),
+                        reinterpret_cast<vv10_rebase::SlotTag*>(bytes + bound->bank_tags),
+                        reinterpret_cast<vv10_rebase::Transaction*>(bytes + bound->transaction)};
+    }
+    cuda_ks_detail::rebase_reset(stream, history, rebase_storage);
+    check(cudaGetLastError());
+    rebase_active = true;
+  }
+
+  const double* isolated_rebase_potential() const {
+    if (!nonlocal_anchor_generation) return nullptr;
+    if (!nonlocal_xc) return nonlocal_anchor_arena ? nonlocal_anchor_potential : nullptr;
+    const auto view = nonlocal_xc->view(nonlocal_anchor_generation);
+    return view.generation == nonlocal_anchor_generation && view.nao == n && view.spins == 1 &&
+                   view.stream == stream && view.error && view.potential
+               ? view.potential
+               : nullptr;
+  }
+
+  void read_rebase_transaction() {
+    check(cudaMemcpyAsync(&rebase_readback, rebase_storage.transaction, sizeof(rebase_readback),
+                          cudaMemcpyDeviceToHost, stream));
+    check(cudaStreamSynchronize(stream));
+    movement.scalar_d2h_bytes += sizeof(rebase_readback);
+    ++movement.synchronizations;
+  }
+
+  void snapshot_rebase_history(bool seed) {
+    rebase_bank_pending = false;
+    if (!rebase_active || !rebase_ordinary_stream()) return;
+    const auto* potential = seed ? nullptr : isolated_rebase_potential();
+    if (!seed && !potential) {
+      cuda_ks_detail::rebase_refuse(stream, vv10_rebase::Error::AnchorMismatch, rebase_storage);
+      check(cudaGetLastError());
+      return;
+    }
+    cuda_ks_detail::rebase_snapshot(stream, matrix, history, fock_history, residual_history,
+                                    potential, history_count, history_head, rebase_key(),
+                                    rebase_storage);
+    check(cudaGetLastError());
+    read_rebase_transaction();
+    rebase_bank_pending = rebase_readback.ready && rebase_readback.bank_count;
+  }
+
+  void commit_rebase_history() {
+    rebase_bank_pending = false;
+    if (!rebase_active || !rebase_ordinary_stream()) return;
+    const auto* potential = isolated_rebase_potential();
+    if (!potential) {
+      cuda_ks_detail::rebase_refuse(stream, vv10_rebase::Error::AnchorMismatch, rebase_storage);
+      check(cudaGetLastError());
+      return;
+    }
+    cuda_ks_detail::rebase_prepare_target(stream, matrix, history, potential, history_count,
+                                          history_head, rebase_key(), rebase_storage);
+    check(cudaGetLastError());
+    read_rebase_transaction();
+    if (!rebase_readback.ready) return;
+    // finish_legacy has completed physical diagnostics and copied the proposed
+    // density and tmp1/tmp2 orbital frame to their retained owners. For admitted
+    // full-Direct nonlocal owners neither scratch matrix lends an occupied-XC
+    // or fitted-exchange factor here. No next iteration is pending. Borrow them
+    // only on this serialized stream until all bridge launches are complete.
+    for (unsigned bank = 0; bank < rebase_readback.bank_count; ++bank) {
+      const auto* d = rebase_storage.bank_density + bank * matrix;
+      multiply_spin(1, rebase_storage.potential, true, false, d, true, nullptr, tmp1);
+      cuda_ks_detail::rebase_check_finite(stream, matrix, tmp1, rebase_storage);
+      check(cudaGetLastError());
+      multiply_spin(1, tmp1, true, false, overlap, false, nullptr, tmp2);
+      cuda_ks_detail::rebase_accumulate(stream, matrix, bank, tmp2, false, true, rebase_storage);
+      check(cudaGetLastError());
+      multiply_spin(1, overlap, false, false, d, true, nullptr, tmp1);
+      cuda_ks_detail::rebase_check_finite(stream, matrix, tmp1, rebase_storage);
+      check(cudaGetLastError());
+      multiply_spin(1, tmp1, true, false, rebase_storage.potential, true, nullptr, tmp2);
+      cuda_ks_detail::rebase_accumulate(stream, matrix, bank, tmp2, true, false, rebase_storage);
+      check(cudaGetLastError());
+    }
+    cuda_ks_detail::rebase_restore(stream, matrix, history, fock_history, residual_history,
+                                   rebase_storage);
+    check(cudaGetLastError());
+    scf::cuda_execution::launch_rebuild_ordered_diis_gram(
+        stream, matrix, history, rebase_readback.proposed_count, rebase_readback.proposed_head,
+        residual_history, raw_gram, &rebase_storage.transaction->ready, diis_work);
+    check(cudaGetLastError());
+    cuda_ks_detail::rebase_publish(stream, history, history_count, history_head, rebase_storage);
+    check(cudaGetLastError());
+  }
+
+  void publish_rebase_receipt() {
+    if (rebase_request != vv10_rebase::Request::On || rebase_receipt_published) return;
+    if (rebase_active) read_rebase_transaction();
+    const auto& work = rebase_readback.work;
+    std::fprintf(
+        stderr,
+        "GENERATIVEQC_VV10_REBASE_HISTORY {\"owner\":%llu,\"solve\":%llu,"
+        "\"request\":1,\"admission\":%u,\"allocated_bytes\":%zu,"
+        "\"density_writes\":%llu,\"snapshots\":%llu,\"successful_rebases\":%llu,"
+        "\"entries_transferred\":%llu,\"refusals\":%llu,\"last_error\":%u,"
+        "\"bank_anchor\":%llu,\"target_anchor\":%llu,\"metric\":1,"
+        "\"converged\":%d,\"failed\":%d}\n",
+        static_cast<unsigned long long>(owner), static_cast<unsigned long long>(solve_epoch),
+        static_cast<unsigned>(rebase_admission), rebase_layout ? rebase_layout->total_bytes : 0,
+        static_cast<unsigned long long>(work.density_writes),
+        static_cast<unsigned long long>(work.snapshots),
+        static_cast<unsigned long long>(work.successful_rebases),
+        static_cast<unsigned long long>(work.entries_transferred),
+        static_cast<unsigned long long>(work.refusals),
+        static_cast<unsigned>(rebase_readback.error),
+        static_cast<unsigned long long>(rebase_readback.bank_key.anchor),
+        static_cast<unsigned long long>(rebase_readback.target_key.anchor),
+        static_cast<int>(output.converged), static_cast<int>(is_failed));
+    rebase_receipt_published = true;
+  }
+
   /** Optional frozen AO storage must not displace a mandatory resource promise.
    * Pair keys and final rho/grad-rho exports retain independent storage; an
    * allocation miss keeps the original per-inner-step assembly. */
@@ -4215,6 +4431,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
         runtime::cuda_trace::trace_counter(damp ? "startup_damped_focks" : "startup_current_focks",
                                            1);
       } else {
+        if (rebase_active) {
+          cuda_ks_detail::rebase_record_density(stream, matrix, history, density, enabled,
+                                                history_count, history_head, rebase_key(),
+                                                rebase_storage);
+          check(cudaGetLastError());
+        }
         if (ordered_diis_gram) {
           launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock,
                                          history_residual, enabled, fock_history, residual_history,
@@ -4593,7 +4815,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         mixed_warmup.enter_refinement(mixed_stage, converged, output.iterations,
                                       options.max_iterations, physical.maximum_residual,
                                       pending_nonlocal_seed || pending_nonlocal_frozen);
+    bool bridge_selected = false;
     if (enter_strict_refinement) {
+      rebase_bank_pending = false;
       // FP32 is only a proposal accelerator. The bounded point-only history
       // exception cannot certify a physical iterate; ordinary AUTO still
       // clears history and every route retains the full FP64 refinement gate.
@@ -4622,6 +4846,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       output.converged = false;
       is_active = output.iterations < options.max_iterations;
       if (enter_nonlocal_target) {
+        snapshot_rebase_history(pending_nonlocal_seed);
         nonlocal_seed_stage = false;
         nonlocal_frozen_stage = false;
         nonlocal_exact_epoch_iterations = 0;
@@ -4647,6 +4872,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         nonlocal_inner_residual_tolerance = nonlocal_inner_tolerance(
             budget_stationarity || (standard_nonlocal_model && standard_convergence_active()),
             physical.maximum_residual, options.density_tolerance);
+        bridge_selected = rebase_bank_pending;
         // The just-computed target Fock is also the first exact Fock of this
         // fixed-potential inner problem. Retain that one valid DIIS entry.
       }
@@ -4756,6 +4982,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       final_fitted_projection_ready = final_occupied_factor_ready = false;
       throw;
     }
+    if (bridge_selected && is_active && !is_failed) commit_rebase_history();
+    rebase_bank_pending = vv10_rebase::retain_bank_after_finish(
+        rebase_bank_pending, enter_nonlocal_target, nonlocal_frozen_stage, nonlocal_outer_active,
+        is_active, is_failed, enter_strict_refinement);
     pending_incremental_delta = false;
     // An approximate energy cannot be the baseline of a strict stopping test.
     // The first FP64 observation starts a new energy epoch regardless of DIIS.
@@ -5339,6 +5569,7 @@ scf::ScfResult CudaKsPlan::result(bool export_density) {
   if (!impl_->started || impl_->is_active || impl_->is_pending)
     throw std::logic_error("CUDA KS result is not terminal");
   impl_->publish_diis_receipt();
+  impl_->publish_rebase_receipt();
   auto result = impl_->output;
   if (impl_->xc)
     result.dft_diagnostic.cuda_ao_selection.xc_evaluations =

@@ -44,7 +44,30 @@ inline void validate_ordered_gram_launch(dim3 grid, dim3 block, std::int32_t bat
     throw std::invalid_argument("ordered Gram history size exceeds addressable storage");
 }
 
+inline void validate_rebuild(std::size_t vector_size, unsigned capacity, unsigned count,
+                             unsigned head, const double* residual, double* cache,
+                             std::uint32_t* finite) {
+  const auto maximum = std::numeric_limits<std::size_t>::max() / sizeof(double);
+  if (!vector_size || capacity < 2 || capacity > 64 || count < 2 || count > capacity ||
+      head >= capacity || vector_size > maximum / capacity || !residual || !cache || !finite ||
+      residual == cache || static_cast<const void*>(residual) == finite ||
+      static_cast<const void*>(cache) == finite)
+    throw std::invalid_argument("invalid ordered Gram rebuild window or storage");
+}
+
 }  // namespace ordered_gram_admission
+
+/** Validation-bound complete ordered Gram transaction. The caller owns the
+ * proposed window and a sticky finite vote; this function never publishes the
+ * live ring. Uses the same raw physical-slot cache as ordinary insertion.
+ * Residual extent is capacity*vector_size doubles; cache is capacity^2 doubles.
+ * Residual/cache/vote must have disjoint complete extents. The host validator
+ * rejects overflow and exact aliases; partial nonoverlap is a caller contract. */
+void launch_rebuild_ordered_diis_gram(cudaStream_t stream, std::size_t vector_size,
+                                      unsigned capacity, unsigned proposed_count,
+                                      unsigned proposed_head, const double* residual_history,
+                                      double* raw_gram, std::uint32_t* finite,
+                                      tensor::RingGramWork* work = nullptr);
 
 /** Form deterministic block partials for the history including the current
  * residual, before its circular slot is overwritten. The caller lends
