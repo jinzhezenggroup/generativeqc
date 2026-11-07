@@ -73,6 +73,14 @@ def recurrence_owner(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
         np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")
     ]
     owner.evaluate_full.restype = ctypes.c_int
+    owner.evaluate_combined.argtypes = [
+        ctypes.c_uint,
+        ctypes.c_uint,
+        ctypes.c_double,
+        ctypes.c_double,
+        owner.evaluate_full.argtypes[-1],
+    ]
+    owner.evaluate_combined.restype = ctypes.c_int
     return owner
 
 
@@ -270,11 +278,86 @@ def test_full_simplex_overwrites_poison_without_initial_zero_stores(
     np.testing.assert_allclose(actual, expected, rtol=2e-10, atol=2e-11)
 
 
+@pytest.mark.parametrize("order", [0, 2, 3, 5, 6, 8, 9, 10, 12])
+@pytest.mark.parametrize("scale", [0.0, 0.17647058823529413, -0.7294117647058823, -1.0])
+@pytest.mark.parametrize("omega", [0.0, 0.3, 1e6])
+def test_combined_radial_roots_match_independent_interval_quadrature(
+    recurrence_owner: ctypes.CDLL, order: int, scale: float, omega: float
+) -> None:
+    """Signed and near-cancelling Full/LR roots feed every cell through ffff."""
+    count = math.comb(order + 4, 4)
+    actual = np.empty(count)
+    assert recurrence_owner.evaluate_combined(order, 1, omega, scale, actual) == count
+    nodes, weights = np.polynomial.legendre.leggauss(96)
+    points, weights = (nodes + 1) / 2, weights / 2
+    cutoff = omega / math.sqrt(omega * omega + 0.7)
+    argument = 0.7 * (0.19**2 + 0.27**2 + 0.11**2)
+    moments = [
+        np.dot(
+            weights,
+            (cutoff * points) ** (2 * degree)
+            * np.exp(-argument * (cutoff * points) ** 2),
+        )
+        * cutoff
+        + scale
+        * np.dot(weights, points ** (2 * degree) * np.exp(-argument * points**2))
+        for degree in range(order + 1)
+    ]
+    expected = [
+        (-1.4) ** degree * _oracle(first, second, third, moments[degree:])
+        for degree in range(order + 1)
+        for first in range(order - degree + 1)
+        for second in range(order - degree - first + 1)
+        for third in range(order - degree - first - second + 1)
+    ]
+    np.testing.assert_allclose(actual, expected, rtol=2e-10, atol=2e-11)
+
+
+@pytest.mark.parametrize(
+    "radial,scale", [(0, 1.0), (2, 1.0), (1, float("inf")), (1, float("nan"))]
+)
+def test_combined_radial_roots_refuse_unsupported_operator_or_coefficient(
+    recurrence_owner: ctypes.CDLL, radial: int, scale: float
+) -> None:
+    """A composite value producer must not silently become SR or non-finite."""
+    assert recurrence_owner.evaluate_combined(3, radial, 0.3, scale, np.empty(35)) == -1
+
+
 PROBE = r"""
 #include <cmath>
 #include <limits>
 #include "scf/cuda/coulomb_auxiliary.cuh"
 using namespace generativeqc::scf::cuda_execution;
+template<unsigned Order> int combined_simplex(unsigned radial, double omega, double scale,
+                                               double* output) {
+  CoulombAuxiliary<double, Order> auxiliary;
+  for (auto& value : auxiliary.data) value = std::numeric_limits<double>::quiet_NaN();
+  const Vec3<double> product{0.19,-0.27,0.11}, center{0,0,0};
+  if (!fill_range_coulomb<Order>(0.7, product, center,
+      static_cast<generativeqc::integrals::CoulombRange>(radial), omega, auxiliary, {}, scale))
+    return -1;
+  unsigned written = 0;
+  for (unsigned degree=0; degree<=Order; ++degree)
+    for (unsigned first=0; first+degree<=Order; ++first)
+      for (unsigned second=0; second+first+degree<=Order; ++second)
+        for (unsigned third=0; third+second+first+degree<=Order; ++third) {
+          const auto value = auxiliary.at(degree, first, second, third);
+          written += std::isfinite(value);
+          *output++ = value;
+        }
+  return static_cast<int>(written);
+}
+extern "C" int evaluate_combined(unsigned order, unsigned radial, double omega, double scale,
+                                  double* output) {
+  switch(order) {
+#define COMBINED_CASE(Order) case Order: return combined_simplex<Order>(radial,omega,scale,output)
+    COMBINED_CASE(0); COMBINED_CASE(1); COMBINED_CASE(2); COMBINED_CASE(3); COMBINED_CASE(4);
+    COMBINED_CASE(5); COMBINED_CASE(6); COMBINED_CASE(7); COMBINED_CASE(8); COMBINED_CASE(9);
+    COMBINED_CASE(10); COMBINED_CASE(11); COMBINED_CASE(12);
+#undef COMBINED_CASE
+  }
+  return -2;
+}
 template<unsigned Order> int full_simplex(double* out) {
   CoulombAuxiliary<Dual3, Order> jet_auxiliary;
   CoulombAuxiliary<double, Order> value_auxiliary;

@@ -321,6 +321,9 @@ void launch_canonical_pair_inverse(cudaStream_t, CanonicalBatch, const int*, con
                                    size_t, std::int32_t*) {
   throw std::logic_error("exact retry fixture dispatched an optional inverse");
 }
+generativeqc_status prepare_cuda_direct_jk_range_resident_values(
+    CudaDirectJkPlan*, std::size_t, std::uint32_t, FockOperator, double,
+    std::string&, double = 0.0);
 void launch_materialized_canonical_jk_kernel(
     cudaStream_t, CanonicalBatch, unsigned, CanonicalPairRows, size_t, size_t, size_t, size_t,
     bool, DirectCoulombRange, double, double, const double*, const double*, const std::uint8_t*,
@@ -332,7 +335,10 @@ void launch_canonical_jk_kernel(cudaStream_t, CanonicalBatch, int, int, unsigned
                                 size_t n, size_t, size_t m, bool same, bool, bool, bool,
                                 DirectCoulombRange, double, double, const double*, const double*,
                                 double*, double*, std::uint64_t*, double* target,
-                                double*, double*, size_t work_limit) {
+                                double*, double*, size_t work_limit,
+                                size_t work_begin = 0, double full_range_scale = 0.0) {
+  if(work_begin!=0 || full_range_scale!=0.0)
+    throw std::logic_error("exact retry fixture must not build a coefficient-bound source");
   size_t count = std::min(same ? n * (n + 1) / 2 : n * m, work_limit);
   for (size_t i = 0; i < count; ++i)
     target[i] = state.nan ? std::numeric_limits<double>::quiet_NaN() : double(i + 1);
