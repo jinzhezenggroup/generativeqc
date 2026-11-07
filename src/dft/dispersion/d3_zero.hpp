@@ -41,31 +41,14 @@ struct DampedInversePower {
   double derivative_over_distance{};
 };
 
-GENERATIVEQC_D3_ZERO_HD inline DampedInversePower damped_inverse_power(double r, double r2,
-                                                                       double scaled_r0,
-                                                                       double exponent, int power) {
-  using d3_detail::finite;
+template <int Power>
+GENERATIVEQC_D3_ZERO_HD inline DampedInversePower damped_inverse_power(double r, double scaled_r0,
+                                                                       double exponent) {
   if (!(r > 0.0) || !(scaled_r0 > 0.0) || !(exponent > 0.0)) return {};
-  const double ratio = scaled_r0 / r;
-  const double x = 6.0 * pow(ratio, exponent);
-  if (!finite(x)) {
-    // Here 1+x rounds to x. Scale the complete weighted result instead of
-    // rounding its tiny damping factor to zero before multiplying by r^-power.
-    // The derivative is scaled independently since it can outlive value underflow.
-    const double log_value =
-        -static_cast<double>(power) * log2(r) - log2(6.0) - exponent * (log2(scaled_r0) - log2(r));
-    const double factor = exponent - static_cast<double>(power);
-    const double radial =
-        factor == 0.0 ? 0.0 : copysign(exp2(log_value - log2(r2) + log2(fabs(factor))), factor);
-    return {exp2(log_value), radial};
-  }
-  const double damping = 1.0 / (1.0 + x);
-  double inverse = 1.0;
-  for (int i = 0; i < power; ++i) inverse /= r;
-  const double value = damping * inverse;
-  const double derivative_over_distance =
-      value / r2 * (exponent * (1.0 - damping) - static_cast<double>(power));
-  return {value, derivative_over_distance};
+  double output[2];
+  ::generativeqc::generated::dispersion::zero_damping(r, scaled_r0, exponent,
+                                                      static_cast<double>(Power), output);
+  return {output[0], output[1]};
 }
 
 }  // namespace d3_zero_detail
@@ -143,8 +126,8 @@ GENERATIVEQC_D3_ZERO_HD inline D3Status evaluate_d3_zero(std::size_t n, const st
       // which constructs its damping radius from sqrt(C8/C6).
       const double r0 = tables.pairs[pair_index(z[first], z[second])].vdw_radius;
       if (!(r0 > 0.0) || !finite(r0)) return D3Status::numerical_failure;
-      const auto term6 = damped_inverse_power(r, r2, parameters.rs6 * r0, parameters.alpha6, 6);
-      const auto term8 = damped_inverse_power(r, r2, parameters.rs8 * r0, alpha8, 8);
+      const auto term6 = damped_inverse_power<6>(r, parameters.rs6 * r0, parameters.alpha6);
+      const auto term8 = damped_inverse_power<8>(r, parameters.rs8 * r0, alpha8);
       if (!finite(term6.value) || !finite(term8.value) || !finite(term6.derivative_over_distance) ||
           !finite(term8.derivative_over_distance))
         return D3Status::numerical_failure;
@@ -156,15 +139,19 @@ GENERATIVEQC_D3_ZERO_HD inline D3Status evaluate_d3_zero(std::size_t n, const st
       double cutoff_derivative = 0.0;
       const double cutoff =
           smooth_cutoff(r, parameters.pair_cutoff, parameters.pair_switch_width, cutoff_derivative);
-      const double damping = cutoff * phi;
+      double damped[2];
+      double projected[1];
+      ::generativeqc::generated::dispersion::radial_scatter(r, cutoff_derivative, projected);
+      ::generativeqc::generated::dispersion::product_response(
+          phi, cutoff, phi_derivative_over_distance, projected[0], damped);
+      const double damping = damped[0];
       const double pair_energy = -c.c6 * damping;
       if (!finite(pair_energy)) return D3Status::numerical_failure;
       *energy += pair_energy;
       adjoints[first] += -c.first_cn * damping;
       adjoints[second] += -c.second_cn * damping;
       if (gradient) {
-        const double scale =
-            -c.c6 * (cutoff * phi_derivative_over_distance + cutoff_derivative * phi / r);
+        const double scale = -c.c6 * damped[1];
         add_pair_gradient(first, second, dx, dy, dz, scale, gradient);
       }
     }
@@ -182,11 +169,9 @@ GENERATIVEQC_D3_ZERO_HD inline D3Status evaluate_d3_zero(std::size_t n, const st
         const double r = sqrt(r2);
         const double radius = tables.elements[z[first] - 1].covalent_radius +
                               tables.elements[z[second] - 1].covalent_radius;
-        const double argument = 16.0 * (radius / r - 1.0);
-        const double e = exp(-fabs(argument));
-        const double logistic_derivative = e / ((1.0 + e) * (1.0 + e));
-        const double derivative = -16.0 * radius / r2 * logistic_derivative;
-        const double scale = (adjoints[first] + adjoints[second]) * derivative / r;
+        double coordination[2];
+        ::generativeqc::generated::dispersion::d3_coordination(r, radius, coordination);
+        const double scale = (adjoints[first] + adjoints[second]) * coordination[1];
         add_pair_gradient(first, second, dx, dy, dz, scale, gradient);
       }
     }

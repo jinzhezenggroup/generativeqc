@@ -2,7 +2,7 @@
 
 `src/dft/dispersion/d4_reference.hpp` retains the bounded CPU/device fixed-charge
 D4 baseline migrated from xTBloom. `src/dft/dispersion/d4_eeq.hpp` adds the
-generic molecular EEQ2019 charge provider, its analytic coordinate response,
+generic molecular EEQ2019 charge provider, its compiler-AD coordinate response,
 and a complete CPU/CUDA D4 gradient qualification endpoint. The handwritten
 complete composition in that header is qualification-only. Production is owned
 by `D4Plan`, the compiler-generated derivative lowering and the bounded runtime.
@@ -26,6 +26,18 @@ force = -dE/dR
 ```
 
 and publishes outputs only after the charge and response solves succeed.
+
+`generativeqc_compiler.geometry.dispersion_scalar` owns the scalar primal/AD
+programs for charge scaling, reference weights, damping, ATM edge/C6 responses,
+the saturated EEQ right-hand side and the error-function Coulomb matrix. Native
+code retains bounded LU factorization/response solves and sparse physical-atom
+scatter. The charge-RHS response differentiates the complete regularized primal
+`-chi + kcnchi*CN/sqrt(CN+1e-14)`, including its regularizer; it is prepared once
+per atom, not recomputed for each coordination pair.
+
+ATM responses use the physical energy sign and ordered `ij, ik, jk` edge/C6
+partials. GFN2's absolute-C6-product energy path uses a separate energy-only
+specialization; positive-C6 force admission is unchanged.
 
 ## Reference models and r2SCAN-3c
 

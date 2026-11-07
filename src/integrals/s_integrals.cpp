@@ -10,12 +10,15 @@
 #include <vector>
 
 #include "generated_eri_cpu.hpp"
+#include "generated_nuclear_repulsion.hpp"
 #include "generated_one_electron_st_cpu.hpp"
 #include "generated_stationary_cpu_derivative_dispatch.hpp"
 #include "integrals/ecp.hpp"
 #include "integrals/generated_df_cpu.hpp"
+#include "integrals/generated_scalar_ad.hpp"
 #include "integrals/range_moments.hpp"
 #include "molecule/basis.hpp"
+#include "molecule/nuclear_gradient.hpp"
 #include "posthf/raw_source.hpp"
 
 namespace generativeqc::integrals {
@@ -33,10 +36,9 @@ std::size_t checked_sum(std::size_t a, std::size_t b) {
   return a + b;
 }
 
-// Dynamic forward derivatives remain the structurally independent host reference
-// for raw integral validation and for families not yet promoted to generated CPU
-// production code.  Production s/p/d/f overlap/kinetic/nuclear-attraction instead
-// consumes the same compiler-owned mathematical DAG used by the CUDA one-electron lowering.
+// The dynamic recurrence interpreter remains structurally independent of the
+// unrolled integral DAG. Its scalar channels are compiler-differentiated too;
+// storage and recurrence traversal do not own a second set of chain rules.
 struct Jet {
   double value{};
   std::vector<double> derivative;
@@ -51,61 +53,51 @@ struct Jet {
   }
 };
 
+template <class Operation>
+Jet binary_operation(const Jet& a, const Jet& b) {
+  Jet out(Operation::primal(a.value, b.value), a.derivative.size());
+  if (!out.derivative.empty()) {
+    const Operation operation(a.value, b.value);
+    for (std::size_t coordinate = 0; coordinate < out.derivative.size(); ++coordinate) {
+      out.derivative[coordinate] =
+          operation.tangent(a.derivative[coordinate], b.derivative[coordinate]);
+    }
+  }
+  return out;
+}
+
+template <class Operation>
+Jet unary_operation(const Jet& input) {
+  Jet out(Operation::primal(input.value), input.derivative.size());
+  if (!out.derivative.empty()) {
+    const Operation operation(input.value);
+    for (std::size_t coordinate = 0; coordinate < out.derivative.size(); ++coordinate) {
+      out.derivative[coordinate] = operation.tangent(input.derivative[coordinate]);
+    }
+  }
+  return out;
+}
+
 Jet operator+(const Jet& a, const Jet& b) {
-  Jet out(a.value + b.value, a.derivative.size());
-  for (std::size_t i = 0; i < out.derivative.size(); ++i) {
-    out.derivative[i] = a.derivative[i] + b.derivative[i];
-  }
-  return out;
+  return binary_operation<generated_scalar_ad::Add>(a, b);
 }
-
 Jet operator-(const Jet& a, const Jet& b) {
-  Jet out(a.value - b.value, a.derivative.size());
-  for (std::size_t i = 0; i < out.derivative.size(); ++i) {
-    out.derivative[i] = a.derivative[i] - b.derivative[i];
-  }
-  return out;
+  return binary_operation<generated_scalar_ad::Subtract>(a, b);
 }
-
 Jet operator*(const Jet& a, const Jet& b) {
-  Jet out(a.value * b.value, a.derivative.size());
-  for (std::size_t i = 0; i < out.derivative.size(); ++i) {
-    out.derivative[i] = a.derivative[i] * b.value + a.value * b.derivative[i];
-  }
-  return out;
+  return binary_operation<generated_scalar_ad::Multiply>(a, b);
 }
-
 Jet operator/(const Jet& a, const Jet& b) {
-  Jet out(a.value / b.value, a.derivative.size());
-  const double inverse_square = 1.0 / (b.value * b.value);
-  for (std::size_t i = 0; i < out.derivative.size(); ++i) {
-    out.derivative[i] = (a.derivative[i] * b.value - a.value * b.derivative[i]) * inverse_square;
-  }
-  return out;
+  return binary_operation<generated_scalar_ad::Divide>(a, b);
 }
 
 Jet operator*(double a, const Jet& b) { return Jet(a, b.derivative.size()) * b; }
 Jet operator/(const Jet& a, double b) { return a / Jet(b, a.derivative.size()); }
 Jet operator/(double a, const Jet& b) { return Jet(a, b.derivative.size()) / b; }
 
-Jet exp(const Jet& x) {
-  const double value = std::exp(x.value);
-  Jet out(value, x.derivative.size());
-  for (std::size_t i = 0; i < out.derivative.size(); ++i) {
-    out.derivative[i] = value * x.derivative[i];
-  }
-  return out;
-}
+Jet exp(const Jet& input) { return unary_operation<generated_scalar_ad::Exp>(input); }
 
-Jet sqrt(const Jet& x) {
-  const double value = std::sqrt(x.value);
-  Jet out(value, x.derivative.size());
-  const double factor = 0.5 / value;
-  for (std::size_t i = 0; i < out.derivative.size(); ++i) {
-    out.derivative[i] = factor * x.derivative[i];
-  }
-  return out;
-}
+Jet sqrt(const Jet& input) { return unary_operation<generated_scalar_ad::Sqrt>(input); }
 
 using Vec3 = std::array<Jet, 3>;
 
@@ -151,7 +143,8 @@ std::vector<Jet> boys_values(unsigned maximum_order, const Jet& argument) {
   for (unsigned n = 0; n <= maximum_order; ++n) {
     values[n].value = scalar[n];
     for (std::size_t coordinate = 0; coordinate < argument.derivative.size(); ++coordinate)
-      values[n].derivative[coordinate] = -scalar[n + 1] * argument.derivative[coordinate];
+      values[n].derivative[coordinate] =
+          generated_scalar_ad::moment_tangent(scalar[n + 1], argument.derivative[coordinate]);
   }
   return values;
 }
@@ -2241,21 +2234,24 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
     }
   }
 
-  Jet nuclear_repulsion(0.0, out.ncoord);
+  out.nuclear_repulsion = 0.0;
   for (std::size_t a = 0; a < system.atoms.size(); ++a) {
     for (std::size_t b = 0; b < a; ++b) {
-      nuclear_repulsion =
-          nuclear_repulsion +
-          static_cast<double>(system.atoms[a].ionic_charge() * system.atoms[b].ionic_charge()) /
-              sqrt(distance_squared(atom_coordinates[a], atom_coordinates[b]));
+      const auto& first = system.atoms[a];
+      const auto& second = system.atoms[b];
+      out.nuclear_repulsion += ::generativeqc::generated::nuclear_repulsion::energy(
+          static_cast<double>(first.ionic_charge()) * second.ionic_charge(),
+          first.position[0] - second.position[0], first.position[1] - second.position[1],
+          first.position[2] - second.position[2]);
     }
   }
+  out.nuclear_repulsion_derivative.assign(out.ncoord, 0.0);
+  if (include_derivatives)
+    molecule::add_nuclear_repulsion_gradient(system, out.nuclear_repulsion_derivative);
 
   unpack_jets(overlap, out.overlap, out.overlap_derivative, out.ncoord);
   unpack_jets(hcore, out.hcore, out.hcore_derivative, out.ncoord);
   if (include_eri && include_derivatives) unpack_jets(eri, out.eri, out.eri_derivative, out.ncoord);
-  out.nuclear_repulsion = nuclear_repulsion.value;
-  out.nuclear_repulsion_derivative = std::move(nuclear_repulsion.derivative);
   if (!system.ecp_terms.empty()) {
     auto cartesian = system;
     cartesian.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;

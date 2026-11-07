@@ -2,6 +2,6 @@
   "path": "src/dft/dispersion/gcp_r2scan3c.hpp",
   "role": "scientific",
   "subsystem": "gcp",
-  "reason": "Audited shared CPU/device r2SCAN-3c gCP overlap, pair energy and radial derivative mathematics with pinned H-Ar tables; independently checked against upstream and finite differences.",
+  "reason": "Shared CPU/device r2SCAN-3c adapter consumes generated Slater-overlap and pair-energy radial AD. Native pinned H-Ar lookup, pair prefactors, geometry, admission and physical scatter remain conservatively scientific; independent upstream and finite-difference gates are retained.",
   "regions": []
 }

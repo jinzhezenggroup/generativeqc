@@ -1,0 +1,304 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "endpoint",
+  "subject": "Production derivative AD retirement, source-matched CPU/CUDA endpoints",
+  "inputs_hash": "2a5f91789ca5bbf8bbe7f3bd1badc9a2a2aa2c5b29d7280c62709c03185f5db1",
+  "revision": "97c34eeb0eb1a0fdabfb24b5436f667149701f32",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": "b275c11e026da9ac024fe11becc60fe2408d0000d6bf5a4b9b10b0bc8ae26b16",
+    "schedule": null
+  },
+  "hash_reasons": {
+    "equation": "Multi-domain campaign: actual differentiated primals and independent oracles are retained in source.patch; no one equation owns the cohort",
+    "ir": "Several scalar, TensorIR and GeometryIR programs; no aggregate executable IR identity is asserted",
+    "schedule": "Multiple bounded native and generated schedules; exact source, build options, DSOs and recipe identities are retained separately"
+  },
+  "device": {
+    "cuda": "NVIDIA GeForce RTX 5090 on n1/n5",
+    "cpu": "local CPU reference/native endpoints"
+  },
+  "toolchain": {
+    "cpu": "GCC 11.4.0; Python 3.13.9; sccache 0.16.0",
+    "cuda": "CUDA 12.9.86; GCC 13.3; sm120; Python 3.13.12; sccache 0.16.0"
+  },
+  "settings": {
+    "source_dirty": true,
+    "cpu_also_measured": true,
+    "gpu_integral_aot": false,
+    "source_hash_identity": "SHA256 of decompressed source.patch.xz",
+    "stationary_aot_profiles": [
+      "lda_rks",
+      "lda_uks",
+      "pbe_rks",
+      "pbe_uks",
+      "pbe0_rks",
+      "pbe0_uks"
+    ],
+    "raw_timing_record": "samples.json.xz",
+    "uncertainty": "paired bootstrap only for randomized paired cohorts"
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": null,
+    "devices": "Scheduled GPU receipts and CPU source-matched workers retained in provenance.json"
+  },
+  "stages": {
+    "representation": {
+      "status": "pass",
+      "reason": null,
+      "scope": "Actual primal AD and independent numerical oracles; no relocated supplied derivative witness"
+    },
+    "source": {
+      "status": "pass",
+      "reason": null,
+      "scope": "Generated-source freshness and compiler/CUDA ownership gates"
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": null,
+      "scope": "Cached host/CUDA builds and six source-matched stationary DSOs"
+    },
+    "numerical": {
+      "status": "pass",
+      "reason": null,
+      "scope": "Independent scientific suites and all replayed endpoint block tolerances"
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": null,
+      "scope": "Complete retained lifecycle timings with numerical and semantic-work parity"
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "No new selector/default promotion; this is a source ownership migration"
+    }
+  },
+  "timings": [],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "not measured"
+  },
+  "residuals": {},
+  "block_errors": {
+    "gfn2_energy": {
+      "passed": true,
+      "atol": 5e-10,
+      "rtol": 0.0,
+      "max_absolute_error": 1.4210854715202004e-14,
+      "max_scaled_error": 2.8421709430404004e-05,
+      "rms_error": 4.0751890158766265e-15,
+      "shape": [
+        1560
+      ]
+    },
+    "gfn2_force": {
+      "passed": true,
+      "atol": 5e-09,
+      "rtol": 0.0,
+      "max_absolute_error": 3.247402347028583e-15,
+      "max_scaled_error": 6.494804694057166e-07,
+      "rms_error": 5.54171319422273e-16,
+      "shape": [
+        25740
+      ]
+    },
+    "nonlocal_energy": {
+      "passed": true,
+      "atol": 2e-10,
+      "rtol": 0.0,
+      "max_absolute_error": 1.7763568394002505e-15,
+      "max_scaled_error": 8.881784197001252e-06,
+      "rms_error": 2.794321064551206e-16,
+      "shape": [
+        1374
+      ]
+    },
+    "nonlocal_compacted_feature_error": {
+      "passed": true,
+      "atol": 2e-09,
+      "rtol": 0.0,
+      "max_absolute_error": 1.3877787807814457e-17,
+      "max_scaled_error": 6.9388939039072276e-09,
+      "rms_error": 4.1909061137339254e-18,
+      "shape": [
+        1170
+      ]
+    },
+    "nonlocal_features": {
+      "passed": true,
+      "atol": 2e-09,
+      "rtol": 1e-10,
+      "max_absolute_error": 5.551115123125783e-16,
+      "max_scaled_error": 2.732588162900365e-07,
+      "rms_error": 1.8869104072135597e-17,
+      "shape": [
+        78948
+      ]
+    },
+    "ks_cpu_density_response": {
+      "passed": true,
+      "atol": 2e-08,
+      "rtol": 2e-08,
+      "max_absolute_error": 1.8388068845354155e-15,
+      "max_scaled_error": 8.972901922452838e-08,
+      "rms_error": 1.8645847838292446e-16,
+      "shape": [
+        13068
+      ]
+    },
+    "ks_cpu_scf_energy": {
+      "passed": true,
+      "atol": 2e-09,
+      "rtol": 0.0,
+      "max_absolute_error": 3.552713678800501e-15,
+      "max_scaled_error": 1.7763568394002503e-06,
+      "rms_error": 1.831026719408895e-15,
+      "shape": [
+        72
+      ]
+    },
+    "ks_cpu_true_residual": {
+      "passed": true,
+      "atol": 1.01e-12,
+      "rtol": 0.0,
+      "max_absolute_error": 1.791894619992508e-16,
+      "max_scaled_error": 0.00017741530891014933,
+      "rms_error": 6.150501657703626e-17,
+      "shape": [
+        432
+      ]
+    },
+    "ks_cuda_density_response": {
+      "passed": true,
+      "atol": 2e-08,
+      "rtol": 2e-08,
+      "max_absolute_error": 2.3175905639050143e-15,
+      "max_scaled_error": 1.0894384915671931e-07,
+      "rms_error": 2.8743193309526297e-16,
+      "shape": [
+        13068
+      ]
+    },
+    "ks_cuda_scf_energy": {
+      "passed": true,
+      "atol": 2e-09,
+      "rtol": 0.0,
+      "max_absolute_error": 2.842170943040401e-14,
+      "max_scaled_error": 1.4210854715202002e-05,
+      "rms_error": 1.4266257867675778e-14,
+      "shape": [
+        72
+      ]
+    },
+    "ks_cuda_true_residual": {
+      "passed": true,
+      "atol": 1.01e-12,
+      "rtol": 0.0,
+      "max_absolute_error": 2.2421930049028365e-15,
+      "max_scaled_error": 0.0022199930741612244,
+      "rms_error": 8.359402960310892e-16,
+      "shape": [
+        432
+      ]
+    },
+    "ks_cuda_energy": {
+      "passed": true,
+      "atol": 2e-09,
+      "rtol": 0.0,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 2.1316282072803006e-05,
+      "rms_error": 1.1317580896615731e-14,
+      "shape": [
+        216
+      ]
+    },
+    "ks_cuda_force": {
+      "passed": true,
+      "atol": 2e-07,
+      "rtol": 0.0,
+      "max_absolute_error": 1.865174681370263e-14,
+      "max_scaled_error": 9.325873406851315e-08,
+      "rms_error": 3.96422437728833e-15,
+      "shape": [
+        1944
+      ]
+    },
+    "force_cpu_energy": {
+      "passed": true,
+      "atol": 2e-09,
+      "rtol": 0.0,
+      "max_absolute_error": 5.684341886080802e-14,
+      "max_scaled_error": 2.8421709430404004e-05,
+      "rms_error": 2.265580489993249e-14,
+      "shape": [
+        432
+      ]
+    },
+    "force_cpu_force": {
+      "passed": true,
+      "atol": 2e-07,
+      "rtol": 0.0,
+      "max_absolute_error": 3.4638958368304884e-14,
+      "max_scaled_error": 1.7319479184152442e-07,
+      "rms_error": 8.823559250366772e-15,
+      "shape": [
+        3888
+      ]
+    },
+    "classical_energy_parity": {
+      "passed": true,
+      "atol": 2e-10,
+      "rtol": 0.0,
+      "max_absolute_error": 3.3306690738754696e-16,
+      "max_scaled_error": 1.6653345369377348e-06,
+      "rms_error": 1.1148400770006623e-16,
+      "shape": [
+        72
+      ]
+    },
+    "classical_force_parity": {
+      "passed": true,
+      "atol": 2e-09,
+      "rtol": 0.0,
+      "max_absolute_error": 3.209238430557093e-17,
+      "max_scaled_error": 1.6046192152785466e-08,
+      "rms_error": 1.0031902358426324e-17,
+      "shape": [
+        72
+      ]
+    },
+    "classical_checksum": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0.0,
+      "max_absolute_error": 3.3858515990914384e-10,
+      "max_scaled_error": 0.033858515990914384,
+      "rms_error": 1.3481672448106576e-10,
+      "shape": [
+        72
+      ]
+    }
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Per-solve true residuals, iterations and operator work are retained; complete per-iteration traces were not captured for a formal performance promotion",
+  "attachments": [
+    {
+      "path": "samples.json.xz",
+      "sha256": "37b4c878d417a8e9dad353b590acedfcea8a7b0b8f580a27f235980f35fdedb5",
+      "kind": "complete endpoint timing and numerical/work samples"
+    }
+  ],
+  "performance": {
+    "status": "not-run",
+    "reason": "Formal selector-promotion assessment not run: descriptive no-regression cohorts attached, no universal significant speedup or complete memory/compile budget claim"
+  }
+}

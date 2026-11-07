@@ -4,6 +4,11 @@ import typing
 
 from generativeqc_compiler.common.array_execution import arrays as np
 from generativeqc_compiler.common.arrays import immutable
+from generativeqc_compiler.dft.ao_response_ad import (
+    matrix_jvp_callable,
+    spatial_panel_jvp_callable,
+    weighted_pair_jvp_callable,
+)
 
 from .coefficients import PackedCoefficientViews, coefficient_program
 
@@ -111,41 +116,40 @@ def assemble_coefficients_directional(
 
     phi, dphi = jets[0], directional_jets[0]
     derivatives, directional_derivatives = jets[1:4], directional_jets[1:4]
+    measure_jvp = weighted_pair_jvp_callable()
+    matrix_jvp = matrix_jvp_callable()
+    panel_jvp = spatial_panel_jvp_callable() if spatial is not None else None
     matrices = []
     for spin in range(len(rho)):
-        base_measure = weights * rho[spin]
-        moving_measure = directional_weights * rho[spin] + weights * drho[spin]
-        matrix = (
-            dphi.T @ (base_measure[:, None] * phi)
-            + phi.T @ (base_measure[:, None] * dphi)
-            + phi.T @ (moving_measure[:, None] * phi)
+        base_measure, moving_measure = measure_jvp(
+            weights, rho[spin], directional_weights, drho[spin]
         )
+        matrix = matrix_jvp(phi, base_measure, phi, dphi, moving_measure, dphi)
         if spatial is not None:
-            panel = sum(spatial[spin, :, k, None] * derivatives[k] for k in range(3))
-            directional_panel = sum(
-                directional_spatial[spin, :, k, None] * derivatives[k]
-                + spatial[spin, :, k, None] * directional_derivatives[k]
-                for k in range(3)
+            panel, directional_panel = panel_jvp(
+                *(spatial[spin, :, axis, None] for axis in range(3)),
+                *derivatives,
+                *(directional_spatial[spin, :, axis, None] for axis in range(3)),
+                *directional_derivatives,
             )
-            directional_cross = (
-                dphi.T @ (weights[:, None] * panel)
-                + phi.T @ (directional_weights[:, None] * panel)
-                + phi.T @ (weights[:, None] * directional_panel)
+            directional_cross = matrix_jvp(
+                phi, weights, panel, dphi, directional_weights, directional_panel
             )
             matrix += directional_cross + directional_cross.T
         if kinetic is not None:
-            base_kinetic = weights * kinetic[spin]
-            moving_kinetic = (
-                directional_weights * kinetic[spin]
-                + weights * directional_kinetic[spin]
+            base_kinetic, moving_kinetic = measure_jvp(
+                weights, kinetic[spin], directional_weights, directional_kinetic[spin]
             )
             for axis in range(3):
                 derivative = derivatives[axis]
                 moving_derivative = directional_derivatives[axis]
-                matrix += (
-                    moving_derivative.T @ (base_kinetic[:, None] * derivative)
-                    + derivative.T @ (base_kinetic[:, None] * moving_derivative)
-                    + derivative.T @ (moving_kinetic[:, None] * derivative)
+                matrix += matrix_jvp(
+                    derivative,
+                    base_kinetic,
+                    derivative,
+                    moving_derivative,
+                    moving_kinetic,
+                    moving_derivative,
                 )
         matrices.append(0.5 * (matrix + matrix.T))
     return immutable(matrices)

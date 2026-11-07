@@ -6,6 +6,8 @@ from generativeqc_compiler.integral.cuda import CudaEmitter
 from generativeqc_compiler.integral.expr import Graph
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
+from .density_bilinear_ad import density_axis_roots
+
 
 def emit_feature_policy(
     *, device: typing.Any = False, scalar_type: str = "double"
@@ -29,7 +31,7 @@ def emit_feature_policy(
     work = tuple(graph.variable(f"work[{i}]") for i in range(4))
     roots = (
         phi * work[0],
-        *(2 * d * work[0] for d in dp),
+        *(density_axis_roots(graph, axis) for axis in range(3)),
         sum((d * w / 2 for d, w in zip(dp, work[1:], strict=True)), graph.constant(0)),
     )
     lines.append(

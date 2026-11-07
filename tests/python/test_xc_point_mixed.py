@@ -23,7 +23,11 @@ def test_installed_fp32_point_headers_compile(native_cxx: Any, tmp_path: Path) -
             re.MULTILINE,
         )
     )
-    for relative in ("src/dft/xc_point.hpp", "src/dft/xc_point_mixed.hpp"):
+    for relative in (
+        "src/dft/xc_point.hpp",
+        "src/dft/generated_point_ad.hpp",
+        "src/dft/xc_point_mixed.hpp",
+    ):
         target = tmp_path / entries[relative]
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, target)

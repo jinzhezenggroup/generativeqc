@@ -8,6 +8,10 @@ loops can consume generated math without specializing one Program per molecule.
 
 from __future__ import annotations
 
+from fractions import Fraction
+
+from generativeqc_compiler.integral.expr import AlgebraForm, Graph
+from generativeqc_compiler.integral.scalar_python import polynomial_terms
 from generativeqc_compiler.tensor.ad_program import linearize
 from generativeqc_compiler.tensor.ir import (
     Node,
@@ -143,7 +147,12 @@ def build_gfn2_runtime_pair_kernel() -> Program:
 
 
 def build_gfn2_runtime_pair_cartesian_projection_program() -> Program:
-    """Project a generated radial derivative into one Cartesian adjoint."""
+    """AD of the Cartesian norm, reusing its already evaluated reciprocal.
+
+    GFN2's bounded positive-distance caller owns admission. Only after AD may
+    the reciprocal norm be bound to its cached value; the supplied radial
+    cotangent is linear and does not replace the norm's differentiation.
+    """
 
     parameter = TensorSpec((), role="input", differentiable=False)
     distance_derivative = input_tensor("distance_derivative", parameter)
@@ -153,14 +162,36 @@ def build_gfn2_runtime_pair_cartesian_projection_program() -> Program:
     dy = input_tensor("dy", parameter)
     dz = input_tensor("dz", parameter)
 
-    scale = multiply(radial_adjoint, distance_derivative)
-    scale = multiply(scale, inverse_distance)
+    graph = Graph()
+    coordinates = tuple(graph.variable(name) for name in ("dx", "dy", "dz"))
+    squared = graph.sum(coordinate * coordinate for coordinate in coordinates)
+    norm = squared.pow(Fraction(1, 2))
+    responses = tuple(
+        graph.differentiate(norm, coordinate) for coordinate in coordinates
+    )
+    responses = graph.replace_subexpressions(
+        responses, {squared.pow(Fraction(-1, 2)): graph.variable("inverse_distance")}
+    )
+    graph, responses = graph.apply_algebra_form(responses, AlgebraForm.FACTORED_NARY)
+    bindings = {"dx": dx, "dy": dy, "dz": dz, "inverse_distance": inverse_distance}
+    outputs = {}
+    for name, response in zip(("gx", "gy", "gz"), responses, strict=True):
+        terms = []
+        for coefficient, monomial in polynomial_terms(graph, response):
+            if len(monomial) != 2 or "inverse_distance" not in monomial:
+                raise ValueError("norm AD no longer admits cached radial projection")
+            term = multiply(radial_adjoint, distance_derivative)
+            if coefficient != 1:
+                term = multiply(constant(coefficient), term)
+            # Cached norm first retains the established bounded scaling order.
+            for field in sorted(
+                monomial, key=lambda field: field != "inverse_distance"
+            ):
+                term = multiply(term, bindings[field])
+            terms.append(term)
+        outputs[name] = add(*terms)
     return Program(
-        {
-            "gx": multiply(scale, dx),
-            "gy": multiply(scale, dy),
-            "gz": multiply(scale, dz),
-        },
+        outputs,
         provenance={
             "kind": "gfn2-runtime-pair-cartesian-projection",
             "version": GFN2_PAIR_RUNTIME_VERSION,
@@ -169,6 +200,6 @@ def build_gfn2_runtime_pair_cartesian_projection_program() -> Program:
                 ("distance",),
                 outputs=("coordination", "repulsion_energy"),
             ).derivative_hash,
-            "generation": "TensorIR radial chain-rule projection",
+            "generation": "Graph Cartesian norm AD and TensorIR radial cotangent",
         },
     )

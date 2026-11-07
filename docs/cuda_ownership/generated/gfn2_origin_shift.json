@@ -1,0 +1,6 @@
+{
+  "name": "gfn2_origin_shift",
+  "outputs": ["generated/generated_gfn2_sdq_native.hpp", "generated/generated_gfn2_sdq_cuda.cuh"],
+  "owner": "python/generativeqc_compiler/integral/gfn2_sdq_cpu.py",
+  "scope": "The shared GFN2 S/D/Q artifacts own primitive integrals plus ket-to-bra moment-origin translation and its Graph-differentiated weighted overlap/dipole/displacement pullback. Native spherical basis transforms, identity quadrupole-adjoint passthrough, traversal, screening, reduction, signs and publication remain. No full method performance promotion is implied."
+}

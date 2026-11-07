@@ -1,6 +1,4 @@
-#include <cmath>
-
-#include "scf/cuda/gaussian_geometry.cuh"
+#include "generated_nuclear_repulsion.hpp"
 #include "scf/cuda/nuclear_kernels.hpp"
 #include "scf/cuda/one_electron_export_kernels.hpp"
 
@@ -17,27 +15,36 @@ __global__ void build_cuda_nuclear_repulsion_kernel(DeviceBatch batch,
       derivative_coordinate < 0 ? derivative_coordinate
                                 : derivative_coordinate + batch.atom_offsets[system] * 3;
   if constexpr (Derivative) {
-    Dual result{0.0, 0.0};
+    if (system_derivative_coordinate < 0) {
+      nuclear_repulsion[system] = 0.0;
+      return;
+    }
+    double result = 0.0;
     for (std::int64_t first = batch.atom_offsets[system]; first < batch.atom_offsets[system + 1];
          ++first) {
-      const Vec3<Dual> a = atom_position<Dual>(batch, first, system_derivative_coordinate);
+      const double* a = batch.positions + 3 * first;
       for (std::int64_t second = batch.atom_offsets[system]; second < first; ++second) {
-        const Vec3<Dual> b = atom_position<Dual>(batch, second, system_derivative_coordinate);
-        result = result +
-                 static_cast<double>(batch.atomic_numbers[first] * batch.atomic_numbers[second]) /
-                     qsqrt(distance_squared(a, b));
+        const double* b = batch.positions + 3 * second;
+        double gradient[3];
+        ::generativeqc::generated::nuclear_repulsion::gradient(
+            static_cast<double>(batch.atomic_numbers[first]) * batch.atomic_numbers[second],
+            a[0] - b[0], a[1] - b[1], a[2] - b[2], gradient);
+        const auto atom = system_derivative_coordinate / 3;
+        if (atom == first) result += gradient[system_derivative_coordinate % 3];
+        if (atom == second) result -= gradient[system_derivative_coordinate % 3];
       }
     }
-    nuclear_repulsion[system] = result.derivative;
+    nuclear_repulsion[system] = result;
   } else {
     double result = 0.0;
     for (std::int64_t first = batch.atom_offsets[system]; first < batch.atom_offsets[system + 1];
          ++first) {
-      const Vec3<double> a = atom_position<double>(batch, first, -1);
+      const double* a = batch.positions + 3 * first;
       for (std::int64_t second = batch.atom_offsets[system]; second < first; ++second) {
-        const Vec3<double> b = atom_position<double>(batch, second, -1);
-        result += static_cast<double>(batch.atomic_numbers[first] * batch.atomic_numbers[second]) /
-                  sqrt(distance_squared(a, b));
+        const double* b = batch.positions + 3 * second;
+        result += ::generativeqc::generated::nuclear_repulsion::energy(
+            static_cast<double>(batch.atomic_numbers[first]) * batch.atomic_numbers[second],
+            a[0] - b[0], a[1] - b[1], a[2] - b[2]);
       }
     }
     nuclear_repulsion[system] = result;
@@ -51,11 +58,12 @@ __global__ void build_nuclear_repulsion_kernel(DeviceBatch batch, double* nuclea
   double result = 0.0;
   for (std::int64_t first = batch.atom_offsets[system]; first < batch.atom_offsets[system + 1];
        ++first) {
-    const Vec3<double> a = atom_position<double>(batch, first, -1);
+    const double* a = batch.positions + 3 * first;
     for (std::int64_t second = batch.atom_offsets[system]; second < first; ++second) {
-      const Vec3<double> b = atom_position<double>(batch, second, -1);
-      result += static_cast<double>(batch.atomic_numbers[first] * batch.atomic_numbers[second]) /
-                sqrt(distance_squared(a, b));
+      const double* b = batch.positions + 3 * second;
+      result += ::generativeqc::generated::nuclear_repulsion::energy(
+          static_cast<double>(batch.atomic_numbers[first]) * batch.atomic_numbers[second],
+          a[0] - b[0], a[1] - b[1], a[2] - b[2]);
     }
   }
   nuclear_repulsion[system] = result;
@@ -68,18 +76,21 @@ __global__ void nuclear_force_kernel(DeviceBatch batch, const std::uint8_t* acti
   const std::int64_t atom = coordinate / 3;
   const std::int32_t system = batch.atom_systems[atom];
   if (active[system] == 0) return;
-  Dual derivative{0.0, 0.0};
+  double derivative = 0.0;
   for (std::int64_t first = batch.atom_offsets[system]; first < batch.atom_offsets[system + 1];
        ++first) {
-    const Vec3<Dual> a = atom_position<Dual>(batch, first, coordinate);
+    const double* a = batch.positions + 3 * first;
     for (std::int64_t second = batch.atom_offsets[system]; second < first; ++second) {
-      const Vec3<Dual> b = atom_position<Dual>(batch, second, coordinate);
-      derivative = derivative +
-                   static_cast<double>(batch.atomic_numbers[first] * batch.atomic_numbers[second]) /
-                       qsqrt(distance_squared(a, b));
+      const double* b = batch.positions + 3 * second;
+      double gradient[3];
+      ::generativeqc::generated::nuclear_repulsion::gradient(
+          static_cast<double>(batch.atomic_numbers[first]) * batch.atomic_numbers[second],
+          a[0] - b[0], a[1] - b[1], a[2] - b[2], gradient);
+      if (atom == first) derivative += gradient[coordinate % 3];
+      if (atom == second) derivative -= gradient[coordinate % 3];
     }
   }
-  forces[coordinate] = -derivative.derivative;
+  forces[coordinate] = -derivative;
 }
 
 void launch_build_nuclear_repulsion_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

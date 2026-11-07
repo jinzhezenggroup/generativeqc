@@ -96,29 +96,38 @@ __device__ void compute_weights_atom(int atom, const std::int32_t* atomic_number
   for (int ref_index = 0; ref_index < element.reference_count; ++ref_index) {
     const auto reference = tables.references[element.reference_offset + ref_index];
     maximum_cn = fmax(maximum_cn, reference.coordination_number);
-    const double delta = coordination[atom] - reference.coordination_number;
     for (int gaussian = 1; gaussian <= reference.gaussian_count; ++gaussian) {
-      const double value = exp(-6.0 * gaussian * delta * delta);
-      norm += value;
-      norm_derivative -= 12.0 * gaussian * delta * value;
+      double values[2];
+      ::generativeqc::generated::dispersion::gaussian(coordination[atom],
+                                                      reference.coordination_number,
+                                                      6.0 * static_cast<double>(gaussian), values);
+      norm += values[0];
+      norm_derivative += values[1];
     }
   }
   const double inverse = norm > 1.4916681462400413e-154 ? 1.0 / norm : 0.0;
   for (int ref_index = 0; ref_index < element.reference_count; ++ref_index) {
     const auto reference = tables.references[element.reference_offset + ref_index];
-    const double delta = coordination[atom] - reference.coordination_number;
     double numerator = 0.0;
     double numerator_derivative = 0.0;
     for (int gaussian = 1; gaussian <= reference.gaussian_count; ++gaussian) {
-      const double value = exp(-6.0 * gaussian * delta * delta);
-      numerator += value;
-      numerator_derivative -= 12.0 * gaussian * delta * value;
+      double values[2];
+      ::generativeqc::generated::dispersion::gaussian(coordination[atom],
+                                                      reference.coordination_number,
+                                                      6.0 * static_cast<double>(gaussian), values);
+      numerator += values[0];
+      numerator_derivative += values[1];
     }
     const double gaussian_weight =
         inverse ? numerator * inverse
                 : (fabs(maximum_cn - reference.coordination_number) < 1.0e-12 ? 1.0 : 0.0);
-    const double gaussian_derivative =
-        inverse ? inverse * (numerator_derivative - numerator * norm_derivative * inverse) : 0.0;
+    double gaussian_derivative = 0.0;
+    if (inverse) {
+      double normalized[2];
+      ::generativeqc::generated::dispersion::normalize(numerator, norm, numerator_derivative,
+                                                       norm_derivative, normalized);
+      gaussian_derivative = normalized[1];
+    }
     double scale = 0.0;
     double scale_derivative = 0.0;
     d4_detail::charge_scale(parameters.ga, parameters.gc * element.hardness,
@@ -325,29 +334,20 @@ __global__ void atm_kernel(D4CudaBatch batch, D4Parameters parameters, D4Tables 
       continue;
     }
     const auto atm =
-        math::atm_terms(a, b, c, d4_detail::radius(first, second, z, tables, parameters),
-                        d4_detail::radius(first, third, z, tables, parameters),
-                        d4_detail::radius(second, third, z, tables, parameters), c12.c6, c13.c6,
-                        c23.c6, parameters.s9);
-    atomic_add_fp64(result.energies + 2 * system + 1, -atm.energy);
-    add_pair_gradient_atomic(first, second, first_second,
-                             d4_detail::atm_radial(a, c, b, atm.r5_product, atm.damping, atm.angle,
-                                                   atm.damping_derivative, atm.c9),
-                             gradient);
-    add_pair_gradient_atomic(first, third, first_third,
-                             d4_detail::atm_radial(b, c, a, atm.r5_product, atm.damping, atm.angle,
-                                                   atm.damping_derivative, atm.c9),
-                             gradient);
-    add_pair_gradient_atomic(second, third, second_third,
-                             d4_detail::atm_radial(c, b, a, atm.r5_product, atm.damping, atm.angle,
-                                                   atm.damping_derivative, atm.c9),
-                             gradient);
+        math::atm_response(a, b, c, d4_detail::radius(first, second, z, tables, parameters),
+                           d4_detail::radius(first, third, z, tables, parameters),
+                           d4_detail::radius(second, third, z, tables, parameters), c12.c6, c13.c6,
+                           c23.c6, parameters.s9);
+    atomic_add_fp64(result.energies + 2 * system + 1, atm.energy);
+    add_pair_gradient_atomic(first, second, first_second, atm.radial[0], gradient);
+    add_pair_gradient_atomic(first, third, first_third, atm.radial[1], gradient);
+    add_pair_gradient_atomic(second, third, second_third, atm.radial[2], gradient);
     atomic_add_fp64(coordination_adjoints + first,
-                    math::atm_cn_adjoint(atm.energy, c12.c6, c13.c6, c12.ci, c13.ci));
+                    atm.coefficient[0] * c12.ci + atm.coefficient[1] * c13.ci);
     atomic_add_fp64(coordination_adjoints + second,
-                    math::atm_cn_adjoint(atm.energy, c12.c6, c23.c6, c12.cj, c23.ci));
+                    atm.coefficient[0] * c12.cj + atm.coefficient[2] * c23.ci);
     atomic_add_fp64(coordination_adjoints + third,
-                    math::atm_cn_adjoint(atm.energy, c13.c6, c23.c6, c13.cj, c23.cj));
+                    atm.coefficient[1] * c13.cj + atm.coefficient[2] * c23.cj);
   }
 }
 
@@ -376,10 +376,11 @@ __global__ void coordination_response_kernel(D4CudaBatch batch, D4Parameters par
     double value = 0.0;
     double derivative = 0.0;
     d4_detail::cn_pair(first, second, z, tables, distance, value, derivative);
-    add_pair_gradient_atomic(
-        first, second, vector,
-        derivative * (coordination_adjoints[first] + coordination_adjoints[second]) / distance,
-        gradient);
+    double projected[1];
+    ::generativeqc::generated::dispersion::radial_scatter(
+        distance, derivative * (coordination_adjoints[first] + coordination_adjoints[second]),
+        projected);
+    add_pair_gradient_atomic(first, second, vector, projected[0], gradient);
   }
 }
 

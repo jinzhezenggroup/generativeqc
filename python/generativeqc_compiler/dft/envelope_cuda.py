@@ -1,10 +1,57 @@
 """Device lowering of the existing conservative pre-collocation AO domain.
 
-The independent Python oracle remains ``ao_region_envelopes``. This lowering
-bounds complete through-order jets from normalized packed contractions before
+The Python and CUDA bounds share the Gaussian AD coefficient operator. An
+independent test-only recurrence and sampled AO jets qualify coverage. This
+lowering bounds complete through-order jets from normalized contractions before
 any AO is sampled. Unsupported polynomial degrees and arithmetic overflow
 retain an AO; a loose region changes cost, never the omission criterion.
 """
+
+from .ao_axis import axis_bound_transitions
+
+
+def _bound_operator_cpp() -> str:
+    """Compress affine bands of the AD operator without runtime table loads.
+
+    Absolute monomial coefficients must be affine in the source degree over
+    each contiguous band. Verify that property for the entire bounded domain
+    before emitting it; neither the derivative factors nor offsets are supplied
+    independently of Gaussian AD.
+    """
+    columns = axis_bound_transitions(11)
+    bands: dict[tuple[int, int], dict[int, float]] = {}
+    for degree, column in enumerate(columns):
+        for target, factor, exponent in column:
+            bands.setdefault((target - degree, exponent), {})[degree] = factor
+    lines = []
+    for (offset, exponent), factors in sorted(bands.items()):
+        first, last = min(factors), max(factors)
+        if set(factors) != set(range(first, last + 1)):
+            raise ValueError("noncontiguous Gaussian AD bound band")
+        slope = (factors[last] - factors[first]) / (last - first) if last > first else 0
+        intercept = factors[first] - slope * first
+        if any(
+            intercept + slope * degree != factor for degree, factor in factors.items()
+        ):
+            raise ValueError("nonaffine Gaussian AD bound band")
+        factor = (
+            "double(degree)"
+            if slope == 1 and intercept == 0
+            else str(intercept)
+            if slope == 0
+            else f"({intercept} + {slope} * degree)"
+        )
+        for _ in range(exponent):
+            factor = f"ao_bound_multiply({factor}, alpha)"
+        target = f"degree + ({offset})"
+        condition = f"if (degree >= {first} && degree <= {last}) "
+        lines += [
+            "      " + condition + "{",
+            f"        following[{target}] = ao_bound_add(following[{target}],",
+            f"            ao_bound_multiply({factor}, coefficients[degree]));",
+            "      }",
+        ]
+    return "\n".join(lines)
 
 
 def emit_ao_region_screen_cuda() -> str:
@@ -38,12 +85,7 @@ __device__ double ao_region_axis_bound(int power, int derivative, double alpha,
   for (int order = 0; order < derivative; ++order) {
     double following[maximum_degree + 1]{};
     for (int degree = 0; degree <= power + order; ++degree) {
-      if (degree)
-        following[degree - 1] = ao_bound_add(
-            following[degree - 1], ao_bound_multiply(degree, coefficients[degree]));
-      following[degree + 1] = ao_bound_add(
-          following[degree + 1], ao_bound_multiply(
-              ao_bound_multiply(2.0, alpha), coefficients[degree]));
+@BOUND_OPERATOR@
     }
     for (int degree = 0; degree <= maximum_degree; ++degree)
       coefficients[degree] = following[degree];
@@ -200,4 +242,4 @@ __global__ void ao_region_compact_kernel(const unsigned* masks, size_t words,
   }
 }
 }  // namespace
-"""
+""".replace("@BOUND_OPERATOR@", _bound_operator_cpp())

@@ -1,0 +1,81 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "97c34eeb0eb1a0fdabfb24b5436f667149701f32",
+    "dirty": true
+  },
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/derivative-ad-20261108/replay.py"
+    ]
+  },
+  "decision": {
+    "scope": "numerical",
+    "status": "accepted",
+    "reason": "Independent scientific oracles and all complete endpoint numerical/work parity gates pass; descriptive performance cohorts are retained without asserting a formal default promotion"
+  },
+  "archives": [],
+  "files": [
+    {
+      "path": "source.patch.xz",
+      "role": "source-patch",
+      "sha256": "527accd56ea564cd7ae8b8a98e8a680bb0f109ebc6b6405e61177704992ad3f4",
+      "bytes": 126184
+    },
+    {
+      "path": "reproduction.patch.xz",
+      "role": "reproduction",
+      "sha256": "75a618e92b354e53115c9e200e420ebe0a9f890d2b73d1076b2ae19ddce392f3",
+      "bytes": 8240
+    },
+    {
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "37b4c878d417a8e9dad353b590acedfcea8a7b0b8f580a27f235980f35fdedb5",
+      "bytes": 211576
+    },
+    {
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "26c8cfc8c826553eda8a003086297e2f83ab0eb9823dc7a0e6bd7c544223b1ee",
+      "bytes": 21709
+    },
+    {
+      "path": "inputs.json",
+      "role": "input",
+      "sha256": "da9e9ce6efb3bb7a8d397fae5831e1f3603637bdd65b83c4500e8133f5694e83",
+      "bytes": 3620
+    },
+    {
+      "path": "provenance.json",
+      "role": "input",
+      "sha256": "564e62f1b2f5d3d302d2844513036cdcb7a8c993ea305ab1d53c22ddff549ef8",
+      "bytes": 38946
+    },
+    {
+      "path": "qualification.json",
+      "role": "summary",
+      "sha256": "1421501c3d398d5dfb18974c98405aa3dcdc2c78bfb4d3d74ff961675153bb57",
+      "bytes": 37790
+    },
+    {
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "d8e8d51ff1c6e2ce321ea8fba800afe0b67c170037a84a512f5aac5b2ef53ab8",
+      "bytes": 10760
+    },
+    {
+      "path": "replay.py",
+      "role": "reproduction",
+      "sha256": "e8c8f4bada50189e8f4f582d11cf436c2dfbbb8c297db34b87657bbb4295ed8d",
+      "bytes": 11645
+    },
+    {
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "e085f2bd5a092ed955db7797ccb799c7a778f9cb0664377c66c039c67aa4674a",
+      "bytes": 8707
+    }
+  ]
+}

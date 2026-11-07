@@ -370,8 +370,11 @@ CUDA_ALLOWED["cuda_direct_fock_lowering"] = ("scf/aot_shell_registry.hpp",)
 CUDA_EXACT_ALLOWED = {
     "cuda_df_runtime": ("tensor/cuda_square_linalg.hpp",),
     "cuda_direct_fock_lowering": ("scf/generated_shell_task.hpp",),
-    # Qualifier-only leaf permits the same numerical owner to lower on CPU.
-    "cuda_integral_numerics": ("integrals/execution_qualifiers.hpp",),
+    # Shared leaf arithmetic carries generated scalar AD, not integral traversal.
+    "cuda_integral_numerics": (
+        "integrals/execution_qualifiers.hpp",
+        "integrals/generated_scalar_ad.hpp",
+    ),
     # Generic rounded accumulation changes no compiler-owned spin/operator
     # equations. Admit this leaf only, not the broader runtime implementation.
     "cuda_direct_contractions": ("runtime/compensated_atomic.cuh",),

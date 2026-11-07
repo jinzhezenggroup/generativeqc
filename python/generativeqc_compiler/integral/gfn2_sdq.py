@@ -6,9 +6,10 @@ DAG with the ket polynomial raised by one or two Cartesian powers. Keeping that
 identity explicit lets the compiler own S/D/Q values and coordinate
 derivatives without introducing a second recurrence implementation.
 
-This module intentionally stops at one primitive Cartesian AO pair. Contracted
-basis coefficients, normalization, real-spherical transforms, ragged shell
-traversal, screening, and runtime publication remain backend/runtime policy.
+The same scalar algebra also owns the explicit ket-to-bra moment-origin
+translation and its pullback. Contracted basis coefficients, normalization,
+real-spherical transforms, ragged traversal, screening and publication remain
+backend/runtime policy.
 """
 
 from __future__ import annotations
@@ -50,6 +51,46 @@ _SECOND_MOMENT_RAISES = (
     (0, 1, 1),
     (0, 0, 2),
 )
+
+
+def build_gfn2_origin_shift() -> tuple[Graph, tuple[Expr, ...], tuple[Expr, ...]]:
+    """Return translated D/Q primals and the weighted S/D/displacement VJP.
+
+    Components are xx,xy,yy,xz,yz,zz, with the same traceless convention as
+    primitive moments. Quadrupole input adjoints are an identity passthrough
+    handled by the native contraction; only the nontrivial shift is returned.
+    """
+    graph = Graph()
+    overlap = graph.variable("overlap")
+    vector = tuple(graph.variable(f"vector_{axis}") for axis in AXES)
+    dipole = tuple(graph.variable(f"dipole_{axis}") for axis in AXES)
+    quadrupole = tuple(graph.variable(f"quadrupole_{index}") for index in range(6))
+    pairs = ((0, 0), (0, 1), (1, 1), (0, 2), (1, 2), (2, 2))
+    shifted_dipole = tuple(
+        dipole[index] + vector[index] * overlap for index in range(3)
+    )
+    shifts = tuple(
+        vector[first] * dipole[second]
+        + vector[second] * dipole[first]
+        + vector[first] * vector[second] * overlap
+        for first, second in pairs
+    )
+    trace = graph.sum(shifts[index] for index in (0, 2, 5))
+    shifted_quadrupole = tuple(
+        quadrupole[index] + 1.5 * shift - (0.5 * trace if first == second else 0)
+        for index, ((first, second), shift) in enumerate(
+            zip(pairs, shifts, strict=True)
+        )
+    )
+    roots = (*shifted_dipole, *shifted_quadrupole)
+    objective = graph.sum(
+        graph.variable(f"adjoint_{index}") * value for index, value in enumerate(roots)
+    )
+    pullback = tuple(
+        graph.differentiate(objective, variable)
+        for variable in (overlap, *dipole, *vector)
+    )
+    return graph, roots, pullback
 
 
 def _component_powers(component: str) -> tuple[int, int, int]:

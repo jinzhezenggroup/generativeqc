@@ -20,8 +20,8 @@ from generativeqc_compiler.common.array_execution import array_execution
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.method import StationaryHVPPlan, StationaryMeanField
+from generativeqc_compiler.method.nuclear_repulsion import nuclear_repulsion_hvp
 from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
-from generativeqc_compiler.method.stationary_grid_second import nuclear_repulsion_hvp
 from generativeqc_compiler.tensor import execute
 from generativeqc_compiler.xc.grid_response import partition_response
 from generativeqc_compiler.xc.potential import assemble_coefficients

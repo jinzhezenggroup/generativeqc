@@ -9,6 +9,6 @@
   "generated_capability": "generated fixed-density S/T/V first derivatives and public spherical weights with target-legal nucleus-cooperative scheduling",
   "missing_capability": "No missing S/T/V first-derivative formula or current production-performance capability. The generated nucleus-cooperative path is the sole CUDA force owner; the former native cooperative force exception and provider selector are retired. Independent validation remains in CPU/libcint/PySCF and explicit raw-derivative oracles.",
   "owner": "one_electron_derivatives",
-  "retirement_condition": "Completed for S/T/V force execution: generated derivatives own production and diagnostic schedules, while the legacy native force/reference family is removed. Nuclear repulsion remains a separately classified analytic term.",
+  "retirement_condition": "Completed for S/T/V force execution: generated derivatives own production and diagnostic schedules, while the legacy native force/reference family is removed. Nuclear repulsion is a separate compiler-AD scalar pair term; its changed native wrappers still require matching real-device endpoint qualification.",
   "status": "production"
 }

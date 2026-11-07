@@ -30,6 +30,7 @@ class PreparedCpuRangeExchange:
         _publish_source(path, source)
         names = (
             "integrals/execution_qualifiers.hpp",
+            "integrals/generated_scalar_ad.hpp",
             "integrals/range_moments.hpp",
             "integrals/range_exchange_runtime.hpp",
             "core/types.hpp",

@@ -1,0 +1,6 @@
+{
+  "path": "src/integrals/generated_scalar_ad.hpp",
+  "reason": "Packaged compiler output from integral.scalar_ad. Scalar Graph primals own binary/unary JVP schedules; Gaussian integrand AD and monomial integration own the radial-moment seed. Included conservatively in scientific accounting, not a handwritten derivative authority.",
+  "role": "scientific",
+  "subsystem": "direct_integrals"
+}

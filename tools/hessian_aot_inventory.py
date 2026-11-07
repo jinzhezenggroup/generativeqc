@@ -14,9 +14,9 @@ from typing import Any
 from generativeqc_compiler.integral.array_graph_cuda import emit_array_graph
 from generativeqc_compiler.integral.ecp_grid import harmonic_roots, radial_map_roots
 from generativeqc_compiler.integral.ecp_projector import radial_roots
+from generativeqc_compiler.method.nuclear_repulsion import nuclear_pair_program
 from generativeqc_compiler.method.spec import resolve_method
 from generativeqc_compiler.method.stationary_grid_second import (
-    _nuclear_pair_program,
     _pair_program,
 )
 from generativeqc_compiler.xc.coefficients import coefficient_program
@@ -67,7 +67,8 @@ def scalar_graph(name: str) -> tuple[Any, tuple]:
     if name == "vv10_pair":
         return _pair_program(resolve_method("WB97M-V").primitives[-1].spec)
     if name == "nuclear_pair_hvp":
-        return _nuclear_pair_program()
+        graph, roots = nuclear_pair_program()
+        return graph, roots[4:]
     if name.startswith("grid_mixed_"):
         program = grid_mixed_response_program(name.removeprefix("grid_mixed_"), 3)
         return program.graph, program.roots

@@ -13,11 +13,12 @@ import typing
 from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.cuda import CudaEmitter
-from generativeqc_compiler.integral.expr import AlgebraForm, Graph
+from generativeqc_compiler.integral.expr import AlgebraForm
 
 from ._generated_native_semilocal import SEMILOCAL_FAMILIES, SEMILOCAL_FAMILY_BY_CODE
 from ._generated_split_hybrid_consumers import SPLIT_HYBRID_POINT_CONSUMERS
 from .ao import jet_indices
+from .ao_axis import axis_expression
 from .feature_policy import emit_feature_policy
 from .grid_contraction import emit_grid_contraction
 from .spatial_xc_cuda import emit_spatial_xc_assembly, emit_spatial_xc_batches
@@ -683,16 +684,8 @@ __device__ inline DevicePointValue evaluate_semilocal_point(I functional, const 
   for (double derivative : raw.feature_derivative) out.valid = out.valid && isfinite(derivative);
   if (!out.valid) return out;
   if (total < tail_high) {
-    const double width = tail_high - tail_low;
-    const double x = (total - tail_low) / width;
-    const double x2 = x * x, x3 = x2 * x;
-    const double scale = x3 * (10.0 + x * (-15.0 + 6.0 * x));
-    const double dscale = 30.0 * x2 * (1.0 - x) * (1.0 - x) / width;
-    const double energy = raw.energy_density;
-    raw.energy_density *= scale;
-    raw.feature_derivative[0] = scale * raw.feature_derivative[0] + dscale * energy;
-    raw.feature_derivative[1] = scale * raw.feature_derivative[1] + dscale * energy;
-    for (I i = 2; i < 7; ++i) raw.feature_derivative[i] *= scale;
+    generativeqc::dft::point::detail::apply_r2scan_tail(
+        total, raw.energy_density, raw.feature_derivative);
   }
   out.energy = raw.energy_density;
   out.rho[0] = raw.feature_derivative[0];
@@ -1351,28 +1344,6 @@ def emit_grid_scientific_kernels(
     )
 
 
-def axis_expression(power: typing.Any, derivative: typing.Any) -> typing.Any:
-    """Return exp(+a*x*x) d^d[x^l exp(-a*x*x)] as a scalar polynomial.
-
-    Keeping the exponential outside avoids division by an underflowed radial
-    factor. Derivatives are ordinary spatial derivatives, without factorials.
-    """
-    if (
-        type(power) is not int
-        or type(derivative) is not int
-        or not (0 <= power <= 3 and 0 <= derivative <= 3)
-    ):
-        raise ValueError("AO axis domain is l,d in [0,3]")
-    graph = Graph()
-    x, a = graph.variable("x"), graph.variable("a")
-    root = graph.constant(1)
-    for _ in range(power):
-        root = root * x
-    for _ in range(derivative):
-        root = graph.differentiate(root, x) - 2 * a * x * root
-    return graph, root
-
-
 def emit_grid_policy() -> typing.Any:
     """Emit through-f/order-three AO factors and spin feature contractions.
 
@@ -1483,6 +1454,7 @@ def emit_grid_source(
             asset_path("src/runtime/residency_observer.hpp"),
             asset_path("src/dft/grid_task_view.cuh"),
             asset_path("src/dft/xc_point.hpp"),
+            asset_path("src/dft/generated_point_ad.hpp"),
             asset_path("src/dft/xc_point_mixed.hpp"),
             asset_path("src/dft/semilocal_family.hpp"),
             asset_path("src/dft/xc_capabilities.hpp"),
