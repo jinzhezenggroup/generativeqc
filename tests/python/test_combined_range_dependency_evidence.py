@@ -18,10 +18,26 @@ DIRECTORY = (
 
 @pytest.mark.parametrize(
     "corruption",
-    ["valid", "force", "work", "image", "selector", "timing", "source", "oracle"],
+    [
+        "valid",
+        "force",
+        "work",
+        "image",
+        "selector",
+        "timing",
+        "source",
+        "oracle",
+        "basis",
+        "charge",
+        "spin",
+        "warm_protocol",
+        "settings",
+        "missing_device",
+    ],
 )
+@pytest.mark.parametrize("optimized", [False, True])
 def test_integrated_default_gates_remain_active_under_optimized_python(
-    tmp_path: Path, corruption: str
+    tmp_path: Path, corruption: str, optimized: bool
 ) -> None:
     """Do not relabel the earlier pair or trade scientific work for a new default."""
     evidence = json.loads(
@@ -30,7 +46,19 @@ def test_integrated_default_gates_remain_active_under_optimized_python(
     population = evidence["devices"]["A100"]
     record = population["record"]
     sample = record["samples"][0]
-    if corruption == "force":
+    if corruption == "basis":
+        record["orbital_basis"] = "def2-TZVP"
+    elif corruption == "charge":
+        record["charge"] = 1
+    elif corruption == "spin":
+        record["spin"] = 2
+    elif corruption == "warm_protocol":
+        record["protocol"]["warm"] = "cross-owner pooled density"
+    elif corruption == "settings":
+        sample["settings"]["screening_tolerance"] = 1e-6
+    elif corruption == "missing_device":
+        del evidence["devices"]["RTX5090"]
+    elif corruption == "force":
         sample["forces"][0][0] += 1e-3
     elif corruption == "work":
         sample["ks_diagnostic"]["coulomb_exchange_work"]["exchange_applications"] *= 2
@@ -57,7 +85,7 @@ def test_integrated_default_gates_remain_active_under_optimized_python(
         f"reader['replay'](Path({str(tmp_path)!r}))"
     )
     result = subprocess.run(
-        [sys.executable, "-O", "-c", command],
+        [sys.executable, *(["-O"] if optimized else []), "-c", command],
         capture_output=True,
         text=True,
         timeout=30,

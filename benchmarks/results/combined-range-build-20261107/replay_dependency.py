@@ -88,6 +88,9 @@ def replay(directory: Path = DIRECTORY) -> dict:
             "mode",
             "atoms",
             "basis_representation",
+            "orbital_basis",
+            "charge",
+            "spin",
             "geometry_bohr",
             "protocol",
         ):

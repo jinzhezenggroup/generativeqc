@@ -178,9 +178,14 @@ def replay(
                 and record["basis_representation"] == "spherical",
                 "changed scientific problem",
             )
+            for key in ("geometry_bohr", "orbital_basis", "charge", "spin"):
+                require(
+                    record[key] == reference["cohort"][key],
+                    "changed independent scientific inputs",
+                )
             require(
-                record["geometry_bohr"] == reference["cohort"]["geometry_bohr"],
-                "wrong geometry",
+                record["protocol"] == previous_default["protocol"],
+                "changed cold/warm endpoint protocol",
             )
             require(
                 record["protocol"]["cold"]
@@ -211,7 +216,12 @@ def replay(
                 old["fock_builds"] == new["fock_builds"] == old["iterations"],
                 "changed Fock work",
             )
-            require(old["settings"] == new["settings"], "changed grids/convergence")
+            require(
+                old["settings"]
+                == new["settings"]
+                == previous_default["samples"][index]["settings"],
+                "changed grids/convergence",
+            )
             require(
                 old["ks_diagnostic"]["nonlocal_work"]
                 == new["ks_diagnostic"]["nonlocal_work"],
@@ -267,7 +277,7 @@ def replay(
             completed, previous = source_values(new), source_values(old)
             if phase == "cold":
                 require(
-                    completed > 0
+                    completed == 1873221716
                     and previous == (2 if device == "A100" else 1) * completed,
                     "duplicated or incomplete resident construction",
                 )

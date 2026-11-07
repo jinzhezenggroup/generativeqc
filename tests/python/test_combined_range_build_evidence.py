@@ -34,17 +34,46 @@ DIRECTORY = (
         "oracle",
         "master_source",
         "retained_receipt",
+        "basis",
+        "charge",
+        "spin",
+        "warm_protocol",
+        "paired_settings",
+        "paired_source_work",
+        "missing_device",
+        "infinite_baseline",
     ],
 )
+@pytest.mark.parametrize("optimized", [False, True])
 def test_combined_build_evidence_keeps_optimized_python_gates(
-    tmp_path: Path, corruption: str, evidence_name: str
+    tmp_path: Path, corruption: str, evidence_name: str, optimized: bool
 ) -> None:
     """A self-consistent archive must still pass the independently specified gates."""
     evidence = json.loads(lzma.decompress((DIRECTORY / evidence_name).read_bytes()))
     population = evidence["devices"]["A100"]
     candidate = population["records"]["default"]
     sample = candidate["samples"][0]
-    if corruption == "force":
+    if corruption == "basis":
+        candidate["orbital_basis"] = "def2-TZVP"
+    elif corruption == "charge":
+        candidate["charge"] = 1
+    elif corruption == "spin":
+        candidate["spin"] = 2
+    elif corruption == "warm_protocol":
+        candidate["protocol"]["warm"] = "cross-owner pooled density"
+    elif corruption == "paired_settings":
+        for record in population["records"].values():
+            record["samples"][0]["settings"]["screening_tolerance"] = 1e-6
+    elif corruption == "paired_source_work":
+        for record in population["records"].values():
+            for operator in record["samples"][0]["precision"]["operators"]:
+                if operator["name"] == "coulomb_recurrence":
+                    operator["count"] *= 2
+    elif corruption == "missing_device":
+        del evidence["devices"]["RTX5090"]
+    elif corruption == "infinite_baseline":
+        population["records"]["baseline"]["samples"][0]["seconds"] = float("inf")
+    elif corruption == "force":
         sample["forces"][0][0] += 1e-3
     elif corruption == "work":
         sample["ks_diagnostic"]["coulomb_exchange_work"]["exchange_applications"] *= 2
@@ -84,7 +113,7 @@ def test_combined_build_evidence_keeps_optimized_python_gates(
         f"reader['replay'](Path({str(tmp_path)!r}))"
     )
     result = subprocess.run(
-        [sys.executable, "-O", "-c", command],
+        [sys.executable, *(["-O"] if optimized else []), "-c", command],
         capture_output=True,
         text=True,
         check=False,
