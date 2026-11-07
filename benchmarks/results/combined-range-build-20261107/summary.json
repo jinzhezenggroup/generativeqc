@@ -1,0 +1,144 @@
+{
+  "master_synced": {
+    "image": {
+      "source_identity": "ea83781aafef1d8e4f8159033ce12f2aed096cb7aaeb07de397d71da32ee9a13",
+      "library_sha256": "e27f500d7bba457002cec893fb7762ee6a411a84846843525702082f4c97428f"
+    },
+    "fresh_reference_latency_ranking": false,
+    "devices": {
+      "RTX5090": {
+        "scheduler_job": 16640,
+        "samples": [
+          {
+            "phase": "cold",
+            "baseline_seconds": 178.99417331814766,
+            "default_seconds": 168.19824840128422,
+            "ratio": 0.9396856069852365,
+            "retained_prior_default_seconds": 178.61936957761645,
+            "paired_energy_error_per_atom": 3.789561257387201e-14,
+            "paired_max_force_error": 1.4797052472204086e-12,
+            "baseline_k_actions": 32,
+            "default_k_actions": 16,
+            "baseline_source_outputs": 1873221716,
+            "default_source_outputs": 1873221716
+          },
+          {
+            "phase": "warm",
+            "baseline_seconds": 13.645767319947481,
+            "default_seconds": 12.760090067982674,
+            "ratio": 0.9350950935041873,
+            "retained_prior_default_seconds": 13.624872297048569,
+            "paired_energy_error_per_atom": 3.789561257387201e-14,
+            "paired_max_force_error": 9.157119507108291e-13,
+            "baseline_k_actions": 2,
+            "default_k_actions": 1,
+            "baseline_source_outputs": 0,
+            "default_source_outputs": 0
+          }
+        ]
+      },
+      "A100": {
+        "scheduler_job": 226634,
+        "samples": [
+          {
+            "phase": "cold",
+            "baseline_seconds": 88.98027828335762,
+            "default_seconds": 83.33496180921793,
+            "ratio": 0.9365554189866412,
+            "retained_prior_default_seconds": 89.77635370194912,
+            "paired_energy_error_per_atom": 1.4210854715202004e-14,
+            "paired_max_force_error": 6.359357485052897e-13,
+            "baseline_k_actions": 16,
+            "default_k_actions": 16,
+            "baseline_source_outputs": 3746443432,
+            "default_source_outputs": 1873221716
+          },
+          {
+            "phase": "warm",
+            "baseline_seconds": 13.913736376911402,
+            "default_seconds": 13.918370828032494,
+            "ratio": 1.0003330845860199,
+            "retained_prior_default_seconds": 13.879518277943134,
+            "paired_energy_error_per_atom": 1.4210854715202004e-14,
+            "paired_max_force_error": 6.128431095930864e-13,
+            "baseline_k_actions": 1,
+            "default_k_actions": 1,
+            "baseline_source_outputs": 0,
+            "default_source_outputs": 0
+          }
+        ]
+      }
+    }
+  },
+  "pre_master": {
+    "image": {
+      "source_identity": "56034cd22620e5ded0fd231556609642ee7595cebfe34f98961ff9b3822bc478",
+      "library_sha256": "1c193f6ae50516613de16c2da1c5662d771b4edfd644e1256309f4e6cb1d37ff"
+    },
+    "fresh_reference_latency_ranking": false,
+    "devices": {
+      "RTX5090": {
+        "scheduler_job": 16639,
+        "samples": [
+          {
+            "phase": "cold",
+            "baseline_seconds": 178.69574144482613,
+            "default_seconds": 167.78762428835034,
+            "ratio": 0.9389570391086026,
+            "retained_prior_default_seconds": 178.61936957761645,
+            "paired_energy_error_per_atom": 3.789561257387201e-14,
+            "paired_max_force_error": 1.000088900582341e-12,
+            "baseline_k_actions": 32,
+            "default_k_actions": 16,
+            "baseline_source_outputs": 1873221716,
+            "default_source_outputs": 1873221716
+          },
+          {
+            "phase": "warm",
+            "baseline_seconds": 13.652371998876333,
+            "default_seconds": 12.69761522859335,
+            "ratio": 0.9300666015867745,
+            "retained_prior_default_seconds": 13.624872297048569,
+            "paired_energy_error_per_atom": 3.789561257387201e-14,
+            "paired_max_force_error": 8.064660050877137e-13,
+            "baseline_k_actions": 2,
+            "default_k_actions": 1,
+            "baseline_source_outputs": 0,
+            "default_source_outputs": 0
+          }
+        ]
+      },
+      "A100": {
+        "scheduler_job": 226550,
+        "samples": [
+          {
+            "phase": "cold",
+            "baseline_seconds": 89.08820504695177,
+            "default_seconds": 83.40113236755133,
+            "ratio": 0.9361635732092345,
+            "retained_prior_default_seconds": 89.77635370194912,
+            "paired_energy_error_per_atom": 2.3684757858670007e-14,
+            "paired_max_force_error": 7.478462293875054e-13,
+            "baseline_k_actions": 16,
+            "default_k_actions": 16,
+            "baseline_source_outputs": 3746443432,
+            "default_source_outputs": 1873221716
+          },
+          {
+            "phase": "warm",
+            "baseline_seconds": 13.842545058578253,
+            "default_seconds": 13.90349406003952,
+            "ratio": 1.004403019907347,
+            "retained_prior_default_seconds": 13.879518277943134,
+            "paired_energy_error_per_atom": 2.3684757858670007e-14,
+            "paired_max_force_error": 7.371880883511039e-13,
+            "baseline_k_actions": 1,
+            "default_k_actions": 1,
+            "baseline_source_outputs": 0,
+            "default_source_outputs": 0
+          }
+        ]
+      }
+    }
+  }
+}

@@ -58,10 +58,11 @@ def test_shared_force_grid_control_requires_registration() -> None:
     )
 
 
-def test_combined_range_source_requires_registration() -> None:
-    """The coefficient-bound K default retains a distinct rollback owner."""
+@pytest.mark.parametrize("suffix", ["SOURCE", "BUILD"])
+def test_combined_range_source_requires_registration(suffix: str) -> None:
+    """The coefficient-bound K and producer defaults retain rollback owners."""
     payload = _payload()
-    control = "ks-runtime:GENERATIVEQC_KS_COMBINED_RANGE_SOURCE"
+    control = f"ks-runtime:GENERATIVEQC_KS_COMBINED_RANGE_{suffix}"
     entry = next(entry for entry in payload["entries"] if control in entry["controls"])
     assert entry["classification"] == "already-default"
     payload["entries"] = [
