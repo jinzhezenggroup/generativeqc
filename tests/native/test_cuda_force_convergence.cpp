@@ -277,39 +277,45 @@ void check_direct_df_acceptance(unsigned spins) {
  * A manufactured stationary tail must retire deltas, reject a reconstructed
  * baseline, and require consecutive full evaluations. Neighbors retain their
  * own warm/coarse/invalid/inactive state, for both spin and density lifetimes. */
-void check_incremental_energy_refinement(unsigned spins, bool retain) {
+void check_incremental_energy_refinement(unsigned spins, bool retain, bool standard) {
   using namespace generativeqc::scf::cuda_execution;
-  constexpr unsigned batch = 8, basis_size = 16;
-  constexpr double tolerance = 1e-9;
+  constexpr unsigned batch = 10, basis_size = 16;
+  const double tolerance = standard ? 1e-5 : 1e-9;
+  const double energy_tolerance = standard ? 1e-9 : 1e-12;
+  const double physical_tolerance = standard && spins == 1 ? 1e-5 : std::min(1e-8, tolerance);
   const std::size_t matrix_size = basis_size * basis_size;
   const std::size_t vector_size = spins * matrix_size;
   const std::size_t total = batch * vector_size;
   const unsigned blocks = static_cast<unsigned>((total + 127) / 128);
   const double nan = std::numeric_limits<double>::quiet_NaN();
   std::vector<double> energies(batch, -1200.0), baselines(batch, -1200.0);
-  baselines[0] += 1e-8;
+  baselines[0] += 1e-6;
+  baselines[8] += 1e-6;
   energies[6] = nan;
   std::vector<double> residual(total, 0.0), proposal(total, 0.25 + 1e-12);
-  residual[4 * vector_size - 1] = 2 * tolerance;
+  residual[2 * vector_size - 1] = physical_tolerance / 2;
+  residual[4 * vector_size - 1] = 20 * physical_tolerance;
   residual[5 * vector_size - 1] = nan;
-  proposal.back() += 1e-6;
+  residual[9 * vector_size - 1] = physical_tolerance / 2;
+  residual[10 * vector_size - 1] = physical_tolerance / 2;
+  proposal[8 * vector_size - 1] += 20 * tolerance * std::sqrt(static_cast<double>(vector_size));
   Device<double> energy(energies), previous(baselines), physical(residual), next(proposal),
       density(std::vector<double>(total, 0.25)), change(std::vector<double>(batch, nan)),
       rms(std::vector<double>(batch, nan));
-  Device<std::uint8_t> active(std::vector<std::uint8_t>{1, 1, 1, 1, 0, 1, 1, 1}),
+  Device<std::uint8_t> active(std::vector<std::uint8_t>{1, 1, 1, 1, 0, 1, 1, 1, 1, 1}),
       converged(std::vector<std::uint8_t>(batch, 0)), full(std::vector<std::uint8_t>(batch, 0));
   Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 0)),
-      updates(std::vector<std::uint32_t>{2, 2, 0, 2, 2, 2, 2, 2}),
-      census(std::vector<std::uint32_t>{0, 0, 0, 0, 0, 1, 0, 0});
+      updates(std::vector<std::uint32_t>{2, 2, 0, 2, 2, 2, 2, 2, 0, 0}),
+      census(std::vector<std::uint32_t>{0, 0, 0, 0, 0, 1, 0, 0, 0, 0});
   Device<unsigned long long> full_count(std::vector<unsigned long long>(batch, 0)),
-      delta_count(std::vector<unsigned long long>{2, 2, 0, 2, 2, 2, 2, 2});
+      delta_count(std::vector<unsigned long long>{2, 2, 0, 2, 2, 2, 2, 2, 0, 2});
   const auto launch =
       spins == 1 ? launch_update_convergence_kernel : launch_update_uhf_convergence_kernel;
   const auto converge = [&] {
-    launch(retain, batch, 32, 0, nullptr, batch, basis_size, 1e-12, tolerance, true, energy.data,
-           previous.data, next.data, density.data, active.data, converged.data, iterations.data,
-           change.data, rms.data, physical.data, census.data, false, updates.data,
-           delta_count.data);
+    launch(retain, batch, 32, 0, nullptr, batch, basis_size, energy_tolerance, tolerance, true,
+           energy.data, previous.data, next.data, density.data, active.data, converged.data,
+           iterations.data, change.data, rms.data, physical.data, census.data, standard,
+           updates.data, delta_count.data);
     check(cudaGetLastError());
   };
   converge();
@@ -321,10 +327,14 @@ void check_incremental_energy_refinement(unsigned spins, bool retain) {
       !std::isinf(baseline_after[0]) || !std::isinf(baseline_after[1]) ||
       !(change.read()[0] > 1e-9))
     throw std::runtime_error("stationary delta tail retained a reconstructed energy baseline");
-  if (flags[2] != 1 || states[2] != 0 || states[3] != 2 || states[4] != 2 || states[5] != 2 ||
-      states[6] != 2 || states[7] != 2 || flags[3] || flags[4] || flags[6] || flags[7] ||
-      iterations.read()[4] != 0)
+  if (flags[2] != 1 || states[2] != kIncrementalDirectJkFullEnergyRefinement || states[3] != 2 ||
+      states[4] != 2 || states[5] != 2 || states[6] != 2 || states[7] != 2 || flags[3] ||
+      flags[4] || flags[6] || flags[7] || iterations.read()[4] != 0)
     throw std::runtime_error("full-energy fallback contaminated a neighboring item");
+  if (states[8] != kIncrementalDirectJkFullEnergyRefinement ||
+      states[9] != kIncrementalDirectJkFullEnergyRefinement || flags[8] || flags[9] ||
+      baseline_after[8] != energies[8] || baseline_after[9] != energies[9])
+    throw std::runtime_error("stationary full evaluation lost its usable energy baseline");
 
   const double full_provider_value = std::nextafter(1.0, 0.0);
   Device<double> hcore(std::vector<double>(batch * matrix_size, 0.5)),
@@ -364,6 +374,56 @@ void check_incremental_energy_refinement(unsigned spins, bool retain) {
     const bool expected_convergence = full_iteration == 2;
     if (flags[0] != expected_convergence || flags[1] != expected_convergence)
       throw std::runtime_error("fallback did not require two consecutive full Focks");
+    if (!flags[8] || !flags[9] || delta_count.read()[8] != 0 || delta_count.read()[9] != 2 ||
+        full_count.read()[8] != 1 || full_count.read()[9] != 1)
+      throw std::runtime_error("stationary full-energy tail introduced unnecessary delta work");
+  }
+}
+
+/** Near-stationary deltas retire before acceptance. Neither a full baseline nor
+ * full-only mode may turn the phase-selection margin into a stopping margin. */
+void check_incremental_approach(unsigned spins, bool standard, bool density_limited) {
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr unsigned batch = 3, basis_size = 8;
+  const double tolerance = standard ? 1e-5 : 1e-9;
+  const double energy_tolerance = standard ? 1e-9 : 1e-12;
+  const double physical_tolerance = standard && spins == 1 ? 1e-5 : std::min(1e-8, tolerance);
+  const std::size_t vector_size = spins * basis_size * basis_size;
+  std::vector<double> residual(batch * vector_size, 0.0);
+  std::vector<double> proposal(batch * vector_size, 0.25);
+  for (unsigned item = 0; item < batch; ++item) {
+    if (density_limited)
+      proposal[item * vector_size] += 5 * tolerance * std::sqrt(static_cast<double>(vector_size));
+    else
+      residual[item * vector_size] = 5 * physical_tolerance;
+  }
+  Device<double> energy(std::vector<double>(batch, -1200.0)),
+      previous(std::vector<double>(batch, -1200.0)), physical(residual), next(proposal),
+      density(std::vector<double>(batch * vector_size, 0.25)),
+      change(std::vector<double>(batch, 0.0)), rms(std::vector<double>(batch, 0.0));
+  Device<std::uint8_t> active(std::vector<std::uint8_t>(batch, 1)),
+      converged(std::vector<std::uint8_t>(batch, 0));
+  Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 0)),
+      updates(std::vector<std::uint32_t>{2, 0, 0});
+  Device<unsigned long long> delta_count(std::vector<unsigned long long>{2, 2, 0});
+  const auto launch =
+      spins == 1 ? launch_update_convergence_kernel : launch_update_uhf_convergence_kernel;
+  for (unsigned evaluation = 0; evaluation < 3; ++evaluation) {
+    const std::vector<double> unchanged_density(batch * vector_size, 0.25);
+    check(cudaMemcpy(density.data, unchanged_density.data(),
+                     unchanged_density.size() * sizeof(double), cudaMemcpyHostToDevice));
+    launch(false, batch, 32, 0, nullptr, batch, basis_size, energy_tolerance, tolerance, true,
+           energy.data, previous.data, next.data, density.data, active.data, converged.data,
+           iterations.data, change.data, rms.data, physical.data, nullptr, standard, updates.data,
+           delta_count.data);
+    check(cudaGetLastError());
+    if (updates.read() !=
+            std::vector<std::uint32_t>(batch, kIncrementalDirectJkFullEnergyRefinement) ||
+        converged.read() != std::vector<std::uint8_t>(batch, 0))
+      throw std::runtime_error("early full-only selection relaxed the physical acceptance gates");
+    if (evaluation == 0 && (!std::isinf(previous.read()[0]) || previous.read()[1] != -1200.0 ||
+                            previous.read()[2] != -1200.0))
+      throw std::runtime_error("early refinement confused full and delta energy baselines");
   }
 }
 }  // namespace
@@ -377,7 +437,13 @@ int main() {
         for (bool masked : {false, true})
           for (bool tiny : {false, true}) check_density_bounds(spins, threads, masked, tiny);
     for (unsigned spins : {1U, 2U})
-      for (bool retain : {false, true}) check_incremental_energy_refinement(spins, retain);
+      for (bool standard : {false, true})
+        for (bool density_limited : {false, true})
+          check_incremental_approach(spins, standard, density_limited);
+    for (unsigned spins : {1U, 2U})
+      for (bool retain : {false, true})
+        for (bool standard : {false, true})
+          check_incremental_energy_refinement(spins, retain, standard);
     for (unsigned spins : {1U, 2U}) check_direct_df_acceptance(spins);
     for (unsigned spins : {1U, 2U})
       for (bool retain : {false, true})

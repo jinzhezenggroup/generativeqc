@@ -3,6 +3,12 @@
 Status: implemented; experimental opt-in, not default promotion
 Date: 2026-10-15
 
+The later [ordinary-policy composition](2026-11-05-incremental-hf-convergence-composition.md)
+supersedes this note's screened-only admission and mandatory post-delta canonical
+finalization. It preserves fresh full-energy confirmation and adds qualified
+same-generation retention; historical measurements below describe this earlier
+implementation.
+
 ## Problem
 
 The [full-only warm repair](../performance/2026-10-15-incremental-full-only-warm-finalization.md)

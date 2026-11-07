@@ -1,0 +1,153 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Numerical and complete-endpoint qualification passes, but Standard 96-atom cold benefit is below the >2% default-promotion floor. Strong moved/strict gains do not replace the original cold-start question. The delivered HF controller stays opt-in; no formal production/performance acceptance is claimed.",
+    "scope": "performance",
+    "status": "rejected"
+  },
+  "files": [
+    {
+      "bytes": 4396,
+      "path": "source.patch.xz",
+      "role": "source-patch",
+      "sha256": "81bdeff1309dee2fab9b97d238f204a2e0ce12dc916f4515187dd17ed6c77bfa"
+    },
+    {
+      "bytes": 1756,
+      "path": "default-selection.patch.xz",
+      "role": "source-patch",
+      "sha256": "4dd7c37a87446c69af29cda55e2f94ffb925e8a96b0abe26f05d2aeb376d9777"
+    },
+    {
+      "bytes": 13671,
+      "path": "reproduction/default-candidate.py",
+      "role": "reproduction",
+      "sha256": "1aa395de3a43269fbaa4578bbf4436a8f85faca3364ba6d4f64310be78c5966e"
+    },
+    {
+      "bytes": 2399,
+      "path": "reproduction/reference-96atoms.py",
+      "role": "reproduction",
+      "sha256": "8e936cb715e594cc62052a9a3c0a1daa246557f18f803e9f5454e851093cdba9"
+    },
+    {
+      "bytes": 5520,
+      "path": "references/atoms96.json.xz",
+      "role": "input",
+      "sha256": "88754302a1ab3f8e9e974ba58e1ecda2efc2a579e6d3acf21131e0b063c6ba30"
+    },
+    {
+      "bytes": 23561,
+      "path": "references/inputs-96atoms.json",
+      "role": "input",
+      "sha256": "d8100de5d9af015d1d58a95e3ae011e58f3b8b111f917b238bcb302ede96366e"
+    },
+    {
+      "bytes": 838,
+      "path": "reference-reuse.json",
+      "role": "input",
+      "sha256": "e4c53bf8ab5e026490f94d9f162262c28debb0bfaa75982ffc1b4ee665faa4e5"
+    },
+    {
+      "bytes": 49624,
+      "path": "samples/final-optin/small-standard.json.xz",
+      "role": "samples",
+      "sha256": "c4cfa96430f257478b597dc8bff49474fab1c2f9e5985ea639940dbb9b0d4db5"
+    },
+    {
+      "bytes": 50196,
+      "path": "samples/final-optin/atoms96-standard.json.xz",
+      "role": "samples",
+      "sha256": "8b0061239b435e3730fa4de465652a90861d29f1a82f801b64c3052cfe5c0a0b"
+    },
+    {
+      "bytes": 50776,
+      "path": "samples/final-optin/small-strict.json.xz",
+      "role": "samples",
+      "sha256": "2a757b367f8f1c72a7330801ff2ed36a098781885f048d5930615ddb2b82da5d"
+    },
+    {
+      "bytes": 51160,
+      "path": "samples/final-optin/atoms96-strict.json.xz",
+      "role": "samples",
+      "sha256": "e217aa5d9788ccdfd4d4e168fa467481b82788f61a6af2e4ddcc6a973bdd8938"
+    },
+    {
+      "bytes": 36780,
+      "path": "samples/rejected-default-candidate/small-standard.json.xz",
+      "role": "samples",
+      "sha256": "2ce660d650b37ebbd5dbbe6341682b3287a0fbabbb32b5d5e19b1471d0de8e74"
+    },
+    {
+      "bytes": 37264,
+      "path": "samples/rejected-default-candidate/atoms96-standard.json.xz",
+      "role": "samples",
+      "sha256": "72ac2cd5aee29cfd43036473b0f6235c6ec36a81a43e12a6780607ccc57d8fff"
+    },
+    {
+      "bytes": 37392,
+      "path": "samples/rejected-default-candidate/small-strict.json.xz",
+      "role": "samples",
+      "sha256": "c81ffdf762dfa4dd8084f8038880a7e51e96173d14ff9da2f9c2503e326dd6dc"
+    },
+    {
+      "bytes": 37932,
+      "path": "samples/rejected-default-candidate/atoms96-strict.json.xz",
+      "role": "samples",
+      "sha256": "5aa308882262a80232efed924500ca2801b3823a104a7b73659564fe94c228f9"
+    },
+    {
+      "bytes": 2344,
+      "path": "cleanup.json.xz",
+      "role": "samples",
+      "sha256": "9600146d961d1e5896c9d23acdd2595cf166a26bd615e3baa46f623117bedb2a"
+    },
+    {
+      "bytes": 8308,
+      "path": "summary.json.xz",
+      "role": "summary",
+      "sha256": "cd4d0b0d1b8543a77aeb93478e6c57aaddea1dfecb7402be63556f906add391c"
+    },
+    {
+      "bytes": 13707,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "da2bbc05ec72be192fbcb6275b873d78442e9fbe1d71a287d2a5dd978d265cc6"
+    },
+    {
+      "bytes": 5770,
+      "path": "receipts.json",
+      "role": "summary",
+      "sha256": "8d35b48b7d16d34ae28e2f5879dd71cafd8b75973c8a11743b954c6be8263873"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=00:30:00",
+      "python",
+      "benchmarks/hf_incremental_direct_jk.py",
+      "--source-revision",
+      "ee9e454f33778489a1b5c3aa5ed95b6d6b44d182",
+      "--reference",
+      "benchmarks/results/hf-incremental-composition-20261105/references/atoms96.json.xz",
+      "--reference-scope",
+      "Retained independent full-density GPU4PySCF original/displaced E/F",
+      "--sizes",
+      "768",
+      "--repeats",
+      "6",
+      "--output",
+      ".artifacts/benchmarks/hf-incremental-96atoms"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "ee9e454f33778489a1b5c3aa5ed95b6d6b44d182"
+  }
+}

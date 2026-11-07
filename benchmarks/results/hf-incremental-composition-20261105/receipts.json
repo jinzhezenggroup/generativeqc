@@ -1,0 +1,139 @@
+{
+  "files": {
+    "optin-final-qualified/cache-after.txt": {
+      "bytes": 1166,
+      "sha256": "d96164e6fc7563160102381381caf1594e7640ce1dd44c741e4c60ee6a925edc"
+    },
+    "optin-final-qualified/memcheck-cuda_force_convergence.log": {
+      "bytes": 122,
+      "sha256": "c6d3657a077248a04895b779b11f3dc64332715be80f38090ddc5ac3f595caa0"
+    },
+    "optin-final-qualified/small-strict.log": {
+      "bytes": 543933,
+      "sha256": "b3c09937b9e223fc4047761602155c0244cfdf468fb550539f69452470508e97"
+    },
+    "optin-final-qualified/cache-server.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "optin-final-qualified/atoms96-standard.log": {
+      "bytes": 373271,
+      "sha256": "ffc4594c325cf985866f69565c6cb540b5d163f253cab9adbee3697d23fb7c39"
+    },
+    "optin-final-qualified/host-tests.log": {
+      "bytes": 99,
+      "sha256": "0649294f82cb126a772be76dedadab9eca50d9295dd6a4801518408bada76425"
+    },
+    "optin-final-qualified/small-standard.log": {
+      "bytes": 546297,
+      "sha256": "ceb2febc55db19e5c20281ca9fb7199643931a1268457a9f50875b5b95f8ecf2"
+    },
+    "optin-final-qualified/memcheck-incremental_direct_jk_cuda.log": {
+      "bytes": 2390,
+      "sha256": "2f6c093996f8d21ca3d29b96e4f5e792f9c7bc57c4f8c4d0f32762859e12ea5d"
+    },
+    "optin-final-qualified/cache-before.txt": {
+      "bytes": 1038,
+      "sha256": "1d3cf5485cf723d53564decde68ad08a6fc1e62851ecdeaeff6a5c671621ce5b"
+    },
+    "optin-final-qualified/native-tests.log": {
+      "bytes": 557,
+      "sha256": "8876ed5e86ecd9cb61e11b2f6674878645e6bba6e6a33bf95a94129f08b789f7"
+    },
+    "optin-final-qualified/cache-version.txt": {
+      "bytes": 15,
+      "sha256": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109"
+    },
+    "optin-final-qualified/exit-code.txt": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "optin-final-qualified/composition-tests.log": {
+      "bytes": 99,
+      "sha256": "2a5a5a05daf1622e1a23d622de72fdf471cd944a282ee13f31e64dda8ee16736"
+    },
+    "optin-final-qualified/atoms96-strict.log": {
+      "bytes": 372340,
+      "sha256": "d1ad79bea07ca119ed1495139989366b968caa7ff3b23c64a4fb454436f91b5d"
+    },
+    "build-optin-final-receipts/cache-after.txt": {
+      "bytes": 1206,
+      "sha256": "c1dd9d001320edb83c166e2b2ec4ee1dd24070d45cf60a1e65f7b2b9138fe362"
+    },
+    "build-optin-final-receipts/cache-server.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "build-optin-final-receipts/build.log": {
+      "bytes": 45976,
+      "sha256": "9affae226f75801205f3fb00c9f8de17214e4a1c785b16afb98086a8c5d2c5ff"
+    },
+    "build-optin-final-receipts/library.sha256": {
+      "bytes": 91,
+      "sha256": "20176ab74306c07d7a15a3cc7083adb261f44f4c3b176b09d154ff6f96315be5"
+    },
+    "build-optin-final-receipts/cache-before.txt": {
+      "bytes": 1038,
+      "sha256": "1d3cf5485cf723d53564decde68ad08a6fc1e62851ecdeaeff6a5c671621ce5b"
+    },
+    "build-optin-final-receipts/build-seconds.txt": {
+      "bytes": 2,
+      "sha256": "06e9d52c1720fca412803e3b07c4b228ff113e303f4c7ab94665319d832bbfb7"
+    },
+    "build-optin-final-receipts/cache-version.txt": {
+      "bytes": 15,
+      "sha256": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109"
+    },
+    "build-optin-final-receipts/exit-code.txt": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "build-optin-final-receipts/configure.log": {
+      "bytes": 939,
+      "sha256": "803bfbae83bd48244a7506827e89ebfa418d2e9dbfca9c655789174f563699c9"
+    },
+    "build-default-receipts/cache-after.txt": {
+      "bytes": 1936,
+      "sha256": "bb23af849d1693d3f772af8be91d7a8eca9ef8040728760bd5f4fe8b2f4b8d82"
+    },
+    "build-default-receipts/cache-server.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "build-default-receipts/build.log": {
+      "bytes": 924505,
+      "sha256": "947eb5e9231601201836a450fef59a10f6276a8746a556d5b907020b056cfd4b"
+    },
+    "build-default-receipts/library.sha256": {
+      "bytes": 91,
+      "sha256": "5c4cd4c94bc2a6d73ed58d5bf97bb918e9a1ec774a8816fb6b6c59bcc39089e7"
+    },
+    "build-default-receipts/cache-before.txt": {
+      "bytes": 1038,
+      "sha256": "1d3cf5485cf723d53564decde68ad08a6fc1e62851ecdeaeff6a5c671621ce5b"
+    },
+    "build-default-receipts/cache-version.txt": {
+      "bytes": 15,
+      "sha256": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109"
+    },
+    "build-default-receipts/exit-code.txt": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "build-default-receipts/configure.log": {
+      "bytes": 939,
+      "sha256": "803bfbae83bd48244a7506827e89ebfa418d2e9dbfca9c655789174f563699c9"
+    }
+  },
+  "native_suites": 3,
+  "live_cpu_reference_cases": 4,
+  "host_tests": 61,
+  "memcheck_errors": 0,
+  "failed_attempts": {
+    "15981": "Slow CPU reference cancelled before a measurement; not a timed native population.",
+    "15982": "GPU oracle postcheck initially omitted explicit molecule; repaired before accepted reference.",
+    "15995": "Native/CPU-oracle composition pass; stopped at missing compiler-cache runner selection.",
+    "15992": "DFT reference setup omitted CUDA shared-library path; no result.",
+    "16000": "DFT attempt failed before first complete endpoint: assigned GPU 4 already used about 31 GiB by unrelated processes. Finite Slurm audit 16002 confirms resource contention; no scheduler visibility override or other-user process modification."
+  }
+}

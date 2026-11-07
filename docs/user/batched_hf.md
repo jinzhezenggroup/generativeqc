@@ -48,6 +48,25 @@ batch lifetime, see [checkpoint/restart](checkpoint.md) and
 The backend diagnostic labels are `cpu_reference` and `cuda`.
 `hybrid_cuda` remains an older ABI value and is not reported by current runs.
 
+## Incremental Direct J/K
+
+Exact CUDA HF keeps full-density J/K by default. Set
+`GENERATIVEQC_INCREMENTAL_DIRECT_JK=1` before constructing the calculator to
+request experimental density-difference J/K; `=0` explicitly disables it.
+The selector changes the Fock-build schedule, not public
+energy/density tolerances or physical stationarity acceptance. After delta
+work the solver closes on two fresh full-density energies before publishing
+a retained physical Fock; screening and roundoff can still change the SCF
+trajectory. Cold and moved restarts may use deltas; an already stationary
+frozen warm restart needs only ordinary full-density verification.
+
+Inspect each result's `incremental_direct_jk` and `precision` diagnostics for
+actual full/delta/post-SCF work. An unavailable quartet census is not zero
+integral work. Resident storage remains optional with bounded direct
+recomputation as its fallback. See [HF force finalization](../developer/hf_force_finalization.md)
+for the scientific closure contract and `benchmarks/hf_incremental_direct_jk.py`
+for matched complete-endpoint qualification.
+
 ## Solver and fitting diagnostics
 
 CUDA uses a small-matrix eigensolver through 16 AOs, batched Jacobi for
