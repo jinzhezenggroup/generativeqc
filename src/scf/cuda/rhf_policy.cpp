@@ -8,6 +8,7 @@
 #include <limits>
 
 #include "generated_one_electron_derivative_policy.cuh"
+#include "scf/cuda/hf_bounded_page_policy.hpp"
 
 namespace generativeqc::scf::cuda_policy {
 
@@ -166,6 +167,13 @@ bool selected(const char* variable, const char* value) noexcept {
          (std::strcmp(selection, "1") == 0 || std::strcmp(selection, value) == 0);
 }
 
+DirectJkTuningProfile expanded_hf_direct_profile() noexcept {
+  DirectJkTuningProfile profile;
+  profile.bounded_streaming.maximum_task_capacity = 32U * 1024U * 1024U;
+  profile.bounded_streaming.maximum_arena_bytes = std::size_t{6} << 30;
+  return profile;
+}
+
 std::size_t resolve_target_memory_budget(std::size_t total_global_memory,
                                          std::size_t profile_ceiling, std::size_t unknown_fallback,
                                          std::size_t divisor) noexcept {
@@ -321,21 +329,41 @@ bool reuse_converged_fock_requested() noexcept {
 }
 
 DirectJkTuningProfile resolve_hf_direct_tuning_profile(bool physical_reference) noexcept {
-  DirectJkTuningProfile profile;
-  if (!physical_reference && selected("GENERATIVEQC_HF_COLD_SCREENING", "1")) {
-    profile.bounded_streaming.maximum_task_capacity = 32U * 1024U * 1024U;
-    profile.bounded_streaming.maximum_arena_bytes = std::size_t{6} << 30;
+  return !physical_reference && selected("GENERATIVEQC_HF_COLD_SCREENING", "1")
+             ? expanded_hf_direct_profile()
+             : DirectJkTuningProfile{};
+}
+
+DirectJkSchedulePolicy resolve_hf_bounded_page_policy(const runtime::CudaTargetInfo& target,
+                                                      const HfBoundedPageDomain& domain) noexcept {
+  auto profile = resolve_hf_direct_tuning_profile(domain.physical_reference);
+  const bool automatic = std::getenv("GENERATIVEQC_HF_COLD_SCREENING") == nullptr &&
+                         domain.nbf >= 512 && domain.systems == 1 &&
+                         domain.maximum_shell_angular <= 2 && domain.maximum_iterations >= 24 &&
+                         !domain.unrestricted && !domain.physical_reference &&
+                         !domain.mixed_precision && !domain.incremental_jk;
+  if (automatic) {
+    profile = expanded_hf_direct_profile();
   }
-  return profile;
+  auto policy = resolve_direct_jk_schedule_policy(target, profile);
+  // The generic schedule remains conservative for other consumers and custom
+  // profiles. Only this admitted HF owner may use the qualified larger fraction.
+  if (automatic && target.total_global_memory >= kLargeBoundedStreamingTargetBytes) {
+    policy.bounded_streaming.arena_maximum_bytes = resolve_target_memory_budget(
+        target.total_global_memory, profile.bounded_streaming.maximum_arena_bytes,
+        kUnknownTargetBoundedStreamingArenaBytes, kLargeBoundedStreamingArenaDeviceMemoryDivisor);
+  }
+  return policy;
 }
 
 ColdHfScreeningPolicy resolve_cold_hf_screening(const ColdHfScreeningDomain& domain,
                                                 double target_screening) noexcept {
   constexpr double cutoff = 8.0e-8;
+  const char* selection = std::getenv("GENERATIVEQC_HF_COLD_SCREENING");
   // Qualification covers large closed-shell through-d direct owners. Keep
   // small/batched/reference and seeded solves on their existing paths; never
   // consume a short user allowance with a proposal that needs a target tail.
-  if (!selected("GENERATIVEQC_HF_COLD_SCREENING", "1") || domain.nbf < 512 || domain.systems != 1 ||
+  if ((selection && std::strcmp(selection, "1") != 0) || domain.nbf < 512 || domain.systems != 1 ||
       domain.maximum_shell_angular > 2 || domain.maximum_iterations < 24 || !domain.first_setup ||
       domain.warm_seed || domain.unrestricted || domain.physical_reference ||
       !domain.bounded_quartet_direct || domain.persistent_eri || domain.resident_values ||
