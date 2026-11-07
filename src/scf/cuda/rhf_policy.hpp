@@ -12,7 +12,7 @@
 namespace generativeqc::scf::cuda_policy {
 
 /** Strict default-off control, resolved before graph admission. */
-enum class SharedRysXyRequest { Off, On, Invalid };
+enum class SharedRysXyRequest { Off, On, Invalid, WeightedZOn };
 enum class SharedRysXyAdmission {
   Off,
   Active,
@@ -36,12 +36,14 @@ struct SharedRysXyPolicy {
   SharedRysXyAdmission admission{SharedRysXyAdmission::Off};
   std::uint64_t class_mask{};
   bool active() const noexcept { return admission == SharedRysXyAdmission::Active; }
+  bool weighted_z() const noexcept { return request == SharedRysXyRequest::WeightedZOn; }
   bool selects(unsigned shell_class) const noexcept {
     return active() && shell_class < 64U && (class_mask & (std::uint64_t{1} << shell_class)) != 0U;
   }
   bool operator==(const SharedRysXyPolicy&) const = default;
 };
 SharedRysXyRequest parse_shared_rys_xy_request(const char* value) noexcept;
+SharedRysXyRequest parse_shared_rys_xy_request(const char* xy, const char* weighted_z) noexcept;
 SharedRysXyRequest shared_rys_xy_requested() noexcept;
 SharedRysXyPolicy resolve_shared_rys_xy_policy(SharedRysXyRequest request,
                                                const SharedRysXyContext& context) noexcept;

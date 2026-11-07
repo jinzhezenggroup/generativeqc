@@ -1357,17 +1357,21 @@ def emit_profile_shard(
 def emit_shared_rys_xy_fock_shard(
     profile: ResolvedProductionProfile,
     selections: Iterable[KernelSelection],
+    *,
+    weighted_z: bool = False,
 ) -> str:
     """Package the qualified arithmetic beside its primary owning class."""
     names = {item.spec.name for item in selections}
     companions = tuple(
         item
-        for item in shared_rys_xy_companions(profile)
+        for item in shared_rys_xy_companions(profile, weighted_z=weighted_z)
         if item.incumbent.spec.name in names
     )
     if not companions:
         return ""
-    identifier = _profile_identifier(profile.target.architecture) + "_shared_rys_xy"
+    identifier = _profile_identifier(profile.target.architecture) + (
+        "_shared_rys_weighted_z" if weighted_z else "_shared_rys_xy"
+    )
     body = [f"\nnamespace generativeqc::scf::generated::profile_{identifier} {{\n"]
     for companion in companions:
         item = companion.incumbent
