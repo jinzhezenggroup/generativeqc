@@ -118,6 +118,7 @@ def write_production_bundles(
             return (
                 emit_profile_shard(profile, unit)
                 + emit_shared_rys_xy_fock_shard(profile, unit)
+                + emit_shared_rys_xy_fock_shard(profile, unit, weighted_z=True)
                 + emit_profile_shard(profile, rys_alternatives, variant="_rys_value")
                 + emit_profile_shard(profile, k_block_alternatives, variant="_k_block")
                 + emit_profile_shard(

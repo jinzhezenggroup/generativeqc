@@ -391,6 +391,7 @@ def emit_registry_source(
         )
         resident_launch = f"return generativeqc_launch_ppps_resident({_resident_launch_argument_list()});"
     return f"""#include "generativeqc_generated_shell_registry.hpp"
+#include "scf/shared_rys_weighted_z.hpp"
 
 #include <cstdlib>
 #include <cstring>
@@ -509,6 +510,13 @@ cudaError_t launch_shell_class_shared_rys_xy_fock(
   return launch_shell_class_fock(shell_class, {_launch_argument_list()});
 }}
 
+std::uint64_t enabled_shared_rys_weighted_z_fock_shell_class_mask() noexcept {{ return 0; }}
+
+cudaError_t launch_shell_class_shared_rys_weighted_z_fock(
+    {_fock_launch_parameter_declaration()}) noexcept {{
+  return launch_shell_class_fock(shell_class, {_launch_argument_list()});
+}}
+
 cudaError_t launch_shell_class_mixed_fock(
     unsigned shell_class, cudaStream_t stream, bool unrestricted,
     unsigned worker_blocks, const void* tasks,
@@ -594,6 +602,16 @@ def emit_multi_registry_header(
                 f'    {{"{profile.target.architecture}", "{name}", '
                 f'"shared_rys_xy_fock", '
                 f'"generativeqc_launch_{identifier}_shared_rys_xy_generated_{name}_fock", '
+                f"{shell_class_index(companion.incumbent.spec)}U, "
+                f"{companion.plan.block_threads}U}},"
+            )
+        for companion in shared_rys_xy_companions(profile, weighted_z=True):
+            name = companion.incumbent.spec.name
+            identifier = _profile_identifier(profile.target.architecture)
+            companion_rows.append(
+                f'    {{"{profile.target.architecture}", "{name}", '
+                f'"shared_rys_weighted_z_fock", '
+                f'"generativeqc_launch_{identifier}_shared_rys_weighted_z_generated_{name}_fock", '
                 f"{shell_class_index(companion.incumbent.spec)}U, "
                 f"{companion.plan.block_threads}U}},"
             )
@@ -763,6 +781,8 @@ def emit_multi_registry_source(
         fock_cases = []
         shared_rys_xy_cases = []
         shared_rys_xy_mask = 0
+        shared_rys_weighted_z_cases = []
+        shared_rys_weighted_z_mask = 0
         mixed_fock_cases = []
         streaming_fock_cases = []
         work_streaming_fock_cases = []
@@ -799,6 +819,24 @@ def emit_multi_registry_source(
                 f"    case {shell_class}U:\n      return {symbol}({launch_arguments});"
             )
             shared_rys_xy_mask |= 1 << shell_class
+        for companion in shared_rys_xy_companions(profile, weighted_z=True):
+            shell_class = shell_class_index(companion.incumbent.spec)
+            symbol = (
+                f"generativeqc_launch_{identifier}_shared_rys_weighted_z_generated_"
+                f"{companion.incumbent.spec.name}_fock"
+            )
+            declarations.append(
+                f'extern "C" cudaError_t {symbol}('
+                "cudaStream_t, bool, unsigned, const void*, const std::uint32_t*, "
+                "const std::int64_t*, const void*, const double*, const void*, "
+                "double, const double*, const double*, "
+                "generativeqc::runtime::CompensatedOutput, "
+                "const std::uint32_t*, std::uint32_t*);"
+            )
+            shared_rys_weighted_z_cases.append(
+                f"    case {shell_class}U:\n      return {symbol}({launch_arguments});"
+            )
+            shared_rys_weighted_z_mask |= 1 << shell_class
         for candidate in direct_rys_task_candidates(profile):
             shell_class = shell_class_index(candidate.spec)
             symbol = (
@@ -1016,6 +1054,13 @@ cudaError_t launch_{identifier}_shared_rys_xy_fock({fock_launch_parameters}) noe
   }}
 }}
 
+cudaError_t launch_{identifier}_shared_rys_weighted_z_fock({fock_launch_parameters}) noexcept {{
+  switch (shell_class) {{
+{chr(10).join(shared_rys_weighted_z_cases)}
+    default: return cudaErrorNotSupported;
+  }}
+}}
+
 cudaError_t launch_{identifier}_mixed_fock({fock_launch_parameters}) noexcept {{
   switch (shell_class) {{
 {chr(10).join(mixed_fock_cases)}
@@ -1101,12 +1146,13 @@ constexpr std::array<ShellKernelMetadata, {len(mixed_fock_names)}> kMixedFockNam
       UINT64_C({preferred_streaming_fock_mask}),
       UINT64_C({rys_fock_mask}), UINT64_C({k_block_fock_mask}),
       UINT64_C({rys_task_fock_mask}), UINT64_C({preferred_rys_task_fock_mask}),
-      UINT64_C({shared_rys_xy_mask}),
+      UINT64_C({shared_rys_xy_mask}), UINT64_C({shared_rys_weighted_z_mask}),
       kForceNames{index}.data(), kForceNames{index}.size(),
       kFockNames{index}.data(), kFockNames{index}.size(),
       kMixedFockNames{index}.data(), kMixedFockNames{index}.size(),
       launch_{identifier}_force, launch_{identifier}_fock,
       launch_{identifier}_shared_rys_xy_fock,
+      launch_{identifier}_shared_rys_weighted_z_fock,
       launch_{identifier}_mixed_fock,
       launch_{identifier}_streaming_fock,
       launch_{identifier}_work_streaming_fock,
@@ -1117,6 +1163,7 @@ constexpr std::array<ShellKernelMetadata, {len(mixed_fock_names)}> kMixedFockNam
       launch_{identifier}_resident}},"""
         )
     return f"""#include "generativeqc_generated_shell_registry.hpp"
+#include "scf/shared_rys_weighted_z.hpp"
 
 #include <array>
 #include <cstdlib>
@@ -1145,6 +1192,7 @@ struct KernelSet {{
   std::uint64_t rys_task_fock_mask;
   std::uint64_t preferred_rys_task_fock_mask;
   std::uint64_t shared_rys_xy_fock_mask;
+  std::uint64_t shared_rys_weighted_z_fock_mask;
   const ShellKernelMetadata* force_names;
   std::size_t force_name_count;
   const ShellKernelMetadata* fock_names;
@@ -1154,6 +1202,7 @@ struct KernelSet {{
   LaunchFunction launch_force;
   FockLaunchFunction launch_fock;
   FockLaunchFunction launch_shared_rys_xy_fock;
+  FockLaunchFunction launch_shared_rys_weighted_z_fock;
   FockLaunchFunction launch_mixed_fock;
   StreamingFockLaunchFunction launch_streaming_fock;
   StreamingFockLaunchFunction launch_work_streaming_fock;
@@ -1282,6 +1331,12 @@ std::uint64_t enabled_shared_rys_xy_fock_shell_class_mask() noexcept {{
       : kernels->shared_rys_xy_fock_mask & enabled_fock_shell_class_mask();
 }}
 
+std::uint64_t enabled_shared_rys_weighted_z_fock_shell_class_mask() noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr ? 0
+      : kernels->shared_rys_weighted_z_fock_mask & enabled_fock_shell_class_mask();
+}}
+
 std::uint64_t enabled_rys_fock_shell_class_mask() noexcept {{
   const KernelSet* kernels = current_kernel_set();
   // Disabling an incumbent class disables its alternative as well. Optional
@@ -1354,6 +1409,19 @@ cudaError_t launch_shell_class_shared_rys_xy_fock(
     return launch_shell_class_fock(shell_class, {launch_arguments});
   }}
   return kernels->launch_shared_rys_xy_fock(shell_class, {launch_arguments});
+}}
+
+cudaError_t launch_shell_class_shared_rys_weighted_z_fock(
+    {_fock_launch_parameter_declaration()}) noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  // All refusal occurs before enqueue. A candidate launch error is returned
+  // directly: retrying the incumbent could double-add a partial Fock.
+  if (kernels == nullptr || unrestricted || output.correction != nullptr ||
+      shell_class >= 64U ||
+      (kernels->shared_rys_weighted_z_fock_mask & (UINT64_C(1) << shell_class)) == 0U) {{
+    return launch_shell_class_fock(shell_class, {launch_arguments});
+  }}
+  return kernels->launch_shared_rys_weighted_z_fock(shell_class, {launch_arguments});
 }}
 
 cudaError_t launch_shell_class_mixed_fock(
