@@ -226,6 +226,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda/resources.cpp
       src/scf/cuda/matrix_library.cpp
       src/tensor/cuda_matrix_product.cpp
+      src/tensor/cuda_dense_operations.cu
       src/scf/cuda/runtime_support.cpp
       src/scf/cuda/scf_state_kernels.cu
       src/scf/cuda/scf_matrix_kernels.cu

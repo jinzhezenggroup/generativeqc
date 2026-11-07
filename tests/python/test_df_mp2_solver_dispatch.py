@@ -206,7 +206,8 @@ int probe() {
     hf::RHFFrameResponseOptions frame_options;
     DFCorrelationDemand demand{false,kMp2Component};
     const std::size_t retained_host_bytes=17;
-    bool df_auxiliary_reduction=true,df_matrix_gemm=true,lambda_matrix_gemm=true;
+    bool df_auxiliary_reduction=true;
+    const cc::DFContractionQualification qualification;
     std::size_t lambda_batch_limit=7,ccsd_batch_limit=11,lambda_true_residual_interval=30;
     bool derived_denominators=true,packed_diis=false,parallel_gap_reduction=true;
     bool lambda_core_reuse=true,lambda_audit_matrix=true,lambda_primal_matrix=true;

@@ -12,15 +12,6 @@
         "cublasDaxpy": 1
       }
     },
-    "python/generativeqc_compiler/method/df_occupied_response_cuda.py": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Occupied DF response borrows shared Tensor column GEMM views; its symmetric metric Gram retains direct SYRK and GEMM fallback pending canonical lowering.",
-      "references": {
-        "cublasDgemm": 1,
-        "cublasDsyrk": 2
-      }
-    },
     "python/generativeqc_compiler/tensor/cuda_emit.py": {
       "classification": "provider",
       "contract": "python/generativeqc_compiler/tensor/ir.py",
@@ -30,24 +21,6 @@
         "cub::BlockReduce": 1,
         "cublasGetProperty": 3,
         "cublasSetMathMode": 1
-      }
-    },
-    "src/api/c_api_fock.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Public prepared Fock/response adapter still owns direct dense contractions and vector algebra; migrate through shared semantic operations.",
-      "references": {
-        "cublasCreate": 2,
-        "cublasDaxpy": 14,
-        "cublasDcopy": 7,
-        "cublasDdot": 2,
-        "cublasDestroy": 4,
-        "cublasDgeam": 1,
-        "cublasDgemm": 29,
-        "cublasDnrm2": 2,
-        "cublasDscal": 4,
-        "cublasSetPointerMode": 2,
-        "cublasSetStream": 2
       }
     },
     "src/runtime/nvidia_host_api/generativeqc_nvidia_host_api.h": {
@@ -93,17 +66,17 @@
       }
     },
     "src/scf/cuda/eigensolver.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Ordinary DFT/KS solves now use a canonical prepared binding with queried cuSOLVER provenance. RHF and DF launch_solver selectors remain migration debt; classification stays partial.",
+      "classification": "provider",
+      "contract": "src/scf/cuda/eigensolver.hpp",
+      "reason": "Reusable eigensystem execution and preparation adapter over shared symmetric-eigen handles/providers. The only direct vendor symbols query linked cuSOLVER version provenance for canonical lowering; no HF/DFT functional, occupation or precision policy is selected here.",
       "references": {
         "cusolverGetProperty": 3
       }
     },
     "src/scf/cuda/matrix_library.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Reusable adapters are retained, but upstream implementation selectors and exact-stack policy still need canonical binding integration; do not whitelist them solely by filename.",
+      "classification": "provider",
+      "contract": "src/scf/cuda/matrix_library.hpp",
+      "reason": "Reusable, stream-bound FP64 matrix/structured-product execution and optional context owner. Canonical immutable Tensor bindings own provider selection; the owner charges the 96 MiB allowance and retains generated fallback on capacity/allocation refusal. Matrix context admission is shared Tensor policy, not an upstream method selector.",
       "references": {
         "cublasCreate": 1,
         "cublasDestroy": 3,
@@ -114,17 +87,21 @@
       }
     },
     "src/scf/cuda/resources.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests. The opt-in explicit close reports the actual vendor destroy result separately from legacy destruction.",
+      "classification": "provider",
+      "contract": "src/scf/cuda/resources.hpp",
+      "reason": "Prepared HF bucket resource/lifetime owner under #933. Matrix handle create/stream/HOST-pointer/workspace setup and explicit/legacy teardown are centralized here; enclosing semantic admission and canonical Tensor bindings do not submit vendor calls. Partial failure and verified retirement preserve native statuses and dependency order.",
       "references": {
-        "cublasDestroy": 2
+        "cublasDestroy": 2,
+        "cublasCreate": 1,
+        "cublasSetStream": 1,
+        "cublasSetPointerMode": 1,
+        "cublasSetWorkspace": 1
       }
     },
     "src/scf/cuda_eigensolver_policy.hpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Reusable adapters are retained, but upstream implementation selectors and exact-stack policy still need canonical binding integration; do not whitelist them solely by filename.",
+      "classification": "runtime_abi",
+      "contract": "src/solver/cuda/cusolver_compat.hpp",
+      "reason": "Optional cuSOLVER signature adaptation only: imported SDK overloads and dependent templates delegate official contiguous calls to the shared explicit-stride compatibility adapter. Remaining declarations describe documented API eligibility/exact-stack graph evidence, not method selection.",
       "references": {
         "cusolverDnXsyevBatched": 2,
         "cusolverDnXsyevBatched_bufferSize": 2
@@ -146,14 +123,11 @@
       }
     },
     "src/scf/cuda_rhf.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests. The extra create-symbol addresses authenticate the actual execution binding for an explicit provider identity observation; they do not execute additional vendor calls.",
+      "classification": "diagnostic",
+      "contract": "src/scf/provider_initialization.hpp",
+      "reason": "The two create-symbol addresses authenticate the actually loaded BLAS/solver objects for explicit provider-initialization provenance only. They execute no vendor call. Matrix context setup belongs to CudaResources; provider admission belongs to shared Tensor policy and solver context need follows the selected eigensystem capability.",
       "references": {
-        "cublasCreate": 2,
-        "cublasSetPointerMode": 1,
-        "cublasSetStream": 1,
-        "cublasSetWorkspace": 1,
+        "cublasCreate": 1,
         "cusolverDnCreate": 1
       }
     },
@@ -314,7 +288,7 @@
     "src/tensor/cuda_runtime.cuh": {
       "classification": "provider",
       "contract": "python/generativeqc_compiler/tensor/ir.py",
-      "reason": "Existing TensorIR CUDA prepared executor and shared borrowed strict-FP64 column-major GEMM/GEMV/GEAM/strided-GEMM provider submissions. Scientific response callers supply semantic views and borrow the existing plan handle/stream; error statuses retain original native provenance for draining cleanup, and CuMetal GEAM capability remains guarded.",
+      "reason": "Existing TensorIR CUDA prepared executor and shared borrowed strict-FP64 column-major GEMM/GEMV/GEAM/Gram/strided-GEMM provider submissions. Scientific response callers supply semantic views and borrow the existing plan handle/stream; error statuses retain original native provenance for draining cleanup. Optional GEAM and SYRK capabilities remain C++17-compatible, with the Gram provider retaining the full-GEMM fallback and actual-work report.",
       "references": {
         "cublasCreate": 1,
         "cublasDaxpy": 1,
@@ -322,6 +296,7 @@
         "cublasDestroy": 1,
         "cublasDgemm": 2,
         "cublasDgemmStridedBatched": 2,
+        "cublasDsyrk": 2,
         "cublasGetVersion": 1,
         "cublasSetMathMode": 1,
         "cublasSetPointerMode": 3,
@@ -388,9 +363,9 @@
       }
     },
     "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "GFN prepared execution owns handles and generalized eigensolve work; migrate solver/tensor choices without changing occupation or precision admission.",
+      "classification": "provider",
+      "contract": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cuh",
+      "reason": "Retained bucketed generalized-eigensystem provider: caller-owned bounded scratch, overlap Cholesky, qualified symmetric/tridiagonal execution and exact-stream graph save/restore. Generic reduction/recovery and symmetric-eigen submission use shared solver services. No occupations, SCC functional or force model is selected; preserve alternate providers and graph state restoration rather than duplicating this executor.",
       "references": {
         "cublasGetMathMode": 1,
         "cublasGetPointerMode": 1,
@@ -418,9 +393,9 @@
       }
     },
     "src/xtb/native/src/runtime/gfn2_cuda_execution.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "GFN context retains BLAS setup and method-specific generalized-eigen/graph work; shared prepared symmetric-eigen service now uniquely owns solver/Params/Jacobi lifetime. Migrate remaining tensor and generalized setup contracts without changing scientific admission.",
+      "classification": "infrastructure",
+      "contract": "#933",
+      "reason": "Runtime context lifetime only: transactional BLAS create/stream binding, partial rollback and final destroy accompany the unique shared prepared symmetric-eigen handle owner. GFN method work consumes the prepared Gfn2SccSetupEigensolver binding and charged arenas; these vendor references do not choose a scientific method, solver algorithm or precision.",
       "references": {
         "cublasCreate": 1,
         "cublasDestroy": 2,
@@ -522,6 +497,22 @@
       "references": {
         "cublasCreate": 1,
         "cusolverDnCreate": 1
+      }
+    },
+    "src/tensor/cuda_dense_operations.cu": {
+      "classification": "provider",
+      "contract": "src/tensor/cuda_dense_operations.hpp",
+      "reason": "Prepared strict-FP64 dense operations reuse shared borrowed GEMM/GEAM views and retain vector, optional-transpose fallback and handle setup/close submission. Response owners supply admitted views and retain device, stream, allocations, synchronization, numeric checks and cleanup ordering; execution never changes provider or precision.",
+      "references": {
+        "cublasCreate": 1,
+        "cublasDestroy": 1,
+        "cublasSetStream": 1,
+        "cublasSetPointerMode": 1,
+        "cublasDcopy": 2,
+        "cublasDscal": 1,
+        "cublasDaxpy": 2,
+        "cublasDdot": 1,
+        "cublasDnrm2": 1
       }
     }
   }

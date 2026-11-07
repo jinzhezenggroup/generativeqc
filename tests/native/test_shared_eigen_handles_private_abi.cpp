@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "generativeqc/generativeqc.h"
 #include "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h"
 #include "runtime/residency_cuda.cuh"
 #include "runtime/types.hpp"
@@ -40,6 +41,8 @@ shared::SymmetricEigenResources private_handle_view(
 std::uint32_t trace_blas_create(void**);
 std::uint32_t trace_blas_bind(void*, void*);
 std::uint32_t trace_blas_destroy(void*);
+std::uint32_t trace_blas_pointer_mode(void*, std::uint32_t);
+std::uint32_t trace_blas_workspace(void*, void*, std::size_t);
 void trace_external(const char*);
 void begin_teardown_trace();
 cudaError_t trace_release(void*, bool);
@@ -55,6 +58,13 @@ extern "C" cublasStatus_t cublasSetStream_v2(cublasHandle_t handle, cudaStream_t
 }
 extern "C" cublasStatus_t cublasDestroy_v2(cublasHandle_t handle) {
   return trace_blas_destroy(handle);
+}
+extern "C" cublasStatus_t cublasSetPointerMode_v2(cublasHandle_t handle, cublasPointerMode_t mode) {
+  return trace_blas_pointer_mode(handle, mode);
+}
+extern "C" cublasStatus_t cublasSetWorkspace_v2(cublasHandle_t handle, void* workspace,
+                                                std::size_t bytes) {
+  return trace_blas_workspace(handle, workspace, bytes);
 }
 
 namespace generativeqc::runtime {
@@ -83,6 +93,9 @@ struct CudaResources {
   void *reference_eri_{}, *solver_workspace_{}, *direct_tile_validation_{}, *arena_{};
   void* reference_fock_correction_{};
   void* solver_host_workspace_{};
+  std::size_t solver_workspace_bytes_{};
+  cublasStatus_t prepare_matrix_context() noexcept;
+  cublasStatus_t bind_matrix_workspace() noexcept;
   ~CudaResources();
 };
 struct OrdinaryStreamEigensolver {
@@ -97,6 +110,23 @@ struct OrdinaryStreamEigensolver {
 };
 
 #include "shared_eigen_lifetimes.inc"
+
+std::int32_t private_matrix_preparation(void* stream, bool& retained) {
+  CudaResources owner;
+  owner.stream_ = static_cast<cudaStream_t>(stream);
+  auto status = owner.prepare_matrix_context();
+  retained = owner.blas_ != nullptr;
+  if (status == CUBLAS_STATUS_SUCCESS) {
+    owner.solver_workspace_ = reinterpret_cast<void*>(0x5000);
+    owner.solver_workspace_bytes_ = 128;
+    status = owner.bind_matrix_workspace();
+  }
+  owner.solver_workspace_ = nullptr;
+  owner.stream_ = nullptr;
+  return status == CUBLAS_STATUS_SUCCESS        ? GENERATIVEQC_STATUS_SUCCESS
+         : status == CUBLAS_STATUS_ALLOC_FAILED ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                : GENERATIVEQC_STATUS_CUDA_ERROR;
+}
 
 void* private_gfn2_create(void* stream) {
   auto* owner = new Gfn2Owner;

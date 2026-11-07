@@ -67,6 +67,9 @@ CUDA_ABORT(cudaGraphLaunch, (cudaGraphExec_t, cudaStream_t))
 
 cublasStatus_t cublasCreate(cublasHandle_t*) { unexpected_hardware(); }
 cublasStatus_t cublasDestroy(cublasHandle_t) { unexpected_hardware(); }
+cublasStatus_t cublasSetStream(cublasHandle_t, cudaStream_t) { unexpected_hardware(); }
+cublasStatus_t cublasSetPointerMode(cublasHandle_t, cublasPointerMode_t) { unexpected_hardware(); }
+cublasStatus_t cublasSetWorkspace(cublasHandle_t, void*, std::size_t) { unexpected_hardware(); }
 #define SOLVER_ABORT(name, args) \
   cusolverStatus_t name args { unexpected_hardware(); }
 SOLVER_ABORT(cusolverDnCreate, (cusolverDnHandle_t*))

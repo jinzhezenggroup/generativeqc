@@ -2,121 +2,51 @@
   "schema": 1,
   "files": {
     "src/cc/cuda_solver.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "CC solver plumbing still carries matrix-implementation selectors that must be replaced by semantic contraction requests or prepared bindings. The separately admitted expanded-replay lowering shares the existing prepared provider and adds an internal ablation/diagnostic selector, not method-local vendor discovery. One additional existing matrix-admission read gates optional occupied-spectator storage after the primal tile and replay; it reuses that provider and introduces no independent vendor selector. One preparation-only read requests bounded optional workspace for actual matrix tiles above Q8, under the same provider allowance and zero-workspace fallback; retain this resource-admission read as existing #1890 selector debt, not new vendor discovery. One additional read in the explicitly opted-in CC source diagnostic snapshots the already selected matrix route; it does not participate in resource admission or provider choice. Retain this read-only observation in the classified inventory.",
+      "classification": "diagnostic",
+      "contract": "src/cc/solver.hpp",
+      "reason": "One-way reporting of the admitted compiler layout and independently prepared physical replay. Production options have only explicit DFContractionQualification exclusions; execution consumes prepared layouts/bindings, never these diagnostic fields.",
       "selectors": {
-        "df_matrix_gemm": 2,
-        "df_replay_matrix_gemm": 2,
-        "matrix_gemm": 16
+        "df_matrix_gemm": 1,
+        "df_replay_matrix_gemm": 1
       }
     },
-    "src/cc/df_lambda_cuda.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "DF Lambda execution still branches on a method-local GEMM implementation selector. Two additional reads gate optional independent-audit GEMM and owner-local core reuse on the existing matrix admission; these remain method-owned selector debt under #1890. One further admission read gates optional FP32 auxiliary warmup descriptors on that same prepared provider and shared scratch lease; it adds no vendor discovery or independent implementation selector.",
+    "src/cc/df_prepared_regions.hpp": {
+      "classification": "diagnostic",
+      "contract": "src/cc/df_prepared_regions.hpp",
+      "reason": "One-way snapshots of prepared response/audit/primal region extents. Execution reads these independent layouts and their bound Tensor descriptors; report() cannot import diagnostic choices.",
       "selectors": {
-        "df_matrix_gemm": 11
-      }
-    },
-    "src/cc/df_plan.hpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "CC DF plan state still stores a matrix-GEMM implementation selector instead of a provider-neutral prepared contraction binding.",
-      "selectors": {
-        "matrix_gemm": 4
+        "df_audit_matrix_gemm": 1,
+        "df_matrix_gemm": 1,
+        "df_primal_matrix_gemm": 1
       }
     },
     "src/cc/lambda_response.hpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Lambda response API still exposes the DF matrix-GEMM implementation choice.",
+      "classification": "diagnostic",
+      "contract": "src/cc/df_prepared_regions.hpp",
+      "reason": "Observational LambdaDiagnostic fields only. LambdaOptions contains explicit qualification exclusions, not matrix-GEMM selection flags.",
       "selectors": {
-        "df_matrix_gemm": 2
+        "df_audit_matrix_gemm": 1,
+        "df_matrix_gemm": 1,
+        "df_primal_matrix_gemm": 1
       }
     },
     "src/cc/lambda_response_cuda.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Lambda CUDA execution still consumes the DF matrix-GEMM implementation selector.",
+      "classification": "diagnostic",
+      "contract": "src/cc/df_prepared_regions.hpp",
+      "reason": "Copies prepared-owner observations to the public Lambda diagnostic snapshot; no field is consumed for scientific execution or admission.",
       "selectors": {
-        "df_matrix_gemm": 2
+        "df_audit_matrix_gemm": 2,
+        "df_matrix_gemm": 2,
+        "df_primal_matrix_gemm": 2
       }
     },
     "src/cc/solver.hpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "CC solver API still exposes the DF matrix-GEMM implementation choice, including an internal independent-expanded-replay ablation and selection diagnostic. Retain these under the existing provider-neutral migration contract.",
-      "selectors": {
-        "df_matrix_gemm": 2,
-        "df_replay_matrix_gemm": 2
-      }
-    },
-    "src/methods/df_ccsdt_force.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "DF-CCSD(T) force execution still threads DF/Lambda GEMM implementation selectors through method ownership. The same-source MP2 companion forwards these existing selections to the shared native owner; it introduces no selector or provider choice and skips CC/Lambda consumers.",
-      "selectors": {
-        "df_matrix_gemm": 6,
-        "lambda_matrix_gemm": 5
-      }
-    },
-    "src/methods/df_ccsdt_force.hpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "DF-CCSD(T) force method surface still carries DF/Lambda GEMM implementation selectors.",
+      "classification": "diagnostic",
+      "contract": "src/cc/solver.hpp",
+      "reason": "SolverDiagnostic observations only; SolverOptions exposes explicit qualification exclusions rather than production GEMM implementation selectors.",
       "selectors": {
         "df_matrix_gemm": 1,
-        "lambda_matrix_gemm": 1
-      }
-    },
-    "src/methods/rccsd_method.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "RCCSD method plumbing still forwards the DF GEMM implementation selector.",
-      "selectors": {
-        "df_matrix_gemm": 3
-      }
-    },
-    "src/methods/rccsd_method.hpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "RCCSD method API still exposes the DF GEMM implementation selector.",
-      "selectors": {
-        "df_matrix_gemm": 1
-      }
-    },
-    "src/scf/cuda/rhf_bucket.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "RHF bucket execution still consumes a named cuBLAS selection switch.",
-      "selectors": {
-        "use_cublas": 2
-      }
-    },
-    "src/scf/cuda/rhf_policy.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "RHF policy still produces a named cuBLAS implementation decision rather than a provider-neutral binding.",
-      "selectors": {
-        "use_cublas": 2
-      }
-    },
-    "src/scf/cuda/rhf_policy.hpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "RHF policy contract still exposes a named cuBLAS implementation decision.",
-      "selectors": {
-        "use_cublas": 1
-      }
-    },
-    "src/scf/cuda_rhf.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "RHF prepared execution still branches on a named cuBLAS selector; migrate selection below scientific/runtime policy. Two references pass the already-resolved route into charged masked-output arena reservation and borrowing; they do not introduce another provider decision.",
-      "selectors": {
-        "use_cublas": 12,
-        "use_cusolver": 4
+        "df_replay_matrix_gemm": 1
       }
     }
   }

@@ -57,7 +57,7 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
     response.df_max_device_bytes = device_budget;
     response.gmres.absolute_tolerance = 1e-12;
     response.df_auxiliary_reduction = !(mode & 4);
-    response.df_matrix_gemm = !(mode & 8);
+    response.qualification.ordered_response = mode & 8;
     response.df_core_reuse = !(mode & 64);
     response.serial_scratch_reuse = mode & 4096;
     response.df_mixed_precision = mode & 8192;
@@ -67,9 +67,9 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
       response.df_mixed_precision_max_iterations = 0;
     }
     response.cuda_resident_krylov = mode & 65536;
-    response.df_audit_matrix_gemm = !(mode & 128);
+    response.qualification.ordered_audit = mode & 128;
     if (!(mode & 2048)) {
-      response.df_primal_matrix_gemm = mode & 1024;
+      response.qualification.ordered_primal = !(mode & 1024);
       response.df_auxiliary_batch_limit = (mode & 512) ? 32 : (mode & 16) ? 2 : 8;
     }
     if (mode & 32) {

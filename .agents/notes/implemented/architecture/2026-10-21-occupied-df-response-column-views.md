@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-21
 
+Follow-up: the retained symmetric metric Gram migration debt described here is
+resolved by the [2026-11-07 shared Gram provider decision](2026-11-07-occupied-metric-gram-provider.md).
+The original migration evidence below remains historical.
+
 ## Problem and decision
 
 The compiler-owned occupied response emitter still submitted four ordinary and
