@@ -132,6 +132,41 @@ The final A100 download also required retiring its owned SCP EOF wait only after
 authenticated complete remote/local SHA256 agreement. The LSF job is DONE, Slurm
 is COMPLETED/0:0, and both owned finite transfer services are stopped.
 
+### Reviewed dependency integration after paired measurement
+
+The active PR #3030 ref had advanced to `ac66f7fab`; refresh active dependency refs
+as well as master before freezing future cohorts. Do not infer a dependency SHA
+from a branch name or cached tracking ref. A non-fast-forward push was rejected
+safely; preserve that independently updated branch rather than force-pushing it.
+
+Merge `768f4a514` retains its four-line compact-mask guard in the legacy optional
+combination wrapper and the independent compact raw-LR oracle alongside the new
+composite oracle. This changes the inventory to
+`0644bc072403a966f646672cabdd8210cff351bacf1be1eb812781db9b14e60a`, ELF SHA256
+`2dd1887b8e29f21bdec8d2b2764fc6835df29193c9e6b17b1035c2e710c2215f`.
+The normal cached rebuild records 99.89% hits and restores the borrowed runtime.
+
+The guard is outside the qualified complete-composite domain. Preserve the EA
+image's paired performance evidence byte-for-byte; use separate default-only
+complete A100/RTX5090 endpoints, independent compact/matrix/force gates and a
+historical default non-regression guard for the integrated source. Do not invent
+another rollback pair or relabel old timings as the later image. The dedicated
+`replay_dependency.py` reader keeps this boundary explicit under Python `-O`.
+
+The integrated default records A100 LSF226710 cold82.588231 s / warm13.920897 s
+and RTX5090 Slurm16641 cold168.205025 s / warm12.722292 s. Independent full E/F,
+signed/displaced/f-shell and compact raw-fallback matrices, zero-error memcheck,
+default-unset controls and unchanged 16/1 Focks, VV10 and source/K work pass.
+Do not recompute the paired improvement using these later default-only timings.
+Both default-only allocations complete successfully. Their finite transfer service
+is stopped after the complete A100 download is authenticated and its owned SCP
+EOF wait retired; no scheduler job or shared VPN/compiler service is terminated.
+
+All 125 reviewed-dependency host regressions pass after updating three stale
+host-double signatures/default declarations to the new optional argument. Exact
+HF lifetime/retry doubles still explicitly reject nonzero composite scales. Retain
+both fixture failure logs separately; these are test-only fixes, not native changes.
+
 ## Revisit when
 
 Broaden only with independent numerical/resource and complete endpoint evidence.

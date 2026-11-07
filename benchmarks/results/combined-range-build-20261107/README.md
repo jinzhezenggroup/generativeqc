@@ -5,7 +5,7 @@ grids, screening, convergence and analytic forces. Cold is
 constructor+prepare+SCF+analytic-force+host-export. Warm is the first same-owner
 call from its own frozen cold density, not a pooled warm median.
 
-Final native source, after integrating master `dafa29f83` (#3016):
+Paired performance native source, after integrating master `dafa29f83` (#3016):
 `ea83781aafef1d8e4f8159033ce12f2aed096cb7aaeb07de397d71da32ee9a13`.
 SM80/SM120 Release ELF SHA256:
 `e27f500d7bba457002cec893fb7762ee6a411a84846843525702082f4c97428f`.
@@ -39,6 +39,39 @@ These measurements are not observations of the final master-synced image:
 | --- | ---: | ---: | ---: | ---: |
 | A100 / LSF226550 | 89.088205 s | 83.401132 s | 13.842545 s | 13.903494 s |
 | RTX5090 / Slurm16639 | 178.695741 s | 167.787624 s | 13.652372 s | 12.697615 s |
+
+## Reviewed dependency integration
+
+The live PR #3030 dependency advanced to `ac66f7fab` while this change was being
+qualified. Its compact-mask raw-LR refusal fix is retained by merge `768f4a514`,
+not overwritten. The published native source is
+`0644bc072403a966f646672cabdd8210cff351bacf1be1eb812781db9b14e60a`, Release
+SM80/SM120 ELF SHA256
+`2dd1887b8e29f21bdec8d2b2764fc6835df29193c9e6b17b1035c2e710c2215f`.
+This safety guard affects the legacy optional compact-mask path, not the admitted
+complete composite producer. The cached integration rebuild records 99.89% hits.
+
+`dependency-evidence.json.xz` and `replay_dependency.py` keep this later source's
+independent matrix/compact-refusal, full cold E/F/export, first-own-density warm,
+actual work and historical default non-regression gates separate from the paired
+performance cohort. Run
+`python benchmarks/results/combined-range-build-20261107/replay_dependency.py`;
+`dependency-summary.json` is derived. These are default-only allocations, not
+another rollback pair, and do not create new paired speedup or gpu4pyscf rankings.
+The earlier image identities and latency observations remain unchanged.
+
+| Integrated default / finite allocation | Complete cold | First own-density warm |
+| --- | ---: | ---: |
+| A100 / LSF226710 | 82.588231 s | 13.920897 s |
+| RTX5090 / Slurm16641 | 168.205025 s | 12.722292 s |
+
+Both pass independent complete E/F and unchanged semantic work gates. These
+default-only numbers are not used to recalculate the paired percentages above.
+
+The dependency's 125 host regressions pass. Three existing lifetime/retry host
+doubles initially lagged the new optional API arguments; their test-only repair
+preserves explicit refusal of composite scales in exact HF consumers. Both failed
+fixture attempts remain in the late-cohort archive and change no native identity.
 
 ## Actual work and scientific gates
 
@@ -80,7 +113,7 @@ was restored/hash-verified. Slurm16638 failed an added fallback fixture that
 accidentally requested derivatives: no endpoint ran. Correcting only the probe
 request preserved the final native identity and ELF. All development failures and
 skips remain distinct from passed GPU gates. The A100 download was hash-verified
-before retiring its owned SCP EOF wait, and both finite transfer services are
+before retiring its owned SCP EOF wait, and all owned finite transfer services are
 stopped. The final cohort additionally retains successful Slurm/LSF completion
 receipts and its own authenticated download EOF retirement. An initial local host
 selection included seven CPU diagnostic tests requiring a native library absent
