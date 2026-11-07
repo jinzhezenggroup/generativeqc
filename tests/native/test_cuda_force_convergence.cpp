@@ -294,7 +294,7 @@ void check_incremental_energy_refinement(unsigned spins, bool retain, bool stand
   const double tolerance = standard ? 1e-5 : 1e-9;
   const double energy_tolerance = standard ? 1e-9 : 1e-12;
   const double physical_tolerance = standard && spins == 1 ? 1e-5 : std::min(1e-8, tolerance);
-  const std::size_t matrix_size = static_cast<std::size_t>(basis_size) * basis_size;
+  const std::size_t matrix_size = basis_size * basis_size;
   const std::size_t vector_size = spins * matrix_size;
   const std::size_t total = batch * vector_size;
   const unsigned blocks = static_cast<unsigned>((total + 127) / 128);
@@ -595,7 +595,7 @@ void check_reference_residual_diagnostics() {
 
 void check_reference_startup(bool retain, unsigned threads, unsigned basis_size) {
   using namespace generativeqc::scf::cuda_execution;
-  const std::size_t matrix_size = basis_size * basis_size;
+  const std::size_t matrix_size = static_cast<std::size_t>(basis_size) * basis_size;
   for (const unsigned before : {0U, kReferenceStartupIterations - 1, kReferenceStartupIterations}) {
     std::vector<double> initial(2 * matrix_size, 97.0), next(2 * matrix_size, -4.0);
     std::fill_n(initial.begin(), matrix_size, 0.0);
