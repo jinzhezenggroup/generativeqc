@@ -374,7 +374,8 @@ cudaError_t launch_generated_shell_class_focks(
     std::uint32_t* generated_task_offsets, std::uint32_t* generated_task_counts,
     std::uint32_t* generated_task_write_counts, std::uint32_t* generated_task_heads,
     const std::uint64_t* enabled_mask, unsigned persistent_worker_blocks, bool unrestricted,
-    double screening_tolerance, const double* schwarz_bounds, const double* density, double* fock) {
+    double screening_tolerance, const double* schwarz_bounds, const double* density, double* fock,
+    const cuda_policy::SharedRysXyPolicy& shared_rys_xy) {
   cudaError_t error = prepare_generated_shell_tasks(
       stream, total_tile_capacity, generated_task_capacity, active_tile_offsets, batch,
       active_tile_counts, active_tiles, generated_tasks, generated_shell_classes,
@@ -396,7 +397,9 @@ cudaError_t launch_generated_shell_class_focks(
         task_capacity / claim_width + (task_capacity % claim_width != 0U);
     const unsigned worker_blocks =
         std::min(static_cast<unsigned>(capacity_workers), persistent_worker_blocks);
-    error = generated::launch_shell_class_fock(
+    error = (shared_rys_xy.selects(kernel.shell_class)
+                 ? generated::launch_shell_class_shared_rys_xy_fock
+                 : generated::launch_shell_class_fock)(
         kernel.shell_class, stream, unrestricted, worker_blocks, generated_tasks,
         generated_task_offsets + kernel.shell_class, batch.shell_pair_primitive_offsets,
         batch.shell_primitive_pairs, batch.direct_ao_coefficients, batch.positions,
@@ -494,6 +497,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   if (options.export_physical_reference &&
       (unrestricted || options.screening_tolerance != 0 || batch_size != 1)) {
     fill_global_failure(outputs, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+    return outputs;
+  }
+  const auto shared_rys_xy_request = cuda_policy::shared_rys_xy_requested();
+  if (shared_rys_xy_request == cuda_policy::SharedRysXyRequest::Invalid) {
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   plan.last_shell_class_profile.reset();
@@ -762,6 +770,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const auto incremental_direct_jk_policy = resolve_incremental_direct_jk_policy(
       options, {requested_quartet_direct, true, requested_mixed_precision_fock});
   const bool requested_incremental_direct_jk = incremental_direct_jk_policy.active;
+  const auto shared_rys_xy_capabilities = generated::enabled_shared_rys_xy_fock_shell_class_mask();
+  const auto requested_shared_rys_xy = cuda_policy::resolve_shared_rys_xy_policy(
+      shared_rys_xy_request,
+      {unrestricted, requested_mixed_precision_fock,
+       direct_target.compute_capability_major == 9 && direct_target.compute_capability_minor == 0,
+       requested_quartet_direct, requested_incremental_direct_jk, separate_fock_jk,
+       (requested_primary_streaming_fock_mask & shared_rys_xy_capabilities) != 0U,
+       requested_persistent_eri, options.export_physical_reference, shared_rys_xy_capabilities});
   // A mixed item is promoted to exact FP64 by the target refinement before any
   // consumer runs, so the matrix it retains is target precision. The convergence
   // kernel keeps P_n paired with the F(P_n) that was just evaluated when an item
@@ -809,6 +825,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
        !same_hf_bucket_options(plan.options, options) ||
        !compatible_hf_bucket_options(plan, host, options) || plan.unrestricted != unrestricted ||
        plan.bounded_direct_streaming != requested_bounded_direct_streaming ||
+       plan.shared_rys_xy != requested_shared_rys_xy ||
        plan.fp32_block_screening != requested_fp32_block_screening ||
        plan.shell_class_profiling != shell_class_profiling ||
        plan.inactive_eigensolver_profiling != inactive_eigensolver_profiling ||
@@ -1028,6 +1045,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     plan.quartet_direct = requested_quartet_direct;
     plan.transformed_direct = requested_transformed_direct;
     plan.bounded_direct_streaming = requested_bounded_direct_streaming;
+    plan.shared_rys_xy = requested_shared_rys_xy;
     plan.fp32_block_screening = requested_fp32_block_screening;
     plan.unrestricted = unrestricted;
     plan.shell_class_profiling = shell_class_profiling;
@@ -2702,7 +2720,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         error = cudaMemsetAsync(bounded_direct_generated_task_heads + shell_class, 0,
                                 sizeof(std::uint32_t), resources.stream_);
         if (error != cudaSuccess) return error;
-        error = generated::launch_shell_class_fock(
+        error = (plan.shared_rys_xy.selects(shell_class)
+                     ? generated::launch_shell_class_shared_rys_xy_fock
+                     : generated::launch_shell_class_fock)(
             shell_class, resources.stream_, is_unrestricted, plan.persistent_quartet_worker_blocks,
             bounded_direct_generated_tasks,
             bounded_direct_generated_retry_task_offsets + shell_class,
@@ -2885,7 +2905,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         if ((host_generated_fock_shell_class_mask & (std::uint64_t{1} << shell_class)) == 0U) {
           continue;
         }
-        cudaError_t launch_error = generated::launch_shell_class_fock(
+        cudaError_t launch_error = (plan.shared_rys_xy.selects(shell_class)
+                                        ? generated::launch_shell_class_shared_rys_xy_fock
+                                        : generated::launch_shell_class_fock)(
             shell_class, resources.stream_, is_unrestricted, plan.persistent_quartet_worker_blocks,
             bounded_direct_generated_tasks, task_offsets + shell_class,
             device_batch.shell_pair_primitive_offsets, device_batch.shell_primitive_pairs,
@@ -3030,7 +3052,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
             generated_shell_classes, generated_shell_task_offsets, generated_shell_task_counts,
             generated_shell_task_write_counts, generated_shell_task_heads,
             generated_fock_shell_class_mask, plan.persistent_quartet_worker_blocks, true,
-            fock_screening_tolerance, schwarz_bounds, quartet_density, quartet_fock);
+            fock_screening_tolerance, schwarz_bounds, quartet_density, quartet_fock, {});
         if (generated_error != cudaSuccess) return generated_error;
         dispatch_angular_fock_quartets(
             true, false, resources.stream_, plan.shell_quartet_tile_capacities,
@@ -3090,7 +3112,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
             generated_shell_classes, generated_shell_task_offsets, generated_shell_task_counts,
             generated_shell_task_write_counts, generated_shell_task_heads,
             generated_fock_shell_class_mask, plan.persistent_quartet_worker_blocks, false,
-            fock_screening_tolerance, schwarz_bounds, quartet_density, quartet_fock);
+            fock_screening_tolerance, schwarz_bounds, quartet_density, quartet_fock,
+            plan.shared_rys_xy);
         if (generated_error != cudaSuccess) return generated_error;
         dispatch_angular_fock_quartets(
             false, false, resources.stream_, plan.shell_quartet_tile_capacities,
