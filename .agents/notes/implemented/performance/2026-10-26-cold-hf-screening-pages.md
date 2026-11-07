@@ -3,6 +3,11 @@
 Status: implemented; explicit opt-in only
 Date: 2026-10-26
 
+Superseded for current automatic admission by
+[the strict-tail and bounded-page qualification](2026-11-07-cold-hf-strict-screened-tail.md).
+The failed default-force diagnostic and this note's containment history remain
+unchanged; their source identities are not relabeled as the new passing image.
+
 ## Problem
 
 Large direct RHF cold execution spent most of its time evaluating accurate

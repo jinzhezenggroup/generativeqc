@@ -74,7 +74,7 @@ independently matching remote archive checksums. The owned HTTP listener is clos
 
 ## Source, replay and limits
 
-Final master base: `6572be1904d370bd156a754a149acce982ab0ced`.
+Measured master base: `6572be1904d370bd156a754a149acce982ab0ced`.
 Executed source: `7fa6df22bf7bbf8912375aeab23b1e2e1149ea711373d336e833d1ca2dbf4931`.
 Executed ELF: `3f902abe8e5082c8644e1e42d43a5ce540e3610875d77aa58d2ef89269c08847`.
 
@@ -105,6 +105,13 @@ manifest envelope. Every decoded original byte, Git reference, record and recove
 path is unchanged and verified. No numerical observation is deleted, external
 archive published, limit raised, or scientific gate weakened. The retained
 `campaign/retention-compaction.json` receipt names these metadata-only changes.
+
+After measurement, PR #3041 also integrates master
+`4c2334c143d98a594d7a89c26618e257729bb107` (#3038). Its production changes
+are restricted to the separate HF owner, not the RKS density path qualified
+here. The inherited evidence cap is now85 MiB; the84-MiB limit above describes
+the measured campaign. No GPU samples were rerun or relabelled after integration;
+the source/ELF identities and reconstruction base above remain historical facts.
 
 See [the durable decision](../../../.agents/notes/implemented/performance/2026-11-07-r2scan-indexed-density-gemm.md),
 [current contract](../../../docs/developer/xc_native_cuda.md) and tracking issue#2976.

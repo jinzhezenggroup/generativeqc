@@ -125,6 +125,17 @@ sampled only on the recorded r2SCAN-3c geometry and two devices. Unqualified
 grids/displacements, other workloads and other FP64-matrix GPUs remain follow-up
 qualification, not implied results. Stationary force remains the next large owner.
 
+## Post-measurement integration
+
+PR #3041 additionally integrates master
+`4c2334c143d98a594d7a89c26618e257729bb107` (#3038), which landed after
+qualification. Its production policy changes belong to the separate HF owner;
+the measured RKS indexed-density route is unchanged. This also inherits the
+master evidence-cap increase to85 MiB, rather than attributing that independent
+policy change to this campaign. Keep the measured6572be190 base, source patch,
+source/ELF identity and original samples unchanged. Host integration checks are
+not a new real-GPU qualification of the combined source.
+
 ## References
 
 - Tracking external memory: issue #2976.

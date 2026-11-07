@@ -17,7 +17,9 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks", "b3lyp-rks", "b3lyp-uks"))
 def test_cuda_hybrid_snapshot_matches_cpu_composition_and_state(method: str) -> None:
     """Exercise the native writer and Python reader after a converged solve."""
-    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID"), (
+        "real GPU tests require a scheduler allocation"
+    )
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
     charge, multiplicity = (1, 2) if method.endswith("-uks") else (0, 1)
     options = KsOptions(
@@ -87,7 +89,9 @@ def test_separate_full_range_derivatives_match_libcint(
     from pyscf import gto
     from pyscf.grad import rhf
 
-    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID"), (
+        "real GPU tests require a scheduler allocation"
+    )
     monkeypatch.setenv(
         "GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_DERIVATIVES", materialized_derivative
     )

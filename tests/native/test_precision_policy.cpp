@@ -61,12 +61,11 @@ void verify_cold_hf_screening_domain() {
                                    false, true, false, false, false, false};
   generativeqc::runtime::CudaTargetInfo target;
   target.total_global_memory = std::size_t{32} << 30;
-  for (const char* value :
-       {static_cast<const char*>(nullptr), "0", "none", "", "invalid", "true", " 1", "1 "}) {
+  for (const char* value : {"0", "none", "", "invalid", "true", " 1", "1 "}) {
     ScopedEnv disabled("GENERATIVEQC_HF_COLD_SCREENING", value);
     const auto policy = resolve_cold_hf_screening(cold, 1e-12);
     require(policy.maximum_iterations == 0 && policy.tolerance == 0.0,
-            "screened proposals require an exact explicit opt-in");
+            "explicitly disabled or invalid proposals must retain ordinary execution");
     const auto profile = resolve_hf_direct_tuning_profile(false);
     require(profile.bounded_streaming.maximum_task_capacity == 8U * 1024U * 1024U &&
                 profile.bounded_streaming.maximum_arena_bytes == (std::size_t{3} << 29),
@@ -81,6 +80,16 @@ void verify_cold_hf_screening_domain() {
         resolve_direct_jk_schedule_policy(target, custom).bounded_streaming.arena_maximum_bytes ==
             target.total_global_memory / 16,
         "the incumbent default divisor also applies to custom profiles");
+  }
+  {
+    ScopedEnv automatic("GENERATIVEQC_HF_COLD_SCREENING", nullptr);
+    const auto policy = resolve_cold_hf_screening(cold, 1e-12);
+    require(policy.maximum_iterations == 8 && policy.tolerance == 8e-8,
+            "automatic cold proposal must retain the bounded screened operator");
+    const auto profile = resolve_hf_direct_tuning_profile(false);
+    require(profile.bounded_streaming.maximum_task_capacity == 8U * 1024U * 1024U &&
+                profile.bounded_streaming.maximum_arena_bytes == (std::size_t{3} << 29),
+            "proposal admission alone must not enlarge the generic Direct profile");
   }
   ScopedEnv selection("GENERATIVEQC_HF_COLD_SCREENING", "1");
   const auto expanded = resolve_hf_direct_tuning_profile(false);
