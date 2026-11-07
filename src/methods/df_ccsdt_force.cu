@@ -124,7 +124,7 @@ generativeqc_correlation_diagnostic mp2_diagnostic(
 static DFCCSDTResult run_df_ccsdt_native_attempt(
     runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
     const generativeqc_method_descriptor& descriptor, bool forces, bool with_triples,
-    bool df_auxiliary_reduction, bool df_matrix_gemm, bool lambda_matrix_gemm,
+    bool df_auxiliary_reduction, const cc::DFContractionQualification& qualification,
     std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
     const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis,
     bool parallel_gap_reduction, bool request_triples_gap_cotangents,
@@ -133,7 +133,6 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     DFPhysicalResponseComparison* physical_replay = nullptr,
     bool fused_triples_scalar_response = true, runtime::PrecisionDirective admitted_triples_w = {},
     std::size_t lambda_true_residual_interval = 1, bool lambda_core_reuse = true,
-    bool lambda_audit_matrix = true, bool lambda_primal_matrix = false,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
     bool lambda_serial_scratch_reuse = true,
     std::optional<bool> ccsd_mixed_precision = std::nullopt, bool lambda_mixed_precision = false,
@@ -171,7 +170,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
                          df_retry::attempt_reservation(
                              seed_bytes, recycle_bytes,
                              physical_replay ? physical_replay->output_bytes : 0, checked_add),
-                         &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit,
+                         &auxiliary, forces, qualification, nullptr, ccsd_batch_limit,
                          derived_denominators, packed_diis, ccsd_mixed_precision,
                          ccsd_mixed_switch_residual, demand.mp2, demand.df_reference, convergence);
   if (retained_host_bytes >= state.budget)
@@ -351,10 +350,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     lambda_options.cuda_resident_krylov = lambda_resident_krylov;
     lambda_options.serial_scratch_reuse = lambda_serial_scratch_reuse;
     lambda_options.df_auxiliary_reduction = df_auxiliary_reduction;
-    lambda_options.df_matrix_gemm = lambda_matrix_gemm;
+    lambda_options.qualification = qualification;
     lambda_options.df_core_reuse = lambda_core_reuse;
-    lambda_options.df_audit_matrix_gemm = lambda_audit_matrix;
-    lambda_options.df_primal_matrix_gemm = lambda_primal_matrix;
     lambda_options.df_mixed_precision = lambda_mixed_precision;
     // Record the actual executing owner's request, including resource refusal.
     result.primal.lambda_fp32_requested = lambda_mixed_precision;
@@ -571,12 +568,11 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
                     preconditioner.data ? preconditioner.data->storage_bytes() : 0);
     auto companion = run_df_ccsdt_native_attempt(
         execution, system, auxiliary, descriptor, true, false, df_auxiliary_reduction,
-        df_matrix_gemm, lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit, frame_options,
-        derived_denominators, packed_diis, parallel_gap_reduction, false, &state,
+        qualification, lambda_batch_limit, ccsd_batch_limit, frame_options, derived_denominators,
+        packed_diis, parallel_gap_reduction, false, &state,
         checked_add(retained_host_bytes, parent_bytes), 0, nullptr, nullptr, false, {},
-        lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, lambda_primal_matrix,
-        nullptr, lambda_serial_scratch_reuse, false, false, false, ccsd_mixed_switch_residual,
-        {true, 0});
+        lambda_true_residual_interval, lambda_core_reuse, nullptr, lambda_serial_scratch_reuse,
+        false, false, false, ccsd_mixed_switch_residual, {true, 0});
     state.reference = reference;
     state.budget = original_budget;
     Result::Companion component;
@@ -736,7 +732,7 @@ DFGapForceComparison diagnose_df_ccsdt_gap_schedules(
     const auto primal_started = Clock::now();
     const auto original = run_rccsd_native_state(
         execution, system, descriptor, nullptr, nullptr, nullptr, comparison.output_bytes,
-        &auxiliary, true, true, nullptr, ccsd_batch_limit, derived_denominators, packed_diis);
+        &auxiliary, true, {}, nullptr, ccsd_batch_limit, derived_denominators, packed_diis);
     comparison.primal_seconds = elapsed(primal_started);
     if (!original.solved.converged() || !original.df_source.response_state ||
         original.df_source.source_identity != original.problem.df_source_identity)
@@ -785,8 +781,9 @@ DFGapForceComparison diagnose_df_ccsdt_gap_schedules(
         throw std::logic_error("DF gap comparison did not preserve bitwise native inputs");
       snapshot.clone_seconds = elapsed(clone_started);
       const auto result = run_df_ccsdt_native_attempt(
-          execution, system, auxiliary, descriptor, true, true, true, true, true,
-          lambda_batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
+          execution, system, auxiliary, descriptor, true, true, true,
+          cc::DFContractionQualification{.ordered_primal = true}, lambda_batch_limit,
+          ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
           index == 1 || index == 2, index != 2, &state, comparison.retained_primal_host_bytes,
           comparison.retained_df_source_bytes, &snapshot.fingerprints);
       if (result.forces.size() != coords || primal_identity(original) != comparison.primal_identity)
@@ -836,9 +833,10 @@ DFPhysicalResponseComparison diagnose_df_ccsdt_physical_responses(
     snapshot.df_gradient.resize(coords);
     snapshot.orbital_gradient.resize(coords);
   }
-  auto result = run_df_ccsdt_native_attempt(execution, system, auxiliary, descriptor, true, true,
-                                            true, true, true, 8, 8, frame_options, true, false,
-                                            false, true, nullptr, 0, 0, nullptr, &comparison);
+  auto result = run_df_ccsdt_native_attempt(
+      execution, system, auxiliary, descriptor, true, true, true,
+      cc::DFContractionQualification{.ordered_primal = true}, 8, 8, frame_options, true, false,
+      false, true, nullptr, 0, 0, nullptr, &comparison);
   comparison.forces = std::move(result.forces);
   comparison.energy = result.energy;
   comparison.reference_iterations = result.reference_iterations;
@@ -854,16 +852,16 @@ DFPhysicalResponseComparison diagnose_df_ccsdt_physical_responses(
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
     const generativeqc_method_descriptor& descriptor, bool forces, bool with_triples,
-    bool df_auxiliary_reduction, bool df_matrix_gemm, bool lambda_matrix_gemm,
+    bool df_auxiliary_reduction, const cc::DFContractionQualification& qualification,
     std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
     const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis,
     bool parallel_gap_reduction, bool request_triples_gap_cotangents,
     bool fused_triples_scalar_response, runtime::PrecisionDirective admitted_triples_w,
-    std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix,
-    bool lambda_primal_matrix, DFCCSDTReferenceExperiment* reference_experiment,
-    bool lambda_serial_scratch_reuse, std::optional<bool> ccsd_mixed_precision,
-    bool lambda_mixed_precision, bool lambda_resident_krylov, double ccsd_mixed_switch_residual,
-    DFCorrelationDemand demand, core::CorrelationConvergence convergence) {
+    std::size_t lambda_true_residual_interval, bool lambda_core_reuse,
+    DFCCSDTReferenceExperiment* reference_experiment, bool lambda_serial_scratch_reuse,
+    std::optional<bool> ccsd_mixed_precision, bool lambda_mixed_precision,
+    bool lambda_resident_krylov, double ccsd_mixed_switch_residual, DFCorrelationDemand demand,
+    core::CorrelationConvergence convergence) {
   if (demand.mp2 && with_triples) throw std::invalid_argument("DF-MP2 cannot request CC triples");
   if (reference_experiment && reference_experiment->reference)
     throw std::invalid_argument("clear the previous experiment reference before reuse");
@@ -894,12 +892,12 @@ DFCCSDTResult run_df_ccsdt_native(
     diagnostic->seed_fallback = false;
     return run_df_ccsdt_native_attempt(
         execution, system, auxiliary, descriptor, forces, with_triples, df_auxiliary_reduction,
-        df_matrix_gemm, lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit, frame_options,
-        derived_denominators, packed_diis, parallel_gap_reduction, request_triples_gap_cotangents,
-        nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
-        lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, lambda_primal_matrix,
-        diagnostic, lambda_serial_scratch_reuse, ccsd_mixed_precision, lambda_mixed_precision,
-        lambda_resident_krylov, ccsd_mixed_switch_residual, demand, convergence);
+        qualification, lambda_batch_limit, ccsd_batch_limit, frame_options, derived_denominators,
+        packed_diis, parallel_gap_reduction, request_triples_gap_cotangents, nullptr, 0, 0, nullptr,
+        nullptr, fused_triples_scalar_response, admitted_triples_w, lambda_true_residual_interval,
+        lambda_core_reuse, diagnostic, lambda_serial_scratch_reuse, ccsd_mixed_precision,
+        lambda_mixed_precision, lambda_resident_krylov, ccsd_mixed_switch_residual, demand,
+        convergence);
   };
   return df_retry::retry_retained_cache_once<MethodError>(
       recycling, had_retained_cache, GENERATIVEQC_STATUS_OUT_OF_MEMORY, attempt, finish);
@@ -924,9 +922,9 @@ DFCCSDTResult run_df_correlation_group_native(
   // Preserve strict FP64 replay/audit after a mixed Lambda epoch. The planner
   // may select a smaller Q than the requested upper limit.
   return run_df_ccsdt_native(execution, system, auxiliary, descriptor, forces, !demand.mp2, true,
-                             true, true, selection.lambda_batch_limit, 0, {}, true, false, true,
-                             false, true, {}, 30, true, true, true, nullptr, true,
-                             selection.mixed_ccsd, selection.mixed_lambda, false,
-                             selection.mixed_switch_residual, demand, convergence);
+                             {}, selection.lambda_batch_limit, 0, {}, true, false, true, false,
+                             true, {}, 30, true, nullptr, true, selection.mixed_ccsd,
+                             selection.mixed_lambda, false, selection.mixed_switch_residual, demand,
+                             convergence);
 }
 }  // namespace generativeqc::methods::detail

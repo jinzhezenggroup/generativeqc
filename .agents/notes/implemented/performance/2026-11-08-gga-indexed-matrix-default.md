@@ -96,3 +96,17 @@ HF is a separate K/work and convergence problem. Its fixed-coarse-delta and
 `../../rejected/2026-11-08-hf-fixed-coarse-delta.md`; their negative results
 are retained, not shipped as another opt-in. See issue2976 and PR3041 for
 the original audit and ongoing unresolved work.
+
+## Post-measurement master integration
+
+The final fetch discovered master`7704dd93dec18db0cf506d78ce1c76f0d6d40fe1`
+(#3039), which landed during publication. Merge it rather than omit the user's
+requested synchronization. It adds shared Gram/dense-provider adapters and
+migrates RHF/occupied-response ownership; the GGA policy and the existing
+`submit_column_gemm` implementation are unchanged. It does not authorize
+relabelling the pre-merge source/ELF above as a newly executed combined image.
+Those static GPU timings remain bound to843a2dae/e25c91df, with focused host
+provider/lifetime/admission and evidence replay used for integration. No new
+64-case or post-merge GPU qualification is claimed. Regenerate the stale
+Libxc source inventory after the merge while retaining its original measured
+receipts, stale status and zero qualified-product claims.

@@ -48,6 +48,10 @@ def _consumer_lifetimes() -> str:
         + "\n};\n"
         + _definition(rhf, "CudaResources::~CudaResources()")
         + "\n"
+        + _definition(rhf, "cublasStatus_t CudaResources::prepare_matrix_context()")
+        + "\n"
+        + _definition(rhf, "cublasStatus_t CudaResources::bind_matrix_workspace()")
+        + "\n"
         + _definition(ordinary, "void OrdinaryStreamEigensolver::cleanup()")
         + "\n"
         + _definition(
@@ -148,6 +152,15 @@ def test_actual_gfn2_setup_transaction_and_context_teardown(
 def test_actual_scf_teardown_bodies(handle_probe: Path, consumer: str) -> None:
     subprocess.run(
         [str(handle_probe), "scf-lifetime", consumer], check=True, timeout=15
+    )
+
+
+@pytest.mark.parametrize("failure", range(5))
+def test_actual_matrix_context_partial_preparation(
+    handle_probe: Path, failure: int
+) -> None:
+    subprocess.run(
+        [str(handle_probe), "matrix-preparation", str(failure)], check=True, timeout=15
     )
 
 

@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
     descriptor.correlation_memory_budget_bytes = budget;
     auto phase = Clock::now();
     auto state = generativeqc::methods::detail::run_rccsd_native_state(
-        execution, orbital, descriptor, nullptr, nullptr, nullptr, 0, &auxiliary, true, true);
+        execution, orbital, descriptor, nullptr, nullptr, nullptr, 0, &auxiliary, true, {});
     if (!state.solved.converged()) throw std::runtime_error("shared-state CCSD failed");
     const auto primal_seconds = elapsed(phase);
     std::cerr << "Shared native primal completed: " << primal_seconds << " s\n";
@@ -125,7 +125,7 @@ int main(int argc, char** argv) {
         capacity({&matrix.lambda.lambda1, &matrix.lambda.lambda2, &matrix.foo, &matrix.fov,
                   &matrix.fvv, &matrix.ovov, &matrix.ovvo, &matrix.oovv, &matrix.ovvv, &matrix.ovoo,
                   &matrix.oooo, &matrix.vvvv, &matrix.df_bov, &matrix.df_bvv});
-    options.df_matrix_gemm = false;
+    options.qualification.ordered_response = true;
     options.max_bytes = remainder(budget, checked_add(tbytes, first_bytes));
     options.gmres.max_workspace_bytes = options.max_bytes;
     phase = Clock::now();

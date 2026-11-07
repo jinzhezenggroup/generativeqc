@@ -52,11 +52,11 @@
   "migrated_settings": [
     {
       "name": "cublas-matrix-product-fallback-threshold",
-      "source": "src/scf/cuda/rhf_policy.hpp",
-      "owner": "SmallHfProfitabilityProfile / resolve_small_hf_profitability",
+      "source": "src/tensor/cuda_matrix_product_admission.hpp",
+      "owner": "CudaMatrixProductProfile / CudaMatrixProductAdmission",
       "required_tokens": [
-        "fallback_cublas_matrix_product_ao_threshold{17}",
-        "SmallHfMatrixCalibration matrix{}"
+        "fallback_dimension_threshold{17}",
+        "CudaMatrixProductCalibration calibration"
       ]
     },
     {

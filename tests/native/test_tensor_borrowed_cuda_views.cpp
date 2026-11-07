@@ -12,6 +12,7 @@ struct Handle {
 };
 using cublasHandle_t = Handle*;
 enum cublasOperation_t { CUBLAS_OP_N = 0, CUBLAS_OP_T = 1 };
+enum cublasFillMode_t { CUBLAS_FILL_MODE_LOWER = 0, CUBLAS_FILL_MODE_UPPER = 1 };
 std::vector<std::uint64_t> record;
 int result = 0;
 template <class T>
@@ -43,6 +44,15 @@ int cublasDgemv(cublasHandle_t h, cublasOperation_t t, int m, int n, const doubl
   return capture(h, t, m, n, alpha, a, lda, x, ix, beta, y, iy);
 }
 
+#ifdef GENERATIVEQC_TEST_HAS_SYRK
+int cublasDsyrk(cublasHandle_t handle, cublasFillMode_t triangle, cublasOperation_t transpose,
+                int order, int reduction, const double* alpha, const double* input, int input_ld,
+                const double* beta, double* output, int output_ld) {
+  return capture(handle, triangle, transpose, order, reduction, alpha, input, input_ld, beta,
+                 output, output_ld);
+}
+#endif
+
 #ifdef GENERATIVEQC_TEST_HAS_GEAM
 int cublasDgeam(cublasHandle_t h, cublasOperation_t ta, cublasOperation_t tb, int m, int n,
                 const double* alpha, const double* a, int lda, const double* beta, const double* b,
@@ -62,6 +72,35 @@ static_assert(column_geam_available<cublasHandle_t>);
 #else
 static_assert(!column_geam_available<cublasHandle_t>);
 #endif
+
+#ifdef GENERATIVEQC_TEST_HAS_SYRK
+static_assert(column_syrk_available<cublasHandle_t>);
+#else
+static_assert(!column_syrk_available<cublasHandle_t>);
+#endif
+
+void gram(cublasHandle_t handle, bool transpose, bool lower, int value) {
+  const auto* alpha = reinterpret_cast<const double*>(0x1);
+  const auto* beta = reinterpret_cast<const double*>(0x3);
+  auto* data = reinterpret_cast<double*>(0x9);
+#ifdef GENERATIVEQC_TEST_HAS_SYRK
+  auto expected = cublasDsyrk(handle, lower ? CUBLAS_FILL_MODE_LOWER : CUBLAS_FILL_MODE_UPPER,
+                              transpose ? CUBLAS_OP_T : CUBLAS_OP_N, value, INT_MAX, alpha, data,
+                              INT_MIN, beta, data, -1);
+#else
+  auto expected = cublasDgemm(handle, transpose ? CUBLAS_OP_T : CUBLAS_OP_N,
+                              transpose ? CUBLAS_OP_N : CUBLAS_OP_T, value, value, INT_MAX, alpha,
+                              data, INT_MIN, data, INT_MIN, beta, data, -1);
+#endif
+  auto args = record;
+  record.clear();
+  bool triangular = !column_syrk_available<cublasHandle_t>;
+  assert(submit_column_gram(ColumnGramView<cublasHandle_t>{handle, transpose, lower, value, INT_MAX,
+                                                           alpha, data, INT_MIN, beta, data, -1},
+                            &triangular) == expected);
+  assert(record == args);
+  assert(triangular == column_syrk_available<cublasHandle_t>);
+}
 
 template <class H>
 void geam(H h, bool ta, bool tb, int v) {
@@ -118,6 +157,7 @@ int main() {
                 assert(submit_column_gemv({h, ta != 0, v, INT_MAX, alpha, data, INT_MIN, data, v,
                                            beta, data, -3}) == expected);
                 assert(record == args);
+                gram(h, ta != 0, tb != 0, v);
                 geam(h, ta != 0, tb != 0, v);
                 assert(handle.pointer_mode == mode && handle.stream == 71);
               }

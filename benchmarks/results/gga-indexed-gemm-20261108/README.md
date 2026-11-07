@@ -126,3 +126,13 @@ PYTHONPATH=python:. pytest -q tests/python/test_gga_indexed_gemm_evidence.py
 See the [default decision](../../../.agents/notes/implemented/performance/2026-11-08-gga-indexed-matrix-default.md),
 the [rejected HF experiment](../../../.agents/notes/rejected/2026-11-08-hf-fixed-coarse-delta.md),
 issue2976 and PR3041. The HF fixed coarse delta does not ship as a new opt-in.
+
+After measurement, master`7704dd93dec18db0cf506d78ce1c76f0d6d40fe1` (#3039)
+landed during publication and is integrated. It migrates shared Gram/dense,
+RHF and occupied-response ownership without changing this GGA policy or the
+existing column-GEMM implementation. All GPU samples above retain their actual
+pre-merge source/ELF identities; they are not claimed as new timings of the
+combined source. Focused host provider/lifetime/admission and offline evidence
+checks validate integration; no repeated64-case or new post-merge GPU
+qualification is implied. The Libxc catalog is refreshed only for checked
+source identities, retaining stale status and zero qualified-product claims.

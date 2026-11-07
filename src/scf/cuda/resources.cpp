@@ -11,6 +11,18 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+cublasStatus_t CudaResources::prepare_matrix_context() noexcept {
+  auto status = cublasCreate(&blas_);
+  if (status == CUBLAS_STATUS_SUCCESS) status = cublasSetStream(blas_, stream_);
+  if (status == CUBLAS_STATUS_SUCCESS)
+    status = cublasSetPointerMode(blas_, CUBLAS_POINTER_MODE_HOST);
+  return status;
+}
+
+cublasStatus_t CudaResources::bind_matrix_workspace() noexcept {
+  return cublasSetWorkspace(blas_, solver_workspace_, solver_workspace_bytes_);
+}
+
 CudaResources::~CudaResources() {
   if (explicit_retirement_managed_) {
     if (!explicit_retirement_closed_) std::terminate();

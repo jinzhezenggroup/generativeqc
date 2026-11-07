@@ -24,7 +24,9 @@ def test_compact_source_admission(tmp_path: Path) -> None:
     (tmp_path / "cuda_runtime.h").write_text(
         '#pragma once\n#include "cuda_runtime_api.h"\nstruct dim3 { unsigned x=1,y=1,z=1; };\n'
     )
-    (tmp_path / "cublas_v2.h").write_text("#pragma once\nusing cublasHandle_t=void*;\n")
+    (tmp_path / "cublas_v2.h").write_text(
+        "#pragma once\nusing cublasHandle_t=void*;\nusing cublasStatus_t=int;\n"
+    )
     eigen_units = empty_eigen_owner_units(tmp_path)
     objects = []
     for name, source in (

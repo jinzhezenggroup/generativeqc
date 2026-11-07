@@ -23,9 +23,12 @@ def occupied_provider(tmp_path_factory: Any, required_native_cxx: Any) -> Any:
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <type_traits>
+#include <utility>
 using cublasHandle_t = void*;
 using cublasStatus_t = int;
-constexpr int CUBLAS_OP_N=0, CUBLAS_OP_T=1, CUBLAS_FILL_MODE_LOWER=0;
+constexpr int CUBLAS_OP_N=0, CUBLAS_OP_T=1;
+constexpr int CUBLAS_FILL_MODE_LOWER=0, CUBLAS_FILL_MODE_UPPER=1;
 constexpr int CUBLAS_STATUS_SUCCESS=0, CUBLAS_STATUS_INVALID_VALUE=7;
 static bool provider_entry=false;
 static int calls=0, fail_on=0, failure=0, bypass=0;
