@@ -479,6 +479,50 @@ void combined_range_oracle(const Fixture& fixture) {
       ++checks;
     }
   std::cout << "combined range oracle checks " << checks << "\n";
+  unsigned maximum_angular = 0;
+  for (const auto& shell : fixture.system.shells)
+    maximum_angular = std::max(maximum_angular, shell.angular_momentum);
+  if (maximum_angular < 3) {
+    // Cover every populated bucket without selecting empty higher orders.
+    // Optional combination must preserve a usable raw LR fallback here.
+    const auto pair_orders = 2 * maximum_angular + 1;
+    const auto mask = (1U << (pair_orders * (pair_orders + 1) / 2)) - 1;
+    scf::cuda_execution::DirectJkSourceLease compact(stream.get(), scf::FockOperator::LongRange,
+                                                     0.3);
+    require(
+        compact.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                        2 * elements * sizeof(double), 8ULL << 30, "1",
+                        "compact-combined-source-oracle", false, false, 1e-12, 8ULL << 30, false,
+                        scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
+                        mask) == GENERATIVEQC_STATUS_SUCCESS &&
+            compact.active(),
+        compact.reason());
+    scf::FockBuildSpec full;
+    full.derivative_order = 0;
+    auto range = full;
+    range.coulomb.present = false;
+    range.exchange.op = scf::FockOperator::LongRange;
+    range.exchange.omega = 0.3;
+    const auto completed_values = compact.completed_value_count();
+    require(compact.combine_full_exchange(full, range, 8ULL << 30) == GENERATIVEQC_STATUS_SUCCESS &&
+                compact.active() && !compact.combined_exchange(),
+            "compact complete source lost its raw LR fallback");
+    require(compact.completed_value_count() == completed_values,
+            "compact refusal counted the retained LR construction twice");
+    std::string detail;
+    require(compact.enqueue(range, matrices.get(), nullptr, matrices.get() + elements, error.get(),
+                            1e-12, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    require(compact.audit() == GENERATIVEQC_STATUS_SUCCESS,
+            "compact fallback failed finite/census audit");
+    std::vector<double> actual(elements);
+    cuda_check(cudaMemcpy(actual.data(), matrices.get() + elements, elements * sizeof(double),
+                          cudaMemcpyDeviceToHost));
+    for (std::size_t element = 0; element < elements; ++element)
+      require(std::isfinite(actual[element]) &&
+                  std::abs(actual[element] - fixture.range_exchange[1][element]) < 2e-9,
+              "compact fallback differs from independent raw LR matrix");
+  }
 }
 
 /** Independent SR/LR matrices protect both spins and partial caches. */

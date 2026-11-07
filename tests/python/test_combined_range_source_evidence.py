@@ -17,10 +17,27 @@ DIRECTORY = (
 
 
 @pytest.mark.parametrize(
-    "corruption", ["valid", "force", "work", "identity", "selector", "vv10", "time"]
+    "corruption",
+    [
+        "valid",
+        "force",
+        "work",
+        "identity",
+        "selector",
+        "vv10",
+        "time",
+        "missing_a100",
+        "missing_5090",
+        "empty_devices",
+        "infinite_baseline",
+        "basis",
+        "charge",
+        "spin",
+    ],
 )
+@pytest.mark.parametrize("optimized", [False, True])
 def test_combined_source_evidence_keeps_gates_under_optimized_python(
-    tmp_path: Path, corruption: str
+    tmp_path: Path, corruption: str, optimized: bool
 ) -> None:
     """A missing gate cannot be hidden by -O or an otherwise self-consistent archive."""
     evidence = json.loads(
@@ -40,6 +57,23 @@ def test_combined_source_evidence_keeps_gates_under_optimized_python(
         sample["ks_diagnostic"]["nonlocal_work"]["pair_sweeps"] -= 1
     elif corruption == "time":
         sample["seconds"] *= 2
+    elif corruption == "missing_a100":
+        del evidence["cohorts"]["final"]["devices"]["A100"]
+    elif corruption == "missing_5090":
+        del evidence["cohorts"]["final"]["devices"]["RTX5090"]
+    elif corruption == "empty_devices":
+        evidence["cohorts"]["final"]["devices"].clear()
+    elif corruption == "infinite_baseline":
+        baseline = evidence["cohorts"]["final"]["devices"]["A100"]["records"][
+            "baseline"
+        ]
+        baseline["samples"][0]["seconds"] = float("inf")
+    elif corruption == "basis":
+        candidate["orbital_basis"] = "def2-tzvp"
+    elif corruption == "charge":
+        candidate["charge"] = 1
+    elif corruption == "spin":
+        candidate["spin"] = 2
     (tmp_path / "evidence.json.xz").write_bytes(
         lzma.compress(json.dumps(evidence).encode())
     )
@@ -49,7 +83,7 @@ def test_combined_source_evidence_keeps_gates_under_optimized_python(
         f"reader['replay'](Path({str(tmp_path)!r}))"
     )
     result = subprocess.run(
-        [sys.executable, "-O", "-c", command],
+        [sys.executable, *(["-O"] if optimized else []), "-c", command],
         capture_output=True,
         text=True,
         check=False,

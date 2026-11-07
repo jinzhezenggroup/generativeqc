@@ -79,6 +79,10 @@ def replay(directory: Path = DIRECTORY) -> dict[str, Any]:
             "native patch mismatch",
         )
         require(cohort["owned_transfer_stopped"], "owned transfer not retired")
+        require(
+            set(cohort["devices"]) == {"A100", "RTX5090"},
+            "missing required device population",
+        )
         devices = {}
         for device, population in cohort["devices"].items():
             require(population["exit_code"] == 0, "incomplete GPU allocation")
@@ -137,7 +141,10 @@ def replay(directory: Path = DIRECTORY) -> dict[str, Any]:
                     record["method"] == "wb97m-v"
                     and record["mode"] == "direct"
                     and record["atoms"] == 96
-                    and record["basis_representation"] == "spherical",
+                    and record["basis_representation"] == "spherical"
+                    and record["orbital_basis"] == reference["cohort"]["orbital_basis"]
+                    and record["charge"] == reference["cohort"]["charge"]
+                    and record["spin"] == reference["cohort"]["spin"],
                     "changed scientific problem",
                 )
                 require(
@@ -219,7 +226,8 @@ def replay(directory: Path = DIRECTORY) -> dict[str, Any]:
                     "weighted contraction/fallback work mismatch",
                 )
                 require(
-                    math.isfinite(new["seconds"])
+                    math.isfinite(old["seconds"])
+                    and math.isfinite(new["seconds"])
                     and old["seconds"] > 0
                     and new["seconds"] > 0,
                     "invalid timing",

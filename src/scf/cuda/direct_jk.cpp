@@ -2961,6 +2961,10 @@ generativeqc_status prepare_cuda_direct_jk_combined_range_values(
   }
   plan->diagnostic.resident_values_submitted = 0;
   plan->diagnostic.resident_values_completed = 0;
+  // A compact mask can cover every nonempty bucket without matching the
+  // all-bucket temporary producer's identity. Keep that valid raw LR lease
+  // rather than turning an optional optimization into an endpoint failure.
+  if (plan->resident_bucket_mask != (1U << 28) - 1) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   const auto status = prepare_cuda_direct_jk_range_resident_values_impl(
       plan, maximum_transient_bytes, (1U << 28) - 1, FockOperator::FullRange, 0.0, detail,
       full_scale);
