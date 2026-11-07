@@ -10,6 +10,7 @@
 #include "scf/cuda/arena.hpp"
 #include "scf/cuda/resources.hpp"
 #include "scf/cuda/rhf_graph.hpp"
+#include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/diis_work.hpp"
@@ -95,6 +96,7 @@ struct CudaRhfBucketPlan {
   bool quartet_direct{};
   bool transformed_direct{};
   bool bounded_direct_streaming{};
+  cuda_policy::SharedRysXyPolicy shared_rys_xy{};
   /** Frozen with the optional arena regions and captured block predicates. */
   bool fp32_block_screening{};
   bool unrestricted{};
