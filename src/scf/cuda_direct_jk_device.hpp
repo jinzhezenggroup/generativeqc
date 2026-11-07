@@ -76,6 +76,16 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
                                                            std::size_t maximum_bytes,
                                                            std::string& detail);
 
+/** Replace a complete FP64 LR source by LR + full_scale * Full in place.
+ * A bounded temporary source uses the same canonical rows and compiler-owned
+ * producer; it is released before returning. The retained allocation does not
+ * grow. Refusal before mutation leaves the original LR source usable; errors
+ * after mutation must retire the source. Call only before the first consumer.
+ */
+generativeqc_status prepare_cuda_direct_jk_combined_range_values(
+    CudaDirectJkPlan* plan, double full_scale, std::size_t maximum_transient_bytes,
+    std::string& detail);
+
 /** Cache FP32 recurrence values in FP32 storage, never strict ERIs.
  * Restricted through-d sources share full/SR/LR identity and bounded angular
  * selection with strict sources. Unselected buckets evaluate mixed recurrences

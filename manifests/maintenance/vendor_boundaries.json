@@ -1,6 +1,17 @@
 {
   "schema": 1,
   "files": {
+    "src/tensor/cuda_vector_accumulation.hpp": {
+      "classification": "provider",
+      "contract": "src/tensor/cuda_vector_accumulation.hpp",
+      "reason": "Prepared FP64 contiguous vector accumulation owns stream-bound BLAS lifetime and submission. Scientific source owners supply the coefficient and disjoint admitted views, drain work and retain finite/publication policy; no recurrence or method selection moves into the provider.",
+      "references": {
+        "cublasCreate": 1,
+        "cublasDestroy": 1,
+        "cublasSetStream": 1,
+        "cublasDaxpy": 1
+      }
+    },
     "python/generativeqc_compiler/method/df_occupied_response_cuda.py": {
       "classification": "migration",
       "contract": "#1890",

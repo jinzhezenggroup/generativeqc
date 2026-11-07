@@ -64,6 +64,7 @@ def _production_probe() -> str:
         "generativeqc_status prepare_cuda_direct_jk_resident_values(",
         "std::size_t cuda_direct_jk_selected_resident_value_bytes(",
         "generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(",
+        "static generativeqc_status prepare_cuda_direct_jk_range_resident_values_impl(",
         "generativeqc_status prepare_cuda_direct_jk_range_resident_values(",
         "generativeqc_status prepare_cuda_direct_jk_selected_resident_values(",
         "bool cuda_direct_jk_linear_available(",
@@ -251,6 +252,18 @@ cudaError_t resource_cuda_free(void* p) {
 }  // namespace runtime
 }  // namespace generativeqc
 namespace runtime = generativeqc::runtime;
+constexpr int CUBLAS_STATUS_SUCCESS = 0, CUBLAS_STATUS_ALLOC_FAILED = 3;
+namespace generativeqc::tensor {
+struct CudaVectorAccumulation {
+  int prepare(cudaStream_t) {
+    throw std::logic_error("raw retry fixture attempted combined exchange");
+  }
+  int enqueue(int, double, const double*, double*) {
+    throw std::logic_error("raw retry fixture mutated a combined exchange source");
+  }
+};
+}
+namespace tensor = generativeqc::tensor;
 struct Slots : std::vector<void*> {
   void push_back(void* p) {
     if (state.publication_fail) throw std::bad_alloc();
@@ -285,6 +298,8 @@ struct CudaDirectJkPlan {
   float* resident_mixed_values{};
   FockOperator resident_operator{FockOperator::FullRange};
   double resident_omega{};
+  double resident_full_exchange_scale{};
+  void* host_cache{};
   size_t resident_value_count{}, device_bytes{16};
   std::uint32_t resident_bucket_mask{(1U << 28) - 1};
   Diagnostic diagnostic;

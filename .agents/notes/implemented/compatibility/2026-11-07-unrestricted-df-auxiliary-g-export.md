@@ -21,7 +21,7 @@ specialized polynomial/Rys/candidate diagnostics remain auxiliary-f-only.
 Both raw exporters pack Cartesian normalized metadata with `DfValues`, avoiding
 unused direct-HF shell-pair, quartet, resident-task and warm-density state.
 They retain the existing generated value and `AuxiliaryGDerivative` evaluators.
-No recurrence, spherical ordering, metric cutoff or scientific identity changes.
+No recurrence, spherical ordering, metric cutoff or fitting-Hamiltonian changes.
 The source's separately qualified full-range auxiliary-h domain (#3015) is not
 permission to admit h into unrestricted correlation response. A compiled host
 preflight checks that source h remains available while raw exports reject it
@@ -92,23 +92,41 @@ the local node3 Slurm GPU was maintenance-drained and was not used.
 On n1's RTX 5090 under finite `srun --partition=main --gres=gpu:5090:1`
 allocations, all four molecular CBS cases, eight raw-source/export cases, and
 both physical Na DZ / B TZ UHF/UMP2 cases passed against PySCF 2.14.0/libcint.
-The complete physical B DZ/TZ CBS energy/force gate also passed, including all
+The complete physical Na and B DZ/TZ CBS energy/force gates passed, including all
 component energies and both directional-difference steps for the components
 and the assembled force.
 The native DF suite also passed its 48 weighted finite-difference gates and
 RI-J/K/planning checks; native work-policy/status contracts passed. The local
-host CBS algebra, composition and policy suite passed 240 tests. The standalone
+host CBS algebra, composition and policy suite passed 240 tests; another 70
+catalog/provenance tests passed after refreshing the checked input identities.
+The standalone
 `validate_df_source.py --derivatives` tier passed all 16 configurations across
 spherical and mixed Cartesian/spherical g fixtures, four source mappings and
 two tile sizes, including single/batch values and coordinate derivatives.
 
-The complete Na physical CCSD(T)/MP2 CBS force qualification exceeded its
-20-minute allocation, and a separate Na DZ CCSD(T) energy-only attempt exceeded
-five minutes. Neither published a qualified complete result. These limits are
-not auxiliary-g errors, numerical acceptance failures, or evidence of complete
-Na CBS force qualification. The current-master Na gate is running in an explicit
-four-hour allocation without weakening its work/memory/convergence policies or
-dropping its oracle. Complete Na CBS qualification remains pending.
+The complete Na physical CBS gate passed in Slurm job 16635 within its explicit
+four-hour allocation, using the default finite scalar-work limit (`1e11`), a
+32-GiB numerical memory budget and all independent component/composite force
+checks. The test call took 11602.02 seconds, including its independent oracles
+and optional diagnostics; this is not an optimized production latency claim.
+Earlier 20-minute full-CBS and five-minute energy-only allocations were too
+short, not numerical failures. Keep the separate long-running physical gate
+rather than dropping response/oracles or weakening admission to fit a short job.
+
+Subsequent master integration brought restricted-MP2/residency observations
+(`dafa29f839c3f6e146c5f088bb5d5592bf14125a`) and coefficient-bound Direct range
+exchange (`22b33b081fe201e004199b6e2bda569354e9f519`). A one-off source comparison
+against the qualified change confirms that the unrestricted CC owner, its
+fitting/response adapters, raw exporters, DF value source and integral sources
+are byte-identical. This is opt-in integration evidence, not a permanent source
+fingerprint CI gate. Na's retained qualification belongs to the exact original
+library above, not a relabelled binary.
+
+The first integrated build, SHA-256
+`2b6ce37190705c39c4cec3188ac1b6b0b5a8cadb13bc86636cb3da3ef4c92f3e`,
+independently repeated all 15 shorter GPU cases (including complete B CBS),
+the 48 native finite-difference gates and the admission/status contracts.
+The integrated host suite passed all 310 tests.
 
 ## Revisit when
 

@@ -72,6 +72,21 @@ class DirectJkSourceLease {
                               double* exchange, int* numerical_error, double screening,
                               std::string& detail, const double* beta = nullptr,
                               double* beta_exchange = nullptr);
+  /** Prepare a coefficient-bound RSH K source before its first consumer.
+   * Retains LR + (c_full/c_range) Full in the existing allocation. A finite
+   * temporary-memory refusal preserves ordinary LR replay. Neither raw J nor
+   * raw LR consumers may borrow an accepted composite source.
+   */
+  generativeqc_status combine_full_exchange(FockBuildSpec full, FockBuildSpec range,
+                                            std::size_t maximum_transient_bytes);
+  bool combined_exchange() const noexcept { return combined_exchange_; }
+  /** Enqueue K_LR + (c_full/c_range) K_full for the frozen restricted terms.
+   * The consumer applies c_range once; ordinary raw-LR/J entry points reject it.
+   */
+  generativeqc_status enqueue_combined_exchange(FockBuildSpec full, FockBuildSpec range,
+                                                const double* density, double* exchange,
+                                                int* numerical_error, double screening,
+                                                std::string& detail);
   /** Fence finite/census validation before publishing the last action.
    * At the frozen Schwarz threshold every uncached value must be evaluated.
    * A stricter replay predicate may skip recurrences but not source visits.
@@ -99,6 +114,9 @@ class DirectJkSourceLease {
   }
 
  private:
+  generativeqc_status enqueue_impl(FockBuildSpec spec, const double* density, double* coulomb,
+                                   double* exchange, int* numerical_error, double screening,
+                                   std::string& detail, const double* beta, double* beta_exchange);
   void release_values() noexcept;
   cudaStream_t stream_{};
   FockOperator source_operator_{FockOperator::FullRange};
@@ -116,6 +134,8 @@ class DirectJkSourceLease {
   double source_screening_{}, last_screening_{};
   std::size_t host_value_bytes_{}, host_capacity_bytes_{}, disk_value_bytes_{};
   bool prepared_{};
+  bool combined_exchange_{};
+  FockTermSpec combined_full_term_{}, combined_range_term_{};
   const char* selection_{"auto"};
   std::string reason_{"ineligible"};
 };
