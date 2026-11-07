@@ -287,6 +287,12 @@ no increase in handwritten scientific CUDA lines, with no new CUDA file or
 semantic ownership reclassification. Real-device qualification of the
 integrated source is distinct from the earlier binary's evidence above.
 
+The first PR CI attempt also identifies the native Libxc catalog's checked
+source-input digests as stale after these native-source edits. Regenerate
+only that current identity/report: the retained campaign, measured binary,
+scientific capability summary, acknowledgements, and already-stale admission
+state remain unchanged. This is not a new Libxc numerical qualification.
+
 ## Revisit when
 
 Matrix-free curvature admission replaces the dense physical Hessian, or a new
