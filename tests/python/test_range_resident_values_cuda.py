@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
     [
         ("range-oracle", 1),
         ("range-oracle", 4),
+        ("combined-range-oracle", 1),
+        ("combined-range-oracle", 4),
         ("range-mixed-oracle", 1),
         ("range-mixed-oracle", 4),
         ("range-host-oracle", 1),
@@ -121,6 +123,8 @@ def test_resident_range_sources_match_independent_matrices(
     assert (
         "full host oracle checks passed"
         if mode.startswith("full-")
+        else "combined range oracle checks 4"
+        if mode == "combined-range-oracle"
         else "mixed range oracle checks 24"
         if mode == "range-mixed-oracle"
         else "range oracle checks 16"
@@ -131,10 +135,11 @@ def test_resident_range_sources_match_independent_matrices(
     (tmp_path / "oracle-result.txt").write_text(result.stdout)
 
 
+@pytest.mark.parametrize("mode", ["range-oracle", "combined-range-oracle"])
 def test_resident_range_sources_cover_f_shells(
-    tmp_path: Path, native_cxx: NativeCxx
+    tmp_path: Path, native_cxx: NativeCxx, mode: str
 ) -> None:
     """Qualify shared orders through nine and the higher-order scalar fallback."""
     test_resident_range_sources_match_independent_matrices(
-        tmp_path, native_cxx, 0.001, "range-oracle", 1, basis_name="def2-tzvp"
+        tmp_path, native_cxx, 0.001, mode, 1, basis_name="def2-tzvp"
     )

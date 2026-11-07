@@ -219,6 +219,10 @@ generativeqc_status prepare_cuda_direct_jk_range_resident_values(
     FockOperator, double, std::string& detail) {
   return prepare_cuda_direct_jk_selected_resident_values(plan,budget,mask,detail);
 }
+generativeqc_status prepare_cuda_direct_jk_combined_range_values(
+    CudaDirectJkPlan*, double, std::size_t, std::string&) {
+  throw std::logic_error("HF lifetime fixture attempted combined range exchange");
+}
 generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
     CudaDirectJkPlan* plan, std::size_t budget, std::string& detail,
     FockOperator source_operator, double omega, std::uint32_t mask) {
