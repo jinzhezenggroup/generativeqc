@@ -30,14 +30,12 @@ generativeqc_status cuda_status(cudaError_t status) {
 /** Generate Cartesian DF tensors without constructing the full four-center ERI. */
 generativeqc_status build_cuda_density_fitting_integrals_impl(
     int device_id, const core::System& orbital_system, const core::System& auxiliary_system,
-    integrals::DensityFittingIntegralData& output, std::string& detail, bool include_derivatives) {
-  unsigned value_math = 0, value_lanes = 1;
+    integrals::DensityFittingIntegralData& output, std::string& detail, bool include_derivatives,
+    const CudaDfSourcePolicy& policy) {
+  const unsigned value_math = policy.value_math;
+  unsigned value_lanes = 1;
   if (!cuda_policy::df_value_raw_lanes_requested(value_lanes)) {
     detail = "GENERATIVEQC_DF_VALUE_RAW_MAPPING must be auto, scalar, subgroup, warp or candidate";
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  }
-  if (!cuda_policy::df_value_math_requested(value_math)) {
-    detail = "GENERATIVEQC_DF_VALUE_MATH must be auto, generic, polynomial rys or candidate";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (device_id < 0) {
@@ -74,7 +72,10 @@ generativeqc_status build_cuda_density_fitting_integrals_impl(
 
   HostBatch host;
   std::vector<const std::vector<double>*> no_warm(1, nullptr);
-  if (!pack_host_batch({combined}, no_warm, host, false)) {
+  // Raw values and coordinate derivatives share the source's Cartesian-only
+  // metadata domain; no direct-HF quartet or warm-density state is consumed.
+  if (!pack_host_batch({combined}, no_warm, host, false, true, false, ResidentPsssPolicy::Skip,
+                       HostBasisPacking::DfValues)) {
     detail = "combined Cartesian DF basis cannot be represented by CUDA";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -278,12 +279,13 @@ generativeqc_status build_cuda_density_fitting_integrals_impl(
 generativeqc_status build_cuda_density_fitting_integrals(
     int device_id, const core::System& orbital_system, const core::System& auxiliary_system,
     integrals::DensityFittingIntegralData& output, std::string& detail, bool include_derivatives) {
-  if (!cuda_df_shell_domain(auxiliary_system, "auxiliary", detail) ||
-      !cuda_df_shell_domain(orbital_system, "orbital", detail)) {
+  CudaDfSourcePolicy policy;
+  if (!resolve_cuda_df_source_policy(policy, detail) ||
+      !cuda_df_integral_export_domain(orbital_system, auxiliary_system, policy, detail)) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   return build_cuda_density_fitting_integrals_impl(device_id, orbital_system, auxiliary_system,
-                                                   output, detail, include_derivatives);
+                                                   output, detail, include_derivatives, policy);
 }
 
 }  // namespace generativeqc::scf

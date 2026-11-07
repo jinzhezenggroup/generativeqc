@@ -31,15 +31,12 @@ generativeqc_status build_cuda_density_fitting_integrals_batch_impl(
     int device_id, const std::vector<core::System>& orbital_systems,
     const std::vector<core::System>& auxiliary_systems,
     std::vector<integrals::DensityFittingIntegralData>& outputs, std::string& detail,
-    std::size_t output_budget_bytes, bool include_derivatives) {
+    std::size_t output_budget_bytes, bool include_derivatives, const CudaDfSourcePolicy& policy) {
   outputs.clear();
-  unsigned value_math = 0, value_lanes = 1;
+  const unsigned value_math = policy.value_math;
+  unsigned value_lanes = 1;
   if (!cuda_policy::df_value_raw_lanes_requested(value_lanes)) {
     detail = "GENERATIVEQC_DF_VALUE_RAW_MAPPING must be auto, scalar, subgroup, warp or candidate";
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  }
-  if (!cuda_policy::df_value_math_requested(value_math)) {
-    detail = "GENERATIVEQC_DF_VALUE_MATH must be auto, generic, polynomial rys or candidate";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (device_id < 0 || orbital_systems.empty() ||
@@ -90,7 +87,9 @@ generativeqc_status build_cuda_density_fitting_integrals_batch_impl(
   }
   HostBatch host;
   std::vector<const std::vector<double>*> no_warm(batch_size, nullptr);
-  if (!pack_host_batch(combined, no_warm, host, false) || host.nbf == 0U) {
+  if (!pack_host_batch(combined, no_warm, host, false, true, false, ResidentPsssPolicy::Skip,
+                       HostBasisPacking::DfValues) ||
+      host.nbf == 0U) {
     detail = "combined Cartesian DF batch cannot be represented by CUDA";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -399,17 +398,21 @@ generativeqc_status build_cuda_density_fitting_integrals_batch(
     const std::vector<core::System>& auxiliary_systems,
     std::vector<integrals::DensityFittingIntegralData>& outputs, std::string& detail,
     std::size_t output_budget_bytes, bool include_derivatives) {
-  for (const auto& system : auxiliary_systems) {
-    if (!cuda_df_shell_domain(system, "auxiliary", detail))
+  CudaDfSourcePolicy policy;
+  if (!resolve_cuda_df_source_policy(policy, detail)) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (orbital_systems.size() != auxiliary_systems.size()) {
+    outputs.clear();
+    detail = "CUDA DF integral batch dimensions are invalid";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  for (std::size_t system = 0; system < orbital_systems.size(); ++system) {
+    if (!cuda_df_integral_export_domain(orbital_systems[system], auxiliary_systems[system], policy,
+                                        detail))
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  for (const auto& system : orbital_systems) {
-    if (!cuda_df_shell_domain(system, "orbital", detail))
-      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  }
-  return build_cuda_density_fitting_integrals_batch_impl(device_id, orbital_systems,
-                                                         auxiliary_systems, outputs, detail,
-                                                         output_budget_bytes, include_derivatives);
+  return build_cuda_density_fitting_integrals_batch_impl(
+      device_id, orbital_systems, auxiliary_systems, outputs, detail, output_budget_bytes,
+      include_derivatives, policy);
 }
 
 }  // namespace generativeqc::scf
