@@ -237,9 +237,6 @@ SEMILOCAL_ABI_IDS = {
     "r2scan-uks": 11,
 }
 SPARSE_SPHERICAL_COMPONENT_TERMS = {0: 1, 1: 3, 2: 8}
-SPD_EXPANSION_CONTRACT_SHA256 = (
-    "a482b3ace40fd01758f504c1e47bfa795dcabb5483149873fcd36e71c6b47ae0"
-)
 AO_PACKER_CONTRACT_SHA256 = (
     "07858ba7f9a78fe6348bbcb9430eb4f8321db8774ea3ce1ecef495629abe2a1c"
 )
@@ -251,9 +248,6 @@ NATIVE_AO_CONSTRUCTOR_CONTRACT_SHA256 = (
 )
 BASIS_SNAPSHOT_CONTRACT_SHA256 = (
     "4dea9a2041897bf843012c01f64c580b6b8696f444611a54c0d161141f1894fd"
-)
-BASIS_SHELL_EXPANSION_CONTRACT_SHA256 = (
-    "300a64c1815273cf31ed5b463eac2e32f24bf4a1db5938975ffbad5cfb27f60c"
 )
 # Reviewed strict Cartesian x/y/z pairing preserves the native basis layout.
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
@@ -2223,6 +2217,7 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
     """
     import ctypes
     from dataclasses import replace
+    from unittest.mock import patch
 
     from generativeqc import calculator as calculator_module
 
@@ -2275,6 +2270,18 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
         if reject_preflight:
             raise AdmissionRejected
         calculator_module.require_basis(basis, observed_atoms, **options)
+
+    expand_shells = BasisSet.shells_for
+
+    def observe_shell_expansion(basis: Any, observed_atoms: Any, **options: Any) -> Any:
+        expected = {k: v for k, v in expected_options.items() if k != "representation"}
+        if (
+            basis != expected_basis
+            or tuple(observed_atoms) != atoms
+            or options != expected
+        ):
+            raise RuntimeError("basis shell expansion capability inputs changed")
+        return expand_shells(basis, observed_atoms, **options)
 
     def capture_system(
         observed_context: Any,
@@ -2403,6 +2410,7 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
                     calculator._method = native.METHOD_PBE_RKS
                     calculator._dispersion_method_ir = None
                     calculator._composite_rks_second_order = False
+                    calculator._ks_options = None
                     calculator._library = SimpleNamespace(
                         generativeqc_system_create=capture_system,
                         generativeqc_system_create_ecp=capture_ecp,
@@ -2438,12 +2446,15 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
                             }
                             label = "_shells_for_atoms"
                             preflight_seen = False
-                            shells = calculator._shells_for_atoms(
-                                atoms,
-                                explicit_basis,
-                                operator=operator,
-                                derivative_order=derivative_order,
-                            )
+                            with patch.object(
+                                BasisSet, "shells_for", observe_shell_expansion
+                            ):
+                                shells = calculator._shells_for_atoms(
+                                    atoms,
+                                    explicit_basis,
+                                    operator=operator,
+                                    derivative_order=derivative_order,
+                                )
                             if not preflight_seen or tuple(shells) != expected_shells:
                                 raise RuntimeError("basis shell expansion changed")
                         expected_options.update(
@@ -2585,6 +2596,119 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
     )
 
 
+def _basis_shell_expansion_contract(repository: Path) -> str:
+    """Exercise current contraction expansion and its role-specific admission."""
+    from unittest.mock import patch
+
+    from generativeqc import basis as basis_module
+    from generativeqc import basis_capabilities
+    from generativeqc.calculator import Primitive, Shell
+
+    source = (repository / "python/generativeqc/basis.py").read_text(encoding="utf-8")
+    owners = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.ClassDef) and node.name == "BasisSet"
+    ]
+    functions = [
+        node
+        for owner in owners
+        for node in owner.body
+        if isinstance(node, ast.FunctionDef) and node.name == "shells_for"
+    ]
+    if len(functions) != 1:
+        raise RuntimeError("shells_for basis lowering is missing or ambiguous")
+    namespace = dict(vars(basis_module))
+    exec(  # noqa: S102 - current repository method, metadata only
+        compile(ast.Module(body=functions, type_ignores=[]), str(repository), "exec"),
+        namespace,
+    )
+    expand = namespace["shells_for"]
+    atoms = (Atom(6, (0.25, -0.5, 0.75)), Atom(1, (1.5, 0.25, -0.125)))
+    # Multiple contraction rows, a zero coefficient, signed coefficients and a
+    # second element distinguish row/primitive truncation and atom reordering.
+    elements = (
+        basis_module.ElementBasis(
+            6,
+            (
+                basis_module.BasisShell(
+                    2, ("2.5", "0.25"), (("0.5", "-0.25"), ("0", "1"))
+                ),
+            ),
+        ),
+        basis_module.ElementBasis(
+            1, (basis_module.BasisShell(0, ("0.75",), (("1.25",),)),)
+        ),
+    )
+    expected_shells = (
+        Shell(0, 2, (Primitive(2.5, 0.5), Primitive(0.25, -0.25))),
+        Shell(0, 2, (Primitive(2.5, 0.0), Primitive(0.25, 1.0))),
+        Shell(1, 0, (Primitive(0.75, 1.25),)),
+    )
+    admit = basis_capabilities.require_basis
+    seen = False
+    reject = False
+
+    class AdmissionRejected(Exception):
+        pass
+
+    def observe(basis: Any, observed_atoms: Any, **options: Any) -> None:
+        nonlocal seen
+        seen = True
+        if (
+            basis is not selected
+            or tuple(observed_atoms) != atoms
+            or options != request
+        ):
+            raise RuntimeError("shell expansion capability inputs changed")
+        if reject:
+            raise AdmissionRejected
+        admit(basis, observed_atoms, **options)
+
+    try:
+        with patch.object(basis_capabilities, "require_basis", observe):
+            for representation in ("spherical", "cartesian"):
+                selected = replace(
+                    snapshot_basis("def2-svp", representation), elements=elements
+                )
+                for backend, role, operator, order, consumer in (
+                    ("cpu", "orbital", "eri", 0, None),
+                    ("cuda", "orbital", "kinetic", 1, None),
+                    ("cpu", "auxiliary", "df_metric", 0, None),
+                    ("cuda", "auxiliary", "df_three_center", 1, "scf_df"),
+                    ("cuda", "auxiliary", "df_metric", 0, "correlation_df"),
+                ):
+                    request = {
+                        "backend": backend,
+                        "role": role,
+                        "operator": operator,
+                        "derivative_order": order,
+                        "consumer": consumer,
+                    }
+                    seen = False
+                    if (
+                        tuple(expand(selected, atoms, **request)) != expected_shells
+                        or not seen
+                    ):
+                        raise RuntimeError("shell/primitive census changed")
+                    reject = True
+                    try:
+                        expand(selected, atoms, **request)
+                    except AdmissionRejected:
+                        pass
+                    else:
+                        raise RuntimeError(
+                            "shell expansion admission failure was swallowed"
+                        )
+                    finally:
+                        reject = False
+    except Exception as error:
+        raise RuntimeError(
+            f"shells_for basis lowering contract changed: {error}"
+        ) from error
+    return _source_node_sha256(source, functions[0])
+
+
 def _basis_layout_contract(repository: Path) -> dict[str, str]:
     source = (repository / "python/generativeqc_compiler/dft/ao.py").read_text(
         encoding="utf-8"
@@ -2666,12 +2790,7 @@ def _basis_layout_contract(repository: Path) -> dict[str, str]:
         "snapshot_basis",
         BASIS_SNAPSHOT_CONTRACT_SHA256,
     )
-    expansion_digest = function_digest(
-        "python/generativeqc/basis.py",
-        "shells_for",
-        BASIS_SHELL_EXPANSION_CONTRACT_SHA256,
-        class_name="BasisSet",
-    )
+    expansion_digest = _basis_shell_expansion_contract(repository)
     shell_forwarding_digest, native_system_digest = _calculator_basis_contract(
         repository
     )
@@ -2690,7 +2809,12 @@ def _basis_layout_contract(repository: Path) -> dict[str, str]:
 
 
 def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
-    """Bind frozen s/p/d term counts to the native public-AO expansion table."""
+    """Report current s/p/d expansion provenance, without compiling native code.
+
+    The required cached host probe in test_dft_mp_v1_capacity executes the full
+    native owner against independent expansion/count fixtures. A source digest
+    is provenance only: this preflight cannot qualify native scientific behavior.
+    """
 
     source = (repository / "src/molecule/basis.cpp").read_text(encoding="utf-8")
     try:
@@ -2699,8 +2823,6 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
     except ValueError as error:
         raise RuntimeError("native s/p/d expansion owner is missing") from error
     digest = _lf_sha256(source[begin:end].encode())
-    if digest != SPD_EXPANSION_CONTRACT_SHA256:
-        raise RuntimeError("native s/p/d expansion contract changed")
 
     packer_source = (repository / "src/dft/ao_grid.cpp").read_text(encoding="utf-8")
     try:

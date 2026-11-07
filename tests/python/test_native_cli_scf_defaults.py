@@ -20,8 +20,9 @@ int main() {
   using generativeqc::cli::RunOptions;
   using generativeqc::cli::resolve_scf_convergence;
   RunOptions options;
+  options.method = GENERATIVEQC_METHOD_RHF;
   const auto standard = resolve_scf_convergence(options, false);
-  if (standard.energy_tolerance != 1e-10 || standard.density_tolerance != 1e-8)
+  if (standard.energy_tolerance != 1e-9 || standard.density_tolerance != 1e-5)
     return 1;
 
   const auto correlated = resolve_scf_convergence(options, true);
@@ -42,8 +43,13 @@ int main() {
   // An explicit tighter component does not change the other default.
   options.density_tolerance.reset();
   const auto mixed = resolve_scf_convergence(options, false);
-  if (mixed.energy_tolerance != 3e-11 || mixed.density_tolerance != 1e-8)
+  if (mixed.energy_tolerance != 3e-11 || mixed.density_tolerance != 1e-5)
     return 4;
+  options.energy_tolerance.reset();
+  options.method = GENERATIVEQC_METHOD_GFN2_XTB;
+  const auto scc = resolve_scf_convergence(options, false);
+  if (scc.energy_tolerance != 1e-10 || scc.density_tolerance != 1e-8)
+    return 5;
   return 0;
 }
 """,

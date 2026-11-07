@@ -245,11 +245,23 @@ def capture_metric_case(name: str, output: Path) -> None:
             activity = profiler.stop()
         except (RuntimeError, ValueError, OSError, AssertionError) as error:
             cleanup_errors.append(str(error))
-    diagnostics = (
-        summarize_sources(source, activity, regions)
-        if source and activity
-        else {"source_annotations_intact": False, "issues": ["incomplete capture"]}
-    )
+    for filename, value in (
+        ("activity.json", activity),
+        ("source-boundaries.json", source),
+        ("graph-inventory.json", graphs),
+        ("regions.json", regions),
+    ):
+        (output / filename).write_text(json.dumps(value, indent=2, default=str) + "\n")
+    try:
+        diagnostics = (
+            summarize_sources(source, activity, regions)
+            if source and activity
+            else {"source_annotations_intact": False, "issues": ["incomplete capture"]}
+        )
+    except (RuntimeError, ValueError, TypeError, KeyError, OverflowError) as error:
+        diagnostics = {"source_annotations_intact": False, "issues": [str(error)]}
+        if capture_error is None:
+            capture_error = error
     expected = meta["records"]["df"]
     reference_energy = expected["hf_energy"] + expected["correlation_energy"]
     evidence = {
@@ -287,9 +299,11 @@ def capture_metric_case(name: str, output: Path) -> None:
         assert abs(result.energy - target) < evidence["energy_gate"]
 
 
+@pytest.mark.parametrize("broken_journal", [False, True])
 def test_failed_scientific_capture_retains_journals_and_original_exception(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    broken_journal: bool,
 ) -> None:
     """CPU doubles test failure ownership, not scientific CUDA execution."""
     import generativeqc
@@ -322,6 +336,8 @@ def test_failed_scientific_capture_retains_journals_and_original_exception(
         return next(statuses)
 
     raw, activity = metric_fixture()
+    if broken_journal:
+        raw["records"][2]["bytes"] += 8
     monkeypatch.setattr(generativeqc, "Calculator", Calculator)
     monkeypatch.setattr(
         ctypes, "CDLL", lambda _: SimpleNamespace(cudaDeviceSynchronize=synchronize)
@@ -378,3 +394,38 @@ if __name__ == "__main__":
     if len(sys.argv) != 4 or sys.argv[1] != "--capture":
         raise SystemExit("expected --capture FIXTURE OUTPUT")
     capture_metric_case(sys.argv[2], Path(sys.argv[3]))
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "stream",
+        "context",
+        "missing-fence",
+        "early-completion",
+        "download-bytes",
+        "upload-bytes",
+        "copies",
+    ],
+)
+def test_invalid_activity_cannot_qualify_host_round_trip(mutation: str) -> None:
+    raw, activity = metric_fixture()
+    for row in activity["records"]:
+        if row["kind"] == 38:
+            if mutation in ("stream", "context"):
+                row[mutation] += 1
+            elif mutation == "early-completion":
+                row["start"], row["end"] = 1, 2
+        if row["kind"] == 1:
+            if (mutation == "download-bytes" and row["subtype"] == 2) or (
+                mutation == "upload-bytes" and row["subtype"] == 1
+            ):
+                row["bytes"] //= 2
+            elif mutation == "copies":
+                row["copy_count"] += 1
+    if mutation == "missing-fence":
+        activity["records"] = [row for row in activity["records"] if row["kind"] != 38]
+    recount(raw, activity)
+    result = summarize_sources(raw, activity, REGIONS)
+    assert not result["qualified_host_round_trips"]
+    assert not result["source_annotations_intact"]

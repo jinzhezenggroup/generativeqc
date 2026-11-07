@@ -9,21 +9,46 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
-import numpy as np
-import pyscf
-from generativeqc import Atom, Calculator
-from pyscf import gto, mp, scf
-from pyscf.data.elements import ELEMENTS
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT))
+from benchmarks._retention import raw_output_path
+
+
+def observation_histories(directory: Path) -> dict[Path, dict]:
+    """Reject incomplete cold/warm histories before running the scientific oracle."""
+    files = sorted(directory.glob("endpoint-*.json")) + sorted(
+        directory.glob("memory-*.endpoints.json")
+    )
+    if not files:
+        raise ValueError("no complete endpoint observations")
+    histories = {}
+    for filename in files:
+        cases = json.loads(filename.read_text())["cases"]
+        for name in ("h2", "lih", "water"):
+            samples = cases[name]["samples"]
+            if not isinstance(samples, list) or len(samples) != 2:
+                raise ValueError(f"{filename}: expected two samples for {name}")
+        histories[filename] = cases
+    return histories
 
 
 def main() -> None:
     """Retain the independent inputs/results and check every observed endpoint."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--observations", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     arguments = parser.parse_args()
+    observations = observation_histories(arguments.observations)
+
+    import numpy as np
+    import pyscf
+    from generativeqc import Atom, Calculator
+    from pyscf import gto, mp, scf
+    from pyscf.data.elements import ELEMENTS
+
     cases = {
         "h2": [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))],
         "lih": [(3, (0.0, 0.0, 0.0)), (1, (0.0, 0.0, 3.0))],
@@ -35,11 +60,6 @@ def main() -> None:
     }
     references = {}
     energy_errors, force_errors = [], []
-    observations = sorted(arguments.observations.glob("endpoint-*.json")) + sorted(
-        arguments.observations.glob("memory-*.endpoints.json")
-    )
-    if not observations:
-        raise ValueError("no complete endpoint observations")
     for name, atoms in cases.items():
         labels = [
             f"{ELEMENTS[atomic_number]}{index}"
@@ -77,7 +97,7 @@ def main() -> None:
             "forces": forces.tolist(),
         }
         for filename in observations:
-            for sample in json.loads(filename.read_text())["cases"][name]["samples"]:
+            for sample in observations[filename][name]["samples"]:
                 assert sample["converged"], filename
                 energy_error = abs(sample["energy"] - correlation.e_tot)
                 force_error = float(

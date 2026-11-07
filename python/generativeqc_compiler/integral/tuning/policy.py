@@ -55,27 +55,31 @@ class ScheduleTrial:
 
         shared = "shared" if self.schedule.shared_coulomb else "recomputed"
         unroll = "unrolled" if self.schedule.unroll_pair_terms else "rolled"
-        return "_".join(
-            (
-                self.schedule.kind.value,
-                f"b{self.schedule.block_threads}",
-                f"t{self.schedule.component_tile}",
-                f"w{self.schedule.tasks_per_warp}",
-                f"o{self.schedule.minimum_blocks_per_sm}",
-                f"r{self.schedule.maximum_registers}",
-                shared,
-                unroll,
-                self.schedule.pair_orientation.value,
-                f"pairs_{self.schedule.pair_storage.value}",
-                self.schedule.algebra_placement.value,
-                self.schedule.algebra_ordering.value,
-                self.schedule.algebra_fusion.value,
-                self.schedule.algebra_form.value,
+        return (
+            "_".join(
+                (
+                    self.schedule.kind.value,
+                    f"b{self.schedule.block_threads}",
+                    f"t{self.schedule.component_tile}",
+                    f"w{self.schedule.tasks_per_warp}",
+                    f"o{self.schedule.minimum_blocks_per_sm}",
+                    f"r{self.schedule.maximum_registers}",
+                    shared,
+                    unroll,
+                    self.schedule.pair_orientation.value,
+                    f"pairs_{self.schedule.pair_storage.value}",
+                    self.schedule.algebra_placement.value,
+                    self.schedule.algebra_ordering.value,
+                    self.schedule.algebra_fusion.value,
+                    self.schedule.algebra_form.value,
+                )
             )
-        ) + (
-            "_mixed_pair_products_fp64"
-            if self.schedule.mixed_pair_products_fp64
-            else ""
+            + (
+                "_mixed_pair_products_fp64"
+                if self.schedule.mixed_pair_products_fp64
+                else ""
+            )
+            + ("_fock_shared_rys_xy" if self.schedule.fock_shared_rys_xy else "")
         )
 
     @property
@@ -214,6 +218,8 @@ def schedule_payload(schedule: ScheduleIR) -> dict[str, object]:
     }
     if schedule.mixed_pair_products_fp64:
         payload["mixed_pair_products_fp64"] = True
+    if schedule.fock_shared_rys_xy:
+        payload["fock_shared_rys_xy"] = True
     return payload
 
 

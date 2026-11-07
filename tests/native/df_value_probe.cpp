@@ -51,7 +51,8 @@ void write_optional_string(const char* value) {
   else
     std::cout << "null";
 }
-void read_shells(std::istream& input, System& system, std::size_t count) {
+void read_shells(std::istream& input, System& system, std::size_t count,
+                 unsigned maximum_angular_momentum = 4) {
   require(count > 0 && count <= 100, "invalid fixture shell count");
   for (std::size_t shell = 0; shell < count; ++shell) {
     generativeqc::core::Shell value;
@@ -67,9 +68,9 @@ void read_shells(std::istream& input, System& system, std::size_t count) {
   }
   std::string detail;
   require(static_cast<bool>(input), "truncated fixture input");
-  require(
-      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
-      detail);
+  require(generativeqc::molecule::validate_and_normalize(
+              system, detail, maximum_angular_momentum) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
 }
 }  // namespace
 
@@ -119,7 +120,7 @@ int main(int argc, char** argv) {
                                                    ? GENERATIVEQC_BASIS_CARTESIAN
                                                    : GENERATIVEQC_BASIS_SPHERICAL;
       read_shells(input, orbital[system], orbital_shells);
-      read_shells(input, auxiliary[system], auxiliary_shells);
+      read_shells(input, auxiliary[system], auxiliary_shells, 5);
     }
     std::string detail;
     CudaDensityFittingIntegralSource* raw_source = nullptr;
@@ -176,7 +177,7 @@ int main(int argc, char** argv) {
               "overflowing packed tile accepted");
     }
     auto unsupported_auxiliary = auxiliary;
-    unsupported_auxiliary[0].shells[0].angular_momentum = 5U;
+    unsupported_auxiliary[0].shells[0].angular_momentum = 6U;
     CudaDensityFittingIntegralSource* unsupported = nullptr;
     std::vector<double> unsupported_metric;
     std::size_t unsupported_nbf = 0, unsupported_naux = 0;
@@ -184,8 +185,8 @@ int main(int argc, char** argv) {
         create_cuda_density_fitting_integral_source(
             0, orbital, unsupported_auxiliary, &unsupported, unsupported_metric, unsupported_nbf,
             unsupported_naux, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
-            unsupported == nullptr && detail.find("beyond g") != std::string::npos,
-        "unsupported auxiliary h shell was not explicitly rejected");
+            unsupported == nullptr && detail.find("beyond h") != std::string::npos,
+        "unsupported auxiliary i shell was not explicitly rejected");
     auto unsupported_orbital = orbital;
     unsupported_orbital[0].shells[0].angular_momentum = 4U;
     require(

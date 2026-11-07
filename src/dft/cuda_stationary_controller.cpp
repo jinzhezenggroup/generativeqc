@@ -53,6 +53,8 @@ struct CudaStationaryController::NonlocalOwner {
   std::size_t points_per_atom{};
   std::vector<std::size_t> xc_offsets, offsets;
   std::vector<double> xc_radii, radii;
+  // A shared panel also borrows stationary topology, not just coordinates.
+  bool shared_grid{};
   runtime::OwnedCudaBuffer<double> effective, seeds, workspace;
   runtime::OwnedCudaBuffer<int> errors;
   // Coordinates, weights, parameters and grid lifetime are fixed by this
@@ -162,6 +164,11 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
       };
       topology(grid, pair.xc_offsets, pair.xc_radii);
       topology(*nonlocal_grid, pair.offsets, pair.radii);
+      pair.shared_grid = pair.quadrature.points == quadrature_.points &&
+                         pair.quadrature.point_count == quadrature_.point_count &&
+                         pair.quadrature.device == quadrature_.device &&
+                         pair.points_per_atom == points_per_atom_ &&
+                         pair.offsets == pair.xc_offsets && pair.radii == pair.xc_radii;
     }
     grid_provider_allowance_.emplace(device, storage.provider_allowance);
     require_stationary_call(
@@ -389,45 +396,15 @@ generativeqc_status CudaStationaryController::gradient(
         mixed_grid = false;
       }
     }
-    for (std::size_t offset = 0; offset < quadrature_.point_count; offset += tile_points_) {
-      const auto points = std::min(tile_points_, quadrature_.point_count - offset);
-      if (mixed_grid) {
-        require_grid_call(
-            grid_cuda_run_fp32_device_deferred_v1(grid_, quadrature_.points + 3 * offset, points,
-                                                  aos_, error.data(), error.size()),
-            error);
-        precision->grid_points += points;
-      } else if (indexed_grid_)
-        require_grid_call(grid_cuda_run_ao_map_device_deferred_v1(
-                              grid_, quadrature_.points + 3 * offset, points, offset,
-                              binding_->plan_identity, error.data(), error.size()),
-                          error);
-      else
-        require_grid_call(grid_cuda_run_selected_device_deferred_v1(
-                              grid_, quadrature_.points + 3 * offset, points, 1, nullptr, aos_,
-                              nullptr, nullptr, error.data(), error.size()),
-                          error);
-      GridTaskView view;
-      require_grid_call(grid_cuda_view_v1(grid_, &view, error.data(), error.size()), error);
-      const double* work = nullptr;
-      std::uint64_t flags = 0;
-      require_grid_call(grid_cuda_density_jets_v2(grid_, view.generation, binding_->density_jets,
-                                                  &work, &flags, error.data(), error.size()),
-                        error);
-      require_stationary_call(
-          geometry(stationary_, &view, work, offset, points_per_atom_, quadrature_.weights + offset,
-                   quadrature_.atomic_weights + offset, view.generation, flags, error.data(),
-                   error.size()),
-          error);
-      if (mixed_geometry) precision->geometry_points += points;
-    }
-    if (nonlocal_) {
+    const auto* shared_grid_selector = std::getenv("GENERATIVEQC_STATIONARY_SHARED_GRID");
+    const bool shared_nonlocal_grid = nonlocal_ && nonlocal_->shared_grid && !mixed_grid &&
+                                      !mixed_geometry &&
+                                      (!shared_grid_selector || !*shared_grid_selector ||
+                                       std::string_view(shared_grid_selector) == "1");
+    const auto prepare_nonlocal_seeds = [&](cudaStream_t stream) {
       auto& pair = *nonlocal_;
       const auto& quadrature = pair.quadrature;
       const auto points = quadrature.point_count;
-      GridTaskView view;
-      require_grid_call(grid_cuda_view_v1(grid_, &view, error.data(), error.size()), error);
-      const auto stream = view.stream;
       // Order the borrowed final feature lease against the grid producer;
       // neither dense D/W nor full-grid feature arrays cross to the host.
       runtime::OwnedCudaEvent ready(device_, cudaEventDisableTiming, stationary_cuda_check);
@@ -480,6 +457,61 @@ generativeqc_status CudaStationaryController::gradient(
         pair.reuse_schedule = schedule;
         pair.reuse_ready = true;
       }
+    };
+    for (std::size_t offset = 0; offset < quadrature_.point_count; offset += tile_points_) {
+      const auto points = std::min(tile_points_, quadrature_.point_count - offset);
+      if (mixed_grid) {
+        require_grid_call(
+            grid_cuda_run_fp32_device_deferred_v1(grid_, quadrature_.points + 3 * offset, points,
+                                                  aos_, error.data(), error.size()),
+            error);
+        precision->grid_points += points;
+      } else if (indexed_grid_)
+        require_grid_call(grid_cuda_run_ao_map_device_deferred_v1(
+                              grid_, quadrature_.points + 3 * offset, points, offset,
+                              binding_->plan_identity, error.data(), error.size()),
+                          error);
+      else
+        require_grid_call(grid_cuda_run_selected_device_deferred_v1(
+                              grid_, quadrature_.points + 3 * offset, points, 1, nullptr, aos_,
+                              nullptr, nullptr, error.data(), error.size()),
+                          error);
+      GridTaskView view;
+      require_grid_call(grid_cuda_view_v1(grid_, &view, error.data(), error.size()), error);
+      const double* work = nullptr;
+      std::uint64_t flags = 0;
+      require_grid_call(grid_cuda_density_jets_v2(grid_, view.generation, binding_->density_jets,
+                                                  &work, &flags, error.data(), error.size()),
+                        error);
+      // Fresh grid owners have no valid view before the first evaluation. The
+      // seeds borrow final SCF features, not this panel, and stay on its stream.
+      if (shared_nonlocal_grid && !offset) prepare_nonlocal_seeds(view.stream);
+      require_stationary_call(
+          geometry(stationary_, &view, work, offset, points_per_atom_, quadrature_.weights + offset,
+                   quadrature_.atomic_weights + offset, view.generation, flags, error.data(),
+                   error.size()),
+          error);
+      if (mixed_geometry) precision->geometry_points += points;
+      if (shared_nonlocal_grid) {
+        const auto& pair = *nonlocal_;
+        const auto& quadrature = pair.quadrature;
+        // Both consumers finish on the grid stream before the next generation
+        // overwrites its AO/density jets. Weights remain model-specific.
+        require_stationary_call(
+            binding_->nonlocal_geometry(stationary_, &view, work, offset, pair.points_per_atom,
+                                        quadrature.weights + offset,
+                                        quadrature.atomic_weights + offset, pair.seeds.get(),
+                                        quadrature.point_count, offset, error.data(), error.size()),
+            error);
+      }
+    }
+    if (nonlocal_ && !shared_nonlocal_grid) {
+      auto& pair = *nonlocal_;
+      const auto& quadrature = pair.quadrature;
+      const auto points = quadrature.point_count;
+      GridTaskView view;
+      require_grid_call(grid_cuda_view_v1(grid_, &view, error.data(), error.size()), error);
+      prepare_nonlocal_seeds(view.stream);
       // The same bounded AO/grid owner can serve a distinct nonlocal grid.
       // Changing atom-prefix/radius topology first drains prior geometry work.
       require_stationary_call(
@@ -511,7 +543,7 @@ generativeqc_status CudaStationaryController::gradient(
         require_stationary_call(binding_->nonlocal_geometry(
                                     stationary_, &view, work, offset, pair.points_per_atom,
                                     quadrature.weights + offset, quadrature.atomic_weights + offset,
-                                    seeds, points, offset, error.data(), error.size()),
+                                    pair.seeds.get(), points, offset, error.data(), error.size()),
                                 error);
       }
     }
@@ -651,6 +683,7 @@ generativeqc_status CudaStationaryController::gradient(
     runtime::cuda_trace::trace_counter("indexed_grid", indexed_grid_ ? 1 : 0);
     runtime::cuda_trace::trace_counter("cached_geometry", resources_.cached_geometry ? 1 : 0);
     runtime::cuda_trace::trace_counter("grid_tile_points", tile_points_);
+    runtime::cuda_trace::trace_counter("shared_nonlocal_grid", shared_nonlocal_grid ? 1 : 0);
     output.swap(candidate);
     reuse_attempt.complete = true;
     return GENERATIVEQC_STATUS_SUCCESS;

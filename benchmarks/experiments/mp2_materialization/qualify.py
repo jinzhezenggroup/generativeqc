@@ -26,6 +26,8 @@ sys.path[:0] = [str(ROOT), str(ROOT / "python"), str(ROOT / "tests/python")]
 
 from generativeqc_compiler.common.materialization import MaterializationRuleRequest
 
+from benchmarks._retention import raw_output_path
+
 HERE = Path(__file__).resolve().parent
 COMMON = ROOT / "src/posthf/mp2_derivative_common.cpp"
 MODES = {
@@ -161,8 +163,30 @@ def qualification_probe(directory: Path, launcher: str) -> dict[str, Any]:
     }
 
 
+def verify_build_freshness(build: Path) -> None:
+    """Refuse retained objects from another checkout or an out-of-date Ninja tree.
+
+    A dry run checks all transitive inputs without changing production objects.
+    Rebuild stale inputs with the configured compiler cache before qualification.
+    """
+    entries = (build / "CMakeCache.txt").read_text().splitlines()
+    homes = [
+        line.split("=", 1)[1]
+        for line in entries
+        if line.startswith("CMAKE_HOME_DIRECTORY:INTERNAL=")
+    ]
+    if len(homes) != 1 or Path(homes[0]).resolve() != ROOT.resolve():
+        raise ValueError("qualification build must belong to this source checkout")
+    planned = run(["ninja", "-n", "-v", "libgenerativeqc.so.0.1.0"], cwd=build)
+    if planned.strip() != "ninja: no work to do.":
+        raise ValueError(
+            "qualification build is stale; rebuild production inputs first\n" + planned
+        )
+
+
 def library_variants(build: Path, directory: Path) -> dict[str, Path]:
     """Relink only the experimental object; keep all production build inputs."""
+    verify_build_freshness(build)
     commands = run(["ninja", "-C", str(build), "-t", "commands"]).splitlines()
     common = next(
         command for command in commands if command.endswith("-c " + str(COMMON))
@@ -251,8 +275,9 @@ def library_variants(build: Path, directory: Path) -> dict[str, Path]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
+    verify_build_freshness(args.build.resolve())
     directory = args.output.resolve()
     directory.mkdir(parents=True, exist_ok=False)
     launcher = shutil.which("sccache") or shutil.which("ccache")

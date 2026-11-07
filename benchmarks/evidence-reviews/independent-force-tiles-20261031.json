@@ -2,16 +2,16 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "independent-force-tiles-20261031",
   "owner": "Portable CUDA stationary-force qualification",
-  "reason": "Complete original 212 endpoint populations: 201 independently qualified, three failed HF gates, two pre-alignment AOT failures and six rejected abbreviated-revision controls repeated with full source tags. Retains vectors, timing samples, work and original source identities under unchanged storage limits.",
+  "reason": "Complete original 212 endpoint populations: 201 independently qualified, three failed HF gates, two pre-alignment AOT failures and six rejected abbreviated-revision controls repeated with full source tags. The shared exact-FP64 reader reconstructs the original receipt container and every embedded receipt byte-for-byte, retaining all vectors, timings, work, failures and checksums under unchanged storage limits.",
   "review_document": "benchmarks/results/independent-force-tiles-20261031/README.md",
   "files": [
     {
-      "path": "benchmarks/results/independent-force-tiles-20261031/receipts.json.xz",
+      "path": "benchmarks/results/independent-force-tiles-20261031/fp64.xz",
       "family": "independent-force-tiles-20261031",
       "classification": "required-compact-accepted-evidence",
-      "role": "complete-original-endpoint-receipts-with-numerical-gates-and-negative-controls",
-      "bytes": 927624,
-      "sha256": "410e50124dc26cd1e2df012dce4affce854e1eef62308a0a664a6cb1271cc73a"
+      "role": "exact-fp64-stream-for-complete-original-endpoint-receipts-and-negative-controls",
+      "bytes": 540212,
+      "sha256": "091f180039a0a6438363017566220b44ae132f2f03559dd21ac06547b1e17aa2"
     }
   ]
 }

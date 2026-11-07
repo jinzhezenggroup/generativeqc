@@ -14,15 +14,20 @@ import runpy
 import sys
 from pathlib import Path
 
-import memray
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT))
+from benchmarks._retention import raw_output_path
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("output", type=Path)
+parser.add_argument("output", type=raw_output_path)
 parser.add_argument("--native-traces", action="store_true")
 arguments = parser.parse_args()
 output = arguments.output.resolve()
-binary = output.with_suffix(".bin")
-endpoint_output = output.with_suffix(".endpoints.json")
+binary = raw_output_path(output.with_suffix(".bin"))
+endpoint_output = raw_output_path(output.with_suffix(".endpoints.json"))
+
+import memray
+
 sys.argv = [str(Path(__file__).with_name("endpoint.py")), str(endpoint_output)]
 with memray.Tracker(
     binary,

@@ -34,8 +34,8 @@ inline Shape shape(const core::System& system) {
   p.system_bytes = add(p.system_bytes, mul(p.shells, sizeof(core::Shell)));
   p.system_bytes = add(p.system_bytes, mul(system.ecp_terms.size(), sizeof(core::EcpTerm)));
   for (const auto& shell : system.shells) {
-    if (shell.angular_momentum > 4)
-      throw std::invalid_argument("DF source capacity supports basis metadata through g");
+    if (shell.angular_momentum > 5)
+      throw std::invalid_argument("DF source capacity supports basis metadata through h");
     const auto l = static_cast<std::size_t>(shell.angular_momentum);
     const auto cart = (l + 1) * (l + 2) / 2;
     p.cartesian_aos = add(p.cartesian_aos, cart);

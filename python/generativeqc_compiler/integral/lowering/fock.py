@@ -55,6 +55,8 @@ def _emit_shell_class_fock_cuda(
     into its tuned width so the ordinary and streaming wrappers agree.
     """
 
+    if plan.schedule.fock_shared_rys_xy and k_block:
+        raise ValueError("shared Rys x/y does not support work-K lowering")
     first_pair_order, second_pair_order = spec.pair_orders
     supported_pair_orders = " || ".join(
         f"PairOrder == {order}U" for order in sorted(set(spec.pair_orders))
@@ -619,6 +621,8 @@ def _emit_shell_class_mixed_fock_cuda(
 
     state_axis_bits = max(3, spec.maximum_force_coulomb_order.bit_length())
     state_mask = (1 << state_axis_bits) - 1
+    if plan.schedule.fock_shared_rys_xy:
+        raise ValueError("shared Rys x/y does not support mixed Fock lowering")
     source = _emit_shell_class_fock_cuda(
         spec,
         plan,

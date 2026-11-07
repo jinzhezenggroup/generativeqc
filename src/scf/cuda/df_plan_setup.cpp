@@ -815,6 +815,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   for (std::size_t system = 0; system < batch_size; ++system) {
     if (solver_info[system] != 0) {
       detail = "CUDA DF metric eigensolver did not converge for system " + std::to_string(system);
+      scale_transform.finish(cudaErrorUnknown);
       return fail_plan(candidate, GENERATIVEQC_STATUS_CUDA_ERROR);
     }
     const std::size_t offset = system * naux;
@@ -822,6 +823,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     if (!(largest > 0.0) || !std::isfinite(largest)) {
       detail =
           "CUDA DF metric has no finite positive eigenspace for system " + std::to_string(system);
+      scale_transform.finish(cudaErrorUnknown);
       return fail_plan(candidate, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     }
     auto& diagnostic = diagnostics[system];
@@ -834,6 +836,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       const double value = eigenvalues[offset + item];
       if (!std::isfinite(value)) {
         detail = "CUDA DF metric eigensolver returned a non-finite eigenvalue";
+        scale_transform.finish(cudaErrorUnknown);
         return fail_plan(candidate, GENERATIVEQC_STATUS_CUDA_ERROR);
       }
       if (std::abs(value - diagnostic.absolute_threshold) <=
@@ -846,6 +849,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     }
     if (diagnostic.effective_rank == 0) {
       detail = "CUDA DF metric threshold removed every auxiliary direction";
+      scale_transform.finish(cudaErrorUnknown);
       return fail_plan(candidate, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     }
     candidate->metric_full_rank[system] = diagnostic.effective_rank == naux;

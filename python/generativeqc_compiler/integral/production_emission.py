@@ -276,6 +276,8 @@ def _streaming_fock_schedule(selection: KernelSelection) -> ScheduleIR:
 
     spec = selection.spec
     schedule = selection.fock_schedule or selection.schedule
+    if schedule.fock_shared_rys_xy:
+        raise ValueError("shared Rys x/y does not support streaming Fock lowering")
     if (
         selection.fock_schedule is None
         and schedule.kind == ScheduleKind.SUBGROUP_TASKS

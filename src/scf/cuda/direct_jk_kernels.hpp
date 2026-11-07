@@ -8,6 +8,7 @@
 #include <limits>
 
 #include "scf/cuda/direct_force_schedule.hpp"
+#include "scf/cuda/direct_source_layout.hpp"
 #include "scf/cuda/direct_spd_force_schedule.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/direct_block_domain.hpp"
@@ -57,7 +58,12 @@ void launch_materialized_canonical_jk_kernel(
     std::size_t second_count, bool unrestricted, DirectCoulombRange range, double omega,
     double screening, const double* bounds, const double* density, const std::uint8_t* active,
     double* coulomb, double* exchange, std::uint64_t* work_count,
-    double* coulomb_correction = nullptr, double* exchange_correction = nullptr);
+    double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
+    CanonicalDirectSourceSink source = {});
+
+void launch_canonical_pair_inverse(cudaStream_t stream, DeviceBatch batch,
+                                   const std::int32_t* pairs, const std::int32_t* order,
+                                   std::size_t pair_count, std::int32_t* inverse);
 
 /** Prefix only quartets admitted by the original product comparison.
  * The same-bucket triangle is defined in the sorted order, preserving symmetry.

@@ -41,7 +41,8 @@ std::size_t cartesian_ao_count(const core::System& system) noexcept {
   for (const auto& shell : system.shells) functions += cartesian_count(shell.angular_momentum);
   return functions;
 }
-generativeqc_status validate_and_normalize(core::System& system, std::string&) {
+generativeqc_status validate_and_normalize(core::System& system, std::string&, unsigned maximum_angular_momentum) {
+  assert(maximum_angular_momentum == 4);
   assert(system.atoms.size() == 8);
   assert(system.atoms[1].position[0] == 2.0);
   assert(system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL);

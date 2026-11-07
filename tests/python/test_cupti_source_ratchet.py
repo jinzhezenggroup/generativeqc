@@ -817,3 +817,36 @@ def test_capture_contract_pins_independent_profile_and_policy_changes_without_gp
     value["profiles"][0]["regions"][0]["owner_roles"][0]["max"]["h2d_bytes"] += 1
     limits.write_text(json.dumps(value))
     assert capture_prepared_residency.contract(arguments) != pinned
+
+
+@pytest.mark.parametrize(
+    "input_name", ["expected", "work-ratchet", "source-boundaries", "activity"]
+)
+@pytest.mark.parametrize("alias", ["same", "symlink", "hardlink"])
+def test_reaudit_rejects_output_aliases_before_reading_inputs(
+    tmp_path: Path, input_name: str, alias: str
+) -> None:
+    from tools.cupti_source_ratchet import main
+
+    inputs = {
+        name: tmp_path / name
+        for name in ("expected", "work-ratchet", "source-boundaries", "activity")
+    }
+    for path in inputs.values():
+        path.write_text("retained evidence, deliberately not JSON")
+    source = inputs[input_name]
+    output = tmp_path / "output.json"
+    if alias == "same":
+        output = source
+    elif alias == "symlink":
+        output.symlink_to(source)
+    else:
+        output.hardlink_to(source)
+    argv = [item for name, path in inputs.items() for item in ("--" + name, str(path))]
+    with pytest.raises(SystemExit) as error:
+        main([*argv, "--output", str(output)])
+    assert error.value.code == 2
+    assert all(
+        path.read_text() == "retained evidence, deliberately not JSON"
+        for path in inputs.values()
+    )

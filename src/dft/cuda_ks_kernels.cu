@@ -83,6 +83,16 @@ __global__ void fock_kernel(std::size_t matrix, unsigned spins, const double* hc
   }
 }
 
+__global__ void cold_start_fock_kernel(std::size_t elements, const double* physical_fock,
+                                       double* previous_proposal, double* proposal, bool damp) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < elements;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    const double value =
+        damp ? 0.5 * (physical_fock[index] + previous_proposal[index]) : physical_fock[index];
+    previous_proposal[index] = proposal[index] = value;
+  }
+}
+
 __global__ void stabilize_uks_kernel(std::size_t matrix, const double* overlap,
                                      const double* occupied_projector, const std::uint8_t* enabled,
                                      double* proposal_fock) {
@@ -311,6 +321,13 @@ void break_core_guess_ties(cudaStream_t stream, std::size_t dimension, double* c
 void orient_core_guess_orbitals(cudaStream_t stream, std::size_t dimension, double* coefficients) {
   orient_core_guess_orbitals_kernel<<<static_cast<unsigned>((dimension + 127) / 128), 128, 0,
                                       stream>>>(dimension, coefficients);
+}
+
+void cold_start_fock(cudaStream_t stream, std::size_t elements, const double* physical_fock,
+                     double* previous_proposal, double* proposal, bool damp) {
+  const auto blocks = std::min<std::size_t>((elements + 127) / 128, 65535);
+  cold_start_fock_kernel<<<static_cast<unsigned>(blocks), 128, 0, stream>>>(
+      elements, physical_fock, previous_proposal, proposal, damp);
 }
 
 void stabilize_uks_proposal(cudaStream_t stream, std::size_t n, const double* overlap,

@@ -238,6 +238,10 @@ measured_core_runtime_paths=(
 # worksteal, but count them in the existing core parity before
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
+  # Queue run 42164201724 exhausted core-c with late repeated LR owner builds.
+  # Compiler-heavy finished in 609 s; keep this intact module on loadfile
+  # while counting its original core slot and retaining all numerical cases.
+  tests/python/test_direct_lr_weighted_host.py
   # Run 40450776430 exhausted core-a twice; this intact corrected-Lambda
   # module used 269-351 s per worker while uccsd-forces finished in 559 s.
   # Preserve its ordinary core slot and all cases on existing worksteal workers.
@@ -434,18 +438,21 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # them without advancing the ordinary index: inserting the eleven files
     # otherwise moved 1292 of 2163 existing core files on #2977's base.
     # Keep the molecular matrix on worksteal, not a serial loadfile worker.
-    # The 400s d/f compile goes to core-a and lifecycle cases to core-b.
-    # Queue run 42040437186 exhausted core-c at 99% in the molecular
-    # matrix while core-b finished in 764s. Transfer only that new complete
-    # module to core-b, retaining every historical modulo slot.
-    # This preserves all cases and does not change cache trust or identities.
+    # The d/f compile remains on core-a and lifecycle cases on core-b.
+    # Earlier run 42040437186 moved molecular curvature out of core-c before
+    # fresh-frontier scheduling. Current cold queue 42137083928 instead has
+    # core-c at 806s and core-b beyond 35min; restore only that supplemental
+    # owner below. Preserve all cases, historical modulo slots and cache trust.
     declare -A supplemental_core_owner=(
       [tests/python/test_composite_integral_weights.py]=2
       [tests/python/test_eri_symmetry.py]=0
       [tests/python/test_factorized_host.py]=1
       [tests/python/test_global_hybrid_grid_second_order.py]=0
       [tests/python/test_global_hybrid_hessian_lifecycle.py]=1
-      [tests/python/test_global_hybrid_molecular_hessian.py]=1
+      # Queue 42137083928: core-b remained cold-overloaded after priority;
+      # this intact 1634-worker-second suite moves to core-c (806s total).
+      # Preserve its supplemental, non-modulo slot and all fresh case priority.
+      [tests/python/test_global_hybrid_molecular_hessian.py]=2
       [tests/python/test_native_semilocal_grid_second_order.py]=2
       [tests/python/test_orbital_gap_preconditioner.py]=2
       [tests/python/test_second_component_schedule.py]=0
@@ -456,9 +463,19 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # The intact RKS Hessian suite now starts on the existing force lane.
     fresh_frontier_paths=(
       tests/python/test_wb97mv_uks_hessian.py
+      # Run 41939348245 passed both scalar-ECP HVP cases (443/1097 s),
+      # but one worker started them late and sequentially before the 1800 s cap.
+      # Their native states/caches are function-scoped. Start the two cases on
+      # separate existing worker frontiers; preserve their ordinary core owner.
+      tests/python/test_global_hybrid_ecp_hessian.py
       # Independent 103-136s curvature cases otherwise started at minute 28.
       # Seed them across existing worker frontiers, never one serial tail.
       tests/python/test_global_hybrid_molecular_hessian.py
+      # Queue 42128769441 reached 99% with these fresh Hessian cases still
+      # compiling at the 35-minute cap. Preserve their existing shard owners
+      # and seed cases early across the same four worksteal workers.
+      tests/python/test_global_hybrid_public_hessian.py
+      tests/python/test_global_hybrid_uks_hessian.py
     )
     case "${GENERATIVEQC_CI_SHARD}" in
       core-a) target_bucket=0 ;;
@@ -699,7 +716,8 @@ case "${GENERATIVEQC_CI_SHARD}" in
     for path in \
       tests/python/test_cc_native_tensor_cpu.py \
       tests/python/test_uccsd_native.py \
-      tests/python/test_uccsd_triples_fock_response.py; do
+      tests/python/test_uccsd_triples_fock_response.py \
+      tests/python/test_direct_lr_weighted_host.py; do
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
         test_targets+=("$path")
       fi

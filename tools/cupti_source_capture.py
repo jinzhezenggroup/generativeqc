@@ -424,6 +424,7 @@ def summarize_sources(
             ),
             "source operation identity changed",
         )
+        operation_issue_count = len(issues)
         role = catalog["role"].get(str(row["role"]))
         site = catalog["site"].get(str(row["site"]))
         payload = catalog["payload"].get(str(row["payload"]))
@@ -517,19 +518,22 @@ def summarize_sources(
                 "direction": DIRECTIONS.get(row["direction"], "none"),
                 "requested_bytes": row["bytes"],
                 "status": row["status"],
-                "source_call_verified": (
-                    host_transform
-                    and row["status"] == 0
-                    and not events
-                    and not call_apis
-                )
-                or (
-                    len(runtime) == 1
-                    and runtime[0]["start"] > 0
-                    and runtime[0]["end"] >= runtime[0]["start"]
-                    and runtime[0]["return_value"] == row["status"]
-                    and len(phase_ids) == 1
-                    and phase in regions
+                "source_call_verified": len(issues) == operation_issue_count
+                and (
+                    (
+                        host_transform
+                        and row["status"] == 0
+                        and not events
+                        and not call_apis
+                    )
+                    or (
+                        len(runtime) == 1
+                        and runtime[0]["start"] > 0
+                        and runtime[0]["end"] >= runtime[0]["start"]
+                        and runtime[0]["return_value"] == row["status"]
+                        and len(phase_ids) == 1
+                        and phase in regions
+                    )
                 ),
                 "events": events,
                 "risk": "higher"
@@ -623,7 +627,7 @@ def _qualified_payload_links(
             generation_counts[instance] = generation_counts.get(instance, 0) + 1
     if any(count != 1 for count in generation_counts.values()):
         issues.append("ambiguous source payload generation")
-    fences: dict[tuple[int, int | None], int] = {}
+    fences: dict[tuple[int, int | None, int, int], tuple[int, int]] = {}
     positions = {}
     round_trips = []
     for position, operation in enumerate(operations):
@@ -656,8 +660,35 @@ def _qualified_payload_links(
                         event.get("direction") == "d2h" for event in source["events"]
                     )
                     and positions[source["operation_id"]]
-                    < fences.get((source["execution_id"], source["region_id"]), -1)
+                    < min(
+                        (
+                            fences.get(
+                                (
+                                    source["execution_id"],
+                                    source["region_id"],
+                                    event["context"],
+                                    event["stream"],
+                                ),
+                                (-1, -1),
+                            )[0]
+                            for event in source["events"]
+                        ),
+                        default=-1,
+                    )
                     < position
+                    and all(
+                        event["end"]
+                        <= fences.get(
+                            (
+                                source["execution_id"],
+                                source["region_id"],
+                                event["context"],
+                                event["stream"],
+                            ),
+                            (-1, -1),
+                        )[1]
+                        for event in source["events"]
+                    )
                 )
                 if valid:
                     operation["region_id"] = source["region_id"]
@@ -701,7 +732,22 @@ def _qualified_payload_links(
             and operation["source_call_verified"]
             and operation["status"] == 0
         ):
-            fences[(operation["execution_id"], operation["region_id"])] = position
+            for event in operation["events"]:
+                if (
+                    event["kind"] == "sync"
+                    and event["sync_subtype"] == 3
+                    and event["return_value"] == 0
+                    and event["start"] > 0
+                    and event["end"] >= event["start"]
+                ):
+                    fences[
+                        (
+                            operation["execution_id"],
+                            operation["region_id"],
+                            event["context"],
+                            event["stream"],
+                        )
+                    ] = (position, event["end"])
         instance = operation["payload_instance"]
         if instance:
             instances.setdefault(instance, []).append(operation)

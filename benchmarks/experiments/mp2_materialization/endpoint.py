@@ -1,10 +1,19 @@
 """Fresh-process complete cold/warm CPU MP2 E+F observation."""
 
+import argparse
 import json
 import os
 import sys
 import time
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT))
+from benchmarks._retention import raw_output_path
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("output", type=raw_output_path)
+arguments = parser.parse_args()
 
 import numpy as np
 from generativeqc import Calculator
@@ -46,7 +55,7 @@ for name, atoms in cases.items():
                 }
             )
     observations[name] = {"prepare_seconds": prepare_seconds, "samples": samples}
-Path(sys.argv[1]).write_text(
+arguments.output.write_text(
     json.dumps(
         {"affinity": sorted(os.sched_getaffinity(0)), "cases": observations}, indent=2
     )

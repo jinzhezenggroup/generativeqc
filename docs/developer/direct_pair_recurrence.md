@@ -57,6 +57,35 @@ records the complete six/nine-slot bounds and their resource/endpoint gates.
 The [low-order scheduling decision](../../.agents/notes/implemented/performance/2026-10-11-canonical-small-cta-scheduling.md)
 records the 32-thread ownership bounds and the retained full initialization.
 
+## Cold strict range-source construction
+
+Strict SR/LR resident-source preparation can use the same shared shell recurrence
+for total angular orders three through nine. A source-only plan prepares bounded
+primitive-pair geometry and screened shell rows after its canonical AO topology;
+it does not prepare a second generated Fock/force owner. Lower orders, higher
+orders, mixed-precision sources and unavailable optional storage retain their
+component-source preparation.
+
+A temporary quadratic inverse maps canonical AO pairs to their existing sorted
+ranks. Each admitted shell component writes its FP64 value, including exact zero,
+into the original screened compact source slot. Equal-bucket pair swaps are
+resolved by sorted rank, not by shell traversal order. Geometry, range, omega,
+Schwarz admission and replay layout remain immutable. A NaN-initialized source
+and the complete finite audit reject missing publications before lease admission.
+When a replay requests a stricter threshold and an immutable source-row census,
+uncached buckets retain the AO consumer: it counts the original compact rows
+before applying the stricter predicate.
+
+The inverse must fit alongside values within the preparation allowance; it is
+stream-fenced and released after construction. Allocation refusal preserves the
+component producer. `GENERATIVEQC_DIRECT_RESIDENT_COMPONENT_SOURCE=1` selects that
+producer explicitly for qualification without disabling resident replay. This is
+not the same experiment as disabling the LR lease entirely. The change does not
+alter SCF convergence, grids, precision, full-range J/K or force ownership.
+
+The [source-construction decision](../../.agents/notes/implemented/performance/2026-11-06-shared-cold-range-source.md)
+records ownership, qualification and the retained stricter-threshold fallback.
+
 ## Bounded long-range force scheduling
 
 Ordinary long-range exchange force launches use the established 128-thread

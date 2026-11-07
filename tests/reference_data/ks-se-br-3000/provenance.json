@@ -1,0 +1,14 @@
+{
+  "archive_file_revision": "c05d281fe6388242c495ef5a8a59e6cac3244238",
+  "archive_sha256": "7b8263436cc2c1bbff1943f611f6ac2d38b7b120c248ae09e74ac78482e593d7",
+  "gist": "31fc5f5913ed3e5d1e3c3b00b9d46af2",
+  "issues": [
+    3000,
+    3001
+  ],
+  "original_file_sha256": {
+    "auxbasis.json": "89c75ed82978ab0eb3345122d2be1d637b943b38cb821ce05fb5a1963bf6392b",
+    "basis.json": "b40d9d048e4ead75596c0393bf4dee70eb786ac629c3a31af5e5430fc6544ce4"
+  },
+  "selection": "All original target H/C/O/S/Se/Br records, unchanged shells, primitives, contractions and provenance; unrelated elements omitted. All six original ordered geometries, charges, multiplicities and controls retained."
+}

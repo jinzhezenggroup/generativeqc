@@ -22,6 +22,13 @@ from generativeqc_compiler.method.stationary_grid_second import density_mixed
 
 from ._dft_gradient import _native_ao_atoms
 
+# A single denser validation grid can distinguish an under-resolved coarse
+# check from an inaccurate native result. It never replaces the 224x44 native
+# matrix, perturbation, or returned HVP, and is only evaluated after a finite
+# mismatch in the original two-grid check.
+HESSIAN_VALIDATION_RADIAL_POINTS = 320
+HESSIAN_VALIDATION_POLAR_POINTS = 60
+
 
 @cache
 def _quadrature_nodes(count: int) -> tuple:
@@ -64,7 +71,7 @@ def _quadrature(radial: int, polar: int) -> tuple:
 
 
 class ECPSecondOrder:
-    """Match native residual channels and two-grid admission without displaced SCFs.
+    """Match native residual channels with bounded validation and no displaced SCFs.
 
     The ECP-centered radial/angular rule is fixed. Nuclear motion acts on AO
     jets relative to the ECP center; angular projection is a fixed linear map.
@@ -80,7 +87,13 @@ class ECPSecondOrder:
         self.centers = np.asarray([atom.position for atom in basis.atoms])
         self.ao_atoms = _native_ao_atoms(basis)
         self.ecp_centers = np.flatnonzero(np.asarray(state._source.ecp_cores))
-        self.statistics = {"radial_layers": 0, "ao_points": 0}
+        self.statistics = {
+            "radial_layers": 0,
+            "ao_points": 0,
+            "hvp_validation_refinements": 0,
+            "hvp_coarse_error": None,
+            "hvp_validation_error": None,
+        }
         self.matrix = immutable(self._integrate("matrix"))
 
     def _layers(self, radial: int, polar: int) -> typing.Iterator[tuple]:
@@ -200,18 +213,41 @@ class ECPSecondOrder:
     def hvp(
         self, vector: np.ndarray, density: np.ndarray, delta_density: np.ndarray
     ) -> dict:
-        """Publish both ECP sources only after the retained two-grid HVP gate."""
+        """Validate the fixed native HVP without changing its discretization.
+
+        Retain the original two-grid fast path. A finite mismatch permits one
+        denser check of the native fine-grid result at the same absolute
+        tolerance; nonfinite values and unresolved refinement still reject.
+        """
+        self.statistics["hvp_coarse_error"] = None
+        self.statistics["hvp_validation_error"] = None
         options = {"vector": vector, "density": density, "delta_density": delta_density}
         coarse = self._integrate(
             "hvp", radial=COARSE_RADIAL_POINTS, polar=COARSE_POLAR_POINTS, **options
         )
         fine = self._integrate("hvp", **options)
-        if (
-            not np.isfinite(coarse).all()
-            or not np.isfinite(fine).all()
-            or np.max(abs(fine - coarse)) > DERIVATIVE_ABS_TOLERANCE
-        ):
+        if not np.isfinite(coarse).all() or not np.isfinite(fine).all():
             raise ArithmeticError("ECP Hessian quadrature convergence gate failed")
+        error = np.max(abs(fine - coarse))
+        if not np.isfinite(error):
+            raise ArithmeticError("ECP Hessian quadrature convergence gate failed")
+        self.statistics["hvp_coarse_error"] = float(error)
+        if error > DERIVATIVE_ABS_TOLERANCE:
+            self.statistics["hvp_validation_refinements"] += 1
+            validation = self._integrate(
+                "hvp",
+                radial=HESSIAN_VALIDATION_RADIAL_POINTS,
+                polar=HESSIAN_VALIDATION_POLAR_POINTS,
+                **options,
+            )
+            if not np.isfinite(validation).all():
+                raise ArithmeticError("ECP Hessian quadrature convergence gate failed")
+            error = np.max(abs(validation - fine))
+            if not np.isfinite(error):
+                raise ArithmeticError("ECP Hessian quadrature convergence gate failed")
+            self.statistics["hvp_validation_error"] = float(error)
+            if error > DERIVATIVE_ABS_TOLERANCE:
+                raise ArithmeticError("ECP Hessian quadrature convergence gate failed")
         return {
             name: immutable(value)
             for name, value in zip(("ecp_local", "ecp_nonlocal"), fine, strict=True)

@@ -453,11 +453,14 @@ CUDA_MODULES["cuda_provider_kernel_interfaces"] = (
     "one_electron_export_kernels.hpp",
 )
 CUDA_ALLOWED["cuda_provider_kernel_interfaces"] = (
+    "scf/cuda/direct_source_layout.hpp",
     "scf/cuda/direct_force_schedule.hpp",
     "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/cuda/packed_basis.",
     "scf/direct_block_domain.hpp",
 )
+CUDA_MODULES["canonical_source_layout"] = ("direct_source_layout.hpp",)
+CUDA_ALLOWED["canonical_source_layout"] = ()
 # Retained numerical primitives have no queue policy or host plan dependency.
 # One-electron consumers share only these bounded scientific building blocks.
 CUDA_MODULES["cuda_integral_numerics"] = (

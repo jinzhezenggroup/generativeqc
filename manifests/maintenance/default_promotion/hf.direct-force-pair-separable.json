@@ -1,0 +1,28 @@
+{
+  "id": "hf.direct-force-pair-separable",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE"
+  ],
+  "owner_issues": [2976],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "python/generativeqc_compiler/integral/weighted_eri_cuda.py",
+    "src/scf/cuda/direct_coulomb.cpp",
+    "src/scf/cuda/direct_force_low_order_sources.cuh",
+    "src/scf/cuda/direct_force_order4_sources.cuh",
+    "src/scf/cuda/direct_force_order5_sources.cuh"
+  ],
+  "rationale": "Unset/1 enables exact complete ordered-pair projection for seven order-four/five full-range strict-FP64 pure-J force classes. Prepared owners capture the preference and resource/restart identity. Complete Schwarz masks, relative responses and no seed/exchange remain mandatory; finite checks precede publication and a numerical decline retries nuclear FP64 once. Source-matched A100 and RTX5090 complete E+force endpoints improve with unchanged work/settings and independent Libcint science. Memcheck passes; racecheck reaches its finite cap without a diagnostic and is explicitly inconclusive, not a sanitizer pass. No new shared memory or synchronization is introduced.",
+  "revisit_condition": "New classes or admission domains require independent symmetry/derivative and full-endpoint qualification. Preserve bounded fallbacks, zero partial publication, resource identity and the 5090 non-regression gate. Zero/empty/unknown disables the preference. Do not infer overall GPU4PySCF parity or racecheck success from this cohort.",
+  "evidence": [
+    "note:.agents/notes/implemented/performance/2026-11-06-direct-complete-pair-projection.md",
+    "docs:docs/developer/weighted_eri.md",
+    "tests:tests/python/test_direct_scalar_separable_host.py",
+    "tests:tests/python/test_direct_scalar_separable_cuda.py",
+    "tests:tests/python/test_weighted_eri_separable.py",
+    "tests:tests/python/test_coulomb_optional_allocation.py",
+    "tests:tests/python/test_hf_resources.py",
+    "benchmarks:benchmarks/results/direct-complete-pair-20261106/README.md"
+  ]
+}

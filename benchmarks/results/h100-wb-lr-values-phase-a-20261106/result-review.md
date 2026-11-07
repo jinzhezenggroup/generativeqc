@@ -1,0 +1,9 @@
+# Astra review of completed WB-LR phase A
+
+2026-11-06: **PASS for the bounded standalone numerical/resource qualification.** No molecular-input or performance result is implied.
+
+Reviewed source `1fa3ba2f9d579e868103bfd5877c83cc5d225f5d`, bundle `576802cd3906682b47808ae8d4b693ccdf4e02a743312fbc0e44dba07fc16357`, executable `47e60836806b2225ff2ec6a48c6e48bd144de5f7689a236abb663f238e427706`, H100 UUID `GPU-24ec451f-eb55-820b-9107-7314fac7c0ba`. Independently checked all five reviewed committed blobs and all 31 retained raw-file sizes/hashes against the reduction. Reviewed qualification stage results, reducer implementation, original gates, complete raw-array/visit/work coverage, graph-report cardinality, sanitizer summary semantics, and all resource views. The reducer is `b6ef8627a26082da096e8b8d68c27090e6e7ffbb24116152a598197c900ec815`; result is `c6a0f59ce45815b21a53a3c7ac9513c99c778f758a011d01c0b9570a799b493f`.
+
+The retained CPU reduction checks all 3,120 ordinary arrays (126,792 admitted values) against frozen independent references; candidate/scalar maximum oracle error is 1.0103029524088925e-14 and their maximum difference is 4.440892098500626e-16. Full raw-K checks, guards, holes, exact-zero publication and work counters pass. All 9,360 ordinary/graph reports and each sanitizer's 792 reports have the prescribed identities and work. The fixed 264-case sanitizer slices have clean terminal summaries. No new reference generation, GPU execution or rebuild was performed by this review.
+
+Candidate order3/4/5 attributes report 148/202/248 registers, 512-byte local/stack frames, zero spills and 6,584/6,864/7,312 shared bytes. Linked shared counts are 7,608/7,888/8,336; both views satisfy 16 KiB. The unexplained 1,024-byte view difference and linker warning remain visible. These figures establish neither occupancy nor savings. Proceed to the separate source-input replay contract; do not integrate or promote the producer on these results alone.

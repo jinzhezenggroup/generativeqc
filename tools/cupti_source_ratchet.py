@@ -493,6 +493,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--activity", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     arguments = parser.parse_args(argv)
+    if arguments.output is not None:
+        for source in (
+            arguments.expected,
+            arguments.work_ratchet,
+            arguments.source_boundaries,
+            arguments.activity,
+        ):
+            if arguments.output.resolve() == source.resolve() or (
+                arguments.output.exists()
+                and source.exists()
+                and arguments.output.samefile(source)
+            ):
+                parser.error("output must not overwrite a re-audit input")
     try:
         result = reaudit_capture(
             _decode_json(arguments.expected.read_bytes()),

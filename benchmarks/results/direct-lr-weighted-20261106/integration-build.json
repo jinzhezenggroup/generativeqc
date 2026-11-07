@@ -1,0 +1,33 @@
+{
+  "started-at.txt": "2026-11-06T06:18:09+08:00\n",
+  "completed-at.txt": "2026-11-06T06:23:25+08:00\n",
+  "exit-code.txt": "0\n",
+  "cache-version.txt": "sccache 0.16.0\n",
+  "repair.txt": "tar --touch gives newly extracted build inputs fresh mtimes; content keys and the shared compiler cache remain intact.\n",
+  "cache-after.txt": "Compile requests                          590\nCompile requests executed                2172\nCache hits                               1782\nCache hits (C/C++)                        252\nCache hits (CUBIN)                        522\nCache hits (CUDA)                         256\nCache hits (CUDA (Device code))           256\nCache hits (PTX)                          496\nCache misses                              121\nCache misses (C/C++)                       69\nCache misses (CUDA)                        13\nCache misses (CUDA (Device code))          13\nCache misses (PTX)                         26\nCache hits rate                         93.64 %\nCache hits rate (C/C++)                 78.50 %\nCache hits rate (CUBIN)                100.00 %\nCache hits rate (CUDA)                  95.17 %\nCache hits rate (CUDA (Device code))    95.17 %\nCache hits rate (PTX)                   95.02 %\nCache timeouts                              0\nCache read errors                           0\nForced recaches                             0\nCache write errors                          0\nCache errors                                0\nCompilations                              390\nCompilation failures                        0\nNon-cacheable compilations                269\nNon-cacheable calls                         0\nNon-compilation calls                       0\nUnsupported compiler calls                  0\nAverage cache write                     0.000 s\nAverage compiler                        2.602 s\nAverage cache read hit                  0.001 s\nFailed distributed compilations             0\nCache location                       Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                     (none)\nUse direct/preprocessor mode?        yes\nVersion (client)                     0.16.0\nCache size                                 10 GiB\nMax cache size                             10 GiB\n",
+  "identity": {
+    "source_identity": "ff6117e3ba5b481e6124f3bf80f4613fa27586d77bff88f5187f9290abbf5afa",
+    "base_commit": "9a72d770a8d32d0491a51161fd477d3891d8d86d",
+    "library_sha256": "4c73bcf8a409a15362355d290695e7866c3a2b28753a42a1d61c91aba4ffe83a"
+  },
+  "default_policy": {
+    "status": 0,
+    "struct_size": 40,
+    "abi_version": 0,
+    "policy_version": 2,
+    "qualified_defaults": 1,
+    "energy_tolerance": 1e-09,
+    "density_tolerance": 1e-05,
+    "screening_tolerance": 1e-12
+  },
+  "initial_mixed_object_build": {
+    "cache-after.txt": "Compile requests                          238\nCompile requests executed                1076\nCache hits                                850\nCache hits (C/C++)                         76\nCache hits (CUBIN)                        270\nCache hits (CUDA)                         130\nCache hits (CUDA (Device code))           130\nCache hits (PTX)                          244\nCache misses                               81\nCache misses (C/C++)                       17\nCache misses (CUBIN)                        4\nCache misses (CUDA)                        15\nCache misses (CUDA (Device code))          15\nCache misses (PTX)                         30\nCache hits rate                         91.30 %\nCache hits rate (C/C++)                 81.72 %\nCache hits rate (CUBIN)                 98.54 %\nCache hits rate (CUDA)                  89.66 %\nCache hits rate (CUDA (Device code))    89.66 %\nCache hits rate (PTX)                   89.05 %\nCache timeouts                              0\nCache read errors                           0\nForced recaches                             0\nCache write errors                          0\nCache errors                                0\nCompilations                              226\nCompilation failures                        0\nNon-cacheable compilations                145\nNon-cacheable calls                         0\nNon-compilation calls                       0\nUnsupported compiler calls                  0\nAverage cache write                     0.005 s\nAverage compiler                       44.806 s\nAverage cache read hit                  0.000 s\nFailed distributed compilations             0\nCache location                       Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                     (none)\nUse direct/preprocessor mode?        yes\nVersion (client)                     0.16.0\nCache size                                 10 GiB\nMax cache size                             10 GiB\n",
+    "cache-version.txt": "sccache 0.16.0\n",
+    "completed-at.txt": "2026-11-06T06:14:36+08:00\n",
+    "exit-code.txt": "0\n",
+    "failed-image-default-policy.json": "{\n  \"status\": 0,\n  \"struct_size\": 40,\n  \"abi_version\": 0,\n  \"policy_version\": 1,\n  \"qualified_defaults\": 0,\n  \"energy_tolerance\": 1e-10,\n  \"density_tolerance\": 1e-08,\n  \"screening_tolerance\": 1e-12\n}\n",
+    "identity.json": "{\n  \"source_identity\": \"ff6117e3ba5b481e6124f3bf80f4613fa27586d77bff88f5187f9290abbf5afa\",\n  \"base_commit\": \"9a72d770a8d32d0491a51161fd477d3891d8d86d\",\n  \"library_sha256\": \"d5d4181ffdb0b6a09ad50a5aeed7b5858a075c408e245e5afaa2b116ac262160\"\n}\n",
+    "started-at.txt": "2026-11-06T05:37:40+08:00\n",
+    "qualification": "rejected: stale-object policy1, not latest-master integration"
+  }
+}

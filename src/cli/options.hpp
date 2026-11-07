@@ -7,6 +7,7 @@
 
 #include "generativeqc/ks.hpp"
 #include "methods/named_ks_catalog.hpp"
+#include "scf/default_controls.hpp"
 
 namespace generativeqc::cli {
 
@@ -99,8 +100,9 @@ struct ScfConvergenceControls {
 
 [[nodiscard]] inline ScfConvergenceControls resolve_scf_convergence(const RunOptions& options,
                                                                     bool correlated) noexcept {
-  const double default_energy = correlated ? 1.0e-12 : 1.0e-10;
-  const double default_density = correlated ? 1.0e-10 : 1.0e-8;
+  const auto defaults = scf::defaults::for_method(options.method);
+  const double default_energy = correlated ? 1.0e-12 : defaults.energy;
+  const double default_density = correlated ? 1.0e-10 : defaults.density;
   return {options.energy_tolerance.value_or(default_energy),
           options.density_tolerance.value_or(default_density)};
 }

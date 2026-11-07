@@ -1,0 +1,73 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "7109b3d208d23352f266e2bf7440fdfcc71df974",
+    "dirty": false
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Both declared cohorts pass the unchanged independent and same-source gates; timings remain descriptive and independent PR review is separate"
+  },
+  "files": [
+    {
+      "path": "records-01.json.xz",
+      "bytes": 181008,
+      "sha256": "637e6e572c6a42b5944ac721d662669bdedfaf38d6110e637525dc9552830a9b",
+      "role": "samples"
+    },
+    {
+      "path": "members.json.xz",
+      "bytes": 9168,
+      "sha256": "1da00c379095dd1b0bb8e66cd5e51fb3f4831e197834e66008e90d2a78fa98f7",
+      "role": "input"
+    },
+    {
+      "path": "summary.json.xz",
+      "bytes": 2360,
+      "sha256": "a3652ad352f2f761ecc786a5af5a1201bb77f00b337365ca337c97d7a5a8c33b",
+      "role": "summary"
+    },
+    {
+      "path": "README.md",
+      "bytes": 11488,
+      "sha256": "56ce0999e75f8ef548500ffd0e61de7142ab26efdd7e9e660208405aeec53d7e",
+      "role": "summary"
+    },
+    {
+      "path": "replay.py",
+      "bytes": 16670,
+      "sha256": "1447771028c73610545cd4b2e2072b91d2f55a49c121bc5c8e602b407c25a298",
+      "role": "reproduction"
+    },
+    {
+      "path": ".gitattributes",
+      "bytes": 91,
+      "sha256": "559e121e9ae42ffd8c98f58e994fb34111acd089d42bd7e7ad70894bb0a58e1b",
+      "role": "reproduction"
+    },
+    {
+      "path": "evidence.json.xz",
+      "bytes": 1908,
+      "sha256": "ca67f9b44c56bef357524beafe51da9a24e7b4817c305283fd927cd1f9b48051",
+      "role": "evidence"
+    }
+  ],
+  "members_file": "members.json.xz",
+  "capsules": [
+    "records-01.json.xz"
+  ],
+  "git_recovery": {
+    "source-manifest.json": {
+      "revision": "7109b3d208d23352f266e2bf7440fdfcc71df974",
+      "format": "git-archive-file-sha256-map.v1"
+    }
+  },
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/cbs-h100-5090-7109b3d2-20261106/replay.py"
+    ]
+  }
+}
