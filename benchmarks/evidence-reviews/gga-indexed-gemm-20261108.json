@@ -8,16 +8,16 @@
     {
       "path": "benchmarks/results/gga-indexed-gemm-20261108/fp64.xz",
       "family": "gga-indexed-gemm-20261108",
-      "bytes": 229464,
-      "sha256": "0da9b301ecbafd5c1b8f1cebe42ec8df433cab33c07e6cca7f9ba13643e8970a",
+      "bytes": 202424,
+      "sha256": "61ce9e954fe717e7bb2dbf6bf83740bbf19c339e41ff2e2a552e14c0f08a1353",
       "classification": "required-compact-accepted-evidence",
       "role": "Exact original FP64 words for all retained complete E/F endpoints, including separately rejected HF arms."
     },
     {
       "path": "benchmarks/results/gga-indexed-gemm-20261108/receipts.json.xz",
       "family": "gga-indexed-gemm-20261108",
-      "bytes": 141516,
-      "sha256": "d1e1caf92ea03d1d78ec0d1838cd2c4b9f3cffb1fd21f202471d325ab6fed241",
+      "bytes": 126904,
+      "sha256": "726d0d6da0b794c2a7e63ca6f8b3390063cdd88592cc75a7251c471c3c7c53fd",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless original text, checksums, source/image/acquisition receipts and declared qualification cohorts."
     }

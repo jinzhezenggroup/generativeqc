@@ -127,6 +127,12 @@ See the [default decision](../../../.agents/notes/implemented/performance/2026-1
 the [rejected HF experiment](../../../.agents/notes/rejected/2026-11-08-hf-fixed-coarse-delta.md),
 issue2976 and PR3041. The HF fixed coarse delta does not ship as a new opt-in.
 
+A storage-only repack groups the existing exact-FP64 predictors by scientific
+case and engine, preserving all333 original text receipts, every FP64 word and
+all experiment metadata. `storage-receipt.json` retains the previous compressed
+identities; current containers remain authenticated by `sha256.txt`. Neither
+the positive GGA populations nor rejected HF observations are retired.
+
 After measurement, master`7704dd93dec18db0cf506d78ce1c76f0d6d40fe1` (#3039)
 landed during publication and is integrated. It migrates shared Gram/dense,
 RHF and occupied-response ownership without changing this GGA policy or the

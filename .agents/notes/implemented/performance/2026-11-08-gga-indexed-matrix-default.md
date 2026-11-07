@@ -110,3 +110,18 @@ provider/lifetime/admission and evidence replay used for integration. No new
 64-case or post-merge GPU qualification is claimed. Regenerate the stale
 Libxc source inventory after the merge while retaining its original measured
 receipts, stale status and zero qualified-product claims.
+
+## Evidence storage after the next master merge
+
+Master `d52d2ae2a` adds a separate H100 component capsule. Keeping that evidence
+and this PR's original capsules exceeds the unchanged85MiB aggregate retention
+budget by66663 bytes. Do not raise the budget or remove negative observations.
+Regroup only this PR's two exact-FP64 predictor streams by scientific case and
+engine using the already supported codec, then use stronger ordinary XZ storage.
+This saves94676 bytes while preserving the388 README and333 GGA original texts,
+every FP64 word, the experiment metadata and the source-bound acceptance rules.
+Both `storage-receipt.json` files retain the previous compressed identities.
+The acquisition identities, independent failures and frozen timing conclusions
+do not change. This requires neither implicit Git/network recovery nor a new
+codec, dependency or external publication. Revisit storage, not science, when
+future source-bound evidence again approaches the inherited budget.

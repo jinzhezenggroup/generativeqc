@@ -52,6 +52,12 @@ oracle hashes. Frozen auxiliary bytes match all32 historical DF cases exactly.
 
 ## Reproduction
 
+The existing exact-FP64 codec groups predictors by scientific case and engine.
+The storage-only repack preserves all388 original text receipts, every FP64 word
+and the entire experiment metadata. `storage-receipt.json` retains the previous
+compressed identities; `sha256.txt` authenticates the current containers. No
+failed population, independent reference or timing is removed or regenerated.
+
 ```sh
 python benchmarks/results/readme-a100-20261108/replay.py
 PYTHONPATH=python:. python -m pytest -q tests/python/test_readme_a100_evidence.py
