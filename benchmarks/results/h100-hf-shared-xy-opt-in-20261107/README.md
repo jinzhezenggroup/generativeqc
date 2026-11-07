@@ -87,5 +87,7 @@ queue replay remain in their bound owner histories; this pilot does not relabel
 those earlier sources or add terminal-gather work.
 
 A normal publication synchronization also merges current main
-`dafa29f839c3f6e146c5f088bb5d5592bf14125a`, preserving its independent MP2
-changes. This adds no device measurement or change to the retained HF pilot.
+`22b33b081fe201e004199b6e2bda569354e9f519`, preserving its coefficient-bound
+resident exchange work and the earlier MP2 merge at
+`dafa29f839c3f6e146c5f088bb5d5592bf14125a`. This adds no device measurement
+or change to the retained HF pilot.

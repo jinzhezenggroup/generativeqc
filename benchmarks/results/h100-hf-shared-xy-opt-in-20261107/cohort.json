@@ -32,9 +32,10 @@
   },
   "omitted_artifacts": "native binaries, generated shards, large build/resource streams and CUDA caches remain in bound owner roots; their hashes do not make omitted files recoverable from this capsule",
   "latest_publication_master_merge": {
-    "revision": "dafa29f839c3f6e146c5f088bb5d5592bf14125a",
-    "source": "merged MP2 residency/current-main changes",
+    "revision": "22b33b081fe201e004199b6e2bda569354e9f519",
+    "source": "merged coefficient-bound resident exchange #3030; earlier MP2/current-main changes retained",
     "new_device_measurement": false,
-    "measured_pilot_unchanged": true
+    "measured_pilot_unchanged": true,
+    "previous_revision": "dafa29f839c3f6e146c5f088bb5d5592bf14125a"
   }
 }
