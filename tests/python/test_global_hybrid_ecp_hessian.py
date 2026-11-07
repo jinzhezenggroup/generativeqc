@@ -56,6 +56,10 @@ def independent_moved_gradient(
     return gradient.kernel()
 
 
+# Two complete Cs-ECP moving-grid HVP oracles take >14 minutes each on
+# hosted CPU runners. Preserve both strict numerical gates for nightly/manual
+# qualification; routine PR/merge-group CI keeps the shorter response tests.
+@pytest.mark.ci_nightly
 @pytest.mark.parametrize(
     "direction",
     (
