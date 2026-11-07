@@ -53,6 +53,7 @@ def profile_program(
     )
     range_method = _definition(source, "  void enqueue_range_correction(")
     range_active = _definition(source, "  bool range_source_active()")
+    combined_active = _definition(source, "  bool combined_range_source_active()")
     observer = _definition(source, "  generativeqc_status observe_value_dispatch(")
     harness = r"""
 #include <algorithm>
@@ -248,10 +249,14 @@ struct PhaseSource {
   bool active() const { return mode != 32 && mode != 37; }
   // Final-state profiling must bypass a retained mixed-recurrence source.
   bool mixed_recurrence() const { return mode == 41; }
+  bool combined_exchange() const { return mode == 42; }
+  template<class... Args> int enqueue_combined_exchange(Args&&...) {
+    throw std::logic_error("raw fixed-density profile consumed combined exchange");
+  }
   int enqueue(scf::Spec spec, const double* density, double* j, double* k,
               int* error, double threshold, std::string& detail,
               const double* beta, double* kb) {
-    assert(active() && !mixed_recurrence() && threshold == 1e-12);
+    assert(active() && !mixed_recurrence() && !combined_exchange() && threshold == 1e-12);
     ++calls;
     // A range lease must receive only the correction operator and scratch,
     // never the primary J/K operator. Both spin layouts use the same lease.
@@ -322,6 +327,7 @@ struct Impl {
   std::unique_ptr<PhaseSource> phase_source;
   bool phase_source_range{};
 RANGE_ACTIVE
+COMBINED_ACTIVE
   scf::Provider separate_range_provider;
   scf::Provider* range_provider{};
   struct { int stream{11}; } range_fock_binding;
@@ -355,7 +361,7 @@ int main(int argc, char** argv) {
   }
   if (mode >= 29) {
     p.phase_source = std::make_unique<PhaseSource>();
-    p.phase_source_range = mode >= 36 && mode <= 40;
+    p.phase_source_range = (mode >= 36 && mode <= 40) || mode == 42;
     p.has_range_correction = p.phase_source_range;
     if (mode == 30) p.provider.model.spec.exchange.present = false;
   }
@@ -367,7 +373,7 @@ int main(int argc, char** argv) {
   auto run = [&] { return owner.profile_fixed_density_components(expected, profile, detail); };
   const auto status = run();
   const bool preflight_failure = mode == 5 || mode == 6 || mode == 7 || mode == 20 || mode == 35;
-  const bool success = mode < 5 || mode == 17 || mode == 21 || mode == 29 || mode == 30 || mode == 32 || mode == 36 || mode == 37 || mode == 41;
+  const bool success = mode < 5 || mode == 17 || mode == 21 || mode == 29 || mode == 30 || mode == 32 || mode == 36 || mode == 37 || mode == 41 || mode == 42;
   assert((status == GENERATIVEQC_STATUS_SUCCESS) == success);
   if (mode == 23 || mode == 25 || mode == 27)
     assert(status == GENERATIVEQC_STATUS_CUDA_ERROR);
@@ -417,7 +423,7 @@ int main(int argc, char** argv) {
     assert(std::string(bridge.begin(), bridge.end()) == expected_bridge[mode - 22]);
   }
   if (p.phase_source) {
-    if (mode == 32 || mode == 35 || mode == 37 || mode == 41)
+    if (mode == 32 || mode == 35 || mode == 37 || mode == 41 || mode == 42)
       assert(p.phase_source->calls == 0 && p.phase_source->audits == 0);
     else if (success)
       assert(p.phase_source->calls == (mode == 30 || mode == 36 ? 2U : 4U) &&
@@ -437,6 +443,7 @@ int main(int argc, char** argv) {
         .replace("METHODS", methods)
         .replace("RANGE_METHOD", range_method)
         .replace("RANGE_ACTIVE", range_active)
+        .replace("COMBINED_ACTIVE", combined_active)
         .replace("OBSERVER_METHOD", observer)
     )
     native_cxx.build_executable(
@@ -482,6 +489,7 @@ int main(int argc, char** argv) {
         pytest.param(39, id="range-resident-audit-failure"),
         pytest.param(40, id="range-resident-audit-allocation"),
         pytest.param(41, id="mixed-resident-source-strict-fallback"),
+        pytest.param(42, id="combined-source-raw-profile-fallback"),
     ],
 )
 @pytest.mark.parametrize("spins", [1, 2])

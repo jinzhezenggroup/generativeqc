@@ -71,9 +71,11 @@ _TRANSFERS = frozenset(
         "cudaMemcpy2DAsync",
         "runtime::residency_memcpy",
         "runtime::residency_memcpy_async",
+        "runtime::df_metric_memcpy_async",
         "runtime::residency_upload",
         "generativeqc::runtime::residency_memcpy",
         "generativeqc::runtime::residency_memcpy_async",
+        "generativeqc::runtime::df_metric_memcpy_async",
         "generativeqc::runtime::residency_upload",
     ]
 )
