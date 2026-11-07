@@ -29,6 +29,7 @@ from .production_selection import (
     _selection_integral,
     split_independent_consumers,
 )
+from .production_shared_rys_xy import shared_rys_xy_companions
 from .shell_spec import ShellClassSpec, shell_pair_class
 from .signature import GeneratedKernelArgument, GeneratedKernelSignature
 
@@ -1350,4 +1351,60 @@ def emit_profile_shard(
     if not items:
         body.append("// Portable profile: generic CUDA kernels remain active.\n")
     body.append(f"\n}}  // namespace {namespace}\n")
+    return "".join(body)
+
+
+def emit_shared_rys_xy_fock_shard(
+    profile: ResolvedProductionProfile,
+    selections: Iterable[KernelSelection],
+) -> str:
+    """Package the qualified arithmetic beside its primary owning class."""
+    names = {item.spec.name for item in selections}
+    companions = tuple(
+        item
+        for item in shared_rys_xy_companions(profile)
+        if item.incumbent.spec.name in names
+    )
+    if not companions:
+        return ""
+    identifier = _profile_identifier(profile.target.architecture) + "_shared_rys_xy"
+    body = [f"\nnamespace generativeqc::scf::generated::profile_{identifier} {{\n"]
+    for companion in companions:
+        item = companion.incumbent
+        source = emit_shell_class_fused_cuda(item.spec, companion.plan)
+        body.append(
+            _scope_profile_identifiers(
+                _strip_emitter_includes(source),
+                item,
+                identifier,
+            )
+        )
+        symbol = f"generativeqc_launch_{identifier}_generated_{item.spec.name}_fock"
+        wrapper = _fock_launch_wrapper(item.spec, symbol)
+        start = wrapper.index("  if (unrestricted) {")
+        middle = wrapper.index("  } else {", start)
+        end = wrapper.index("  return cudaPeekAtLastError();", middle)
+        wrapper = (
+            wrapper[:start]
+            + wrapper[middle + len("  } else {\n") : end]
+            + wrapper[end:]
+        )
+        # The dispatcher falls back before enqueue. Direct ABI callers get an
+        # explicit rejection rather than silently changing output semantics.
+        wrapper = wrapper.replace(
+            "  if (worker_blocks == 0U)",
+            "  if (unrestricted || fock.correction != nullptr) return cudaErrorNotSupported;\n"
+            "  if (worker_blocks == 0U)",
+        )
+        # Remove the closing brace of the stripped else arm.
+        wrapper = wrapper.replace(
+            "  }\n  return cudaPeekAtLastError();", "  return cudaPeekAtLastError();"
+        )
+        body.append(
+            _scope_profile_identifiers(wrapper, item, identifier).replace(
+                _scope_profile_identifiers(symbol, item, identifier),
+                symbol,
+            )
+        )
+    body.append("}  // namespace\n")
     return "".join(body)
