@@ -94,8 +94,14 @@ class CudaScheduleIR:
     mixed_pair_products_fp64: bool = False
     # Fixture-only value capability; production selection remains unqualified.
     fock_shared_rys_xy: bool = False
+    # Fixture-only exact coefficient-keyed weighted-Z reuse beside shared XY.
+    fock_shared_rys_weighted_z: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.fock_shared_rys_weighted_z, bool):
+            raise TypeError("shared Rys weighted-Z choice must be boolean")
+        if self.fock_shared_rys_weighted_z and not self.fock_shared_rys_xy:
+            raise ValueError("shared Rys weighted-Z requires shared Rys x/y")
         if not isinstance(self.fock_shared_rys_xy, bool):
             raise TypeError("shared Rys x/y choice must be boolean")
         if self.fock_shared_rys_xy and (
@@ -247,6 +253,11 @@ class CudaKernelIR:
         require_cuda_integral(self.integral)
         self.schedule.validate_for(self.target)
         component_count = self.integral.spec.component_count
+        if (
+            self.schedule.fock_shared_rys_weighted_z
+            and self.target.architecture != "sm_90"
+        ):
+            raise ValueError("shared Rys weighted-Z requires the qualified SM90 owner")
         if self.schedule.fock_shared_rys_xy and (
             not isinstance(self.integral.spec, ShellClassSpec)
             or self.integral.spec.name not in ("dppp", "pppp")
