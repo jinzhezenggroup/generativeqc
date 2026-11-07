@@ -73,18 +73,6 @@ generativeqc_xtb_status_t evaluate_es3_potential_cpu(ES3View view, const double*
                                             double* shell_potentials, std::string& error);
 
 /*
- * Accumulate one Hartree energy per ragged batch member using
- *
- *   E3 = sum_s Gamma3_s q_s^3 / 3.
- *
- * Existing energies must be finite. The complete operation is preflighted,
- * including accumulated-output range, so a failure leaves every energy
- * unchanged. Input and output arrays must not overlap.
- */
-generativeqc_xtb_status_t add_es3_energy_cpu(ES3View view, const double* shell_charges, double* energies,
-                                    std::string& error);
-
-/*
  * Overwrite the ES3 shell potential of exactly one ragged batch member.
  * shell_charges and shell_potentials address the complete packed arrays, while
  * numerical validation and arithmetic touch only system's shell slice. This

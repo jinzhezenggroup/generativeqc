@@ -327,15 +327,6 @@ std::vector<double> metric_pseudoinverse(const integrals::DensityFittingIntegral
   return inverse;
 }
 
-std::vector<double> metric_pseudoinverse_derivative(
-    const integrals::DensityFittingIntegralData& data, const std::vector<double>& inverse,
-    const double* metric_derivative, double relative_threshold = 0.0) {
-  const std::size_t elements = data.naux * data.naux;
-  return density_fitting_metric_inverse_response(
-      data.metric, inverse, std::vector<double>(metric_derivative, metric_derivative + elements),
-      data.naux, relative_threshold);
-}
-
 void validate_gradient_density(const std::vector<double>& density, std::size_t nbf,
                                const char* description) {
   std::size_t matrix_elements = 0;
@@ -607,22 +598,6 @@ std::vector<double> density_fitting_metric_pseudoinverse(
     const integrals::DensityFittingIntegralData& integrals, double relative_threshold) {
   validate_density_fitting_derivative_data(integrals);
   return metric_pseudoinverse(integrals, relative_threshold);
-}
-
-std::vector<double> density_fitting_metric_pseudoinverse_derivative(
-    const integrals::DensityFittingIntegralData& integrals, const std::vector<double>& inverse,
-    std::size_t coordinate, double relative_threshold) {
-  validate_density_fitting_derivative_data(integrals);
-  if (inverse.size() != integrals.naux * integrals.naux) {
-    throw std::invalid_argument("DF metric pseudoinverse dimensions are inconsistent");
-  }
-  if (coordinate >= integrals.ncoord) {
-    throw std::invalid_argument("DF metric derivative coordinate is invalid");
-  }
-  const std::size_t metric_elements = integrals.naux * integrals.naux;
-  return metric_pseudoinverse_derivative(
-      integrals, inverse, integrals.metric_derivative.data() + coordinate * metric_elements,
-      relative_threshold);
 }
 
 std::vector<double> density_fitting_metric_inverse_response(const std::vector<double>& metric,
