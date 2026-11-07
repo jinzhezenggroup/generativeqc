@@ -76,6 +76,72 @@ E/F acceptance. The source-matched occupied-Gram PR build at `9c7cf3036` passed
 independent PySCF comparisons. The combined final tree requires its own complete
 build and endpoint qualification before #1890 can close.
 
+### Combined-source qualification — 2026-11-07
+
+The combined native/compiler source at
+`d2f031681ad5e0d22068e0616f56745113fc5a56` now builds successfully on n1
+with CUDA 12.9.86, GCC 13.3.0, sm_120 and verified sccache 0.16.0 launchers.
+The qualified `libgenerativeqc.so` SHA-256 is
+`b19f9e4b91efc703bef96e43fe081070e5f96e808d0f2dcacb184692932f0f37`.
+Subsequent commits update test probes/formatting and this receipt only;
+`git diff d2f031681..HEAD -- src include python tools cmake CMakeLists.txt`
+contains no production or compiler changes. These identities are evidence,
+not permanent CI source-fingerprint assertions.
+
+- The final unique 27-file host suite passes **1706 tests**, with 38 explicit
+  device/endpoint skips. The four late-discovered cache/admission/upload probe
+  consumers are migrated without removing their original failure/lifetime gates.
+- Slurm **16711**, visibility `0`: **60 passed** across occupied DF E/F replay,
+  RHF resident block response and UHF response. Independent PySCF/dense oracles,
+  cold/warm/moved geometry, both spins, bounded capacity, cleanup and transfers
+  remain checked; this rerun uses the combined source, not the original Gram DSO.
+- Slurm **16709**, visibility `3`: **124 passed, 15 expected skips** across
+  native DF solver, Lambda, resident response and complete DF-CCSD(T) force
+  endpoints. This includes ordered/prepared comparisons, independent determinant
+  and molecular energy-difference oracles, full-coordinate water forces, exact
+  budget fallback, tail batches and no publication after failure. The skips are
+  CPU parameterizations of CUDA-only schedules, not failed GPU gates.
+- Slurm **16708**, visibility `2`: all four native precision-policy,
+  stream-eigensolver, Fock-composition and Fock-provider executables pass.
+  The extended Python run also passes **140 RHF frame cases**, **26 native CPU
+  precision cases** and all seven GFN CUDA molecular oracles. It is **not** an
+  all-green run: the baseline failures and CPU prerequisite below are retained.
+- Slurm **16717**, visibility `3`: **14 passed** for all GFN CPU/CUDA pinned
+  tblite molecular E/F fixtures, including d shells. The CPU half requires the
+  installed LP64/local-thread-control provider at
+  `/data/jzzeng/portable-integration-20261101/provider/scipy_openblas32/lib` on
+  the loader path. The initial seven CPU failures were missing-provider errors;
+  setting a CMake-only provider variable at runtime does not configure that DSO.
+- All three modified endpoint/qualification benchmark translation units compile
+  against the combined generated headers through sccache. This is an interface
+  check, not a benchmark or performance improvement claim.
+- Vendor, selection, CUDA ownership, SCF dependency and Direct-J/K tuning guards
+  pass. The complete changed-file pre-commit run passes after formatting.
+
+#### Unchanged extended-test failures
+
+The expanded run intentionally retains two pre-existing red groups rather than
+weakening their assertions or silently reporting a completely green suite:
+
+1. Three nonresident Direct multi-RHS cases fail the unchanged Python
+   `device_workspace_bytes` contract. Slurm **16710** reproduces the same three
+   failures with the preserved pre-completion Gram-only DSO at `9c7cf30367080d815a9ebe3da8a6d8e43c14a5bc`.
+2. Twelve positive-screening/materialized fixed-mask cases fail the validation
+   probe's `requested response schedule was not exercised` assertion. Slurm
+   **16713** reproduces exactly the same twelve failure identities with that
+   baseline DSO; its other 36 fixed-mask cases pass. The numerical/provider
+   source and probe responsible for this schedule assertion are not modified by
+   this migration.
+
+Neither group is a new numerical discrepancy, and neither is fixed or removed
+by this ownership change. They are reported separately from the changed-path
+acceptance above. Raw logs, source/library identities, launcher commands and
+before/after cache statistics remain in the ignored qualification directory
+`/data/jzzeng/qc-1890-gram-20261107/` (the `final-*` receipts and `evidence-gram/`)
+and local `build/issue1890/`. All device executions use finite Slurm allocations;
+device visibility is preserved. No speedup, approximation change, precision
+promotion or new Libxc qualification is claimed.
+
 ## Revisit when
 
 New compiler layouts, precision variants, provider resource profiles or graph
