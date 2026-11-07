@@ -1,5 +1,12 @@
 # CUDA tensor and solver vendor boundaries
 
+Public RHF/UHF resident response owners borrow the shared
+`tensor::CudaDenseOperations` execution boundary. They retain vector leases,
+device/stream lifetime, arena ownership, synchronization and numeric validation;
+the provider submits strict-FP64 matrix/vector operations and preserves optional
+GEAM fallback work reporting and native error provenance. Public adapters do not
+create an alternate vendor-selection surface.
+
 Run `python tools/check_vendor_boundaries.py` to check production native sources,
 scientific compiler modules and `tools/generate*.py` entry points. The same check
 runs in pre-commit. `--json` reports the current file/symbol reference inventory.
