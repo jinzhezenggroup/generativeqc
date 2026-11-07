@@ -8,6 +8,22 @@ integrated source and remeasure **both H100 and RTX 5090** before making the
 requested current-implementation comparison. No replacement source was selected
 or executed in this task.
 
+## Follow-up and archival scope, 2026-11-07
+
+The same author completed the recommended same-source replacement campaign in
+[PR #3027](https://github.com/jinzhezenggroup/generativeqc/pull/3027), merged on
+2026-11-06 as `f0f806d62ec9bcd33954ddb2803b98c5e090ca15`. Both H100 and RTX 5090
+were measured on `7109b3d208d23352f266e2bf7440fdfcc71df974`; see the
+[retained paired campaign](https://github.com/jinzhezenggroup/generativeqc/blob/f0f806d62ec9bcd33954ddb2803b98c5e090ca15/benchmarks/results/cbs-h100-5090-7109b3d2-20261106/README.md).
+
+That follow-up fulfills this audit's recommendation to remeasure both GPUs on a
+common integrated source. This directory remains the historical stopped
+old-source campaign: `source_gate: STOP`, `scientific_status: NOT_RUN`, zero
+observed calls and unavailable execution identity are unchanged. Retaining this
+audit supplies no extra timing points and makes no new scientific or performance
+claim. No additional build, GPU allocation or measurement is needed to archive
+this stop record.
+
 ## Source audit, 2026-11-06
 
 The requested unmodified source is
