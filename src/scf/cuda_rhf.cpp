@@ -594,7 +594,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                                                        spin_batch_size};
   const cuda_policy::SmallHfProfitabilityPolicy small_hf_profitability =
       cuda_policy::resolve_small_hf_profitability(direct_target, small_hf_workload);
-  const bool use_cublas = plan.cublas_enabled && small_hf_profitability.use_cublas;
+  const auto matrix_admission =
+      small_hf_profitability.matrix.available_if(plan.matrix_context_enabled);
   const std::size_t total_atoms = host.atomic_numbers.size();
   const std::size_t total_shells = host.shell_atoms.size();
   const std::size_t total_shell_pairs = host.shell_pair_first.size();
@@ -964,7 +965,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         requested_persistent_eri, requested_transformed_direct, shell_class_profiling,
         inactive_eigensolver_profiling, bounded_fock_class_timing,
         requested_bounded_direct_streaming, requested_mixed_precision_fock,
-        requested_incremental_direct_jk, plan.layout, requested_incremental_diis_gram, use_cublas,
+        requested_incremental_direct_jk, plan.layout, requested_incremental_diis_gram,
+        matrix_admission.requires_provider_context(),
         tensor::CudaStructuredProductBinding::basis_workspace_required(),
         requested_fp32_block_screening);
   };
@@ -1168,9 +1170,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       plan.eigensolver_diagnostic.ordinary_family;
   const bool use_jacobi = graph_eigensolver_family == CudaEigensolverFamily::jacobi_batched ||
                           ordinary_eigensolver_family == CudaEigensolverFamily::jacobi_batched;
-  const bool use_cusolver = use_jacobi ||
-                            ordinary_eigensolver_family == CudaEigensolverFamily::xsyev_batched ||
-                            ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd;
+  const bool provider_eigen_context =
+      use_jacobi || ordinary_eigensolver_family == CudaEigensolverFamily::xsyev_batched ||
+      ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd;
   const auto retained_reference_peak = options.export_physical_reference && !first_setup
                                            ? hf_cuda_reference_reuse_capacity(plan, host)
                                            : 0;
@@ -1223,7 +1225,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   plan.resident_warm_density.clear();
   plan.resident_previous_energy.clear();
   std::size_t reference_base_bytes = 0;
-  const ReferenceProviders reference_providers{use_cublas, use_cusolver};
+  const ReferenceProviders reference_providers{matrix_admission.requires_provider_context(),
+                                               provider_eigen_context};
   const auto reference_provider_allowance = declared_reference_provider_allowance(
       options.reference_provider_initialization, options.reference_provider_initialization_intent,
       reference_providers);
@@ -1321,7 +1324,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     resources.provider_initialization_ = resolved;
     resources.provider_identity_pins_ = identity.library_pins;
   }
-  cublasStatus_t blas_error = CUBLAS_STATUS_SUCCESS;
+  generativeqc_status matrix_status = GENERATIVEQC_STATUS_SUCCESS;
   cusolverStatus_t solver_error = CUSOLVER_STATUS_SUCCESS;
   if (first_setup) {
     std::unique_lock<std::mutex> allocation_lock(runtime::allocation_measurement_mutex);
@@ -1374,21 +1377,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     }
     const auto provider_before =
         options.export_physical_reference ? reference_detail::free_bytes(resources.stream_) : 0;
-    if (use_cublas) {
-      blas_error = cublasCreate(&resources.blas_);
-      if (blas_error == CUBLAS_STATUS_SUCCESS) {
-        blas_error = cublasSetStream(resources.blas_, resources.stream_);
-      }
-      if (blas_error == CUBLAS_STATUS_SUCCESS) {
-        blas_error = cublasSetPointerMode(resources.blas_, CUBLAS_POINTER_MODE_HOST);
-      }
-      if (blas_error != CUBLAS_STATUS_SUCCESS) {
-        plan.retry_without_cublas = true;
-        fill_global_failure(outputs, blas_status(blas_error));
+    if (matrix_admission.requires_provider_context()) {
+      matrix_status = blas_status(resources.prepare_matrix_context());
+      if (matrix_status != GENERATIVEQC_STATUS_SUCCESS) {
+        plan.retry_without_matrix_context = true;
+        fill_global_failure(outputs, matrix_status);
         return outputs;
       }
     }
-    if (use_cusolver) {
+    if (provider_eigen_context) {
       solver_error = static_cast<cusolverStatus_t>(resources.eigen_handles_.create());
       if (solver_error != CUSOLVER_STATUS_SUCCESS ||
           (solver_error = static_cast<cusolverStatus_t>(resources.eigen_handles_.bind_stream(
@@ -1625,7 +1622,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   auto orthogonalizer = arena_pointer<double>(resources.arena_, layout.orthogonalizer);
   auto temporary = arena_pointer<double>(resources.arena_, layout.temporary);
   auto masked_matrix_output =
-      use_cublas ? arena_pointer<double>(resources.arena_, layout.masked_matrix_output) : nullptr;
+      matrix_admission.requires_provider_context()
+          ? arena_pointer<double>(resources.arena_, layout.masked_matrix_output)
+          : nullptr;
   auto eigensystem = arena_pointer<double>(resources.arena_, layout.eigensystem);
   auto coefficients = arena_pointer<double>(resources.arena_, layout.coefficients);
   auto eigenvalues = arena_pointer<double>(resources.arena_, layout.eigenvalues);
@@ -2063,7 +2062,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   }
 
   device_batch.reference_fock_correction = resources.reference_fock_correction_;
-  if (first_setup && use_cusolver) {
+  if (first_setup && provider_eigen_context) {
     const auto family = use_jacobi ? eigen_provider::SymmetricEigenFamily::jacobi_batched
                         : ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd
                             ? eigen_provider::SymmetricEigenFamily::xsyevd
@@ -2117,12 +2116,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         return outputs;
       }
     }
-    if (use_cublas) {
-      blas_error = cublasSetWorkspace(resources.blas_, resources.solver_workspace_,
-                                      resources.solver_workspace_bytes_);
-      if (blas_error != CUBLAS_STATUS_SUCCESS) {
-        plan.retry_without_cublas = true;
-        fill_global_failure(outputs, blas_status(blas_error));
+    if (matrix_admission.requires_provider_context()) {
+      matrix_status = blas_status(resources.bind_matrix_workspace());
+      if (matrix_status != GENERATIVEQC_STATUS_SUCCESS) {
+        plan.retry_without_matrix_context = true;
+        fill_global_failure(outputs, matrix_status);
         return outputs;
       }
     }
@@ -2331,8 +2329,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         launch_matrix_product(resources.matrix_view(masked_matrix_output, spin_matrix_elements),
                               static_cast<int>(batch_size), static_cast<int>(nbf), left,
                               transpose_left, right, active, output, scale);
-    if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
-      plan.retry_without_cublas = true;
+    if (matrix_admission.requires_provider_context() &&
+        product_status != GENERATIVEQC_STATUS_SUCCESS) {
+      plan.retry_without_matrix_context = true;
     }
     return product_status;
   };
@@ -2343,8 +2342,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         resources.matrix_view(masked_matrix_output, spin_matrix_elements),
         static_cast<int>(batch_size), 2, static_cast<int>(nbf), left, left_is_spin, transpose_left,
         right, right_is_spin, active, output);
-    if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
-      plan.retry_without_cublas = true;
+    if (matrix_admission.requires_provider_context() &&
+        product_status != GENERATIVEQC_STATUS_SUCCESS) {
+      plan.retry_without_matrix_context = true;
     }
     return product_status;
   };
@@ -3551,7 +3551,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const EigensolverProfileLaunch graph_eigensolver_profile{
       static_cast<std::int32_t>(batch_size),
       active,
-      use_cublas,
+      matrix_admission.requires_provider_context(),
       static_cast<std::uint32_t>(options.max_iterations),
       inactive_eigensolver_profile_count,
       inactive_eigensolver_profile,
@@ -3798,7 +3798,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         });
     cuda_error = iteration_capture.cuda_error;
     if (!iteration_capture.ok()) {
-      if (use_cublas) plan.retry_without_cublas = true;
+      if (matrix_admission.requires_provider_context()) plan.retry_without_matrix_context = true;
       fill_global_failure(outputs, iteration_capture.body_status != GENERATIVEQC_STATUS_SUCCESS
                                        ? iteration_capture.body_status
                                        : cuda_status(iteration_capture.cuda_error));
@@ -3812,7 +3812,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
           });
       cuda_error = post_capture.cuda_error;
       if (!post_capture.ok()) {
-        if (use_cublas) plan.retry_without_cublas = true;
+        if (matrix_admission.requires_provider_context()) plan.retry_without_matrix_context = true;
         fill_global_failure(outputs, post_capture.body_status != GENERATIVEQC_STATUS_SUCCESS
                                          ? post_capture.body_status
                                          : cuda_status(post_capture.cuda_error));

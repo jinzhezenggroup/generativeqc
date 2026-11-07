@@ -63,7 +63,7 @@ RccsdNativeState run_rccsd_native_state(
     std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache = nullptr,
     const std::vector<double>* initial_density = nullptr, bool* warm_start_fallback = nullptr,
     std::size_t external_reservation_bytes = 0, const core::System* correlation_auxiliary = nullptr,
-    bool retain_df_response = false, bool df_matrix_gemm = true,
+    bool retain_df_response = false, const cc::DFContractionQualification& qualification = {},
     scf::CudaRhfBucketPlan** cuda_reference_plan = nullptr,
     std::size_t df_auxiliary_batch_limit = 8, bool derived_denominators = true,
     bool packed_diis = false, std::optional<bool> df_mixed_precision = std::nullopt,

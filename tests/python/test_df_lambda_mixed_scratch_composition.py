@@ -60,7 +60,7 @@ def selector_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "tests/native/df_cc_lambda_probe.cpp").read_text()
     controls = source[
         source.index("    response.serial_scratch_reuse =") : source.index(
-            "    response.df_audit_matrix_gemm ="
+            "    response.qualification.ordered_audit ="
         )
     ]
     return _compile(
@@ -134,13 +134,15 @@ def scratch_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         start : source.index("    cuda_check(cudaStreamCreateWithFlags", start)
     ]
     start = source.index("    auto at =")
-    binding = source[start : source.index("      if (metrics.df_matrix_gemm)", start)]
+    binding = source[
+        start : source.index("      if (regions.response.has_value())", start)
+    ]
     # Preserve the live retained-frontier binding, excluding unrelated GPU work.
     retained = re.search(r"^\s*staged.core_reuse_arena = [^;]+;", source, re.MULTILINE)
     audit_binding = re.search(r"^\s*staged.audit_arena = [^;]+;", source, re.MULTILINE)
     assert retained is not None and audit_binding is not None
     start = source.index(
-        "    if (options.df_mixed_precision && metrics.df_matrix_gemm)"
+        "    if (options.df_mixed_precision && regions.response.has_value())"
     )
     mixed = source[start : source.index("    metrics.cuda_actions = true;", start)]
     definitions = []
@@ -235,22 +237,24 @@ int main(int argc,char** argv) {
   cc.t1.resize(6);cc.t2.resize(36);
   generativeqc::cc::LambdaOptions options;
   options.serial_scratch_reuse=sharing;options.df_mixed_precision=warming;
-  options.df_auxiliary_reduction=true;options.df_matrix_gemm=true;
-  options.df_audit_matrix_gemm=audit;options.df_core_reuse=true;
+  options.df_auxiliary_reduction=true;options.qualification.ordered_response=false;
+  options.qualification.ordered_audit=!audit;options.df_core_reuse=true;
   options.max_bytes=1ULL<<30;
   const std::size_t o=2,v=3,q=5,n1=o*v,n2=n1*n1,vv=v*v;
   bool with_source=true,with_parameters=true,parameters_admitted=false;
   std::array<double*,6> cuts{},cut_seeds{};
   std::array<std::size_t,6> cut_sizes{};
   generativeqc::cc::LambdaDiagnostic metrics;
+  generativeqc::cc::DFPreparedRegions regions;
 """
         + planner
         + r"""
   if(rollback==1 || rollback==2)drop_core_reuse();
   if(rollback==2)drop_audit();
   if(rollback==3)scalar_plan();
-  if(rollback==4){scalar_plan();metrics.df_auxiliary_reduction=false;
+  if(rollback==4){scalar_plan();regions.reduced=false;
     cursor=fallback_cursor;scratch_elements=scratch;capacity();}
+  regions.report(metrics);
   const auto allocated=allocation_bytes,owned=metrics.owned_device_bytes,
              admitted=metrics.numeric_capacity_bytes;
   std::vector<unsigned char> allocation(allocation_bytes,0);
@@ -293,6 +297,7 @@ int main(int argc,char** argv) {
     for(const auto r:persistent)if(first<r.last && r.first<first+size)
       throw std::runtime_error("scratch aliases persistent slot");};
   scratch_safe(arena,bytes(sharing?scratch_elements:scratch));
+  regions.report(metrics);
   if(metrics.df_matrix_gemm){
     scratch_safe(offset(staged.response_arena),
                  std::max(bytes(matrix_scratch_elements),metrics.df_audit_arena_bytes));
