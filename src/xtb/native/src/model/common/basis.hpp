@@ -5,7 +5,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <type_traits>
 #include <vector>
 
 namespace generativeqc::xtb::detail::common {
@@ -55,31 +54,6 @@ struct BasisPlan {
   std::vector<double> primitive_exponents;
   std::vector<double> primitive_coefficients;
 };
-
-/*
- * Heap storage retained by a sealed basis plan. Runtime workspace reporting
- * uses vector capacities because those are the actual owned allocations, not
- * merely the currently populated element counts. Keep this inventory beside
- * BasisPlan so every backend accounts for newly added metadata together.
- */
-inline std::size_t basis_plan_resident_bytes(const BasisPlan& plan) noexcept {
-  const auto vector_bytes = [](const auto& values) noexcept {
-    using Value = typename std::decay_t<decltype(values)>::value_type;
-    return values.capacity() * sizeof(Value);
-  };
-  return vector_bytes(plan.atom_offsets) + vector_bytes(plan.batch_shell_offsets) +
-         vector_bytes(plan.batch_orbital_offsets) +
-         vector_bytes(plan.batch_cartesian_orbital_offsets) +
-         vector_bytes(plan.batch_primitive_offsets) + vector_bytes(plan.atom_shell_offsets) +
-         vector_bytes(plan.atom_orbital_offsets) +
-         vector_bytes(plan.atom_cartesian_orbital_offsets) +
-         vector_bytes(plan.atom_primitive_offsets) + vector_bytes(plan.shell_orbital_offsets) +
-         vector_bytes(plan.shell_cartesian_orbital_offsets) +
-         vector_bytes(plan.shell_primitive_offsets) + vector_bytes(plan.shell_to_atom) +
-         vector_bytes(plan.principal_quantum_numbers) + vector_bytes(plan.angular_momenta) +
-         vector_bytes(plan.shell_is_valence) + vector_bytes(plan.slater_exponents) +
-         vector_bytes(plan.primitive_exponents) + vector_bytes(plan.primitive_coefficients);
-}
 
 }  // namespace generativeqc::xtb::detail::common
 
