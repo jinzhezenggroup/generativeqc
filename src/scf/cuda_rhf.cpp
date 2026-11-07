@@ -64,6 +64,7 @@
 #include "scf/cuda/direct_tile_validation.hpp"
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda/force_queue_policy.hpp"
+#include "scf/cuda/hf_bounded_page_policy.hpp"
 #include "scf/cuda/hf_initial_guess.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/metadata_upload.hpp"
@@ -892,7 +893,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     bounded_generated_task_capacity =
         std::min(bounded_generated_task_capacity,
                  cuda_policy::direct_jk_bounded_streaming_task_capacity_limit(
-                     direct_schedule, sizeof(GeneratedShellTask)));
+                     cuda_policy::resolve_hf_bounded_page_policy(
+                         direct_target,
+                         {nbf, batch_size,
+                          static_cast<unsigned>(*std::max_element(host.shell_angular.begin(),
+                                                                  host.shell_angular.end())),
+                          options.max_iterations, unrestricted, options.export_physical_reference,
+                          requested_mixed_precision_fock, requested_incremental_direct_jk}),
+                     sizeof(GeneratedShellTask)));
   }
   if (requested_quartet_direct && first_setup && !requested_bounded_direct_streaming) {
     // The shared generated-task arena serves both exact Fock and force
@@ -3700,6 +3708,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     const double iteration_density_tolerance =
         screened_stage ? std::max(options.density_tolerance, 1000.0 * iteration_screening)
                        : options.density_tolerance;
+    // A proposal changes the trajectory: the standard owner's looser physical
+    // ceiling did not preserve the stronger independent HF force diagnostic.
+    // Its target tail therefore uses the strict residual gate, without changing
+    // public controls, ordinary solves, or the provisional stopping condition.
+    const bool qualified_iteration_owner =
+        qualified_standard_owner && (!cold_screened_iterations || screened_stage);
     // Only the item's coarse mixed stage may defer stationarity. Exact peers
     // and every FP64 refinement step must satisfy the physical force criterion.
     const auto* approximate_census = allow_mixed_precision ? mixed_precision_item_census : nullptr;
@@ -3720,7 +3734,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census, qualified_standard_owner, incremental_energy_refinement_updates,
+              approximate_census, qualified_iteration_owner, incremental_energy_refinement_updates,
               incremental_energy_refinement_census);
         } else {
           launch_update_uhf_convergence_kernel(
@@ -3729,7 +3743,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census, qualified_standard_owner, incremental_energy_refinement_updates,
+              approximate_census, qualified_iteration_owner, incremental_energy_refinement_updates,
               incremental_energy_refinement_census);
         }
       }
@@ -3748,7 +3762,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census, qualified_standard_owner, incremental_energy_refinement_updates,
+              approximate_census, qualified_iteration_owner, incremental_energy_refinement_updates,
               incremental_energy_refinement_census);
         } else {
           launch_update_convergence_kernel(
@@ -3757,7 +3771,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census, qualified_standard_owner, incremental_energy_refinement_updates,
+              approximate_census, qualified_iteration_owner, incremental_energy_refinement_updates,
               incremental_energy_refinement_census);
         }
       }

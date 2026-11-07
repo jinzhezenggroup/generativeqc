@@ -238,7 +238,9 @@ def test_production_native_lowering_is_bound_to_stationary_plan() -> None:
     assert "rooted[q * stride + i * diagonal_stride]" in cuda
     assert "symmetric_pairs ? 1 : rank + 1" in cuda
     assert "potentials[q] = density_scale * value" in cuda
-    assert "cublasDgemm" in cuda
+    # Vendor submissions belong to the shared Tensor provider. Executable
+    # occupied-provider and borrowed-view tests cover that boundary; the
+    # stationary-plan contract does not require a direct vendor-call spelling.
     for kernel in (
         "coulomb_weights_kernel",
         "coulomb_metric_kernel",

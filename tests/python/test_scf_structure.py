@@ -14,6 +14,24 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+@pytest.mark.parametrize("unrelated", ("rhf_graph.hpp", "direct_jk_kernels.hpp"))
+def test_hf_page_policy_cannot_acquire_execution_dependencies(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """The owner-specific page contract remains a pure host policy leaf."""
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    (source / "rhf_policy.hpp").write_text("\n")
+    (source / unrelated).write_text("\n")
+    owner = source / "hf_bounded_page_policy.hpp"
+    owner.write_text('#include "scf/cuda/rhf_policy.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "scf/cuda/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_hf_bounded_page_policy dependency" in errors[0]
+
+
 @pytest.mark.parametrize(
     "unrelated",
     (
