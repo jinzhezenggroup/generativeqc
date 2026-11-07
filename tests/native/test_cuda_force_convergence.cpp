@@ -422,8 +422,12 @@ void check_incremental_approach(unsigned spins, bool standard, bool density_limi
   Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 0)),
       updates(std::vector<std::uint32_t>{2, 0, 0});
   Device<unsigned long long> delta_count(std::vector<unsigned long long>{2, 2, 0});
-  const auto launch =
-      spins == 1 ? launch_update_convergence_kernel : launch_update_uhf_convergence_kernel;
+  const auto launch = [spins](auto... arguments) {
+    if (spins == 1)
+      launch_update_convergence_kernel(arguments...);
+    else
+      launch_update_uhf_convergence_kernel(arguments...);
+  };
   for (unsigned evaluation = 0; evaluation < 3; ++evaluation) {
     const std::vector<double> unchanged_density(batch * vector_size, 0.25);
     check(cudaMemcpy(density.data, unchanged_density.data(),
