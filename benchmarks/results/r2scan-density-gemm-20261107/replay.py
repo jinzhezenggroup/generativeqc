@@ -132,8 +132,13 @@ def replay(directory: Path = DIRECTORY) -> dict[str, Any]:
                     require(sample["settings"]["force_grid_response"], "missing moving-grid force response")
                     require(sample["settings"]["xc_grid_points"] == 1078336, "changed sampled quadrature")
                     precision = sample["precision"]
+                    require(precision.get("complete") is True and precision.get("operator_inventory_complete") is True and precision.get("operator_work_counters_valid") is True and bool(precision.get("operators")), "incomplete operator inventory")
                     require(precision["requested_mode"] == "fp64" and precision["effective_bits"] == 64 and precision["mixed_stage_fock_builds"] == 0 and precision["execution_retries"] == 0, "not strict FP64 execution")
                     require(all(operator[key] == "fp64" for operator in precision["operators"] for key in ("storage", "compute", "accumulation", "reduction")), "lower precision operator")
+                    work = sample["ks_diagnostic"]["coulomb_exchange_work"]
+                    expected_focks = 10 if index == 0 else 1
+                    require(sample["fock_builds"] == expected_focks and precision["strict_stage_fock_builds"] == expected_focks and precision["post_scf_fock_builds"] == 0, "incomplete solver work")
+                    require(work.get("complete") is True and work.get("coulomb_applications") == expected_focks and work.get("exchange_applications") == 0, "incomplete Coulomb/exchange work")
                     observed = errors(sample, target)
                     observed[0] /= 96
                     require(all(value < gate for value, gate in zip(observed, (1e-5, 1e-4, 3e-5), strict=True)), "independent E/F gate")

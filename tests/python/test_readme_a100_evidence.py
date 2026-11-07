@@ -75,3 +75,19 @@ def test_reject_relabelled_readme_a100_receipts(corruption: str) -> None:
         ).hexdigest()
     with pytest.raises(ValueError):
         module["replay"](evidence=evidence)
+
+
+@pytest.mark.parametrize("order", [["standard", "standard"], ["gpu4pyscf"], []])
+def test_reject_incomplete_case_arm_order(order: list[str]) -> None:
+    """Balanced first arms cannot replace one execution of each engine."""
+    module = runpy.run_path(str(DIRECTORY / "replay.py"))
+    evidence = module["load_evidence"]()
+    name = "campaign.json"
+    campaign = json.loads(evidence["files"][name])
+    campaign["cases"][0]["order"] = order
+    evidence["files"][name] = json.dumps(campaign, indent=2) + "\n"
+    evidence["sha256"][name] = hashlib.sha256(
+        evidence["files"][name].encode()
+    ).hexdigest()
+    with pytest.raises(ValueError, match="invalid arm order"):
+        module["replay"](evidence=evidence)

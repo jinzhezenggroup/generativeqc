@@ -35,6 +35,12 @@ DIRECTORY = (
         "convergence",
         "precision",
         "work",
+        "incomplete_inventory",
+        "empty_inventory",
+        "invalid_work_counters",
+        "incomplete_work",
+        "zero_work",
+        "unexpected_exchange",
         "failed_reference",
         "repair_job",
         "memcheck",
@@ -77,6 +83,35 @@ def test_r2scan_density_gemm_complete_evidence(
         sample["precision"]["operators"][0]["compute"] = "fp32"
     elif corruption == "work":
         sample["ks_diagnostic"]["coulomb_exchange_work"]["coulomb_applications"] += 1
+    elif corruption in {
+        "incomplete_inventory",
+        "empty_inventory",
+        "invalid_work_counters",
+        "incomplete_work",
+        "zero_work",
+        "unexpected_exchange",
+    }:
+        # Matching corrupt receipts must not turn equality into qualification.
+        for arm in ("baseline", "candidate"):
+            name = f"a100-native/forward-{arm}.json"
+            candidate = json.loads(files[name])
+            for sample in candidate["samples"]:
+                precision = sample["precision"]
+                work = sample["ks_diagnostic"]["coulomb_exchange_work"]
+                if corruption == "incomplete_inventory":
+                    precision["operator_inventory_complete"] = False
+                elif corruption == "empty_inventory":
+                    precision["operators"] = []
+                elif corruption == "invalid_work_counters":
+                    precision["operator_work_counters_valid"] = False
+                elif corruption == "incomplete_work":
+                    work["complete"] = False
+                elif corruption == "zero_work":
+                    work["coulomb_applications"] = 0
+                else:
+                    work["exchange_applications"] = 1
+            files[name] = json.dumps(candidate, indent=2) + "\n"
+            evidence["sha256"][name] = hashlib.sha256(files[name].encode()).hexdigest()
     elif corruption == "failed_reference":
         name = "a100-native/reference.json"
         candidate = json.loads(files[name])

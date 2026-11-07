@@ -83,6 +83,13 @@ def replay(directory: Path = DIRECTORY, *, evidence: dict | None = None) -> dict
         "incomplete matrix",
     )
     require(
+        all(
+            case["order"] in (["standard", "gpu4pyscf"], ["gpu4pyscf", "standard"])
+            for case in manifest["cases"]
+        ),
+        "invalid arm order",
+    )
+    require(
         sum(case["order"][0] == "standard" for case in manifest["cases"]) == 32,
         "unbalanced first-arm order",
     )

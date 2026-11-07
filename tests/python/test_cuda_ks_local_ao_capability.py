@@ -295,11 +295,11 @@ int main() {
     const bool mixed_density = automatic && capable && !nonlocal &&
                                qualification == CudaXcCapability::Qualified;
     Layout xc_layout{capable};
+    const std::size_t spins = 1;
+    const auto functional = semilocal_family_code(SemilocalFamily::Pbe);
     Xc owner{{}, {{runtime::strict_fp64_precision()}}, capable};
     owner.qualified = qualified;
     auto* xc = &owner;
-    const unsigned spins = 1;
-    const auto functional = semilocal_family_code(SemilocalFamily::Pbe);
     struct {
       std::uint64_t max_iterations = 50;
       std::size_t reference_memory_budget_bytes{};
