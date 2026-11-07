@@ -176,8 +176,18 @@ def _compile_registry(
     required_native_cxx: NativeCxx,
     *,
     legacy: bool = False,
+    weighted: bool = False,
+    weighted_available: bool = True,
 ) -> Path:
     selected = profile()
+    if not weighted_available:
+        selected = replace(
+            selected,
+            selections=tuple(
+                replace(s, capabilities=s.capabilities - {"shared_rys_weighted_z_fock"})
+                for s in selected.selections
+            ),
+        )
     selected = replace(
         selected,
         selections=tuple(
@@ -208,12 +218,14 @@ inline int cudaDeviceGetAttribute(int* v, int a, int) { *v=a==1?gpu_major:0; ret
         r'extern "C" cudaError_t (\w+)\((.*?)\);', registry, re.DOTALL
     )
     stubs = [
-        '#include "scf/aot_shell_registry.hpp"',
+        '#include "scf/aot_shell_registry.hpp"\n#include "scf/shared_rys_weighted_z.hpp"',
         "int gpu_major=9; int primary=0,candidate=0;",
         "int candidate_error=0;",
     ]
     for symbol, args in declarations:
-        shared = "_shared_rys_xy_" in symbol
+        shared = (
+            "_shared_rys_weighted_z_" if weighted else "_shared_rys_xy_"
+        ) in symbol
         count = "candidate" if shared else "primary"
         value = "candidate_error" if shared else "0"
         stubs.append(
@@ -260,6 +272,13 @@ int main() {
             source.read_text()
             .replace("select_profile_for_device(0,9,0);", "")
             .replace("select_profile_for_device(0,8,0);", "")
+        )
+    if weighted:
+        program = source.read_text()
+        client = program.index("#include <cassert>")
+        source.write_text(
+            program[:client]
+            + program[client:].replace("shared_rys_xy", "shared_rys_weighted_z")
         )
     return required_native_cxx.build_executable(
         [registry_path, source],

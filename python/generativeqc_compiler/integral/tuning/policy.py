@@ -80,6 +80,11 @@ class ScheduleTrial:
                 else ""
             )
             + ("_fock_shared_rys_xy" if self.schedule.fock_shared_rys_xy else "")
+            + (
+                "_fock_shared_rys_weighted_z"
+                if self.schedule.fock_shared_rys_weighted_z
+                else ""
+            )
         )
 
     @property
@@ -220,6 +225,8 @@ def schedule_payload(schedule: ScheduleIR) -> dict[str, object]:
         payload["mixed_pair_products_fp64"] = True
     if schedule.fock_shared_rys_xy:
         payload["fock_shared_rys_xy"] = True
+    if schedule.fock_shared_rys_weighted_z:
+        payload["fock_shared_rys_weighted_z"] = True
     return payload
 
 

@@ -9,7 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from .capabilities import CAPABILITY_SHARED_RYS_XY_FOCK
+from .capabilities import (
+    CAPABILITY_SHARED_RYS_WEIGHTED_Z_FOCK,
+    CAPABILITY_SHARED_RYS_XY_FOCK,
+)
 from .fused_schedule import FusedShellPlan, build_fused_shell_plan
 from .ir import KernelConsumer
 
@@ -28,16 +31,23 @@ class SharedRysXyCompanion:
 
 def shared_rys_xy_companions(
     profile: ResolvedProductionProfile,
+    *,
+    weighted_z: bool = False,
 ) -> tuple[SharedRysXyCompanion, ...]:
     """Do not transfer this two-class capability to other architectures."""
     if profile.target.architecture != "sm_90":
         return ()
     result = []
+    capability = (
+        CAPABILITY_SHARED_RYS_WEIGHTED_Z_FOCK
+        if weighted_z
+        else CAPABILITY_SHARED_RYS_XY_FOCK
+    )
     for item in profile.selections:
         if (
             item.spec.name not in ("dppp", "pppp")
             or KernelConsumer.FOCK not in item.consumers
-            or not item.has_capability(CAPABILITY_SHARED_RYS_XY_FOCK)
+            or not item.has_capability(capability)
         ):
             continue
         plan = build_fused_shell_plan(
@@ -50,7 +60,11 @@ def shared_rys_xy_companions(
             item.spec,
             integral=plan.kernel.integral,
             target=profile.target,
-            schedule=replace(plan.schedule, fock_shared_rys_xy=True),
+            schedule=replace(
+                plan.schedule,
+                fock_shared_rys_xy=True,
+                fock_shared_rys_weighted_z=weighted_z,
+            ),
         )
         expected = 192 if item.spec.name == "dppp" else 96
         if plan.block_threads != expected:

@@ -16,6 +16,31 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
 
 @pytest.mark.parametrize(
     "unrelated",
+    (
+        "shared_rys_weighted_z.hpp_impl.hpp",
+        "shared_rys_weighted_z_internal.hpp",
+        "shared_rys_weighted_z.cuh",
+    ),
+)
+def test_hf_driver_weighted_dispatch_is_one_exact_leaf(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """A typed dispatch leaf does not admit adjacent implementation headers."""
+    source = tmp_path / "src/scf"
+    source.mkdir(parents=True)
+    (source / "shared_rys_weighted_z.hpp").write_text("// Typed declarations only\n")
+    (source / unrelated).write_text("// Unrelated implementation\n")
+    owner = source / "cuda_rhf.cpp"
+    owner.write_text('#include "scf/shared_rys_weighted_z.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "scf/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert f"forbidden cuda_hf_driver dependency on scf/{unrelated}" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "unrelated",
     ("range_exchange_runtime.hpp", "execution_qualifiers.hpp_impl.hpp", "eri.hpp"),
 )
 def test_cuda_integral_numerics_borrows_only_exact_execution_qualifiers(

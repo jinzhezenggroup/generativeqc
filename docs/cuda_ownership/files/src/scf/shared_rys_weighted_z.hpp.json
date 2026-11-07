@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/shared_rys_weighted_z.hpp",
+  "reason": "Private typed capability and launch declarations; generated companions own the recurrence and Fock mathematics.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}
