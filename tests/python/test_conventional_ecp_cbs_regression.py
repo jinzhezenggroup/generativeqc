@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import time
 from functools import cache
 from pathlib import Path
 
@@ -346,12 +347,14 @@ def test_reported_complete_ecp_cbs_force(
         preconvergence="auto",
         calculator_options={"correlation_memory_budget_bytes": 43 * 1024**3},
     )
+    native_started = time.perf_counter()
     result = workflow.singlepoint(
         atoms,
         charge=CASES[case_name]["charge"],
         multiplicity=1,
         properties=("energy", "forces"),
     )
+    native_seconds = time.perf_counter() - native_started
     assert result.converged and result.executed_backend == "cuda"
     assert result.forces is not None
     np.testing.assert_allclose(result.forces.sum(axis=0), 0, atol=3e-8, rtol=0)
@@ -359,6 +362,7 @@ def test_reported_complete_ecp_cbs_force(
         json.dumps(
             {
                 "case": case_name,
+                "native_endpoint_seconds": native_seconds,
                 "native_energy": result.energy,
                 "native_forces": result.forces.tolist(),
                 "components": [
@@ -382,6 +386,7 @@ def test_reported_complete_ecp_cbs_force(
         cardinal: reference_components(case_name, cardinal, atoms)
         for cardinal in ("dz", "tz")
     }
+    print(json.dumps({"case": case_name, "oracle_components": oracles}), flush=True)
     assert result.energy == pytest.approx(
         reference_cbs(oracles), abs=3 * ENERGY_ATOL, rel=0
     )
@@ -423,6 +428,20 @@ def test_reported_complete_ecp_cbs_force(
         composite_force = (reference_cbs(shifted[0]) - reference_cbs(shifted[1])) / (
             2 * step
         )
+        print(
+            json.dumps(
+                {
+                    "case": case_name,
+                    "step_bohr": step,
+                    "component": "cbs",
+                    "native_directional_force": float(
+                        np.sum(result.forces * direction)
+                    ),
+                    "oracle_directional_force": composite_force,
+                }
+            ),
+            flush=True,
+        )
         assert abs(composite_force) > 1e-5, (
             "direction failed to exercise a nonzero molecular force"
         )
@@ -432,6 +451,20 @@ def test_reported_complete_ecp_cbs_force(
         for (cardinal, method), component in native_components.items():
             expected = (shifted[0][cardinal][method] - shifted[1][cardinal][method]) / (
                 2 * step
+            )
+            print(
+                json.dumps(
+                    {
+                        "case": case_name,
+                        "step_bohr": step,
+                        "component": [cardinal, method],
+                        "native_directional_force": float(
+                            np.sum(component.forces * direction)
+                        ),
+                        "oracle_directional_force": expected,
+                    }
+                ),
+                flush=True,
             )
             assert float(np.sum(component.forces * direction)) == pytest.approx(
                 expected, abs=FORCE_ATOL, rel=0

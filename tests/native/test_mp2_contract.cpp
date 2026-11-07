@@ -909,6 +909,52 @@ void conventional_derivative_from_mo_weights(bool with_p_shell) {
     require(std::abs(derivative[coordinate] - expected) < 1e-10,
             "conventional MO-weight derivative differs from dense oracle");
   }
+  // An additional occupied orbital in the s/p frame exercises inter-orbital
+  // exchange. This is a cotangent identity test, not a second physical SCF.
+  auto stationary_reference = ref;
+  if (with_p_shell) stationary_reference.nocc = 2;
+  auto stationary = weights;
+  stationary.occupied = stationary_reference.nocc;
+  stationary.two_electron.clear();
+  auto& factors = stationary.two_electron_factors;
+  factors.orbitals = n;
+  factors.occupied = stationary.occupied;
+  factors.fock.assign(n2, 0.0);
+  factors.correlation_iajb.assign(stationary.occupied * stationary.occupied *
+                                      (n - stationary.occupied) * (n - stationary.occupied),
+                                  0.0);
+  for (std::size_t occupied = 0; occupied < stationary.occupied; ++occupied)
+    factors.fock[occupied * n + occupied] = 1.0;
+  auto dense_stationary = stationary;
+  dense_stationary.two_electron.resize(n4);
+  for (std::size_t first = 0; first < n; ++first)
+    for (std::size_t second = 0; second < n; ++second)
+      for (std::size_t third = 0; third < n; ++third)
+        for (std::size_t fourth = 0; fourth < n; ++fourth)
+          dense_stationary.two_electron[eri(first, second, third, fourth)] =
+              generativeqc::mp2::factorized_two_electron_weight(factors, first, second, third,
+                                                                fourth);
+  const auto contract = [&](const auto& input, auto layout) {
+    return generativeqc::mp2::detail::conventional_derivative(
+        system, stationary_reference, input,
+        [&](auto overlap, auto hcore) {
+          return generativeqc::integrals::contract_weighted_one_electron_derivative(system, overlap,
+                                                                                    hcore, true);
+        },
+        [&](const auto& shells, auto local) {
+          return generativeqc::integrals::contract_weighted_eri_shell_derivative(system, shells,
+                                                                                 local);
+        },
+        layout);
+  };
+  using Layout = generativeqc::mp2::detail::FactorizedFirstLayout;
+  const auto projected = contract(stationary, Layout::automatic);
+  const auto staged = contract(stationary, Layout::staged);
+  const auto dense_projected = contract(dense_stationary, Layout::automatic);
+  for (std::size_t coordinate = 0; coordinate < projected.size(); ++coordinate)
+    require(std::abs(projected[coordinate] - staged[coordinate]) < 2e-11 &&
+                std::abs(projected[coordinate] - dense_projected[coordinate]) < 2e-11,
+            "stationary AO density products differ from independent MO pullbacks");
 #if !GENERATIVEQC_HAS_CUDA
   bool cuda_rejected = false;
   try {

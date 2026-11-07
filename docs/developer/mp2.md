@@ -143,6 +143,16 @@ RI-MP2 forces or enlarge the native force domain available to CBS composition.
 
 ## Response and force contracts
 
+An exact stationary RHF two-electron cotangent uses the occupied AO projector
+directly instead of rebuilding it through generic rank-four MO staging. This
+route requires exactly unit occupied-diagonal Fock weights and exactly zero
+correlation weights; small nonzero correlation contributions are not discarded.
+The eightfold-symmetrized density products visit canonical shell quartets with
+their actual orbit multiplicities, including repeated shells and atoms. It
+retains the same one-electron/ECP, overlap, nuclear and bounded derivative
+consumers. General correlated weights retain their existing streamed pullback;
+the explicit staged layout remains available for independent validation.
+
 CPU RI-MP2 analytic forces compose the native MP2 adjoint and
 true-residual RHF response with the shared fixed-rank inverse-square-root VJP and
 the bounded raw three-center/metric derivative consumers. No coordinate-major
