@@ -37,6 +37,9 @@ tar -xzf generativeqc-v0.1.0-linux-x86_64-cuda12.9-sm120.tar.gz
 ```
 
 The filename is an example; `master` artifacts also contain a commit SHA.
+Package names and `build-metadata.json` reflect the installed build's CUDA
+version and requested architecture images; other builds may list multiple
+architectures and retain CMake's `-real`/`-virtual` image suffixes.
 This package embeds the GenerativeQC core but still needs the appropriate
 NVIDIA driver, CUDA libraries and host dependencies. It targets sm_120 only;
 other GPUs require another build. No Python process is launched by the CLI.
