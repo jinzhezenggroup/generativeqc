@@ -297,7 +297,9 @@ struct ScfResult {
   unsigned iterations{};
   double energy_change{};
   double density_rms{};
-  /** Physical commutator RMS at the retained density, over all spin entries.
+  /** Physical commutator RMS over all spin entries, at the retained KS density
+   * or last evaluated CUDA correlated-HF iterate. The exported HF reference
+   * independently checks its final canonical density/Fock pair.
    * KS separately gates the maximum per-spin value in dft_diagnostic.
    * Zero means the backend does not report this field separately. */
   double physical_residual_rms{};

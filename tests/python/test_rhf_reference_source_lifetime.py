@@ -225,9 +225,13 @@ constexpr int GENERATIVEQC_STATUS_SUCCESS=0,GENeric=1,
  GENERATIVEQC_STATUS_INVALID_ARGUMENT=4,GENeric3=5,
  GENERATIVEQC_STATUS_NOT_IMPLEMENTED=6,GENeric4=7,
  GENERATIVEQC_STATUS_SCF_NOT_CONVERGED=8;
-struct Error:std::runtime_error { Error(int,const char* s):std::runtime_error(s){} };
+struct Error:std::runtime_error { Error(int,const std::string& s):std::runtime_error(s){} };
 struct PhysicalReference { std::size_t numeric_capacity_bytes=1500; };
 struct ScfResult { bool converged=true; std::shared_ptr<PhysicalReference> reference=std::make_shared<PhysicalReference>(); };
+// The native method suite checks diagnostic fields; this fixture isolates ownership.
+std::string reference_failure_detail(const ScfResult&,generativeqc_status,const char* message) {
+ return message;
+}
 struct RhfBucketItem { generativeqc_status status=0; ScfResult scf; bool execution_plan_reused=false; };
 std::vector<RhfBucketItem> run_rhf_cuda_bucket_cached(CudaRhfBucketPlan** p,const std::vector<core::System>&,const ScfOptions&,const std::vector<const std::vector<double>*>&,int){
  const bool reused=*p!=nullptr;

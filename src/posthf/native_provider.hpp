@@ -81,6 +81,9 @@ class NativeBlockProvider final : public MOBlockProvider {
   NumericBlockPlan plan(const std::array<std::size_t, 4>& shape, bool cuda = false) const;
   std::size_t batch_bytes(const std::array<std::size_t, 4>& shape, std::size_t requests,
                           bool cuda = false) const;
+  /** Complete simultaneous peak for heterogeneous requests sharing one AO scan. */
+  std::size_t batch_bytes(std::span<const std::array<std::size_t, 4>> shapes,
+                          bool cuda = false) const;
   std::size_t batch_capacity(const std::array<std::size_t, 4>& shape, bool cuda = false) const;
   std::vector<std::vector<double>> get_many(const std::vector<MOSlots>& requests, bool cuda = false,
                                             int device = 0,

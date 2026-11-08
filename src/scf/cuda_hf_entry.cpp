@@ -18,6 +18,7 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/reference_failure.hpp"
 
 namespace generativeqc::scf {
 namespace {
@@ -394,7 +395,8 @@ ScfResult run_rhf_cuda_cached(
   if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
     throw Error(status, "CUDA RHF numerical endpoint is unavailable in this mode");
   if (status != GENERATIVEQC_STATUS_SUCCESS && status != GENERATIVEQC_STATUS_SCF_NOT_CONVERGED)
-    throw std::runtime_error("CUDA RHF execution failed");
+    throw Error(status,
+                reference_failure_detail(result.front().scf, status, "CUDA RHF execution failed"));
   ScfResult scf = std::move(result.front().scf);
   if (handoff && scf.reference) handoff->numeric_peak_bytes = scf.reference->numeric_capacity_bytes;
   if (options.reference_provider_initialization_owner) {

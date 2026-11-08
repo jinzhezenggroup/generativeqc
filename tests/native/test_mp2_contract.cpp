@@ -316,6 +316,24 @@ void provider_and_reference() {
     const auto single = provider.get(mixed[request]);
     require(single == mixed_values[request], "heterogeneous MO batch changed values or order");
   }
+  std::vector<std::array<std::size_t, 4>> mixed_shapes;
+  for (const auto& request : mixed)
+    mixed_shapes.push_back(
+        {request[0].size(), request[1].size(), request[2].size(), request[3].size()});
+  const auto mixed_bytes = provider.batch_bytes(mixed_shapes);
+  generativeqc::posthf::NativeBlockProvider exact_mixed(source, ref, mixed_bytes, 1);
+  require(exact_mixed.get_many(mixed) == mixed_values,
+          "exact heterogeneous batch admission changed the returned blocks");
+  generativeqc::posthf::ProviderWork short_work;
+  bool short_batch_rejected = false;
+  try {
+    generativeqc::posthf::NativeBlockProvider short_mixed(source, ref, mixed_bytes - 1, 1);
+    (void)short_mixed.get_many(mixed, false, 0, nullptr, &short_work);
+  } catch (const std::length_error&) {
+    short_batch_rejected = true;
+  }
+  require(short_batch_rejected && short_work.source_reads == 0,
+          "one-byte-short heterogeneous batch traversed the source before admission");
   auto invalid = slots;
   invalid[3][0] = ref.nbf;
   generativeqc::posthf::ProviderWork rejected_work;
@@ -541,6 +559,39 @@ void conventional_energy_reuses_ao_scans() {
           "batched MP2 energy rescanned the AO tensor");
   require(energy.provider_work.source_reads == full_ao_values,
           "batched MP2 energy source-read count changed unexpectedly");
+  generativeqc::posthf::NativeBlockProvider provider(source, *hf.reference, 256ULL << 20);
+  const auto ovov = provider.get({{{0}, {1}, {0}, {1}}});
+  ForwardingInteractionSource unread_source(source);
+  const auto borrowed = generativeqc::mp2::conventional_energy(
+      *hf.reference, unread_source, 256ULL << 20, 1e-10, 1, false, 0, ovov);
+  require(std::abs(borrowed.opposite_spin - energy.opposite_spin) < 1e-14 &&
+              std::abs(borrowed.same_spin - energy.same_spin) < 1e-14 &&
+              unread_source.reads() == 0 && borrowed.provider_work.source_values == 0,
+          "borrowed OVOV energy changed MP2 algebra or regenerated AO integrals");
+  const auto tight = generativeqc::mp2::conventional_energy(
+      *hf.reference, unread_source, borrowed.numeric_capacity_bytes, 1e-10, 1, false, 0, ovov);
+  require(tight.opposite_spin == borrowed.opposite_spin,
+          "borrowed energy unnecessarily reserved an AO provider workspace");
+  bool short_rejected = false;
+  try {
+    (void)generativeqc::mp2::conventional_energy(*hf.reference, unread_source,
+                                                 borrowed.numeric_capacity_bytes - 1, 1e-10, 1,
+                                                 false, 0, ovov);
+  } catch (const std::length_error&) {
+    short_rejected = true;
+  }
+  require(short_rejected && unread_source.reads() == 0,
+          "borrowed energy accepted a short budget or traversed the AO source");
+  auto retained_reference = *hf.reference;
+  const auto before_reserve = generativeqc::mp2::conventional_energy(
+      retained_reference, unread_source, 256ULL << 20, 1e-10, 1, false, 0, ovov);
+  const auto old_capacity = retained_reference.weighted_density.capacity();
+  retained_reference.weighted_density.reserve(old_capacity + 17);
+  const auto after_reserve = generativeqc::mp2::conventional_energy(
+      retained_reference, unread_source, 256ULL << 20, 1e-10, 1, false, 0, ovov);
+  require(after_reserve.numeric_capacity_bytes - before_reserve.numeric_capacity_bytes ==
+              (retained_reference.weighted_density.capacity() - old_capacity) * sizeof(double),
+          "borrowed energy omitted a retained reference allocation from admission");
 }
 
 void shell_local_weighted_eri_derivative() {
@@ -867,6 +918,72 @@ void conventional_derivative_from_mo_weights(bool with_p_shell) {
       expected += two_ao[element] * oracle.eri_derivative[coordinate * n4 + element];
     require(std::abs(derivative[coordinate] - expected) < 1e-10,
             "conventional MO-weight derivative differs from dense oracle");
+  }
+  // An additional occupied orbital in the s/p frame exercises inter-orbital
+  // exchange. This is a cotangent identity test, not a second physical SCF.
+  auto stationary_reference = ref;
+  if (with_p_shell) stationary_reference.nocc = 2;
+  auto stationary = weights;
+  stationary.occupied = stationary_reference.nocc;
+  stationary.two_electron.clear();
+  auto& factors = stationary.two_electron_factors;
+  factors.orbitals = n;
+  factors.occupied = stationary.occupied;
+  factors.fock.assign(n2, 0.0);
+  factors.correlation_iajb.assign(stationary.occupied * stationary.occupied *
+                                      (n - stationary.occupied) * (n - stationary.occupied),
+                                  0.0);
+  for (std::size_t occupied = 0; occupied < stationary.occupied; ++occupied)
+    factors.fock[occupied * n + occupied] = 1.0;
+  auto dense_stationary = stationary;
+  dense_stationary.two_electron.resize(n4);
+  for (std::size_t first = 0; first < n; ++first)
+    for (std::size_t second = 0; second < n; ++second)
+      for (std::size_t third = 0; third < n; ++third)
+        for (std::size_t fourth = 0; fourth < n; ++fourth)
+          dense_stationary.two_electron[eri(first, second, third, fourth)] =
+              generativeqc::mp2::factorized_two_electron_weight(factors, first, second, third,
+                                                                fourth);
+  const auto contract = [&](const auto& input, auto layout) {
+    return generativeqc::mp2::detail::conventional_derivative(
+        system, stationary_reference, input,
+        [&](auto overlap, auto hcore) {
+          return generativeqc::integrals::contract_weighted_one_electron_derivative(system, overlap,
+                                                                                    hcore, true);
+        },
+        [&](const auto& shells, auto local) {
+          return generativeqc::integrals::contract_weighted_eri_shell_derivative(system, shells,
+                                                                                 local);
+        },
+        layout);
+  };
+  using Layout = generativeqc::mp2::detail::FactorizedFirstLayout;
+  const auto projected = contract(stationary, Layout::automatic);
+  const auto staged = contract(stationary, Layout::staged);
+  const auto dense_projected = contract(dense_stationary, Layout::automatic);
+  for (std::size_t coordinate = 0; coordinate < projected.size(); ++coordinate)
+    require(std::abs(projected[coordinate] - staged[coordinate]) < 2e-11 &&
+                std::abs(projected[coordinate] - dense_projected[coordinate]) < 2e-11,
+            "stationary AO density products differ from independent MO pullbacks");
+  for (std::size_t element = 0; element < factors.fock.size(); ++element)
+    factors.fock[element] = 0.03 * std::sin(static_cast<double>(element + 1));
+  for (std::size_t element = 0; element < factors.correlation_iajb.size(); ++element)
+    factors.correlation_iajb[element] = 0.07 * std::cos(static_cast<double>(element + 2));
+  auto dense_correlated = stationary;
+  dense_correlated.two_electron.resize(n4);
+  for (std::size_t first = 0; first < n; ++first)
+    for (std::size_t second = 0; second < n; ++second)
+      for (std::size_t third = 0; third < n; ++third)
+        for (std::size_t fourth = 0; fourth < n; ++fourth)
+          dense_correlated.two_electron[eri(first, second, third, fourth)] =
+              generativeqc::mp2::factorized_two_electron_weight(factors, first, second, third,
+                                                                fourth);
+  const auto correlated_oracle = contract(dense_correlated, Layout::automatic);
+  for (const auto layout : {Layout::automatic, Layout::compact, Layout::staged}) {
+    const auto correlated = contract(stationary, layout);
+    for (std::size_t coordinate = 0; coordinate < correlated.size(); ++coordinate)
+      require(std::abs(correlated[coordinate] - correlated_oracle[coordinate]) < 2e-11,
+              "factorized canonical/ordered derivative differs from independent dense weights");
   }
 #if !GENERATIVEQC_HAS_CUDA
   bool cuda_rejected = false;
