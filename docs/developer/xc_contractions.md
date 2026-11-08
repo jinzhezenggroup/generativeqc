@@ -89,28 +89,56 @@ The CUDA KS owner automatically admits bounded occupied-feature **SCF
 proposals**, not a different convergence certificate. Leaving
 `GENERATIVEQC_CUDA_KS_OCCUPIED_XC` unset or setting it to the exact value `1`
 enables admission. A canonical frame which
-formed the current D may supply strict-FP64 meta-GGA features in the admitted
+formed the current D may supply strict-FP64 LDA, GGA or tau-meta-GGA features in the admitted
 phase. Finite projection/feature, coefficient-range and capacity checks guard
 initializer work; admitted proposals skip both the dense original-D
 contraction and the unused absolute-dot certificate altogether.
-Their single scratch panel fits whenever the occupied rank is below the active
-AO count; exact mode retains its separate two-panel capacity requirement.
+LDA projects values and reduces their squares. GGA projects values once, then
+reconstructs `C * (C^T * phi)` within the AO-row feature reduction; the original
+AO gradients and shared feature algebra supply rho/grad(rho). This replaces one
+dense contraction with two rank contractions, not four orbital-jet projections.
+Tau-meta-GGA projects all four jets. A single projection panel fits the existing
+dead work storage. LDA/meta-GGA require `rank < active`; GGA requires
+`2 * rank < active` so both contractions reduce work. Tiles failing their own
+work/capacity gate keep matrix products; exact mode retains its separate
+meta-GGA-only, two-panel capacity requirement. Point programs and hybrid exact
+exchange do not change. Ingredient layouts, rather than functional names, select
+the algorithm; optional point/force providers must still exist.
 Set the control to `0` to retain matrix-only work; other explicit values,
 including an empty string, conservatively disable proposals as well.
 The [automatic-admission decision](../../.agents/notes/implemented/performance/2026-11-05-occupied-xc-automatic-admission.md)
 records the default-promotion rationale and rollback boundary.
 
-Near-stationary inputs (previous residual RMS at most `1e-6`), the final two
-permitted iterations, and plans without any AO domain larger than the occupied
-rank retain matrix work without starting a provisional energy epoch. The owner switches permanently to
+Numerical admission is not a per-input profitability guarantee. Use
+`benchmarks/occupied_xc_functionals.py` to compare complete native energy/force
+populations with actual unset/`0` controls, independent references and semantic
+SCF/Fock counts. Keep traced admission diagnostics separate from timing, retain
+neutral/regressing populations, and require matching optional native providers
+rather than treating a recognized functional name as a backend capability.
+
+Near-stationary inputs (previous residual RMS at most `1e-4`), the final two
+permitted iterations, and plans without any work-reducing AO domain
+retain matrix work without starting a provisional energy epoch. The owner switches permanently to
 the original matrix target at the proposal handoff and starts a fresh energy epoch. The switch
-uses the existing bounded warmup policy (residual RMS at most `1e-6`, or
+uses the existing bounded warmup policy (residual RMS at most `1e-4`, or
 at most eleven proposal-stage iterations, with room for two strict target
 evaluations to establish a finite energy comparison).
+The earlier switch leaves a strict energy-comparison window before the nearly
+stationary tail instead of adding a Fock solely to establish that baseline.
 These are initializer scheduling controls, not scientific tolerances. No
 provisional energy, residual, warm seed or force can authorize publication.
-DIIS history may predict densities for at most six unsuccessful strict sweeps;
-it is then cleared. Only fresh matrix Focks certify the returned physical state.
+XC-only handoff preserves an active, unchanged FP64 J/K source lease rather
+than regenerating its ERIs. An absent source stays on the incumbent bounded
+direct path; a genuinely mixed source still undergoes strict replacement.
+The XC-only handoff also preserves the existing strict J/K incremental
+anchor and delta/full schedule. Its original full-density energy refinement
+and final canonical proof still prohibit delta builds; XC reassociation does
+not turn a J/K reuse opportunity into a precision transition.
+DIIS history only predicts densities. Provisional entries age out through the
+existing chronological ring, bounded by the configured history depth (at most
+64), without clearing the strict predictor accumulated after handoff. Only
+fresh matrix Focks certify the returned physical state. The separate FP32
+history experiment retains its own six-sweep reset.
 Strict matrix refinement, canonical validation and analytic force acceptance
 retain their original gates. A failed provisional numerical evaluation retries
 the same density using the strict target, without a CPU scientific fallback.
@@ -119,7 +147,8 @@ Lower-level `CudaXcPlan` experiments retain the explicit borrowed-frame API and
 [native certificate contract](xc_native_cuda.md#occupied-density-certificates).
 Their default exact mode still requires original-D identity. Explicit
 provisional witnesses are rejected in `StrictAudit`; their caller owns the
-strict target handoff. Both modes require eligible strict-FP64 meta-GGA inputs,
+strict target handoff. Exact mode requires strict-FP64 meta-GGA inputs;
+provisional mode accepts the supported 1/4/5-feature layouts. Both require
 a matching canonical generation and bounded scratch capacity. The feature,
 compact-batch and native-plan tests continue to exercise these contracts.
 Default promotion requires source-matched complete-endpoint numerical and cost
