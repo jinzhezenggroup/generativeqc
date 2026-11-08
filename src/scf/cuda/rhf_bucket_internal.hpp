@@ -24,6 +24,7 @@ std::size_t host_batch_numeric_bytes(const HostBatch& host) noexcept;
 struct CudaRhfBucketPlan {
   cuda_execution::CudaResources resources;
   cuda_execution::RhfIterationGraphs graphs;
+  bool captured_reference_startup{};
   cuda_execution::ArenaLayout layout;
   cuda_execution::HostBatch topology;
   // Generation counters are meaningful only together with this plan's

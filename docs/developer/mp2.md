@@ -118,9 +118,10 @@ its actual vector capacities alongside producer scratch and the full force
 consumer. If the complete cover is refused, construction can instead admit
 OVOV alone for energy. CUDA energy-only calculations use that smaller store.
 Borrowed energy consumption reserves its own reduction workspace, not a second
-AO provider batch. A force memory refusal drops the optional cache and restores
-bounded force reconstruction without changing the reference or swallowing
-numerical errors. CPU and RI paths do not build this cache. Full VVVV storage is
+AO provider batch. An energy or force memory refusal drops the optional cache and restores
+bounded streamed reconstruction without changing the reference or swallowing
+numerical errors. Energy-only diagnostic tiling disables also suppress the
+independent OVOV cache, including fallback after a refused six-block cover. CPU and RI paths do not build this cache. Full VVVV storage is
 quartic, so admission is optional rather than an arbitrary-basis work bound.
 
 `GENERATIVEQC_MP2_FORCE_MO_CACHE=0` disables only this optional cache for

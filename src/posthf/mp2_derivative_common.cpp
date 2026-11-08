@@ -175,12 +175,16 @@ void stationary_two_electron_derivative(const core::System& system,
         }
 }
 
+struct ProjectedStaging {
+  std::vector<double> first, second, third, local;
+};
+
 void transform_remaining_shells(const core::System& system, const hf::PhysicalReference& reference,
                                 const std::vector<std::size_t>& offsets, std::size_t si,
                                 std::span<const double> first,
                                 const EriShellDerivativeAccumulate& eri_shell,
                                 std::vector<double>& derivative, bool canonical_shells,
-                                bool compact_first) {
+                                bool compact_first, ProjectedStaging* staging = nullptr) {
   const auto n = reference.nbf;
   const auto di = offsets[si + 1] - offsets[si];
   // Factorized weights have an occupied third MO slot. Preserve that exact
@@ -190,7 +194,9 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
   for (std::size_t sj = 0; sj < system.shells.size(); ++sj) {
     if (canonical_shells && sj > si) continue;
     const auto dj = offsets[sj + 1] - offsets[sj];
-    std::vector<double> second(
+    std::vector<double> fallback_second;
+    auto& second = staging ? staging->second : fallback_second;
+    second.assign(
         posthf::checked_mul(posthf::checked_mul(di, dj), posthf::checked_mul(second_rows, n)), 0.0);
     if (compact_first) {
       const auto occupied = reference.nocc, virtuals = n - occupied;
@@ -231,8 +237,10 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
     for (std::size_t sk = 0; sk < system.shells.size(); ++sk) {
       if (canonical_shells && sk > si) continue;
       const auto dk = offsets[sk + 1] - offsets[sk];
-      std::vector<double> third(
-          posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), n), 0.0);
+      std::vector<double> fallback_third;
+      auto& third = staging ? staging->third : fallback_third;
+      third.assign(posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), n),
+                   0.0);
       for (std::size_t iu = 0; iu < di; ++iu)
         for (std::size_t jv = 0; jv < dj; ++jv)
           for (std::size_t kw = 0; kw < dk; ++kw)
@@ -244,8 +252,10 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
       for (std::size_t sl = 0; sl < system.shells.size(); ++sl) {
         if (canonical_shells && (sl > sk || (si == sk && sl > sj))) continue;
         const auto dl = offsets[sl + 1] - offsets[sl];
-        std::vector<double> local(
-            posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), dl), 0.0);
+        std::vector<double> fallback_local;
+        auto& local = staging ? staging->local : fallback_local;
+        local.assign(posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), dl),
+                     0.0);
         for (std::size_t iu = 0; iu < di; ++iu)
           for (std::size_t jv = 0; jv < dj; ++jv)
             for (std::size_t kw = 0; kw < dk; ++kw)
@@ -324,7 +334,7 @@ std::vector<double> conventional_derivative_accumulate(
   // layout remains an independent numerical/resource fallback for validation.
   const bool stationary_two = factorized_two && first_layout == FactorizedFirstLayout::automatic &&
                               stationary_two_electron_weights(weights.two_electron_factors);
-  std::vector<double> projected_first;
+  ProjectedStaging projected;
   bool projected_two = false;
   if (factorized_two && !stationary_two && first_layout == FactorizedFirstLayout::automatic) {
     std::size_t maximum_shell = 0;
@@ -334,11 +344,17 @@ std::vector<double> conventional_derivative_accumulate(
     // submitted. A resource-only failure can then retain the compact ordered
     // route without mixing canonical and ordered contributions to a gradient.
     try {
-      projected_first.reserve(
+      projected.first.reserve(
           posthf::checked_mul(maximum_shell, posthf::checked_mul(n, square(n))));
+      projected.second.reserve(posthf::checked_mul(square(maximum_shell), square(n)));
+      projected.third.reserve(
+          posthf::checked_mul(posthf::checked_mul(square(maximum_shell), maximum_shell), n));
+      projected.local.reserve(fourth(maximum_shell));
       projected_two = true;
     } catch (const std::bad_alloc&) {
+      projected = {};
     } catch (const std::length_error&) {
+      projected = {};
     }
   }
   if (stationary_two) {
@@ -360,7 +376,7 @@ std::vector<double> conventional_derivative_accumulate(
                                  first_layout != FactorizedFirstLayout::staged &&
                                  compact_elements < first_elements;
       std::vector<double> fallback_first;
-      auto& first = projected_two ? projected_first : fallback_first;
+      auto& first = projected_two ? projected.first : fallback_first;
       first.assign(compact_first ? compact_elements : first_elements, 0.0);
       if (dense_two) {
         for (std::size_t iu = 0; iu < di; ++iu)
@@ -416,7 +432,8 @@ std::vector<double> conventional_derivative_accumulate(
         }
       }
       transform_remaining_shells(system, reference, offsets, si, first, shell_contract, derivative,
-                                 dense_two || projected_two, compact_first);
+                                 dense_two || projected_two, compact_first,
+                                 projected_two ? &projected : nullptr);
     }
   const auto finalize_started = now();
   if (finalize) finalize(derivative);
