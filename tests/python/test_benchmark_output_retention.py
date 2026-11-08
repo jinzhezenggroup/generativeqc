@@ -926,3 +926,79 @@ def test_cbs_convergence_rejects_retained_output_before_science(
     assert "invalid raw_output_path value" in capsys.readouterr().err
     assert previous.read_text(encoding="utf-8") == "preserved reviewed evidence"
     assert not (retained / "new").exists()
+
+
+@pytest.mark.parametrize("xz", [False, True])
+@pytest.mark.parametrize(
+    "destination_kind", ["retained", "alias", "traversal", "file-alias"]
+)
+def test_source_census_recovery_rejects_retained_output_before_reading(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    destination_kind: str,
+    xz: bool,
+) -> None:
+    from benchmarks import _retention, _source_census_evidence
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    destination = retained / "new/result.json"
+    if destination_kind == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / "new/result.json"
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results/new/result.json"
+    elif destination_kind == "file-alias":
+        alias = tmp_path / "output.json"
+        alias.symlink_to(destination)
+        destination = alias
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("invalid output reached evidence reconstruction")
+
+    monkeypatch.setattr(_source_census_evidence, "read_json_bytes", forbidden)
+    monkeypatch.setattr(_source_census_evidence, "read_xz_bytes", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["recovery", "missing-member", "--output", str(destination)]
+        + (["--xz"] if xz else []),
+    )
+    with pytest.raises(SystemExit) as error:
+        _source_census_evidence.main()
+    assert error.value.code == 2
+    assert "invalid raw_output_path value" in capsys.readouterr().err
+    assert not (retained / "new").exists()
+    assert not (tmp_path / ".artifacts").exists()
+
+
+@pytest.mark.parametrize("xz", [False, True])
+def test_source_census_recovery_preserves_bytes_and_refuses_overwrite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, xz: bool
+) -> None:
+    import lzma
+
+    from benchmarks import _retention, _source_census_evidence
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    raw = b'{"value": 1.000, "source": "original"}\n'
+    stored = lzma.compress(raw)
+    source = tmp_path / "member.json.xz"
+    source.write_bytes(stored)
+    destination = tmp_path / ".artifacts/recovered/output"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["recovery", str(source), "--output", str(destination)]
+        + (["--xz"] if xz else []),
+    )
+    _source_census_evidence.main()
+    assert destination.read_bytes() == (stored if xz else raw)
+    destination.write_bytes(b"existing output")
+    with pytest.raises(FileExistsError):
+        _source_census_evidence.main()
+    assert destination.read_bytes() == b"existing output"
+    assert source.read_bytes() == stored

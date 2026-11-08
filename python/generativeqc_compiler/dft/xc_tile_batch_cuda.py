@@ -36,16 +36,16 @@ _COMPACT_TILE_IDS = r"""__device__ const size_t* compact_tile_ids(const CudaXcCo
 _BATCH_CONTRACTIONS = r"""template <class Arithmetic = double, bool Occupied = false>
 __global__ void batch_density_products(const CudaXcCompactTile* tiles, const double* density,
     const double* ao, double* work, I full_n, I spins, I work_jets, const size_t* ids, int* error,
-    CudaXcOccupiedDensity occupied) {
+    CudaXcOccupiedDensity occupied, I ao_jets = 4) {
   const auto& tile = tiles[blockIdx.z / (spins * work_jets)];
   if (!tile.active || blockIdx.x >= (tile.active + @TILE@ - 1) / @TILE@ ||
       blockIdx.y >= (tile.count + @TILE@ - 1) / @TILE@) return;
   if constexpr (Occupied) {
-    if (occupied.provisional ? occupied.rank() < tile.active : occupied.rank() <= tile.active / 2) {
+    if (occupied.projection_fits(tile.active, ao_jets, work_jets)) {
       if (blockIdx.x >= (occupied.rank() + @TILE@ - 1) / @TILE@) return;
       tiled_occupied_product_body(occupied, ao + tile.ao_offset, tile.active, tile.count,
           work + tile.work_offset, error, compact_tile_ids(tile, ids, full_n),
-          blockIdx.z % (spins * work_jets));
+          blockIdx.z % (spins * work_jets), work_jets);
       return;
     }
   }
@@ -61,13 +61,14 @@ __global__ void batch_density_features(const CudaXcCompactTile* tiles, const dou
   const auto& tile = tiles[blockIdx.y];
   auto* target = features + (tile.begin - batch_begin) * spins * terms;
   if constexpr (Occupied) {
-    if (occupied.provisional ? occupied.rank() < tile.active : occupied.rank() <= tile.active / 2) {
+    if (occupied.projection_fits(tile.active, jets, work_jets)) {
       occupied_density_features_body(work + tile.work_offset, occupied.rank(), tile.count,
           spins, terms, target, error, occupied.density, ao + tile.ao_offset, tile.active,
           occupied.nao, compact_tile_ids(tile, ids, occupied.nao),
           occupied.provisional ? nullptr :
               work + tile.work_offset + occupied.spins * 4 * tile.count * occupied.rank(),
-          occupied.provisional);
+          occupied.provisional, occupied.coefficients, occupied.occupations[0],
+          occupied.occupations[1]);
       return;
     }
   }
@@ -212,7 +213,7 @@ inline void launch_batch_density_typed(cudaStream_t stream, const CudaXcLayout& 
   batch_density_products<Arithmetic, Occupied><<<dim3((max_active + @TILE@ - 1) / @TILE@,
       (layout.tile_points + @TILE@ - 1) / @TILE@, tile_count * layout.spins * layout.work_jets),
       dim3(@TILE@, @TILE@), 0, stream>>>(tiles, density, ao, work, layout.nao, layout.spins,
-      layout.work_jets, ids, error, occupied);
+      layout.work_jets, ids, error, occupied, layout.jets);
   generativeqc_tensor::cuda_check(cudaGetLastError());
   batch_density_features<Occupied><<<dim3(generativeqc_tensor::blocks(layout.spins * layout.tile_points * 32,
       128), tile_count), 128, 0, stream>>>(tiles, ao, work, features, batch_begin, layout.spins,
