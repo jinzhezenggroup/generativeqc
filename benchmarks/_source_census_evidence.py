@@ -18,6 +18,7 @@ import re
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
 
+from benchmarks._retention import raw_output_path
 from tools.generativeqc_validation.storage_json import decode_storage_json
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -353,7 +354,9 @@ def main() -> None:
     parser.add_argument(
         "--xz", action="store_true", help="restore its original XZ transport"
     )
-    parser.add_argument("--output", type=Path, required=True, help="new output file")
+    parser.add_argument(
+        "--output", type=raw_output_path, required=True, help="new output file"
+    )
     args = parser.parse_args()
     data = (read_xz_bytes if args.xz else read_json_bytes)(args.path)
     args.output.parent.mkdir(parents=True, exist_ok=True)
