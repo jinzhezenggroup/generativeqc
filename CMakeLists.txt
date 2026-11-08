@@ -677,6 +677,13 @@ install(FILES LICENSES/bse-data-BSD-3-Clause.txt
         DESTINATION "${CMAKE_INSTALL_DATADIR}/generativeqc/licenses")
 if(GENERATIVEQC_BUILD_CLI)
   install(TARGETS generativeqc_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  if(GENERATIVEQC_ENABLE_CUDA)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCNativeCLIMetadata.cmake")
+    generativeqc_write_native_cli_metadata(
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/native-cli-build.json")
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/generated/native-cli-build.json"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/generativeqc")
+  endif()
   if(GENERATIVEQC_PYTHON_WHEEL AND DEFINED SKBUILD_SCRIPTS_DIR)
     # scikit-build-core places this executable in wheel .data/scripts (venv/bin).
     # A Python entry point would shadow it and reintroduce Python startup.

@@ -8,7 +8,9 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -387,3 +389,218 @@ def test_current_history_entrypoint(historical_capsule: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["historical_commit"] == history.COMMIT
     assert payload["cold_timing_scope"].startswith("prepared-plan-execute-only")
+
+
+def git(root: Path, *args: str) -> str:
+    return subprocess.check_output(
+        [
+            "git",
+            "-C",
+            str(root),
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            *args,
+        ],
+        text=True,
+        stderr=subprocess.DEVNULL,
+        timeout=30,
+    ).strip()
+
+
+@pytest.fixture
+def shallow_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    source = tmp_path / "source"
+    source.mkdir()
+    git(source, "init", "--object-format=sha1")
+    capsule = source / history.PREFIX
+    capsule.mkdir(parents=True)
+    data = b"historical measurement\n"
+    (capsule / "record").write_bytes(data)
+    manifest = json.dumps(
+        {
+            "files": [
+                {
+                    "path": "record",
+                    "bytes": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }
+            ]
+        }
+    ).encode()
+    (capsule / "capsule.json").write_bytes(manifest)
+    git(source, "add", ".")
+    git(source, "commit", "--no-gpg-sign", "-qm", "Historical evidence")
+    commit = git(source, "rev-parse", "HEAD")
+    tree = git(source, "rev-parse", f"HEAD:{history.PREFIX}")
+    git(source, "rm", "-r", history.PREFIX)
+    git(source, "commit", "--no-gpg-sign", "-qm", "Retire evidence")
+    checkout = tmp_path / "checkout"
+    git(tmp_path, "clone", "--depth=1", source.as_uri(), str(checkout))
+    assert git(checkout, "rev-parse", "--is-shallow-repository") == "true"
+    monkeypatch.setattr(history, "ROOT", checkout)
+    monkeypatch.setattr(history, "REMOTE", source.as_uri())
+    monkeypatch.setattr(history, "COMMIT", commit)
+    monkeypatch.setattr(history, "TREE", tree)
+    monkeypatch.setattr(
+        history, "MANIFEST_SHA256", hashlib.sha256(manifest).hexdigest()
+    )
+    return checkout
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="fetch locking requires POSIX")
+@pytest.mark.parametrize("linked_worktree", [False, True])
+def test_concurrent_shallow_recovery(
+    shallow_history: Path,
+    tmp_path: Path,
+    linked_worktree: bool,
+) -> None:
+    roots = [shallow_history] * 4
+    if linked_worktree:
+        linked = tmp_path / "linked"
+        git(shallow_history, "worktree", "add", "--detach", str(linked), "HEAD")
+        roots[1::2] = [linked, linked]
+    # Fresh interpreters also work under xdist's multithreaded workers; forking
+    # those workers can deadlock on locks owned by their other threads.
+    worker_script = r"""
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[1])
+from tools import verify_issue1598_history as history
+
+config = json.loads(sys.argv[2])
+for name in ("REMOTE", "COMMIT", "TREE", "MANIFEST_SHA256"):
+    setattr(history, name, config[name])
+history.ROOT = Path(sys.argv[3])
+root = Path(sys.argv[4])
+index = sys.argv[5]
+original_run = subprocess.run
+original_git = history.git
+first_probe = True
+
+def simultaneous_probe(command, **kwargs):
+    global first_probe
+    result = original_run(command, **kwargs)
+    if "cat-file" in command and first_probe:
+        first_probe = False
+        assert result.returncode != 0
+        (root / ("ready-" + index)).touch()
+        deadline = time.monotonic() + 15
+        while len(list(root.glob("ready-*"))) != 4:
+            if time.monotonic() >= deadline:
+                raise TimeoutError("concurrent recovery barrier")
+            time.sleep(0.01)
+    return result
+
+def monitored_git(*args):
+    if args[0] != "fetch":
+        return original_git(*args)
+    # Detect overlapping fetches deterministically while still fetching real
+    # objects from a real shallow repository, without an internal call count.
+    with (root / "fetch-active").open("x"):
+        try:
+            time.sleep(0.2)
+            return original_git(*args)
+        finally:
+            (root / "fetch-active").unlink()
+
+history.subprocess.run = simultaneous_probe
+history.git = monitored_git
+history.restore(root / ("restored-" + index), fetch=True)
+"""
+    config = json.dumps(
+        {
+            name: getattr(history, name)
+            for name in ("REMOTE", "COMMIT", "TREE", "MANIFEST_SHA256")
+        }
+    )
+    workers = []
+    try:
+        for index, root in enumerate(roots):
+            workers.append(
+                subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-c",
+                        worker_script,
+                        str(ROOT),
+                        config,
+                        str(root),
+                        str(tmp_path),
+                        str(index),
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+            )
+        results = [worker.communicate(timeout=30) for worker in workers]
+        assert [worker.returncode for worker in workers] == [0] * 4, results
+    finally:
+        for worker in workers:
+            if worker.poll() is None:
+                worker.kill()
+            worker.communicate(timeout=5)
+    for index in range(4):
+        assert (
+            tmp_path / f"restored-{index}/record"
+        ).read_bytes() == b"historical measurement\n"
+
+
+def test_missing_history_stays_offline_without_fetch(
+    shallow_history: Path,
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        history.restore(tmp_path / "restored")
+    assert not (tmp_path / "restored").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="fetch locking requires POSIX")
+def test_fetch_failure_is_reported_and_lock_is_released(
+    shallow_history: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    remote = history.REMOTE
+    monkeypatch.setattr(history, "REMOTE", (tmp_path / "absent").as_uri())
+    with pytest.raises(subprocess.CalledProcessError):
+        history.restore(tmp_path / "restored", fetch=True)
+    assert not (tmp_path / "restored").exists()
+    monkeypatch.setattr(history, "REMOTE", remote)
+    history.restore(tmp_path / "restored", fetch=True)
+    assert (tmp_path / "restored/record").read_bytes() == b"historical measurement\n"
+    monkeypatch.setattr(history, "REMOTE", (tmp_path / "absent").as_uri())
+    history.restore(tmp_path / "offline-existing", fetch=True)
+    assert (
+        tmp_path / "offline-existing/record"
+    ).read_bytes() == b"historical measurement\n"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="fetch locking requires POSIX")
+def test_history_fetch_lock_wait_is_bounded(
+    shallow_history: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import fcntl
+
+    common = Path(git(shallow_history, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = shallow_history / common
+    with (common / "issue1598-history-fetch.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        clock = iter((0.0, 151.0))
+        monkeypatch.setattr(
+            history,
+            "time",
+            SimpleNamespace(monotonic=lambda: next(clock), sleep=time.sleep),
+        )
+        with pytest.raises(TimeoutError, match="waiting for historical Git fetch"):
+            history.restore(tmp_path / "restored", fetch=True)
+    assert not (tmp_path / "restored").exists()

@@ -2,6 +2,8 @@
 
 Payloads remain in existing Git history, outside the bounded results tree.
 Only an explicit --fetch permits fetching the pinned public commit when absent.
+Fetching missing history uses POSIX file locks (Linux/macOS); offline recovery
+of locally available history does not require those platform facilities.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,17 +29,48 @@ def git(*args: str) -> bytes:
     return subprocess.check_output(["git", "-C", str(ROOT), *args], timeout=120)
 
 
-def restore(destination: Path, *, fetch: bool = False) -> None:
-    """Restore Git-original bytes with fixed tree and SHA256 integrity gates."""
-    if fetch:
-        available = subprocess.run(
+def _fetch_missing_history() -> None:
+    """Serialize shallow-history mutations across workers and linked worktrees."""
+
+    def available() -> bool:
+        result = subprocess.run(
             ["git", "-C", str(ROOT), "cat-file", "-e", COMMIT],
             capture_output=True,
             check=False,
             timeout=30,
         )
-        if available.returncode:
+        return result.returncode == 0
+
+    if available():
+        return
+    import fcntl
+
+    common = Path(git("rev-parse", "--git-common-dir").decode().strip())
+    if not common.is_absolute():
+        common = ROOT / common
+    # Keep the lock file: unlinking it permits concurrent holders on distinct
+    # inodes. Git's own shallow.lock covers only part of a fetch transaction.
+    with (common / "issue1598-history-fetch.lock").open("a") as lock:
+        deadline = time.monotonic() + 150
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        "timed out waiting for historical Git fetch"
+                    ) from None
+                time.sleep(0.05)
+        # Another worker may have supplied the commit while we waited.
+        if not available():
             git("fetch", "--no-tags", "--depth=1", REMOTE, COMMIT)
+
+
+def restore(destination: Path, *, fetch: bool = False) -> None:
+    """Restore Git-original bytes with fixed tree and SHA256 integrity gates."""
+    if fetch:
+        _fetch_missing_history()
     tree = git("rev-parse", f"{COMMIT}:{PREFIX}").decode().strip()
     if tree != TREE:
         raise ValueError("historical tree identity mismatch")
