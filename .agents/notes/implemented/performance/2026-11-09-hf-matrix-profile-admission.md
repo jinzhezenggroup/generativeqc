@@ -79,6 +79,13 @@ prepared bindings and cache invalidation, not just cost-model outputs. Device
 execution evidence must be retained separately and must identify source and
 loaded library identities. Its owned-byte count is not a complete memory peak.
 
+The source-matched diagnostic image passed the three native fixtures on RTX 5090
+in Slurm job 2028 and the new matrix fixture under memcheck in job 2029 (zero
+errors/leaked bytes). The retained logs and library/source identities are under
+`benchmarks/results/hf-matrix-profile-20261109/`. This image explicitly uses fast
+compilation; these passes establish routing/numerical and memory-safety behavior,
+not release performance or a measured production calibration winner.
+
 No calibrated production profile, new ERI crossover, angular schedule promotion,
 cross-device timing result or endpoint speedup follows from these changes.
 Issue #597's screened-quartet/reuse profitability and full matched performance
