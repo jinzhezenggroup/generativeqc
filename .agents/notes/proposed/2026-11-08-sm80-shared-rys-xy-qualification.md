@@ -124,6 +124,8 @@ restored HF96 passes independently on both cards. Strict HF48 controls require
 21 target iterations and pass independently with maximum force error below
 3.8e-11 on both cards, while every untouched-default HF48 observation still
 fails1e-7. The strict result diagnoses an accuracy boundary, not a default pass.
+All three public controls changed in that diagnostic; convergence versus
+screening has not been isolated and must not be assigned a sole cause yet.
 
 Slurm16819 verifies all original noncache bytes, no remaining candidate-only
 files, original source identity and original ELF after final restoration.

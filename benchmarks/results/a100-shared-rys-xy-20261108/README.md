@@ -105,8 +105,10 @@ gradient norm is `4.448e-11`. Its energy is `-1215.6178506877025` Eh.
 The old GPU reference differs by only `6.531e-10` in force, excluding reference
 underconvergence as the explanation. Strict native A100 and5090 HF48 need21 target
 iterations and reach about `3.8e-11` maximum force error, compared with10
-iterations at defaults. This diagnoses stopping accuracy; it does not license
-default promotion at a gate that defaults fail.
+iterations at defaults. This establishes a default-control accuracy boundary,
+not which individual stopping or screening control causes it: all three were
+tightened in this diagnostic. It does not license default promotion at a gate
+that defaults fail; isolate those controls before choosing a numerical fix.
 
 Retained adverse references include CPU16813's pre-computation import failure,
 CPU16814 and GPU228912's100-cycle nonconvergence, and GPU228940's metadata
