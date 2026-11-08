@@ -17,6 +17,53 @@ import tarfile
 from pathlib import Path
 
 
+def _build_configuration(prefix: Path, version: str) -> tuple[str, list[str]]:
+    """Read installed CMake provenance without executing the CLI or probing GPUs.
+
+    Preserve real/virtual image suffixes: a profile identity alone cannot say
+    which cubins and PTX images were requested from the compiler. Missing or
+    unresolved metadata must not silently acquire the packaging host's target.
+    """
+    manifest = prefix / "share" / "generativeqc" / "native-cli-build.json"
+    if not manifest.is_file():
+        raise ValueError(f"Installed native CLI build metadata is required: {manifest}")
+    metadata = json.loads(manifest.read_text(encoding="utf-8"))
+    if not isinstance(metadata, dict) or metadata.get("schema_version") != 1:
+        raise ValueError("Unsupported native CLI build metadata schema")
+    if metadata.get("version") != version:
+        raise ValueError(
+            "Native CLI build metadata version does not match package version"
+        )
+    if (metadata.get("system_name"), metadata.get("system_processor")) != (
+        "Linux",
+        "x86_64",
+    ):
+        raise ValueError("Native CLI distribution requires a Linux x86_64 build")
+    if metadata.get("cuda_compiler_id") != "NVIDIA":
+        raise ValueError("Native CLI distribution requires NVIDIA CUDA build metadata")
+    toolkit = metadata.get("cuda_toolkit")
+    if not isinstance(toolkit, str) or not re.fullmatch(
+        r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", toolkit
+    ):
+        raise ValueError(
+            "Native CLI build metadata requires a numeric CUDA toolkit version"
+        )
+    architectures = metadata.get("cuda_architectures")
+    if (
+        not isinstance(architectures, list)
+        or not architectures
+        or any(
+            not isinstance(architecture, str)
+            or not re.fullmatch(r"[1-9][0-9]+(?:-real|-virtual)?", architecture)
+            for architecture in architectures
+        )
+    ):
+        raise ValueError(
+            "Native CLI build metadata requires resolved CUDA architectures"
+        )
+    return toolkit, architectures
+
+
 def _dynamic_dependencies(executable: Path) -> list[str]:
     dynamic = subprocess.run(
         ["readelf", "-d", str(executable)],
@@ -101,6 +148,7 @@ def package_native_cli(
     release: bool,
     source_date_epoch: int,
 ) -> Path:
+    """Package an installed CUDA CLI using its CMake-recorded build targets."""
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
         raise ValueError("A CMake numeric X.Y.Z project version is required")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
@@ -108,8 +156,14 @@ def package_native_cli(
     if source_date_epoch < 0:
         raise ValueError("SOURCE_DATE_EPOCH must be nonnegative")
 
+    toolkit, architectures = _build_configuration(prefix, version)
+    toolkit_label = ".".join(toolkit.split(".")[:2])
+    architecture_label = "+".join(f"sm{architecture}" for architecture in architectures)
     suffix = "" if release else f"+g{commit[:12]}"
-    basename = f"generativeqc-v{version}{suffix}-linux-x86_64-cuda12.9-sm120"
+    basename = (
+        f"generativeqc-v{version}{suffix}-linux-x86_64-"
+        f"cuda{toolkit_label}-{architecture_label}"
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     staging = output_dir / basename
     if staging.exists():
@@ -124,8 +178,8 @@ def package_native_cli(
         "version": version,
         "commit": commit,
         "platform": "linux-x86_64",
-        "cuda_toolkit": "12.9",
-        "cuda_architecture": "sm_120",
+        "cuda_toolkit": toolkit,
+        "cuda_architectures": architectures,
         "core_linkage": "static",
         "generativeqc_shared_core_required": False,
         "separately_packaged_aot_plugins": False,
@@ -137,19 +191,20 @@ def package_native_cli(
     )
     (staging / "README.txt").write_text(
         f"GenerativeQC v{version}  ({commit})\n"
-        "Native CUDA 12.9 / sm_120 CLI for Linux x86_64\n\n"
+        f"Native CUDA {toolkit} / {architecture_label} CLI for Linux x86_64\n\n"
         "Run: ./bin/generativeqc --version\n"
         "     ./bin/generativeqc methods --json\n\n"
         "The C++/CUDA GenerativeQC core is linked into bin/generativeqc;\n"
         "Python is NOT required at runtime. The external Linux libraries\n"
         "shown by 'readelf -d bin/generativeqc' must be installed on the host.\n"
-        "In particular, install CUDA 12.9 runtime/math libraries and a\n"
+        f"In particular, install CUDA {toolkit_label} runtime/math libraries and a\n"
         "compatible NVIDIA driver (libcuda.so.1). System OpenBLAS, OpenSSL,\n"
         "libarchive, glibc and libstdc++ may also be required. This package\n"
         "does not bundle NVIDIA or other system-provider libraries.\n"
         "If your CUDA installation is non-standard, configure the loader's\n"
-        "library search path before launching. sm_120 targets Blackwell GPUs;\n"
-        "this artifact is NOT a universal CUDA fat binary.\n"
+        "library search path before launching. Compiled CUDA architectures:\n"
+        f"{', '.join(architectures)} (CMake real/virtual image notation).\n"
+        "Only these requested images are included, not universal GPU coverage.\n"
         "All native-CLI-reachable AOT kernels are already compiled into the\n"
         "static core. Python-only stationary CUDA force plug-ins are not\n"
         "included; they are not callable by this native CLI.\n"

@@ -295,6 +295,13 @@ qualify a geometry under a retained Rys recurrence.
 CMake selects profiles with `GENERATIVEQC_AOT_PROFILE` or `GENERATIVEQC_AOT_PROFILES`.
 `auto` prefers an exact measured or explicitly compatible profile, then selects
 `portable_cuda`. Explicit incompatible requests and ambiguous manifests fail.
+Production shell manifests require `schema_version: 2`; the retired schema-v1
+format is rejected rather than assuming SM120 qualification. Migrate custom
+manifests to explicit architecture profiles and retain the evidence for any
+profile marked tuned. When no build target is supplied, resolution uses an
+explicit `default_architecture` or the sole architecture profile; ambiguous
+multi-profile manifests require a default. An explicit build target does not
+require a manifest default and still follows the same qualified/portable policy.
 The portable profile provides value kernels for every canonical s/p/d class.
 Most use independently scheduled value-only Rys J/K kernels with lane-local
 packed tasks or target-legal component schedules; `dddd` retains the tiled

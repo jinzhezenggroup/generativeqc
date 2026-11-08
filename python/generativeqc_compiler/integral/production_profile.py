@@ -575,72 +575,25 @@ def resolve_production_profile(
     architecture: str | None = None,
     profile: str = "auto",
 ) -> ResolvedProductionProfile:
-    """Resolve a target without requiring architecture-specific tuning evidence."""
+    """Resolve a schema-v2 profile without inventing architecture qualification.
+
+    An explicit build target overrides the manifest default. Only omitted
+    targets need an unambiguous manifest default; untuned targets retain the
+    generic CUDA fallback rather than inheriting another GPU's tuning evidence.
+    """
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise TypeError("production shell manifest must be a JSON object")
-    schema_version = payload.get("schema_version")
-    default_architecture = (
-        "sm_120" if schema_version == 1 else _default_architecture(payload)
-    )
+    if payload.get("schema_version") != 2:
+        raise ValueError(
+            "unsupported production shell manifest schema; use schema_version 2 "
+            "with explicit architecture profiles"
+        )
     selected_architecture = normalize_cuda_architecture(
-        architecture or default_architecture
+        architecture if architecture is not None else _default_architecture(payload)
     )
     target = cuda_target_info(selected_architecture)
-    if schema_version == 1:
-        names = payload.get("shell_classes")
-        if not isinstance(names, list) or not names:
-            raise ValueError("production manifest requires shell_classes")
-        acceptance = payload.get("acceptance")
-        accepted_architecture = (
-            acceptance.get("architecture") if isinstance(acceptance, dict) else "sm_120"
-        )
-        accepted_architecture = normalize_cuda_architecture(
-            accepted_architecture
-            if isinstance(accepted_architecture, str)
-            else "sm_120"
-        )
-        if profile in ("portable", "portable_cuda") or (
-            profile == "auto" and selected_architecture != accepted_architecture
-        ):
-            return ResolvedProductionProfile(
-                target=target,
-                profile="portable_cuda",
-                match=ProfileMatch.PORTABLE,
-                tuned=False,
-                selections=(),
-                cuda_toolkit="",
-            )
-        if selected_architecture != accepted_architecture:
-            raise ValueError(
-                f"no tuned production profile for {selected_architecture}; "
-                "request 'portable_cuda' explicitly to use the generic CUDA path"
-            )
-        if profile not in ("auto", accepted_architecture):
-            raise ValueError(f"production manifest has no profile {profile!r}")
-        rows = [
-            {"shell_class": name, "consumers": [KernelConsumer.FORCE.value]}
-            for name in names
-        ]
-        selections = _selections_from_rows(
-            rows,
-            architecture=selected_architecture,
-            profile=accepted_architecture,
-            tuned=True,
-            target=target,
-        )
-        return ResolvedProductionProfile(
-            target=target,
-            profile=accepted_architecture,
-            match=ProfileMatch.EXACT,
-            tuned=True,
-            selections=selections,
-            cuda_toolkit="",
-        )
-    if schema_version != 2:
-        raise ValueError("unsupported production shell manifest schema")
-
     profile_name, profile_payload, match = _resolve_profile_payload(
         payload,
         selected_architecture,
