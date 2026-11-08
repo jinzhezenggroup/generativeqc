@@ -208,6 +208,9 @@ struct Xc {
   CudaXcOccupiedDensity last_occupied{};
   struct PointBatch { std::size_t tiles = 1, device_bytes = 0; };
   PointBatch point_batch_plan() const { return {}; }
+  struct ProviderDiagnostic { std::size_t provider_allowance = 0, matrix_bytes = 0; };
+  const ProviderDiagnostic* density_provider_diagnostic() const { return nullptr; }
+  ProviderDiagnostic potential_lowering() const { return {}; }
   void enqueue(const double* density, std::size_t, std::uint64_t, Phase phase,
                CudaXcOccupiedDensity occupied = {}) {
     require(!occupied.provisional || phase == Phase::Admitted,

@@ -242,7 +242,7 @@ def _discover_force_active_ao(root: Path) -> dict[str, str]:
 
 
 def _discover_xc_point_batching(root: Path) -> dict[str, str]:
-    """Inventory rollback controls; compiled resource tests qualify the policy."""
+    """Inventory XC rollback controls; executable tests qualify their policies."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = _read(root / relative)
     for control in (
@@ -250,6 +250,7 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
         "GENERATIVEQC_CUDA_XC_BATCH_BYTES",
         "GENERATIVEQC_CUDA_XC_COMPACT_BATCH",
         "GENERATIVEQC_CUDA_XC_RAGGED_BATCH",
+        "GENERATIVEQC_CUDA_XC_DENSITY_GEMM",
     ):
         if f'"{control}"' not in source:
             raise ValueError(f"XC point-batch rollback selector missing: {control}")
@@ -257,6 +258,7 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
         "dft-policy:xc-point-batch-auto": relative.as_posix(),
         "dft-policy:GENERATIVEQC_CUDA_XC_COMPACT_BATCH": relative.as_posix(),
         "dft-policy:GENERATIVEQC_CUDA_XC_RAGGED_BATCH": relative.as_posix(),
+        "dft-policy:GENERATIVEQC_CUDA_XC_DENSITY_GEMM": relative.as_posix(),
     }
 
 

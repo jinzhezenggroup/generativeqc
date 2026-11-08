@@ -1,11 +1,12 @@
 """Protect the descriptive gates and strict default-route evidence boundary."""
 
 import json
-import lzma
 import runpy
 from pathlib import Path
 
 import pytest
+
+from benchmarks._source_census_evidence import read_json_bytes
 
 ROOT = Path(__file__).resolve().parents[2]
 REDUCER = ROOT / "benchmarks/results/r2scan3c-final-validation-20261015/reduce.py"
@@ -135,7 +136,7 @@ def test_retained_direct_regression_stays_blocked_under_the_policy_hold() -> Non
     """Narrowing production admission must not turn failed historical evidence green."""
     verify = runpy.run_path(str(REDUCER.with_name("refresh.py")))["verify_comparison"]
     observations = json.loads(
-        lzma.decompress(REDUCER.with_name("observations.json.xz").read_bytes())
+        read_json_bytes(REDUCER.with_name("observations.json.xz"))
     )
     for comparison in observations["comparisons"]:
         if comparison["density_fitting"] == "none" and comparison["atoms"] == 96:

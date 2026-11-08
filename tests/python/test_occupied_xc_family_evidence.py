@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
+import json
+import lzma
 import os
+import runpy
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-
-from benchmarks.occupied_xc_proposals import load
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -28,7 +31,7 @@ def retained() -> tuple[ModuleType, dict]:
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module, load(SCRIPT.parent / "endpoints.json.xz")
+    return module, module.load_capsules()["endpoints"]
 
 
 def test_retained_family_population_and_admission(
@@ -114,7 +117,7 @@ def test_integrated_image_is_qualified_separately(
     retained: tuple[ModuleType, dict],
 ) -> None:
     module, capsule = retained
-    supplement = load(SCRIPT.parent / "integration.json.xz")
+    supplement = module.load_capsules()["integration"]
     assert supplement["source_identity"] != capsule["source_identity"]
     summary = module.replay_integration(supplement, capsule)
     assert summary["m06"]["phases"]["cold"]["profitable"]
@@ -137,9 +140,105 @@ def test_integrated_image_corruption_is_rejected(
     retained: tuple[ModuleType, dict],
 ) -> None:
     module, capsule = retained
-    module.integration_corruption_probes(
-        load(SCRIPT.parent / "integration.json.xz"), capsule
+    module.integration_corruption_probes(module.load_capsules()["integration"], capsule)
+
+
+def test_original_transports_recover_without_repository_history(
+    retained: tuple[ModuleType, dict], tmp_path: Path
+) -> None:
+    module, capsule = retained
+    for name in ("fp64.xz", "receipts.json.xz", "sha256.txt", "storage-receipt.json"):
+        shutil.copyfile(SCRIPT.parent / name, tmp_path / name)
+    originals = module.recover_originals(tmp_path)
+    receipt = json.loads((tmp_path / "storage-receipt.json").read_text())
+    for row in receipt["originals"]:
+        packed = originals[row["path"]]
+        assert len(packed) == row["bytes"]
+        assert hashlib.sha256(packed).hexdigest() == row["sha256"]
+        raw = lzma.decompress(packed)
+        assert len(raw) == row["text_bytes"]
+        assert hashlib.sha256(raw).hexdigest() == row["text_sha256"]
+    assert json.loads(lzma.decompress(originals["endpoints.json.xz"])) == capsule
+
+
+def test_original_export_refuses_an_existing_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    existing = tmp_path / "endpoints.json.xz"
+    existing.write_bytes(b"existing evidence must remain untouched")
+    monkeypatch.setattr(
+        sys, "argv", [str(SCRIPT), "--restore-originals", str(tmp_path)]
     )
+    with pytest.raises(FileExistsError):
+        runpy.run_path(str(SCRIPT), run_name="__main__")
+    assert existing.read_bytes() == b"existing evidence must remain untouched"
+    assert not (tmp_path / "integration.json.xz").exists()
+
+
+@pytest.mark.parametrize("field", ["bytes", "sha256", "git_blob_sha1", "text_sha256"])
+def test_original_transport_identity_corruption_is_rejected(
+    retained: tuple[ModuleType, dict], tmp_path: Path, field: str
+) -> None:
+    module, _ = retained
+    for name in ("fp64.xz", "receipts.json.xz", "sha256.txt", "storage-receipt.json"):
+        shutil.copyfile(SCRIPT.parent / name, tmp_path / name)
+    path = tmp_path / "storage-receipt.json"
+    receipt = json.loads(path.read_text())
+    receipt["originals"][0][field] = 0 if field == "bytes" else "0" * 64
+    path.write_text(json.dumps(receipt))
+    with pytest.raises(ValueError, match="original (compressed transport|JSON bytes)"):
+        module.recover_originals(tmp_path)
+
+
+def test_integration_binds_the_complete_reconstructed_baseline(
+    retained: tuple[ModuleType, dict],
+) -> None:
+    module, capsule = retained
+    supplement = module.load_capsules()["integration"]
+    altered = dict(capsule, unexpected_field="must not escape the transport binding")
+    with pytest.raises(ValueError, match="integration reference provenance"):
+        module.replay_integration(supplement, altered)
+
+
+@pytest.mark.parametrize("optimize", [False, True])
+def test_rehashed_fp64_corruption_cannot_change_original_text(
+    tmp_path: Path, optimize: bool
+) -> None:
+    for name in ("fp64.xz", "receipts.json.xz", "sha256.txt", "storage-receipt.json"):
+        shutil.copyfile(SCRIPT.parent / name, tmp_path / name)
+    path = tmp_path / "fp64.xz"
+    planes = bytearray(lzma.decompress(path.read_bytes()))
+    planes[0] ^= 1
+    path.write_bytes(lzma.compress(planes))
+    (tmp_path / "sha256.txt").write_text(
+        "".join(
+            hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+            + "  "
+            + name
+            + "\n"
+            for name in ("fp64.xz", "receipts.json.xz")
+        )
+    )
+    code = (
+        "import importlib.util, pathlib; "
+        f"spec = importlib.util.spec_from_file_location('family_replay', {str(SCRIPT)!r}); "
+        "module = importlib.util.module_from_spec(spec); "
+        "spec.loader.exec_module(module); "
+        f"module.recover_originals(pathlib.Path({str(tmp_path)!r}))"
+    )
+    process = subprocess.run(
+        [sys.executable, *(["-O"] if optimize else []), "-c", code],
+        env=dict(
+            os.environ,
+            PYTHONPATH=os.pathsep.join((str(ROOT), str(ROOT / "python"))),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert process.returncode != 0
+    assert "ValueError: endpoints.json" in process.stderr
 
 
 @pytest.mark.parametrize("optimize", [False, True])

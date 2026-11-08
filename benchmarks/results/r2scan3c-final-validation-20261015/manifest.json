@@ -24,24 +24,24 @@
       "sha256": "6fb46075d121841b25c74a35e6de926cf35081e32b9d7605ee1ca53df7f4cb48"
     },
     "observations.json.xz": {
-      "bytes": 185084,
-      "sha256": "9a9fdf4b4e8c1fedea423fe911ad1de460ab8e73e7a618699cc4074e1839a32b"
+      "bytes": 284,
+      "sha256": "0e13c80e8dbdbcb5a733ece9ef3bafeea08c6691ddf99d4ec5648e940ee84a2b"
     },
     "pilot-observations.json.xz": {
       "bytes": 23600,
       "sha256": "7d0a1d99aa32296e94a6fa925509b066c3942a9161c463c6533d6b195376c50c"
     },
     "receipts.json.xz": {
-      "bytes": 121112,
-      "sha256": "8b393a9c0028f9b0a1746904d28f54576ea6bd9c0f079c1625c67d7cfbe92b6c"
+      "bytes": 284,
+      "sha256": "5f8ee119f5351a4a609e2f02cd881a0758cacbcafe2d74d50f7d20b933581a4d"
     },
     "reduce.py": {
       "bytes": 6775,
       "sha256": "b5d0ee2994b10d9ecbacd0cbe46a2362cd9a1d156e082af6ea20716213d1e4b1"
     },
     "refresh.py": {
-      "bytes": 6265,
-      "sha256": "19dc7e095c2b28f00c53c21218aabe622d9020df2e0ca96bc0a603025d527470"
+      "bytes": 6314,
+      "sha256": "fe6e5648795cd5569123fd90ed0b1d755265e7189a478f6b3aa72f5fe1c840f8"
     },
     "source.patch.xz": {
       "bytes": 3940,

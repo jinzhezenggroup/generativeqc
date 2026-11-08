@@ -2365,29 +2365,26 @@ struct CudaKsPlan::Impl : KsStateStorage {
                 cuda_ks_precision_region::kXcMatrixContractions) &&
             cuda_xc_detail::mixed_matrix_contractions_supported(xc_layout))
           xc->prepare_mixed_matrix_contractions();
-        // Host and device reservations must both precede optional preparation.
-        // The lowering layer owns qualification and implementation selection.
-        const auto density_budget =
-            xc_budget.host_bytes >= tensor::PreparedPanelProduct::host_reservation
-                ? xc_budget.device_bytes
-                : 0;
-        xc->prepare_density(*admitted_precision.find(cuda_ks_precision_region::kDensityContraction),
-                            options.max_iterations, density_budget);
-        if (const auto* prepared = xc->density_provider_diagnostic()) {
-          resource.xc_device_bytes = sum(resource.xc_device_bytes, prepared->matrix_bytes);
-          resource.provider_device_bytes =
-              sum(resource.provider_device_bytes, prepared->provider_allowance);
-          resource.retained_host_numeric_bytes =
-              sum(resource.retained_host_numeric_bytes, prepared->host_bytes);
-        }
-        // A large strict-FP64 meta-GGA panel can amortize indexed publication
-        // with a library cross product on FP64 matrix-capable hardware. This
+        // Large strict-FP64 meta-GGA panels amortize mapped matrix products
+        // on FP64 matrix-capable hardware. This
         // is a capability/work gate, never a GPU model-name whitelist. Public
         // ledgers and explicit reference budgets keep their bounded incumbent
         // until a complete optional-provider quote has been qualified there.
+        const char* gga_gemm_control = std::getenv("GENERATIVEQC_CUDA_XC_GGA_GEMM");
+        if (gga_gemm_control && std::strcmp(gga_gemm_control, "0") != 0 &&
+            std::strcmp(gga_gemm_control, "1") != 0)
+          throw std::invalid_argument("GENERATIVEQC_CUDA_XC_GGA_GEMM accepts 0 or 1");
+        const bool qualified_indexed_gga =
+            spins == 1 && xc_layout.work_jets == 1 &&
+            (functional == semilocal_family_code(SemilocalFamily::Pbe) ||
+             functional == semilocal_family_code(SemilocalFamily::B3lyp));
+        const bool indexed_gga =
+            qualified_indexed_gga && (!gga_gemm_control || gga_gemm_control[0] != '0');
+        bool fp64_indexed_matrix = false;
         if (!runtime::active_device_resource_ledger && !options.reference_memory_budget_bytes &&
             !precision_schedule.any_lower_precision() && xc_layout.local_ao &&
-            xc_layout.nao >= 512 && xc_layout.npoint >= (1U << 19) && xc_layout.work_jets >= 4) {
+            xc_layout.nao >= 512 && xc_layout.npoint >= (1U << 19) &&
+            (xc_layout.work_jets >= 4 || indexed_gga)) {
           cudaDeviceProp properties{};
           const auto capability = cudaGetDeviceProperties(&properties, device);
           if (capability == cudaErrorNotSupported || capability == cudaErrorInvalidValue) {
@@ -2395,17 +2392,49 @@ struct CudaKsPlan::Impl : KsStateStorage {
             if (pending != cudaSuccess && pending != capability) check(pending);
           } else {
             check(capability);
-            if (runtime::cuda_fp64_matrix_acceleration_supported(
-                    properties.major, properties.singleToDoublePrecisionPerfRatio)) {
-              runtime::DeviceUnpromisedCapacityScope optional_scope;
-              xc->prepare_potential(std::min(std::size_t{128ULL << 20}, optional_device_capacity()),
-                                    true);
-              const auto& prepared = xc->potential_lowering();
-              resource.xc_device_bytes = sum(resource.xc_device_bytes, prepared.matrix_bytes);
-              resource.provider_device_bytes =
-                  sum(resource.provider_device_bytes, prepared.provider_allowance);
-            }
+            fp64_indexed_matrix = runtime::cuda_fp64_matrix_acceleration_supported(
+                properties.major, properties.singleToDoublePrecisionPerfRatio);
           }
+        }
+        const char* density_gemm_control = std::getenv("GENERATIVEQC_CUDA_XC_DENSITY_GEMM");
+        if (density_gemm_control && std::strcmp(density_gemm_control, "0") != 0 &&
+            std::strcmp(density_gemm_control, "1") != 0)
+          throw std::invalid_argument("GENERATIVEQC_CUDA_XC_DENSITY_GEMM accepts 0 or 1");
+        const bool indexed_density_gemm =
+            fp64_indexed_matrix && (!density_gemm_control || density_gemm_control[0] != '0');
+        // The extra provider/cache allowance is outside any public promise.
+        // Resource refusal preserves the same generated indexed contraction.
+        const auto density_budget =
+            indexed_density_gemm ? std::min(std::size_t{128ULL << 20}, optional_device_capacity())
+            : xc_budget.host_bytes >= tensor::PreparedPanelProduct::host_reservation
+                ? xc_budget.device_bytes
+                : 0;
+        const auto prepare_density = [&] {
+          xc->prepare_density(
+              *admitted_precision.find(cuda_ks_precision_region::kDensityContraction),
+              options.max_iterations, density_budget, indexed_density_gemm);
+        };
+        if (indexed_density_gemm) {
+          runtime::DeviceUnpromisedCapacityScope optional_scope;
+          prepare_density();
+        } else {
+          prepare_density();
+        }
+        if (const auto* prepared = xc->density_provider_diagnostic()) {
+          resource.xc_device_bytes = sum(resource.xc_device_bytes, prepared->matrix_bytes);
+          resource.provider_device_bytes =
+              sum(resource.provider_device_bytes, prepared->provider_allowance);
+          resource.retained_host_numeric_bytes =
+              sum(resource.retained_host_numeric_bytes, prepared->host_bytes);
+        }
+        if (fp64_indexed_matrix) {
+          runtime::DeviceUnpromisedCapacityScope optional_scope;
+          xc->prepare_potential(std::min(std::size_t{128ULL << 20}, optional_device_capacity()),
+                                true);
+          const auto& prepared = xc->potential_lowering();
+          resource.xc_device_bytes = sum(resource.xc_device_bytes, prepared.matrix_bytes);
+          resource.provider_device_bytes =
+              sum(resource.provider_device_bytes, prepared.provider_allowance);
         }
         // Default batching retains the compiler's bounded admission and the
         // one-tile fallback. Overrides keep the incumbent available for ablations;
@@ -3575,6 +3604,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
       runtime::cuda_trace::trace_counter("xc_point_ao_visits", prepared_ao_work.point_ao_visits);
       runtime::cuda_trace::trace_counter("xc_point_ao_square_sum",
                                          prepared_ao_work.point_ao_square_sum);
+      const auto* density_provider = xc->density_provider_diagnostic();
+      runtime::cuda_trace::trace_counter(
+          "xc_density_provider_allowance",
+          density_provider ? density_provider->provider_allowance : 0);
+      runtime::cuda_trace::trace_counter("xc_density_matrix_bytes",
+                                         density_provider ? density_provider->matrix_bytes : 0);
+      runtime::cuda_trace::trace_counter("xc_potential_provider_allowance",
+                                         xc->potential_lowering().provider_allowance);
       CudaXcOccupiedDensity occupied_frame;
       const CudaXcOccupiedDensity candidate{
           density,         tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
@@ -5955,24 +5992,43 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
     std::size_t free_before{}, free_after{}, total{}, retired{};
     check(cudaMemGetInfo(&free_before, &total));
     free_after = free_before;
-    if (additional_device_bytes > free_before &&
-        (impl_->fast_anchor_arena || impl_->nonlocal_anchor_arena || impl_->phase_source)) {
+    const auto* density_provider = impl_->xc ? impl_->xc->density_provider_diagnostic() : nullptr;
+    const bool density_storage = density_provider && (density_provider->matrix_bytes ||
+                                                      density_provider->provider_allowance);
+    const bool density_retirement_pending =
+        impl_->xc && impl_->xc->density_provider_retirement_pending();
+    if ((additional_device_bytes > free_before || density_retirement_pending) &&
+        (impl_->fast_anchor_arena || impl_->nonlocal_anchor_arena || impl_->phase_source ||
+         density_storage)) {
       // The final-state token excludes active/pending SCF work. Drain its
       // producer before freeing optional cold-SCF storage. Downstream D/W/XC
       // leases borrow neither the anchor nor the independently owned ERIs.
       check(cudaStreamSynchronize(impl_->stream));
       ++impl_->movement.synchronizations;
-      if (impl_->nonlocal_anchor_arena) {
+      if (additional_device_bytes > free_before && impl_->nonlocal_anchor_arena) {
         retired = impl_->retire_nonlocal_anchor_storage();
         check(cudaMemGetInfo(&free_after, &total));
       }
-      if (impl_->fast_anchor_arena) {
+      if (additional_device_bytes > free_before && impl_->fast_anchor_arena) {
         retired += impl_->retire_fast_anchor_storage();
         check(cudaMemGetInfo(&free_after, &total));
       }
       if (additional_device_bytes > free_after && impl_->phase_source) {
         retired += impl_->phase_device_bytes;
         impl_->retire_phase_source(false);  // Successful SCF already audited it.
+        check(cudaMemGetInfo(&free_after, &total));
+      }
+      if ((additional_device_bytes > free_after || density_retirement_pending) && density_storage) {
+        const auto prepared = *density_provider;
+        // A subsequent warm SCF must rebind to the retained generated kernels.
+        // Release graph executables before destroying any provider they borrow.
+        impl_->device_chunk_region.invalidate();
+        impl_->solver_region_executor.invalidate();
+        impl_->xc->retire_density_provider();
+        impl_->resource.xc_device_bytes -= prepared.matrix_bytes;
+        impl_->resource.provider_device_bytes -= prepared.provider_allowance;
+        impl_->resource.retained_host_numeric_bytes -= prepared.host_bytes;
+        retired += prepared.matrix_bytes + prepared.provider_allowance;
         check(cudaMemGetInfo(&free_after, &total));
       }
     }

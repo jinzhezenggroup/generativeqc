@@ -74,7 +74,7 @@ the native source identity.
   `efe799a008482dad106f2d49e4926fdc2e47c26f915cb4a635308037772e8518`.
 - Library SHA-256:
   `7cfcdd909988028da3369c5141351d7302bebf2d5e51d9ffde0aff71f212d0dd`.
-- `integration.json.xz`: 50,176 bytes, SHA-256
+- Original `integration.json.xz` transport, recoverable offline: 50,176 bytes, SHA-256
   `10059a7e7250332300c9153211ace2fb44b8d96263d11ef02a4036febbbce40f`.
 
 Both populations run on node4, each with three alternating fresh-process pairs,
@@ -190,7 +190,7 @@ PYTHONPATH=.:python python -O benchmarks/results/occupied-xc-families-20261105/r
 It rechecks both capsules' image/host separation, complete force vectors,
 independent and paired gates, grid stability, semantic work, actual controls and original
 reference checksums. Corruption probes and regression tests remain active under
-optimized Python. `endpoints.json.xz` retains the exact execution scripts in
+optimized Python. The recovered endpoint capsule retains the exact execution scripts in
 `commands`; raw profiler events, incomplete receipts and build outputs stay
 outside tracked results. Adapt the raw directory/library paths, bind the
 scientific source and native image, and run the scripts through finite `srun`
@@ -198,3 +198,47 @@ allocations. Generate new independent references with
 `benchmarks.occupied_xc_functionals oracle`; never supply them as production
 densities. See the [decision note](../../../.agents/notes/implemented/performance/2026-11-05-occupied-xc-feature-families.md)
 and [current contract](../../../docs/developer/xc_contractions.md).
+
+## Lossless storage and original transport recovery
+
+The two capsules now use the existing `generativeqc.exact-fp64-evidence.v3`
+reader. `receipts.json.xz` retains both complete typed JSON structures;
+`fp64.xz` stores all **418,921 FP64 values** as lossless XOR byte planes.
+`sha256.txt` authenticates both streams. The reader authenticates every byte of
+both reconstructed original JSON texts, including field order, integer/float
+distinctions, signed zero, diagnostic sentinels, all samples and full vectors.
+No population, failed/discarded result, execution script or provenance field is
+removed. The separate PBE0 confirmation's warm regression remains unchanged.
+
+The three stream/manifest files total **425,265 bytes**, versus **700,720 bytes**
+for the two original XZ files: **275,455 payload bytes saved**, before the small
+storage receipt and reader/documentation changes. `storage-receipt.json` records
+the exact before/after identities and the original source revision
+`e71606ddecf9d7a8e527ff79572427bb2acbb309`. That revision is additional provenance;
+all live numerical data and the complete original transports remain recoverable
+from the checked-out bundle without Git history, a network or external archives.
+
+The original writer used compact JSON plus LF, XZ/CRC64 and LZMA preset 6. Applying
+that recipe to each authenticated text reproduces the original compressed bytes,
+which are checked against their original size, SHA-256 and Git blob identity.
+XZ encoding can vary by version/build, as documented in the
+[XZ manual](https://www.tukaani.org/xz/man/xz.1.html). Transport recovery rejects
+an incompatible encoder's output; it never substitutes a declared hash for
+the actual bytes. The complete original JSON remains separately authenticated.
+Integration still binds the unchanged original endpoint transport SHA-256
+`5b9edbbdbc6a389faefc7c1591c49df28773f730a9bf750d11a8fda3de9dd79d`;
+it does not substitute the repacked stream's hash. Export both original files to a
+new directory with:
+
+```bash
+PYTHONPATH=.:python python benchmarks/results/occupied-xc-families-20261105/replay.py \
+  --restore-originals /tmp/occupied-xc-originals
+```
+
+This storage-only change does not qualify a new native image, rerun GPU timings
+or alter any numerical, semantic-work or profitability gate. The
+[storage decision](../../../.agents/notes/implemented/architecture/2026-11-08-occupied-xc-lossless-retention.md)
+records the rejected layouts and why this capsule alone did not provide enough
+aggregate headroom. The accompanying
+[shared source-census storage](../shared-source-censuses-20261108/README.md)
+supplies the remaining headroom while retaining all original observations.

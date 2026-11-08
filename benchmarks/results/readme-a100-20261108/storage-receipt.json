@@ -1,0 +1,22 @@
+{
+  "family": "readme-a100-20261108",
+  "original_text_count": 388,
+  "files": [
+    {
+      "path": "fp64.xz",
+      "previous_bytes": 286888,
+      "previous_sha256": "20ddd0f77eff8a7128eddcef5ca77d6853ee18535ac1493793d6a50121d6f606",
+      "bytes": 250912,
+      "sha256": "a7c7b6f56568fc284e4e5d7a08d93dd2295c9d078e7ccb24c8656759851cae37"
+    },
+    {
+      "path": "receipts.json.xz",
+      "previous_bytes": 184128,
+      "previous_sha256": "5a4c0de7f1ebecf4d23fe87098588fde0d3002be1356f7219c23d0cadc55459c",
+      "bytes": 167080,
+      "sha256": "0254402abfeaeb5e26e25c1a682a33c9882e788b995ac060a1c19c926859a26c"
+    }
+  ],
+  "all_original_text_bytes_and_experiment_unchanged": true,
+  "saving_bytes": 53024
+}

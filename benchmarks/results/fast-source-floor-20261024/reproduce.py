@@ -7,6 +7,7 @@ import json
 import lzma
 import math
 import statistics
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -23,11 +24,15 @@ def require(condition: bool, context: object) -> None:
 
 def load_receipt(name: str) -> dict:
     """Share authenticated references and input maps without pooling timings."""
+    repository = str(ROOT.parents[2])
+    if repository not in sys.path:
+        sys.path.insert(0, repository)
+    from benchmarks._source_census_evidence import read_json_bytes, read_xz_bytes
+
     require(name in COHORTS, ("unknown cohort", name))
-    with lzma.open(ROOT / name, "rt") as stream:
-        payload = json.load(stream)
+    payload = json.loads(read_json_bytes(ROOT / name))
     if name == "integration.json.xz":
-        shared = (ROOT / "qualification.json.xz").read_bytes()
+        shared = read_xz_bytes(ROOT / "qualification.json.xz")
         require(
             hashlib.sha256(shared).hexdigest()
             == payload["shared_qualification_sha256"],

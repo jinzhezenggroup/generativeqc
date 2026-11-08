@@ -2,17 +2,88 @@
 
 from __future__ import annotations
 
+import argparse
 import copy
 import hashlib
 import importlib.util
 import json
+import lzma
 import math
+from functools import lru_cache
 from pathlib import Path
 
+from benchmarks._exact_fp64_evidence import load as load_exact
 from benchmarks.occupied_xc_functionals import independent_gate, replay_records
-from benchmarks.occupied_xc_proposals import check_vectors, load
+from benchmarks.occupied_xc_proposals import check_vectors
 
 ROOT = Path(__file__).resolve().parent
+
+
+@lru_cache(maxsize=2)
+def original_transport(text: str) -> bytes:
+    """Recreate the original writer's XZ bytes; cache by the complete text."""
+    return lzma.compress(
+        text.encode(), format=lzma.FORMAT_XZ, check=lzma.CHECK_CRC64, preset=6
+    )
+
+
+def recover_originals(folder: Path = ROOT) -> dict[str, bytes]:
+    """Authenticate complete original JSON/XZ and Git blobs without Git access."""
+    receipt = json.loads((folder / "storage-receipt.json").read_text())
+    bundle, texts = load_exact(folder)
+    names = {"endpoints", "integration"}
+    if (
+        receipt["schema"] != "generativeqc.lossless-storage-receipt.v1"
+        or receipt["representation"] != bundle["schema"]
+        or receipt["float_count"] != bundle["float_count"]
+        or receipt["original_xz_recipe"]
+        != {"format": "xz", "check": "crc64", "preset": 6}
+        or set(texts) != {name + ".json" for name in names}
+        or len(receipt["originals"]) != len(names)
+        or {row["path"] for row in receipt["originals"]}
+        != {name + ".json.xz" for name in names}
+        or len(receipt["stored_streams"]) != 3
+        or {row["path"] for row in receipt["stored_streams"]}
+        != {"fp64.xz", "receipts.json.xz", "sha256.txt"}
+    ):
+        raise ValueError("original capsule storage contract changed")
+    for row in receipt["stored_streams"]:
+        data = (folder / row["path"]).read_bytes()
+        if (
+            len(data) != row["bytes"]
+            or hashlib.sha256(data).hexdigest() != row["sha256"]
+        ):
+            raise ValueError("stored stream receipt changed")
+    originals = {}
+    for row in receipt["originals"]:
+        if row["text_path"] != row["path"].removesuffix(".xz"):
+            raise ValueError("original text identity changed")
+        text = texts[row["text_path"]]
+        raw = text.encode()
+        if (
+            len(raw) != row["text_bytes"]
+            or hashlib.sha256(raw).hexdigest() != row["text_sha256"]
+        ):
+            raise ValueError("original JSON bytes changed")
+        packed = original_transport(text)
+        blob = b"blob " + str(len(packed)).encode() + b"\0" + packed
+        if (
+            len(packed) != row["bytes"]
+            or hashlib.sha256(packed).hexdigest() != row["sha256"]
+            or hashlib.sha1(blob, usedforsecurity=False).hexdigest()
+            != row["git_blob_sha1"]
+        ):
+            raise ValueError("original compressed transport changed")
+        originals[row["path"]] = packed
+    return originals
+
+
+def load_capsules(folder: Path = ROOT) -> dict[str, dict]:
+    """Load both complete measured capsules after lossless storage verification."""
+    return {
+        name.removesuffix(".json.xz"): json.loads(lzma.decompress(data))
+        for name, data in recover_originals(folder).items()
+    }
 
 
 def source_work(observation: dict) -> int:
@@ -221,7 +292,9 @@ def replay_integration(supplement: dict, baseline: dict) -> dict:
     if supplement["schema"] != "generativeqc.occupied-xc-integration.v1":
         raise ValueError("unsupported integration capsule")
     if (
-        hashlib.sha256((ROOT / "endpoints.json.xz").read_bytes()).hexdigest()
+        hashlib.sha256(
+            original_transport(json.dumps(baseline, separators=(",", ":")) + "\n")
+        ).hexdigest()
         != supplement["baseline_capsule_sha256"]
         or any(supplement["baseline_image"][key] != baseline[key] for key in identity)
         or supplement["original_reference_sha256"]
@@ -359,10 +432,21 @@ def integration_corruption_probes(supplement: dict, baseline: dict) -> None:
 
 
 if __name__ == "__main__":
-    capsule = load(ROOT / "endpoints.json.xz")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--restore-originals", type=Path)
+    arguments = parser.parse_args()
+    if arguments.restore_originals is not None:
+        originals = recover_originals()
+        arguments.restore_originals.mkdir(parents=True, exist_ok=False)
+        for name, data in originals.items():
+            with (arguments.restore_originals / name).open("xb") as stream:
+                stream.write(data)
+        raise SystemExit(0)
+    capsules = load_capsules()
+    capsule = capsules["endpoints"]
     result = replay(capsule)
     corruption_probes(capsule)
-    supplement = load(ROOT / "integration.json.xz")
+    supplement = capsules["integration"]
     result["integration"] = replay_integration(supplement, capsule)
     integration_corruption_probes(supplement, capsule)
     print(json.dumps(result, indent=2))
