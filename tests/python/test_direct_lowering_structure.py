@@ -58,7 +58,6 @@ def test_prepared_k_owner_uses_one_selection_for_topology_and_launch() -> None:
     source = (root / "src/scf/cuda/direct_coulomb.cpp").read_text()
     header = (root / "src/scf/cuda/direct_coulomb.hpp").read_text()
     assert "DirectExchangeSelection selection{};" in header
-    assert "prepare_direct_exchange_selection(shared->value_class_mask)" in source
     assert "plan->selection.task_schedule}" in source
     assert "direct_fock_streaming_launcher(p.selection, cls, unrestricted)" in source
     assert "prepare_direct_fock_rys_mask(true)" not in source

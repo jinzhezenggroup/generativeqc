@@ -214,6 +214,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
         *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
   plan->batch.total_shell_pairs = pairs;
   plan->stream = stream;
+  plan->fp32_fp64_ratio = properties.singleToDoublePrecisionPerfRatio;
   plan->screening = screening;
   plan->class_mask = present;
   plan->value_class_mask = value_class_mask;
@@ -463,7 +464,8 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   // The owner drains H2D on failed preparation before this staging is freed.
   std::vector<std::uint32_t> bounded_pair_order;
   auto plan = std::make_unique<GeneratedExchangePlan>();
-  plan->selection = prepare_direct_exchange_selection(shared->value_class_mask);
+  plan->selection =
+      prepare_direct_exchange_selection(shared->value_class_mask, shared->fp32_fp64_ratio);
   plan->shared = std::move(shared);
   plan->force_capability = force_capability;
   plan->angular_force_opt_in = angular_force;

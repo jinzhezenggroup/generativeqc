@@ -1,0 +1,20 @@
+{
+  "schema": "generativeqc.radius-adjusted-becke.v1",
+  "base_commit": "fe7461907ff7e85be2a947e78a405d5c5c429658",
+  "source_base": "2bf3fd98da9c6cfba46ca83345e63e1d934e4780",
+  "candidate_image": {
+    "source_identity": "9d11d7557a6174a0d745ece94ca39f5746009d5ff3927c6d5ee94dbf700d571a",
+    "library_sha256": "f44e143aabf7e0945ba3851be395828d3ce9322130c3ebfe5652f8415d441250"
+  },
+  "jobs": {
+    "a100": "LSF230464",
+    "5090": "Slurm16868",
+    "failed_harness": "Slurm16867",
+    "normal_build": "Slurm16865",
+    "owner_build": "Slurm16866"
+  },
+  "member_count": 222,
+  "default_promotion_qualified": false,
+  "qualified_production_source_restored": "75d94b32dd3e0b13be41bcc7a75f8634ebb15a1e3acbaa6f74be9d4c1afbce9e",
+  "all_readme_leadership_established": false
+}

@@ -6,20 +6,20 @@
   "review_document": "benchmarks/results/density-candidates/README.md",
   "files": [
     {
-      "bytes": 396572,
+      "bytes": 294370,
       "classification": "test-reference-input",
       "family": "density-candidates",
       "path": "benchmarks/results/density-candidates/inputs/co2_tzvp.npz",
       "role": "reference-input",
-      "sha256": "8ea913c0e662945a1229972783c0ab1423cd441bf01429d61343435b41665c6f"
+      "sha256": "21ae883de6e248315b8094b6f117fba099d312d7f8b2bd720d46a948358e7e92"
     },
     {
-      "bytes": 475350,
+      "bytes": 311310,
       "classification": "test-reference-input",
       "family": "density-candidates",
       "path": "benchmarks/results/density-candidates/inputs/water4_svp.npz",
       "role": "reference-input",
-      "sha256": "72a9be35a2b0edca1d772a797b0ca2ee86e1e329c2c3adeae4ce1865b6977d1d"
+      "sha256": "39e44449298aae5dbabcc03aab3999da43cb879033f90386373a6bbf36116f22"
     },
     {
       "bytes": 796419,

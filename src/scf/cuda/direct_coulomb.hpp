@@ -60,6 +60,7 @@ struct GeneratedCoulombPlan {
    * present shell class without the bounded higher-l fallback. */
   bool value_capability{true};
   unsigned worker_blocks{};
+  int fp32_fp64_ratio{};
   double screening{};
   /** Coulomb owns two contiguous Cartesian planes: sum followed by rounding
    * correction. Every J writer shares them; projection folds once per build.
