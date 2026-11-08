@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "a100-shared-rys-xy-20261108",
+  "owner": "SM80 shared Rys x/y qualification, issue 2976 and PR 3048",
+  "reason": "Lossless original observation capsule retains both source-bound cohorts, default HF48 independent force failures, strict-request diagnostics, adverse oracle outcomes and source/ELF identities. Storage review does not qualify default promotion; all 32 default HF48 force gates remain failed. No evidence budget or scientific gate is increased.",
+  "review_document": "benchmarks/results/a100-shared-rys-xy-20261108/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/a100-shared-rys-xy-20261108/observations.json.xz",
+      "family": "a100-shared-rys-xy-20261108",
+      "bytes": 265836,
+      "sha256": "6b7fce973022f8b4daa4b9a42ea2b42b7b8790ce8595394c816e9645d16bd315",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless source-bound endpoint observations and independent numerical failures; storage acceptance only, not promotion qualification."
+    }
+  ]
+}
