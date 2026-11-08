@@ -20,6 +20,7 @@ enum class SharedRysXyAdmission {
   Unrestricted,
   MixedPrecision,
   UnsupportedProfile,
+  UnsupportedResources,
   NonPaged,
   IncrementalJk,
   SeparateJk,
@@ -28,10 +29,9 @@ enum class SharedRysXyAdmission {
   CompensatedOutput
 };
 struct SharedRysXyContext {
-  bool unrestricted{}, mixed_precision{}, profile_supported{}, quartet_direct{};
+  bool unrestricted{}, mixed_precision{}, quartet_direct{};
   bool incremental_jk{}, separate_jk{}, streaming{}, persistent_eri{}, compensated_output{};
   std::uint64_t capability_mask{};
-  bool default_profile{};
 };
 struct SharedRysXyPolicy {
   SharedRysXyRequest request{SharedRysXyRequest::Off};
@@ -48,7 +48,8 @@ SharedRysXyRequest parse_shared_rys_xy_request(const char* value) noexcept;
 SharedRysXyRequest parse_shared_rys_xy_request(const char* xy, const char* weighted_z) noexcept;
 SharedRysXyRequest shared_rys_xy_requested() noexcept;
 SharedRysXyPolicy resolve_shared_rys_xy_policy(SharedRysXyRequest request,
-                                               const SharedRysXyContext& context) noexcept;
+                                               const SharedRysXyContext& context,
+                                               const runtime::CudaTargetInfo& target) noexcept;
 const char* shared_rys_xy_admission_name(SharedRysXyAdmission admission) noexcept;
 
 /**

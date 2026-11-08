@@ -1,6 +1,11 @@
 # Decision proposal: qualify SM80 shared Rys x/y without changing scientific algebra
 
 Status: proposed; default promotion is not independently qualified at HF48
+
+The SM80-specific admission design is superseded by
+`2026-11-08-capability-based-hf-shared-xy.md` following the user's rejection of
+architecture hardcoding. All measurements and failures below retain their
+original historical source identities; none qualify the revised policy.
 Date: 2026-11-08
 
 ## Problem

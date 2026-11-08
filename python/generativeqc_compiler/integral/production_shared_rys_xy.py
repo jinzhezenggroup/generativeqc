@@ -1,4 +1,4 @@
-"""Explicit SM80/SM90 restricted-FP64 paged Fock companions.
+"""Capability-bound restricted-FP64 paged Fock companions.
 
 These are independent FOCK-only plans, never primary KernelSelections. The
 manifest declares availability; HF owns target-scoped runtime admission.
@@ -36,14 +36,12 @@ def shared_rys_xy_companions(
 ) -> tuple[SharedRysXyCompanion, ...]:
     """Keep the fixed mapping separate from runtime and weighted-Z admission.
 
-    SM80 exposes only the existing unweighted x/y companion. Native HF policy
-    decides target defaults and resource admission; the SM90 weighted-Z
-    qualification does not transfer with this source family.
+    Unweighted x/y follows the manifest capability and validated target plan,
+    not an architecture whitelist. Native HF owns throughput-class defaults.
+    The independent weighted-Z qualification remains target-specific.
     """
     architecture = profile.target.architecture
-    if architecture not in ("sm_80", "sm_90") or (
-        weighted_z and architecture != "sm_90"
-    ):
+    if weighted_z and architecture != "sm_90":
         return ()
     result = []
     capability = (

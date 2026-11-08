@@ -73,10 +73,12 @@ contracts.
 ## Work and diagnostics
 
 The shared Rys x/y companion changes recurrence storage, not convergence or
-the force determinant. An internal automatic request selects the exact SM80
-profile; exact SM90 remains opt-in and other profiles retain their incumbent.
+the force determinant. An internal automatic request requires a runtime-reported
+FP32:FP64 throughput ratio in `(0, 2]`, an available generated companion, and
+legal launch resources. Compute-capability numbers and product names do not
+select this default; unknown/reduced-rate FP64 retains the incumbent.
 `GENERATIVEQC_CUDA_HF_SHARED_RYS_XY=0` disables it; exact `1` requests it on
-supported profiles. Unset/empty selects the internal automatic policy, while
+available companions. Unset/empty selects the internal automatic policy, while
 invalid explicit values fail before graph preparation. Weighted Z remains a
 separate SM90-only control. Existing restricted-FP64, generated capability,
 materialized-page, no-incremental/separate-JK, no-relevant-streaming,

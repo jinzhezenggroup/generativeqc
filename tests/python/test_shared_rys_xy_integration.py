@@ -53,8 +53,7 @@ def test_companion_architecture_capability_and_qualified_mapping(
         "dppp": 192,
         "pppp": 96,
     }
-    for unsupported in ("sm_89", "sm_100", "sm_120"):
-        assert shared_rys_xy_companions(profile(unsupported)) == ()
+    assert shared_rys_xy_companions(profile("sm_120")) == ()
     if architecture == "sm_80":
         assert shared_rys_xy_companions(selected, weighted_z=True) == ()
     assert not shared_rys_xy_companions(
@@ -99,6 +98,25 @@ def test_packaging_preserves_qualified_arithmetic(name: str) -> None:
     assert "fock_rhf_persistent_kernel<<<" in wrapper
 
 
+@pytest.mark.parametrize("architecture", ("sm_89", "sm_100", "sm_120"))
+def test_unweighted_companion_follows_declared_capability(
+    architecture: str,
+) -> None:
+    """An explicitly supplied capability is not vetoed by an ISA-name list.
+
+    This synthetic inventory checks compiler legality, not performance authority
+    for these targets. Capability and performance qualification remain separate.
+    """
+    selected = replace(profile(architecture), selections=profile().selections)
+    assert {
+        item.incumbent.spec.name for item in shared_rys_xy_companions(selected)
+    } == {
+        "dppp",
+        "pppp",
+    }
+    assert not shared_rys_xy_companions(selected, weighted_z=True)
+
+
 def test_policy_strict_parse_refusal_and_frozen_identity(
     tmp_path: Path,
     required_native_cxx: NativeCxx,
@@ -131,7 +149,12 @@ int main() {
   for (const char* v : {"true", "false", "01", " 1", "1 ", "-1", "2"})
     assert(parse_shared_rys_xy_request(v) == SharedRysXyRequest::Invalid);
   SharedRysXyContext c{};
-  c.profile_supported = c.quartet_direct = true; c.capability_mask = 3;
+  c.quartet_direct = true; c.capability_mask = 3;
+  generativeqc::runtime::CudaTargetInfo target{};
+  target.warp_size = 32;
+  target.maximum_threads_per_block = 1024;
+  target.maximum_threads_per_sm = 2048;
+  target.maximum_blocks_per_sm = 32;
   unsetenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY");
   unsetenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z");
   assert(shared_rys_xy_requested() == SharedRysXyRequest::Auto);
@@ -145,28 +168,61 @@ int main() {
   assert(shared_rys_xy_requested() == SharedRysXyRequest::Invalid);
   unsetenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z");
   const auto automatic = SharedRysXyRequest::Auto;
-  assert(!resolve_shared_rys_xy_policy(automatic, c).active());
-  c.default_profile = true;
-  const auto default_on = resolve_shared_rys_xy_policy(automatic, c);
+  assert(!resolve_shared_rys_xy_policy(automatic, c, target).active());
+  target.fp32_fp64_performance_ratio = 2;
+  const auto default_on = resolve_shared_rys_xy_policy(automatic, c, target);
   assert(default_on.active() && default_on.class_mask == 3 && !default_on.weighted_z());
-  auto on = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c);
-  auto off = resolve_shared_rys_xy_policy(SharedRysXyRequest::Off, c);
+  auto on = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c, target);
+  auto off = resolve_shared_rys_xy_policy(SharedRysXyRequest::Off, c, target);
   assert(on.active() && on.class_mask == 3 && !off.active() && on != off);
-  assert(on == resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c));
+  assert(on == resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c, target));
   assert(on.selects(0) && on.selects(1) && !on.selects(2) && !on.selects(64));
   assert(!off.selects(0));
   using A = SharedRysXyAdmission;
+  // Throughput and compiled availability are independent of ISA identity.
+  for (int major : {7, 8, 9, 10, 12, 20}) {
+    for (int minor : {0, 1, 6}) {
+      auto other = target;
+      other.compute_capability_major = major;
+      other.compute_capability_minor = minor;
+      for (int ratio : {-1, 0, 1, 2, 3, 32, 64}) {
+        other.fp32_fp64_performance_ratio = ratio;
+        assert(resolve_shared_rys_xy_policy(automatic, c, other).active() ==
+               (ratio > 0 && ratio <= 2));
+        assert(resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c, other).active());
+        assert(!resolve_shared_rys_xy_policy(SharedRysXyRequest::Off, c, other).active());
+      }
+    }
+  }
+  auto refuse_resources = [&](const generativeqc::runtime::CudaTargetInfo& other) {
+    for (auto request : {automatic, SharedRysXyRequest::On, SharedRysXyRequest::WeightedZOn}) {
+      const auto policy = resolve_shared_rys_xy_policy(request, c, other);
+      assert(!policy.active() && policy.class_mask == 0 &&
+             policy.admission == A::UnsupportedResources);
+    }
+  };
+  auto insufficient = target;
+  insufficient.warp_size = 64; refuse_resources(insufficient);
+  insufficient = target; insufficient.maximum_threads_per_block = 191;
+  refuse_resources(insufficient);
+  insufficient = target; insufficient.maximum_threads_per_sm = 191;
+  refuse_resources(insufficient);
+  insufficient = target; insufficient.maximum_blocks_per_sm = 0;
+  refuse_resources(insufficient);
+  auto minimum = target;
+  minimum.maximum_threads_per_block = minimum.maximum_threads_per_sm = 192;
+  minimum.maximum_blocks_per_sm = 1;
+  assert(resolve_shared_rys_xy_policy(automatic, c, minimum).active());
   auto refuse = [&](SharedRysXyContext bad, A why) {
-    auto p = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, bad);
+    auto p = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, bad, target);
     assert(!p.active() && p.class_mask == 0 && p.admission == why && p != on);
-    const auto automatic_refusal = resolve_shared_rys_xy_policy(automatic, bad);
+    const auto automatic_refusal = resolve_shared_rys_xy_policy(automatic, bad, target);
     assert(!automatic_refusal.active() && automatic_refusal.class_mask == 0 &&
            automatic_refusal.admission == why);
     std::puts(shared_rys_xy_admission_name(p.admission));
   };
   auto bad = c; bad.unrestricted = true; refuse(bad, A::Unrestricted);
   bad = c; bad.mixed_precision = true; refuse(bad, A::MixedPrecision);
-  bad = c; bad.profile_supported = false; refuse(bad, A::UnsupportedProfile);
   bad = c; bad.capability_mask = 0; refuse(bad, A::UnsupportedProfile);
   bad = c; bad.quartet_direct = false; refuse(bad, A::NonPaged);
   bad = c; bad.incremental_jk = true; refuse(bad, A::IncrementalJk);
@@ -193,7 +249,7 @@ int main() {
     result = subprocess.run(
         [exe], check=True, capture_output=True, text=True, timeout=20
     )
-    assert len(result.stdout.splitlines()) == 10
+    assert len(result.stdout.splitlines()) == 9
 
 
 def _compile_registry(

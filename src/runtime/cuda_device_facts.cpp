@@ -178,9 +178,10 @@ cudaError_t selected_facts(int device, CudaTargetInfo& target, char (&name)[256]
                                        cudaDevAttrMaxSharedMemoryPerBlock,
                                        cudaDevAttrMaxSharedMemoryPerBlockOptin,
                                        cudaDevAttrMaxSharedMemoryPerMultiprocessor,
-                                       cudaDevAttrMultiProcessorCount};
-  int values[11]{};
-  for (unsigned i = 0; i < 11; ++i) {
+                                       cudaDevAttrMultiProcessorCount,
+                                       cudaDevAttrSingleToDoublePrecisionPerfRatio};
+  int values[12]{};
+  for (unsigned i = 0; i < 12; ++i) {
     const auto error = cudaDeviceGetAttribute(&values[i], attributes[i], device);
     if (error == cudaErrorInvalidValue || error == cudaErrorNotSupported) {
       // Successful property queries do not reset the runtime's last-error slot.
@@ -209,6 +210,7 @@ cudaError_t selected_facts(int device, CudaTargetInfo& target, char (&name)[256]
   target.shared_memory_per_sm = static_cast<std::size_t>(values[9]);
   target.multiprocessor_count = static_cast<unsigned>(values[10]);
   target.total_global_memory = memory;
+  target.fp32_fp64_performance_ratio = values[11];
   qualified = true;
   return cudaSuccess;
 }

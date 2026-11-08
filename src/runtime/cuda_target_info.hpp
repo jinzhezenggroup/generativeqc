@@ -24,6 +24,7 @@ struct CudaTargetInfo {
   std::size_t shared_memory_per_sm{};
   unsigned multiprocessor_count{};
   std::size_t total_global_memory{};
+  int fp32_fp64_performance_ratio{};
 };
 
 template <class DeviceProperties>
@@ -42,6 +43,7 @@ CudaTargetInfo cuda_target_info_from_properties(const DeviceProperties& properti
   target.shared_memory_per_sm = static_cast<std::size_t>(properties.sharedMemPerMultiprocessor);
   target.multiprocessor_count = static_cast<unsigned>(properties.multiProcessorCount);
   target.total_global_memory = static_cast<std::size_t>(properties.totalGlobalMem);
+  target.fp32_fp64_performance_ratio = properties.singleToDoublePrecisionPerfRatio;
   return target;
 }
 

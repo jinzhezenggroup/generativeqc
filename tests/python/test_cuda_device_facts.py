@@ -245,7 +245,8 @@ enum cudaDeviceAttr {
   cudaDevAttrWarpSize, cudaDevAttrMaxThreadsPerBlock, cudaDevAttrMaxThreadsPerMultiProcessor,
   cudaDevAttrMaxBlocksPerMultiprocessor, cudaDevAttrMaxRegistersPerMultiprocessor,
   cudaDevAttrMaxSharedMemoryPerBlock, cudaDevAttrMaxSharedMemoryPerBlockOptin,
-  cudaDevAttrMaxSharedMemoryPerMultiprocessor, cudaDevAttrMultiProcessorCount
+  cudaDevAttrMaxSharedMemoryPerMultiprocessor, cudaDevAttrMultiProcessorCount,
+  cudaDevAttrSingleToDoublePrecisionPerfRatio
 };
 struct cudaDeviceProp {
   char name[256]{};
@@ -253,6 +254,7 @@ struct cudaDeviceProp {
   int maxBlocksPerMultiProcessor{},regsPerMultiprocessor{},multiProcessorCount{};
   std::size_t sharedMemPerBlock{},sharedMemPerBlockOptin{},sharedMemPerMultiprocessor{};
   std::size_t totalGlobalMem{};
+  int singleToDoublePrecisionPerfRatio{};
 };
 cudaError_t cudaDeviceGetAttribute(int*,cudaDeviceAttr,int);
 cudaError_t cudaGetDeviceProperties(cudaDeviceProp*,int);
@@ -313,7 +315,7 @@ cudaError_t cudaDeviceSetLimit(int limit,std::size_t value) {
   if(stack_bytes.exchange(value)>value) lowered=true;
   return cudaSuccess;
 }
-int values[]={12,0,32,1024,2048,32,65536,49152,101376,102400,100};
+int values[]={12,0,32,1024,2048,32,65536,49152,101376,102400,100,64};
 int sm(int device) { return 100+5*device+epoch; }
 std::size_t memory(int device) { return (std::size_t{1}<<35)+device+epoch; }
 void device_name(char* p,int size,int device) { std::snprintf(p,size,"GPU-%d-%d",device,epoch); }
@@ -338,7 +340,9 @@ cudaError_t cudaDeviceGetAttribute(int* out,cudaDeviceAttr attr,int device) {
     return last_error=cudaErrorNotSupported;
   if (attr==cudaDevAttrMaxThreadsPerBlock && mode==8) return last_error=cudaErrorInvalidValue;
   if (attr==cudaDevAttrMaxThreadsPerBlock && mode==5) return last_error=42;
-  *out=attr==cudaDevAttrMultiProcessorCount ? sm(device) : values[int(attr)];
+  *out=attr==cudaDevAttrMultiProcessorCount ? sm(device) :
+       attr==cudaDevAttrSingleToDoublePrecisionPerfRatio ? (device==7 ? 2+epoch : 64) :
+       values[int(attr)];
   return cudaSuccess;
 }
 cudaError_t cudaGetDeviceProperties(cudaDeviceProp* out,int device) {
@@ -353,6 +357,7 @@ cudaError_t cudaGetDeviceProperties(cudaDeviceProp* out,int device) {
   out->sharedMemPerBlock=values[7];out->sharedMemPerBlockOptin=values[8];
   out->sharedMemPerMultiprocessor=values[9];out->multiProcessorCount=sm(device);
   out->totalGlobalMem=memory(device);
+  out->singleToDoublePrecisionPerfRatio=device==7 ? 2+epoch : 64;
   return cudaSuccess;
 }
 cudaError_t cudaPeekAtLastError() { return last_error; }
@@ -383,6 +388,7 @@ void check(int device,int expected_error=0) {
   assert(result.registers_per_sm==65536 && result.shared_memory_per_block==49152);
   assert(result.shared_memory_per_block_optin==101376 && result.shared_memory_per_sm==102400);
   assert(result.multiprocessor_count==unsigned(sm(device)) && result.total_global_memory==memory(device));
+  assert(result.fp32_fp64_performance_ratio==(device==7 ? 2+epoch : 64));
   char expected[256]{};device_name(expected,sizeof(expected),device);
   assert(std::strcmp(name,expected)==0);
 }
@@ -430,7 +436,7 @@ int main(int argc,char** argv) {
   }
   check(7);++epoch;check(7);check(2);check(7);
   // Both repeated and changed ordinals must observe fresh device/resource facts.
-  if (mode==0) assert(properties==0 && attributes==44 && opens==1);
+  if (mode==0) assert(properties==0 && attributes==48 && opens==1);
   else assert(properties==4);
   assert(clears==((mode==1 || mode==8) ? 4 : 0));
   if (mode==7) assert(attributes==0 && opens==0); // CuMetal bypasses NVIDIA discovery.
