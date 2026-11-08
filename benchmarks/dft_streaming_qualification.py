@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import lzma
+from functools import partial
 from pathlib import Path
 from statistics import mean
 
@@ -22,6 +23,85 @@ from benchmarks.readme_defaults_qualification import (
 from benchmarks.readme_defaults_report import reduce_record
 
 
+def _quadrature_definition(sample: dict) -> tuple:
+    """Match NLC settings, not implementation-specific retained-point counts."""
+    return sample["level"], {
+        key: value
+        for key, value in (sample.get("nonlocal_grid") or {}).items()
+        if key != "points"
+    }
+
+
+def qualify_independent_record(
+    record: dict, *, oracles: list[dict], reference_contracts: dict
+) -> dict:
+    """Gate every phase against unchanged dense, grid-stability and CPU/GPU oracles.
+
+    Reuse contracts bind original independent producers and scientific inputs;
+    neither measurement revisions nor retained oracle receipts are rewritten.
+    This scientific gate alone makes no timing or default-promotion claim.
+    """
+
+    def require(condition: bool, detail: str) -> None:
+        if not condition:
+            raise ValueError(detail)
+
+    require(
+        record.get("status") == "complete"
+        and len(record.get("samples", [])) == record.get("warm_repeats", 0) + 1,
+        "Incomplete independent endpoint population",
+    )
+    reduce_record(record)
+    indexed = {
+        (item["atoms"], item["backend"]): item
+        for item in oracles
+        if item["method"] == record["method"]
+    }
+    target, cpu, gpu = (
+        indexed[key] for key in ((record["atoms"], "cuda"), (3, "cpu"), (3, "cuda"))
+    )
+    for oracle in (target, cpu, gpu):
+        _oracle(oracle)
+        require(oracle["status"] == "complete", "Incomplete independent reference")
+        require(
+            reference_contracts[identity(oracle)]
+            == _reference_contract(record, oracle),
+            "Changed independent producer/input contract",
+        )
+    require(_geometry(target) == _geometry(record), "Changed independent geometry")
+    require(_geometry(cpu) == _geometry(gpu), "Changed CPU/GPU spot geometry")
+    stability = [
+        _comparison(*oracle["samples"], oracle["atoms"], fraction=STABILITY_FRACTION)
+        for oracle in (target, gpu)
+    ]
+    cpu_sample = cpu["samples"][-1]
+    matches = [
+        sample
+        for sample in gpu["samples"]
+        if _quadrature_definition(sample) == _quadrature_definition(cpu_sample)
+    ]
+    require(len(matches) == 1, "Unmatched independent spot quadrature")
+    spot = _comparison(cpu_sample, matches[0], 3, fraction=STABILITY_FRACTION)
+    endpoints = [
+        _comparison(sample, target["samples"][-1], record["atoms"])
+        for sample in record["samples"]
+    ]
+    require(
+        spot["passed"] and all(item["passed"] for item in stability + endpoints),
+        "Independent numerical gate failed",
+    )
+    return {
+        "dense_sha256": identity(target),
+        "cpu_sha256": identity(cpu),
+        "gpu_spot_sha256": identity(gpu),
+        "grid_stability": stability,
+        "cpu_gpu_spot": spot,
+        "endpoints": endpoints,
+        "measurement_packages": record["environment"]["packages"],
+        "reference_packages": target["environment"]["packages"],
+    }
+
+
 def qualify_native(
     directory: Path, card: str, *, images: dict[str, dict[str, str]]
 ) -> dict:
@@ -34,63 +114,13 @@ def qualify_native(
         lzma.decompress((legacy_root / "oracles.json.xz").read_bytes())
     )
     legacy = json.loads((legacy_root / "reference-reuse.json").read_text())["entries"]
+    scientific = partial(
+        qualify_independent_record, oracles=oracles, reference_contracts=legacy
+    )
 
     def require(condition: bool, detail: str) -> None:
         if not condition:
             raise ValueError(detail)
-
-    def scientific(record: dict) -> dict:
-        """Use the unchanged dense/CPU contract at the actual measured atom count."""
-        indexed = {
-            (item["atoms"], item["backend"]): item
-            for item in oracles
-            if item["method"] == record["method"]
-        }
-        target, cpu, gpu = (
-            indexed[key] for key in ((record["atoms"], "cuda"), (3, "cpu"), (3, "cuda"))
-        )
-        for oracle in (target, cpu, gpu):
-            _oracle(oracle)
-            require(oracle["status"] == "complete", "Incomplete independent reference")
-            require(
-                legacy[identity(oracle)] == _reference_contract(record, oracle),
-                "Changed independent producer/input contract",
-            )
-        require(_geometry(target) == _geometry(record), "Changed independent geometry")
-        require(_geometry(cpu) == _geometry(gpu), "Changed CPU/GPU spot geometry")
-        stability = [
-            _comparison(
-                *oracle["samples"], oracle["atoms"], fraction=STABILITY_FRACTION
-            )
-            for oracle in (target, gpu)
-        ]
-        cpu_sample = cpu["samples"][-1]
-        matches = [
-            sample
-            for sample in gpu["samples"]
-            if sample["level"] == cpu_sample["level"]
-            and sample.get("nonlocal_grid") == cpu_sample.get("nonlocal_grid")
-        ]
-        require(len(matches) == 1, "Unmatched independent spot quadrature")
-        spot = _comparison(cpu_sample, matches[0], 3, fraction=STABILITY_FRACTION)
-        endpoints = [
-            _comparison(sample, target["samples"][-1], record["atoms"])
-            for sample in record["samples"]
-        ]
-        require(
-            spot["passed"] and all(item["passed"] for item in stability + endpoints),
-            "Independent numerical gate failed",
-        )
-        return {
-            "dense_sha256": identity(target),
-            "cpu_sha256": identity(cpu),
-            "gpu_spot_sha256": identity(gpu),
-            "grid_stability": stability,
-            "cpu_gpu_spot": spot,
-            "endpoints": endpoints,
-            "measurement_packages": record["environment"]["packages"],
-            "reference_packages": target["environment"]["packages"],
-        }
 
     require(
         (directory / "exit-code.txt").read_text().strip() == "0",
