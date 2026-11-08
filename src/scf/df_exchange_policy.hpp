@@ -5,6 +5,8 @@
 #include <cstring>
 #include <limits>
 
+#include "runtime/cuda_lowering_profile.hpp"
+
 namespace generativeqc::scf {
 
 /** Explicit packed-projection controls remain available for paired ablations. */
@@ -31,10 +33,31 @@ inline bool df_packed_projection_policy_valid() noexcept {
  * The CUDA throughput ratio is a capability, never a GPU-name allowlist.
  * This measured admission is not a universal latency model for all shapes.
  */
+inline constexpr runtime::CudaLoweringProfile kDfPackedProjectionProfile{
+    false, {256, 1024, 64, 8}, 2};
+
+/** Shape-only admission avoids probing hardware for bounded incumbent plans.
+ * Axes are AO columns, auxiliary functions, occupied rank and scratch rows.
+ * The older projection profile qualifies scalar FP64 throughput, independently
+ * of the stricter matrix-acceleration requirement used by occupied Gram.
+ */
+inline bool df_packed_projection_work_admitted(std::size_t ao_columns,
+                                               std::size_t auxiliary_columns, std::size_t rank,
+                                               std::size_t capacity) noexcept {
+  return ao_columns && auxiliary_columns && rank <= ao_columns &&
+         runtime::cuda_lowering_workload_rejection(
+             kDfPackedProjectionProfile,
+             {ao_columns, auxiliary_columns, rank, capacity / ao_columns / auxiliary_columns})
+             .empty();
+}
+
 inline bool df_packed_projection_preferred(std::size_t n, std::size_t a, std::size_t rank,
-                                           std::size_t capacity, int fp32_fp64_ratio) noexcept {
-  return fp32_fp64_ratio > 0 && fp32_fp64_ratio <= 2 && n >= 256 && a >= 1024 && rank >= 64 &&
-         rank <= n && capacity / n / a >= 8;
+                                           std::size_t capacity,
+                                           const runtime::CudaTargetInfo& target) noexcept {
+  return df_packed_projection_work_admitted(n, a, rank, capacity) &&
+         runtime::cuda_lowering_profile_rejection(kDfPackedProjectionProfile, target,
+                                                  {n, a, rank, capacity / n / a})
+             .empty();
 }
 
 /** Diagnostic legacy contraction requires a new owner: captured J/K nodes

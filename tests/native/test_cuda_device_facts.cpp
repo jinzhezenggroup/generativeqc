@@ -27,18 +27,23 @@ int main() {
         CudaTargetInfo actual{};
         char name[256]{};
         check(generativeqc::runtime::cuda_device_facts(device, actual, name));
-        const std::uint64_t expected_values[] = {std::uint64_t(full.major),
-                                                 std::uint64_t(full.minor),
-                                                 std::uint64_t(full.warpSize),
-                                                 std::uint64_t(full.maxThreadsPerBlock),
-                                                 std::uint64_t(full.maxThreadsPerMultiProcessor),
-                                                 std::uint64_t(full.maxBlocksPerMultiProcessor),
-                                                 std::uint64_t(full.regsPerMultiprocessor),
-                                                 full.sharedMemPerBlock,
-                                                 full.sharedMemPerBlockOptin,
-                                                 full.sharedMemPerMultiprocessor,
-                                                 std::uint64_t(full.multiProcessorCount),
-                                                 full.totalGlobalMem};
+        const std::uint64_t expected_values[] = {
+            std::uint64_t(full.major),
+            std::uint64_t(full.minor),
+            std::uint64_t(full.warpSize),
+            std::uint64_t(full.maxThreadsPerBlock),
+            std::uint64_t(full.maxThreadsPerMultiProcessor),
+            std::uint64_t(full.maxBlocksPerMultiProcessor),
+            std::uint64_t(full.regsPerMultiprocessor),
+            full.sharedMemPerBlock,
+            full.sharedMemPerBlockOptin,
+            full.sharedMemPerMultiprocessor,
+            std::uint64_t(full.multiProcessorCount),
+            full.totalGlobalMem,
+            std::uint64_t(full.singleToDoublePrecisionPerfRatio),
+            std::uint64_t(full.clockRate),
+            std::uint64_t(full.memoryClockRate),
+            std::uint64_t(full.memoryBusWidth)};
         const std::uint64_t actual_values[] = {std::uint64_t(actual.compute_capability_major),
                                                std::uint64_t(actual.compute_capability_minor),
                                                actual.warp_size,
@@ -50,7 +55,11 @@ int main() {
                                                actual.shared_memory_per_block_optin,
                                                actual.shared_memory_per_sm,
                                                actual.multiprocessor_count,
-                                               actual.total_global_memory};
+                                               actual.total_global_memory,
+                                               std::uint64_t(actual.fp32_fp64_ratio),
+                                               actual.clock_rate_khz,
+                                               actual.memory_clock_rate_khz,
+                                               actual.memory_bus_width_bits};
         if (std::strcmp(name, full.name) ||
             std::memcmp(expected_values, actual_values, sizeof(expected_values)))
           throw std::runtime_error("device facts differ from complete CUDA property query");

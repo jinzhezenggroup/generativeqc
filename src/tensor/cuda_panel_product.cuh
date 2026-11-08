@@ -39,10 +39,10 @@ class CudaPanelProduct final : public PreparedPanelProduct {
                    std::string_view compilation, std::size_t columns, std::size_t rows,
                    std::size_t batches, cudaStream_t stream, std::size_t budget,
                    std::size_t incumbent, std::size_t alternative, bool physical,
-                   bool qualified_indexed_gemm = false)
+                   bool qualified_indexed_gemm = false, std::uint64_t expected_replays = 1)
       : columns_(columns), rows_(rows), batches_(batches) {
     static_assert(sizeof(CudaPanelProduct) + 3 * sizeof(offers) + 4096 <= host_reservation);
-    if (!columns || !rows || !batches || incumbent >= N || alternative >= N)
+    if (!columns || !rows || !batches || incumbent >= N || alternative >= N || !expected_replays)
       throw std::invalid_argument("invalid panel product domain");
     const auto matrix_bytes = contraction_product(
         contraction_product(contraction_product(columns, columns), batches), sizeof(double));
@@ -97,9 +97,15 @@ class CudaPanelProduct final : public PreparedPanelProduct {
       offer.rejection = "matrix-panel cache and provider allowance are not admitted";
     else if (!available)
       offer.rejection = "matrix-panel provider is unavailable";
-    if (offer.rejection.empty() && !context_.prepare(stream))
+    // Complete costs and expected reuse precede optional provider/cache storage.
+    // Resource refusal returns to the same selector without relaxing precision.
+    auto decision =
+        runtime::select_native_lowering(request, offers, target, compilation, expected_replays,
+                                        offer.rejection.empty() ? alternative : incumbent);
+    const bool prepare_library = decision.selected == alternative;
+    if (prepare_library && !context_.prepare(stream))
       offer.rejection = "matrix-panel provider allocation unavailable";
-    if (offer.rejection.empty()) {
+    if (prepare_library && offer.rejection.empty()) {
       bool host_oom = false;
       const auto status = runtime::resource_cuda_malloc(reinterpret_cast<void**>(&matrix_),
                                                         matrix_bytes, &host_oom);
@@ -119,7 +125,10 @@ class CudaPanelProduct final : public PreparedPanelProduct {
       }
     }
     try {
-      if (!matrix_) context_.prepare_generated(stream);
+      if (prepare_library && !offer.rejection.empty())
+        decision = runtime::select_native_lowering(request, offers, target, compilation,
+                                                   expected_replays, incumbent);
+      if (decision.selected != alternative) context_.prepare_generated(stream);
       if (matrix_) {
         // This owner executes only typed FP64 Dgemm. Default math admits FP64
         // matrix units, never TF32 inputs; unrelated contraction handles keep
@@ -130,8 +139,6 @@ class CudaPanelProduct final : public PreparedPanelProduct {
         std::snprintf(version_.data(), version_.size(), "%d", context_.provider_version());
         offer.provider_version = version_.data();
       }
-      const auto decision = runtime::select_native_lowering(request, offers, target, compilation, 1,
-                                                            matrix_ ? alternative : incumbent);
       enabled_ = decision.selected == alternative;
       diagnostic_ = {
           offers[decision.selected],
