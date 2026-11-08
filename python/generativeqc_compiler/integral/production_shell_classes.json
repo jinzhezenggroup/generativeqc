@@ -1293,6 +1293,7 @@
           ],
           "capabilities": [
             "streaming_fock",
+            "shared_rys_xy_streaming_fock",
             "shared_rys_xy_fock",
             "shared_rys_weighted_z_fock"
           ],
@@ -1498,6 +1499,7 @@
           ],
           "capabilities": [
             "streaming_fock",
+            "shared_rys_xy_streaming_fock",
             "shared_rys_xy_fock",
             "shared_rys_weighted_z_fock"
           ],
@@ -1522,7 +1524,8 @@
             "force"
           ],
           "capabilities": [
-            "streaming_fock"
+            "streaming_fock",
+            "shared_rys_xy_streaming_fock"
           ],
           "recurrence": "rys4",
           "schedule": {
@@ -1545,7 +1548,8 @@
             "force"
           ],
           "capabilities": [
-            "streaming_fock"
+            "streaming_fock",
+            "shared_rys_xy_streaming_fock"
           ],
           "recurrence": "rys4",
           "schedule": {
@@ -1599,7 +1603,8 @@
             "force"
           ],
           "capabilities": [
-            "streaming_fock"
+            "streaming_fock",
+            "shared_rys_xy_streaming_fock"
           ],
           "recurrence": "rys4",
           "schedule": {
@@ -1622,7 +1627,8 @@
             "force"
           ],
           "capabilities": [
-            "streaming_fock"
+            "streaming_fock",
+            "shared_rys_xy_streaming_fock"
           ],
           "recurrence": "rys4",
           "schedule": {

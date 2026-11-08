@@ -383,6 +383,10 @@ def test_shared_owner_phases_preserve_sources_and_work(
     if profiled and not hasattr(native.library, "stationary_becke_phase_profile_v1"):
         pytest.skip("artifact predates separate Becke phase profiling")
     cupy = native.cupy
+    cuda_device = cupy.cuda.Device()
+    properties = cupy.cuda.runtime.getDeviceProperties(cuda_device.id)
+    major, minor = properties["major"], properties["minor"]
+    target = cuda_target_info(f"sm_{major}{minor}")
     rng = np.random.default_rng(183000 + atoms)
     centers = rng.normal(size=(atoms, 3)) * 3
     base_centers = centers.copy()
@@ -425,16 +429,16 @@ def test_shared_owner_phases_preserve_sources_and_work(
             tasks=1,
             spins=1,
             sources=8,
-            target=cuda_target_info("sm_120"),
+            target=target,
             budget_bytes=256 << 20,
             phased_becke=phased,
         )
         handle = ct.c_void_p()
         native.call(
             "stationary_create",
-            0,
-            12,
-            0,
+            cuda_device.id,
+            major,
+            minor,
             atoms,
             4,
             4,

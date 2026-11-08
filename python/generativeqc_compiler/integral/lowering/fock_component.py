@@ -495,6 +495,7 @@ void generated_dppp_shell_class_fock_uhf_persistent_kernel(
         source,
         bra_extent,
         ket_extent,
+        nroots=nroots,
         weighted_z_spec=spec if plan.schedule.fock_shared_rys_weighted_z else None,
     )
 
@@ -504,13 +505,21 @@ def _with_shared_rys_xy_task(
     bra_extent: int,
     ket_extent: int,
     *,
+    nroots: int,
     weighted_z_spec: ShellClassSpec | None = None,
 ) -> str:
     """Add a restricted task while preserving the private/UHF instantiation.
 
     The fixture capability does not replace UHF, mixed, streaming or work-K
     consumers. The RHF persistent queue and launch geometry remain incumbent.
+    Axis extents and root count come from the same value IR as the private
+    evaluator; sharing changes table ownership, not the recurrence algebra.
     """
+
+    if nroots not in (3, 4):
+        raise ValueError("shared Rys x/y supports three- and four-root values")
+    if weighted_z_spec is not None and nroots != 3:
+        raise ValueError("shared Rys weighted-Z retains its three-root qualification")
 
     marker = "template <bool Unrestricted>\n__device__"
     task_begin = source.index(marker)
@@ -529,9 +538,9 @@ def _with_shared_rys_xy_task(
         )
     )
     task = task.replace(
-        "    double roots_weights[6];",
-        f"    double roots_weights[6];\n"
-        f"    volatile double xy[3][2][{bra_extent}][{ket_extent}];",
+        f"    double roots_weights[{2 * nroots}];",
+        f"    double roots_weights[{2 * nroots}];\n"
+        f"    volatile double xy[{nroots}][2][{bra_extent}][{ket_extent}];",
         1,
     )
     task = task.replace(
@@ -564,6 +573,12 @@ def _with_shared_rys_xy_task(
       }
       __syncthreads();
 """
+    producer = (
+        producer.replace("Six fixed", "Six fixed" if nroots == 3 else "Eight fixed")
+        .replace("lane < 6U", f"lane < {2 * nroots}U")
+        .replace("Rys3Primitive", f"Rys{nroots}Primitive")
+        .replace("generated_dppp_rys3_", f"generated_dppp_rys{nroots}_")
+    )
     task = task.replace(
         "      __syncthreads();\n      if (retained_by_schwarz) {",
         "      __syncthreads();\n" + producer + "      if (retained_by_schwarz) {",
@@ -571,13 +586,13 @@ def _with_shared_rys_xy_task(
     )
     for axis, ordinal in (("x", 0), ("y", 1)):
         task = task.replace(
-            f"          const double {axis} = generated_dppp_rys3_value_axis(",
+            f"          const double {axis} = generated_dppp_rys{nroots}_value_axis(",
             f"          const double {axis} = share_xy\n"
-            f"              ? generated_dppp_rys3_state(\n"
+            f"              ? generated_dppp_rys{nroots}_state(\n"
             f"                    shared.xy[root_index][{ordinal}],\n"
             f"                    a{axis}, b{axis}, c{axis}, d{axis}_order,\n"
             f"                    primitive.ab{axis}, primitive.cd{axis})\n"
-            f"              : generated_dppp_rys3_value_axis(",
+            f"              : generated_dppp_rys{nroots}_value_axis(",
             1,
         )
     guard = ""
@@ -588,7 +603,7 @@ def _with_shared_rys_xy_task(
         guard = _emit_weighted_z_match_cuda()
     fill = f"""
 /** Fill an unweighted root/axis table; HRR remains component-local. */
-__device__ __forceinline__ void generated_dppp_rys3_fill_axis(
+__device__ __forceinline__ void generated_dppp_rys{nroots}_fill_axis(
     volatile double (&trr)[{bra_extent}][{ket_extent}],
     double c0, double cp, double b10, double b00, double b01, double seed) {{
 {_emit_rys_axis_fill_cuda(bra_extent, ket_extent)}}}

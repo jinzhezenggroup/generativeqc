@@ -253,30 +253,38 @@ class CudaKernelIR:
         require_cuda_integral(self.integral)
         self.schedule.validate_for(self.target)
         component_count = self.integral.spec.component_count
-        if (
-            self.schedule.fock_shared_rys_weighted_z
-            and self.target.architecture != "sm_90"
+        if self.schedule.fock_shared_rys_weighted_z and (
+            self.target.architecture != "sm_90"
+            or not isinstance(self.integral.spec, ShellClassSpec)
+            or self.integral.spec.name not in ("dppp", "pppp")
         ):
             raise ValueError("shared Rys weighted-Z requires the qualified SM90 owner")
         if self.schedule.fock_shared_rys_xy and (
             not isinstance(self.integral.spec, ShellClassSpec)
-            or self.integral.spec.name not in ("dppp", "pppp")
+            or self.integral.spec.name
+            not in ("dppp", "pppp", "dpds", "ddps", "dpdp", "ddpp")
             or self.integral.operator.family != OperatorFamily.FOUR_CENTER_ERI
             or not any(
                 isinstance(item, ContractionSpec) and DensityModel.RHF in item.density
                 for item in self.integral.contractions
             )
             or self.integral.derivative is not None
-            or self.integral.recurrence != "rys3"
-            or self.integral.required_rys_roots != 3
+            or self.integral.recurrence != f"rys{self.integral.required_rys_roots}"
             or self.integral.consumers != frozenset((KernelConsumer.FOCK,))
-            or self.schedule.block_threads
-            != {"dppp": 192, "pppp": 96}.get(self.integral.spec.name)
+            or (self.integral.required_rys_roots, self.schedule.block_threads)
+            != {
+                "dppp": (3, 192),
+                "pppp": (3, 96),
+                "dpds": (3, 128),
+                "ddps": (3, 128),
+                "dpdp": (4, 352),
+                "ddpp": (4, 352),
+            }.get(self.integral.spec.name)
             or self.schedule.component_tile != component_count
         ):
             raise ValueError(
-                "shared Rys x/y requires value-only Rys3 DPPP/PPPP Fock "
-                "with the incumbent 192/96-thread mapping"
+                "shared Rys x/y requires a supported value-only Rys3/Rys4 "
+                "Fock component mapping; production capability is separate"
             )
         if (
             self.schedule.kind != ScheduleKind.TILED_COMPONENTS

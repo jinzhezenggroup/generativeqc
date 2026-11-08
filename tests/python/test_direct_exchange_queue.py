@@ -397,6 +397,8 @@ def test_prepared_schedule_parser_is_explicit_and_fail_closed(
         "inline std::uint64_t enabled_rys_fock_shell_class_mask() { return 2; }\n"
         "inline std::uint64_t enabled_rys_task_fock_shell_class_mask() { return 24; }\n"
         "inline std::uint64_t preferred_task_mask = 8;\n"
+        "inline std::uint64_t shared_xy_mask = 31;\n"
+        "inline std::uint64_t available_shared_rys_xy_streaming_fock_shell_class_mask() { return shared_xy_mask; }\n"
         "inline std::uint64_t preferred_rys_task_fock_shell_class_mask() { return preferred_task_mask; }\n"
         "inline std::uint64_t enabled_k_block_fock_shell_class_mask() { return 4; }\n"
         "inline void launch_shell_class_rys_streaming_fock() {}\n"
@@ -405,6 +407,8 @@ def test_prepared_schedule_parser_is_explicit_and_fail_closed(
         "inline void launch_shell_class_k_block_streaming_fock() {}\n"
         "inline void launch_shell_class_streaming_fock() {}\n"
         "inline void launch_shell_class_work_streaming_fock() {}\n}\n"
+        "namespace generativeqc::scf::generated {\n"
+        "inline void launch_shell_class_shared_rys_xy_streaming_fock() {}\n}\n"
     )
     driver = tmp_path / "selection.cpp"
     driver.write_text(
@@ -476,6 +480,27 @@ int main() {
 
   // Exhaust both independent controls, reachable coverage and spin contracts.
   namespace registry = generativeqc::scf::generated;
+  unsetenv(lowering);
+  setenv(variable, "work", 1);
+  for (int ratio : {-1, 0, 1, 2, 3, 64}) {
+    const auto selected = prepare_direct_exchange_selection(23, ratio);
+    assert(selected.shared_rys_xy_streaming_mask ==
+        ((ratio > 0 && ratio <= 2) ? 23 : 0));
+    for (unsigned shell = 0; shell < 5; ++shell) {
+      const auto restricted = direct_fock_streaming_launcher(selected, shell, false);
+      const auto unrestricted = direct_fock_streaming_launcher(selected, shell, true);
+      assert((restricted == registry::launch_shell_class_shared_rys_xy_streaming_fock) ==
+          ((selected.shared_rys_xy_streaming_mask & (1ULL << shell)) != 0));
+      assert(unrestricted != registry::launch_shell_class_shared_rys_xy_streaming_fock);
+    }
+  }
+  registry::shared_xy_mask = 0;
+  assert(prepare_direct_exchange_selection(31, 2).shared_rys_xy_streaming_mask == 0);
+  registry::shared_xy_mask = 31;
+  for (const char* mode : {"incumbent", "rys", "rys-task", "block"}) {
+    setenv(lowering, mode, 1);
+    assert(prepare_direct_exchange_selection(31, 2).shared_rys_xy_streaming_mask == 0);
+  }
   registry::preferred_task_mask = 8;
   constexpr const char* j_lowering = "GENERATIVEQC_DIRECT_J_FOCK_LOWERING";
   setenv(j_lowering, "typo", 1);

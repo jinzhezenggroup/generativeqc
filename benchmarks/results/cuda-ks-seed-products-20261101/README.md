@@ -195,3 +195,18 @@ conventions. The original GPU receipts do not qualify this later routing change.
 All receipts retain their original measured identity; these tables are not fresh
 measurements of the current checkout. The independent evidence reader is replayed
 without changing recorded inputs or gates.
+
+## Exact storage representation
+
+The existing exact-FP64 v3 codec now reconstructs the original complete receipt
+container and every embedded endpoint JSON byte, including all139 populations
+and failures. Per-record checksums and the original container checksum remain
+enforced. This storage-only change reduces411288 bytes to221361 bytes, freeing
+space for later DFT qualification under the unchanged85-MiB aggregate budget.
+It does not rerun or requalify these historical measurements.
+
+The full historical `report.py --verify` currently stops at its original
+`independent-force-tiles-20261031/receipts.json.xz` dependency checksum. The
+unchanged pre-migration report fails at the same dependency; this migration
+neither bypasses that check nor claims that replay passed. Exact original-byte
+reconstruction is checked independently, including all139 receipt populations.

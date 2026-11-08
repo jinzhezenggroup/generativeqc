@@ -112,7 +112,7 @@ def test_shared_xy_rejects_other_mappings_and_precision(changes: dict) -> None:
         )
 
 
-@pytest.mark.parametrize("name", ("dpss", "ppps", "ddss", "ddpp"))
+@pytest.mark.parametrize("name", ("dpss", "ppps", "ddss", "fsps"))
 def test_shared_xy_rejects_other_classes_and_roots(name: str) -> None:
     plan = value_plan(name)
     with pytest.raises(ValueError, match="shared Rys x/y"):
@@ -121,6 +121,28 @@ def test_shared_xy_rejects_other_classes_and_roots(name: str) -> None:
             integral=plan.kernel.integral,
             target=TARGET,
             schedule=replace(plan.schedule, fock_shared_rys_xy=True),
+        )
+
+
+@pytest.mark.parametrize("name", ("dpds", "ddps", "dpdp", "ddpp"))
+def test_shared_xy_component_family_fixture_preserves_value_contract(name: str) -> None:
+    """Explicit fixtures are legal without silently declaring a production capability."""
+    from tools.generativeqc_validation.shared_rys_xy_fixture import fixture_plan
+
+    private = fixture_plan(name, shared=False)
+    shared = fixture_plan(name, shared=True)
+    assert private.kernel.integral == shared.kernel.integral
+    assert private.block_threads == shared.block_threads
+    assert not private.schedule.fock_shared_rys_xy
+    assert shared.schedule.fock_shared_rys_xy
+    assert not shared.schedule.fock_shared_rys_weighted_z
+    emit_shell_class_fused_cuda(shared.spec, shared)
+    with pytest.raises(ValueError, match="weighted-Z"):
+        build_fused_shell_plan(
+            shared.spec,
+            integral=shared.kernel.integral,
+            target=shared.kernel.target,
+            schedule=replace(shared.schedule, fock_shared_rys_weighted_z=True),
         )
 
 
