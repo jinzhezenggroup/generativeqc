@@ -62,3 +62,86 @@ def test_optional_fock_variants_requires_an_explicit_boolean(
     )
     with pytest.raises(TypeError, match="optional_fock_variants must be a boolean"):
         production_profile.resolve_production_profile(manifest, "sm_80")
+
+
+@pytest.mark.parametrize("architecture", (None, "sm_80", "sm_120"))
+@pytest.mark.parametrize("acceptance", (None, {}, {"architecture": "sm_90"}))
+def test_legacy_manifest_cannot_invent_architecture_qualification(
+    tmp_path: Path, architecture: str | None, acceptance: object
+) -> None:
+    """Retired manifests must be migrated, never silently relabeled as SM120."""
+    manifest = tmp_path / "profile.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "shell_classes": ["dsss"],
+                "acceptance": acceptance,
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="use schema_version 2"):
+        production_profile.resolve_production_profile(manifest, architecture)
+
+
+def test_explicit_target_does_not_require_manifest_default(tmp_path: Path) -> None:
+    """A target supplied by the build is authoritative even with many profiles."""
+    manifest = tmp_path / "profile.json"
+    payload = {
+        "schema_version": 2,
+        "architectures": {
+            "sm_80": {"kind": "tuned", "kernels": []},
+            "sm_90": {"kind": "tuned", "kernels": []},
+            "portable_cuda": {"kind": "portable", "kernels": []},
+        },
+    }
+    manifest.write_text(json.dumps(payload))
+    resolved = production_profile.resolve_production_profile(manifest, "sm_90")
+    assert resolved.profile == "sm_90" and resolved.tuned
+    assert resolved.target.architecture == "sm_90"
+    portable = production_profile.resolve_production_profile(manifest, "sm_100")
+    assert portable.portable and not portable.tuned
+    assert portable.target.architecture == "sm_100"
+    with pytest.raises(ValueError, match="requires default_architecture"):
+        production_profile.resolve_production_profile(manifest)
+
+
+@pytest.mark.parametrize("architecture", ("sm_80", "sm_90", "sm_120"))
+def test_omitted_target_uses_manifest_evidence_only(
+    tmp_path: Path, architecture: str
+) -> None:
+    manifest = tmp_path / "profile.json"
+    payload = {
+        "schema_version": 2,
+        "architectures": {architecture: {"kind": "tuned", "kernels": []}},
+    }
+    manifest.write_text(json.dumps(payload))
+    assert (
+        production_profile.resolve_production_profile(manifest).target.architecture
+        == architecture
+    )
+    payload["default_architecture"] = architecture
+    payload["architectures"]["portable_cuda"] = {"kind": "portable", "kernels": []}
+    manifest.write_text(json.dumps(payload))
+    assert (
+        production_profile.resolve_production_profile(manifest).target.architecture
+        == architecture
+    )
+
+
+@pytest.mark.parametrize("architecture", ("", " "))
+def test_invalid_explicit_target_cannot_select_manifest_default(
+    tmp_path: Path, architecture: str
+) -> None:
+    manifest = tmp_path / "profile.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "default_architecture": "sm_90",
+                "architectures": {"sm_90": {"kind": "tuned", "kernels": []}},
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="invalid CUDA architecture"):
+        production_profile.resolve_production_profile(manifest, architecture)

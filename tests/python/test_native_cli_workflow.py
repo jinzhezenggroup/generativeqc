@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import shutil
@@ -412,6 +413,21 @@ def test_archive_verification_uses_installed_bytes(
         package_prefix = tmp_path / "different-prefix"
         (package_prefix / "bin").mkdir(parents=True)
         shutil.copyfile(build_cli, package_prefix / "bin/generativeqc")
+    build_metadata = package_prefix / "share/generativeqc/native-cli-build.json"
+    build_metadata.parent.mkdir(parents=True)
+    build_metadata.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "version": "0.1.0",
+                "system_name": "Linux",
+                "system_processor": "x86_64",
+                "cuda_compiler_id": "NVIDIA",
+                "cuda_toolkit": "12.9.86",
+                "cuda_architectures": ["120"],
+            }
+        )
+    )
     package_native_cli(
         prefix=package_prefix,
         source_root=source,
