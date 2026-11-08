@@ -15,6 +15,7 @@ from benchmarks.dft_streaming_qualification import qualify_native
 
 ROOT = Path(__file__).resolve().parents[2]
 FAMILY = ROOT / "benchmarks/results/dft-shared-rys-streaming-20261108"
+MASTER = ROOT / "benchmarks/results/dft-streaming-master-20261109"
 
 
 def test_native_default_qualification_is_scoped_and_preserves_raw_k_oracles() -> None:
@@ -26,11 +27,12 @@ def test_native_default_qualification_is_scoped_and_preserves_raw_k_oracles() ->
 
 
 @pytest.mark.parametrize("stream", ("receipts.json.xz", "fp64.xz"))
+@pytest.mark.parametrize("family", (FAMILY, MASTER), ids=("historical", "master"))
 def test_evidence_rejects_changed_compressed_stream(
-    tmp_path: Path, stream: str
+    tmp_path: Path, stream: str, family: Path
 ) -> None:
     for name in ("receipts.json.xz", "fp64.xz", "sha256.txt"):
-        shutil.copyfile(FAMILY / name, tmp_path / name)
+        shutil.copyfile(family / name, tmp_path / name)
     path = tmp_path / stream
     payload = path.read_bytes()
     path.write_bytes(bytes((payload[0] ^ 1,)) + payload[1:])
@@ -60,3 +62,55 @@ def test_storage_migration_authenticates_every_original_seed_receipt_byte() -> N
         == bundle["experiment"]["original_raw_sha256"]
     )
     assert len(json.loads(original)["records"]) == 139
+
+
+def test_master_qualification_keeps_reference_gaps_and_df_scope_visible() -> None:
+    result = runpy.run_path(str(MASTER / "replay.py"))["replay"]()
+    assert result["default_promotion_qualified"]
+    assert not result["all_readme_leadership_established"]
+    assert result["historical_raw_k_matrix_predicates"] == {"a100": 144, "5090": 144}
+    reference = result["known_remaining_gaps"]["b3lyp_direct96_reference_seconds"]
+    native = result["cards"]["a100"]["methods"]["b3lyp"]["cold_means"]["candidate"]
+    assert native > reference
+    for diagnostic in result["cards"]["a100"]["df_single_pair_diagnostics"].values():
+        assert diagnostic["single_pair_not_abba"]
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    (
+        ("missing-df", "Incomplete DF diagnostics"),
+        ("df-image", "Wrong normal DF ELF"),
+        ("df-forces", "DF paired E/F failed"),
+        ("cold-census", "B3LYP automatic dispatch was not proved"),
+    ),
+)
+def test_master_diagnostics_reject_incomplete_or_changed_evidence(
+    tmp_path: Path, change: str, message: str
+) -> None:
+    _, files = load(MASTER)
+    for name, text in files.items():
+        if name.startswith("native-a100/"):
+            path = tmp_path / name.removeprefix("native-a100/")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+    if change == "missing-df":
+        (tmp_path / "pbe0-df-reference.json").unlink()
+    else:
+        name = {
+            "df-image": "identity-pbe0-df-candidate.json",
+            "df-forces": "pbe0-df-candidate.json",
+            "cold-census": "b3lyp-default-execution-proof.json",
+        }[change]
+        path = tmp_path / name
+        record = json.loads(path.read_text())
+        if change == "df-image":
+            record["library_sha256"] = "0" * 64
+        elif change == "df-forces":
+            record["samples"][0]["forces"][0][0] += 0.1
+        else:
+            record["samples"][0]["fock_builds"] += 1
+        path.write_text(json.dumps(record))
+    cohort = json.loads((MASTER / "cohort.json").read_text())
+    with pytest.raises(ValueError, match=message):
+        qualify_native(tmp_path, "a100", images=cohort["native_images"])

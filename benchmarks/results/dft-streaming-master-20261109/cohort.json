@@ -1,0 +1,35 @@
+{
+  "schema": "generativeqc.dft-streaming-master-qualification.v1",
+  "source_base": "2bf3fd98da9c6cfba46ca83345e63e1d934e4780",
+  "candidate_commit": "b737016bab2e41daa3dbb27c996b5b07733b0786",
+  "member_count": 183,
+  "native_images": {
+    "control": {
+      "source_identity": "bda7f76be67202a57eb1001cfbe29bd4d4d844a85c144b1854a264a96ffdb208",
+      "library_sha256": "f6b87f706dc51f6a466eb477e139bce4182f94a786e44278130e4fb68ef10f14"
+    },
+    "candidate": {
+      "source_identity": "75d94b32dd3e0b13be41bcc7a75f8634ebb15a1e3acbaa6f74be9d4c1afbce9e",
+      "library_sha256": "549ed9a2db4479bdb555af76eba3d5323a8ecb689939725ca5a1ad4afc58316e"
+    }
+  },
+  "jobs": {
+    "a100": "LSF230450",
+    "5090": "Slurm16863",
+    "normal_builds": [
+      "Slurm16861",
+      "Slurm16862"
+    ]
+  },
+  "scope": "PBE0/B3LYP restricted FP64 Direct96 streaming, Direct48 science and own-density warms; not HF, general DF or all README leadership.",
+  "known_remaining_gaps": {
+    "b3lyp_direct96_reference_seconds": 11.699542786926031,
+    "pbe0_reference_cold_anomalies_not_used_for_victory": {
+      "direct": 165.39406107366085,
+      "df": 30.152892153710127
+    },
+    "reference_anomaly_cause": "unmeasured; do not assert JIT, GPU compute or any other cause"
+  },
+  "default_promotion_qualified": true,
+  "all_readme_leadership_established": false
+}

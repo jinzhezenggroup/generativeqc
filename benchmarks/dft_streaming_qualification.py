@@ -228,6 +228,60 @@ def qualify_native(
                 for name, record in records.items()
             },
         }
+    diagnostic_paths = [
+        directory / f"{method}-df-{arm}.json"
+        for method in ("pbe0", "b3lyp")
+        for arm in ("candidate", "reference")
+    ]
+    if any(path.exists() for path in diagnostic_paths):
+        require(
+            all(path.exists() for path in diagnostic_paths), "Incomplete DF diagnostics"
+        )
+        diagnostics = {}
+        for method in ("pbe0", "b3lyp"):
+            records = {
+                arm: json.loads((directory / f"{method}-df-{arm}.json").read_text())
+                for arm in ("candidate", "reference")
+            }
+            image = json.loads(
+                (directory / f"identity-{method}-df-candidate.json").read_text()
+            )
+            require(
+                (image["source_identity"], image["library_sha256"])
+                == expected["candidate"],
+                "Wrong normal DF ELF",
+            )
+            for record in records.values():
+                require(
+                    record["status"] == "complete"
+                    and len(record["samples"]) == 4
+                    and (record["method"], record["mode"], record["atoms"])
+                    == (method, "df", 96),
+                    "Changed DF diagnostic population",
+                )
+                reduce_record(record)
+            paired = [
+                errors(sample["energy"], sample["forces"], oracle, 96)
+                for sample in records["candidate"]["samples"]
+                for oracle in records["reference"]["samples"]
+            ]
+            require(all(item["passed"] for item in paired), "DF paired E/F failed")
+            diagnostics[method] = {
+                "single_pair_not_abba": True,
+                "independent": {
+                    arm: scientific(record) for arm, record in records.items()
+                },
+                "paired": paired,
+                "cold_seconds": {
+                    arm: record["samples"][0]["seconds"]
+                    for arm, record in records.items()
+                },
+                "warm_seconds": {
+                    arm: [sample["seconds"] for sample in record["samples"][1:]]
+                    for arm, record in records.items()
+                },
+            }
+        report["df_single_pair_diagnostics"] = diagnostics
     small = {
         arm: json.loads((directory / ("pbe0-48-" + arm + ".json")).read_text())
         for arm in ("control", "candidate")
@@ -264,6 +318,8 @@ def qualify_native(
     proof_endpoint = json.loads(
         (directory / "default-execution-proof.json").read_text()
     )
+    reduce_record(proof_endpoint)
+    report["default_cold_independent"] = scientific(proof_endpoint)
     cold_focks = proof_endpoint["samples"][0]["fock_builds"]
     if card == "a100":
         require(
@@ -276,5 +332,36 @@ def qualify_native(
     report["default_kernel_census"] = shared
     report["default_cold_fock_builds"] = cold_focks
     report["collector"] = header
+    extra_proof = directory / "b3lyp-default-cold-kernels.tsv"
+    if extra_proof.exists():
+        lines = extra_proof.read_text().splitlines()
+        extra_header = dict(
+            field.split("=", 1) for field in lines[0].removeprefix("# ").split()
+        )
+        require(extra_header == header, "Incomplete B3LYP cold-only collector")
+        extra_endpoint = json.loads(
+            (directory / "b3lyp-default-execution-proof.json").read_text()
+        )
+        reduce_record(extra_endpoint)
+        extra_focks = extra_endpoint["samples"][0]["fock_builds"]
+        extra_rows = list(csv.DictReader(lines[1:], delimiter="\t"))
+        extra_shared = [
+            item for item in extra_rows if "shared_rys_xy_streaming" in item["name"]
+        ]
+        require(
+            (
+                len(extra_shared) == 6
+                and all(int(item["count"]) == extra_focks for item in extra_shared)
+            )
+            if card == "a100"
+            else not extra_shared,
+            "B3LYP automatic dispatch was not proved",
+        )
+        report["b3lyp_cold_diagnostic"] = {
+            "collector": extra_header,
+            "cold_fock_builds": extra_focks,
+            "kernel_census": extra_shared,
+            "independent": scientific(extra_endpoint),
+        }
     report["unacquired_counts"] = ["quartet_evaluations", "recurrence_evaluations"]
     return report

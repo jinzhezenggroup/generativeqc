@@ -1,9 +1,14 @@
 # Proposal: ship DFT streaming independently of the old HF draft
 
-Status: proposed; latest-master native qualification in progress
+Status: implemented; superseded by the source-matched 2026-11-09 qualification
 Date: 2026-11-08
 
 ## Problem
+
+Completion and remaining gaps are recorded in
+`../implemented/performance/2026-11-09-dft-streaming-master-qualification.md`.
+The pending-job discussion below preserves the original investigation, not
+current qualification status.
 
 The qualified normal native DFT predecessor is recorded in
 `../implemented/performance/2026-11-08-dft-streaming-shared-rys-xy.md`.
