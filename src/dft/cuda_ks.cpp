@@ -5975,24 +5975,43 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
     std::size_t free_before{}, free_after{}, total{}, retired{};
     check(cudaMemGetInfo(&free_before, &total));
     free_after = free_before;
-    if (additional_device_bytes > free_before &&
-        (impl_->fast_anchor_arena || impl_->nonlocal_anchor_arena || impl_->phase_source)) {
+    const auto* density_provider = impl_->xc ? impl_->xc->density_provider_diagnostic() : nullptr;
+    const bool density_storage = density_provider && (density_provider->matrix_bytes ||
+                                                      density_provider->provider_allowance);
+    const bool density_retirement_pending =
+        impl_->xc && impl_->xc->density_provider_retirement_pending();
+    if ((additional_device_bytes > free_before || density_retirement_pending) &&
+        (impl_->fast_anchor_arena || impl_->nonlocal_anchor_arena || impl_->phase_source ||
+         density_storage)) {
       // The final-state token excludes active/pending SCF work. Drain its
       // producer before freeing optional cold-SCF storage. Downstream D/W/XC
       // leases borrow neither the anchor nor the independently owned ERIs.
       check(cudaStreamSynchronize(impl_->stream));
       ++impl_->movement.synchronizations;
-      if (impl_->nonlocal_anchor_arena) {
+      if (additional_device_bytes > free_before && impl_->nonlocal_anchor_arena) {
         retired = impl_->retire_nonlocal_anchor_storage();
         check(cudaMemGetInfo(&free_after, &total));
       }
-      if (impl_->fast_anchor_arena) {
+      if (additional_device_bytes > free_before && impl_->fast_anchor_arena) {
         retired += impl_->retire_fast_anchor_storage();
         check(cudaMemGetInfo(&free_after, &total));
       }
       if (additional_device_bytes > free_after && impl_->phase_source) {
         retired += impl_->phase_device_bytes;
         impl_->retire_phase_source(false);  // Successful SCF already audited it.
+        check(cudaMemGetInfo(&free_after, &total));
+      }
+      if ((additional_device_bytes > free_after || density_retirement_pending) && density_storage) {
+        const auto prepared = *density_provider;
+        // A subsequent warm SCF must rebind to the retained generated kernels.
+        // Release graph executables before destroying any provider they borrow.
+        impl_->device_chunk_region.invalidate();
+        impl_->solver_region_executor.invalidate();
+        impl_->xc->retire_density_provider();
+        impl_->resource.xc_device_bytes -= prepared.matrix_bytes;
+        impl_->resource.provider_device_bytes -= prepared.provider_allowance;
+        impl_->resource.retained_host_numeric_bytes -= prepared.host_bytes;
+        retired += prepared.matrix_bytes + prepared.provider_allowance;
         check(cudaMemGetInfo(&free_after, &total));
       }
     }

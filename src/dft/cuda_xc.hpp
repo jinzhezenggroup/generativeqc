@@ -313,6 +313,13 @@ class CudaXcPlan {
                        std::uint64_t expected_replays = 1, std::size_t provider_budget = 0,
                        bool indexed_gemm = false);
   const CudaXcDensityBinding& density_binding(generativeqc::runtime::PrecisionPhase phase) const;
+  /** Release optional density storage after its caller drains the stream and
+   * invalidates every captured execution region that borrowed the provider.
+   * Generated strict/admitted bindings and published XC output stay valid.
+   * A failed checked release disables provider execution but retains its owner
+   * and original charges; a later handoff must finish this retirement. */
+  void retire_density_provider();
+  bool density_provider_retirement_pending() const noexcept;
   /** Optional owner charges are separate from the ordinary arena. A positive
    * device allowance alone does not qualify a new endpoint/provider profile. */
   const tensor::PanelProductDiagnostic* density_provider_diagnostic() const noexcept {
