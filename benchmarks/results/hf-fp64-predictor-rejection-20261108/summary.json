@@ -1,0 +1,414 @@
+{
+  "decision": "rejected",
+  "default_promotion_qualified": false,
+  "cards": {
+    "5090": {
+      "arms": [
+        {
+          "arm": "control",
+          "cold_seconds": 16.92058413475752,
+          "iterations": 15,
+          "focks": 15,
+          "screened_iterations": 8,
+          "strict_iterations": 7,
+          "initial_guess": {
+            "kind": "huckel",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 7,
+            "preliminary_fock_builds": 7,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 93104600,
+            "preparation_seconds": 0.133178403
+          },
+          "warm_seconds": [
+            2.6892311237752438,
+            2.685733649879694,
+            2.6870231926441193
+          ],
+          "independent_errors": [
+            {
+              "energy": 1.3965291145723313e-09,
+              "force": 1.5473362348361608e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3965291145723313e-09,
+              "force": 1.5473854975134316e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3965291145723313e-09,
+              "force": 1.547390087591749e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3965291145723313e-09,
+              "force": 1.5473704748081296e-09,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "arm": "candidate",
+          "cold_seconds": 18.175454150885344,
+          "iterations": 16,
+          "focks": 16,
+          "screened_iterations": 8,
+          "strict_iterations": 8,
+          "initial_guess": {
+            "kind": "huckel",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 7,
+            "preliminary_fock_builds": 7,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 93104600,
+            "preparation_seconds": 0.130661783
+          },
+          "warm_seconds": [
+            2.687271263450384,
+            2.687414299696684,
+            2.6880078949034214
+          ],
+          "independent_errors": [
+            {
+              "energy": 1.3983481039758772e-09,
+              "force": 6.600753780366952e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 6.600660903272049e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 6.6006745035041e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 6.600811633394876e-10,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "arm": "candidate",
+          "cold_seconds": 18.223212882876396,
+          "iterations": 16,
+          "focks": 16,
+          "screened_iterations": 8,
+          "strict_iterations": 8,
+          "initial_guess": {
+            "kind": "huckel",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 7,
+            "preliminary_fock_builds": 7,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 93104600,
+            "preparation_seconds": 0.124952625
+          },
+          "warm_seconds": [
+            2.6931616440415382,
+            2.691001068800688,
+            2.6897421292960644
+          ],
+          "independent_errors": [
+            {
+              "energy": 1.3938006304670125e-09,
+              "force": 6.600492843261696e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3938006304670125e-09,
+              "force": 6.600621212798918e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3928911357652396e-09,
+              "force": 6.600615037183344e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3928911357652396e-09,
+              "force": 6.600519696781104e-10,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "arm": "control",
+          "cold_seconds": 17.012708190828562,
+          "iterations": 15,
+          "focks": 15,
+          "screened_iterations": 8,
+          "strict_iterations": 7,
+          "initial_guess": {
+            "kind": "huckel",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 7,
+            "preliminary_fock_builds": 7,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 93104600,
+            "preparation_seconds": 0.133058489
+          },
+          "warm_seconds": [
+            2.698071401566267,
+            2.692941654473543,
+            2.6910398826003075
+          ],
+          "independent_errors": [
+            {
+              "energy": 1.3983481039758772e-09,
+              "force": 1.5475450712565397e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3983481039758772e-09,
+              "force": 1.5475447173729506e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 1.5475354157856724e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3983481039758772e-09,
+              "force": 1.547552200970026e-09,
+              "passed": true
+            }
+          ]
+        }
+      ],
+      "candidate_cold_ratio": 1.0726535664302972,
+      "paired_warm_ratios": [
+        0.9992712190828328,
+        1.0006257693561926,
+        1.0003664658578302,
+        0.9981802714628387,
+        0.9992793807212156,
+        0.9995177502523712
+      ],
+      "every_warm_within_3_percent": true,
+      "all_independent_passed": true,
+      "credible_cold_win": false
+    },
+    "A100": {
+      "arms": [
+        {
+          "arm": "control",
+          "cold_seconds": 14.584671046584845,
+          "iterations": 15,
+          "focks": 15,
+          "screened_iterations": 8,
+          "strict_iterations": 7,
+          "initial_guess": {
+            "kind": "huckel",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 7,
+            "preliminary_fock_builds": 7,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 93104600,
+            "preparation_seconds": 0.151102212
+          },
+          "warm_seconds": [
+            2.197625171393156,
+            2.2077588848769665,
+            2.205596499145031
+          ],
+          "independent_errors": [
+            {
+              "energy": 1.4028955774847418e-09,
+              "force": 1.547290150172298e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.5472861152054929e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.400167093379423e-09,
+              "force": 1.5473017485334584e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.400167093379423e-09,
+              "force": 1.5472899142499053e-09,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "arm": "candidate",
+          "cold_seconds": 15.981273736804724,
+          "iterations": 16,
+          "focks": 16,
+          "screened_iterations": 8,
+          "strict_iterations": 8,
+          "initial_guess": {
+            "kind": "huckel",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 7,
+            "preliminary_fock_builds": 7,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 93104600,
+            "preparation_seconds": 0.154688401
+          },
+          "warm_seconds": [
+            2.224831759929657,
+            2.233315147459507,
+            2.228155978024006
+          ],
+          "independent_errors": [
+            {
+              "energy": 1.3965291145723313e-09,
+              "force": 6.599909715965246e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 6.599988749966812e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3956196198705584e-09,
+              "force": 6.599715478977641e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3956196198705584e-09,
+              "force": 6.600011752400103e-10,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "arm": "candidate",
+          "cold_seconds": 15.998760152608156,
+          "iterations": 16,
+          "focks": 16,
+          "screened_iterations": 8,
+          "strict_iterations": 8,
+          "initial_guess": {
+            "kind": "huckel",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 7,
+            "preliminary_fock_builds": 7,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 93104600,
+            "preparation_seconds": 0.156641138
+          },
+          "warm_seconds": [
+            2.1988615058362484,
+            2.217194676399231,
+            2.225868236273527
+          ],
+          "independent_errors": [
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 6.600136617795904e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3965291145723313e-09,
+              "force": 6.600006808438197e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3956196198705584e-09,
+              "force": 6.600100951881238e-10,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 6.59973799568836e-10,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "arm": "control",
+          "cold_seconds": 14.665496543049812,
+          "iterations": 15,
+          "focks": 15,
+          "screened_iterations": 8,
+          "strict_iterations": 7,
+          "initial_guess": {
+            "kind": "huckel",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 7,
+            "preliminary_fock_builds": 7,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 93104600,
+            "preparation_seconds": 0.15193081
+          },
+          "warm_seconds": [
+            2.2185381278395653,
+            2.2241287864744663,
+            2.234371278434992
+          ],
+          "independent_errors": [
+            {
+              "energy": 1.3983481039758772e-09,
+              "force": 1.547413266966835e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3983481039758772e-09,
+              "force": 1.5473931580523015e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.5474165351858638e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.5473613675098807e-09,
+              "passed": true
+            }
+          ]
+        }
+      ],
+      "candidate_cold_ratio": 1.0933282276558853,
+      "paired_warm_ratios": [
+        1.012379994955761,
+        1.011575658355448,
+        1.0102282892123378,
+        0.9911308163892237,
+        0.9968823252873649,
+        0.996194436330465
+      ],
+      "every_warm_within_3_percent": true,
+      "all_independent_passed": true,
+      "credible_cold_win": false
+    }
+  }
+}

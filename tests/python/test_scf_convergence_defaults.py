@@ -80,6 +80,12 @@ int main() {
     else unsetenv("GENERATIVEQC_HF_COLD_SCREENING");
     const auto admitted = resolve_cold_hf_screening(cold, 1e-12);
     assert(admitted.maximum_iterations == 8 && admitted.tolerance == 8e-8);
+    for (std::size_t size : {383U, 384U, 511U, 512U}) {
+      auto trial = cold;
+      trial.nbf = size;
+      const bool expected = size >= 512;
+      assert((resolve_cold_hf_screening(trial, 1e-12).maximum_iterations != 0) == expected);
+    }
     for (auto member : {&ColdHfScreeningDomain::warm_seed,
                         &ColdHfScreeningDomain::unrestricted,
                         &ColdHfScreeningDomain::physical_reference,
