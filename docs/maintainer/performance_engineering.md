@@ -4,6 +4,48 @@ GenerativeQC performance work must optimize scientific work and data movement, n
 only kernel throughput or peak scratch size. This document records cross-cutting
 rules for CUDA, generated integrals, response, DFT, and post-HF execution.
 
+## Direct J/K policy ownership
+
+The [tuning inventory](../../manifests/maintenance/direct_jk_tuning_inventory.json)
+distinguishes retained bounds, migrated policy owners and pending qualification.
+Persistent-ERI admission belongs to `SmallHfProfitabilityProfile`: the no-calibration
+AO crossover remains 16, and resident ERI bytes are capped by the profile ceiling
+and 1/32 of known target memory (at most 256 MiB for an unknown target).
+This is resource admission, not a screened-quartet/reuse profitability model.
+The bucket lifecycle queries target facts once and passes them to both packing
+and execution. Packing records the resolved admission in immutable topology
+identity and prepares Cartesian transforms when resident storage is rejected.
+Resource-only small-HF queries remain device-inert and use the unknown-target
+fallback; their admitted route agrees with their arena's resident-ERI storage.
+
+`DirectPersistentScheduleProfile` owns the persistent force/Fock angular-order
+domains emitted with the compiler's resident schedule header. Allocation, queue
+reset and kernel dispatch consume that same generated definition. The default
+domains remain seven force orders and six Fock orders. Smaller compiler profiles
+retain fixed-grid workers for the remaining orders; they are testable build
+inputs, not shipped runtime autotune winners. The 1024-task-per-shell-pair staging
+bound remains an explicit retained bounded-schedule choice.
+
+These ownership and resource contracts do not establish a new schedule winner or
+close device qualification. Calibrated profiles still need canonical
+target/provider/version admission, actual screened-work and reuse inputs, total
+endpoint storage/setup accounting, and production activation. Any promotion must
+retain independent energy/force gates and matched cold/warm/moved-warm RHF/UHF
+endpoint timings with semantic work counts. Synthetic-target host tests prove
+legality and cache behavior, not GPU performance.
+
+The native `generativeqc_direct_persistent_queue_cuda_tests` target checks actual
+device queue resets, optional FP32 buffers and guard words against the emitted
+profile. Run it only inside a compatible Slurm allocation with a finite time
+limit, for example:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:03:00 build/generativeqc_direct_persistent_queue_cuda_tests
+```
+
+This storage test does not replace the complete-endpoint qualification above.
+
 ## README production comparisons
 
 The README can report **default-grid endpoint latency** when that is the

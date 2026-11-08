@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "generated_direct_resident_psss_schedule.cuh"
 #include "scf/cuda/direct_angular_fock.hpp"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_fock_order2.cuh"

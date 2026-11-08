@@ -42,11 +42,8 @@ def _write_fixture(root: Path, payload: dict[str, object]) -> None:
     constants = root / "src/scf/cuda/direct_constants.hpp"
     constants.parent.mkdir(parents=True, exist_ok=True)
     constants.write_text(
-        "constexpr std::size_t kPersistentEriAoLimit = 16;\n"
         "constexpr unsigned kSchwarzThreads = 1;\n"
         "constexpr std::size_t kBoundedGeneratedTasksPerShellPair = 1024;\n"
-        "constexpr unsigned kPersistentForceAngularOrderCount = 7;\n"
-        "constexpr unsigned kPersistentFockAngularOrderCount = 6;\n"
         "constexpr double kForceDensityProductScreeningTolerance = 1.0e-14;\n",
         encoding="utf-8",
     )
@@ -55,6 +52,7 @@ def _write_fixture(root: Path, payload: dict[str, object]) -> None:
     policy.parent.mkdir(parents=True, exist_ok=True)
     policy.write_text(
         "fallback_persistent_eri_ao_limit{16}\n"
+        "SmallHfProfitabilityProfile\n"
         "resolve_small_hf_profitability\n"
         "maximum_arena_bytes{std::size_t{1} << 30}\n"
         "cuda_stack_limit_bytes{std::size_t{64} << 10}\n"
@@ -75,7 +73,8 @@ def _write_fixture(root: Path, payload: dict[str, object]) -> None:
     )
     schedule.parent.mkdir(parents=True, exist_ok=True)
     schedule.write_text(
-        "block_threads=128\nminimum_blocks_per_sm=4\nmaximum_bra_primitive_pairs=64\n",
+        "block_threads=128\nminimum_blocks_per_sm=4\nmaximum_bra_primitive_pairs=64\n"
+        "DirectPersistentScheduleProfile\nemit_direct_resident_psss_schedule_header\n",
         encoding="utf-8",
     )
 
@@ -95,11 +94,11 @@ def test_checker_rejects_constant_drift(tmp_path: Path) -> None:
     _write_fixture(tmp_path, payload)
     constants = tmp_path / "src/scf/cuda/direct_constants.hpp"
     constants.write_text(
-        constants.read_text(encoding="utf-8").replace("= 16;", "= 24;", 1),
+        constants.read_text(encoding="utf-8").replace("= 1024;", "= 2048;", 1),
         encoding="utf-8",
     )
     assert any(
-        "kPersistentEriAoLimit" in error and "drifted" in error
+        "kBoundedGeneratedTasksPerShellPair" in error and "drifted" in error
         for error in CHECKER.validate_repository(tmp_path)
     )
 
@@ -164,7 +163,7 @@ def test_checker_rejects_duplicate_symbol(tmp_path: Path) -> None:
     payload = copy.deepcopy(_inventory())
     excluded = payload["excluded_from_tuning"]
     assert isinstance(excluded, list) and isinstance(excluded[0], dict)
-    excluded[0]["symbol"] = "kPersistentEriAoLimit"
+    excluded[0]["symbol"] = "kBoundedGeneratedTasksPerShellPair"
     _write_fixture(tmp_path, payload)
     assert any(
         "duplicate constant symbol" in error

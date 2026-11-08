@@ -114,7 +114,8 @@ bool pack_host_batch(const std::vector<core::System>& systems,
                      const std::vector<const std::vector<double>*>& initial_densities,
                      HostBatch& host, bool unrestricted, bool matrix_direct,
                      bool require_direct_transform, ResidentPsssPolicy resident_psss,
-                     HostBasisPacking packing) {
+                     HostBasisPacking packing, const runtime::CudaTargetInfo& target,
+                     cuda_policy::SmallHfProfitabilityProfile profile) {
   if (systems.empty() || systems.size() != initial_densities.size()) return false;
   const bool df_values = packing == HostBasisPacking::DfValues;
   // The DF owner independently expands public spherical AOs after packing.
@@ -135,6 +136,12 @@ bool pack_host_batch(const std::vector<core::System>& systems,
   host.nbf = molecule::ao_count(systems.front());
   host.direct_nbf = molecule::cartesian_ao_count(systems.front());
   host.spin_count = unrestricted ? 2 : 1;
+  std::size_t fock_states = 0;
+  if (!runtime::checked_multiply(systems.size(), host.spin_count, fock_states)) return false;
+  host.persistent_eri = !df_values && !matrix_direct &&
+                        cuda_policy::resolve_small_hf_profitability(
+                            target, {host.nbf, fock_states, systems.size(), fock_states}, profile)
+                            .persistent_eri;
   if (host.nbf == 0 || host.direct_nbf == 0 ||
       host.nbf > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
       host.direct_nbf > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
@@ -152,12 +159,10 @@ bool pack_host_batch(const std::vector<core::System>& systems,
   host.system_shell_pair_block_quartet_offsets.push_back(0);
   host.shell_pair_primitive_offsets.push_back(0);
   if (!df_values) host.warm_density.resize(systems.size() * host.spin_count * matrix_size, 0.0);
-  // Small-HF energy historically used persistent ERIs and therefore did not
-  // need a public-to-Cartesian transform. Force requests may now select the
-  // quartet-direct route at the same <=16-AO sizes, so their caller must opt
-  // into the transform even below the persistent-ERI energy threshold.
+  // A resource/profile rejection must prepare the same Cartesian transform
+  // used by the direct execution fallback, even below the default AO crossover.
   if (!matrix_direct && host.direct_nbf != host.nbf &&
-      (require_direct_transform || host.nbf > kPersistentEriAoLimit)) {
+      (require_direct_transform || !host.persistent_eri)) {
     host.ao_to_direct_transform.resize(systems.size() * host.nbf * host.direct_nbf, 0.0);
   }
   for (std::size_t system_index = 0; system_index < systems.size(); ++system_index) {
@@ -384,8 +389,8 @@ bool same_topology(const HostBatch& first, const HostBatch& second) {
   for (std::size_t i = 0; i < first.ecp_systems.size(); ++i)
     if (first.ecp_systems[i].ecp_terms != second.ecp_systems[i].ecp_terms) return false;
   return first.nbf == second.nbf && first.direct_nbf == second.direct_nbf &&
-         first.spin_count == second.spin_count && first.atom_offsets == second.atom_offsets &&
-         first.atom_systems == second.atom_systems &&
+         first.persistent_eri == second.persistent_eri && first.spin_count == second.spin_count &&
+         first.atom_offsets == second.atom_offsets && first.atom_systems == second.atom_systems &&
          first.atomic_numbers == second.atomic_numbers &&
          first.system_shell_offsets == second.system_shell_offsets &&
          first.shell_atoms == second.shell_atoms && first.shell_angular == second.shell_angular &&
