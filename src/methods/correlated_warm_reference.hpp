@@ -17,6 +17,7 @@
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/reference_failure.hpp"
 #include "scf/warm_state.hpp"
 
 namespace generativeqc::methods::warm_reference {
@@ -52,7 +53,9 @@ scf::ScfResult solve_reference(const std::vector<double>* seed, scf::FockSpin sp
     result = operation(nullptr);
   }
   if (!valid(result))
-    throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED, std::string(failure_message));
+    throw MethodError(
+        GENERATIVEQC_STATUS_NOT_CONVERGED,
+        scf::reference_failure_detail(result, GENERATIVEQC_STATUS_NOT_CONVERGED, failure_message));
   return result;
 }
 

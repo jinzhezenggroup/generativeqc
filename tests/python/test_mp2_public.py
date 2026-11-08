@@ -488,10 +488,16 @@ def test_cuda_mp2_shared_reference_source_complete_endpoint(
     metadata, _ = load_fixture(name)
     arguments = source_arguments(metadata)
     results = []
-    for selection, cache in (("0", "0"), ("1", "0"), ("1", "1")):
-        journal = tmp_path / f"{name}-{selection}-{cache}.jsonl"
+    for selection, cache, energy_cache in (
+        ("0", "0", "0"),
+        ("1", "0", "0"),
+        ("1", "0", "1"),
+        ("1", "1", "1"),
+    ):
+        journal = tmp_path / f"{name}-{selection}-{cache}-{energy_cache}.jsonl"
         monkeypatch.setenv("GENERATIVEQC_MP2_REFERENCE_SOURCE", selection)
         monkeypatch.setenv("GENERATIVEQC_MP2_FORCE_MO_CACHE", cache)
+        monkeypatch.setenv("GENERATIVEQC_MP2_ENERGY_MO_CACHE", energy_cache)
         monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(journal))
         calc = Calculator(
             method="mp2",
@@ -516,6 +522,9 @@ def test_cuda_mp2_shared_reference_source_complete_endpoint(
         }
         assert routing["mp2_energy_device_source"] == int(selection)
         assert routing["mp2_force_device_source"] == int(selection)
+        assert (routing["mp2_energy_mo_cache_bytes"] > 0) == (
+            selection == "1" and energy_cache == "1"
+        )
         cache_bytes = routing["mp2_force_mo_cache_bytes"]
         borrowed_reads = sum(
             record["value"]

@@ -1,0 +1,68 @@
+{
+  "hf_dz": {
+    "pyscf_version": "2.14.0",
+    "reference": [
+      {
+        "basis": "dz",
+        "energy_hartree": -442.99474918126947,
+        "converged": true,
+        "alternative_energy_hartree": -442.99474918126936,
+        "alternative_converged": true
+      },
+      {
+        "basis": "tz",
+        "energy_hartree": -443.04865235829624,
+        "converged": true,
+        "alternative_energy_hartree": -443.04865235829783,
+        "alternative_converged": true
+      }
+    ],
+    "native_error": "RuntimeError: GENERATIVEQC error 4: HF did not converge; no RCCSD energy evaluated",
+    "native_elapsed_seconds": 716.3680449072272,
+    "native_peak_device_mib_sampled": 2598
+  },
+  "hf_tz": {
+    "pyscf_version": "2.14.0",
+    "reference": [
+      {
+        "basis": "dz",
+        "energy_hartree": -370.74809215247933,
+        "converged": true,
+        "alternative_energy_hartree": -370.7480921524787,
+        "alternative_converged": true
+      },
+      {
+        "basis": "tz",
+        "energy_hartree": -370.79058492615314,
+        "converged": true,
+        "alternative_energy_hartree": -370.7905849261522,
+        "alternative_converged": true
+      }
+    ],
+    "native_error": "RuntimeError: GENERATIVEQC error 4: HF did not converge; no MP2 energy evaluated",
+    "native_elapsed_seconds": 11852.99224336259,
+    "native_peak_device_mib_sampled": 9224
+  },
+  "response_dz": {
+    "pyscf_version": "2.14.0",
+    "reference": [
+      {
+        "basis": "dz",
+        "energy_hartree": -793.0422252889799,
+        "converged": true,
+        "alternative_energy_hartree": -793.0422252889862,
+        "alternative_converged": true
+      },
+      {
+        "basis": "tz",
+        "energy_hartree": -793.0802455139006,
+        "converged": true,
+        "alternative_energy_hartree": -793.080245513904,
+        "alternative_converged": true
+      }
+    ],
+    "native_error": "RuntimeError: GENERATIVEQC error 5: RCCSD(T) physical orbital response did not converge",
+    "native_elapsed_seconds": 1130.0111978426576,
+    "native_peak_device_mib_sampled": 6024
+  }
+}
