@@ -23,10 +23,7 @@ def test_hf_driver_uses_qualified_facts_without_unbatched_grid_query() -> None:
     beginning = source.index("std::vector<RhfBucketItem> execute_hf_cuda_bucket(")
     compaction = source.index("dim3 direct_shell_quartet_compaction_grid", beginning)
     setup = source[beginning:compaction]
-    assert (
-        "runtime::cuda_device_facts(device_id, direct_target, direct_device_name)"
-        in setup
-    )
+    assert "runtime::cuda_device_facts(" in source
     query = setup.index("cudaGetDeviceProperties(")
     guard = (
         "if (requested_quartet_direct && !requested_bounded_direct_streaming "

@@ -111,10 +111,7 @@ def test_runtime_and_tuning_api_share_cuda_target_info() -> None:
 
     assert "cuda_device_facts(state.device_id, target, device_name)" in runtime
     assert "cuda_device_facts(device_id, target, device_name)" in tuning
-    assert (
-        "runtime::cuda_device_facts(device_id, direct_target, direct_device_name)"
-        in direct
-    )
+    assert "runtime::cuda_device_facts(device_id, target, device_name)" in direct
     # Compiled precision-policy tests check the resolver's resource decisions;
     # this boundary audit must not pin its argument spelling or arity.
     # The common facts owner retains the authoritative full-property fallback.

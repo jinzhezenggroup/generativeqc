@@ -68,6 +68,8 @@ struct SmallHfProfitabilityProfile {
   // Compatibility evidence used only when no complete device calibration is
   // available. These values are not CUDA semantics.
   std::size_t fallback_persistent_eri_ao_limit{16};
+  /** Resident ERIs share the conservative fixed-topology target-memory budget. */
+  std::size_t maximum_persistent_eri_bytes{std::size_t{1} << 30};
   tensor::CudaMatrixProductProfile matrix{};
 };
 

@@ -1,5 +1,6 @@
 #include <cmath>
 
+#include "generated_direct_resident_psss_schedule.cuh"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/direct_tile_compaction.hpp"

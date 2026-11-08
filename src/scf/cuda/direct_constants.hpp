@@ -21,11 +21,6 @@ namespace generativeqc::scf::cuda_execution {
 constexpr double kMixedPrecisionFloat32UnitRoundoff = 5.9604644775390625e-08;
 static_assert(kMixedPrecisionFloat32UnitRoundoff ==
               cuda_policy::kMixedPrecisionFloat32UnitRoundoff);
-// Persistent ERI still participates in topology/layout construction before
-// runtime profitability is available. Keep only this compatibility boundary
-// here until the topology cache consumes the derived small-HF policy. Matrix
-// product routing is already owned by cuda_policy::resolve_small_hf_profitability.
-constexpr std::size_t kPersistentEriAoLimit = 16;
 // Schwarz diagonal ERIs use the largest device call frame in the direct path.
 // One thread per block prevents a full warp of those frames from exhausting
 // the SM local-memory stack pool while preserving the dense AO-pair grid.
@@ -39,15 +34,6 @@ constexpr std::size_t kBoundedGeneratedTasksPerShellPair = 1024;
 // Resident-PSSS launch/admission parameters are compiler-owned and emitted
 // through generated_direct_resident_psss_schedule.cuh. Keep this header for
 // native correctness/topology invariants rather than accepted tuning evidence.
-// Orders zero through six have dedicated analytic derivatives and enough work
-// to amortize the device queue. Higher generic Dual3 orders retain fixed grids
-// because queue state raises their already-maximal register footprint without
-// improving the 96-AO profile.
-constexpr unsigned kPersistentForceAngularOrderCount = 7;
-// Fock orders zero through five stay below the worst high-order register
-// footprint and contain the largest topology-capacity tails at 192 AOs.
-constexpr unsigned kPersistentFockAngularOrderCount = 6;
-static_assert(kPersistentFockAngularOrderCount <= detail::kDirectQuartetAngularOrderCount);
 // Orders zero through two retain their specialized FP64 workers.  Keeping the
 // mixed queue limited to the remaining partitions avoids duplicating the
 // dominant low-order topology capacity solely for records that can never be

@@ -162,6 +162,9 @@ macro(generativeqc_add_native_tests)
     target_include_directories(generativeqc_cuda_vector_contraction_tests PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/generated")
     generativeqc_native_test(generativeqc_hf_resource_layout_tests tests/native/test_hf_resource_layout.cpp)
+    generativeqc_native_test(generativeqc_direct_persistent_queue_cuda_tests
+                       tests/native/test_direct_persistent_queue_cuda.cu
+                       LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_incremental_direct_jk_cuda_tests
                        tests/native/test_incremental_direct_jk_cuda.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
