@@ -1880,10 +1880,11 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-def test_hybrid_qualification_insertion_preserves_existing_core_owners(
-    event: str, presence: str, tmp_path: Path
+@pytest.mark.parametrize("family", ("hybrid", "derivative"))
+def test_qualification_insertion_preserves_existing_core_owners(
+    event: str, presence: str, family: str, tmp_path: Path
 ) -> None:
-    """Adding complete hybrid gates must not migrate unrelated cached workloads."""
+    """Adding complete qualification gates cannot migrate cached workloads."""
     owners = {
         "test_composite_integral_weights.py": "core-c",
         "test_eri_symmetry.py": "core-a",
@@ -1897,6 +1898,18 @@ def test_hybrid_qualification_insertion_preserves_existing_core_owners(
         "test_spherical_global_hybrid_basis.py": "core-b",
         "test_stationary_one_center_integrals.py": "core-c",
     }
+    if family == "derivative":
+        owners = {
+            "test_ao_response_ad.py": "core-a",
+            "test_classical_derivative_codegen.py": "core-b",
+            "test_cosx_scalar_ad.py": "core-c",
+            "test_density_bilinear_ad.py": "core-a",
+            "test_gfn2_origin_shift.py": "core-b",
+            "test_integral_scalar_ad.py": "core-c",
+            "test_nuclear_runtime_codegen_cuda.py": "core-a",
+            "test_quadrature_ad.py": "core-b",
+            "test_scalar_graph_ad.py": "core-c",
+        }
     owners = {f"tests/python/{name}": shard for name, shard in owners.items()}
     # Interleave ordinary files with the inserted qualification filenames.
     ordinary = sorted(
@@ -1919,14 +1932,14 @@ def test_hybrid_qualification_insertion_preserves_existing_core_owners(
     if presence == "missing":
         for relative in owners:
             (tmp_path / relative).unlink()
-    after = {shard: _selection(event, shard, root=tmp_path) for shard in shards}
+    after = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
     for shard in shards:
         assert after[shard][0] == before[shard][0] == "worksteal"
         priority = (
             "--ci-fresh-priority=tests/python/test_global_hybrid_molecular_hessian.py"
         )
         expected_extra = list(before[shard][2])
-        if tracked and shard == "core-c":
+        if family == "hybrid" and tracked and shard == "core-c":
             expected_extra += ["-p", "tools.pytest_ci_fresh_frontier", priority]
         assert after[shard][2] == expected_extra
         assert [p for p in after[shard][1] if p not in owners] == before[shard][1]
@@ -1934,7 +1947,24 @@ def test_hybrid_qualification_insertion_preserves_existing_core_owners(
             p for p, owner in owners.items() if tracked and owner == shard
         )
     expected = Counter([*ordinary, *(owners if tracked else [])])
-    assert Counter(p for _, paths, _ in after.values() for p in paths) == expected
+    inventory = {*ordinary, *owners}
+    # Auxiliary lanes also list fixed fixtures absent from this synthetic tree.
+    assert (
+        Counter(
+            path
+            for _, paths, _ in after.values()
+            for path in paths
+            if path in inventory
+        )
+        == expected
+    )
+    if family == "derivative":
+        assert not any(
+            path in argument
+            for _, _, arguments in after.values()
+            for argument in arguments
+            for path in owners
+        )
 
 
 @pytest.mark.parametrize(

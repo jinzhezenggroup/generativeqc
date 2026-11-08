@@ -510,7 +510,9 @@ int main(int argc, char** argv) {
 
 @pytest.fixture(scope="module")
 def ledger_probe(
-    tmp_path_factory: pytest.TempPathFactory, required_native_cxx: NativeCxx
+    tmp_path_factory: pytest.TempPathFactory,
+    required_native_cxx: NativeCxx,
+    generated_classical_headers: Path,
 ) -> Path:
     """Link actual ledger C APIs; discard unrelated CPU shape-query sections."""
     folder = tmp_path_factory.mktemp("device-ledger-requests")
@@ -591,6 +593,8 @@ def ledger_probe(
             "-DGENERATIVEQC_HAS_CUDA=0",
             "-I",
             str(folder),
+            "-I",
+            str(generated_classical_headers),
             "-I",
             str(ROOT / "src"),
             "-I",

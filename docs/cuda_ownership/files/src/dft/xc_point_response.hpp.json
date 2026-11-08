@@ -1,6 +1,6 @@
 {
   "path": "src/dft/xc_point_response.hpp",
-  "reason": "Shared CPU/CUDA analytic directional derivative of the existing scaled SCF point jet. Device qualification reuses this previously CPU-only expression; no scientific-code retirement is claimed.",
+  "reason": "Shared CPU/CUDA directional seeding, domain admission and fixed-scale potential publication. Compiler-generated nested point arithmetic owns mixed derivatives of the same scaled primal; this native composition and boundary policy remain scientific ownership.",
   "role": "scientific",
   "subsystem": "xc"
 }

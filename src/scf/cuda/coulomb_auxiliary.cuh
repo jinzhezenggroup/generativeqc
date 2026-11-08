@@ -207,11 +207,15 @@ GENERATIVEQC_ERI_DEVICE inline bool fill_range_coulomb(
     // as values; no displaced integrals or subtraction of full/LR forces.
     Scalar moment = scalar<Scalar>(moments[n]);
     if constexpr (std::is_same_v<Scalar, Dual>)
-      moment.derivative = -moments[n + 1] * argument.derivative;
+      moment.derivative =
+          integrals::generated_scalar_ad::moment_tangent(moments[n + 1], argument.derivative);
     else if constexpr (std::is_same_v<Scalar, Dual3>) {
-      moment.derivative_x = -moments[n + 1] * argument.derivative_x;
-      moment.derivative_y = -moments[n + 1] * argument.derivative_y;
-      moment.derivative_z = -moments[n + 1] * argument.derivative_z;
+      moment.derivative_x =
+          integrals::generated_scalar_ad::moment_tangent(moments[n + 1], argument.derivative_x);
+      moment.derivative_y =
+          integrals::generated_scalar_ad::moment_tangent(moments[n + 1], argument.derivative_y);
+      moment.derivative_z =
+          integrals::generated_scalar_ad::moment_tangent(moments[n + 1], argument.derivative_z);
     }
     auxiliary.at(n, 0, 0, 0) = factor * moment;
     factor *= -2.0 * exponent;

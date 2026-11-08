@@ -21,6 +21,7 @@ from .grid_response_ir import (
     GridResponseProgram,  # noqa: F401 -- public compatibility export
     grid_mixed_response_program,
     grid_response_program,
+    partition_product_program,
 )
 
 
@@ -196,10 +197,13 @@ def partition_response(
     products, dproducts = np.zeros_like(logs), np.zeros_like(logs)
     # Exponential underflow is the same zero-product limit as the value path.
     with np.errstate(under="ignore"):
-        products[live] = np.exp(shifted[live])
-        dproducts[live] = products[live] * rates[live]
+        products[live], dproducts[live] = partition_product_program(
+            0, mixed=False
+        ).evaluate(logarithm=shifted[live], left_logarithm=rates[live])
         single = (zeros == 1) & (zero_tangents != 0)
-        dproducts[single] = np.exp(shifted[single]) * zero_tangents[single]
+        _, dproducts[single] = partition_product_program(1, mixed=False).evaluate(
+            logarithm=shifted[single], left_zero_sum=zero_tangents[single]
+        )
     weights, derivative = ratio.evaluate(
         a=products,
         b=products.sum(axis=1, keepdims=True),
@@ -407,27 +411,38 @@ def partition_mixed_response(
     right_products = np.zeros_like(logs)
     mixed_products = np.zeros_like(logs)
     with np.errstate(under="ignore"):
-        products[live] = np.exp(shifted[live])
-        left_products[live] = products[live] * left_rates[live]
-        right_products[live] = products[live] * right_rates[live]
-        mixed_products[live] = products[live] * (
-            mixed_rates[live] + left_rates[live] * right_rates[live]
+        (
+            products[live],
+            left_products[live],
+            right_products[live],
+            mixed_products[live],
+        ) = partition_product_program(0, mixed=True).evaluate(
+            logarithm=shifted[live],
+            left_logarithm=left_rates[live],
+            right_logarithm=right_rates[live],
+            mixed_logarithm=mixed_rates[live],
         )
 
         single = zeros == 1
-        q_single = np.exp(shifted[single])
-        left_products[single] = q_single * zero_left[single]
-        right_products[single] = q_single * zero_right[single]
-        mixed_products[single] = q_single * (
-            zero_mixed[single]
-            + zero_left[single] * right_rates[single]
-            + zero_right[single] * left_rates[single]
+        (_, left_products[single], right_products[single], mixed_products[single]) = (
+            partition_product_program(1, mixed=True).evaluate(
+                logarithm=shifted[single],
+                left_logarithm=left_rates[single],
+                right_logarithm=right_rates[single],
+                left_zero_sum=zero_left[single],
+                right_zero_sum=zero_right[single],
+                mixed_zero_sum=zero_mixed[single],
+            )
         )
 
         double = zeros == 2
-        q_double = np.exp(shifted[double])
-        mixed_products[double] = q_double * (
-            zero_left[double] * zero_right[double] - zero_left_right_same[double]
+        (_, _, _, mixed_products[double]) = partition_product_program(
+            2, mixed=True
+        ).evaluate(
+            logarithm=shifted[double],
+            left_zero_sum=zero_left[double],
+            right_zero_sum=zero_right[double],
+            zero_diagonal=zero_left_right_same[double],
         )
 
     weights, left, right, mixed = ratio.evaluate(

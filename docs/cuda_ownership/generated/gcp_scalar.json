@@ -1,0 +1,6 @@
+{
+  "name": "gcp_scalar",
+  "outputs": ["generated/generated_gcp_scalar.hpp"],
+  "owner": "python/generativeqc_compiler/geometry/gcp_scalar.py",
+  "scope": "Shell-specialized pinned Slater auxiliary/normalization primals, radial AD, and gCP pair energy/overlap-JVP composition. Native H-Ar data lookup, admission, host/CUDA resources, pair traversal and output publication remain unchanged."
+}

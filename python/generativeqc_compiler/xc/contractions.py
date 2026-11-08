@@ -12,9 +12,11 @@ import numpy as np
 
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.dft.ao import directional_ao_jets, jet_indices
+from generativeqc_compiler.dft.ao_response_ad import geometry_feature_callable
 from generativeqc_compiler.dft.features import (
     _density_features_from_spin_densities,
     density_features,
+    sigma_response,
     spin_densities,
 )
 
@@ -75,14 +77,8 @@ def _response_features(reference: typing.Any, linear: typing.Any) -> typing.Any:
     """Differentiate nonlinear sigma at the reference, keeping linear fields."""
     result = dict(linear)
     if "gradient" in linear:
-        g, dg = reference["gradient"], linear["gradient"]
         result["sigma"] = immutable(
-            np.stack(
-                [
-                    np.sum(g[a] * dg[b] + dg[a] * g[b], axis=1)
-                    for a, b in ((0, 0), (0, 1), (1, 1))
-                ]
-            )
+            sigma_response(reference["gradient"], linear["gradient"])
         )
     return result
 
@@ -126,43 +122,25 @@ def _geometry_feature_direction(
     npoint = np.asarray(jets).shape[1]
     rho = np.zeros((2, npoint))
     gradient = np.zeros((2, npoint, 3)) if family == "gga" else None
-    p, dp = jets[0], directional_jets[0]
+    response = geometry_feature_callable(family, "right")
     for spin in range(2):
-        ds, dds = d[spin], dd[spin]
-        rho[spin] = (
-            _ao_bilinear(dp, ds, p) + _ao_bilinear(p, ds, dp) + _ao_bilinear(p, dds, p)
+        response(
+            jets,
+            None,
+            directional_jets,
+            None,
+            d[spin],
+            dd[spin],
+            rho[spin],
+            gradient[spin] if gradient is not None else None,
+            _ao_bilinear,
         )
-        if family == "lda":
-            continue
-        assert gradient is not None
-        for axis in range(3):
-            row = axis + 1
-            pk, dpk = jets[row], directional_jets[row]
-            gradient[spin, :, axis] = (
-                _ao_bilinear(dpk, ds, p)
-                + _ao_bilinear(pk, ds, dp)
-                + _ao_bilinear(dp, ds, pk)
-                + _ao_bilinear(p, ds, dpk)
-                + _ao_bilinear(pk, dds, p)
-                + _ao_bilinear(p, dds, pk)
-            )
     result = {"rho": immutable(rho)}
     if family == "gga":
         assert gradient is not None
         result["gradient"] = immutable(gradient)
         base_gradient = reference["gradient"]
-        pairs = ((0, 0), (0, 1), (1, 1))
-        result["sigma"] = immutable(
-            np.stack(
-                [
-                    np.sum(
-                        gradient[a] * base_gradient[b] + base_gradient[a] * gradient[b],
-                        axis=1,
-                    )
-                    for a, b in pairs
-                ]
-            )
-        )
+        result["sigma"] = immutable(sigma_response(base_gradient, gradient))
     return result
 
 
@@ -196,59 +174,27 @@ def _geometry_feature_directions(
     right_gradient = np.zeros_like(left_gradient) if family == "gga" else None
     mixed_gradient = np.zeros_like(left_gradient) if family == "gga" else None
 
-    p, lp, rp, mp = jets[0], left_jets[0], right_jets[0], mixed_jets[0]
+    responses = tuple(
+        geometry_feature_callable(family, direction)
+        for direction in ("left", "right", "mixed")
+    )
     for spin in range(2):
-        ds, dds = d[spin], dd[spin]
-        left_rho[spin] = _ao_bilinear(lp, ds, p) + _ao_bilinear(p, ds, lp)
-        right_rho[spin] = (
-            _ao_bilinear(rp, ds, p) + _ao_bilinear(p, ds, rp) + _ao_bilinear(p, dds, p)
-        )
-        mixed_rho[spin] = (
-            _ao_bilinear(mp, ds, p)
-            + _ao_bilinear(lp, dds, p)
-            + _ao_bilinear(lp, ds, rp)
-            + _ao_bilinear(rp, ds, lp)
-            + _ao_bilinear(p, dds, lp)
-            + _ao_bilinear(p, ds, mp)
-        )
-        if family == "lda":
-            continue
-        assert left_gradient is not None
-        assert right_gradient is not None
-        assert mixed_gradient is not None
-        for axis in range(3):
-            row = axis + 1
-            pk = jets[row]
-            lpk = left_jets[row]
-            rpk = right_jets[row]
-            mpk = mixed_jets[row]
-            left_gradient[spin, :, axis] = (
-                _ao_bilinear(lpk, ds, p)
-                + _ao_bilinear(pk, ds, lp)
-                + _ao_bilinear(lp, ds, pk)
-                + _ao_bilinear(p, ds, lpk)
-            )
-            right_gradient[spin, :, axis] = (
-                _ao_bilinear(rpk, ds, p)
-                + _ao_bilinear(pk, ds, rp)
-                + _ao_bilinear(rp, ds, pk)
-                + _ao_bilinear(p, ds, rpk)
-                + _ao_bilinear(pk, dds, p)
-                + _ao_bilinear(p, dds, pk)
-            )
-            mixed_gradient[spin, :, axis] = (
-                _ao_bilinear(mpk, ds, p)
-                + _ao_bilinear(lpk, dds, p)
-                + _ao_bilinear(lpk, ds, rp)
-                + _ao_bilinear(rpk, ds, lp)
-                + _ao_bilinear(pk, dds, lp)
-                + _ao_bilinear(pk, ds, mp)
-                + _ao_bilinear(mp, ds, pk)
-                + _ao_bilinear(lp, dds, pk)
-                + _ao_bilinear(lp, ds, rpk)
-                + _ao_bilinear(rp, ds, lpk)
-                + _ao_bilinear(p, dds, lpk)
-                + _ao_bilinear(p, ds, mpk)
+        for response, rho, gradient in zip(
+            responses,
+            (left_rho, right_rho, mixed_rho),
+            (left_gradient, right_gradient, mixed_gradient),
+            strict=True,
+        ):
+            response(
+                jets,
+                left_jets,
+                right_jets,
+                mixed_jets,
+                d[spin],
+                dd[spin],
+                rho[spin],
+                gradient[spin] if gradient is not None else None,
+                _ao_bilinear,
             )
 
     left = {"rho": immutable(left_rho)}
@@ -262,43 +208,11 @@ def _geometry_feature_directions(
         left["gradient"] = immutable(left_gradient)
         right["gradient"] = immutable(right_gradient)
         mixed["gradient"] = immutable(mixed_gradient)
-        pairs = ((0, 0), (0, 1), (1, 1))
-        left["sigma"] = immutable(
-            np.stack(
-                [
-                    np.sum(
-                        left_gradient[a] * base_gradient[b]
-                        + base_gradient[a] * left_gradient[b],
-                        axis=1,
-                    )
-                    for a, b in pairs
-                ]
-            )
-        )
-        right["sigma"] = immutable(
-            np.stack(
-                [
-                    np.sum(
-                        right_gradient[a] * base_gradient[b]
-                        + base_gradient[a] * right_gradient[b],
-                        axis=1,
-                    )
-                    for a, b in pairs
-                ]
-            )
-        )
+        left["sigma"] = immutable(sigma_response(base_gradient, left_gradient))
+        right["sigma"] = immutable(sigma_response(base_gradient, right_gradient))
         mixed["sigma"] = immutable(
-            np.stack(
-                [
-                    np.sum(
-                        mixed_gradient[a] * base_gradient[b]
-                        + left_gradient[a] * right_gradient[b]
-                        + right_gradient[a] * left_gradient[b]
-                        + base_gradient[a] * mixed_gradient[b],
-                        axis=1,
-                    )
-                    for a, b in pairs
-                ]
+            sigma_response(
+                base_gradient, left_gradient, right=right_gradient, mixed=mixed_gradient
             )
         )
     return left, right, mixed

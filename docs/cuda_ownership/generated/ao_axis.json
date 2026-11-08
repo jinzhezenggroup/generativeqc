@@ -1,0 +1,6 @@
+{
+  "name": "ao_axis",
+  "outputs": ["src/dft/generated_ao_axis.hpp", "generated/generated_grid_policy.cu"],
+  "owner": "python/generativeqc_compiler/dft/ao_axis.py",
+  "scope": "CPU coefficient schedules, CUDA radial-free expressions and conservative region coefficient operators differentiate the same Cartesian Gaussian monomial primal. Region lowering takes absolute AD contributions before cancellation, preserves directed rounding and verifies affine-band compression over its complete bounded degree domain. CPU evaluation keeps zero-coefficient IEEE arithmetic and one radial factor per primitive/AO/point. Traversal, jet ordering, accumulation and admission remain."
+}

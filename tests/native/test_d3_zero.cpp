@@ -158,8 +158,11 @@ void test_overflowing_damping_keeps_representable_weighted_results() {
   // and its radial derivative are normal representable FP64 values.
   for (int power : {6, 8}) {
     const double exponent = power + 254.0;
-    const auto term = generativeqc::dft::dispersion::d3_zero_detail::damped_inverse_power(
-        std::ldexp(1.0, -16), std::ldexp(1.0, -32), std::ldexp(1.0, -12), exponent, power);
+    const auto term = power == 6
+                          ? generativeqc::dft::dispersion::d3_zero_detail::damped_inverse_power<6>(
+                                std::ldexp(1.0, -16), std::ldexp(1.0, -12), exponent)
+                          : generativeqc::dft::dispersion::d3_zero_detail::damped_inverse_power<8>(
+                                std::ldexp(1.0, -16), std::ldexp(1.0, -12), exponent);
     const double expected = std::ldexp(1.0 / 6.0, 12 * power - 1016);
     const double expected_derivative = std::ldexp(254.0 / 6.0, 12 * power - 984);
     if (!std::isfinite(term.value) || !std::isfinite(term.derivative_over_distance) ||
@@ -167,6 +170,13 @@ void test_overflowing_damping_keeps_representable_weighted_results() {
         std::abs(term.derivative_over_distance / expected_derivative - 1.0) > 1.0e-12)
       throw std::runtime_error("D3(0) overflowed damping lost a representable result");
   }
+  const auto tiny = generativeqc::dft::dispersion::d3_zero_detail::damped_inverse_power<6>(
+      std::ldexp(1.0, -16), std::ldexp(1.0, -12), 300.0);
+  const double expected_tiny_response = std::ldexp(294.0 / 6.0, 96 - 1200 + 32);
+  if (tiny.value != 0.0 || tiny.derivative_over_distance == 0.0 ||
+      std::abs(tiny.derivative_over_distance - expected_tiny_response) >
+          2 * std::numeric_limits<double>::denorm_min())
+    throw std::runtime_error("D3(0) derivative must survive independent energy underflow");
 }
 
 void test_pair_helper_overflowing_damping_keeps_representable_results() {

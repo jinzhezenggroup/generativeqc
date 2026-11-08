@@ -1,11 +1,13 @@
 """Serial host execution of the actual D4 partition guards, not GPU numerics."""
 
 import re
-import shutil
 import subprocess
+import typing
 from pathlib import Path
 
-import pytest
+from generativeqc_compiler.geometry.dispersion_scalar import (
+    emit_dispersion_scalar_header,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -29,10 +31,12 @@ def _definition(source: str, name: str) -> str:
     )
 
 
-def test_invalid_partition_is_rejected_before_any_member_work(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler required")
+def test_invalid_partition_is_rejected_before_any_member_work(
+    tmp_path: Path, native_cxx: typing.Any
+) -> None:
+    (tmp_path / "generated_dispersion_scalar.hpp").write_text(
+        emit_dispersion_scalar_header()
+    )
     source = (ROOT / "src/dft/dispersion/d4_cuda.cu").read_text()
     # Real math/table types; replace only CUDA execution mechanics by a serial lane.
     prefix = r"""
@@ -105,21 +109,15 @@ int main() {
     path = tmp_path / "partition.cpp"
     path.write_text(program)
     binary = tmp_path / "partition"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [path, ROOT / "src/dft/dispersion/d4_table_data.cpp"],
+        binary,
+        compile_args=(
             "-std=c++20",
             "-O1",
             "-I" + str(ROOT / "src"),
             "-I" + str(tmp_path),
-            str(path),
-            str(ROOT / "src/dft/dispersion/d4_table_data.cpp"),
-            "-o",
-            str(binary),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
+        ),
     )
     result = subprocess.run([str(binary)], check=False, capture_output=True, text=True)
     assert result.returncode == 0, "malformed partition admitted a member: " + str(

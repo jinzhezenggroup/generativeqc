@@ -1,7 +1,7 @@
 {
   "owner": "gcp",
   "current_default": "Canonical r2SCAN-3c retains native CPU/CUDA gCP inside its complete named KS owner. CUDA owns pair arithmetic and reduction on device; the separately exposed CPU API remains compatible.",
-  "generated_capability": "The immutable H-Ar parameter snapshot is generated from pinned upstream input. CPU and CUDA share one audited pair algebra.",
+  "generated_capability": "The immutable H-Ar snapshot is generated from pinned upstream input. CPU/CUDA consume the same compiler-owned Slater auxiliary/normalization primal, shell-specialized radial AD and damped pair/overlap-JVP program; energy-only specializations omit derivative work.",
   "missing_capability": "Elements beyond Ar, periodic systems and gCP Hessians are not admitted.",
   "retirement_condition": "Any replacement must preserve the complete pair energy/gradient, independent reference gates, bounded work/storage and transactional replay without a hidden host numerical fallback.",
   "evidence": [

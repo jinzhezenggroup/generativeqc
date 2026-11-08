@@ -10,12 +10,14 @@ from __future__ import annotations
 import ctypes as ct
 import os
 import shutil
-import subprocess
+from dataclasses import replace
+from typing import Any
 
 import numpy as np
 import pytest
 from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.dft.ao_cuda import (
+    _emit_ao_schedule,
     emit_grid_policy,
     emit_grid_scientific_kernels,
 )
@@ -28,7 +30,7 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="module")
-def fp32_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+def fp32_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx: Any) -> ct.CDLL:
     """Compile the actual emitted AO body with only a transport test wrapper."""
     assert os.environ.get("SLURM_JOB_ID")
     compiler = os.environ.get("GENERATIVEQC_NVCC") or shutil.which("nvcc")
@@ -51,9 +53,7 @@ def fp32_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         + policy[:end]
         + "\n}\nusing namespace generativeqc_grid_policy;\n"
         + kernels[begin:end_kernels]
-        + kernels[
-            kernels.index("void scheduled_ao(") : kernels.rindex("}  // namespace")
-        ]
+        + _emit_ao_schedule(ao_radial_reuse=True)
         + r"""
 extern "C" int evaluate(const double* basis, size_t nbasis, size_t natom,
                         size_t nprimitive, size_t nao, const double* points,
@@ -83,21 +83,17 @@ extern "C" int evaluate(const double* basis, size_t nbasis, size_t natom,
 """
     )
     library = directory / "probe.so"
-    subprocess.run(
-        [
-            compiler,
+    replace(native_cxx, compiler=compiler).build_shared(
+        [source],
+        library,
+        compile_args=(
+            "-forward-unknown-to-host-compiler",
             "-std=c++17",
             "-O2",
             "--fmad=false",
-            "-shared",
-            "-Xcompiler=-fPIC",
             "-arch=" + os.environ.get("GENERATIVEQC_GRID_CUDA_ARCH", "sm_120"),
-            str(source),
-            "-o",
-            str(library),
-        ],
-        check=True,
-        timeout=180,
+        ),
+        compile_timeout=180,
     )
     probe = ct.CDLL(str(library))
     pointer = ct.POINTER(ct.c_double)

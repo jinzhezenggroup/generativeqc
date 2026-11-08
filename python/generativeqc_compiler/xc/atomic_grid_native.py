@@ -3,25 +3,134 @@
 from __future__ import annotations
 
 import json
-import math
+from fractions import Fraction
 
 from generativeqc_compiler.dft.treutler import angular_rule, tables
-from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.integral.quadrature import (
+    legendre_step_roots,
+    rational_radial_roots,
+    treutler_radial_roots,
+)
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
+from generativeqc_compiler.xc.grid_response_ir import grid_response_primal
+
+
+def _partition_responses() -> str:
+    """Lower native Becke partials from the same primals as the tiled consumers.
+
+    Native traversal retains cached distances, clamping, sparse incidence and
+    log-sum-exp reduction. Cached norm/exponential values are bound only after
+    AD, so neither unit vectors nor normalized-weight rules are supplied by the
+    execution owner. Zero norms remain an explicitly admitted native branch.
+    """
+    from generativeqc_compiler.integral.expr import AlgebraForm, Graph
+
+    programs = []
+    for kind in ("becke_step", "becke_complement", "treutler_adjust"):
+        graph = Graph()
+        names = ("mu", "adjustment") if kind == "treutler_adjust" else ("mu",)
+        primal = grid_response_primal(
+            graph, kind, {name: graph.variable(name) for name in names}
+        )
+        programs.append(
+            (
+                kind,
+                names,
+                graph,
+                (primal, graph.differentiate(primal, graph.variable("mu"))),
+            )
+        )
+    graph = Graph()
+    first, second, separation = (
+        graph.variable(name) for name in ("first", "second", "separation")
+    )
+    primal = grid_response_primal(
+        graph, "ratio", {"a": first - second, "b": separation}
+    )
+    programs.append(
+        (
+            "pair_coordinate",
+            ("first", "second", "separation"),
+            graph,
+            (
+                primal,
+                *(
+                    graph.differentiate(primal, value)
+                    for value in (first, second, separation)
+                ),
+            ),
+        )
+    )
+    graph = Graph()
+    coordinates = {name: graph.variable(name) for name in ("x", "y", "z")}
+    squared = graph.sum(value * value for value in coordinates.values())
+    norm = grid_response_primal(graph, "norm", coordinates)
+    response = graph.differentiate(norm, coordinates["x"])
+    responses = graph.replace_subexpressions(
+        (response,), {squared.pow(Fraction(-1, 2)): 1 / graph.variable("length")}
+    )
+    programs.append(("norm_axis", ("x", "length"), graph, responses))
+    graph = Graph()
+    pair = graph.variable("pair")
+    logs = (graph.stable_unary("log", pair), graph.stable_unary("log1p", -pair))
+    programs.append(
+        (
+            "pair_log_partials",
+            ("pair",),
+            graph,
+            tuple(graph.differentiate(value, pair) for value in logs),
+        )
+    )
+    graph = Graph()
+    own, normalization = (graph.variable(name) for name in ("own", "normalization"))
+    primal = graph.exponential(own - normalization)
+    response = graph.differentiate(
+        primal,
+        graph.variable("direction"),
+        {
+            "own": graph.variable("down"),
+            "normalization": graph.variable("dnormalization"),
+        },
+    )
+    responses = graph.replace_subexpressions(
+        (response,), {primal: graph.variable("value")}
+    )
+    programs.append(
+        (
+            "normalized_log_tangent",
+            ("value", "down", "dnormalization"),
+            graph,
+            responses,
+        )
+    )
+    lines = []
+    for name, arguments, graph, roots in programs:
+        factored_graph, factored_roots = graph.apply_algebra_form(
+            roots, AlgebraForm.FACTORED_NARY
+        )
+        lowered_graph, lowered_roots = factored_graph.lower_small_integer_powers(
+            factored_roots
+        )
+        emitter = ScalarCEmitter(lowered_graph, {})
+        emitter.emit(lowered_roots)
+        lines.extend(
+            [
+                f"inline std::array<double,{len(lowered_roots)}> {name}("
+                + ", ".join(f"double {argument}" for argument in arguments)
+                + ") {",
+                *emitter.lines,
+                "return {"
+                + ",".join(emitter.reference(root) for root in lowered_roots)
+                + "};}",
+            ]
+        )
+    return "\n".join(lines)
 
 
 def emit_atomic_grid_header() -> str:
     """Emit immutable element tables; native owners build molecule-local storage."""
     data = tables()
-    graph = Graph()
-    x, xi = graph.variable("x"), graph.variable("xi")
-    radius = (
-        -xi
-        / math.log(2)
-        * graph.power(1 + x, 0.6)
-        * graph.stable_unary("log", (1 - x) / 2)
-    )
-    derivative = graph.differentiate(radius, x)
+    graph, (radius, derivative) = treutler_radial_roots()
     emitter = ScalarCEmitter(graph, {"x": "x", "xi": "xi"})
     emitter.emit((radius, derivative))
     lines = [
@@ -108,4 +217,23 @@ def emit_atomic_grid_header() -> str:
             "} // namespace generativeqc::generated::atomic_grid",
         ]
     )
+    for name, arguments, builder in (
+        (
+            "legendre_step",
+            ("k", "z", "p", "previous", "dp", "dprevious"),
+            legendre_step_roots,
+        ),
+        ("rational_radial", ("node", "scale", "weight"), rational_radial_roots),
+    ):
+        graph, roots = builder()
+        emitter = ScalarCEmitter(graph, {})
+        emitter.emit(roots)
+        lines[-1:-1] = [
+            f"inline std::array<double,2> {name}("
+            + ", ".join(f"double {argument}" for argument in arguments)
+            + ") {",
+            *emitter.lines,
+            "return {" + ",".join(emitter.reference(root) for root in roots) + "};}",
+        ]
+    lines.insert(-1, _partition_responses())
     return "\n".join(lines) + "\n"

@@ -10,6 +10,7 @@ import typing
 
 from .expr import Graph
 from .ir import ECP_MAX_ORBITAL_ANGULAR, ECP_MAX_PROJECTOR_ANGULAR
+from .quadrature import legendre_step_roots
 from .scalar_c import ScalarCEmitter
 from .shell_spec import cartesian_components
 
@@ -43,7 +44,8 @@ def radial_map_roots() -> typing.Any:
     graph = Graph()
     z, weight = (graph.variable(a) for a in ("z", "weight"))
     t = (z + 1) / 2
-    return graph, (t / (1 - t), weight / (2 * (1 - t) * (1 - t)))
+    radius = t / (1 - t)
+    return graph, (radius, weight * graph.differentiate(radius, z))
 
 
 def _assign(graph: typing.Any, roots: typing.Any, targets: typing.Any) -> typing.Any:
@@ -72,16 +74,13 @@ def _scalar(
 
 def emit_ecp_grid_cpp() -> typing.Any:
     """Host-only helpers; grid sizes and Newton stopping policy are unchanged."""
-    lines = _scalar(
-        "ecp_legendre_next",
-        ("k", "z", "p", "previous"),
-        lambda k, z, p, previous: ((2 * k - 1) * z * p - (k - 1) * previous) / k,
-    )
-    lines += _scalar(
-        "ecp_legendre_derivative",
-        ("n", "z", "p", "previous"),
-        lambda n, z, p, previous: n * (z * p - previous) / (z * z - 1),
-    )
+    lines = [
+        "inline std::array<double, 2> ecp_legendre_step(double k, double z,",
+        "    double p, double previous, double dp, double dprevious) {",
+        "  std::array<double, 2> out{};",
+    ]
+    graph, roots = legendre_step_roots()
+    lines += _assign(graph, roots, ("out[0]", "out[1]")) + ["  return out;", "}"]
     lines += _scalar(
         "ecp_legendre_weight",
         ("z", "derivative"),
@@ -101,12 +100,12 @@ def emit_ecp_grid_cpp() -> typing.Any:
         "  for (unsigned i=0; i<(n+1)/2; ++i) {",
         "    double z = std::cos(ecp_root_angle(i, n)), derivative = 0;",
         "    for (unsigned iteration=0; iteration<64; ++iteration) {",
-        "      double p=1, previous=0;",
+        "      double p=1, previous=0, dp=0, dprevious=0;",
         "      for (unsigned k=1; k<=n; ++k) {",
-        "        const double next = ecp_legendre_next(k, z, p, previous);",
-        "        previous=p; p=next;",
+        "        const auto next = ecp_legendre_step(k, z, p, previous, dp, dprevious);",
+        "        previous=p; p=next[0]; dprevious=dp; dp=next[1];",
         "      }",
-        "      derivative=ecp_legendre_derivative(n, z, p, previous);",
+        "      derivative=dp;",
         "      const double delta=ecp_root_delta(p, derivative);",
         "      z=ecp_root_update(z, delta);",
         "      if (std::abs(delta)<2e-15) break;",

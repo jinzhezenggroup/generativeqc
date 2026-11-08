@@ -1,0 +1,6 @@
+{
+  "name": "gfn2_cached_radial_ad",
+  "outputs": ["generated/generated_gfn2_es2_native.hpp", "generated/generated_gfn2_external_point_charge_force.hpp"],
+  "owner": "python/generativeqc_compiler/method/radial_kernel_ad.py",
+  "scope": "Cached ES2 and external-charge force weights differentiate the actual TensorIR pair energy through Graph. Symbolic extraction cancels the Cartesian factor before runtime and reuses the retained reciprocal-root kernel. Qualified charge/kernel interleaving, finite-domain checks and native contractions remain."
+}

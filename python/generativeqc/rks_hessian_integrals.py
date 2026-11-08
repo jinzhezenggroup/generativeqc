@@ -79,6 +79,7 @@ from generativeqc_compiler.integral.weight_pullback import (
     normalized_radial_primitives,
 )
 from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.method.nuclear_repulsion_array import nuclear_repulsion_hvp
 
 __all__ = [
     "RKSIntegralTopology",
@@ -1396,21 +1397,4 @@ def nuclear_hvp_from_topology(
     charges = np.asarray(
         [atom.atomic_number for atom in topology.atoms], dtype=np.float64
     )
-    out = np.zeros((len(topology.atoms), 3))
-    for a in range(len(topology.atoms)):
-        for b in range(a + 1, len(topology.atoms)):
-            r = coords[a] - coords[b]
-            distance = np.linalg.norm(r)
-            if not np.isfinite(distance) or distance <= 0:
-                raise ValueError("nuclear Hessian requires distinct finite centers")
-            unit = r / distance
-            block = (
-                charges[a]
-                * charges[b]
-                / distance**3
-                * (3.0 * np.outer(unit, unit) - np.eye(3))
-            )
-            contribution = block @ (vector[a] - vector[b])
-            out[a] += contribution
-            out[b] -= contribution
-    return immutable(out)
+    return immutable(nuclear_repulsion_hvp(coords, charges, vector))

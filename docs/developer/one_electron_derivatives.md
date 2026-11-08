@@ -97,8 +97,13 @@ remains separate, and correlation response must not add the ECP again.
 The stationary HF adapter supplies density for T/V and negative energy-weighted
 density for S. RHF matrices already contain their double-occupation factors.
 UHF sums alpha and beta matrices before calling the same consumer. API forces
-are the negative final energy gradient. Nuclear repulsion is computed by its
-independent module and added exactly once.
+are the negative final energy gradient. Nuclear repulsion remains a separate
+source, added exactly once. Its energy, coordinate gradient and Hessian-vector
+action derive from the Coulomb energy graph in
+`generativeqc_compiler.method.nuclear_repulsion`. The build emits
+`generated_nuclear_repulsion.hpp` for the CPU and CUDA pair traversals; these
+adapters retain effective ionic charges and equal-and-opposite atom scatter,
+not an independently maintained Coulomb derivative or runtime dual-number path.
 
 ## Native interfaces and storage
 

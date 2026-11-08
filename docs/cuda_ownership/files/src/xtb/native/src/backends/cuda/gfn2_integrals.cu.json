@@ -1,6 +1,6 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_integrals.cu",
-  "reason": "Vendored transitional GFN2 CUDA source for #560 native backend admission; counted conservatively as handwritten scientific ownership until generated/GenerativeQC-native replacements retire the equivalent path.",
+  "reason": "GFN2 integral scheduling consumes compiler-owned S/D/Q primitive values/gradients and shared moment-origin translation primal/VJP. Native contraction, spherical transforms, screening, fixed reductions, finite validation and publication remain conservatively scientific ownership; this is not complete GFN2 retirement.",
   "regions": [],
   "role": "scientific",
   "subsystem": "gfn2"

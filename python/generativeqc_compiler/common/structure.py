@@ -38,9 +38,55 @@ RUNTIME_ADAPTERS = {
 }
 
 # Scalar algebra/emission still has its original IntegralIR package location.
-# AO lowering reuses exactly these neutral facilities, as XC already does;
+# Scientific scalar clients reuse exactly these neutral facilities, as XC does;
 # it must not acquire integral recurrence, SCF, or schedule dependencies.
 SCALAR_CLIENTS = {
+    "method.scalar_graph_ad": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.scalar_python",
+    },
+    "dft.ao_response_ad": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.scalar_python",
+    },
+    "dft.density_bilinear_ad": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.scalar_python",
+    },
+    "dft.grid": {
+        "generativeqc_compiler.integral.quadrature",
+        "generativeqc_compiler.integral.scalar_python",
+    },
+    "dft.treutler": {
+        "generativeqc_compiler.integral.quadrature",
+        "generativeqc_compiler.integral.scalar_python",
+    },
+    "dft.ao_axis": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.scalar_c",
+    },
+    "geometry.dispersion_scalar": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.scalar_c",
+        "generativeqc_compiler.integral.scalar_python",
+    },
+    "geometry.gcp_scalar": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.scalar_c",
+    },
+    "geometry.gfn2_pair": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.scalar_python",
+    },
+    "method.nuclear_repulsion": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.scalar_c",
+    },
+    "method.nonlocal_pair_ad": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.scalar_ad",
+    },
+    "method.radial_kernel_ad": {"generativeqc_compiler.integral.expr"},
     "method.stationary_grid_second": {"generativeqc_compiler.integral.expr"},
     "method.wb97mv_grid_response": {"generativeqc_compiler.integral.expr"},
     "method.wb97mv_nuclear_grid": {"generativeqc_compiler.integral.expr"},
