@@ -104,6 +104,16 @@ def qualify_native(directory: Path, card: str) -> dict:
             "9a37512dc5f96f8a5d0ca78cae46c33323cb8a693620ff3bc93958f33c82534f",
         ),
     }
+
+    def require_native_build(record: dict, arm: str) -> None:
+        """Bind the endpoint itself, not only its separate image receipt."""
+        build = record.get("native_build") or {}
+        require(
+            (build.get("source_identity"), build.get("library_sha256"))
+            == expected[arm],
+            "Wrong endpoint native build",
+        )
+
     report = {
         "card": card,
         "default_promotion_qualified": False,
@@ -123,6 +133,7 @@ def qualify_native(directory: Path, card: str) -> dict:
                 (image["source_identity"], image["library_sha256"]) == expected[arm],
                 "Wrong normal ELF",
             )
+            require_native_build(record, arm)
             require(
                 "streaming_trial" not in record,
                 "Interposer is not normal native qualification",
@@ -235,7 +246,13 @@ def qualify_native(directory: Path, card: str) -> dict:
         arm: json.loads((directory / ("pbe0-48-" + arm + ".json")).read_text())
         for arm in ("control", "candidate")
     }
-    for record in small.values():
+    for arm, record in small.items():
+        require(
+            (record.get("method"), record.get("mode"), record.get("atoms"))
+            == ("pbe0", "direct", 48),
+            "Wrong 48-atom workload",
+        )
+        require_native_build(record, arm)
         require(
             record["status"] == "complete" and len(record["samples"]) == 4,
             "Incomplete 48-atom population",
@@ -270,8 +287,15 @@ def qualify_native(directory: Path, card: str) -> dict:
     rows = list(csv.DictReader(proof[1:], delimiter="\t"))
     shared = [item for item in rows if "shared_rys_xy_streaming" in item["name"]]
     if card == "a100":
+        expected_kernels = {
+            f"generated_sm80_shared_rys_xy_streaming_{name}"
+            "_shell_class_fock_rhf_streaming_kernel"
+            for name in ("dppp", "pppp", "dpds", "ddps", "dpdp", "ddpp")
+        }
         require(
-            len(shared) == 6 and all(int(item["count"]) == 9 for item in shared),
+            len(shared) == len(expected_kernels)
+            and {item["name"] for item in shared} == expected_kernels
+            and all(int(item["count"]) == 9 for item in shared),
             "Automatic shared-XY execution was not proved",
         )
     else:

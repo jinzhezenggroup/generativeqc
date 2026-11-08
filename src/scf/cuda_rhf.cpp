@@ -515,6 +515,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
+  // Generated capability registries read CUDA's current device. Re-select
+  // before admission on every execution, including interleaved cached owners.
+  cudaError_t cuda_error = options.reference_provider_initialization_owner &&
+                                   options.reference_provider_initialization_owner->identity_bound()
+                               ? cudaSuccess
+                               : cudaSetDevice(device_id);
+  if (cuda_error != cudaSuccess) {
+    fill_global_failure(outputs, cuda_status(cuda_error));
+    return outputs;
+  }
   plan.last_shell_class_profile.reset();
   plan.last_ppps_queue_profile.reset();
   plan.last_inactive_eigensolver_profile.reset();
@@ -1274,14 +1284,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         reference_base_bytes, runtime::vector_bytes(plan.diis_work_readback),
         options.reference_memory_budget_bytes);
     resources.reference_peak_bytes_ = reference_base_bytes;
-  }
-  cudaError_t cuda_error = options.reference_provider_initialization_owner &&
-                                   options.reference_provider_initialization_owner->identity_bound()
-                               ? cudaSuccess
-                               : cudaSetDevice(device_id);
-  if (cuda_error != cudaSuccess) {
-    fill_global_failure(outputs, cuda_status(cuda_error));
-    return outputs;
   }
   if (quartet_direct || options.export_physical_reference) {
     // The default 1 KiB stack is insufficient for high-order recurrences.

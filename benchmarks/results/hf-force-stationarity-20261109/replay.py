@@ -137,7 +137,10 @@ def replay(directory: Path = ROOT) -> dict:
             "samples": results,
             "all_passed": all(result["passed"] for result in results),
         }
-    require(not summary["arms"]["baseline"]["all_passed"], "lost failed baseline")
+    require(
+        all(not sample["passed"] for sample in summary["arms"]["baseline"]["samples"]),
+        "lost failed baseline endpoint",
+    )
     for arm in ("candidate-before-format", "candidate"):
         require(summary["arms"][arm]["all_passed"], arm + " force gate")
     return summary

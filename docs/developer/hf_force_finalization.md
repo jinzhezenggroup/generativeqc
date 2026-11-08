@@ -82,7 +82,10 @@ select this default; unknown/reduced-rate FP64 retains the incumbent.
 `GENERATIVEQC_CUDA_HF_SHARED_RYS_XY=0` disables it; exact `1` requests it on
 available companions. Unset/empty selects the internal automatic policy, while
 invalid explicit values fail before graph preparation. Weighted Z remains a
-separate SM90-only control. Existing restricted-FP64, generated capability,
+separate SM90-only control and requires both
+`GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z=1` and
+`GENERATIVEQC_CUDA_HF_SHARED_RYS_XY=1`; enabling weighted Z with XY unset or
+disabled is invalid. Existing restricted-FP64, generated capability,
 materialized-page, no-incremental/separate-JK, no-relevant-streaming,
 no-persistent-ERI and ordinary-output admission gates still apply. The plan
 freezes the request, admission and class mask; unsupported requests use the

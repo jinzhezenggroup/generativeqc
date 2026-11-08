@@ -55,7 +55,7 @@ def raw_exchange_reference(
     """
     integrals = np.asarray(integrals)
     density = np.asarray(density)
-    exchange = np.zeros_like(density)
+    exchange = np.zeros_like(density, dtype=np.result_type(integrals, density, float))
     for component in np.ndindex(integrals.shape):
         indices = tuple(
             offset + index for offset, index in zip(offsets, component, strict=True)

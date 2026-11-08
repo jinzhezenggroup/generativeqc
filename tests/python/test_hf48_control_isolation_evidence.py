@@ -86,7 +86,9 @@ def test_strict_force_owner_retains_default_failure_and_independent_acceptance(
     stationarity_reader: dict[str, Any],
 ) -> None:
     summary = stationarity_reader["replay"]()
-    assert not summary["arms"]["baseline"]["all_passed"]
+    assert all(
+        not sample["passed"] for sample in summary["arms"]["baseline"]["samples"]
+    )
     for arm in ("candidate-before-format", "candidate"):
         assert summary["arms"][arm]["all_passed"]
         assert all(

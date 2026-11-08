@@ -3,11 +3,44 @@
 from __future__ import annotations
 
 import json
+import re
+from itertools import product
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
 from benchmarks._exact_fp64_evidence import load, require
 from benchmarks.dft_streaming_qualification import qualify_native
+
+
+def raw_k_predicates(text: str) -> int:
+    """Require one independent result for every retained fixture combination."""
+    expected = set(
+        product(
+            ("dppp", "pppp", "dpds", "ddps", "dpdp", "ddpp"),
+            ("cartesian", "coincident", "reversed_pairs"),
+            ("private", "shared"),
+            ("0", "1"),
+            ("0", "1"),
+        )
+    )
+    observed = []
+    for line in text.splitlines():
+        if not line.startswith("PASS "):
+            continue
+        match = re.fullmatch(
+            r"PASS ([a-z]+)_(cartesian|coincident|reversed_pairs)_(private|shared)"
+            r" graph=([01]) replay=([01]) max_abs=\S+",
+            line,
+        )
+        require(match is not None, "Malformed raw-K oracle predicate")
+        observed.append(match.groups())
+    require(
+        len(observed) == len(expected)
+        and set(observed) == expected
+        and "ALL SYNTHETIC GATES PASS" in text,
+        "Incomplete raw-K oracle gate",
+    )
+    return len(observed)
 
 
 def replay(directory: Path = Path(__file__).parent) -> dict:
@@ -36,13 +69,7 @@ def replay(directory: Path = Path(__file__).parent) -> dict:
                 require(result["cold_ratio"] <= limit, "Cold qualification failed")
     fixture_checks = {}
     for card, name in cohort["raw_k_logs"].items():
-        text = files[name]
-        count = sum(line.startswith("PASS ") for line in text.splitlines())
-        require(
-            count == 144 and "ALL SYNTHETIC GATES PASS" in text,
-            "Incomplete raw-K oracle gate",
-        )
-        fixture_checks[card] = count
+        fixture_checks[card] = raw_k_predicates(files[name])
     for name in cohort["sanitizer_logs"]:
         text = files[name]
         marker = (

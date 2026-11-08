@@ -529,3 +529,88 @@ def test_real_cuda_resource_facts(tmp_path: Path) -> None:
         timeout=60,
     )
     subprocess.run([str(binary)], check=True, timeout=30)
+
+
+def test_hf_capability_admission_selects_each_cached_owners_device(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Execute the driver's selection and capability reads with interleaved devices."""
+    source = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
+    selection = source.index(
+        "  cudaError_t cuda_error = options.reference_provider_initialization_owner"
+    )
+    # The selected-device transaction ends after its failure return. Other
+    # driver setup between it and stack admission is outside this host probe.
+    end = source.index("\n  }", selection) + len("\n  }")
+    capabilities = source.index("  const auto shared_rys_xy_capabilities =")
+    cap_end = source.index(";", capabilities) + 1
+    operations = "\n".join(
+        text
+        for _, text in sorted(
+            (
+                (selection, source[selection:end]),
+                (capabilities, source[capabilities:cap_end]),
+            )
+        )
+    )
+    probe = tmp_path / "hf_device_admission.cpp"
+    probe.write_text(
+        r"""
+#include <cassert>
+#include <vector>
+using cudaError_t = int;
+constexpr int cudaSuccess = 0;
+int current = 0, calls = 0, selections = 0, injected = 0;
+int cudaSetDevice(int device) {
+  ++selections;
+  if (injected) return injected;
+  current = device;
+  return cudaSuccess;
+}
+int cuda_status(int status) { return status; }
+struct RhfBucketItem { int status = 0; };
+void fill_global_failure(std::vector<RhfBucketItem>& outputs, int status) {
+  for (auto& item : outputs) item.status = status;
+}
+struct Owner { bool bound; bool identity_bound() const { return bound; } };
+struct Options { Owner* reference_provider_initialization_owner = nullptr; };
+namespace cuda_policy { enum class SharedRysXyRequest { Auto, WeightedZOn }; }
+namespace generated {
+unsigned enabled_shared_rys_xy_fock_shell_class_mask() { ++calls; return 1U << current; }
+unsigned enabled_shared_rys_weighted_z_fock_shell_class_mask() { ++calls; return 2U << current; }
+}
+std::vector<RhfBucketItem> run(int device_id, unsigned retained_mask,
+    cuda_policy::SharedRysXyRequest shared_rys_xy_request, Options options = {}) {
+  std::vector<RhfBucketItem> outputs(1);
+"""
+        + operations
+        + r"""
+  outputs[0].status = shared_rys_xy_capabilities == retained_mask ? 0 : 99;
+  return outputs;
+}
+int main() {
+  using Request = cuda_policy::SharedRysXyRequest;
+  current = 0;
+  assert(run(1, 2U, Request::Auto)[0].status == 0);
+  assert(run(0, 1U, Request::Auto)[0].status == 0);
+  current = 0; // Another owner changes the current device before cached replay.
+  assert(run(1, 2U, Request::Auto)[0].status == 0);
+  assert(run(1, 4U, Request::WeightedZOn)[0].status == 0);
+  const int before = calls;
+  injected = 37;
+  assert(run(0, 1U, Request::Auto)[0].status == 37);
+  assert(calls == before); // Failed selection cannot query another device.
+  injected = 0;
+  Owner bound{true};
+  const int selected_before = selections;
+  current = 1; // Identity-bound provider already verified its context.
+  assert(run(1, 2U, Request::Auto, {&bound})[0].status == 0);
+  assert(selections == selected_before);
+}
+"""
+    )
+    executable = tmp_path / "hf_device_admission"
+    required_native_cxx.build_executable(
+        [probe], executable, compile_args=("-std=c++17",)
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)

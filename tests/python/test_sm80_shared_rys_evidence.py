@@ -1,5 +1,6 @@
 """Historical E/F failures must survive replay and cannot authorize promotion."""
 
+import json
 import runpy
 import shutil
 from pathlib import Path
@@ -80,3 +81,60 @@ def test_changed_capsule_is_rejected(
     payload.write_bytes(payload.read_bytes() + b"altered")
     with pytest.raises(ValueError, match=stream):
         reader["load"](target)
+
+
+@pytest.mark.parametrize("converged", (False, None, 1))
+def test_reference_convergence_is_required(
+    reader: dict[str, Any], converged: object
+) -> None:
+    """Matching observables do not qualify an unknown or failed reference."""
+    actual = {"energy": 0.0, "forces": [[0.0, 0.0, 0.0]], "converged": True}
+    target = {**actual, "converged": converged}
+    assert not reader["observable_error"](actual, target)["passed"]
+    target.pop("converged")
+    assert not reader["observable_error"](actual, target)["passed"]
+
+
+@pytest.mark.parametrize("size", ("48", "96"))
+def test_replay_rejects_failed_selected_reference(
+    reader: dict[str, Any], monkeypatch: pytest.MonkeyPatch, size: str
+) -> None:
+    """Explicit nonconvergence cannot be overridden by historical provenance."""
+    cohort, capsule = reader["load"]()
+    capsule = dict(capsule)
+    name = cohort["reference_files"][size]
+    capsule[name] = json.dumps({**json.loads(capsule[name]), "converged": False})
+    monkeypatch.setitem(
+        reader["replay"].__globals__, "load", lambda _: (cohort, capsule)
+    )
+    with pytest.raises(ValueError, match="Unconverged independent reference"):
+        reader["replay"]()
+
+
+@pytest.mark.parametrize("corruption", ("reference", "producer", "recipe"))
+def test_historical_reference_requires_bound_producer(
+    reader: dict[str, Any], monkeypatch: pytest.MonkeyPatch, corruption: str
+) -> None:
+    """The legacy missing convergence field is allowed only for its provenance."""
+    cohort, capsule = reader["load"]()
+    capsule = dict(capsule)
+    if corruption == "reference":
+        name = cohort["reference_files"]["96"]
+        record = json.loads(capsule[name])
+        record["energy"] += 1e-12
+    elif corruption == "producer":
+        name = "oracle-hf96-producer-228320.json"
+        record = json.loads(capsule[name])
+        record[0]["energy"] += 1e-12
+    else:
+        name = "receipts/native-a100-frozen-hf96-gates.json"
+        record = json.loads(capsule[name])
+        record["scientific_recipe_sha256"][
+            "tests/python/test_hf_cold_screening_cuda.py"
+        ] = "0" * 64
+    capsule[name] = json.dumps(record)
+    monkeypatch.setitem(
+        reader["replay"].__globals__, "load", lambda _: (cohort, capsule)
+    )
+    with pytest.raises(ValueError, match="historical HF96 reference provenance"):
+        reader["replay"]()

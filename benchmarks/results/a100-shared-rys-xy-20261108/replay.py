@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import itertools
 import json
 import math
@@ -48,7 +49,12 @@ def observable_error(actual: dict, target: dict) -> dict:
     return {
         "energy": energy,
         "force": force,
-        "passed": bool(actual["converged"] and energy < 1e-8 and force < 1e-7),
+        "passed": bool(
+            actual.get("converged") is True
+            and target.get("converged") is True
+            and energy < 1e-8
+            and force < 1e-7
+        ),
     }
 
 
@@ -62,6 +68,34 @@ def replay(directory: Path = ROOT) -> dict:
     references = {
         size: record(name) for size, name in cohort["reference_files"].items()
     }
+    if "converged" not in references["96"]:
+        # This historical schema omitted convergence. Its audited producer
+        # rejects unconverged SCF before exporting either independent target.
+        # Bind the selected observables to that exact retained producer, rather
+        # than treating every reference without a convergence field as valid.
+        producer_text = capsule["oracle-hf96-producer-228320.json"]
+        producer = json.loads(producer_text)
+        for card in ("a100", "5090"):
+            provenance = record(f"receipts/native-{card}-frozen-hf96-gates.json")
+            require(
+                provenance["producer_job"] == 228320
+                and provenance["producer_identity"]["scheduler"]["LSB_JOBID"]
+                == "228320"
+                and provenance["oracle_text_sha256"]
+                == hashlib.sha256(producer_text.encode()).hexdigest()
+                and provenance["scientific_recipe_sha256"][
+                    "tests/python/test_hf_cold_screening_cuda.py"
+                ]
+                == "80a5c3b806654d50ab33245beb096e9147f7e8af67cdbfd4de9fe853d84615ff"
+                and len(producer) == 2
+                and references["96"] == producer[0],
+                "Unqualified historical HF96 reference provenance",
+            )
+        references["96"] = {**references["96"], "converged": True}
+    require(
+        all(reference.get("converged") is True for reference in references.values()),
+        "Unconverged independent reference",
+    )
     summary = {
         "source_identity": cohort["source_identity"],
         "cards": {},
