@@ -39,6 +39,7 @@ from .resources_planning import plan_resources
 _CUDA_SCHEDULE_EXTENSION_VARIABLES = (
     "GENERATIVEQC_CUDA_HF_SHARED_RYS_XY",
     "GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z",
+    "GENERATIVEQC_HF_BLOCK_CONVERGENCE",
     # Optional in historical checkpoints, but part of every new resource and
     # restart identity: changing the force schedule requires explicit admission.
     "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",

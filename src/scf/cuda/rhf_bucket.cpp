@@ -61,9 +61,9 @@ bool small_hf_cuda_resource_layout(std::size_t nbf, std::size_t direct_nbf, std:
   const auto small_hf_profitability =
       cuda_policy::resolve_small_hf_profitability(runtime::CudaTargetInfo{}, small_hf_workload);
   if (nbf == 0 || nbf > kPersistentEriAoLimit || nbf > kSmallEigensolverLimit ||
-      small_hf_profitability.use_cublas || direct_nbf < nbf || direct_nbf > 2 * nbf || atoms == 0 ||
-      shells == 0 || shells > nbf || primitives == 0 || diis_history > 64 ||
-      (spins != 1 && spins != 2))
+      small_hf_profitability.matrix.requires_provider_context() || direct_nbf < nbf ||
+      direct_nbf > 2 * nbf || atoms == 0 || shells == 0 || shells > nbf || primitives == 0 ||
+      diis_history > 64 || (spins != 1 && spins != 2))
     return false;
   const std::size_t pairs = shells * (shells + 1) / 2;
   const std::size_t blocks =
@@ -119,7 +119,7 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
   const cuda_policy::SmallHfWorkload small_hf_workload{nbf, spins, 1U, spins};
   const auto small_hf_profitability =
       cuda_policy::resolve_small_hf_profitability(runtime::CudaTargetInfo{}, small_hf_workload);
-  if (small_hf_profitability.use_cublas) return false;
+  if (small_hf_profitability.matrix.requires_provider_context()) return false;
 
   bool incremental_diis_gram = false;
   try {
@@ -587,13 +587,14 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     }
   };
   std::vector<RhfBucketItem> outputs = execute_driver();
-  const bool retry_without_cublas = !options.reference_provider_initialization_owner &&
-                                    !(*plan)->initialized && (*plan)->retry_without_cublas;
+  const bool retry_without_matrix_context = !options.reference_provider_initialization_owner &&
+                                            !(*plan)->initialized &&
+                                            (*plan)->retry_without_matrix_context;
   if (!(*plan)->initialized) {
     if (*plan && !try_retire_rhf_cuda_bucket_plan(plan))
       throw ProviderInitializationUnavailable("original CUDA reference owner could not retire");
   }
-  if (retry_without_cublas) {
+  if (retry_without_matrix_context) {
     execution_plan_reused = false;
     // Provider setup or graph capture can reject a cuBLAS implementation on a
     // particular CUDA release. Rebuild once with the numerically identical
@@ -603,7 +604,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
-    (*plan)->cublas_enabled = false;
+    (*plan)->matrix_context_enabled = false;
     outputs = execute_driver();
     for (auto& output : outputs) ++output.scf.precision.execution_retries;
     if (!(*plan)->initialized) {

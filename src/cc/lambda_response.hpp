@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "cc/df_qualification.hpp"
 #include "cc/solver.hpp"
 #include "response/native_gmres.hpp"
 
@@ -50,9 +51,8 @@ struct LambdaOptions {
   // Cache immutable DF primal cuts and reverse their reduced graph. Admission
   // falls back to expanded Q actions when the complete cache does not fit.
   bool df_auxiliary_reduction{true};
-  // Compiler-packed FP64 adjoints with bounded auxiliary batches. Optional
-  // matrix storage/provider allocation falls back to the scalar staged graph.
-  bool df_matrix_gemm{true};
+  // Explicit diagnostic exclusions; production selection is prepared admission.
+  DFContractionQualification qualification;
   std::size_t df_auxiliary_batch_limit{32};
   // A DF device-only ceiling is also bounded by the currently free GPU memory.
   // Host numeric/descriptor storage remains charged to max_bytes separately.
@@ -60,11 +60,6 @@ struct LambdaOptions {
   // Optional immutable primal staging belongs to a single Problem/T owner.
   // Budget/provider/allocation refusal retains the original FP64 matrix path.
   bool df_core_reuse{true};
-  // The original expanded audit graph, optionally through bounded FP64 GEMM.
-  bool df_audit_matrix_gemm{true};
-  // Re-evaluate the original virtual residual graph, never accepted residuals
-  // or solver cuts. Optional shared-audit arena admission retains scalar replay.
-  bool df_primal_matrix_gemm{true};
   /** Default-off storage candidate; promote only after complete-endpoint A/B gates.
    * Reuses stage-local scratch on the action owner's one stream, not persistent
    * cuts, solver state, outputs or the optional invariant frontier.

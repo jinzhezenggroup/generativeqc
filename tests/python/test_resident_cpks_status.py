@@ -40,6 +40,13 @@ def test_resident_cpks_fault_status_and_cleanup(
     resources = (ROOT / "src/runtime/cuda_resources.cuh").read_text()
     errors = (ROOT / "src/api/error.cpp").read_text()
     methods = (ROOT / "src/methods/method.hpp").read_text()
+    provider = (ROOT / "src/tensor/cuda_dense_operations.cu").read_text()
+    # Keep the shared provider's actual lifecycle/status forwarding in the
+    # executable controls; only its CUDA/cuBLAS dependencies are fault doubles.
+    operations = "\n".join(
+        _definition(provider, f"cublasStatus_t CudaDenseOperations::{operation}(")
+        for operation in ("create", "bind", "close", "norm")
+    )
     policy = "\n".join(
         _definition(fock, symbol)
         for symbol in (
@@ -81,6 +88,9 @@ def test_resident_cpks_fault_status_and_cleanup(
         handoff = handoff.replace("response->stream.synchronize();", "(void)0;")
     source = (
         PREFIX
+        + "namespace generativeqc::tensor {\n"
+        + operations
+        + "\n}\n"
         + "namespace generativeqc::methods {\n"
         + _definition(methods, "class MethodError final")
         + ";\n}\nnamespace generativeqc::api {\n"
@@ -113,6 +123,7 @@ def test_resident_cpks_fault_status_and_cleanup(
     )
     path = tmp_path / "resident_cpks_status.cpp"
     (tmp_path / "cuda_runtime_api.h").write_text("")
+    (tmp_path / "cublas_v2.h").write_text("")
     path.write_text(source)
     binary = tmp_path / "resident_cpks_status"
     native_cxx.build_executable(
@@ -157,7 +168,8 @@ PREFIX = r"""
 #define GENERATIVEQC_HAS_CUDA 1
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown, cudaErrorInvalidDevice };
 enum cublasStatus_t {
-  CUBLAS_STATUS_SUCCESS, CUBLAS_STATUS_ALLOC_FAILED, CUBLAS_STATUS_EXECUTION_FAILED
+  CUBLAS_STATUS_SUCCESS, CUBLAS_STATUS_ALLOC_FAILED, CUBLAS_STATUS_EXECUTION_FAILED,
+  CUBLAS_STATUS_INVALID_VALUE
 };
 using cudaStream_t = void*;
 using cudaEvent_t = void*;
@@ -247,6 +259,7 @@ cublasStatus_t cublasDnrm2(cublasHandle_t, int, const double*, int, double* valu
   *value = bad_norm ? std::numeric_limits<double>::infinity() : 2;
   return blas_status(blas_norm);
 }
+#include "tensor/cuda_dense_operations.hpp"
 #include "runtime/cuda_device_scope.hpp"
 namespace generativeqc::runtime {
 cudaError_t resource_cuda_malloc(void** output, std::size_t bytes) {

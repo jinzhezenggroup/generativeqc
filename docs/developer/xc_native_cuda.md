@@ -471,6 +471,16 @@ Native KS additionally qualifies the indexed strict-FP64 recipe for large local
 meta-GGA panels on FP64-matrix-capable hardware: compute major at least eight,
 positive single/double throughput ratio at most two, at least 512 AOs,
 `2^19` grid points and four density-product jets. No GPU product name is used.
+The same indexed density and potential schedules are requested by default for
+restricted PBE-family (including PBE0) and B3LYP one-jet panels at these AO,
+grid and hardware thresholds. UKS and other one-jet functionals retain their
+incumbent. `GENERATIVEQC_CUDA_XC_GGA_GEMM=0` rolls back both GGA matrix
+providers; unset or `1` cannot bypass any method, capability or resource gate.
+Other values are errors. This does not change grids, convergence, precision,
+exact-exchange or analytic-force semantics. The GGA qualification covers static
+96-atom Direct/DF endpoints, independent dense/CPU references and RTX5090
+protection, not universal profitability for every eligible molecule. See the
+[GGA decision and evidence](../../.agents/notes/implemented/performance/2026-11-08-gga-indexed-matrix-default.md).
 Any lower-precision schedule, active public resource ledger or explicit reference
 memory budget retains the incumbent. Admission reserves at most 128 MiB of
 additional unpromised device capacity for the 96 MiB provider allowance and exact

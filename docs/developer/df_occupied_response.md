@@ -90,6 +90,17 @@ Additional response workspace contains
 four auxiliary matrices, three AO matrices, densities and auxiliary charges.
 `DfGradientResources` reports the executed route and borrowed capacity.
 
+The compiler-owned occupied projection and metric helpers submit borrowed FP64
+column-major views through the shared Tensor provider in
+`src/tensor/cuda_runtime.cuh`. The symmetric occupied metric Gram keeps diagonal
+pairs at weight one and off-diagonal pairs at weight two, with `beta=1` preserving
+the accumulated Coulomb response. The provider updates the lower triangle with
+SYRK when available; providers without SYRK use a full GEMM with the same physical
+strides and no additional storage. The response mirrors the lower triangle before
+consuming the complete adjoint and uses the provider's triangular/full-product
+report for work accounting. Submission errors propagate without retry; handle,
+stream, workspace, modes and draining remain owned by the response runtime.
+
 `GENERATIVEQC_DF_DERIVATIVE_PAIRS=auto` selects packed weights for the qualified
 768/768-AO, rank-160 RHF occupied response on RTX 5090. The previously promoted
 resident 192--384-AO shell route instead folds the existing dense weights,

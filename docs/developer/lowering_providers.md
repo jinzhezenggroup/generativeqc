@@ -157,12 +157,17 @@ TF32, operand conversion, or a lower accumulation dtype. Mode selection precedes
 capture and never changes another owner's handle.
 
 The compiler's XC density and potential adapters share an indexed-GEMM profile
-for local strict-FP64 panels with at least
-512 AOs, 2^19 points and four work jets when the reported FP32/FP64 throughput
+for local strict-FP64 panels with at least 512 AOs and 2^19 points. The qualified
+domain includes panels with four or more work jets and restricted one-work-jet
+PBE-family/B3LYP panels. PBE0 uses the PBE semilocal family; other one-jet methods
+and unrestricted GGA retain generated execution. The reported FP32/FP64 throughput
 ratio is positive and at most two, with compute capability major at least eight.
 Older full-rate scalar FP64 devices retain generated execution because scalar
 throughput alone does not qualify the matrix schedule. The optional allowance
 is capped at 128 MiB.
+`GENERATIVEQC_CUDA_XC_GGA_GEMM=0` disables both optional GGA providers;
+unset or `1` preserves all admission gates and leaves the meta-GGA domain
+unchanged. The density-specific rollback remains independent.
 Explicit reference-memory budgets and public numeric ledgers retain generated
 execution. Unknown capability and unadmitted resource/provider domains also keep
 the incumbent. The policy preserves user SCF and force tile sizes; it does not

@@ -10,12 +10,25 @@ def emit_indexed_fp64_profile() -> str:
     return r"""
 #ifndef GENERATIVEQC_XC_INDEXED_FP64_PROFILE
 #define GENERATIVEQC_XC_INDEXED_FP64_PROFILE
+#include <cstdlib>
+#include <cstring>
+#include <stdexcept>
+#include "dft/semilocal_family.hpp"
 #include "runtime/cuda_device_facts.hpp"
 #include "runtime/cuda_lowering_profile.hpp"
 namespace generativeqc::dft::cuda_xc_detail {
 inline std::string_view indexed_fp64_profile_rejection(
     const CudaXcLayout& layout, std::size_t budget) {
-  constexpr runtime::CudaLoweringProfile profile{true,{512,1U<<19,4,1}};
+  const char* gga_control=std::getenv("GENERATIVEQC_CUDA_XC_GGA_GEMM");
+  if (gga_control && std::strcmp(gga_control,"0")!=0 && std::strcmp(gga_control,"1")!=0)
+    throw std::invalid_argument("GENERATIVEQC_CUDA_XC_GGA_GEMM accepts 0 or 1");
+  // Preserve the separately qualified restricted PBE-family/B3LYP profile.
+  // Rollback never changes the existing meta-GGA domain or forces admission.
+  const bool indexed_gga=layout.spins==1 && layout.work_jets==1 &&
+      (layout.functional==semilocal_family_code(SemilocalFamily::Pbe) ||
+       layout.functional==semilocal_family_code(SemilocalFamily::B3lyp)) &&
+      (!gga_control || gga_control[0]!='0');
+  const runtime::CudaLoweringProfile profile{true,{512,1U<<19,indexed_gga?1U:4U,1}};
   const std::array<std::size_t,4> extents{
       layout.nao,layout.npoint,layout.work_jets,layout.tile_points};
   auto rejection=runtime::cuda_lowering_workload_rejection(profile,extents);

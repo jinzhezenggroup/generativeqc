@@ -590,6 +590,24 @@ void CudaXcPlan::prepare_mixed_matrix_contractions() {
   mixed_matrix_contractions_ = true;
 }
 
+bool CudaXcPlan::density_provider_retirement_pending() const noexcept {
+  return density_provider_ && !density_provider_->enabled() &&
+         (density_provider_->diagnostic().matrix_bytes ||
+          density_provider_->diagnostic().provider_allowance);
+}
+
+void CudaXcPlan::retire_density_provider() {
+  try {
+    if (density_provider_) density_provider_->release();
+  } catch (const generativeqc_tensor::DeviceAllocationError&) {
+    throw std::bad_alloc();
+  } catch (const generativeqc_tensor::DeviceRuntimeError& error) {
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, error.what());
+  }
+  provider_density_binding_.reset();
+  density_provider_.reset();
+}
+
 void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admitted,
                                  std::uint64_t expected_replays, std::size_t provider_budget,
                                  std::size_t automatic_provider_budget) {
@@ -634,11 +652,16 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   // remain available for mixed arithmetic, signed response and empty maps.
   // An empty indexed domain needs no materialized matrix or provider handle.
   const bool nonempty = !layout_.local_ao || ao_offsets_.back() != 0;
-  auto provider =
-      (provider_budget || automatic_provider_budget) && nonempty
-          ? cuda_xc_detail::prepare_density_provider(layout_, stream_, provider_budget,
-                                                     automatic_provider_budget, expected_replays)
-          : nullptr;
+  std::unique_ptr<tensor::PreparedPanelProduct> provider;
+  try {
+    if ((provider_budget || automatic_provider_budget) && nonempty)
+      provider = cuda_xc_detail::prepare_density_provider(
+          layout_, stream_, provider_budget, automatic_provider_budget, expected_replays);
+  } catch (const generativeqc_tensor::DeviceAllocationError&) {
+    throw std::bad_alloc();
+  } catch (const generativeqc_tensor::DeviceRuntimeError& error) {
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, error.what());
+  }
   std::unique_ptr<CudaXcDensityBinding> provider_binding;
   if (provider && provider->enabled()) {
     provider_binding = std::make_unique<CudaXcDensityBinding>(strict[0]);

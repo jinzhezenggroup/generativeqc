@@ -148,7 +148,7 @@ int main(int argc,char** argv) {
       system.nbf=shape.nbf;
       (void)run_rccsd_native_state(
           execution,system,descriptor,nullptr,nullptr,nullptr,0,
-          with_auxiliary ? &auxiliary : nullptr,false,true,nullptr,8,true,false,
+          with_auxiliary ? &auxiliary : nullptr,false,{},nullptr,8,true,false,
           requested,switch_residual,mp2_mode,fitted,core::CorrelationConvergence{scale});
       const bool expected=cuda && with_auxiliary && requested.value_or(shape.automatic);
       if (admitted_mixed!=expected || admitted_switch!=switch_residual ||
@@ -165,7 +165,7 @@ int main(int argc,char** argv) {
     execution.cuda=true;
     core::System auxiliary; auxiliary.shells={{5}};
     try {
-      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,false,true,nullptr);
+      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,false,{},nullptr);
       return 17;
     } catch (const MethodError& error) {
       return executions || allocations ||
@@ -176,7 +176,7 @@ int main(int argc,char** argv) {
     execution.cuda=true;
     core::System auxiliary; auxiliary.df_supported=false;
     try {
-      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,false,true,nullptr);
+      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,false,{},nullptr);
       return 9;
     } catch (const MethodError&) {
       return executions || allocations ? 10 : 0;
@@ -185,7 +185,7 @@ int main(int argc,char** argv) {
   if (mode == 6) {
     execution.cuda=true;
     try {
-      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,true,true,nullptr);
+      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,true,{},nullptr);
       return 11;
     } catch (const MethodError&) {
       return executions || allocations || retained_response ? 12 : 0;
@@ -202,7 +202,7 @@ int main(int argc,char** argv) {
     const bool derived_denominators=mode != 8;
     const double switch_residual=1e-4;
     (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,
-                                 &auxiliary,retain_response,true,&reference_plan,3,
+                                 &auxiliary,retain_response,{},&reference_plan,3,
                                  derived_denominators,false,false,switch_residual,mp2_mode);
     if(admitted_q_batch!=3 || admitted_reference_plan!=&reference_plan ||
        reference_plan!=&resident || admitted_derived_denominators!=derived_denominators ||
@@ -212,7 +212,7 @@ int main(int argc,char** argv) {
   }
   try {
     auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
-                                        nullptr,nullptr,0,nullptr,false,true,nullptr);
+                                        nullptr,nullptr,0,nullptr,false,{},nullptr);
     if (mode < 2) return 2;
     if(admitted_q_batch!=8 || admitted_reference_plan || !admitted_derived_denominators ||
        admitted_df_mp2_mode || admitted_df_reference || admitted_mixed ||
@@ -223,10 +223,10 @@ int main(int argc,char** argv) {
     if (allocations != (expect_cache ? 1 : 0) || executions != 1 || retained_response) return 4;
     if (expect_cache) {
       auto* first=cache.get();
-      result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,true,nullptr);
+      result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,{},nullptr);
       if (!result.cached || cache.get()!=first || allocations!=1 || executions!=2) return 5;
       descriptor.budget=79;
-      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,true,nullptr); return 6; }
+      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,{},nullptr); return 6; }
       catch (const MethodError&) {}
       if (cache.get()!=first || allocations!=1 || executions!=2) return 7;
     }

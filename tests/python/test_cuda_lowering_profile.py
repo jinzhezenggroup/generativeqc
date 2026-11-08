@@ -46,6 +46,7 @@ namespace generativeqc::dft {
 enum class CudaXcAoPrecision {Fp64,Fp32ComputeFp64Storage};
 struct CudaXcLayout {
   std::size_t nao=512,npoint=1U<<19,work_jets=4,tile_points=256,spins=1,ao_map_entries=1;
+  std::uint32_t functional{};
   bool local_ao=true,response=false,fp32_contractions=false;
   CudaXcAoPrecision ao_precision=CudaXcAoPrecision::Fp64;
 };
@@ -60,6 +61,7 @@ int main(int argc,char** argv) {
   using namespace generativeqc::dft;
   using namespace generativeqc::dft::cuda_xc_detail;
   const std::string mode=argv[1];
+  unsetenv("GENERATIVEQC_CUDA_XC_GGA_GEMM");
   CudaXcLayout layout;
   probed_target.compute_capability_major=8;
   probed_target.fp32_fp64_ratio=2;
@@ -71,6 +73,26 @@ int main(int argc,char** argv) {
   if(mode=="small-ao") {--layout.nao;forbid_probe=true;library=false;}
   if(mode=="small-grid") {--layout.npoint;forbid_probe=true;library=false;}
   if(mode=="gga") {layout.work_jets=1;forbid_probe=true;library=false;}
+  if(mode.starts_with("gga-")) {
+    layout.work_jets=1;
+    layout.functional=semilocal_family_code(SemilocalFamily::Pbe);
+  }
+  if(mode=="gga-b3lyp") layout.functional=semilocal_family_code(SemilocalFamily::B3lyp);
+  if(mode=="gga-enabled") setenv("GENERATIVEQC_CUDA_XC_GGA_GEMM","1",1);
+  if(mode=="gga-rollback" || mode=="meta-rollback") {
+    setenv("GENERATIVEQC_CUDA_XC_GGA_GEMM","0",1);
+    if(mode=="gga-rollback") {forbid_probe=true;library=false;}
+  }
+  if(mode=="gga-invalid") {setenv("GENERATIVEQC_CUDA_XC_GGA_GEMM","2",1);forbid_probe=true;}
+  if(mode=="gga-uks") {layout.spins=2;forbid_probe=true;library=false;}
+  if(mode=="gga-other") {
+    layout.functional=semilocal_family_code(SemilocalFamily::Wb97mv);
+    forbid_probe=true;library=false;
+  }
+  if(mode=="gga-small") {--layout.nao;forbid_probe=true;library=false;}
+  if(mode=="gga-consumer") {
+    probed_target.compute_capability_major=12;probed_target.fp32_fp64_ratio=64;library=false;
+  }
   if(mode=="dense") {layout.local_ao=false;forbid_probe=true;library=false;}
   if(mode=="empty") {layout.ao_map_entries=0;forbid_probe=true;library=false;}
   if(mode=="response") {layout.response=true;forbid_probe=true;library=false;}
@@ -114,9 +136,10 @@ int main(int argc,char** argv) {
     if(mode=="cost-cold" || mode=="cost-pack") assert(!library_prepared);
     forbid_probe=false;
     const auto rejection=indexed_fp64_profile_rejection(layout,budget);
-    if(mode=="consumer" || mode=="unknown" || mode=="old")
+    if(mode=="consumer" || mode=="unknown" || mode=="old" || mode=="gga-consumer")
       assert(rejection.find("hardware")!=std::string_view::npos);
-    if(mode=="small-ao" || mode=="small-grid" || mode=="gga")
+    if(mode=="small-ao" || mode=="small-grid" || mode=="gga" || mode=="gga-small" ||
+       mode=="gga-rollback" || mode=="gga-uks" || mode=="gga-other")
       assert(rejection.find("workload")!=std::string_view::npos);
     if(mode=="mixed-ao" || mode=="mixed-contraction")
       assert(rejection.find("strict FP64")!=std::string_view::npos);
@@ -124,7 +147,7 @@ int main(int argc,char** argv) {
     catch(const std::invalid_argument&) {invalid=true;}
   assert(runtime_failed==(mode=="probe-failure" || mode=="pending-failure" ||
                           mode=="sync-failure" || mode=="destroy-failure"));
-  assert(invalid==(mode=="zero-reuse"));
+  assert(invalid==(mode=="zero-reuse" || mode=="gga-invalid"));
   assert(device==1 && live_handles==0 && ledger->live==0 && device_allocation_owners.empty());
 }
 """
@@ -255,6 +278,16 @@ std::unique_ptr<ProbePrepared> prepare_cost_probe(const CudaXcLayout& l,
         "small-ao",
         "small-grid",
         "gga",
+        "gga-pbe",
+        "gga-b3lyp",
+        "gga-enabled",
+        "gga-rollback",
+        "gga-uks",
+        "gga-other",
+        "gga-consumer",
+        "gga-small",
+        "gga-invalid",
+        "meta-rollback",
         "dense",
         "empty",
         "response",

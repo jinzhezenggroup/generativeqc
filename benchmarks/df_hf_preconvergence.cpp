@@ -249,8 +249,9 @@ int main(int argc, char** argv) {
       descriptor.ccsd_residual_tolerance = 1e-10;
       descriptor.correlation_memory_budget_bytes = budget;
       auto result = generativeqc::methods::detail::run_df_ccsdt_native(
-          execution, orbital, correlation, descriptor, endpoint == "forces", true, true, true, true,
-          8, 8, {}, true, true, true, false, false, {}, 30, true, true, false, &experiment);
+          execution, orbital, correlation, descriptor, endpoint == "forces", true, true,
+          generativeqc::cc::DFContractionQualification{.ordered_primal = true}, 8, 8, {}, true,
+          true, true, false, false, {}, 30, true, &experiment);
       direct_seconds = result.primal.reference_seconds;
       if (mode == "auto-direct") {
         automatic_guess = std::move(result.reference_guess);

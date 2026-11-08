@@ -333,6 +333,105 @@ int main() {
     subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
 
 
+def test_rhf_block_convergence_strict_selection(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Compile the actual private parser/resolver, without a CUDA or SCF run."""
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    subprocess.run(
+        [
+            sys.executable,
+            str(root / "tools/generate_one_electron_kernels.py"),
+            "--derivatives",
+            "--derivative-policy-output",
+            str(tmp_path / "generated_one_electron_derivative_policy.cuh"),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=60,
+    )
+    source = tmp_path / "block_policy.cpp"
+    source.write_text(r"""
+#include "scf/rhf_block_convergence_policy.hpp"
+#include <cassert>
+#include <cstdlib>
+#include <initializer_list>
+int main() {
+  using namespace generativeqc::scf::cuda_policy;
+  using R = RhfBlockConvergenceRequest;
+  assert(parse_rhf_block_convergence_request(nullptr) == R::Off);
+  assert(parse_rhf_block_convergence_request("0") == R::Off);
+  assert(parse_rhf_block_convergence_request("1") == R::On);
+  for (const char* bad : {"", "01", "true", "auto", " 1", "1 ", "-1", "2"})
+    assert(parse_rhf_block_convergence_request(bad) == R::Invalid);
+  unsetenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE");
+  assert(rhf_block_convergence_requested() == R::Off);
+  setenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE", "1", 1);
+  assert(rhf_block_convergence_requested() == R::On);
+  for (unsigned mask = 0; mask != 32; ++mask) {
+    const bool unrestricted = mask & 1, mixed = mask & 2, incremental = mask & 4;
+    const bool quartet = mask & 8, physical = mask & 16;
+    assert(resolve_rhf_block_convergence(R::On, unrestricted, mixed, incremental,
+                                        quartet, physical) == (mask == 8));
+    for (auto request : {R::Off, R::Invalid})
+      assert(!resolve_rhf_block_convergence(request, unrestricted, mixed, incremental,
+                                            quartet, physical));
+  }
+}
+""")
+    executable = required_native_cxx.build_executable(
+        [
+            source,
+            root / "src/scf/cuda/rhf_policy.cpp",
+            root / "src/runtime/cuda_provider.cpp",
+        ],
+        tmp_path / "block-policy",
+        compile_args=(
+            "-std=c++20",
+            f"-I{root / 'src'}",
+            f"-I{root / 'include'}",
+            f"-I{tmp_path}",
+        ),
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_rhf_block_convergence_is_part_of_cuda_resource_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    from generativeqc import estimate_hf_resources
+    from test_hf_cuda_fleet_resources import H2, layout_library
+
+    def identity(backend: str) -> Any:
+        return (
+            estimate_hf_resources([H2], backend=backend, library=layout_library())
+            .requests[0]
+            .identity
+        )
+
+    cpu = identity("cpu")
+    schedules = []
+    for value in (None, "0", "1", "invalid"):
+        if value is None:
+            monkeypatch.delenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE", raising=False)
+        else:
+            monkeypatch.setenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE", value)
+        current = identity("cuda")
+        assert (
+            json.loads(current.schedule)["runtime_policy"][
+                "GENERATIVEQC_HF_BLOCK_CONVERGENCE"
+            ]
+            == value
+        )
+        assert identity("cpu") == cpu
+        schedules.append(current.schedule)
+    assert len(set(schedules)) == 4
+
+
 def test_nonlocal_confirmation_requires_active_stationarity_and_no_rejected_proof(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:

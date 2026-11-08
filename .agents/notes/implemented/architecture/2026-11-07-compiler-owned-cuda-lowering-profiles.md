@@ -177,6 +177,53 @@ is claimed. The host capability probes cover its existing qualification but
 cannot promote a new hardware/workload cost model. Full SCF/force timing evidence
 remains necessary before changing an incumbent or expanding the qualified domain.
 
+## Dependency integration on 2026-11-08
+
+The original follow-up used dependency `0ffc7d153`. Preparing it on
+`c9ed7a408a6f1c4db46a67fd29d5ccf85b86d439` must retain the intervening
+[restricted GGA qualification](../performance/2026-11-08-gga-indexed-matrix-default.md).
+The old four-work-jet-only profile would otherwise silently withdraw the
+PBE-family/B3LYP default delivered by that dependency.
+
+Move the exact restricted one-work-jet family predicate into the shared compiler
+adapter. Keep the same AO/grid bounds, FP64 hardware and precision gates,
+optional resource refusal, and independent density rollback. The GGA rollback
+does not change meta-GGA admission. Invalid-control validation remains at the
+KS boundary even when optional capacity is unavailable, and the generated
+adapter applies the same contract for direct preparation callers.
+
+Executable host probes cover both density and potential preparation for the
+qualified families, explicit enable/rollback, unrestricted and unqualified
+families, small workloads, unsupported hardware and invalid controls. This is
+admission and resource integration evidence; no new GPU execution, force
+qualification or endpoint timing is claimed for the prepared combined tree.
+The original GPU receipts above retain their original source identities.
+
+The focused integration run passes 102 host checks across lowering profiles,
+KS local-AO admission, density repreparation, packed DF projection and device
+facts, using verified ccache 4.14.2. The one explicit CUDA device-fact check is
+skipped without a scheduled device allocation. Compiler dependency checks and
+provider-selection boundary checks pass. Catalog regeneration changes only the
+two current-input identity fields; retained measurements and `stale=True` remain
+unchanged, with zero newly admitted endpoints.
+
+## Checked-retirement dependency refresh
+
+The next preparation uses dependency
+`aa6b38330beaa35cee73793634e998a8a29bcb98`, retaining its checked density-provider
+retirement and public error mapping. The force-memory handoff, pending-retirement
+query, checked XC retirement and panel release functions remain byte-identical
+to that dependency. The updated automatic-budget provider call stays inside the
+existing allocation/runtime exception translation boundary. Tests retain the
+dependency's retirement, partial-release, original-charge and retry cases while
+adapting only the preparation interface.
+
+The affected lowering-profile, KS local-AO, density-repreparation and panel
+cleanup suites pass 145 host checks with verified ccache 4.14.2. Pinned
+clang-format 23.1.3 and Ruff 0.17.3 checks pass. This is a separate local
+preparation on the newer dependency, not a new GPU or endpoint qualification;
+the earlier preparation and all source-bound measurements remain unchanged.
+
 ## Revisit when
 
 Source-matched complete A100/consumer-GPU endpoints support a workload/tile/reuse

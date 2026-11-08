@@ -6,6 +6,7 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include "scf/cuda/df_scf_kernels.hpp"
@@ -277,7 +278,8 @@ void check_direct_df_acceptance(unsigned spins) {
  * A manufactured stationary tail must retire deltas, reject a reconstructed
  * baseline, and require consecutive full evaluations. Neighbors retain their
  * own warm/coarse/invalid/inactive state, for both spin and density lifetimes. */
-void check_incremental_energy_refinement(unsigned spins, bool retain, bool standard) {
+void check_incremental_energy_refinement(unsigned spins, bool retain, bool standard,
+                                         unsigned reduction_threads = 32) {
   using namespace generativeqc::scf::cuda_execution;
   constexpr unsigned batch = 10, basis_size = 16;
   const double tolerance = standard ? 1e-5 : 1e-9;
@@ -312,10 +314,10 @@ void check_incremental_energy_refinement(unsigned spins, bool retain, bool stand
   const auto launch =
       spins == 1 ? launch_update_convergence_kernel : launch_update_uhf_convergence_kernel;
   const auto converge = [&] {
-    launch(retain, batch, 32, 0, nullptr, batch, basis_size, energy_tolerance, tolerance, true,
-           energy.data, previous.data, next.data, density.data, active.data, converged.data,
-           iterations.data, change.data, rms.data, physical.data, census.data, standard,
-           updates.data, delta_count.data);
+    launch(retain, batch, reduction_threads, 0, nullptr, batch, basis_size, energy_tolerance,
+           tolerance, true, energy.data, previous.data, next.data, density.data, active.data,
+           converged.data, iterations.data, change.data, rms.data, physical.data, census.data,
+           standard, updates.data, delta_count.data);
     check(cudaGetLastError());
   };
   converge();
@@ -382,7 +384,8 @@ void check_incremental_energy_refinement(unsigned spins, bool retain, bool stand
 
 /** Near-stationary deltas retire before acceptance. Neither a full baseline nor
  * full-only mode may turn the phase-selection margin into a stopping margin. */
-void check_incremental_approach(unsigned spins, bool standard, bool density_limited) {
+void check_incremental_approach(unsigned spins, bool standard, bool density_limited,
+                                unsigned reduction_threads = 32) {
   using namespace generativeqc::scf::cuda_execution;
   constexpr unsigned batch = 3, basis_size = 8;
   const double tolerance = standard ? 1e-5 : 1e-9;
@@ -412,10 +415,10 @@ void check_incremental_approach(unsigned spins, bool standard, bool density_limi
     const std::vector<double> unchanged_density(batch * vector_size, 0.25);
     check(cudaMemcpy(density.data, unchanged_density.data(),
                      unchanged_density.size() * sizeof(double), cudaMemcpyHostToDevice));
-    launch(false, batch, 32, 0, nullptr, batch, basis_size, energy_tolerance, tolerance, true,
-           energy.data, previous.data, next.data, density.data, active.data, converged.data,
-           iterations.data, change.data, rms.data, physical.data, nullptr, standard, updates.data,
-           delta_count.data);
+    launch(false, batch, reduction_threads, 0, nullptr, batch, basis_size, energy_tolerance,
+           tolerance, true, energy.data, previous.data, next.data, density.data, active.data,
+           converged.data, iterations.data, change.data, rms.data, physical.data, nullptr, standard,
+           updates.data, delta_count.data);
     check(cudaGetLastError());
     if (updates.read() !=
             std::vector<std::uint32_t>(batch, kIncrementalDirectJkFullEnergyRefinement) ||
@@ -426,12 +429,125 @@ void check_incremental_approach(unsigned spins, bool standard, bool density_limi
       throw std::runtime_error("early refinement confused full and delta energy baselines");
   }
 }
+/** Independent scalar RMS/retention oracle for the actual 32/256 launchers.
+ * Residual peaks sit in the matrix tail, including other warps and nonfinite
+ * entries. The exact density boundary is dyadic; other deltas include signed
+ * cancellation and a serial long-double sum independent of the device tree. */
+void check_rhf_matrix_walk(unsigned n, unsigned reduction_threads, bool retain, bool graph,
+                           unsigned residual_route = 0) {
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr unsigned batch = 7;
+  const auto matrix = static_cast<std::size_t>(n) * n;
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double infinity = std::numeric_limits<double>::infinity();
+  const double tolerance = std::ldexp(1.0, -24), physical_bound = 1e-8;
+  std::vector<double> old(batch * matrix), proposal(batch * matrix), residual(batch * matrix, 0.0);
+  std::vector<long double> square(batch, 0.0L);
+  for (unsigned item = 0; item < batch; ++item) {
+    for (std::size_t k = 0; k < matrix; ++k) {
+      const auto index = item * matrix + k;
+      old[index] = item == 1 ? 0.0 : (k % 2 ? -0.25 : 0.25);
+      proposal[index] = old[index] + (static_cast<int>(k % 13) - 6) * 1e-12;
+      if (item == 1) proposal[index] = tolerance;
+      if (item == batch - 1) {
+        old[index] = nan;
+        proposal[index] = 97.0;
+      }
+      const double delta = proposal[index] - old[index];
+      square[item] += static_cast<long double>(delta) * delta;
+    }
+  }
+  residual[3 * matrix - 1] = physical_bound;
+  residual[4 * matrix - 1] = std::nextafter(physical_bound, infinity);
+  residual[5 * matrix - 1] = nan;
+  residual[6 * matrix - 1] = infinity;
+  residual[7 * matrix - 1] = nan;
+  Device<double> density(old), next(proposal), physical(residual),
+      energy(std::vector<double>(batch, -1.0)), previous(std::vector<double>(batch, -1.0)),
+      change(std::vector<double>(batch, -7.0)), rms(std::vector<double>(batch, -8.0));
+  Device<std::uint8_t> active(std::vector<std::uint8_t>{1, 1, 1, 1, 1, 1, 0}),
+      converged(std::vector<std::uint8_t>{0, 0, 0, 0, 0, 0, 9});
+  Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 3)),
+      census(std::vector<std::uint32_t>(batch, 1));
+  const auto launch = [&](cudaStream_t stream) {
+    launch_update_convergence_kernel(
+        retain, batch, reduction_threads, 0, stream, batch, n, 1e-12, tolerance, false, energy.data,
+        previous.data, next.data, density.data, active.data, converged.data, iterations.data,
+        change.data, rms.data, residual_route == 1 ? nullptr : physical.data,
+        residual_route == 2 ? census.data : nullptr);
+    check(cudaGetLastError());
+  };
+  if (graph) {
+    cudaStream_t stream{};
+    cudaGraph_t captured{};
+    cudaGraphExec_t executable{};
+    check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
+    launch(stream);
+    check(cudaStreamEndCapture(stream, &captured));
+    check(cudaGraphInstantiate(&executable, captured, nullptr, nullptr, 0));
+    check(cudaGraphLaunch(executable, stream));
+    check(cudaStreamSynchronize(stream));
+    check(cudaGraphExecDestroy(executable));
+    check(cudaGraphDestroy(captured));
+    check(cudaStreamDestroy(stream));
+  } else {
+    launch(nullptr);
+  }
+  const auto flags = converged.read(), mask = active.read();
+  const auto count = iterations.read();
+  const auto current = density.read(), rms_out = rms.read(), delta_energy = change.read(),
+             baseline = previous.read();
+  for (unsigned item = 0; item < batch; ++item) {
+    const bool inactive = item == batch - 1;
+    const bool accepted = !inactive && item != 1 && (item < 3 || residual_route != 0);
+    if (flags[item] != (inactive ? 9 : accepted) || mask[item] != (!inactive && !accepted) ||
+        count[item] != (inactive ? 3U : 4U) || baseline[item] != -1.0 ||
+        delta_energy[item] != (inactive ? -7.0 : 0.0))
+      throw std::runtime_error("RHF block reduction changed scalar acceptance or inactive state");
+    const double expected_rms = std::sqrt(static_cast<double>(square[item] / matrix));
+    // Positive-square accumulation: bound multiply/add rounds per thread,
+    // the fixed warp/block trees, division and sqrt via gamma_k. This compares
+    // arithmetic only; it never changes the kernel's physical stopping limit.
+    const double unit_roundoff = std::numeric_limits<double>::epsilon() / 2;
+    const auto steps = 2 * ((matrix + reduction_threads - 1) / reduction_threads) + 14;
+    const double gamma = steps * unit_roundoff / (1 - steps * unit_roundoff);
+    if ((inactive && rms_out[item] != -8.0) ||
+        (!inactive && (!std::isfinite(rms_out[item]) || rms_out[item] < 0.0 ||
+                       std::abs(rms_out[item] - expected_rms) > 4 * gamma * expected_rms)))
+      throw std::runtime_error("RHF block RMS differs from independent full-matrix arithmetic");
+    for (std::size_t k = 0; k < matrix; ++k) {
+      const auto index = item * matrix + k;
+      const double expected = inactive || (retain && accepted) ? old[index] : proposal[index];
+      if (!(current[index] == expected || (std::isnan(current[index]) && std::isnan(expected))))
+        throw std::runtime_error("RHF block copy lost a matrix tail or converged density");
+    }
+  }
+}
 }  // namespace
 
-int main() {
-  if (!std::getenv("SLURM_JOB_ID")) return 77;
+int main(int argc, char** argv) {
+  const bool block_only = argc == 2 && std::string_view(argv[1]) == "--rhf-block-convergence";
+  if (argc != 1 && !block_only) return 2;
+  if (!block_only && !std::getenv("SLURM_JOB_ID")) return 77;
   try {
     check(cudaSetDevice(0));
+    if (block_only) {
+      for (unsigned threads : {32U, 256U}) {
+        for (bool retain : {false, true}) {
+          for (unsigned n : {1U, 3U, 17U, 33U, 768U})
+            for (bool graph : {false, true}) check_rhf_matrix_walk(n, threads, retain, graph);
+          for (unsigned route : {1U, 2U}) check_rhf_matrix_walk(33, threads, retain, true, route);
+          for (bool standard : {false, true})
+            check_incremental_energy_refinement(1, retain, standard, threads);
+        }
+        for (bool standard : {false, true})
+          for (bool density_limited : {false, true})
+            check_incremental_approach(1, standard, density_limited, threads);
+      }
+      std::cout << "RHF 32/256 matrix-walk and energy-refinement controls passed\n";
+      return 0;
+    }
     for (unsigned spins : {1U, 2U})
       for (unsigned threads : {32U, 128U, 256U})
         for (bool masked : {false, true})

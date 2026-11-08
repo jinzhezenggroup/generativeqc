@@ -23,7 +23,9 @@ void launch_compute_uhf_energy_kernel(dim3 grid, dim3 block, std::size_t shared_
 
 /** A supplied physical residual adds the owner-qualified HF stationarity limit
  * to the iterative stop. Null is for compatibility callers/coarse refinement only. Each
- * block must contain exactly one warp; residuals precede DIIS extrapolation.
+ * block must contain exactly one warp, or the explicit RHF-only 256-thread
+ * specialization; residuals precede DIIS extrapolation. The latter changes
+ * FP64 RMS reduction order but preserves the scalar physical policy.
  * A nonzero per-item approximate census defers this test to target refinement;
  * exact neighbors retain the gate. Refinement must pass a null census.
  * Incremental HF may supply its controller/census to enter sticky full-only

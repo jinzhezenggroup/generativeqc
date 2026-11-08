@@ -155,6 +155,18 @@ class CudaPanelProduct final : public PreparedPanelProduct {
     }
   }
   ~CudaPanelProduct() override { release_matrix(); }
+  void release() override {
+    enabled_ = false;
+    std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+    runtime::CudaDeviceScope device_scope(context_.device(), generativeqc_tensor::cuda_check);
+    if (matrix_) {
+      generativeqc_tensor::cuda_check(cudaStreamSynchronize(context_.stream()));
+      generativeqc_tensor::cuda_check(runtime::resource_cuda_free(matrix_));
+      matrix_ = nullptr;
+    }
+    context_.release_locked();
+    generativeqc_tensor::cuda_check(device_scope.restore());
+  }
   bool enabled() const noexcept override { return enabled_; }
   double* materialized_matrices() const noexcept override { return matrix_; }
   const PanelProductDiagnostic& diagnostic() const noexcept override { return diagnostic_; }

@@ -383,6 +383,11 @@ def test_density_preparation_requires_physical_support_and_formal_qualification(
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("requires a host C++ compiler")
+    (tmp_path / "cuda_runtime_api.h").write_text(
+        "#pragma once\nusing cudaError_t = int;\n"
+        "constexpr int cudaSuccess = 0, cudaErrorMemoryAllocation = 2;\n"
+        'inline const char* cudaGetErrorString(int) { return "CUDA error"; }\n'
+    )
     unit = tmp_path / "density_guard.cpp"
     executable = tmp_path / "density_guard"
     emitted = _emit_tiled(XcMatrixSchedule(16))
@@ -397,6 +402,8 @@ def test_density_preparation_requires_physical_support_and_formal_qualification(
 #include <stdexcept>
 #include <vector>
 #include "dft/xc_capabilities.hpp"
+#include "generativeqc/generativeqc.hpp"
+#include "tensor/cuda_error.hpp"
 #include "runtime/lowering_binding.hpp"
 using namespace generativeqc::dft;
 using namespace generativeqc::runtime;
