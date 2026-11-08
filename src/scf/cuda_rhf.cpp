@@ -3703,11 +3703,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const bool qualified_standard_owner = standard_hf_stationarity_owner({
       !unrestricted,
       !mixed_precision_fock,
-      std::all_of(systems.begin(), systems.end(), [](const auto& system) {
-        return system.ecp_terms.empty() &&
-               std::none_of(system.atoms.begin(), system.atoms.end(),
-                            [](const auto& atom) { return atom.ecp_core != 0; });
-      }),
+      std::all_of(systems.begin(), systems.end(),
+                  [](const auto& system) {
+                    return system.ecp_terms.empty() &&
+                           std::none_of(system.atoms.begin(), system.atoms.end(),
+                                        [](const auto& atom) { return atom.ecp_core != 0; });
+                  }),
       options.compute_forces,
       options.export_physical_reference,
   });
