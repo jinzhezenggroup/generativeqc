@@ -49,14 +49,9 @@ def capacity_probe(
         "#pragma once\nusing cublasHandle_t=void*;\nusing cublasStatus_t=int;\n"
     )
     eigen_units = empty_eigen_owner_units(directory)
-    # The actual topology packer consumes this compiler-owned schedule.
-    from generativeqc_compiler.integral.direct_resident_schedule import (
-        emit_direct_resident_psss_schedule_header,
-    )
+    from _direct_schedule_test_support import write_direct_policy_headers
 
-    (directory / "generated_direct_resident_psss_schedule.cuh").write_text(
-        emit_direct_resident_psss_schedule_header()
-    )
+    write_direct_policy_headers(directory)
     driver = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
     reference = (ROOT / "src/scf/cuda/reference_export.cuh").read_text()
     diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
@@ -241,6 +236,10 @@ CudaResources::~CudaResources() { if(arena_) ++destroyed; }
 RhfIterationGraphs::~RhfIterationGraphs() = default;
 }
 namespace generativeqc::scf::cuda_policy {
+SmallHfProfitabilityPolicy resolve_small_hf_profitability(
+    const runtime::CudaTargetInfo&, const SmallHfWorkload&, SmallHfProfitabilityProfile) noexcept {
+  std::terminate();
+}
 bool reuse_converged_fock_requested() noexcept { return false; }
 bool graph_native_eigensolver_override_requested() noexcept { return false; }
 bool bounded_direct_streaming_override_requested() noexcept { return false; }
@@ -256,6 +255,9 @@ MixedPrecisionFockPolicy resolve_mixed_precision_fock_policy(
     std::optional<generativeqc_precision_mode>,double,double,double) noexcept { return {}; }
 }
 namespace generativeqc::scf {
+generativeqc_status query_hf_cuda_target(int, runtime::CudaTargetInfo& target) {
+  target = {}; return GENERATIVEQC_STATUS_SUCCESS;
+}
 using namespace cuda_execution;
 using namespace cuda_policy;
 FockBuildSpec make_hf_fock_spec(FockSpin spin,FockApproximation) {

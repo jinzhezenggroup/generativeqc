@@ -50,3 +50,13 @@ def test_invalid_consumer_fails_before_writing_sources(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="consumer"):
         prepare_fixture(destination, consumer="combined-k")
     assert not destination.exists()
+
+
+def test_coincident_components_contract_each_eri_orbit_once() -> None:
+    """A full repeated shell block already contains symmetry-related components."""
+    integrals = np.ones((2, 2, 2, 2)) * 0.25
+    density = np.array([[1.0, 2.0], [2.0, 4.0]])
+    expected = np.einsum("ijkl,jl->ik", integrals, density)
+    np.testing.assert_array_equal(
+        raw_exchange_reference(integrals, density, (0, 0, 0, 0)), expected
+    )

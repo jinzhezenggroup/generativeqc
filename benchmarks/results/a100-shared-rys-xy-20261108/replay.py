@@ -65,6 +65,53 @@ def replay(directory: Path = ROOT) -> dict:
     def record(name: str) -> dict:
         return json.loads(capsule[name])
 
+    def require_image(identity: dict) -> None:
+        require(
+            all(
+                identity.get(key) == cohort[key]
+                for key in ("source_identity", "library_sha256")
+            ),
+            "wrong auxiliary measured image",
+        )
+
+    def require_retained(name: str, digest: str) -> None:
+        require(
+            hashlib.sha256(capsule[name].encode()).hexdigest() == digest,
+            "unqualified historical auxiliary provenance: " + name,
+        )
+
+    # These are immutable evidence inputs, not fingerprints of current production
+    # code. The old strict producer omitted basis/method, and the extra producer
+    # omitted per-record image metadata. Only this audited historical recipe and
+    # same-job chain can supply that context; never infer it for arbitrary records.
+    require_retained(
+        "drivers/strict-native.py",
+        "80973857ec1d7d34645de1cc58d80927fb3ebeb141e7cf97eb74240872a444ab",
+    )
+    require_retained(
+        "drivers/qualify-extra.py",
+        "015109fc788b3f46a319812b6d64c7a062640a58c4e7b6bc97e82b744523b475",
+    )
+    historical_extra = {
+        "a100": (
+            "0128c8193843f0eaf7a675805c4dc211b763a70c21052335c126300c71e8e51c",
+            "ccc4318fea4be87b969b9631def87cae0946ee80260bcb049f427cfa848bdb51",
+            "LSB_JOBID",
+            "229003",
+        ),
+        "5090": (
+            "ef33f1aaf13183e5eeac0a87cf6a6f110ee5c46871b881fe1f6874c42681938c",
+            "912732b9086e1fd5d75f2553d8ea3579a3fd6842ab525b872326500128646344",
+            "SLURM_JOB_ID",
+            "16818",
+        ),
+    }
+    require_retained(
+        "final2/image-identity.json",
+        "fb526af14e6a76fef340aed2e5df3e7f950bf2eba4a6825debcef309b3bbbd52",
+    )
+    require_image(record("final2/image-identity.json"))
+
     references = {
         size: record(name) for size, name in cohort["reference_files"].items()
     }
@@ -104,6 +151,16 @@ def replay(directory: Path = ROOT) -> dict:
     }
     promotion = True
     for card in ("a100", "5090"):
+        worker_digest, extra_digest, scheduler_key, job = historical_extra[card]
+        require_retained(f"drivers/worker-final2-{card}.sh", worker_digest)
+        require_retained(f"final-{card}/extra-native.json", extra_digest)
+        identity = record(f"final-{card}/identity-48-4-control.json")
+        require_image(identity)
+        require(
+            identity["scheduler"].get(scheduler_key) == job
+            and capsule[f"final-{card}/exit-code.txt"].strip() == "0",
+            "incomplete historical auxiliary job provenance",
+        )
         cases = {}
         for atoms in (96, 48):
             populations = []
@@ -232,6 +289,14 @@ def replay(directory: Path = ROOT) -> dict:
         strict = {}
         for arm in ("control", "candidate"):
             data = record(f"final-{card}/hf48-tight-{arm}.json")
+            require_image(data.get("native_build", {}))
+            require(
+                data.get("schema") == "hf48-tight-native.v1"
+                and data.get("geometry_bohr") == references["48"]["geometry_bohr"]
+                and data.get("xy_control") == ("0" if arm == "control" else None)
+                and data.get("scheduler", {}).get(scheduler_key) == job,
+                "changed strict auxiliary scientific input or job",
+            )
             require(
                 len(data["samples"]) == 4
                 and (
@@ -249,13 +314,44 @@ def replay(directory: Path = ROOT) -> dict:
         moved_target = record("history-qualification-a100/extra-reference.json")[
             "observations"
         ][1]
-        extra = record(f"final-{card}/extra-native.json")["observations"]
+        extra_record = record(f"final-{card}/extra-native.json")
+        require(
+            extra_record.get("engine") == "native"
+            and extra_record.get("schema") == "cooperative-roots-extra.v1",
+            "changed auxiliary endpoint",
+        )
+        extra = extra_record["observations"]
+        original96 = record(f"final-{card}/hf-96-1-control.json")
+        extra_settings = dict(original96["samples"][0]["settings"])
+        # The historical extra producer predates this null HF-only field.
+        require(
+            extra_settings.pop("resolved_force_tile_points") is None,
+            "changed auxiliary HF force settings",
+        )
+        moved_geometry = json.loads(json.dumps(original96["geometry_bohr"]))
+        moved_geometry[1][1][0] += 0.01
+        require(
+            moved_target.get("name") == "hf96-moved"
+            and moved_target.get("geometry_bohr") == moved_geometry,
+            "changed auxiliary independent geometry",
+        )
         require(
             [item["name"] for item in extra] == ["hf96-moved", "hf96-restored"],
             "missing displaced/restored endpoint",
         )
         restored = []
         for item, target in zip(extra, (moved_target, references["96"]), strict=True):
+            expected_geometry = (
+                moved_geometry
+                if item["name"] == "hf96-moved"
+                else original96["geometry_bohr"]
+            )
+            require(
+                item.get("geometry_bohr") == expected_geometry
+                and item.get("settings") == extra_settings
+                and item.get("warm_start_used") is True,
+                "changed auxiliary scientific input",
+            )
             error = observable_error(item, target)
             restored.append(
                 {
@@ -270,6 +366,13 @@ def replay(directory: Path = ROOT) -> dict:
             "default_cases": cases,
             "strict_request_hf48": strict,
             "moved_and_restored_hf96": restored,
+            "auxiliary_provenance": {
+                "strict_hf48": "recorded native image; retained producer scientific recipe",
+                "moved_and_restored_hf96": (
+                    "retained observation and producer bytes; authenticated same-job image; "
+                    "no per-record native image measurement in historical schema"
+                ),
+            },
         }
     summary["independent_default_promotion_qualified"] = bool(promotion)
     return summary

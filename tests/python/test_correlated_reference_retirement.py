@@ -231,10 +231,8 @@ int main() {
 def test_exact_h2_mp2_capacity_is_restored_after_plan_retirement(
     tmp_path: Path,
 ) -> None:
+    from _direct_schedule_test_support import write_direct_policy_headers
     from generativeqc_compiler.common.cuda_target import cuda_target_info
-    from generativeqc_compiler.integral.direct_resident_schedule import (
-        emit_direct_resident_psss_schedule_header,
-    )
     from generativeqc_compiler.mp2.equations import energy_program
     from generativeqc_compiler.tensor.cuda_plan import plan_cuda
     from generativeqc_compiler.tensor.optimize import prepare_for_backend
@@ -248,9 +246,7 @@ def test_exact_h2_mp2_capacity_is_restored_after_plan_retirement(
         max_bytes=1 << 20,
         reassociate_contractions=False,
     )
-    (tmp_path / "generated_direct_resident_psss_schedule.cuh").write_text(
-        emit_direct_resident_psss_schedule_header(), encoding="utf-8"
-    )
+    write_direct_policy_headers(tmp_path)
     provider = (ROOT / "src/posthf/native_provider.cpp").read_text(encoding="utf-8")
     provider = provider[
         provider.index("namespace generativeqc::posthf {") : provider.index(
@@ -326,6 +322,8 @@ class DensityFittedInteractionSource : public integrals::ElectronInteractionSour
         (
             ROOT / "src/scf/cuda/arena.cpp",
             ROOT / "src/scf/cuda/topology.cpp",
+            ROOT / "src/scf/cuda/rhf_policy.cpp",
+            ROOT / "src/runtime/cuda_provider.cpp",
             ROOT / "src/molecule/basis.cpp",
         ),
     )

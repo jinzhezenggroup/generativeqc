@@ -141,6 +141,76 @@ def qualify_native(
             "Wrong endpoint native build",
         )
 
+    device_identity = None
+
+    def require_native_endpoint(
+        record: dict, arm: str, method: str, atoms: int
+    ) -> None:
+        """Bind measured device, scientific workload and qualified public defaults."""
+        nonlocal device_identity
+        require_native_build(record, arm)
+        require(
+            "streaming_trial" not in record,
+            "Interposer is not normal native qualification",
+        )
+        require(
+            (
+                record.get("method"),
+                record.get("mode"),
+                record.get("atoms"),
+                record.get("arm"),
+            )
+            == (method, "direct", atoms, "standard"),
+            "Wrong native workload",
+        )
+        accelerator = record.get("accelerator") or {}
+        name, capability = {
+            "a100": ("NVIDIA A100-PCIE-40GB", [8, 0]),
+            "5090": ("NVIDIA GeForce RTX 5090", [12, 0]),
+        }[card]
+        require(
+            accelerator.get("backend") == "cuda"
+            and accelerator.get("name") == name
+            and accelerator.get("compute_capability") == capability,
+            "Wrong qualification GPU",
+        )
+        identity = (
+            accelerator.get("device_id"),
+            accelerator.get("pci_bus_id"),
+            accelerator.get("nvidia_smi", {}).get("uuid"),
+        )
+        require(
+            all(value is not None for value in identity),
+            "Missing qualification GPU identity",
+        )
+        if device_identity is None:
+            device_identity = identity
+        require(identity == device_identity, "Changed qualification GPU identity")
+        defaults = {
+            "energy_tolerance": 1e-9,
+            "density_tolerance": 1e-5,
+            "screening_tolerance": 1e-12,
+            "max_iterations": 100,
+            "diis_history": 8,
+            "force_grid_response": True,
+            "scf_tile_points": 1024,
+            "requested_scf_tile_points": None,
+            "force_tile_points": None,
+            "resolved_force_tile_points": 1024,
+            "initial_guess": "InitialGuessSpec(kind='huckel', max_iterations=32, diis_history=8, energy_tolerance=1e-06, density_tolerance=0.0001, maximum_numeric_bytes=268435456, grid=None)",
+            "nonlocal_grid": None,
+            "nonlocal_density_policy": None,
+            "nonlocal_grid_inherits_xc": True,
+        }
+        for sample in record["samples"]:
+            require(
+                all(
+                    key in sample["settings"] and sample["settings"][key] == value
+                    for key, value in defaults.items()
+                ),
+                "Changed qualified default settings",
+            )
+
     report = {
         "card": card,
         "default_promotion_qualified": False,
@@ -160,11 +230,7 @@ def qualify_native(
                 (image["source_identity"], image["library_sha256"]) == expected[arm],
                 "Wrong normal ELF",
             )
-            require_native_build(record, arm)
-            require(
-                "streaming_trial" not in record,
-                "Interposer is not normal native qualification",
-            )
+            require_native_endpoint(record, arm, method, 96)
             require(
                 record["status"] == "complete" and len(record["samples"]) == 4,
                 "Incomplete population",
@@ -333,7 +399,7 @@ def qualify_native(
             == ("pbe0", "direct", 48),
             "Wrong 48-atom workload",
         )
-        require_native_build(record, arm)
+        require_native_endpoint(record, arm, "pbe0", 48)
         require(
             record["status"] == "complete" and len(record["samples"]) == 4,
             "Incomplete 48-atom population",

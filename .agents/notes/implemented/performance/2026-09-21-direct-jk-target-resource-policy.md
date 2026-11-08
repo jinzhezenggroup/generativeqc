@@ -40,3 +40,11 @@ performance domains and reduced the qualified RTX 5090 bounded page below 8M
 tasks. The follow-up `2026-09-22-direct-jk-capacity-domain-separation.md`
 splits those policies, restores the qualified bounded page, and adds explicit
 cross-domain regression guards.
+
+## 2026-11-08 ownership follow-up
+
+[Resolved topology admission](2026-11-08-direct-jk-topology-profile-admission.md)
+connects the no-calibration resident-ERI decision to packing, resource admission
+and cache identity, and moves persistent queue domains to compiler policy.
+Calibrated-profile activation and real-device endpoint qualification remain
+pending; this follow-up does not establish a new schedule winner or close #597.

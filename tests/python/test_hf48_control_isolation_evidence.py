@@ -122,3 +122,23 @@ def test_strict_force_nonfinite_errors_cannot_pass(
     actual = {**target, "forces": [[value, 0.0, 0.0] for _ in range(48)]}
     with pytest.raises(ValueError, match="nonfinite force"):
         stationarity_reader["observable_error"](actual, target)
+
+
+@pytest.mark.parametrize("field", ("iterations", "fock_builds"))
+@pytest.mark.parametrize("value", (0, -1, 1.5, True, float("nan"), 13))
+def test_strict_force_requires_source_bound_positive_work(
+    stationarity_reader: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: object,
+) -> None:
+    import json
+
+    cohort, files = stationarity_reader["load"]()
+    record = json.loads(files["candidate.json"])
+    record["samples"][0][field] = value
+    files["candidate.json"] = json.dumps(record)
+    replay = stationarity_reader["replay"]
+    monkeypatch.setitem(replay.__globals__, "load", lambda _: (cohort, files))
+    with pytest.raises(ValueError, match="source-bound SCF work"):
+        replay()

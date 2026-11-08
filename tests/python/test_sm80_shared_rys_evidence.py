@@ -138,3 +138,103 @@ def test_historical_reference_requires_bound_producer(
     )
     with pytest.raises(ValueError, match="historical HF96 reference provenance"):
         reader["replay"]()
+
+
+@pytest.mark.parametrize("card", ("a100", "5090"))
+@pytest.mark.parametrize(
+    "corruption", ("source_identity", "library_sha256", "geometry", "arm", "job")
+)
+def test_strict_auxiliary_requires_its_image_and_scientific_inputs(
+    reader: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    card: str,
+    corruption: str,
+) -> None:
+    cohort, capsule = reader["load"]()
+    capsule = dict(capsule)
+    name = f"final-{card}/hf48-tight-control.json"
+    record = json.loads(capsule[name])
+    if corruption in ("source_identity", "library_sha256"):
+        record["native_build"][corruption] = "0" * 64
+    elif corruption == "geometry":
+        record["geometry_bohr"][1][1][0] += 0.01
+    elif corruption == "arm":
+        record["xy_control"] = None
+    else:
+        record["scheduler"]["LSB_JOBID" if card == "a100" else "SLURM_JOB_ID"] = "0"
+    capsule[name] = json.dumps(record)
+    monkeypatch.setitem(
+        reader["replay"].__globals__, "load", lambda _: (cohort, capsule)
+    )
+    with pytest.raises(ValueError, match="auxiliary"):
+        reader["replay"]()
+
+
+@pytest.mark.parametrize("card", ("a100", "5090"))
+@pytest.mark.parametrize(
+    "corruption", ("geometry", "settings", "engine", "identity", "job", "exit")
+)
+def test_legacy_extra_requires_bound_same_job_provenance(
+    reader: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    card: str,
+    corruption: str,
+) -> None:
+    cohort, capsule = reader["load"]()
+    capsule = dict(capsule)
+    name = f"final-{card}/extra-native.json"
+    if corruption == "exit":
+        capsule[f"final-{card}/exit-code.txt"] = "1\n"
+    else:
+        if corruption in ("identity", "job"):
+            name = f"final-{card}/identity-48-4-control.json"
+        record = json.loads(capsule[name])
+        if corruption == "geometry":
+            record["observations"][0]["geometry_bohr"][1][1][0] += 0.01
+        elif corruption == "settings":
+            record["observations"][1]["settings"]["screening_tolerance"] = 1e-6
+        elif corruption == "engine":
+            record["engine"] = "reference"
+        elif corruption == "identity":
+            record["library_sha256"] = "0" * 64
+        else:
+            record["scheduler"]["LSB_JOBID" if card == "a100" else "SLURM_JOB_ID"] = "0"
+        capsule[name] = json.dumps(record)
+    monkeypatch.setitem(
+        reader["replay"].__globals__, "load", lambda _: (cohort, capsule)
+    )
+    with pytest.raises(ValueError, match="auxiliary"):
+        reader["replay"]()
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "drivers/strict-native.py",
+        "drivers/qualify-extra.py",
+        "drivers/worker-final2-a100.sh",
+        "drivers/worker-final2-5090.sh",
+        "final2/image-identity.json",
+    ),
+)
+def test_historical_auxiliary_recipe_cannot_be_substituted(
+    reader: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+) -> None:
+    """Bind missing legacy fields to retained inputs, never current source hashes."""
+    cohort, capsule = reader["load"]()
+    capsule = {**capsule, name: capsule[name] + "\n"}
+    monkeypatch.setitem(
+        reader["replay"].__globals__, "load", lambda _: (cohort, capsule)
+    )
+    with pytest.raises(ValueError, match="auxiliary provenance"):
+        reader["replay"]()
+
+
+def test_legacy_extra_image_scope_is_explicit(reader: dict[str, Any]) -> None:
+    for card in reader["replay"]()["cards"].values():
+        assert (
+            "no per-record native image measurement"
+            in card["auxiliary_provenance"]["moved_and_restored_hf96"]
+        )

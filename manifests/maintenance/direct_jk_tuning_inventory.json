@@ -4,21 +4,6 @@
   "source_note": ".agents/notes/implemented/performance/2026-09-21-direct-jk-target-resource-policy.md",
   "remaining_constants": [
     {
-      "symbol": "kPersistentEriAoLimit",
-      "source": "src/scf/cuda/direct_constants.hpp",
-      "expected_expression": "16",
-      "classification": "workload-profile-choice",
-      "state": "migration-pending",
-      "current_owner": "fixed-topology admission and topology layout",
-      "intended_owner": "scf::cuda_policy::resolve_small_hf_profitability plus topology/cache identity",
-      "retirement_condition": "Topology construction and cache identity consume the resolved persistent-ERI policy, with no-profile compatibility and matched endpoint/resource qualification retained.",
-      "policy_source": "src/scf/cuda/rhf_policy.hpp",
-      "required_policy_tokens": [
-        "fallback_persistent_eri_ao_limit{16}",
-        "resolve_small_hf_profitability"
-      ]
-    },
-    {
       "symbol": "kBoundedGeneratedTasksPerShellPair",
       "source": "src/scf/cuda/direct_constants.hpp",
       "expected_expression": "1024",
@@ -27,29 +12,32 @@
       "current_owner": "generated descriptor staging cache",
       "intended_owner": "compiler/profile policy if this staging bound becomes target- or workload-dependent",
       "retirement_condition": "Move only after a compiler/profile owner can reproduce the bounded staging contract without increasing endpoint memory or work."
-    },
-    {
-      "symbol": "kPersistentForceAngularOrderCount",
-      "source": "src/scf/cuda/direct_constants.hpp",
-      "expected_expression": "7",
-      "classification": "measured-schedule-choice",
-      "state": "migration-pending",
-      "current_owner": "native Direct-force queue admission",
-      "intended_owner": "compiler schedule/profile selection",
-      "retirement_condition": "A compiler-owned schedule/profile represents the persistent-force order domain and passes unchanged force correctness plus complete endpoint profitability gates."
-    },
-    {
-      "symbol": "kPersistentFockAngularOrderCount",
-      "source": "src/scf/cuda/direct_constants.hpp",
-      "expected_expression": "6",
-      "classification": "measured-schedule-choice",
-      "state": "migration-pending",
-      "current_owner": "native Direct-Fock queue admission",
-      "intended_owner": "compiler schedule/profile selection",
-      "retirement_condition": "A compiler-owned schedule/profile represents the persistent-Fock order domain and passes unchanged J/K correctness plus complete endpoint profitability gates."
     }
   ],
+  "pending_qualification": [
+    "Canonical target/provider/version-compatible calibrated-profile admission and production activation remain pending; the AO crossover is still a no-calibration fallback, not a screened-work/reuse profitability model.",
+    "Persistent queue-domain profiles are compiler-owned build inputs, not a runtime target/workload autotune winner; defaults retain force=7 and Fock=6.",
+    "Matched RTX 5090 cold/warm/moved-warm RHF/UHF energy/force endpoint qualification and independent scientific oracle gates remain required before claiming #597 complete."
+  ],
   "migrated_settings": [
+    {
+      "name": "persistent-eri-topology-admission",
+      "source": "src/scf/cuda/rhf_policy.hpp",
+      "owner": "SmallHfProfitabilityProfile / resolved HostBatch topology identity",
+      "required_tokens": [
+        "SmallHfProfitabilityProfile",
+        "resolve_small_hf_profitability"
+      ]
+    },
+    {
+      "name": "persistent-angular-order-domains",
+      "source": "python/generativeqc_compiler/integral/direct_resident_schedule.py",
+      "owner": "DirectPersistentScheduleProfile / generated queue allocation, reset and dispatch contract",
+      "required_tokens": [
+        "DirectPersistentScheduleProfile",
+        "emit_direct_resident_psss_schedule_header"
+      ]
+    },
     {
       "name": "cublas-matrix-product-fallback-threshold",
       "source": "src/tensor/cuda_matrix_product_admission.hpp",

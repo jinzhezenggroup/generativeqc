@@ -468,10 +468,8 @@ namespace {
 std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     CudaRhfBucketPlan& plan, const HostBatch& host, const std::vector<core::System>& systems,
     const ScfOptions& options, int device_id, bool unrestricted, bool shell_class_profiling,
-    bool inactive_eigensolver_profiling,
+    bool inactive_eigensolver_profiling, const runtime::CudaTargetInfo& direct_target,
     std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics) {
-  preflight_reference_provider_initialization(options.reference_provider_initialization,
-                                              options.export_physical_reference);
   const auto pending_resident_selection =
       options.reference_provider_initialization_owner
           ? reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"))
@@ -529,16 +527,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   plan.last_ppps_queue_profile.reset();
   plan.last_inactive_eigensolver_profile.reset();
 
-  // Reuse the visibility-safe facts owner and its complete provider fallback.
-  // Unbatched HF does not need the unrelated full-property grid limits.
-  runtime::CudaTargetInfo direct_target{};
-  char direct_device_name[256]{};
-  const cudaError_t direct_target_error =
-      runtime::cuda_device_facts(device_id, direct_target, direct_device_name);
-  if (direct_target_error != cudaSuccess) {
-    fill_global_failure(outputs, cuda_status(direct_target_error));
-    return outputs;
-  }
+  // Admission, topology packing and execution share one visibility-safe probe.
   const auto direct_profile =
       cuda_policy::resolve_hf_direct_tuning_profile(options.export_physical_reference);
   const cuda_policy::DirectJkSchedulePolicy direct_schedule =
@@ -646,7 +635,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // small HF systems. Persistent ERIs remain an energy-only profitability path;
   // keeping their handwritten force consumer would duplicate generated science.
   const bool requested_persistent_eri =
-      !options.compute_forces && !options.export_physical_reference && nbf <= kPersistentEriAoLimit;
+      !options.compute_forces && !options.export_physical_reference && host.persistent_eri;
   const bool reference_quartets =
       options.export_physical_reference &&
       reference_quartet_direct(
@@ -6051,14 +6040,20 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
 
 }  // namespace
 
+generativeqc_status query_hf_cuda_target(int device_id, runtime::CudaTargetInfo& target) {
+  char device_name[256]{};
+  return cuda_execution::cuda_status(runtime::cuda_device_facts(device_id, target, device_name));
+}
+
 std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(
     CudaRhfBucketPlan& plan, const cuda_execution::HostBatch& host,
     const std::vector<core::System>& systems, const ScfOptions& options, int device_id,
     bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling,
+    const runtime::CudaTargetInfo& direct_target,
     std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics) {
   return execute_hf_cuda_bucket(plan, host, systems, options, device_id, unrestricted,
                                 shell_class_profiling, inactive_eigensolver_profiling,
-                                seed_diagnostics);
+                                direct_target, seed_diagnostics);
 }
 
 generativeqc_status contract_cuda_weighted_eri_primitives(

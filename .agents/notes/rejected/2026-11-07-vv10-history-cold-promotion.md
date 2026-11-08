@@ -83,3 +83,11 @@ scientific/lifetime gates and reduces complete cold work on A100 without5090
 regression. Separately rank changed-density outer sweeps and shared geometry
 pullback against measured XC/order-six force work; neither this failed pilot nor
 the older AO cache/map-hoist rejection establishes a win for those branches.
+
+## Subsequent retirement
+
+On 2026-11-09 the user authorized
+[retiring the rejected opt-in](2026-11-09-retire-vv10-history-rebase.md).
+That removes the experimental runtime path without changing this evidence or
+its rejection. The implementation rationale remains historical; no later
+default promotion or new GPU qualification is implied.

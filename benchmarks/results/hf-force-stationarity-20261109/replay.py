@@ -119,7 +119,19 @@ def replay(directory: Path = ROOT) -> dict:
             "incomplete cold/warm population",
         )
         results = []
-        for sample in samples:
+        # Counts belong to these historical, source-bound observations, not
+        # a required iteration count for future implementations or GPU runs.
+        expected_work = [10 if arm == "baseline" else 14, 1, 1, 1]
+        for sample, expected_count in zip(samples, expected_work, strict=True):
+            require(
+                all(
+                    type(sample.get(name)) is int
+                    and sample[name] > 0
+                    and sample[name] == expected_count
+                    for name in ("iterations", "fock_builds")
+                ),
+                "invalid source-bound SCF work",
+            )
             require(
                 math.isfinite(sample["seconds"]) and sample["seconds"] > 0,
                 "invalid complete endpoint timing",

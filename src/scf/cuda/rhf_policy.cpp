@@ -236,7 +236,12 @@ SmallHfProfitabilityPolicy resolve_small_hf_profitability(
   // slice. Its derived n^4 storage/work facts are exposed above, but the direct
   // route also needs screened shell-quartet work and expected SCF reuse before
   // a profitability comparison is meaningful.
-  policy.persistent_eri = workload.nbf <= profile.fallback_persistent_eri_ao_limit;
+  const auto eri_budget = resolve_target_memory_budget(
+      target.total_global_memory, profile.maximum_persistent_eri_bytes,
+      kUnknownTargetFixedTopologyArenaBytes, kFixedTopologyArenaDeviceMemoryDivisor);
+  policy.persistent_eri = workload.system_count != 0 && workload.fock_state_count != 0 &&
+                          workload.nbf <= profile.fallback_persistent_eri_ao_limit &&
+                          policy.estimate.eri_bytes <= eri_budget;
 
   policy.matrix = tensor::CudaMatrixProductAdmission::resolve(
       target, workload.nbf, workload.matrix_count, profile.matrix);
