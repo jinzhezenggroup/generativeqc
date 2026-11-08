@@ -27,6 +27,9 @@ struct alignas(std::max_align_t) Header {
 };
 bool enabled = false;
 std::size_t live = 0, peak = 0, calls = 0, total = 0;
+std::size_t fail_stage = 0, reservation_bytes = 0;
+bool reserving = false;
+bool faulted = false;
 // Allocation ownership follows its creation epoch even while callbacks pause
 // observation. Callback/oracle scratch never counts toward transform receipts.
 struct Pause {
@@ -36,6 +39,13 @@ struct Pause {
 };
 }  // namespace allocation
 void* operator new(std::size_t bytes) {
+  if (allocation::enabled && allocation::fail_stage) {
+    if (bytes == allocation::reservation_bytes) allocation::reserving = true;
+    if (allocation::reserving && --allocation::fail_stage == 0) {
+      allocation::faulted = true;
+      throw std::bad_alloc();
+    }
+  }
   auto* header = static_cast<allocation::Header*>(std::malloc(sizeof(allocation::Header) + bytes));
   if (!header) throw std::bad_alloc();
   header->bytes = bytes;
@@ -349,9 +359,11 @@ int main(int argc, char** argv) {
     require(argc == 4 || argc == 5, "expected case, factorized, sparse and optional physical data");
     const unsigned id = std::stoul(argv[1]);
     const unsigned representation = std::stoul(argv[2]);
-    const bool projected = representation == 4;
-    const bool factorized = representation == 1 || representation == 3;
-    const bool compact = representation == 1, sparse = std::stoi(argv[3]);
+    const auto* fail = std::getenv("PROBE_RESERVATION_FAILURE");
+    const unsigned failure_stage = fail ? std::stoul(fail) : 0;
+    const bool projected = representation == 4 && !failure_stage;
+    const bool factorized = representation == 1 || representation == 3 || failure_stage;
+    const bool compact = representation == 1 || failure_stage, sparse = std::stoi(argv[3]);
     auto f = fixture(id, representation, sparse);
     const auto n = f.reference.nbf, h = f.system.shells.size();
     std::size_t maximum_shell = 0;
@@ -386,6 +398,7 @@ int main(int argc, char** argv) {
       allocation::Pause pause;
       require(factorized || canonical(q), "noncanonical dense callback");
       require(!e.seen[index(h, q)]++, "duplicate callback");
+      if (failure_stage) require(allocation::faulted, "callback before reservation refusal");
       ++callbacks;
       elements += local.size();
       const auto di = f.offsets[q[0] + 1] - f.offsets[q[0]];
@@ -399,7 +412,11 @@ int main(int argc, char** argv) {
                (compact
                     ? f.reference.nocc * (2 * n + (n - f.reference.nocc) * (n - f.reference.nocc))
                     : n * n * n) +
-           di * dj * (compact ? f.reference.nocc : n) * n + di * dj * dk * n + local.size());
+           (projected ? maximum_shell * maximum_shell * n * n +
+                            maximum_shell * maximum_shell * maximum_shell * n +
+                            maximum_shell * maximum_shell * maximum_shell * maximum_shell
+                      : di * dj * (compact ? f.reference.nocc : n) * n + di * dj * dk * n +
+                            local.size()));
       const auto persistent = sizeof(double) * 2 * n * n + sizeof(std::size_t) * (h + 1);
       require(allocation::live == persistent + shell_bytes, "active quartet allocation ownership");
       measured_shell_peak = std::max(measured_shell_peak, allocation::live - persistent);
@@ -428,17 +445,21 @@ int main(int argc, char** argv) {
             }
       return center;
     };
+    // Identify the full first-stage reservation by its numeric capacity, not
+    // allocation counts in unrelated matrix pullbacks or callback setup.
+    allocation::reservation_bytes = sizeof(double) * maximum_shell * n * n * n;
+    allocation::fail_stage = failure_stage;
     allocation::enabled = true;
     {
       auto result = mp2::detail::conventional_derivative(
           f.system, f.reference, f.weights, one, shell,
-          projected ? mp2::detail::FactorizedFirstLayout::automatic
-          : compact ? mp2::detail::FactorizedFirstLayout::compact
-                    : mp2::detail::FactorizedFirstLayout::staged);
+          representation == 4 ? mp2::detail::FactorizedFirstLayout::automatic
+          : compact           ? mp2::detail::FactorizedFirstLayout::compact
+                              : mp2::detail::FactorizedFirstLayout::staged);
       allocation::enabled = false;
       require(allocation::live == 0, "common allocations escaped invocation");
       require(initial_gradient.empty(), "callback output was not ownership-transferred");
-      if (!projected) {
+      if (!projected && !failure_stage) {
         require(allocation::peak == e.peak, "allocation high-water mismatch");
         require(allocation::calls == e.allocation_calls, "allocation call mismatch");
         require(allocation::total == e.total_bytes, "allocation total mismatch");
