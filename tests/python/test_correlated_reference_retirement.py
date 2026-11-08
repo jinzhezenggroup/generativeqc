@@ -827,6 +827,7 @@ def test_actual_mp2_and_cc_force_triples_callbacks_restore_budgets(
         mp2, "      const auto run_phase =", "      if (components & kHfComponent)"
     )
     mp2_energy += cpp_record_definition(mp2, "PrimalCache") + ";\nPrimalCache cache;\n"
+    mp2_energy += "const auto clear_force_cache_allocation_error = [] {};\n"
     mp2_energy += _between(
         mp2, "      auto completed_phase_capacity =", "      result.energy ="
     )
@@ -1474,3 +1475,83 @@ template<class... Args> ConventionalForceResult density_fitted_force_cpu(const A
 }
 }
 """
+
+
+def test_optional_mp2_energy_cache_controls_and_retry(tmp_path: Path) -> None:
+    """Execute cache controls and resource-only energy recovery with owned blocks."""
+    method = (ROOT / "src/methods/mp2_method.cpp").read_text()
+    block = cpp_record_definition(method, "PrimalCache") + ";\n"
+    block += _between(
+        method,
+        "      PrimalCache cache;",
+        "      // Preserve completed simultaneous peaks",
+    )
+    code = (
+        MP2_CACHE_STANDINS
+        + r"""
+int energy_calls = 0, energy_failure = 0;
+namespace mp2 {
+struct Energy { std::size_t numeric_capacity_bytes = 40; };
+Energy density_fitted_energy(const Reference&, const Source&, std::size_t, double, double, int, bool, int) {
+  throw std::logic_error("unexpected DF energy");
+}
+Energy conventional_energy(const Reference&, const Source&, std::size_t budget, double, int, bool, int,
+                           std::span<const double> borrowed) {
+  ++energy_calls;
+  if (!borrowed.empty()) {
+    assert(live_blocks() > 0 && budget < expected_budget);
+    if (energy_failure == 1) throw std::length_error("energy capacity");
+    if (energy_failure == 2) { pending_cuda_error = cudaErrorMemoryAllocation; throw std::bad_alloc(); }
+    if (energy_failure == 3) throw std::invalid_argument("numerical failure");
+  } else {
+    assert(live_blocks() == 0 && budget == expected_budget);
+    assert(pending_cuda_error == cudaSuccess);
+  }
+  return {};
+}
+}
+void probe(bool compute_forces, std::size_t budget, bool energy_enabled, bool tiling_enabled,
+           int failure, int expected_producers, int expected_calls) {
+  setenv("GENERATIVEQC_MP2_ENERGY_MO_CACHE", energy_enabled ? "1" : "0", 1);
+  setenv("GENERATIVEQC_MP2_ENERGY_SOURCE_TILING", tiling_enabled ? "1" : "0", 1);
+  unsetenv("GENERATIVEQC_MP2_FORCE_MO_CACHE");
+  unsetenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
+  energy_calls = producer_calls = 0; energy_failure = failure;
+  fail_stage = fail_kind = 0; pending_cuda_error = cudaSuccess;
+  expected_budget = budget;
+  Source source{true}; const Source* conventional_source = &source; Source* raw_source = &source;
+  Reference ref{2,1};
+  const bool cuda = true, density_fitted_ = false, fitted_cuda_ = false;
+  const double threshold_ = 1e-10;
+  struct { int device_id = 0; } context_;
+  struct { double density_fitting_relative_threshold = 1e-10; } options_;
+  struct { std::size_t retained_numeric_bytes() const { return 13; } } cuda_reference_plan_;
+  const std::size_t component_capacity = 7, warm_capacity = 11, component_peak = 80;
+  const auto prepare_source = [&] { conventional_source = &source; };
+  const auto run_phase = [&](auto&& operation) { return operation(budget); };
+  bool rejected = false;
+  try {
+"""
+        + block
+        + r"""
+    assert(corr.numeric_capacity_bytes == 40 + cache.bytes);
+  } catch (const std::invalid_argument&) { rejected = true; }
+  assert(rejected == (failure == 3));
+  assert(producer_calls == expected_producers && energy_calls == expected_calls);
+  assert(live_blocks() == 0);
+}
+int main() {
+  probe(false,1000,true,true,0,1,1);
+  probe(false,1000,false,true,0,0,1);
+  probe(false,1000,true,false,0,0,1);
+  // Six-block cover does not fit, and the one-block fallback is explicitly disabled.
+  probe(true,220,false,true,0,0,1);
+  for (int failure : {1,2}) probe(false,1000,true,true,failure,1,2);
+  probe(false,1000,true,true,3,1,1);
+  std::cout << "energy cache controls and bounded retry passed\n";
+}
+"""
+    )
+    assert "energy cache controls and bounded retry passed" in _compile_run(
+        tmp_path, code
+    )

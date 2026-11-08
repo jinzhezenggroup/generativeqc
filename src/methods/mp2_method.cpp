@@ -326,13 +326,15 @@ class Mp2Prepared final : public PreparedCalculation,
       };
       const auto* cache_override = std::getenv("GENERATIVEQC_MP2_FORCE_MO_CACHE");
       const auto* energy_cache_override = std::getenv("GENERATIVEQC_MP2_ENERGY_MO_CACHE");
+      const auto* energy_tiling_override = std::getenv("GENERATIVEQC_MP2_ENERGY_SOURCE_TILING");
+      const bool cache_energy =
+          (!energy_cache_override || std::string_view(energy_cache_override) != "0") &&
+          (!energy_tiling_override || std::string_view(energy_tiling_override) != "0");
       const auto* force_tiling_override = std::getenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
       const bool cache_forces =
           compute_forces && (!cache_override || std::string_view(cache_override) != "0") &&
           (!force_tiling_override || std::string_view(force_tiling_override) != "0");
-      if (cuda && !density_fitted_ &&
-          (cache_forces || !energy_cache_override ||
-           std::string_view(energy_cache_override) != "0")) {
+      if (cuda && !density_fitted_ && (cache_forces || cache_energy)) {
         const auto build_cache = [&](bool force_cover) {
           return run_phase([&](std::size_t correlation_budget) {
             prepare_source();
@@ -418,7 +420,7 @@ class Mp2Prepared final : public PreparedCalculation,
           });
         };
         cache = build_cache(cache_forces);
-        if (!cache.bytes && cache_forces) cache = build_cache(false);
+        if (!cache.bytes && cache_forces && cache_energy) cache = build_cache(false);
       }
       auto completed_phase_capacity = std::max(
           component_peak,
@@ -436,14 +438,28 @@ class Mp2Prepared final : public PreparedCalculation,
                     integrals::ElectronInteractionOperator::eri, context_.device_id));
         if (cache.bytes >= correlation_budget) cache = {};
         runtime::df_progress::Scope::number("mp2_energy_mo_cache_bytes", cache.bytes);
-        auto energy =
-            density_fitted_
-                ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget, threshold_,
-                                             options_.density_fitting_relative_threshold, 8,
-                                             fitted_cuda_, context_.device_id)
-                : mp2::conventional_energy(ref, *conventional_source,
-                                           correlation_budget - cache.bytes, threshold_, 8, cuda,
-                                           context_.device_id, cache.blocks[0]);
+        const auto evaluate = [&] {
+          return density_fitted_
+                     ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget, threshold_,
+                                                  options_.density_fitting_relative_threshold, 8,
+                                                  fitted_cuda_, context_.device_id)
+                     : mp2::conventional_energy(ref, *conventional_source,
+                                                correlation_budget - cache.bytes, threshold_, 8,
+                                                cuda, context_.device_id, cache.blocks[0]);
+        };
+        auto energy = [&] {
+          try {
+            return evaluate();
+          } catch (const std::length_error&) {
+            if (!cache.bytes) throw;
+          } catch (const std::bad_alloc&) {
+            if (!cache.bytes) throw;
+          }
+          cache = {};
+          clear_force_cache_allocation_error();
+          runtime::df_progress::Scope::number("mp2_energy_mo_cache_bytes", 0);
+          return evaluate();
+        }();
         energy.numeric_capacity_bytes =
             posthf::checked_add(energy.numeric_capacity_bytes, cache.bytes);
         return energy;

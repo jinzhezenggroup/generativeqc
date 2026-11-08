@@ -26,7 +26,7 @@ COMMON = ROOT / "src/posthf/mp2_derivative_common.cpp"
 WORK_PROBE = os.environ.get("GENERATIVEQC_MP2_WORK_PROBE") == "1"
 # Binding the entire source prevents newly added, uninstrumented work from being
 # silently omitted. Source changes require review of all observation sites.
-COMMON_SHA256 = "38669fe16f97d06fae2ad7edf1aa01a364eee971a5782da574dc847058458763"
+COMMON_SHA256 = "b841a0885c21dd05506f2195eed78dff8b27fef8d317a1c54b696d93ed69a1aa"
 # (exact original statement LHS, replacement LHS). The comma expression only
 # observes execution; arithmetic and evaluation of the original RHS stay intact.
 SITES = (
@@ -310,3 +310,28 @@ def test_projected_factorized_pullback(
         )
         assert receipts[0]["callbacks"] == receipts[1]["callbacks"]
         assert receipts[0]["local_elements"] == receipts[1]["local_elements"]
+
+
+@pytest.mark.parametrize("stage", (1, 2, 3, 4))
+def test_projected_reservation_refusal(pullback_probes: list[Path], stage: int) -> None:
+    """Each coexisting reservation must fail before callbacks and fall back cleanly."""
+    for executable in pullback_probes:
+        receipts = []
+        for representation in (4, 1):
+            run = subprocess.run(
+                [str(executable), "2", str(representation), "0"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=45,
+                env={
+                    **os.environ,
+                    "GENERATIVEQC_DF_PROGRESS_TRACE": "",
+                    "PROBE_RESERVATION_FAILURE": str(stage)
+                    if representation == 4
+                    else "0",
+                },
+            )
+            receipts.append(json.loads(run.stdout))
+        for key in ("gradient", "callbacks", "local_elements"):
+            assert receipts[0][key] == receipts[1][key]
