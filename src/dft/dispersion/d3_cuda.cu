@@ -279,11 +279,9 @@ __global__ void d3_ragged_kernel(std::uint32_t systems, const std::uint32_t* off
         const double r = sqrt(r2);
         const double radius = tables.elements[z[atom] - 1].covalent_radius +
                               tables.elements[z[other] - 1].covalent_radius;
-        const double argument = 16.0 * (radius / r - 1.0);
-        const double e = exp(-fabs(argument));
-        const double logistic_derivative = e / ((1.0 + e) * (1.0 + e));
-        const double derivative = -16.0 * radius / r2 * logistic_derivative;
-        const double scale = (adjoints[atom] + adjoints[other]) * derivative / r;
+        double coordination[2];
+        ::generativeqc::generated::dispersion::d3_coordination(r, radius, coordination);
+        const double scale = (adjoints[atom] + adjoints[other]) * coordination[1];
         gx += scale * dx;
         gy += scale * dy;
         gz += scale * dz;

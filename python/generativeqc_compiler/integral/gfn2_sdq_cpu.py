@@ -2,7 +2,8 @@
 
 The generated artifact owns only primitive Cartesian mathematics. Contracted
 coefficients, shell traversal, screening, Cartesian-to-spherical transforms,
-matrix packing, and reverse origin translation remain native runtime policy.
+and matrix packing remain native runtime policy. The compiler owns moment
+origin translation and its weighted automatic pullback as well.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from .expr import Expr, Graph
 from .gfn2_sdq import (
     GFN2_SDQ_COMPONENTS,
     Gfn2SdqPrimitiveKernel,
+    build_gfn2_origin_shift,
     build_gfn2_sdq_primitive_kernel,
 )
 from .scalar_c import ScalarCEmitter
@@ -46,6 +48,10 @@ def gfn2_sdq_cpu_inventory() -> dict[str, object]:
         "shell_block_entry_points": [f"{mode[0]}_shell_block" for mode in _MODES],
         "maximum_shell_block_pairs": 36,
         "shell_block_gaussian_prefactors_per_primitive_pair": 1,
+        "representation_entry_points": [
+            "gfn2_origin_shift",
+            "gfn2_origin_shift_pullback",
+        ],
     }
 
 
@@ -227,6 +233,7 @@ def emit_gfn2_sdq_cuda() -> str:
             1,
         )
         .replace("inline bool ", "__device__ inline bool ")
+        .replace("inline void ", "__device__ inline void ")
         .replace("std::isfinite", "isfinite")
         .replace("#include <cmath>", "#include <cmath>\n#include <cstdint>", 1)
         .replace(
@@ -270,9 +277,71 @@ def _emit_gfn2_sdq_header(*, shell_blocks: bool) -> str:
             f"  double values[{len(GFN2_SDQ_COMPONENTS)}]{{}};",
             f"  double ket_gradient[3][{len(GFN2_SDQ_COMPONENTS)}]{{}};",
             "};",
+            emit_gfn2_origin_shift(),
             *helpers,
             *dispatches,
             "}  // namespace generativeqc::xtb::generated",
             "",
         ]
     )
+
+
+def emit_gfn2_origin_shift() -> str:
+    """Share generated translation mathematics between host and CUDA owners."""
+    graph, values, pullback = build_gfn2_origin_shift()
+    bindings = {"overlap": "overlap"}
+    bindings.update(
+        {f"vector_{axis}": f"vector[{index}]" for index, axis in enumerate(AXES)}
+    )
+    bindings.update(
+        {f"dipole_{axis}": f"dipole[{index}]" for index, axis in enumerate(AXES)}
+    )
+    bindings.update(
+        {f"quadrupole_{index}": f"quadrupole[{index}]" for index in range(6)}
+    )
+    bindings.update(
+        {f"adjoint_{index}": f"dipole_weights[{index}]" for index in range(3)}
+    )
+    bindings.update(
+        {f"adjoint_{index + 3}": f"quadrupole_weights[{index}]" for index in range(6)}
+    )
+    sections = []
+    for response in (False, True):
+        roots = pullback if response else values
+        lowered, roots = graph.canonicalize_associative(roots, factor_common=True)
+        emitter = ScalarCEmitter(lowered, bindings)
+        emitter.emit(roots)
+        if response:
+            signature = (
+                "inline void gfn2_origin_shift_pullback(const double vector[3], double overlap, "
+                "const double dipole[3], const double dipole_weights[3], const double quadrupole_weights[6], "
+                "double* overlap_adjoint, double dipole_adjoint[3], double vector_adjoint[3]) {"
+            )
+            targets = (
+                "*overlap_adjoint",
+                *(f"dipole_adjoint[{index}]" for index in range(3)),
+                *(f"vector_adjoint[{index}]" for index in range(3)),
+            )
+            operator = "+="
+        else:
+            signature = (
+                "inline void gfn2_origin_shift(const double vector[3], double overlap, const double dipole[3], "
+                "const double quadrupole[6], double shifted_dipole[3], double shifted_quadrupole[6]) {"
+            )
+            targets = (
+                *(f"shifted_dipole[{index}]" for index in range(3)),
+                *(f"shifted_quadrupole[{index}]" for index in range(6)),
+            )
+            operator = "="
+        sections.extend(
+            (
+                signature,
+                *emitter.lines,
+                *(
+                    f"  {target} {operator} {emitter.reference(root)};"
+                    for target, root in zip(targets, roots, strict=True)
+                ),
+                "}",
+            )
+        )
+    return "\n".join(sections)

@@ -451,23 +451,15 @@ __global__ void integral_shell_pair_kernel(Gfn2IntegralDeviceBatch batch, const 
   }
 
   double shifted_dipole[3];
+  double shifted_quadrupole[6];
+  generativeqc::xtb::generated::gfn2_origin_shift(vector, overlap_value, dipole, quadrupole,
+                                                  shifted_dipole, shifted_quadrupole);
   for (int component = 0; component < 3; ++component) {
-    shifted_dipole[component] = dipole[component] + vector[component] * overlap_value;
     workspace.dipole_scratch[component * batch.total_matrix_elements + reverse] =
         shifted_dipole[component];
   }
-  const double shift[6] = {
-      2.0 * vector[0] * dipole[0] + vector[0] * vector[0] * overlap_value,
-      vector[0] * dipole[1] + vector[1] * dipole[0] + vector[0] * vector[1] * overlap_value,
-      2.0 * vector[1] * dipole[1] + vector[1] * vector[1] * overlap_value,
-      vector[0] * dipole[2] + vector[2] * dipole[0] + vector[0] * vector[2] * overlap_value,
-      vector[1] * dipole[2] + vector[2] * dipole[1] + vector[1] * vector[2] * overlap_value,
-      2.0 * vector[2] * dipole[2] + vector[2] * vector[2] * overlap_value};
-  const double shift_trace = 0.5 * (shift[0] + shift[2] + shift[5]);
   for (int component = 0; component < 6; ++component) {
-    const bool diagonal = component == 0 || component == 2 || component == 5;
-    const double shifted =
-        quadrupole[component] + 1.5 * shift[component] - (diagonal ? shift_trace : 0.0);
+    const double shifted = shifted_quadrupole[component];
     if (!isfinite(shifted)) {
       record_system_error(system_errors, system, device_error,
                           Gfn2IntegralDeviceError::kNonfiniteIntegralArithmetic);
@@ -1204,50 +1196,6 @@ __global__ void integral_force_preflight_kernel(Gfn2IntegralDeviceBatch batch,
   }
 }
 
-__device__ void multipole_shift_pullback_device(const double vector[3], double overlap,
-                                                const double dipole[3],
-                                                const double reverse_dipole_adjoint[3],
-                                                const double reverse_quadrupole_adjoint[6],
-                                                double* overlap_adjoint, double dipole_adjoint[3],
-                                                double vector_adjoint[3]) {
-  for (int coordinate = 0; coordinate < 3; ++coordinate) {
-    *overlap_adjoint += reverse_dipole_adjoint[coordinate] * vector[coordinate];
-    dipole_adjoint[coordinate] += reverse_dipole_adjoint[coordinate];
-    vector_adjoint[coordinate] += reverse_dipole_adjoint[coordinate] * overlap;
-  }
-  const double diagonal_sum =
-      reverse_quadrupole_adjoint[0] + reverse_quadrupole_adjoint[2] + reverse_quadrupole_adjoint[5];
-  const double raw[6] = {1.5 * reverse_quadrupole_adjoint[0] - 0.5 * diagonal_sum,
-                         1.5 * reverse_quadrupole_adjoint[1],
-                         1.5 * reverse_quadrupole_adjoint[2] - 0.5 * diagonal_sum,
-                         1.5 * reverse_quadrupole_adjoint[3],
-                         1.5 * reverse_quadrupole_adjoint[4],
-                         1.5 * reverse_quadrupole_adjoint[5] - 0.5 * diagonal_sum};
-  const double x = vector[0];
-  const double y = vector[1];
-  const double z = vector[2];
-  const double dx = dipole[0];
-  const double dy = dipole[1];
-  const double dz = dipole[2];
-  const double axx = raw[0];
-  const double axy = raw[1];
-  const double ayy = raw[2];
-  const double axz = raw[3];
-  const double ayz = raw[4];
-  const double azz = raw[5];
-  *overlap_adjoint +=
-      axx * x * x + axy * x * y + ayy * y * y + axz * x * z + ayz * y * z + azz * z * z;
-  dipole_adjoint[0] += 2.0 * axx * x + axy * y + axz * z;
-  dipole_adjoint[1] += axy * x + 2.0 * ayy * y + ayz * z;
-  dipole_adjoint[2] += axz * x + ayz * y + 2.0 * azz * z;
-  vector_adjoint[0] +=
-      axx * (2.0 * dx + 2.0 * x * overlap) + axy * (dy + y * overlap) + axz * (dz + z * overlap);
-  vector_adjoint[1] +=
-      axy * (dx + x * overlap) + ayy * (2.0 * dy + 2.0 * y * overlap) + ayz * (dz + z * overlap);
-  vector_adjoint[2] +=
-      axz * (dx + x * overlap) + ayz * (dy + y * overlap) + azz * (2.0 * dz + 2.0 * z * overlap);
-}
-
 __global__ void integral_force_shell_pair_kernel(
     Gfn2IntegralDeviceBatch batch, Gfn2ForceDeviceActivity activity,
     Gfn2IntegralForceDeviceInput input, Gfn2IntegralForceDeviceWorkspace workspace,
@@ -1456,9 +1404,9 @@ __global__ void integral_force_shell_pair_kernel(
       reverse_quadrupole_adjoint[component] = reverse_adjoint;
     }
     double vector_adjoint[3] = {};
-    multipole_shift_pullback_device(vector, overlap, dipole, reverse_dipole_adjoint,
-                                    reverse_quadrupole_adjoint, &overlap_adjoint, dipole_adjoint,
-                                    vector_adjoint);
+    generativeqc::xtb::generated::gfn2_origin_shift_pullback(
+        vector, overlap, dipole, reverse_dipole_adjoint, reverse_quadrupole_adjoint,
+        &overlap_adjoint, dipole_adjoint, vector_adjoint);
     for (int coordinate = 0; coordinate < 3; ++coordinate) {
       derivative[coordinate] =
           vector_adjoint[coordinate] + overlap_adjoint * overlap_gradient[coordinate];
@@ -1636,8 +1584,8 @@ cudaError_t add_gfn2_integral_gradient_cuda(
   }
   // Only admission is widened. The scientific shell-pair kernel keeps its
   // fixed 64-lane reduction, and each input/seed is still visited once.
-  const unsigned preflight_threads = generated::gfn2_force_preflight_threads(
-      batch.total_matrix_elements, batch.batch_size);
+  const unsigned preflight_threads =
+      generated::gfn2_force_preflight_threads(batch.total_matrix_elements, batch.batch_size);
   integral_force_preflight_kernel<<<static_cast<unsigned int>(batch.batch_size), preflight_threads,
                                     0, stream>>>(batch, activity, input, output, workspace,
                                                  system_errors, device_error);

@@ -13,6 +13,8 @@
 #include <limits>
 
 #include "dft/dispersion/gcp_r2scan3c_data.hpp"
+#include "generated_dispersion_scalar.hpp"
+#include "generated_gcp_scalar.hpp"
 #include "generated_method_parameters.hpp"
 
 #if defined(__CUDACC__)
@@ -43,145 +45,28 @@ struct GCPParameters {
 inline constexpr GCPParameters r2scan3c_gcp_parameters() { return {}; }
 
 namespace gcp_detail {
-// A tiny trivially copied array keeps the audited scalar program usable in
-// host and device code without depending on a host standard-library ABI.
-template <class T, int N>
-struct Array {
-  T data[N]{};
-  GENERATIVEQC_GCP_HD T& operator[](int i) { return data[i]; }
-  GENERATIVEQC_GCP_HD const T& operator[](int i) const { return data[i]; }
-};
 GENERATIVEQC_GCP_HD inline bool finite(double x) { return x == x && x <= DBL_MAX && x >= -DBL_MAX; }
 
 inline constexpr double kAngstromToBohr = 1.8897261254578281;
-
-GENERATIVEQC_GCP_HD inline Array<double, 9> aaux(double x) {
-  Array<double, 9> a{};
-  const double ex = std::exp(-x), rx = 1.0 / x;
-  a[0] = ex * rx;
-  for (int k = 1; k < 9; ++k) {
-    a[k] = (static_cast<double>(k) * a[k - 1] + ex) * rx;
-  }
-  return a;
-}
-
-GENERATIVEQC_GCP_HD inline Array<double, 9> bint(double x) {
-  Array<double, 9> b{};
-  if (std::abs(x) < 1.0e-6) {
-    for (int k = 0; k < 9; k += 2) b[k] = 2.0 / static_cast<double>(k + 1);
-    return b;
-  }
-  Array<double, 13> pw{};
-  pw[0] = 1.0;
-  for (int i = 1; i < 13; ++i) {
-    pw[i] = pw[i - 1] * (-x) / static_cast<double>(i);
-  }
-  for (int k = 0; k < 9; ++k) {
-    double acc = 0.0;
-    for (int i = k % 2; i < 13; i += 2) {
-      acc += pw[i] / static_cast<double>(k + i + 1);
-    }
-    b[k] = 2.0 * acc;
-  }
-  return b;
-}
-
-GENERATIVEQC_GCP_HD inline Array<double, 9> baux(double x) {
-  Array<double, 9> b{};
-  const double ep = std::exp(x), em = std::exp(-x), rx = 1.0 / x;
-  for (int k = 0; k < 9; ++k) {
-    double term = rx;
-    double sgn = (k % 2 == 0) ? 1.0 : -1.0;
-    double sp = sgn * term, sm = term;
-    for (int j = 1; j <= k; ++j) {
-      term *= static_cast<double>(k - j + 1) * rx;
-      sgn = -sgn;
-      sp += sgn * term;
-      sm += term;
-    }
-    b[k] = ep * sp - em * sm;
-  }
-  return b;
-}
 
 GENERATIVEQC_GCP_HD inline bool overlap(double r, int shell_a, int shell_b, double za, double zb,
                                         double* s, double* ds) {
   const bool same = std::abs(za - zb) < 0.1;
   const int key = shell_a * shell_b;
-  int m = 0, terms = 0;
-  Array<double, 6> wt{};
-  Array<int, 6> pa{}, qb{};
-  double cnorm = 0.0;
-  if (key == 1) {
-    m = 3;
-    terms = 2;
-    wt = {1, -1, 0, 0, 0, 0};
-    pa = {2, 0, 0, 0, 0, 0};
-    qb = {0, 2, 0, 0, 0, 0};
-    cnorm = 0.25 * std::sqrt(std::pow(za * zb, 3));
-  } else if (key == 2) {
-    if (shell_a >= shell_b) {
-      const double old = za;
-      za = zb;
-      zb = old;
-    }
-    m = 4;
-    terms = 4;
-    wt = {1, -1, 1, -1, 0, 0};
-    pa = {3, 0, 2, 1, 0, 0};
-    qb = {0, 3, 1, 2, 0, 0};
-    cnorm = std::sqrt(1.0 / 3.0) * std::sqrt(std::pow(za, 3) * std::pow(zb, 5)) * 0.125;
-  } else if (key == 3) {
-    if (shell_a >= shell_b) {
-      const double old = za;
-      za = zb;
-      zb = old;
-    }
-    m = 5;
-    terms = 4;
-    wt = {1, -1, 2, -2, 0, 0};
-    pa = {4, 0, 3, 1, 0, 0};
-    qb = {0, 4, 1, 3, 0, 0};
-    cnorm = std::sqrt(std::pow(za, 3) * std::pow(zb, 7) / 7.5) * 0.0625 / std::sqrt(3.0);
-  } else if (key == 4) {
-    m = 5;
-    terms = 3;
-    wt = {1, 1, -2, 0, 0, 0};
-    pa = {4, 0, 2, 0, 0, 0};
-    qb = {0, 4, 2, 0, 0, 0};
-    cnorm = std::sqrt(std::pow(za * zb, 5)) * 0.0625 / 3.0;
-  } else if (key == 6) {
-    if (shell_a >= shell_b) {
-      const double old = za;
-      za = zb;
-      zb = old;
-    }
-    m = 6;
-    terms = 6;
-    wt = {1, 1, -2, -2, 1, 1};
-    pa = {5, 4, 3, 2, 1, 0};
-    qb = {0, 1, 2, 3, 4, 5};
-    cnorm = std::sqrt(std::pow(za, 5) * std::pow(zb, 7) / 7.5) * 0.03125 / 3.0;
-  } else if (key == 9) {
-    m = 7;
-    terms = 4;
-    wt = {1, -3, 3, -1, 0, 0};
-    pa = {6, 4, 2, 0, 0, 0};
-    qb = {0, 2, 4, 6, 0, 0};
-    cnorm = std::sqrt(std::pow(za * zb, 7)) / 1440.0;
-  } else {
-    return false;
+  if (shell_a > shell_b) {
+    const double old = za;
+    za = zb;
+    zb = old;
   }
-  const double ha = 0.5 * (za + zb), hb = 0.5 * (zb - za);
-  const auto av = aaux(ha * r);
-  const auto bv = same ? bint(hb * r) : baux(hb * r);
-  double f0 = 0.0, f1 = 0.0;
-  for (int t = 0; t < terms; ++t) {
-    f0 += wt[t] * av[pa[t]] * bv[qb[t]];
-    if (ds) f1 -= wt[t] * (ha * av[pa[t] + 1] * bv[qb[t]] + hb * av[pa[t]] * bv[qb[t] + 1]);
+  double output[2];
+  const bool valid =
+      ds ? ::generativeqc::generated::dispersion::gcp_overlap<true>(key, same, r, za, zb, output)
+         : ::generativeqc::generated::dispersion::gcp_overlap<false>(key, same, r, za, zb, output);
+  if (!valid) return false;
+  *s = output[0];
+  if (ds) {
+    *ds = output[1];
   }
-  *s = cnorm * std::pow(r, m) * f0;
-  if (ds) *ds = cnorm * (static_cast<double>(m) * std::pow(r, m - 1) * f0 + std::pow(r, m) * f1);
   return finite(*s) && (!ds || finite(*ds)) && *s > 0.0;
 }
 /** Shared audited pair equation. r and r0 are in Bohr; derivative is dE/dr.
@@ -193,31 +78,29 @@ GENERATIVEQC_GCP_HD inline GCPStatus pair(const gcp_data::Element& ei, const gcp
   if (!overlap(r, ei.shell, ej.shell, ei.slater, ej.slater, &s, derivative ? &ds : nullptr)) {
     return GCPStatus::numerical_failure;
   }
-  const double bsse = std::exp(-p.alpha * std::pow(r, p.beta)) / std::sqrt(s);
-  const double x = r / r0;
-  const double damp_power = p.damping_scale * std::pow(x, p.damping_exponent);
-  const double damp = 1.0 - 1.0 / (1.0 + damp_power);
   const double xi = ei.xv >= 0.5 ? 1.0 / std::sqrt(ei.xv) : 0.0;
   const double xj = ej.xv >= 0.5 ? 1.0 / std::sqrt(ej.xv) : 0.0;
   const double pref = p.sigma * (ei.emiss * xj + ej.emiss * xi);
-  const double pair = pref * bsse * damp;
-  if (!finite(pair)) return GCPStatus::numerical_failure;
-  *energy = pair;
-  if (!derivative) return GCPStatus::success;
-  const double ddamp = p.damping_scale * p.damping_exponent *
-                       std::pow(x, p.damping_exponent - 1.0) / r0 / std::pow(1.0 + damp_power, 2);
-  const double dbsse = bsse * (-p.alpha * p.beta * std::pow(r, p.beta - 1.0) - 0.5 * ds / s);
-  const double dedr = pref * (dbsse * damp + bsse * ddamp);
-  if (!finite(dedr)) {
-    return GCPStatus::numerical_failure;
+  double output[2];
+  if (derivative) {
+    ::generativeqc::generated::dispersion::gcp_pair<true>(r, r0, p.alpha, p.beta, p.damping_scale,
+                                                          p.damping_exponent, pref, s, ds, output);
+  } else {
+    ::generativeqc::generated::dispersion::gcp_pair<false>(
+        r, r0, p.alpha, p.beta, p.damping_scale, p.damping_exponent, pref, s, 0.0, output);
   }
-  *derivative = dedr;
+  if (!finite(output[0])) return GCPStatus::numerical_failure;
+  *energy = output[0];
+  if (derivative) {
+    if (!finite(output[1])) return GCPStatus::numerical_failure;
+    *derivative = output[1];
+  }
   return GCPStatus::success;
 }
 }  // namespace gcp_detail
 
 /** A null gradient selects the same energy without derivative arithmetic or
- * scratch gradient storage. Gradient calls retain the audited analytic formula. */
+ * scratch gradient storage. Gradient calls consume compiler-AD scalar programs. */
 inline GCPStatus evaluate_r2scan3c_gcp(int n, const std::int32_t* z, const double* xyz,
                                        const GCPParameters& p, double* energy, double* gradient) {
   if (n < 0 || n > std::numeric_limits<int>::max() / 3 || (n > 0 && (!z || !xyz)) || !energy ||
@@ -260,7 +143,9 @@ inline GCPStatus evaluate_r2scan3c_gcp(int n, const std::int32_t* z, const doubl
       *energy += pair;
       if (!gradient) continue;
       for (int k = 0; k < 3; ++k) {
-        const double g = dedr * v[k] / r;
+        double projected[1];
+        ::generativeqc::generated::dispersion::radial_projection(r, dedr, v[k], projected);
+        const double g = projected[0];
         gradient[3 * i + k] += g;
         gradient[3 * j + k] -= g;
       }

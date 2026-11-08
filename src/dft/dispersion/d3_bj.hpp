@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include "d3_data.hpp"
+#include "generated_dispersion_scalar.hpp"
 
 #if defined(__CUDACC__)
 #define GENERATIVEQC_D3_HD __host__ __device__
@@ -69,9 +70,10 @@ GENERATIVEQC_D3_HD inline double smooth_cutoff(double r, double cutoff, double w
   dr = 0.0;
   if (cutoff == 0.0 || width == 0.0 || r <= cutoff - width) return 1.0;
   if (r >= cutoff) return 0.0;
-  const double x = (cutoff - r) / width;
-  dr = -30.0 * x * x * (1.0 - x) * (1.0 - x) / width;
-  return x * x * x * (10.0 + x * (-15.0 + 6.0 * x));
+  double result[2];
+  ::generativeqc::generated::dispersion::smooth_switch(r, cutoff, width, result);
+  dr = result[1];
+  return result[0];
 }
 
 GENERATIVEQC_D3_HD inline std::size_t pair_index(int z_first, int z_second) {
@@ -109,22 +111,23 @@ GENERATIVEQC_D3_HD inline bool prepare_atom_weights(std::size_t atom, const std:
     if (ref >= element.reference_count) continue;
     const double ref_cn = tables.reference_cn[element.reference_offset + ref];
     maximum_cn = fmax(maximum_cn, ref_cn);
-    const double delta = ref_cn - cn[atom];
-    const double u = exp(-4.0 * delta * delta);
-    weights[index] = u;
-    norm += u;
-    derivative_norm += 8.0 * delta * u;
+    double gaussian[2];
+    ::generativeqc::generated::dispersion::gaussian(cn[atom], ref_cn, 4.0, gaussian);
+    weights[index] = gaussian[0];
+    derivatives[index] = gaussian[1];
+    norm += gaussian[0];
+    derivative_norm += gaussian[1];
   }
-  const double inverse_norm = 1.0 / norm;
   for (int ref = 0; ref < element.reference_count; ++ref) {
     const std::size_t index = 7 * atom + ref;
     const double ref_cn = tables.reference_cn[element.reference_offset + ref];
-    const double delta = ref_cn - cn[atom];
     const double u = weights[index];
-    double weight = u * inverse_norm;
+    double normalized[2];
+    ::generativeqc::generated::dispersion::normalize(u, norm, derivatives[index], derivative_norm,
+                                                     normalized);
+    double weight = normalized[0];
     if (!finite(weight)) weight = ref_cn == maximum_cn ? 1.0 : 0.0;
-    double derivative =
-        8.0 * delta * u * inverse_norm - u * derivative_norm * inverse_norm * inverse_norm;
+    double derivative = normalized[1];
     if (!finite(derivative)) derivative = 0.0;
     weights[index] = weight;
     derivatives[index] = derivative;
@@ -238,24 +241,27 @@ GENERATIVEQC_D3_HD inline D3Status evaluate_d3_bj(std::size_t n, const std::int3
       const double rd = parameters.a1 * sqrt(rr) + parameters.a2;
       if (!(rr > 0.0) || !(rd > 0.0) || !finite(rr) || !finite(rd))
         return D3Status::numerical_failure;
-      const double r4 = r2 * r2, r6 = r4 * r2, r8 = r4 * r4;
-      const double rd2 = rd * rd, rd4 = rd2 * rd2, rd6 = rd4 * rd2, rd8 = rd4 * rd4;
-      const double t6 = 1.0 / (r6 + rd6), t8 = 1.0 / (r8 + rd8);
-      const double phi = parameters.s6 * t6 + parameters.s8 * rr * t8;
-      const double derivative_over_distance =
-          parameters.s6 * (-6.0 * r4 * t6 * t6) + parameters.s8 * rr * (-8.0 * r6 * t8 * t8);
+      double pair[2];
+      ::generativeqc::generated::dispersion::bj_damping(r2, rr, rd, parameters.s6, parameters.s8,
+                                                        pair);
+      const double phi = pair[0];
+      const double derivative_over_distance = pair[1];
       double cutoff_derivative = 0.0;
       const double cutoff =
           smooth_cutoff(r, parameters.pair_cutoff, parameters.pair_switch_width, cutoff_derivative);
-      const double damping = cutoff * phi;
+      double damped[2];
+      double projected[1];
+      ::generativeqc::generated::dispersion::radial_scatter(r, cutoff_derivative, projected);
+      ::generativeqc::generated::dispersion::product_response(phi, cutoff, derivative_over_distance,
+                                                              projected[0], damped);
+      const double damping = damped[0];
       const double pair_energy = -c.c6 * damping;
       if (!finite(pair_energy)) return D3Status::numerical_failure;
       *energy += pair_energy;
       adjoints[first] += -c.first_cn * damping;
       adjoints[second] += -c.second_cn * damping;
       if (gradient) {
-        const double scale =
-            -c.c6 * (cutoff * derivative_over_distance + cutoff_derivative * phi / r);
+        const double scale = -c.c6 * damped[1];
         add_pair_gradient(first, second, dx, dy, dz, scale, gradient);
       }
     }
@@ -273,11 +279,9 @@ GENERATIVEQC_D3_HD inline D3Status evaluate_d3_bj(std::size_t n, const std::int3
         const double r = sqrt(r2);
         const double radius = tables.elements[z[first] - 1].covalent_radius +
                               tables.elements[z[second] - 1].covalent_radius;
-        const double argument = 16.0 * (radius / r - 1.0);
-        const double e = exp(-fabs(argument));
-        const double logistic_derivative = e / ((1.0 + e) * (1.0 + e));
-        const double derivative = -16.0 * radius / r2 * logistic_derivative;
-        const double scale = (adjoints[first] + adjoints[second]) * derivative / r;
+        double coordination[2];
+        ::generativeqc::generated::dispersion::d3_coordination(r, radius, coordination);
+        const double scale = (adjoints[first] + adjoints[second]) * coordination[1];
         add_pair_gradient(first, second, dx, dy, dz, scale, gradient);
       }
     }

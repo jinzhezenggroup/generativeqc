@@ -1,7 +1,7 @@
 {
   "path": "src/scf/cuda/nuclear_kernels.cu",
-  "reason": "Separate nuclear-repulsion energy/force term; intentionally retained native scientific arithmetic and not conflated with S/T/V derivative generation.",
+  "reason": "Separate nuclear-repulsion pair traversal, derivative-coordinate selection, force sign and stream launches around compiler-generated Coulomb energy/gradient scalars. No native Coulomb derivative or runtime dual-number arithmetic remains. Real-device qualification is separate from source ownership.",
   "regions": [],
-  "role": "scientific",
+  "role": "runtime",
   "subsystem": "one_electron_derivatives"
 }

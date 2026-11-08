@@ -8,55 +8,6 @@
 #define GENERATIVEQC_XC_RESPONSE_HD
 #endif
 
-namespace generativeqc::dft::point::detail {
-
-/** Directional derivative of the existing point jet. This differentiates the
- * same scaled SCF expression; it does not store a point Hessian or introduce
- * another XC expression. The fixed scales are held constant in both passes. */
-struct ResponseJet : Jet {
-  static constexpr bool second_order = true;
-  Jet tangent;
-  GENERATIVEQC_XC_RESPONSE_HD ResponseJet(double x = 0.0) : Jet(x) {}
-  GENERATIVEQC_XC_RESPONSE_HD ResponseJet(const Jet& x, const Jet& dx) : Jet(x), tangent(dx) {}
-  GENERATIVEQC_XC_RESPONSE_HD const Jet& base() const { return *this; }
-  GENERATIVEQC_XC_RESPONSE_HD static ResponseJet variable(double x, unsigned index,
-                                                          double direction) {
-    return {Jet::variable(x, index), Jet(direction)};
-  }
-  GENERATIVEQC_XC_RESPONSE_HD friend ResponseJet operator+(const ResponseJet& a,
-                                                           const ResponseJet& b) {
-    return {a.base() + b.base(), a.tangent + b.tangent};
-  }
-  GENERATIVEQC_XC_RESPONSE_HD friend ResponseJet operator-(const ResponseJet& a,
-                                                           const ResponseJet& b) {
-    return {a.base() - b.base(), a.tangent - b.tangent};
-  }
-  GENERATIVEQC_XC_RESPONSE_HD friend ResponseJet operator-(const ResponseJet& a) {
-    return ResponseJet(0.0) - a;
-  }
-  GENERATIVEQC_XC_RESPONSE_HD friend ResponseJet operator*(const ResponseJet& a,
-                                                           const ResponseJet& b) {
-    return {a.base() * b.base(), a.tangent * b.base() + a.base() * b.tangent};
-  }
-  GENERATIVEQC_XC_RESPONSE_HD friend ResponseJet operator/(const ResponseJet& a,
-                                                           const ResponseJet& b) {
-    const Jet value = a.base() / b.base();
-    return {value, (a.tangent - value * b.tangent) / b.base()};
-  }
-};
-GENERATIVEQC_XC_RESPONSE_HD inline ResponseJet power(const ResponseJet& x, double p) {
-  return {power(x.base(), p), p * power(x.base(), p - 1.0) * x.tangent};
-}
-GENERATIVEQC_XC_RESPONSE_HD inline ResponseJet log1p(const ResponseJet& x) {
-  return {log1p(x.base()), x.tangent / (1.0 + x.base())};
-}
-GENERATIVEQC_XC_RESPONSE_HD inline ResponseJet expm1(const ResponseJet& x) {
-  Jet slope(::exp(x.v));
-  for (unsigned i = 0; i < 8; ++i) slope.d[i] = slope.v * x.d[i];
-  return {expm1(x.base()), slope * x.tangent};
-}
-}  // namespace generativeqc::dft::point::detail
-
 namespace generativeqc::dft::point {
 /** Spin-resolved directional derivative of the physical SCF potential.
  * The shared correlation expression and exchange potentials own the science.

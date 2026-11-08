@@ -1,6 +1,7 @@
 """Historical E/F failures must survive replay and cannot authorize promotion."""
 
 import runpy
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -65,10 +66,17 @@ def test_invalid_independent_forces_cannot_pass(
         reader["observable_error"](actual, target)
 
 
-def test_changed_capsule_is_rejected(reader: dict[str, Any], tmp_path: Path) -> None:
+@pytest.mark.parametrize("stream", ("receipts.json.xz", "fp64.xz"))
+def test_changed_capsule_is_rejected(
+    reader: dict[str, Any], tmp_path: Path, stream: str
+) -> None:
     directory = READER.parent
-    (tmp_path / "cohort.json").write_bytes((directory / "cohort.json").read_bytes())
-    payload = (directory / "observations.json.xz").read_bytes()
-    (tmp_path / "observations.json.xz").write_bytes(payload + b"altered")
-    with pytest.raises(ValueError, match="changed observation capsule"):
-        reader["load"](tmp_path)
+    target = tmp_path / directory.name
+    shutil.copytree(directory, target)
+    shared = directory.parent / "hf-screened-handoff-rejections-20261108"
+    storage = tmp_path / shared.name
+    shutil.copytree(shared, storage)
+    payload = storage / stream
+    payload.write_bytes(payload.read_bytes() + b"altered")
+    with pytest.raises(ValueError, match=stream):
+        reader["load"](target)

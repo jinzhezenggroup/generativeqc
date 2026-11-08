@@ -6,6 +6,7 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "dft/generated_ao_axis.hpp"
 #include "molecule/basis.hpp"
 
 namespace generativeqc::dft {
@@ -13,33 +14,6 @@ namespace {
 std::size_t multiply(std::size_t a, std::size_t b) {
   if (b && a > SIZE_MAX / b) throw std::invalid_argument("AO tile size overflow");
   return a * b;
-}
-
-// Repeated polynomial differentiation is independent of the CUDA Leibniz
-// formula. Fixed through-f shapes and the runtime fallback share this body;
-// only the loop bounds differ. Preserve zero-coefficient arithmetic as well:
-// finite extreme alpha can overflow in 2 * alpha, and Inf * 0 must stay NaN.
-template <int Angular = -1, int Derivative = -1>
-double differentiated_power_nonzero(unsigned l, unsigned derivative, double alpha, double x) {
-  static_assert((Angular == -1 && Derivative == -1) ||
-                (Angular >= 0 && Angular <= 3 && Derivative >= 1 && Derivative <= 3));
-  if constexpr (Angular >= 0) l = Angular;
-  if constexpr (Derivative >= 0) derivative = Derivative;
-  std::array<double, 7> coefficients{};
-  coefficients[l] = 1;
-  unsigned degree = l;
-  for (unsigned d = 0; d < derivative; ++d) {
-    std::array<double, 7> next{};
-    for (unsigned k = 0; k <= degree; ++k) {
-      if (k) next[k - 1] += k * coefficients[k];
-      next[k + 1] -= 2 * alpha * coefficients[k];
-    }
-    coefficients = next;
-    ++degree;
-  }
-  double result = coefficients[degree];
-  while (degree) result = result * x + coefficients[--degree];
-  return result;
 }
 
 // Derivative zero keeps its direct Horner path. The bounded dispatch has no
@@ -55,37 +29,7 @@ double differentiated_power(unsigned l, unsigned derivative, double alpha, doubl
     }
     return result;
   }
-  if (l <= 3 && derivative <= 3) {
-    switch (3 * l + derivative - 1) {
-      case 0:
-        return differentiated_power_nonzero<0, 1>(l, derivative, alpha, x);
-      case 1:
-        return differentiated_power_nonzero<0, 2>(l, derivative, alpha, x);
-      case 2:
-        return differentiated_power_nonzero<0, 3>(l, derivative, alpha, x);
-      case 3:
-        return differentiated_power_nonzero<1, 1>(l, derivative, alpha, x);
-      case 4:
-        return differentiated_power_nonzero<1, 2>(l, derivative, alpha, x);
-      case 5:
-        return differentiated_power_nonzero<1, 3>(l, derivative, alpha, x);
-      case 6:
-        return differentiated_power_nonzero<2, 1>(l, derivative, alpha, x);
-      case 7:
-        return differentiated_power_nonzero<2, 2>(l, derivative, alpha, x);
-      case 8:
-        return differentiated_power_nonzero<2, 3>(l, derivative, alpha, x);
-      case 9:
-        return differentiated_power_nonzero<3, 1>(l, derivative, alpha, x);
-      case 10:
-        return differentiated_power_nonzero<3, 2>(l, derivative, alpha, x);
-      case 11:
-        return differentiated_power_nonzero<3, 3>(l, derivative, alpha, x);
-    }
-  }
-  // Internal fallback retains the original seven-coefficient buffer domain.
-  // Public AO angular momentum and jet order are still bounded through f/3.
-  return differentiated_power_nonzero<>(l, derivative, alpha, x);
+  return generated_ao::axis_nonzero(l, derivative, alpha, x);
 }
 }  // namespace
 

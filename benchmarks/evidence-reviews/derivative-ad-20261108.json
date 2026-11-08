@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "derivative-ad-20261108",
+  "owner": "Production derivative AD retirement qualification",
+  "reason": "Losslessly retain the selected complete CPU/CUDA endpoint timing populations, first-use observations, independent numerical outputs, semantic work counts and process-order blocks. The 201436-byte XZ record replaces 7.5 MiB of readable JSON; reducing it to medians would discard noise, true-residual and work-parity evidence. Large nonlocal CUDA features retain their measured maximum difference and element count; all corresponding timings are preserved. This storage review does not certify a universal performance promotion or waive the hard file/aggregate limits.",
+  "review_document": "benchmarks/results/derivative-ad-20261108/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/derivative-ad-20261108/samples.json.xz",
+      "family": "derivative-ad-20261108",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete endpoint timing and numerical/semantic-work observations",
+      "bytes": 201436,
+      "sha256": "daf2c384b7a10c40df0d2f39961e940f169a4e8925d6524f12ddacdee3d6bb8f"
+    }
+  ]
+}

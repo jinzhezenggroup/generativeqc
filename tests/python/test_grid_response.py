@@ -18,6 +18,7 @@ from generativeqc_compiler.xc.grid_response import (
     partition_mixed_response,
     partition_response,
 )
+from generativeqc_compiler.xc.grid_response_ir import partition_product_program
 
 CENTERS = np.array([[0.1, -0.2, 0.3], [1.2, 0.3, -0.1], [-0.5, 1.1, 0.8]])
 POINTS = np.array([[0.2, 0.4, -0.3], [0.6, -0.4, 0.7], [-0.2, 0.7, 0.4]])
@@ -479,3 +480,65 @@ def test_grid_spec_and_bad_tile_boundaries_are_not_silently_changed() -> None:
         list(grid_response_tiles(grid, DC, tile_points=0))
     with pytest.raises(TypeError):
         list(grid_response_tiles(grid.explicit(), DC))
+
+
+@pytest.mark.parametrize("zeros", (0, 1, 2))
+def test_log_product_zero_branches_against_high_precision_primal(zeros: int) -> None:
+    """Differentiate the complete factor product without using production AD."""
+    mp = pytest.importorskip("mpmath").mp.clone()
+    mp.dps = 80
+    log_value, log_left, log_right, log_mixed = map(
+        mp.mpf, ("-1.3", ".17", "-.23", ".04")
+    )
+    left = tuple(map(mp.mpf, (".31", "-.19")[:zeros]))
+    right = tuple(map(mp.mpf, ("-.11", ".27")[:zeros]))
+    mixed = tuple(map(mp.mpf, (".07", "-.13")[:zeros]))
+
+    def primal(first: typing.Any, second: typing.Any) -> typing.Any:
+        product = mp.exp(
+            log_value
+            + first * log_left
+            + second * log_right
+            + first * second * log_mixed
+        )
+        for local_left, local_right, local_mixed in zip(
+            left, right, mixed, strict=True
+        ):
+            product *= (
+                first * local_left + second * local_right + first * second * local_mixed
+            )
+        return product
+
+    variables = {
+        "logarithm": float(log_value),
+        "left_logarithm": float(log_left),
+        "right_logarithm": float(log_right),
+        "mixed_logarithm": float(log_mixed),
+        "left_zero_sum": float(sum(left)),
+        "right_zero_sum": float(sum(right)),
+        "mixed_zero_sum": float(sum(mixed)),
+        "zero_diagonal": float(
+            sum(first * second for first, second in zip(left, right, strict=True))
+        ),
+    }
+    expected = [
+        mp.diff(primal, (0, 0), degree) for degree in ((0, 0), (1, 0), (0, 1), (1, 1))
+    ]
+    actual = partition_product_program(zeros, mixed=True).evaluate(**variables)
+    np.testing.assert_allclose(
+        actual, list(map(float, expected)), rtol=3e-15, atol=1e-17
+    )
+    if zeros < 2:
+        first = partition_product_program(zeros, mixed=False).evaluate(**variables)
+        np.testing.assert_allclose(first, actual[:2], rtol=3e-15, atol=1e-17)
+
+
+def test_double_zero_product_does_not_double_large_finite_contractions() -> None:
+    """Cancel exact half-square factors before the runtime overflow boundary."""
+    actual = partition_product_program(2, mixed=True).evaluate(
+        logarithm=0.0,
+        left_zero_sum=1e154,
+        right_zero_sum=1e154,
+        zero_diagonal=1e308,
+    )
+    np.testing.assert_array_equal(actual, np.zeros(4))

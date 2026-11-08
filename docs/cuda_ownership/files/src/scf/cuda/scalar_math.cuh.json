@@ -1,6 +1,6 @@
 {
   "path": "src/scf/cuda/scalar_math.cuh",
-  "reason": "Unchanged generic scalar/AD, precision traits, elementary math and order-zero Boys helper extracted from the previously classified runtime region.",
+  "reason": "Native Dual/Dual3 layout and storage adapters call compiler-generated integral scalar schedules; no maintained binary/unary chain rules remain here. Mixed value precision traits and the primal order-zero Boys helper remain native.",
   "regions": [],
   "role": "runtime",
   "subsystem": "runtime"

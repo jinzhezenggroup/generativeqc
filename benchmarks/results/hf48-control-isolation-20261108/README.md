@@ -21,7 +21,8 @@ Each maximum covers one complete cold endpoint and three own-density frozen
 warm calls. Each public condition has a fresh process/owner; native imports
 of PySCF/GPU4PySCF are blocked. Full force vectors, controls, target and
 initial-guess work, scheduler/device receipts, logs and exact driver text are
-retained losslessly in`observations.json.xz`.
+retained losslessly in the shared`hf-screened-handoff-rejections-20261108/`
+exact-FP64 streams, with the original per-member hashes in this cohort.
 
 **Internal coupling:** either tighter public energy or density request also
 switches the qualified physical-stationarity ceiling from`1e-5` to

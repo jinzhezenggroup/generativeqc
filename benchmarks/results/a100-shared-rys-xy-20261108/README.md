@@ -18,8 +18,9 @@ PYTHONPATH=python:. pytest -q tests/python/test_sm80_shared_rys_evidence.py
 The first two commands reproduce all observations, including failures. The
 third intentionally exits nonzero while independent default promotion is
 blocked. Tests require that failure to remain visible. `cohort.json` binds
-the source/ELF and exact retained raw UTF-8 bytes in `observations.json.xz`;
-`summary.json` is derived, never a replacement for raw populations.
+the source/ELF and exact retained raw UTF-8 bytes in the shared
+`hf-screened-handoff-rejections-20261108/` exact-FP64 streams;
+`summary.json.xz` is derived, never a replacement for raw populations.
 
 ## Protocol and implementation
 
@@ -63,7 +64,7 @@ The final same-image cohort retains these cold medians:
 |5090/48|6.299592309|6.299205655|0.006%|
 
 Every paired warm passes3%, and all120 native sample pairs per size pass
-E`1e-8`/F`1e-7`. The source-bound `summary.json` also reports initial-guess
+E`1e-8`/F`1e-7`. The source-bound `summary.json.xz` also reports initial-guess
 Fock work separately from target-owner work and preserves invalid quartet
 counters as invalid. The original/displaced/restored independent HF96 checks
 pass on both cards. Slurm16819 verifies every original noncache source byte,

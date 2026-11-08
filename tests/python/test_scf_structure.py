@@ -778,3 +778,32 @@ def test_shared_cpu_target_algebra_boundary(
     report = audit_scf_structure(tmp_path)
     allowed = owner == "solver" and header == "cpu_linalg.hpp"
     assert bool(report["errors"]) != allowed
+
+
+@pytest.mark.parametrize(
+    "unrelated",
+    ("generated_scalar_ad.hpp_impl.hpp", "generated_scalar_ad_impl.hpp"),
+)
+def test_cuda_integral_numerics_borrows_only_exact_shared_arithmetic(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """Generated scalar AD admits one shared leaf, not adjacent implementation."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / "integrals").mkdir()
+    (source / "integrals/execution_qualifiers.hpp").write_text("\n")
+    (source / "integrals/generated_scalar_ad.hpp").write_text("\n")
+    (source / "integrals" / unrelated).write_text("\n")
+    owner = source / "scf/cuda/scalar_math.cuh"
+    owner.write_text(
+        '#include "integrals/execution_qualifiers.hpp"\n'
+        '#include "integrals/generated_scalar_ad.hpp"\n'
+    )
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "integrals/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert (
+        f"forbidden cuda_integral_numerics dependency on integrals/{unrelated}"
+        in errors[0]
+    )

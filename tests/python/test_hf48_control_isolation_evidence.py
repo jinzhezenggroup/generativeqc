@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import runpy
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -46,12 +47,19 @@ def test_only_one_public_control_changes_and_internal_gate_is_disclosed(
     )
 
 
-def test_changed_capsule_fails_closed(reader: dict[str, Any], tmp_path: Path) -> None:
-    (tmp_path / "cohort.json").write_bytes((READER.parent / "cohort.json").read_bytes())
-    payload = (READER.parent / "observations.json.xz").read_bytes()
-    (tmp_path / "observations.json.xz").write_bytes(payload + b"altered")
-    with pytest.raises(ValueError, match="changed observation capsule"):
-        reader["load"](tmp_path)
+@pytest.mark.parametrize("stream", ("receipts.json.xz", "fp64.xz"))
+def test_changed_capsule_fails_closed(
+    reader: dict[str, Any], tmp_path: Path, stream: str
+) -> None:
+    target = tmp_path / READER.parent.name
+    shutil.copytree(READER.parent, target)
+    shared = READER.parent.parent / "hf-screened-handoff-rejections-20261108"
+    storage = tmp_path / shared.name
+    shutil.copytree(shared, storage)
+    payload = storage / stream
+    payload.write_bytes(payload.read_bytes() + b"altered")
+    with pytest.raises(ValueError, match=stream):
+        reader["load"](target)
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf")])

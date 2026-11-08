@@ -84,10 +84,20 @@ allows only these exact imports from `dft.ao_cuda`, without permitting DFT to
 depend on integral recurrence or method scheduling. This avoids a second
 scientific algebra implementation.
 
+`integral.scalar_python` lowers validated scalar DAGs to cached straight-line
+Python/array arithmetic. Its exact monomial collection is only contraction
+lowering, not a second differentiation algebra. `method.scalar_graph_ad`
+bridges admitted rank-zero FP64 TensorIR energies to Graph and differentiates
+the actual energy before collecting coefficients. Qualified factor orders
+control floating-point evaluation only: they cannot supply an independent
+potential coefficient or exponent. GFN onsite cubic and symmetric spin
+potentials use this path; COSX product JVPs and AO cotangents use TensorIR AD.
+
 ## Shared nonlocal pair lowering
 
-`method.nonlocal_pair` owns the scalar VV10/rVV10 local-scale policy plus pair
-energy and analytic feature/radial derivative expressions. The build generates
+`method.nonlocal_pair` owns the scalar VV10/rVV10 local-scale and pair primals.
+`method.nonlocal_pair_ad` applies the shared Graph AD engine and rebinds its
+results into scalar TensorIR. The build generates
 one `generated_nonlocal_pair_native.hpp` for CPU and CUDA consumers, preserving
 the separately qualified CPU/CUDA FP64 local-scale operation orders. Requested
 output roots determine the generated arithmetic; their explicit dependency-first
@@ -121,7 +131,17 @@ C++ emitter's opt-in native-sum and caller-owned-check modes preserve the native
 signed-zero and exceptional-arithmetic contract. Other callers retain checked,
 transactional output publication by default.
 
-Native runtimes still own local scales, traversal, residency, reduction,
+Positive-denominator logarithmic factorization avoids squaring underflowed
+denominators in the ordered fallback. Bounded rational closures differentiate
+the energy's implicit residual and reuse its evaluated denominator or energy.
+An inverse-kappa stretch derives preconditioned rVV10 feature responses without
+reconstructing unscaled parameters. Local-scale positive rational products are
+an explicitly qualified lowering, not a change to the general Graph IEEE
+defaults. General and admitted row/weight product rules are generated from
+their density/measure primals. Frozen exceptional-domain checks and independent
+high-precision primal differentiation qualify these schedules.
+
+Native runtimes still own scale storage, traversal, residency, reduction,
 screening and failure reporting. In particular, CPU exact-zero-weight admission
 and CUDA density-screened negative-zero row markers are distinct policies;
 sharing pair expressions does not make those predicates interchangeable.

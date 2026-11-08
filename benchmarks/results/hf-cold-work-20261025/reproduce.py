@@ -15,6 +15,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[3]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
+from benchmarks._exact_fp64_evidence import load
 from benchmarks.readme_defaults_accuracy import errors
 from benchmarks.readme_defaults_qualification import identity, qualify
 
@@ -23,6 +24,9 @@ BASELINE = "194f12d788d0073b4e158968d0eaa694283b0d34"
 
 def read(root: Path, name: str) -> dict | list:
     """Read a retained JSON member without changing its provenance."""
+    if name in ("receipts", "oracles"):
+        _, files = load(root)
+        return json.loads(files[name + ".json"])
     return json.loads(lzma.decompress((root / (name + ".json.xz")).read_bytes()))
 
 

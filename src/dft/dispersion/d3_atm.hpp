@@ -42,17 +42,6 @@ GENERATIVEQC_D3_ATM_HD inline bool valid_parameters(const D3ATMParameters& p) {
          (p.atm_switch_width == 0.0 || (p.atm_cutoff > 0.0 && p.atm_switch_width < p.atm_cutoff));
 }
 
-GENERATIVEQC_D3_ATM_HD inline double atm_radial(double x, double y, double z, double r5,
-                                                double damping, double angle,
-                                                double damping_derivative, double c9) {
-  const double angle_derivative =
-      -0.375 *
-      (x * x * x + x * x * (y + z) + x * (3.0 * y * y + 2.0 * y * z + 3.0 * z * z) -
-       5.0 * (y - z) * (y - z) * (y + z)) /
-      r5;
-  return c9 * (-angle_derivative * damping + angle * damping_derivative) / x;
-}
-
 }  // namespace d3_atm_detail
 
 // Non-periodic D3(BJ)-ATM contribution with complete dE/dR, including
@@ -151,39 +140,34 @@ GENERATIVEQC_D3_ATM_HD inline D3Status evaluate_d3_bj_atm(
             smooth_cutoff(rjk, parameters.atm_cutoff, parameters.atm_switch_width, dsjk);
         const double sw = sij * sik * sjk;
 
-        const double r2p = a * b * c;
-        const double r1p = sqrt(r2p);
-        const double r3p = r2p * r1p;
-        const double r5p = r3p * r2p;
         const double r0ij = kD3BjAtmRs9 * tables.pairs[pair_index(z[i], z[j])].vdw_radius;
         const double r0ik = kD3BjAtmRs9 * tables.pairs[pair_index(z[i], z[k])].vdw_radius;
         const double r0jk = kD3BjAtmRs9 * tables.pairs[pair_index(z[j], z[k])].vdw_radius;
         const double r0 = r0ij * r0ik * r0jk;
         if (!(r0 > 0.0) || !finite(r0)) return D3Status::numerical_failure;
-        const double rp = pow(r0 / r1p, kD3BjAtmAlpha / 3.0);
-        const double damping = 1.0 / (1.0 + 6.0 * rp);
-        const double angle = 0.375 * (a + c - b) * (a - c + b) * (-a + c + b) / r5p + 1.0 / r3p;
-        const double c9 = -parameters.s9 * sqrt(cij.c6 * cik.c6 * cjk.c6);
-        const double de0 = angle * damping * c9;
-        const double de = de0 * sw;
+        double atm[7]{};
+        if (gradient) {
+          ::generativeqc::generated::dispersion::atm(a, b, c, r0, cij.c6, cik.c6, cjk.c6,
+                                                     parameters.s9, kD3BjAtmAlpha, atm);
+        } else {
+          ::generativeqc::generated::dispersion::atm<false>(a, b, c, r0, cij.c6, cik.c6, cjk.c6,
+                                                            parameters.s9, kD3BjAtmAlpha, atm);
+        }
+        const double de = atm[0] * sw;
         if (!finite(de)) return D3Status::numerical_failure;
-        *energy -= de;
-
-        adjoints[i] -= 0.5 * de * (cij.first_cn / cij.c6 + cik.first_cn / cik.c6);
-        adjoints[j] -= 0.5 * de * (cij.second_cn / cij.c6 + cjk.first_cn / cjk.c6);
-        adjoints[k] -= 0.5 * de * (cik.second_cn / cik.c6 + cjk.second_cn / cjk.c6);
+        *energy += de;
 
         if (gradient) {
-          const double ddamping = -2.0 * kD3BjAtmAlpha * rp * damping * damping;
-          const double scale_ij = sw * atm_radial(a, c, b, r5p, damping, angle, ddamping, c9) -
-                                  de0 * dsij / rij * sik * sjk;
-          const double scale_ik = sw * atm_radial(b, c, a, r5p, damping, angle, ddamping, c9) -
-                                  de0 * dsik / rik * sij * sjk;
-          const double scale_jk = sw * atm_radial(c, b, a, r5p, damping, angle, ddamping, c9) -
-                                  de0 * dsjk / rjk * sij * sik;
-          add_pair_gradient(i, j, xij, yij, zij, scale_ij, gradient);
-          add_pair_gradient(i, k, xik, yik, zik, scale_ik, gradient);
-          add_pair_gradient(j, k, xjk, yjk, zjk, scale_jk, gradient);
+          adjoints[i] += sw * (atm[4] * cij.first_cn + atm[5] * cik.first_cn);
+          adjoints[j] += sw * (atm[4] * cij.second_cn + atm[6] * cjk.first_cn);
+          adjoints[k] += sw * (atm[5] * cik.second_cn + atm[6] * cjk.second_cn);
+          double switched[4];
+          ::generativeqc::generated::dispersion::atm_switch(atm[0], atm[1], atm[2], atm[3], sij,
+                                                            sik, sjk, dsij, dsik, dsjk, rij, rik,
+                                                            rjk, switched);
+          add_pair_gradient(i, j, xij, yij, zij, switched[1], gradient);
+          add_pair_gradient(i, k, xik, yik, zik, switched[2], gradient);
+          add_pair_gradient(j, k, xjk, yjk, zjk, switched[3], gradient);
         }
       }
     }
@@ -201,11 +185,9 @@ GENERATIVEQC_D3_ATM_HD inline D3Status evaluate_d3_bj_atm(
         const double r = sqrt(r2);
         const double radius = tables.elements[z[first] - 1].covalent_radius +
                               tables.elements[z[second] - 1].covalent_radius;
-        const double argument = 16.0 * (radius / r - 1.0);
-        const double e = exp(-fabs(argument));
-        const double logistic_derivative = e / ((1.0 + e) * (1.0 + e));
-        const double derivative = -16.0 * radius / r2 * logistic_derivative;
-        const double scale = (adjoints[first] + adjoints[second]) * derivative / r;
+        double coordination[2];
+        ::generativeqc::generated::dispersion::d3_coordination(r, radius, coordination);
+        const double scale = (adjoints[first] + adjoints[second]) * coordination[1];
         add_pair_gradient(first, second, dx, dy, dz, scale, gradient);
       }
     }

@@ -1,6 +1,6 @@
 {
   "path": "src/dft/xc_point.hpp",
-  "reason": "Shared CPU/CUDA semilocal point algebra and forward first derivatives for the explicit scaled-density/spin-boundary domain. Counted as maintained scientific code; this is not a generated-code retirement claim.",
+  "reason": "Shared CPU/CUDA primal correlation, fixed scales, spin-boundary policy and admission for the explicit scaled-density domain. Arithmetic AD and physical exchange potentials come from the compiler-generated point asset; primal scientific policy remains counted here.",
   "regions": [],
   "role": "scientific",
   "subsystem": "xc"

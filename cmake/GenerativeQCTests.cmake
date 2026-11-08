@@ -12,7 +12,9 @@ function(generativeqc_native_test target source)
     target_link_libraries(${target} PRIVATE ${VNT_LIBRARIES})
   endif()
   if(NOT VNT_NO_SRC_INCLUDE)
-    target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    add_dependencies(${target} generativeqc_nuclear_repulsion_codegen)
     if(NOT VNT_NO_GENERATIVEQC AND TARGET CUDA::cudart)
       # Internal device views expose CUDA types when the library enables CUDA.
       # Keep their toolkit usage requirements local to internal-header tests;
@@ -381,10 +383,10 @@ macro(generativeqc_add_native_tests)
   add_test(NAME generativeqc_dft_tests COMMAND generativeqc_dft_tests)
 
   generativeqc_native_test(generativeqc_d3_atm_reference_tests tests/native/test_d3_atm.cpp NO_GENERATIVEQC)
-  add_dependencies(generativeqc_d3_atm_reference_tests generativeqc_d3_codegen)
+  add_dependencies(generativeqc_d3_atm_reference_tests generativeqc_d3_codegen generativeqc_dispersion_scalar_codegen)
   target_include_directories(generativeqc_d3_atm_reference_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   generativeqc_native_test(generativeqc_d3_zero_reference_tests tests/native/test_d3_zero.cpp NO_GENERATIVEQC)
-  add_dependencies(generativeqc_d3_zero_reference_tests generativeqc_d3_codegen)
+  add_dependencies(generativeqc_d3_zero_reference_tests generativeqc_d3_codegen generativeqc_dispersion_scalar_codegen)
   target_include_directories(generativeqc_d3_zero_reference_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   generativeqc_native_test(generativeqc_d3_ragged_tests tests/native/test_d3_ragged.cpp)
   generativeqc_native_test(generativeqc_d3_resource_tests tests/native/test_d3_resources.cpp)
@@ -418,7 +420,18 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_d4_eeq_tests tests/native/test_d4_eeq.cpp NO_GENERATIVEQC)
   target_sources(generativeqc_d4_eeq_tests PRIVATE
     src/dft/dispersion/d4_table_data.cpp)
+  add_dependencies(generativeqc_d4_reference_tests generativeqc_dispersion_scalar_codegen)
+  add_dependencies(generativeqc_d4_eeq_tests generativeqc_dispersion_scalar_codegen)
+  add_executable(generativeqc_classical_derivative_endpoints EXCLUDE_FROM_ALL
+    benchmarks/classical_derivative_endpoints.cpp)
+  target_link_libraries(generativeqc_classical_derivative_endpoints PRIVATE generativeqc)
+  target_include_directories(generativeqc_classical_derivative_endpoints PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  add_dependencies(generativeqc_classical_derivative_endpoints
+    generativeqc_method_parameters_codegen generativeqc_dispersion_scalar_codegen)
   generativeqc_native_test(generativeqc_gcp_r2scan3c_tests tests/native/test_gcp_r2scan3c.cpp NO_GENERATIVEQC)
+  add_dependencies(generativeqc_gcp_r2scan3c_tests
+    generativeqc_gcp_scalar_codegen generativeqc_dispersion_scalar_codegen)
   if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_gcp_cuda_tests tests/native/test_gcp_r2scan3c.cpp SKIP_77)
     target_compile_definitions(generativeqc_gcp_cuda_tests PRIVATE GENERATIVEQC_GCP_CUDA_TEST=1)
@@ -445,13 +458,13 @@ macro(generativeqc_add_native_tests)
   if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_d3_atm_cuda_tests tests/native/test_d3_atm_cuda.cu
                        NO_GENERATIVEQC LIBRARIES CUDA::cudart SKIP_77)
-    add_dependencies(generativeqc_d3_atm_cuda_tests generativeqc_d3_codegen)
+    add_dependencies(generativeqc_d3_atm_cuda_tests generativeqc_d3_codegen generativeqc_dispersion_scalar_codegen)
     target_include_directories(generativeqc_d3_atm_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
     set_target_properties(generativeqc_d3_atm_cuda_tests PROPERTIES CUDA_STANDARD 20)
 
     generativeqc_native_test(generativeqc_d3_zero_cuda_tests tests/native/test_d3_zero_cuda.cu
                        NO_GENERATIVEQC LIBRARIES CUDA::cudart SKIP_77)
-    add_dependencies(generativeqc_d3_zero_cuda_tests generativeqc_d3_codegen)
+    add_dependencies(generativeqc_d3_zero_cuda_tests generativeqc_d3_codegen generativeqc_dispersion_scalar_codegen)
     target_include_directories(generativeqc_d3_zero_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
     set_target_properties(generativeqc_d3_zero_cuda_tests PROPERTIES CUDA_STANDARD 20)
 
@@ -487,7 +500,7 @@ macro(generativeqc_add_native_tests)
                        NO_GENERATIVEQC SKIP_77)
     target_sources(generativeqc_d4_reference_cuda_tests PRIVATE
       src/dft/dispersion/d4_table_data.cpp)
-    add_dependencies(generativeqc_d4_reference_cuda_tests generativeqc_method_parameters_codegen)
+    add_dependencies(generativeqc_d4_reference_cuda_tests generativeqc_method_parameters_codegen generativeqc_dispersion_scalar_codegen)
     target_include_directories(
       generativeqc_d4_reference_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
     set_target_properties(generativeqc_d4_reference_cuda_tests PROPERTIES CUDA_STANDARD 20)
@@ -512,7 +525,7 @@ macro(generativeqc_add_native_tests)
                        NO_GENERATIVEQC SKIP_77)
     target_sources(generativeqc_d4_eeq_cuda_tests PRIVATE
       src/dft/dispersion/d4_table_data.cpp)
-    add_dependencies(generativeqc_d4_eeq_cuda_tests generativeqc_method_parameters_codegen)
+    add_dependencies(generativeqc_d4_eeq_cuda_tests generativeqc_method_parameters_codegen generativeqc_dispersion_scalar_codegen)
     target_include_directories(
       generativeqc_d4_eeq_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
     set_target_properties(generativeqc_d4_eeq_cuda_tests PROPERTIES CUDA_STANDARD 20)

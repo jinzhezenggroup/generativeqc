@@ -21,6 +21,8 @@ from generativeqc_compiler.tensor.ir import (
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import TensorSpec
 
+from .radial_kernel_ad import cached_radial_weight
+
 GFN2_EXTERNAL_POINT_CHARGE_FORCE_VERSION = "gfn2-external-point-charge-force-ir-v1"
 
 
@@ -70,21 +72,17 @@ def build_gfn2_external_point_charge_pair_vjp() -> VJPProgram:
 
 
 def build_gfn2_external_point_charge_force_weight_program() -> Program:
-    """Optimized qQ/r^3 weight, tied to the generated pair VJP identity."""
+    """Factor the cached force weight from AD of the softened pair energy."""
 
-    kernel = _input("kernel")
-    shell_charge = _input("shell_charge")
-    point_charge = _input("point_charge")
-    weight = multiply(shell_charge, kernel)
-    weight = multiply(weight, point_charge)
-    weight = multiply(weight, kernel)
-    weight = multiply(weight, kernel)
+    primal = build_gfn2_external_point_charge_pair_primal()
+    weight = cached_radial_weight(primal, ("shell_charge", "point_charge"))
     return Program(
         {"weight": weight},
         provenance={
             "kind": "gfn2-external-point-charge-force-weight",
             "version": GFN2_EXTERNAL_POINT_CHARGE_FORCE_VERSION,
             "derived_from": build_gfn2_external_point_charge_pair_vjp().derivative_hash,
+            "generated_from_primal": primal.logical_hash,
         },
     )
 

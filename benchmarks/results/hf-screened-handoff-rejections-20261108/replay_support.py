@@ -1,29 +1,43 @@
 """Load correlated HF handoff evidence without weakening per-record integrity."""
 
 import hashlib
-import json
-import lzma
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from benchmarks._exact_fp64_evidence import load
 
 
 def load_observations(directory: Path, cohort: dict) -> dict[str, str]:
-    """Authenticate both semantic streams and the complete original population."""
-    files = {}
-    members = None
-    for entry in cohort["capsules"]:
-        payload = (directory / entry["path"]).read_bytes()
-        if hashlib.sha256(payload).hexdigest() != entry["sha256"]:
-            raise ValueError("Changed evidence stream: " + entry["path"])
-        decoded = json.loads(lzma.decompress(payload))
-        if "integrity" in decoded:
-            if members is not None:
-                raise ValueError("Duplicate integrity manifest")
-            members = decoded["integrity"][cohort["capsule_namespace"]]
-        stream = decoded[cohort["capsule_namespace"]]
-        if files.keys() & stream.keys():
-            raise ValueError("Duplicate evidence records across semantic streams")
-        files.update(stream)
-    if members is None or len(members) != cohort["member_count"]:
+    """Recover exact texts and retain the original per-population integrity gate."""
+    entry = cohort["storage"]
+    folder = (directory / entry["directory"]).resolve()
+    if (
+        folder.parent != directory.resolve().parent
+        or folder.name != "hf-screened-handoff-rejections-20261108"
+    ):
+        raise ValueError("Invalid shared observation storage")
+    manifest = (folder / "sha256.txt").read_bytes()
+    if hashlib.sha256(manifest).hexdigest() != entry["sha256"]:
+        raise ValueError("changed observation capsule")
+    bundle, retained = load(folder)
+    namespace = cohort["capsule_namespace"]
+    prefix = namespace + "/"
+    files = {
+        name.removeprefix(prefix): text
+        for name, text in retained.items()
+        if name.startswith(prefix)
+    }
+    members = cohort.get("members", bundle["integrity"].get(namespace))
+    if members is None:
+        members = {
+            item["path"].removeprefix(prefix): item["sha256"]
+            for item in bundle["files"]
+            if item["path"].startswith(prefix)
+        }
+    count = cohort.get("member_count", cohort.get("retained_text_files", len(members)))
+    if len(members) != count:
         raise ValueError("Missing or incomplete integrity manifest")
     if files.keys() != members.keys():
         raise ValueError("Incomplete observation/provenance population")

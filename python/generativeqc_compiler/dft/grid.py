@@ -21,6 +21,15 @@ import numpy as np
 
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.integral.quadrature import rational_radial_roots
+from generativeqc_compiler.integral.scalar_python import scalar_callable
+
+
+@lru_cache(maxsize=1)
+def _rational_radial_transform() -> typing.Callable:
+    """Execute the shared radial primal/AD once per Legendre rule vector."""
+    graph, roots = rational_radial_roots()
+    return scalar_callable(graph, roots, ("node", "scale", "weight"), np)
 
 
 def checked_int(
@@ -763,9 +772,7 @@ class MolecularGrid:
                 object.__setattr__(self, name, storage)
                 shell_bytes += storage.nbytes
         t, wt = np.polynomial.legendre.leggauss(self.spec.radial_points)
-        t, wt = (t + 1) * 0.5, wt * 0.5
-        r = t / (1 - t)
-        radial_weights = wt * r * r / (1 - t) ** 2
+        r, radial_weights = _rational_radial_transform()(t, 1.0, wt)
         for name, value in (
             ("centers", centers),
             ("directions", angular),

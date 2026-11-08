@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import lzma
 import math
+import runpy
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent
+load_observations = runpy.run_path(
+    str(ROOT.parent / "hf-screened-handoff-rejections-20261108" / "replay_support.py")
+)["load_observations"]
 
 
 def require(condition: bool, message: str) -> None:
@@ -21,19 +23,7 @@ def require(condition: bool, message: str) -> None:
 def load(directory: Path = ROOT) -> tuple[dict[str, Any], dict[str, str]]:
     """Authenticate the lossless raw-text capsule before parsing observations."""
     cohort = json.loads((directory / "cohort.json").read_text())
-    payload = (directory / "observations.json.xz").read_bytes()
-    require(
-        hashlib.sha256(payload).hexdigest() == cohort["capsule_sha256"],
-        "changed observation capsule",
-    )
-    raw = json.loads(lzma.decompress(payload))
-    require(set(raw) == set(cohort["members"]), "changed capsule members")
-    for name, digest in cohort["members"].items():
-        require(
-            hashlib.sha256(raw[name].encode()).hexdigest() == digest,
-            "changed observation: " + name,
-        )
-    return cohort, raw
+    return cohort, load_observations(directory, cohort)
 
 
 def observable_error(actual: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:

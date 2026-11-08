@@ -51,9 +51,14 @@ __global__ void pairs(int n, const std::int32_t* z, const double* xyz,
                               parameters, &e, derivative ? &dedr : nullptr);
     if (status != GCPStatus::success) break;
     energy += 0.5 * e;
-    if (derivative)
-      for (int axis = 0; axis < 3; ++axis)
-        gradient[axis] += (i == high_atom ? 1.0 : -1.0) * dedr * v[axis] / r;
+    if (derivative) {
+      for (int axis = 0; axis < 3; ++axis) {
+        double projected[1];
+        ::generativeqc::generated::dispersion::radial_projection(
+            r, (i == high_atom ? 1.0 : -1.0) * dedr, v[axis], projected);
+        gradient[axis] += projected[0];
+      }
+    }
   }
   if (!gcp_detail::finite(energy)) status = GCPStatus::numerical_failure;
   energies[i] = energy;

@@ -1,0 +1,6 @@
+{
+  "path": "src/dft/generated_point_ad.hpp",
+  "reason": "Checked-in host/device asset emitted by xc.point_ad from primal scalar Graphs: first/mixed arithmetic, scaled exchange potentials and subnormal reduced-gradient JVP. Conservatively included in scientific source accounting; its mathematics and differentiation are compiler-owned, not a handwritten native derivative authority.",
+  "role": "scientific",
+  "subsystem": "xc"
+}

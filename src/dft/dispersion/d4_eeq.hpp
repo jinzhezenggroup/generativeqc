@@ -44,29 +44,17 @@ inline D4Parameters r2scan3c_d4_parameters() {
 inline constexpr int kEEQMaximumAtoms = kD4MaximumAtoms;
 inline constexpr double kEEQCutoff =
     ::generativeqc::generated::method_parameters::r2scan3cD4ChargeCnCutoff();
-inline constexpr double kEEQKcn = 7.5;
-inline constexpr double kEEQMaximumCN = 8.0;
-inline constexpr double kEEQRegularizer = 1.0e-14;
-inline constexpr double kInvSqrtPi = 0.5641895835477562869480794515607726;
 inline constexpr double kSqrtTwoOverPi = 0.7978845608028653558798921198687637;
 
 GENERATIVEQC_D4_EEQ_HD inline std::size_t eeq2019_workspace_elements(int atoms) {
   if (atoms < 0 || atoms > kEEQMaximumAtoms) return 0;
   const std::size_t n = static_cast<std::size_t>(atoms);
   const std::size_t m = n + 1;
-  // raw CN + d(log-cut CN)/d(raw CN) + LU(A) + solution + all response RHS columns.
+  // Raw CN + d(charge RHS)/d(raw CN) + LU(A) + solution + response RHS columns.
   return 2 * n + m * m + m + 3 * n * m;
 }
 
 namespace eeq_detail {
-
-GENERATIVEQC_D4_EEQ_HD inline double log_cn_cut(double cn) {
-  return log1p(exp(kEEQMaximumCN)) - log1p(exp(kEEQMaximumCN - cn));
-}
-
-GENERATIVEQC_D4_EEQ_HD inline double dlog_cn_cut(double cn) {
-  return exp(kEEQMaximumCN) / (exp(kEEQMaximumCN) + exp(cn));
-}
 
 GENERATIVEQC_D4_EEQ_HD inline bool finite(double value) {
   return (value == value && value <= DBL_MAX && value >= -DBL_MAX);
@@ -128,10 +116,11 @@ GENERATIVEQC_D4_EEQ_HD inline bool lu_solve(const double* lu, int n, const int* 
 GENERATIVEQC_D4_EEQ_HD inline void eeq_cn_pair(const data::D4ElementData& a,
                                                const data::D4ElementData& b, double r,
                                                double& count, double& dcountdr) {
-  const double rc = a.covalent_radius + b.covalent_radius;
-  const double x = kEEQKcn * (r - rc) / rc;
-  count = 0.5 * (1.0 + erf(-x));
-  dcountdr = -kEEQKcn * exp(-x * x) * kInvSqrtPi / rc;
+  double output[2];
+  ::generativeqc::generated::dispersion::d4_coordination(r, a.covalent_radius + b.covalent_radius,
+                                                         1.0, output);
+  count = output[0];
+  dcountdr = output[1];
 }
 
 }  // namespace eeq_detail
@@ -179,8 +168,8 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
 
   const int m = n + 1;
   double* raw_cn = workspace;
-  double* cut_factor = raw_cn + n;
-  double* lu = cut_factor + n;
+  double* rhs_cn_response = raw_cn + n;
+  double* lu = rhs_cn_response + n;
   double* solution = lu + static_cast<std::size_t>(m) * m;
   double* responses = solution + m;  // 3*n columns, each length m.
   for (std::size_t i = 0; i < eeq2019_workspace_elements(n); ++i) workspace[i] = 0.0;
@@ -202,9 +191,10 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
   // Build A and x after the same CN saturation used by multicharge.
   for (int i = 0; i < n; ++i) {
     const auto qpar = t.charge_elements[z[i] - 1];
-    cut_factor[i] = dlog_cn_cut(raw_cn[i]);
-    const double cn = log_cn_cut(raw_cn[i]);
-    solution[i] = -qpar.chi + qpar.kcnchi * cn / sqrt(cn + kEEQRegularizer);
+    double rhs[2];
+    ::generativeqc::generated::dispersion::eeq_rhs(raw_cn[i], qpar.chi, qpar.kcnchi, rhs);
+    solution[i] = rhs[0];
+    rhs_cn_response[i] = rhs[1];
     lu[static_cast<std::size_t>(i) * m + i] = qpar.eta + kSqrtTwoOverPi / qpar.radius;
     lu[static_cast<std::size_t>(i) * m + n] = 1.0;
     lu[static_cast<std::size_t>(n) * m + i] = 1.0;
@@ -219,9 +209,10 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
       const auto qi = t.charge_elements[z[i] - 1];
       const auto qj = t.charge_elements[z[j] - 1];
       const double gamma = 1.0 / sqrt(qi.radius * qi.radius + qj.radius * qj.radius);
-      const double value = erf(gamma * r) / r;
-      lu[static_cast<std::size_t>(i) * m + j] = value;
-      lu[static_cast<std::size_t>(j) * m + i] = value;
+      double coulomb[1];
+      ::generativeqc::generated::dispersion::eeq_coulomb<false>(r, gamma, coulomb);
+      lu[static_cast<std::size_t>(i) * m + j] = coulomb[0];
+      lu[static_cast<std::size_t>(j) * m + i] = coulomb[0];
     }
 
   int pivots[kEEQMaximumAtoms + 1]{};
@@ -243,26 +234,24 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
       if (r <= kEEQCutoff) {
         double count, dcountdr;
         eeq_cn_pair(ei, ej, r, count, dcountdr);
-        const double cni = log_cn_cut(raw_cn[i]);
-        const double cnj = log_cn_cut(raw_cn[j]);
-        const double xi = 0.5 * qi.kcnchi / sqrt(cni + kEEQRegularizer) * cut_factor[i];
-        const double xj = 0.5 * qj.kcnchi / sqrt(cnj + kEEQRegularizer) * cut_factor[j];
         for (int axis = 0; axis < 3; ++axis) {
-          const double g = dcountdr * v[axis] / r;
+          double projected[1];
+          ::generativeqc::generated::dispersion::radial_projection(r, dcountdr, v[axis], projected);
+          const double g = projected[0];
           const int ci = 3 * i + axis, cj = 3 * j + axis;
-          responses[static_cast<std::size_t>(ci) * m + i] += xi * g;
-          responses[static_cast<std::size_t>(ci) * m + j] += xj * g;
-          responses[static_cast<std::size_t>(cj) * m + i] -= xi * g;
-          responses[static_cast<std::size_t>(cj) * m + j] -= xj * g;
+          responses[static_cast<std::size_t>(ci) * m + i] += rhs_cn_response[i] * g;
+          responses[static_cast<std::size_t>(ci) * m + j] += rhs_cn_response[j] * g;
+          responses[static_cast<std::size_t>(cj) * m + i] -= rhs_cn_response[i] * g;
+          responses[static_cast<std::size_t>(cj) * m + j] -= rhs_cn_response[j] * g;
         }
       }
 
       // Coulomb-matrix contribution -(dA/dR)y.
       const double gamma = 1.0 / sqrt(qi.radius * qi.radius + qj.radius * qj.radius);
-      const double arg = gamma * gamma * r2;
-      const double dadr = 2.0 * gamma * exp(-arg) * kInvSqrtPi / r - erf(sqrt(arg)) / r2;
+      double coulomb[2];
+      ::generativeqc::generated::dispersion::eeq_coulomb(r, gamma, coulomb);
       for (int axis = 0; axis < 3; ++axis) {
-        const double g = dadr * v[axis] / r;
+        const double g = coulomb[1] * v[axis];
         const int ci = 3 * i + axis, cj = 3 * j + axis;
         responses[static_cast<std::size_t>(ci) * m + i] -= g * solution[j];
         responses[static_cast<std::size_t>(ci) * m + j] -= g * solution[i];

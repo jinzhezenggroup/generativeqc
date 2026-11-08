@@ -11,7 +11,7 @@
     "tests/python/test_gfn2_spin_native_codegen.py",
     "tests/python/test_gfn2_scc_free_energy_native_codegen.py"
   ],
-  "generated_capability": "Compiler-owned CN/repulsion, S/D/Q primitives, ES2/ES3/AES2, electronic pair algebra, shared CPU/CUDA H0 primal/adjoints, spin energy/potential, and SCC internal/free-energy composition.",
+  "generated_capability": "Compiler-owned CN/repulsion, S/D/Q primitives, shared moment-origin translation primal/VJP, ES2/ES3/AES2, electronic pair algebra, shared CPU/CUDA H0 primal/adjoints, spin energy/potential, and SCC internal/free-energy composition.",
   "missing_capability": "Retire remaining D4 SCC, integral representation transforms, periodic and interaction arithmetic only after independent qualification; complete public ragged-batch and CUDA performance/memory/wheel gates.",
   "owner": "gfn2",
   "retirement_condition": "Retire pinned shared scientific source only after the replacement path reproduces independent GFN2 energy/force and backend-consistency gates.",

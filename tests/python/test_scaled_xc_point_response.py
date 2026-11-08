@@ -1,12 +1,14 @@
 """Weighted SCF point-response jets against independent Libxc potentials."""
 
 import ctypes as ct
+import shutil
 import typing
 from pathlib import Path
 
 import numpy as np
 import pytest
 from conftest import NativeCxx
+from generativeqc_compiler.xc.point_ad import emit_point_ad_header
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -16,6 +18,11 @@ def point_probe(
     tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
 ) -> typing.Any:
     directory = tmp_path_factory.mktemp("scaled-point-response")
+    headers = directory / "include/dft"
+    headers.mkdir(parents=True)
+    for name in ("xc_point.hpp", "xc_point_response.hpp"):
+        shutil.copyfile(ROOT / "src/dft" / name, headers / name)
+    (headers / "generated_point_ad.hpp").write_text(emit_point_ad_header())
     source = directory / "point.cpp"
     source.write_text(
         r"""
@@ -49,6 +56,7 @@ extern "C" int evaluate(int pbe, int spins, double exchange, double correlation,
         compile_args=[
             "-std=c++20",
             "-fPIC",
+            f"-I{directory / 'include'}",
             f"-I{ROOT / 'src'}",
             f"-I{ROOT / 'include'}",
         ],
@@ -61,6 +69,80 @@ extern "C" int evaluate(int pbe, int spins, double exchange, double correlation,
     loaded.evaluate.restype = ct.c_int
     loaded.controls_size.restype = ct.c_size_t
     return loaded
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+def test_generated_point_response_matches_independent_tail_fixtures(
+    point_probe: typing.Any, spins: int
+) -> None:
+    """450-digit unscaled equations cover cancellation, tails and C2 endpoints."""
+    path = (
+        ROOT
+        / "tests/data/xc"
+        / ("rks_response.tsv" if spins == 1 else "uks_response.tsv")
+    )
+    rows = np.loadtxt(path)
+    assert len(rows) == (30 if spins == 1 else 48)
+    pointer = ct.POINTER(ct.c_double)
+    for row in rows:
+        rho, direction = np.zeros(2), np.zeros(2)
+        gradient, delta_gradient, output = (
+            np.zeros((2, 3)),
+            np.zeros((2, 3)),
+            np.empty((2, 4)),
+        )
+        rho[:spins] = row[1 : 1 + spins]
+        gradient[:spins] = row[1 + spins : 1 + 4 * spins].reshape(spins, 3)
+        direction[:spins] = row[1 + 4 * spins : 1 + 5 * spins]
+        delta_gradient[:spins] = row[1 + 5 * spins : 1 + 8 * spins].reshape(spins, 3)
+        expected = row[1 + 8 * spins : 1 + 12 * spins]
+        magnitude = row[1 + 12 * spins :]
+        assert (
+            point_probe.evaluate(
+                int(row[0]),
+                spins,
+                1.0,
+                1.0,
+                *(
+                    value.ctypes.data_as(pointer)
+                    for value in (rho, gradient, direction, delta_gradient, output)
+                ),
+            )
+            == 0
+        )
+        actual = np.concatenate((output[:spins, 0], output[:spins, 1:].ravel()))
+        tolerance = (
+            (3e-11 if spins == 1 else 3e-10) * np.abs(expected)
+            + (32 if spins == 1 else 64) * np.finfo(float).eps * magnitude
+            + 8 * np.nextafter(0.0, 1.0)
+        )
+        assert np.all(np.isfinite(actual))
+        np.testing.assert_array_less(
+            np.abs(actual - expected), np.nextafter(tolerance, np.inf)
+        )
+
+
+def test_generated_point_first_derivatives_cover_independent_domain(
+    native_cxx: NativeCxx, tmp_path: Path
+) -> None:
+    """Exercise the packaged header over all independent physical point fixtures."""
+    binary = tmp_path / "point"
+    native_cxx.build_executable(
+        [ROOT / "tests/native/test_xc_point.cpp"],
+        binary,
+        compile_args=(
+            "-std=c++20",
+            "-O3",
+            "-ffp-contract=off",
+            f"-I{ROOT / 'src'}",
+            f'-DGENERATIVEQC_SOURCE_DIR="{ROOT}"',
+        ),
+    )
+    import subprocess
+
+    subprocess.run(
+        [str(binary)], check=True, timeout=30, capture_output=True, text=True
+    )
 
 
 def test_resident_controls_match_native_abi(point_probe: typing.Any) -> None:

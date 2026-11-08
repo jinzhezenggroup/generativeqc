@@ -343,8 +343,9 @@ __global__ void pair_kernel_ordered(
         sum_rho += factor * pair.dphi_dkappa;
         sum_sigma += factor * pair.dphi_domega;
       } else {
-        const double dphi_drho = pair.dphi_domega * domega_rhoi + pair.dphi_dkappa * dkappa_rhoi;
-        const double dphi_dsigma = pair.dphi_domega * domega_sigmai;
+        double dphi_drho{}, dphi_dsigma{};
+        generated::pair_feature_values(pair.dphi_domega, pair.dphi_dkappa, domega_rhoi,
+                                       domega_sigmai, dkappa_rhoi, dphi_drho, dphi_dsigma);
         sum_rho += factor * dphi_drho;
         sum_sigma += factor * dphi_dsigma;
       }
@@ -371,8 +372,8 @@ __global__ void pair_kernel_ordered(
       generated::row_feature_values(sum_phi, sum_sigma, sum_rho, rhoi, domega_rhoi, domega_sigmai,
                                     dkappa_rhoi, beta, coefficient, vrho[i], vsigma[i]);
     } else {
-      vrho[i] = coefficient * (beta + sum_phi + rhoi * sum_rho);
-      vsigma[i] = coefficient * rhoi * sum_sigma;
+      generated::row_sum_values(sum_phi, sum_rho, sum_sigma, rhoi, beta, coefficient, vrho[i],
+                                vsigma[i]);
     }
     nonfinite = nonfinite || !isfinite(vrho[i]) || !isfinite(vsigma[i]);
   }
@@ -380,7 +381,7 @@ __global__ void pair_kernel_ordered(
     point_derivative[3 * i] = coefficient * weighted_i * coordinate_sum[0];
     point_derivative[3 * i + 1] = coefficient * weighted_i * coordinate_sum[1];
     point_derivative[3 * i + 2] = coefficient * weighted_i * coordinate_sum[2];
-    weight_derivative[i] = coefficient * rhoi * (beta + sum_phi);
+    generated::weight_feature_value(sum_phi, rhoi, beta, coefficient, weight_derivative[i]);
     nonfinite = nonfinite || !isfinite(point_derivative[3 * i]) ||
                 !isfinite(point_derivative[3 * i + 1]) || !isfinite(point_derivative[3 * i + 2]) ||
                 !isfinite(weight_derivative[i]);

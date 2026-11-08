@@ -1,13 +1,12 @@
 """Regression gates for the native GFN2 S/D/Q primitive lowering."""
 
 import ctypes
-import shutil
 import subprocess
 from itertools import product
 from pathlib import Path
 
 import numpy as np
-import pytest
+from conftest import NativeCxx
 from generativeqc_compiler.integral.gfn2_sdq_cpu import (
     emit_gfn2_sdq_cpu,
     emit_gfn2_sdq_cuda,
@@ -70,10 +69,9 @@ def test_cuda_integral_consumer_has_no_handwritten_primitive_recurrence() -> Non
     assert "multipole_power" not in source
 
 
-def test_generated_dispatch_rejects_aliasing_and_invalid_inputs(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler required")
+def test_generated_dispatch_rejects_aliasing_and_invalid_inputs(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     (tmp_path / "sdq.hpp").write_text(emit_gfn2_sdq_cpu())
     source = tmp_path / "check.cpp"
     source.write_text(r"""
@@ -95,19 +93,16 @@ int main() {
 }
 """)
     binary = tmp_path / "check"
-    subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(source), "-o", str(binary)],
-        check=True,
-        capture_output=True,
-        timeout=60,
-    )
+    native_cxx.build_executable([source], binary, compile_args=("-std=c++20", "-O0"))
     result = subprocess.run(
         [str(binary)], check=False, capture_output=True, text=True, timeout=10
     )
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
 
 
-def test_generated_sdq_all_cartesian_pairs_against_quadrature(tmp_path: Path) -> None:
+def test_generated_sdq_all_cartesian_pairs_against_quadrature(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     """Gate branch CSE and ket derivatives against independent Gaussian moments.
 
     Five-point Gauss-Hermite quadrature integrates the polynomial part exactly
@@ -116,9 +111,6 @@ def test_generated_sdq_all_cartesian_pairs_against_quadrature(tmp_path: Path) ->
     """
     from generativeqc_compiler.integral.shell_spec import cartesian_components
 
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler required")
     (tmp_path / "sdq.hpp").write_text(emit_gfn2_sdq_cpu())
     source = tmp_path / "check.cpp"
     source.write_text(r"""
@@ -149,21 +141,7 @@ extern "C" bool evaluate(unsigned la, unsigned lb, unsigned ia, unsigned ib,
 }
 """)
     binary = tmp_path / "check.so"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-O2",
-            "-shared",
-            "-fPIC",
-            str(source),
-            "-o",
-            str(binary),
-        ],
-        check=True,
-        capture_output=True,
-        timeout=120,
-    )
+    native_cxx.build_shared([source], binary, compile_args=("-std=c++20", "-O2"))
     evaluate = ctypes.CDLL(str(binary)).evaluate
     array = np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")
     evaluate.argtypes = [ctypes.c_uint] * 4 + [ctypes.c_double] * 2 + [array, array]

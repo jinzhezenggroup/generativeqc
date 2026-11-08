@@ -1,6 +1,6 @@
 {
   "path": "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu",
-  "reason": "Bounded VV10/rVV10 CUDA primitive with compiler-owned local-scale, pair and admitted row-feature scalar mathematics. Native CUDA owns pair traversal, stable compaction, linear domain admission, device workspace, reduction and failure publication; the original general row chain remains maintained scientific execution.",
+  "reason": "Bounded VV10/rVV10 CUDA primitive calls compiler-AD local scales, raw/preconditioned pair and both admitted/general row/weight pullbacks. Native CUDA retains pair traversal, stable compaction, linear domain admission, workspace, reduction and failure publication. The ordered pair traversal and coordinate scatter remain conservatively scientific in this ledger; no count-based retirement claim is made.",
   "regions": [
     {
       "start": "using PairKernelValues = generated::PairValues;",

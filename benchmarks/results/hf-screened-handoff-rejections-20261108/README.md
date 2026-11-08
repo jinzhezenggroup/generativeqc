@@ -7,17 +7,17 @@ summaries and replay entry points in the sibling directories:
 - `hf-fp64-predictor-rejection-20261108`: rejected complete old-operator DIIS ring.
 - `hf-earlier-handoff-rejection-20261108`: rejected four-step provisional cap.
 
-Their raw bytes share compression by semantic responsibility, not arbitrary size
-shards: `endpoint-observations.json.xz` contains molecular endpoints, independent
-references and their producer records; `execution-provenance.json.xz` contains
-drivers, source patches, controls, scheduler/device/build/cache/restoration
-receipts and complete compiler stdout. Each stream is namespace-separated by
-experiment. Each cohort pins both stream hashes and the exact population size;
-the endpoint stream also retains every original per-file hash in its integrity
-manifest. The loader checks the whole population and every member hash, even
-under `python -O`. No numerical observation, failed tooling attempt or original
-compiler-output byte is discarded. Purely redundant base64 transport stdout is
-omitted with its checksum and decoded archives/closure receipts retained.
+The three populations, shared-Rys XY qualification and HF48 control isolation
+share the existing exact-FP64 v3 codec. `receipts.json.xz` retains text, metadata
+and the original integrity manifests; `fp64.xz` retains every numerical word
+without rounding. `sha256.txt` authenticates both streams and each cohort pins
+that manifest. All 459 original UTF-8 texts are reconstructed byte-for-byte,
+including complete compiler stdout, source patches, controls, independent
+references, failures and scheduler/device/build/cache/restoration receipts.
+Namespaces preserve every original population and per-file hash. Readers still
+check those complete populations under `python -O`. Earlier redundant base64
+transport stdout remains omitted only with its original checksum and complete
+decoded observations retained; this migration discards no additional data.
 
 This repacking keeps correlated evidence below the unchanged repository storage
 and large-file review budgets. It does not introduce new GPU qualification,

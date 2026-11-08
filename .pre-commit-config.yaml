@@ -64,6 +64,24 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: xc-point-ad
+        name: Check packaged Graph-generated XC point arithmetic
+        entry: python3 tools/generate_xc_point_ad.py --check
+        language: system
+        pass_filenames: false
+        files: ^(python/generativeqc_compiler/(xc/point_ad|integral/(expr|scalar_c))\.py|tools/generate_xc_point_ad\.py|src/dft/generated_point_ad\.hpp)$
+      - id: integral-scalar-ad
+        name: Check packaged Graph-generated integral arithmetic
+        entry: python3 tools/generate_integral_scalar_ad.py --check
+        language: system
+        pass_filenames: false
+        files: ^(python/generativeqc_compiler/integral/(scalar_ad|expr|scalar_c)\.py|tools/generate_integral_scalar_ad\.py|src/integrals/generated_scalar_ad\.hpp)$
+      - id: ao-axis-ad
+        name: Check packaged Graph-generated AO axis jets
+        entry: python3 tools/generate_ao_axis.py --check
+        language: system
+        pass_filenames: false
+        files: ^(python/generativeqc_compiler/(dft/ao_axis|integral/(expr|scalar_c))\.py|tools/generate_ao_axis\.py|src/dft/generated_ao_axis\.hpp)$
       - id: native-api-boundaries
         name: Check C API handle ownership and native core isolation
         entry: python3 tools/check_native_api_boundaries.py
@@ -150,6 +168,7 @@ repos:
     hooks:
       - id: clang-format
         types_or: [c++, c, cuda]
+        exclude: ^src/(?:dft/generated_(?:ao_axis|point_ad)|integrals/generated_scalar_ad)\.hpp$
   - repo: local
     hooks:
       # Pin ast-grep in a managed Python hook environment.  GitHub Actions

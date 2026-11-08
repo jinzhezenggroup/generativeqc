@@ -1,7 +1,7 @@
 {
   "path": "src/dft/dispersion/d4_eeq.hpp",
-  "role": "oracle",
+  "role": "scientific",
   "subsystem": "d4_dispersion",
-  "reason": "Pinned EEQ2019 charge solve/coordinate response and complete D4 chain-rule CPU/device qualification mathematics. Independent DFT-D4 4.2.0 oracle fixtures and real-device tests validate it; retained as a bounded oracle, not a performance-promoted production kernel.",
+  "reason": "Production EEQ charge primitive consumes compiler-AD saturated charge RHS, coordination and Coulomb-matrix responses; native bounded LU solves, matrix assembly and physical scatter remain. The separate complete-D4 composition is qualification-only. Independent DFT-D4 fixtures, finite differences and real-device tests validate the primitive and production consumer.",
   "regions": []
 }
