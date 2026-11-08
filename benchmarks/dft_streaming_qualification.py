@@ -235,13 +235,18 @@ def qualify_native(directory: Path, card: str) -> dict:
         arm: json.loads((directory / ("pbe0-48-" + arm + ".json")).read_text())
         for arm in ("control", "candidate")
     }
+    for record in small.values():
+        require(
+            record["status"] == "complete" and len(record["samples"]) == 4,
+            "Incomplete 48-atom population",
+        )
+        reduce_record(record)
     report["independent_48"] = {
         arm: scientific(record) for arm, record in small.items()
     }
     for current, baseline in zip(
         small["candidate"]["samples"], small["control"]["samples"], strict=True
     ):
-        reduce_record(small["candidate"])
         require(
             abs(current["energy"] - baseline["energy"]) < 1e-8,
             "48-atom native energy failed",

@@ -59,3 +59,25 @@ def test_storage_migration_authenticates_every_original_seed_receipt_byte() -> N
         == bundle["experiment"]["original_raw_sha256"]
     )
     assert len(json.loads(original)["records"]) == 139
+
+
+@pytest.mark.parametrize("arm", ("control", "candidate", "both"))
+@pytest.mark.parametrize("corruption", ("empty", "partial", "failed"))
+def test_small_population_must_be_complete(
+    tmp_path: Path, arm: str, corruption: str
+) -> None:
+    _, files = load(FAMILY)
+    for name, text in files.items():
+        if name.startswith("native-a100/"):
+            (tmp_path / name.removeprefix("native-a100/")).write_text(text)
+    arms = ("control", "candidate") if arm == "both" else (arm,)
+    for selected in arms:
+        path = tmp_path / f"pbe0-48-{selected}.json"
+        record = json.loads(path.read_text())
+        if corruption == "failed":
+            record["status"] = "failed"
+        else:
+            record["samples"] = [] if corruption == "empty" else record["samples"][:1]
+        path.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="Incomplete 48-atom population"):
+        qualify_native(tmp_path, "a100")

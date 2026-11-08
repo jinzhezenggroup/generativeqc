@@ -115,7 +115,9 @@ def main() -> None:
     manifest = json.loads(
         (ROOT / "benchmarks/evidence-reviews" / (family + ".json")).read_text()
     )
-    for name in ("receipts.json.xz", "fp64.xz", "sha256.txt"):
+    # The review inventory covers large files only. The exact-storage reader
+    # authenticates both streams and every reconstructed original receipt below.
+    for name in ("fp64.xz",):
         relative = f"benchmarks/results/{family}/{name}"
         entries = [row for row in manifest["files"] if row["path"] == relative]
         assert len(entries) == 1, f"{name} manifest entry"
