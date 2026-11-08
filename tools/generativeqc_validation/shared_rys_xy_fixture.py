@@ -29,6 +29,7 @@ from generativeqc_compiler.integral.tuning.policy import schedule_payload
 from tools.generativeqc_validation.f_shell_numerics import (
     _reference_integrals,
     contract_reference,
+    eri_orbit,
     make_fixture,
 )
 
@@ -37,17 +38,40 @@ if TYPE_CHECKING:
 
 
 CLASSES = ("dppp", "pppp")
+SUPPORTED_CLASSES = (*CLASSES, "dpds", "ddps", "dpdp", "ddpp")
 VARIANTS = ("cartesian", "coincident", "reversed_pairs")
 MASKS = ("full", "partial", "one", "two", "zero")
 TASK_MASKS = (0, 4, 1, 2, 3, 0, 4)
+CONSUMERS = ("rhf", "raw-k")
+
+
+def raw_exchange_reference(
+    integrals: ArrayLike, density: ArrayLike, offsets: tuple[int, ...]
+) -> np.ndarray:
+    """Contract positive K from independent ERIs, including unique symmetries.
+
+    The combined RHF J-K/2 reference cannot independently qualify the raw-K
+    consumer. Do not reuse the generated scatter or its multiplicity logic.
+    """
+    integrals = np.asarray(integrals)
+    density = np.asarray(density)
+    exchange = np.zeros_like(density)
+    for component in np.ndindex(integrals.shape):
+        indices = tuple(
+            offset + index for offset, index in zip(offsets, component, strict=True)
+        )
+        for first, second, third, fourth in eri_orbit(indices):
+            exchange[first, third] += density[second, fourth] * integrals[component]
+    return exchange
 
 
 def fixture_plan(name: str, *, shared: bool) -> FusedShellPlan:
-    """Pin the approved H100 component mapping independently of production."""
+    """Pin a component mapping without declaring production qualification."""
+    spec = FUSED_SHELL_SPEC_BY_NAME[name]
     plan = build_fused_shell_plan(
-        FUSED_SHELL_SPEC_BY_NAME[name],
+        spec,
         consumers=(KernelConsumer.FOCK,),
-        recurrence="rys3",
+        recurrence=f"rys{sum(spec.angular) // 2 + 1}",
         target=cuda_target_info("sm_90"),
     )
     return build_fused_shell_plan(
@@ -69,8 +93,12 @@ def _array(name: str, values: ArrayLike, kind: str = "double") -> str:
     return f"static const {kind} {name}[] = {{{','.join(tokens)}}};\n"
 
 
-def fixture_inputs(name: str, variant: str) -> tuple[dict, str]:
+def fixture_inputs(
+    name: str, variant: str, *, consumer: str = "rhf"
+) -> tuple[dict, str]:
     """Mask Libcint's full block before the independent symmetry contraction."""
+    if consumer not in CONSUMERS:
+        raise ValueError(f"unsupported shared Rys fixture consumer: {consumer}")
     fixture = make_fixture(name, variant)
     _, _, block, _ = _reference_integrals(fixture.inputs)
     if not np.all(np.isfinite(block)) or not np.all(np.isfinite(fixture.density)):
@@ -81,14 +109,14 @@ def fixture_inputs(name: str, variant: str) -> tuple[dict, str]:
         schwarz = np.zeros((n, n))
         retained = np.zeros(block.shape, dtype=bool)
         for index in np.ndindex(block.shape):
-            a, b, c, d = index
+            first_component = index[0]
             keep = (
                 mask == "full"
-                or (mask == "partial" and a == 1)
+                or (mask == "partial" and first_component == 1)
                 or (
                     mask in ("one", "two")
-                    and a == b == c == 0
-                    and d < (1 if mask == "one" else 2)
+                    and np.ravel_multi_index(index, block.shape)
+                    < (1 if mask == "one" else 2)
                 )
             )
             if keep:
@@ -106,16 +134,26 @@ def fixture_inputs(name: str, variant: str) -> tuple[dict, str]:
             retained[index] = schwarz[i, j] * schwarz[k, l] >= 0.5
         live_counts.append(int(np.count_nonzero(retained)))
         retained_producers.append(
-            [int(lane) for lane in np.flatnonzero(retained.ravel()) if lane < 6]
+            [
+                int(lane)
+                for lane in np.flatnonzero(retained.ravel())
+                if lane
+                < 2 * fixture_plan(name, shared=True).kernel.integral.required_rys_roots
+            ]
         )
-        reference = contract_reference(
-            np.where(retained, block, 0.0),
-            np.zeros((4, 3, *block.shape)),
-            fixture.density,
-            fixture.spin_density,
-            fixture.ao_offsets,
-            fixture.atom_indices,
-        )["rhf_fock"]
+        screened = np.where(retained, block, 0.0)
+        reference = (
+            raw_exchange_reference(screened, fixture.density, fixture.ao_offsets)
+            if consumer == "raw-k"
+            else contract_reference(
+                screened,
+                np.zeros((4, 3, *block.shape)),
+                fixture.density,
+                fixture.spin_density,
+                fixture.ao_offsets,
+                fixture.atom_indices,
+            )["rhf_fock"]
+        )
         bounds.append(schwarz.ravel(order="F"))
         expected.append(reference.ravel(order="F") * TASK_MASKS.count(len(expected)))
     tag = f"{name}_{variant}"
@@ -145,7 +183,7 @@ def fixture_inputs(name: str, variant: str) -> tuple[dict, str]:
         "n": n,
         "pair_count": len(fixture.pairs),
         "pair_split": fixture.pair_split,
-        "reversed_mask": fixture.reversed_mask,
+        "reversed_mask": fixture.reversed_mask | (8 if consumer == "raw-k" else 0),
         "retained_components": live_counts,
         "retained_producer_lanes": retained_producers,
         "primitive_quartets_per_task": fixture.pair_split
@@ -223,7 +261,7 @@ def _case_runner(metadata: dict) -> str:
         ctype = f"{mode.capitalize()}{class_name}"
         launches.append(f'''
   const auto {mode}_output=execute("{tag}_{mode}",[&]() {{
-    {prefix}_shell_class_fock_rhf_persistent_kernel<<<1,{192 if name == "dppp" else 96},0,stream>>>(
+    {prefix}_shell_class_fock_rhf_persistent_kernel<<<1,{fixture_plan(name, shared=shared).block_threads},0,stream>>>(
       reinterpret_cast<const {ctype}ShellTask*>(tasks),
       reinterpret_cast<const {ctype}PrimitivePairData*>(pairs),offsets,coefficients,
       reinterpret_cast<const {ctype}Vec3*>(positions),0.5,bounds,density,
@@ -271,21 +309,34 @@ void run_{tag}(cudaStream_t stream,bool graph) {{
 """
 
 
-def prepare_fixture(directory: Path) -> dict:
-    """Write one two-class/two-symbol TU and a source/input-bound receipt."""
+def prepare_fixture(
+    directory: Path,
+    *,
+    classes: tuple[str, ...] = CLASSES,
+    consumer: str = "rhf",
+) -> dict:
+    """Write explicit synthetic populations without changing production defaults."""
+    if consumer not in CONSUMERS:
+        raise ValueError(f"unsupported shared Rys fixture consumer: {consumer}")
+    if (
+        not classes
+        or len(set(classes)) != len(classes)
+        or set(classes) - set(SUPPORTED_CLASSES)
+    ):
+        raise ValueError("shared Rys fixture requires distinct supported classes")
     directory.mkdir(parents=True, exist_ok=True)
     source = [
         _PRODUCTION_PRELUDE,
         "\n#include <algorithm>\n#include <cstdio>\n#include <cstdlib>\n#include <utility>\n#include <vector>\n",
     ]
     schedules = {}
-    for name in CLASSES:
+    for name in classes:
         for shared in (False, True):
             plan = fixture_plan(name, shared=shared)
             mode = "shared" if shared else "private"
             body = emit_shell_class_fused_cuda(plan.spec, plan)
-            # Only the two generated identifier roots are scoped. This fixture
-            # bypasses production manifests/registries and emits two small classes.
+            # Only generated identifier roots are scoped. Explicit fixture
+            # classes never acquire a production capability through this path.
             body = body.replace(f"generated_{name}", f"{mode}_{name}")
             body = body.replace(
                 f"Generated{name.capitalize()}",
@@ -294,9 +345,9 @@ def prepare_fixture(directory: Path) -> dict:
             source.append(body)
             schedules[f"{name}_{mode}"] = schedule_payload(plan.schedule)
     cases = []
-    for name in CLASSES:
+    for name in classes:
         for variant in VARIANTS:
-            metadata, arrays = fixture_inputs(name, variant)
+            metadata, arrays = fixture_inputs(name, variant, consumer=consumer)
             cases.append(metadata)
             source.append(arrays)
     source.append(_RUNTIME)
@@ -304,7 +355,7 @@ def prepare_fixture(directory: Path) -> dict:
     source.append(
         "\nint main() {\n  cudaStream_t stream; CUDA(cudaStreamCreate(&stream));\n"
     )
-    for name in CLASSES:
+    for name in classes:
         for mode in ("private", "shared"):
             symbol = f"{mode}_{name}_shell_class_fock_rhf_persistent_kernel"
             source.append(f'  resources("{symbol}",{symbol});\n')
@@ -320,12 +371,20 @@ def prepare_fixture(directory: Path) -> dict:
     path.write_text(contents)
     receipt = {
         "scope": "synthetic independent Libcint class Fock correctness only; not HF96 replay",
+        "consumer": consumer,
         "source_sha256": hashlib.sha256(contents.encode()).hexdigest(),
         "schedules": schedules,
         "cases": cases,
         "masks": MASKS,
         "task_mask_sequence": TASK_MASKS,
-        "expected_extra_shared_bytes": {"dppp": 576, "pppp": 432},
+        "expected_extra_shared_bytes": {
+            name: 2
+            * fixture_plan(name, shared=True).kernel.integral.required_rys_roots
+            * (sum(FUSED_SHELL_SPEC_BY_NAME[name].angular[:2]) + 1)
+            * (sum(FUSED_SHELL_SPEC_BY_NAME[name].angular[2:]) + 1)
+            * 8
+            for name in classes
+        },
         "fock_tolerances": {"atol": 2e-11, "rtol": 2e-10},
         "cuda_status": "not compiled or executed by source preparation",
     }
@@ -336,8 +395,14 @@ def prepare_fixture(directory: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--consumer", choices=CONSUMERS, default="rhf")
+    parser.add_argument(
+        "--classes", nargs="+", choices=SUPPORTED_CLASSES, default=CLASSES
+    )
     args = parser.parse_args()
-    receipt = prepare_fixture(args.output)
+    receipt = prepare_fixture(
+        args.output, classes=tuple(args.classes), consumer=args.consumer
+    )
     print(
         json.dumps(
             {

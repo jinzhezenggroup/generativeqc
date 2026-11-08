@@ -6,12 +6,12 @@
   "review_document": "benchmarks/results/cuda-ks-seed-products-20261101/README.md",
   "files": [
     {
-      "path": "benchmarks/results/cuda-ks-seed-products-20261101/receipts.json.xz",
+      "path": "benchmarks/results/cuda-ks-seed-products-20261101/fp64.xz",
       "family": "cuda-ks-seed-products-20261101",
       "classification": "required-compact-accepted-evidence",
-      "role": "original-endpoint-receipts-independent-gates-and-provenance-binding",
-      "bytes": 411288,
-      "sha256": "d5989a92dc6d693a97a42a20369a8af175287583d7aa86b9d3d43950dd2c0e7e"
+      "role": "exact-original-fp64-words-for-all-retained-populations",
+      "bytes": 193008,
+      "sha256": "a83c8f9da8fae440a21265f8e3c6771235c923207bbff0a5bff1e0497bc38ce6"
     }
   ]
 }
