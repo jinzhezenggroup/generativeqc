@@ -14,9 +14,6 @@ struct HuckelDensityResult {
  * Return the electron counts in s and p channels, not molecular occupations. */
 std::pair<unsigned, unsigned> huckel_atomic_configuration(int atomic_number);
 
-/** Largest atomic s/p integral problem after removing unoccupied channels. */
-std::size_t huckel_maximum_atomic_aos(const core::System& system);
-
 /** Native Modified Hückel (updated Wolfsberg-Helmholtz rule).
  * CPU atomic RHF and the occupied-atomic-subspace eigenproblem are explicit
  * production preparation, including for CUDA targets. No PySCF is called.

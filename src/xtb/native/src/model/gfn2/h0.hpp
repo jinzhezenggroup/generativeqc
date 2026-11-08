@@ -43,10 +43,6 @@ struct H0Plan {
   std::vector<double> shell_pair_scale;
 };
 
-/* Validate that an H0 plan still matches its basis and packed integral layout. */
-generativeqc_xtb_status_t validate_h0_plan(const BasisPlan& basis, const IntegralPlan& integrals,
-                                  const H0Plan& plan, std::string& error);
-
 /*
  * Build a reusable H0 plan for a BasisPlan/IntegralPlan pair. Atomic numbers
  * must be in the same batch-major order used to create the basis. GFN2 shell
