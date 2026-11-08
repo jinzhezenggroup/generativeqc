@@ -222,7 +222,16 @@ ERIs with a checked capacity; CUDA RHF uses the bounded matrix-direct route.
 
 ## Conventional factorized derivative staging
 
-The common host pullback stores the first factorized shell stage as separate
+The default common host pullback projects factorized MO weights onto all eight
+exact ERI permutations before transforming the first AO slot. This uses at most
+the already-admitted `di*N^3` first-stage buffer and contracts only canonical
+shell quartets, with distinct shell-orbit multiplicities. It does not allocate
+a molecular AO-rank-four tensor or approximate small correlation weights.
+The complete largest first-stage reservation is attempted before submitting any
+quartet. Resource-only reservation failure retains the compact ordered route;
+it cannot mix canonical and ordered contributions within one invocation.
+
+The compact fallback stores the first factorized shell stage as separate
 Coulomb, exchange and correlation regions. With shell width `di`, `N` orbitals,
 `O` occupied orbitals and `V=N-O`, it uses `di*O*(2*N+V^2)` doubles when this is
 smaller than the admitted legacy `di*N^3` buffer. Its internal explicit staged
@@ -236,10 +245,10 @@ zeros. The explicit staged route retains both full buffers and the full
 reduction domain for independent comparison.
 
 Dense weights retain the original eightfold projection and staged layout.
-Third and shell-local buffer shapes, ordered factorized callbacks and atom
-scatter remain unchanged. The production resource plan conservatively admits
-the legacy full buffers; this representation change supplies no measured
-endpoint telemetry and does not retire the remaining materializations.
+Explicit compact and full staged layouts retain ordered factorized callbacks
+for independent numerical and resource comparisons. Third and shell-local
+buffer shapes and atom scatter remain unchanged. The production resource plan
+conservatively admits the legacy full buffers for all three layouts.
 
 `tests/python/test_mp2_derivative_pullback_probe.py` compares the actual common
 translation unit with an independent direct tensor oracle, the explicit staged
@@ -250,6 +259,8 @@ lifetimes qualify this host transform; complete endpoint and device evidence
 must be assessed separately. See the
 [first-stage decision](../../.agents/notes/implemented/performance/2026-10-11-compact-factorized-mp2-first-stage.md)
 and the [second-stage decision](../../.agents/notes/implemented/performance/2026-11-06-compact-factorized-mp2-second-stage.md).
+The [canonical projection decision](../../.agents/notes/implemented/performance/2026-11-08-canonical-factorized-derivative-projection.md)
+records the current default and its complete-endpoint qualification boundary.
 
 ## Native path and placement
 

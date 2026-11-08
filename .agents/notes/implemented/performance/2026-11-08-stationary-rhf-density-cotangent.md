@@ -67,3 +67,11 @@ work. A fresh ordinary SCF force calculation would duplicate the already
 published physical reference and weaken endpoint reuse. Materializing molecular
 AO rank-four weights would discard the bounded-storage contract. Approximating
 small correlation cotangents by stationary weights is scientifically incorrect.
+
+## Subsequent correlated default
+
+The [canonical factorized projection decision](2026-11-08-canonical-factorized-derivative-projection.md)
+extends canonical shell traversal to genuinely correlated weights through an
+exact eightfold MO projection. The stationary density-product specialization
+and its exact recognition condition remain unchanged; ordered compact/full
+factorized paths remain independent bounded fallbacks.

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <new>
 #include <stdexcept>
 
 #include "hf/reference.hpp"
@@ -65,6 +66,64 @@ bool stationary_two_electron_weights(const FactorizedTwoElectronWeights& factors
           (row == column && row < factors.occupied ? 1.0 : 0.0))
         return false;
   return true;
+}
+
+/** Project sparse MO factors before the first AO slot is transformed.
+ * Averaging all eight permutations commutes with the common coefficient
+ * transform. Duplicate MO indices deliberately retain repeated contributions;
+ * shell-orbit multiplicity is applied only after the complete AO pullback.
+ */
+void projected_factorized_first(const hf::PhysicalReference& reference,
+                                const FactorizedTwoElectronWeights& factors,
+                                std::size_t first_offset, std::size_t first_count,
+                                std::span<double> first) {
+  const auto orbitals = reference.nbf;
+  const auto occupied = reference.nocc;
+  const auto virtuals = orbitals - occupied;
+  const auto tail_elements = posthf::checked_mul(orbitals, square(orbitals));
+  constexpr std::array<std::array<std::size_t, 4>, 8> permutations{{
+      {0, 1, 2, 3},
+      {1, 0, 2, 3},
+      {0, 1, 3, 2},
+      {1, 0, 3, 2},
+      {2, 3, 0, 1},
+      {3, 2, 0, 1},
+      {2, 3, 1, 0},
+      {3, 2, 1, 0},
+  }};
+  const auto accumulate = [&](const std::array<std::size_t, 4>& indices, double weight) {
+    if (weight == 0.0) return;
+    const double projected_weight = 0.125 * weight;
+    for (const auto& permutation : permutations) {
+      const auto first_orbital = indices[permutation[0]];
+      const auto tail = (indices[permutation[1]] * orbitals + indices[permutation[2]]) * orbitals +
+                        indices[permutation[3]];
+      for (std::size_t local_ao = 0; local_ao < first_count; ++local_ao)
+        first[local_ao * tail_elements + tail] +=
+            reference.coefficients[(first_offset + local_ao) * orbitals + first_orbital] *
+            projected_weight;
+    }
+  };
+  for (std::size_t left = 0; left < orbitals; ++left)
+    for (std::size_t right = 0; right < orbitals; ++right) {
+      const double weight = factors.fock[left * orbitals + right];
+      if (weight == 0.0) continue;
+      for (std::size_t orbital = 0; orbital < occupied; ++orbital) {
+        accumulate({left, right, orbital, orbital}, 2.0 * weight);
+        accumulate({left, orbital, orbital, right}, -weight);
+      }
+    }
+  for (std::size_t occupied_left = 0; occupied_left < occupied; ++occupied_left)
+    for (std::size_t occupied_right = 0; occupied_right < occupied; ++occupied_right)
+      for (std::size_t virtual_left = 0; virtual_left < virtuals; ++virtual_left)
+        for (std::size_t virtual_right = 0; virtual_right < virtuals; ++virtual_right) {
+          const auto index =
+              ((occupied_left * occupied + occupied_right) * virtuals + virtual_left) * virtuals +
+              virtual_right;
+          accumulate(
+              {occupied_left, occupied + virtual_left, occupied_right, occupied + virtual_right},
+              factors.correlation_iajb[index]);
+        }
 }
 
 /** Exact RHF two-electron cotangent, without a staged four-index MO pullback.
@@ -265,6 +324,23 @@ std::vector<double> conventional_derivative_accumulate(
   // layout remains an independent numerical/resource fallback for validation.
   const bool stationary_two = factorized_two && first_layout == FactorizedFirstLayout::automatic &&
                               stationary_two_electron_weights(weights.two_electron_factors);
+  std::vector<double> projected_first;
+  bool projected_two = false;
+  if (factorized_two && !stationary_two && first_layout == FactorizedFirstLayout::automatic) {
+    std::size_t maximum_shell = 0;
+    for (std::size_t shell = 0; shell < system.shells.size(); ++shell)
+      maximum_shell = std::max(maximum_shell, offsets[shell + 1] - offsets[shell]);
+    // Reserve the already-admitted full staging bound before any quartet is
+    // submitted. A resource-only failure can then retain the compact ordered
+    // route without mixing canonical and ordered contributions to a gradient.
+    try {
+      projected_first.reserve(
+          posthf::checked_mul(maximum_shell, posthf::checked_mul(n, square(n))));
+      projected_two = true;
+    } catch (const std::bad_alloc&) {
+    } catch (const std::length_error&) {
+    }
+  }
   if (stationary_two) {
     stationary_two_electron_derivative(system, reference, offsets, shell_contract, derivative);
   } else
@@ -280,10 +356,12 @@ std::vector<double> conventional_derivative_accumulate(
               : first_elements;
       // Never enlarge the admitted legacy staging footprint. The explicit staged
       // route remains available to bounded consumers and independent validation.
-      const bool compact_first = factorized_two &&
-                                 first_layout == FactorizedFirstLayout::automatic &&
+      const bool compact_first = factorized_two && !projected_two &&
+                                 first_layout != FactorizedFirstLayout::staged &&
                                  compact_elements < first_elements;
-      std::vector<double> first(compact_first ? compact_elements : first_elements, 0.0);
+      std::vector<double> fallback_first;
+      auto& first = projected_two ? projected_first : fallback_first;
+      first.assign(compact_first ? compact_elements : first_elements, 0.0);
       if (dense_two) {
         for (std::size_t iu = 0; iu < di; ++iu)
           for (std::size_t q = 0; q < n; ++q)
@@ -293,6 +371,8 @@ std::vector<double> conventional_derivative_accumulate(
                   first[((iu * n + q) * n + r) * n + s] +=
                       reference.coefficients[(offsets[si] + iu) * n + p] *
                       symmetric_eri_weight(weights.two_electron, n, p, q, r, s);
+      } else if (projected_two) {
+        projected_factorized_first(reference, weights.two_electron_factors, offsets[si], di, first);
       } else {
         const auto& factors = weights.two_electron_factors;
         const auto exchange_offset = di * n * occupied;
@@ -336,7 +416,7 @@ std::vector<double> conventional_derivative_accumulate(
         }
       }
       transform_remaining_shells(system, reference, offsets, si, first, shell_contract, derivative,
-                                 dense_two, compact_first);
+                                 dense_two || projected_two, compact_first);
     }
   const auto finalize_started = now();
   if (finalize) finalize(derivative);
@@ -353,8 +433,9 @@ std::vector<double> conventional_derivative_accumulate(
     // Disjoint intervals. The shell callback may contain nested GPU consumer
     // work; the remainder measures host pullback/scatter and bookkeeping.
     Scope::number("ao_functions", n);
-    Scope::number("canonical_shells", dense_two || stationary_two);
+    Scope::number("canonical_shells", dense_two || stationary_two || projected_two);
     Scope::number("stationary_density_products", stationary_two);
+    Scope::number("projected_factorized_first", projected_two);
     Scope::number("rank_two_pullback_ns", ns(one_started - started));
     Scope::number("one_electron_ns", ns(two_started - one_started));
     Scope::number("two_electron_shell_calls", shell_calls);

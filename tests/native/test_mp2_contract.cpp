@@ -965,6 +965,26 @@ void conventional_derivative_from_mo_weights(bool with_p_shell) {
     require(std::abs(projected[coordinate] - staged[coordinate]) < 2e-11 &&
                 std::abs(projected[coordinate] - dense_projected[coordinate]) < 2e-11,
             "stationary AO density products differ from independent MO pullbacks");
+  for (std::size_t element = 0; element < factors.fock.size(); ++element)
+    factors.fock[element] = 0.03 * std::sin(static_cast<double>(element + 1));
+  for (std::size_t element = 0; element < factors.correlation_iajb.size(); ++element)
+    factors.correlation_iajb[element] = 0.07 * std::cos(static_cast<double>(element + 2));
+  auto dense_correlated = stationary;
+  dense_correlated.two_electron.resize(n4);
+  for (std::size_t first = 0; first < n; ++first)
+    for (std::size_t second = 0; second < n; ++second)
+      for (std::size_t third = 0; third < n; ++third)
+        for (std::size_t fourth = 0; fourth < n; ++fourth)
+          dense_correlated.two_electron[eri(first, second, third, fourth)] =
+              generativeqc::mp2::factorized_two_electron_weight(factors, first, second, third,
+                                                                fourth);
+  const auto correlated_oracle = contract(dense_correlated, Layout::automatic);
+  for (const auto layout : {Layout::automatic, Layout::compact, Layout::staged}) {
+    const auto correlated = contract(stationary, layout);
+    for (std::size_t coordinate = 0; coordinate < correlated.size(); ++coordinate)
+      require(std::abs(correlated[coordinate] - correlated_oracle[coordinate]) < 2e-11,
+              "factorized canonical/ordered derivative differs from independent dense weights");
+  }
 #if !GENERATIVEQC_HAS_CUDA
   bool cuda_rejected = false;
   try {
