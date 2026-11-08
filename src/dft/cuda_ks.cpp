@@ -3591,19 +3591,23 @@ struct CudaKsPlan::Impl : KsStateStorage {
       runtime::cuda_trace::trace_counter("xc_potential_provider_allowance",
                                          xc->potential_lowering().provider_allowance);
       CudaXcOccupiedDensity occupied_frame;
-      const auto occupied_rank = std::max(occupations[0], spins == 2 ? occupations[1] : 0);
+      const CudaXcOccupiedDensity candidate{
+          density,         tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
+          next_generation, true};
       // Do not start a provisional epoch without useful projection work and
       // two strict submits for a fresh energy comparison inside the caller's budget.
       if (occupied_xc_requested && occupied_xc_frame_ready && !strict_refinement &&
           output.iterations < options.max_iterations &&
-          options.max_iterations - output.iterations > 2 && occupied_rank &&
-          occupied_rank < prepared_ao_work.max_active && output.physical_residual_rms > 1e-6 &&
+          options.max_iterations - output.iterations > 2 &&
+          candidate.projection_fits(prepared_ao_work.max_active, xc_layout.jets,
+                                    xc_layout.work_jets) &&
+          output.physical_residual_rms > 1e-4 &&
           phase == generativeqc::runtime::PrecisionPhase::Admitted && !device_chunk_mode &&
           !device_nonlocal && !precision_schedule.any_lower_precision() &&
-          xc_layout.feature_terms == 5 && xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
-        occupied_frame = {
-            density,         tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
-            next_generation, true};
+          (xc_layout.feature_terms == 1 || xc_layout.feature_terms == 4 ||
+           xc_layout.feature_terms == 5) &&
+          xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
+        occupied_frame = candidate;
       }
       // tmp1 is borrowed only until residual/DIIS work reuses it on this stream.
       occupied_xc_frame_ready = false;
@@ -3893,8 +3897,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   bool incremental_delta_admitted() const noexcept {
+    // XC-only reassociation never changes the strict J/K operator or its
+    // density anchor. Preserve its ordinary delta/full schedule at handoff;
+    // precision transitions and the physical full-energy tail still forbid
+    // deltas. Occupied admission excludes every lower-precision schedule.
     if (!incremental_direct_jk || !incremental_anchored || incremental_energy_refinement ||
-        final_closure || strict_refinement)
+        final_closure || (strict_refinement && !occupied_xc_executed))
       return false;
     const auto interval = ks_incremental_proposal_interval(
         incremental_proposals_active, incremental_direct_jk_policy.requested_rebuild_interval,
@@ -4023,11 +4031,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     pending_occupied_xc = false;
     try {
       // Mixed history is only a bounded proposal accelerator. Every physical
-      // energy/residual after handoff is rebuilt in FP64; six unsuccessful
-      // strict proposals discard all provisional history and retain the
-      // incumbent exact refinement. No mixed operator certifies publication.
-      if ((experimental_mixed_history && strict_refinement && refinement_iterations == 6) ||
-          (occupied_xc_executed && strict_refinement && occupied_xc_refinement_iterations == 6)) {
+      // energy/residual after handoff is rebuilt in FP64. Retain the separate
+      // FP32 experiment's six-sweep reset, but do not erase the strict DIIS
+      // predictor accumulated after an occupied-FP64 handoff. Its provisional
+      // entries age out through the ordinary bounded chronological ring
+      // (at most options.diis_history strict insertions). None certifies a
+      // physical state; only the fresh stored-D target can do that.
+      if (experimental_mixed_history && strict_refinement && refinement_iterations == 6) {
         check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       }
@@ -4478,11 +4488,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Approximate features are proposals, not a new point-functional contract.
     // Bound their lifetime, then reuse the existing strict target handoff:
     // fresh energy epoch and unchanged publication gates. Old DIIS entries
-    // may only predict new densities; six unsuccessful strict sweeps clear
-    // them. No historical/provisional Fock can certify a physical state.
+    // may only predict new densities and expire through the bounded DIIS ring.
+    // No historical/provisional Fock can certify a physical state.
     // The first strict Fock has no comparable prior target energy. Reserve
     // two strict submits, while retaining the established 11-proposal cap.
-    const MixedPrecisionWarmup occupied_warmup{1e-6, 12};
+    // Switch before the nearly stationary tail: a late energy-epoch reset can
+    // otherwise add a Fock solely to obtain a second comparable strict energy.
+    const MixedPrecisionWarmup occupied_warmup{1e-4, 12};
     const bool enter_occupied_audit =
         occupied_warmup.enter_refinement(occupied_stage, converged, output.iterations,
                                          options.max_iterations, physical.residual_rms) ||
@@ -4629,8 +4641,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       }
       // Mixed J needs a new strict source lease; an XC-only warmup may retain
-      // its unchanged FP64 J/K source. Existing resource/seed guards still apply.
-      prepare_phase_source(phase_source_cold);
+      // its unchanged FP64 J/K source. Re-preparing that lease repeats ERI
+      // generation and allocation without changing the target. An absent
+      // source stays on the existing bounded direct path; a genuinely mixed
+      // source still retires/rebuilds under its original precision guards.
+      if (!enter_occupied_audit ||
+          (phase_source && phase_source->active() && phase_source->mixed_recurrence()))
+        prepare_phase_source(phase_source_cold);
     } else if (pending_nonlocal_seed || pending_nonlocal_frozen) {
       // Never export a provisional density, energy, residual or force as a
       // converged target. The original total iteration budget remains finite.

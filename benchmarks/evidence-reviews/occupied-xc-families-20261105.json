@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "occupied-xc-families-20261105",
+  "owner": "Occupied-XC feature-family endpoint qualification",
+  "reason": "Two source-bound capsules share the exact-FP64 v3 storage streams while retaining every original JSON and XZ byte, complete independent and paired force vectors, original-workload replication, distinct-host confirmations, three handoff diagnoses and neutral/regressing discarded populations. All live data and original transport reconstruction remain offline. This exact-byte storage review changes no size budget, numerical gate or method capability.",
+  "review_document": "benchmarks/results/occupied-xc-families-20261105/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/occupied-xc-families-20261105/fp64.xz",
+      "family": "occupied-xc-families-20261105",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact FP64 words for both complete original capsules; receipts.json.xz retains their full typed structure and provenance, and storage-receipt.json authenticates offline recovery of the original JSON texts and compressed transports, including separately identified negative and semantic-work diagnostics.",
+      "bytes": 404824,
+      "sha256": "419031b56317bccf439197f1dcd1cb59b33253bd7d186e8760aad2eed775223c"
+    }
+  ]
+}

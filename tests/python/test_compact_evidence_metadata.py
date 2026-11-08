@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import copy
 import gzip
+import hashlib
 import json
+import lzma
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from test_compact_evidence_safety import publication, snapshot
 
+from benchmarks import _source_census_evidence as census_evidence
 from tools import compact_evidence_publications as compact
 from tools.generativeqc_validation.storage_json import (
     decode_storage_json,
@@ -357,3 +362,270 @@ def test_gzip_inflation_cannot_mutate_a_publication(
     with pytest.raises(ValueError, match="expanded-byte"):
         compact.main([])
     assert snapshot(publication) == before
+
+
+def source_census_digest(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+@pytest.fixture
+def source_census_storage(tmp_path: Path) -> SimpleNamespace:
+    """Build two tiny originals with unusual numbers and nested JSON strings."""
+    root = tmp_path
+    directory = root / "benchmarks/results/shared"
+    directory.mkdir(parents=True)
+    names = [
+        "benchmarks/results/example/primary.json.xz",
+        "benchmarks/results/peer/nested.json.xz",
+    ]
+    source = {"src/c.cpp": "3" * 64, "src/a.cpp": "1" * 64}
+    maps = {
+        "schema": census_evidence.MAP_SCHEMA,
+        "paths": ["src/a.cpp", "src/b.cpp", "src/c.cpp"],
+        "base_values": ["1" * 64, "2" * 64, None],
+        "maps": {
+            "sample": {
+                "count": 2,
+                "sha256": source_census_digest(
+                    json.dumps(source, separators=(",", ":")).encode()
+                ),
+                "removed": [1],
+                "changed": [[2, "3" * 64]],
+                "order": [2, 0],
+            }
+        },
+    }
+    fmt = {"indent": 2, "ensure_ascii": True, "line_prefix": "  "}
+    first = {"map": "sample", "format": fmt, "escape_depth": 0}
+    nested = {**first, "escape_depth": 1}
+    parts = [
+        [
+            '{"source_revision":"frozen","values":[1.2300e-09,-0.0],"source":',
+            first,
+            ',"failed":true,"text":"α\\nquoted"}\n',
+        ],
+        [
+            '{"journal":"' + json.dumps('{"source":')[1:-1],
+            nested,
+            json.dumps(',"failed":true}')[1:-1] + '","value":1.0000}\n',
+        ],
+    ]
+    originals = {}
+    group = {"schema": census_evidence.FRAGMENT_SCHEMA, "files": {}}
+    for name, fragments in zip(names, parts, strict=True):
+        raw = "".join(
+            part if isinstance(part, str) else census_evidence._render(source, part)
+            for part in fragments
+        ).encode()
+        json.loads(raw)
+        xz = lzma.compress(raw, preset=6)
+        originals[name] = (raw, xz)
+        group["files"][name] = {
+            "parts": fragments,
+            "json_bytes": len(raw),
+            "json_sha256": source_census_digest(raw),
+            "xz_bytes": len(xz),
+            "xz_sha256": source_census_digest(xz),
+            "xz_recipe": {"preset": 6},
+        }
+    state = SimpleNamespace(
+        root=root, directory=directory, maps=maps, group=group, originals=originals
+    )
+
+    def rewrite() -> None:
+        bindings = {}
+        for filename, obj in [
+            ("maps.json.xz", state.maps),
+            ("group.json.xz", state.group),
+        ]:
+            raw = json.dumps(obj, separators=(",", ":")).encode()
+            packed = lzma.compress(raw, preset=6)
+            (directory / filename).write_bytes(packed)
+            bindings[filename] = {
+                "path": filename,
+                "bytes": len(packed),
+                "sha256": source_census_digest(packed),
+                "decoded_bytes": len(raw),
+                "decoded_sha256": source_census_digest(raw),
+            }
+        manifest = {
+            "schema": census_evidence.MANIFEST_SCHEMA,
+            "source_maps": bindings["maps.json.xz"],
+            "groups": {"campaign": bindings["group.json.xz"]},
+            "files": {
+                name: {
+                    "group": "campaign",
+                    **{k: v for k, v in record.items() if k != "parts"},
+                }
+                for name, record in state.group["files"].items()
+            },
+        }
+        raw = (json.dumps(manifest, indent=2) + "\n").encode()
+        (directory / "storage.json").write_bytes(raw)
+        for name in names:
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor = {
+                "schema": census_evidence.MEMBER_SCHEMA,
+                "manifest": "benchmarks/results/shared/storage.json",
+                "manifest_sha256": source_census_digest(raw),
+                "member": name,
+            }
+            path.write_bytes(
+                lzma.compress(json.dumps(descriptor, separators=(",", ":")).encode())
+            )
+        state.manifest = manifest
+
+    state.rewrite = rewrite
+    rewrite()
+    return state
+
+
+def test_source_census_exact_numeric_tokens_nested_strings_order_and_xz(
+    source_census_storage: SimpleNamespace,
+) -> None:
+    for name, (raw, xz) in source_census_storage.originals.items():
+        path = source_census_storage.root / name
+        assert (
+            census_evidence.read_json_bytes(path, repository=source_census_storage.root)
+            == raw
+        )
+        assert (
+            census_evidence.read_xz_bytes(path, repository=source_census_storage.root)
+            == xz
+        )
+    sibling = (
+        source_census_storage.root
+        / "benchmarks/results/peer/../example/primary.json.xz"
+    )
+    assert (
+        census_evidence.read_json_bytes(sibling, repository=source_census_storage.root)
+        == next(iter(source_census_storage.originals.values()))[0]
+    )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "duplicate_change",
+        "missing_base",
+        "duplicate_order",
+        "missing_order",
+        "unknown_map",
+        "json_checksum",
+    ],
+)
+def test_source_census_rejects_semantic_corruption_after_rebinding_storage(
+    source_census_storage: SimpleNamespace, damage: str
+) -> None:
+    """Rehash storage to exercise the original-map/member integrity checks."""
+    record = source_census_storage.maps["maps"]["sample"]
+    name = next(iter(source_census_storage.originals))
+    if damage == "duplicate_change":
+        record["changed"].append(copy.deepcopy(record["changed"][0]))
+    elif damage == "missing_base":
+        source_census_storage.maps["base_values"][0] = None
+    elif damage == "duplicate_order":
+        record["order"] = [2, 2]
+    elif damage == "missing_order":
+        record["order"] = [2]
+    elif damage == "unknown_map":
+        source_census_storage.group["files"][name]["parts"][1]["map"] = "absent"
+    else:
+        source_census_storage.group["files"][name]["json_sha256"] = "0" * 64
+    source_census_storage.rewrite()
+    with pytest.raises(ValueError):
+        census_evidence.read_json_bytes(
+            source_census_storage.root / name, repository=source_census_storage.root
+        )
+
+
+def test_source_census_original_transport_is_actually_recompressed_and_hashed(
+    source_census_storage: SimpleNamespace,
+) -> None:
+    name = next(iter(source_census_storage.originals))
+    source_census_storage.group["files"][name]["xz_sha256"] = "0" * 64
+    source_census_storage.rewrite()
+    assert (
+        census_evidence.read_json_bytes(
+            source_census_storage.root / name, repository=source_census_storage.root
+        )
+        == source_census_storage.originals[name][0]
+    )
+    with pytest.raises(ValueError, match="original XZ checksum"):
+        census_evidence.read_xz_bytes(
+            source_census_storage.root / name, repository=source_census_storage.root
+        )
+
+
+def test_source_census_corrupt_storage_is_not_hidden_by_cached_decoding(
+    source_census_storage: SimpleNamespace,
+) -> None:
+    name = next(iter(source_census_storage.originals))
+    census_evidence.read_json_bytes(
+        source_census_storage.root / name, repository=source_census_storage.root
+    )
+    path = source_census_storage.directory / "group.json.xz"
+    raw = bytearray(path.read_bytes())
+    raw[len(raw) // 2] ^= 1
+    path.write_bytes(raw)
+    with pytest.raises(ValueError, match="checksum"):
+        census_evidence.read_json_bytes(
+            source_census_storage.root / name, repository=source_census_storage.root
+        )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "duplicate_key",
+        "nonfinite_metadata",
+        "escaping_path",
+        "expanded_limit",
+        "trailing_xz",
+    ],
+)
+def test_source_census_rejects_invalid_metadata_and_storage(
+    source_census_storage: SimpleNamespace, damage: str
+) -> None:
+    name = next(iter(source_census_storage.originals))
+    manifest = source_census_storage.manifest
+    if damage == "escaping_path":
+        manifest["source_maps"]["path"] = "../maps.json.xz"
+    elif damage == "expanded_limit":
+        manifest["source_maps"]["decoded_bytes"] = census_evidence.MAX_EXPANDED + 1
+    elif damage == "trailing_xz":
+        path = source_census_storage.directory / "group.json.xz"
+        raw = path.read_bytes() + b"trailing"
+        path.write_bytes(raw)
+        manifest["groups"]["campaign"].update(
+            bytes=len(raw), sha256=source_census_digest(raw)
+        )
+    raw = json.dumps(manifest, separators=(",", ":")).encode()
+    if damage == "duplicate_key":
+        raw = raw[:-1] + b',"schema":"duplicate"}'
+    elif damage == "nonfinite_metadata":
+        raw = raw[:-1] + b',"extra":NaN}'
+    (source_census_storage.directory / "storage.json").write_bytes(raw)
+    path = source_census_storage.root / name
+    descriptor = json.loads(lzma.decompress(path.read_bytes()))
+    descriptor["manifest_sha256"] = source_census_digest(raw)
+    path.write_bytes(
+        lzma.compress(json.dumps(descriptor, separators=(",", ":")).encode())
+    )
+    with pytest.raises(ValueError):
+        census_evidence.read_json_bytes(path, repository=source_census_storage.root)
+
+
+def test_source_census_regular_files_keep_their_original_representation(
+    tmp_path: Path,
+) -> None:
+    raw = b'{"value":1.230000e-09,"signed_zero":-0.0}\n'
+    plain = tmp_path / "ordinary.json"
+    plain.write_bytes(raw)
+    compressed = plain.with_suffix(".json.xz")
+    packed = lzma.compress(raw)
+    compressed.write_bytes(packed)
+    assert census_evidence.read_json_bytes(plain) == raw
+    assert census_evidence.read_json_bytes(compressed) == raw
+    assert census_evidence.read_xz_bytes(compressed) == packed
