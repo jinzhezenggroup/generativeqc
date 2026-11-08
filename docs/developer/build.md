@@ -92,6 +92,16 @@ native CLI distribution. For reproducibility, a compatible device may opt into
 its measured profile with `-DGENERATIVEQC_AOT_PROFILE=sm_120`; this is an
 architecture-specific optimization argument, not a separate build preset.
 
+CUDA CLI installation writes `share/generativeqc/native-cli-build.json` from
+the resolved CMake compiler version and architecture list. `tools/package_native_cli.py`
+requires this file: archive names use the recorded CUDA major/minor version and
+every requested architecture, including `-real`/`-virtual` suffixes. Packaged
+`build-metadata.json` retains the full compiler version and the ordered
+`cuda_architectures` list in CMake notation. Packaging never probes a GPU or
+substitutes the CI machine's target. Missing/unresolved build metadata, a
+package/build version mismatch, or a non-NVIDIA/non-Linux-x86_64 build is an error.
+This records build intent, not numerical or performance qualification on each GPU.
+
 By default, `GENERATIVEQC_CUDA_COMPILE_JOBS` is empty, so native CUDA and
 generated AOT compilation follow the build tool's normal parallelism (for
 example, `ninja -jN`). Set it only when a memory-constrained host needs a

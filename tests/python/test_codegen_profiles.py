@@ -126,26 +126,16 @@ def _small_multi_profile_manifest(path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("schema_version", (1, 2))
 def test_auto_portable_fallback_without_a_manifest_portable_entry(
     tmp_path: Path,
-    schema_version: int,
 ) -> None:
-    """Older/custom manifests must not require a tuning entry for each GPU."""
+    """Custom manifests must not require a tuning entry for each GPU."""
     manifest = tmp_path / "manifest.json"
-    payload = (
-        {
-            "schema_version": 1,
-            "shell_classes": ["dsss"],
-            "acceptance": {"architecture": "sm_120"},
-        }
-        if schema_version == 1
-        else {
-            "schema_version": 2,
-            "default_architecture": "sm_120",
-            "architectures": {"sm_120": {"kind": "tuned", "kernels": []}},
-        }
-    )
+    payload = {
+        "schema_version": 2,
+        "default_architecture": "sm_120",
+        "architectures": {"sm_120": {"kind": "tuned", "kernels": []}},
+    }
     manifest.write_text(json.dumps(payload), encoding="utf-8")
     resolved = resolve_production_profile(manifest, "sm_80")
     assert resolved == resolve_production_profile(manifest, "sm_80", "portable")

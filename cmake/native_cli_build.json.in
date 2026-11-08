@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "version": "@PROJECT_VERSION@",
+  "system_name": "@CMAKE_SYSTEM_NAME@",
+  "system_processor": "@CMAKE_SYSTEM_PROCESSOR@",
+  "cuda_compiler_id": "@CMAKE_CUDA_COMPILER_ID@",
+  "cuda_toolkit": "@CMAKE_CUDA_COMPILER_VERSION@",
+  "cuda_architectures": ["@_generativeqc_cli_architectures@"]
+}
