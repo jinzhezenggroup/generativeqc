@@ -609,6 +609,34 @@ independently reconverged displaced energies. The public native acceptance
 gates are `1e-9` Hartree for energy, `2e-6` Hartree/Bohr for force and composite
 directional derivatives, and every constituent endpoint is checked separately.
 
+The restricted conventional iodine-ECP regression in
+`tests/python/test_conventional_ecp_cbs_regression.py` uses checksum-pinned
+CH3IN2, H2IO(-) and CH2ClI geometries, spherical cc-pV(D,T)Z-PP on iodine,
+cc-pV(D,T)Z on the other atoms, and the matching 28-electron scalar ECP.
+It retains the original 43-GiB numeric budget and native stopping limits.
+Physical HF/orbital-response regressions and complete CBS qualification are
+separate tests: passing an originally failing step does not qualify the whole
+energy-and-force endpoint. Complete acceptance checks all five component
+energies and forces, the composite, zero net force, and independent PySCF
+directional energy differences at both `2e-4` and `6e-5` Bohr. Its absolute gates
+are `3e-8` Hartree per component, `9e-8` Hartree for CBS energy, `3e-7`
+Hartree/Bohr for directional force and `3e-8` Hartree/Bohr for net force.
+These cases qualify that implementation/input domain, not arbitrary elements,
+bases, geometries or predictive CBS accuracy.
+
+Run each long case in its own finite GPU allocation; the opt-in test also
+requires `SLURM_JOB_ID`. For example, on a cluster exposing `gpu:pro6000`:
+
+```bash
+srun --partition=main --gres=gpu:pro6000:1 --nodes=1 --ntasks=1 \
+  --time=04:00:00 env GENERATIVEQC_ECP_CBS_3034_CUDA_TEST=1 \
+  python -m pytest -q \
+  'tests/python/test_conventional_ecp_cbs_regression.py::test_reported_complete_ecp_cbs_force[hf_tz]'
+```
+
+Repeat with `hf_dz` and `response_dz`; preserve the Slurm-assigned CUDA device
+visibility and use the same source-matched CUDA library for all three cases.
+
 Run CPU contracts with `pytest tests/python/test_ccsdt_cbs*.py`. CUDA qualification
 requires `GENERATIVEQC_CBS_CUDA_TEST=1` and a real Slurm allocation. The
 physical H2 DZ/TZ **CPU force** replay is opt-in through

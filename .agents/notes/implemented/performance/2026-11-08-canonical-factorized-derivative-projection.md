@@ -68,6 +68,79 @@ not the default when that same full buffer is already admitted; it remains the
 explicit resource fallback. Revisit when complete profiles show projected host
 staging dominates, retaining these independent gates and bounded fallback.
 
+## Complete source-matched acceptance, November 8
+
+All three original complete conventional iodine-ECP CCSD(T)/CBS energy and
+analytic-force cases pass on production source
+`d7231a911e166ffd0e867291ed980e72e31a0307`, library SHA-256
+`ac41a8f7cf2af63e7b8110dfbec6f61e20d03f7f3d1019b11cedcb323c3cc69c`.
+The subsequent lifecycle-probe and documentation changes do not change that
+production source or library. The complete regression module SHA-256 remains
+`9369a5f56d72663913b14ee9ec98cd6e02e34de4a8478cc437db513a07c1cef5`.
+The retained full source manifest verifies every production/build input.
+The Release build uses CUDA 12.9.1, `120-real`, fast compilation disabled and
+verified sccache 0.16.0; actual launcher commands and before/after cache statistics
+are retained rather than inferring cache hits from elapsed build time.
+
+Jobs 4138, 4139 and 4140 each use n2's RTX PRO 6000 Blackwell Workstation
+Edition, a finite four-hour Slurm allocation, preserved device visibility and
+the unchanged 43-GiB correlation numeric budget. Every srun returns zero.
+These times include complete native endpoint preparation, all five component
+energies/analytic forces and composite construction, not just a derivative
+kernel. Test time additionally includes independent oracle qualification.
+
+| Original case | Job; DZ/TZ AOs | Native seconds | Test seconds | Max component energy error (Eh) | CBS energy error (Eh) | Max two-step directional-force error (Eh/Bohr) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `hf_dz`, CH3IN2 | 4138; 80/171 | 9501.172732 | 10124.66 | 1.1313091e-8 | 1.1313602e-8 | 5.2000556e-8 |
+| `response_dz`, CH2ClI | 4139; 65/131 | 6260.366798 | 6727.92 | 9.2159098e-9 | 9.2223900e-9 | 1.4488144e-7 |
+| `hf_tz`, H2IO(-) | 4140; 47/97 | 1126.247521 | 1165.03 | 1.0954295e-9 | 1.0970780e-9 | 7.6537256e-9 |
+
+Every component and composite passes independent PySCF 2.14 energy and
+directional finite differences at both `2e-4` and `6e-5` Bohr. Unchanged absolute
+gates are `3e-8 Eh` per component, `9e-8 Eh` for CBS, `3e-7 Eh/Bohr` for
+directional force and `3e-8 Eh/Bohr` for net force, with no relative allowance.
+The largest component/composite net-force coordinate across all three is
+`5.935247952837397e-13 Eh/Bohr`. No basis, ECP channel, electron, convergence
+ceiling, iteration cap or integral model is removed or relaxed. PySCF and
+displaced energies are test-only oracles, never production force providers.
+
+The high-basis work journals distinguish a logical AO-domain scan from its
+individual device reads and retain the actual admitted MO capacities:
+
+| Case | AO values in one primal scan | Device reads | Retained MO bytes | Canonical correlated derivative quartets | Correlated derivative seconds |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `hf_dz` | 855,036,081 | 16 | 4,563,543,240 | 1,788,886 | 2079.456130 |
+| `response_dz` | 294,499,921 | 16 | 1,376,919,768 | 636,756 | 1129.727753 |
+| `hf_tz` | 88,529,281 | 1 | 419,477,240 | 198,765 | 315.357377 |
+
+The 171-AO force source uses axis tile 86; bounded admission does not imply one
+contiguous AO read or constant transformation work. Its shared primal producer
+takes 4430.446246 seconds and records 1,637,340,214,725 transformation FMAs.
+The corresponding 131-AO producer takes 3306.249878 seconds and records
+395,406,170,665 FMAs. These retained endpoint/work measurements are not an
+arbitrary-element speedup or memory-peak claim. The measured-peak sentinel
+remains unavailable where retained owners prevent exact allocator telemetry.
+
+Additional current-source acceptance includes 214 focused host tests (11
+explicit opt-in skips), four native host suites, nine independent-oracle CUDA
+CBS/ECP regressions, both native CUDA convergence suites, repeated warm
+tight-budget MP2 energy/forces and an independent F-shell MP2 energy/force
+endpoint in finite Slurm job 4137. The nine lifecycle-harness tests separately
+exercise resource-only rollback, batched/OVOV-only admission, cleanup, restored
+budgets and the stale-CUDA-error negative control. CI run 42436541740 passes
+all Python shards, CPU GCC/Clang, CUDA compile/resource gates and native CUDA
+CLI qualification at the test-only head `81ca354f9`.
+
+Raw logs, compressed work journals, exact source/library/cache identities and
+per-case numerical summaries remain under ignored `.artifacts/issue-3034/`.
+The public, checksum-pinned inputs and executable qualification live in
+`tests/data/conventional_ecp_cbs/` and
+`tests/python/test_conventional_ecp_cbs_regression.py`; the current runnable
+procedure and coverage boundary are in `docs/user/ccsdt_cbs.md`. Earlier binary
+results remain separate rather than being relabelled as this candidate. This
+completes the original three-case acceptance boundary; it does not certify
+arbitrary other elements, bases or geometries.
+
 ## References
 
 - #3034 and PR #3046.

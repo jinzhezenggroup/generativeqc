@@ -338,6 +338,18 @@ does not auto-close #3034. Raw source identities, exact binaries, traces and
 logs remain under ignored `.artifacts/issue-3034/` without publishing a Release
 or changing production resource/fallback policy.
 
+### Superseding complete endpoint qualification
+
+The later source-matched projection candidate completes all three original
+conventional iodine-ECP CBS energy/analytic-force replays, with the original
+43-GiB budget, stopping limits and both independent finite-difference steps.
+Its production source/library identities, complete times, errors, semantic work
+and finite Slurm receipts are retained in the
+[canonical factorized projection decision](../performance/2026-11-08-canonical-factorized-derivative-projection.md#complete-source-matched-acceptance-november-8).
+This supersedes the earlier draft/complete-endpoint gate for that later
+candidate only; it does not retrospectively qualify the earlier binary or
+establish arbitrary-element/basis coverage.
+
 ## Revisit when
 
 Matrix-free curvature admission replaces the dense physical Hessian, or a new
