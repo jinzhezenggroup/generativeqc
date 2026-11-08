@@ -84,7 +84,7 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
                        std::string_view target, std::string_view compilation, std::size_t columns,
                        std::size_t reduction, std::size_t batches, cudaStream_t stream,
                        std::size_t provider_budget, bool indexed = false, bool nonempty = true,
-                       bool indexed_gemm = false)
+                       bool indexed_gemm = false, std::uint64_t expected_replays = 1)
       : columns_(columns), reduction_(reduction), batches_(batches), indexed_(indexed) {
     static_assert(N == 4);
     static_assert(sizeof(CudaSymmetricProduct) + 3 * sizeof(candidates) + 8192 <= host_reservation);
@@ -99,7 +99,7 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
         !request.precisions[0].casts.empty() || !request.precisions[0].refinement.empty() ||
         !request.precisions[0].audit.empty() || candidates[0].provider != "generated.cuda" ||
         candidates[1].provider != "cublas" || candidates[2].provider != "cublas" ||
-        candidates[3].provider != "cublas" ||
+        candidates[3].provider != "cublas" || !expected_replays ||
         candidates[0].algorithm != "symmetric-cross-generated" ||
         candidates[1].algorithm != "symmetric-cross-rank2k" ||
         candidates[2].algorithm != "indexed-symmetric-cross-rank2k" ||
@@ -115,8 +115,8 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
     // Include shared binding/preparation storage in each executable offer, so
     // candidate provenance agrees with the enclosing owner's resource charge.
     for (auto& offer : offers) offer.host_bytes = host_reservation;
-    // The method owner may request the separately qualified indexed GEMM
-    // recipe. Automatic method/device selection stays outside this executor.
+    // The compiler adapter qualifies the workload/hardware profile. This
+    // executor owns common cost/resource selection, not method/device policy.
     bool qualified = indexed && indexed_gemm, available = true;
 #if defined(GENERATIVEQC_TEST_HOOKS)
     indexed_gemm = indexed_gemm || symmetric_product_indexed_gemm_for_test;
@@ -129,7 +129,7 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
     // not promote an optional implementation through an optimistic heuristic.
     const std::size_t alternative_index = indexed ? (indexed_gemm ? 3 : 2) : 1;
     for (std::size_t i = 1; i < offers.size(); ++i)
-      if (i != alternative_index)
+      if (i != alternative_index && offers[i].rejection.empty())
         offers[i].rejection = "recipe does not match the prepared output domain and qualification";
     auto& alternative = offers[alternative_index];
     alternative.provider_bytes = CudaContractionContext::kProviderAllowance;
@@ -145,15 +145,22 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
       alternative.rejection = "symmetric-product cache and provider allowance are not admitted";
     else if (!available)
       alternative.rejection = "symmetric-product provider is unavailable";
-    if (alternative.rejection.empty() && !context_.prepare(stream))
+    // Rank complete prepare + expected reuse before acquiring optional device
+    // resources. Unknown costs retain only the adapter's qualified incumbent;
+    // no timing probes or optimistic zero-cost phases are introduced here.
+    auto selection =
+        runtime::select_native_lowering(request, offers, target, compilation, expected_replays,
+                                        alternative.rejection.empty() ? alternative_index : 0);
+    const bool prepare_library = selection.selected == alternative_index;
+    if (prepare_library && !context_.prepare(stream))
       alternative.rejection = "symmetric-product provider allocation unavailable";
-    if (alternative.rejection.empty() && alternative_index == 3) {
+    if (prepare_library && alternative.rejection.empty() && alternative_index == 3) {
       // This handle executes only typed FP64 Dgemm calls: default mode cannot
       // select TF32/FP32 input arithmetic. Set it during preparation, before
       // graph capture, without relaxing any other shared provider handle.
       generativeqc_tensor::blas_check(cublasSetMathMode(context_.handle(), CUBLAS_DEFAULT_MATH));
     }
-    if (alternative.rejection.empty() && indexed) {
+    if (prepare_library && alternative.rejection.empty() && indexed) {
       bool host_oom = false;
       const auto status = runtime::resource_cuda_malloc(reinterpret_cast<void**>(&matrix_),
                                                         matrix_bytes, &host_oom);
@@ -173,10 +180,10 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
       }
     }
     try {
-      const std::size_t incumbent = alternative.rejection.empty() ? alternative_index : 0;
-      if (!incumbent) context_.prepare_generated(stream);
-      const auto selection =
-          runtime::select_native_lowering(request, offers, target, compilation, 1, incumbent);
+      if (prepare_library && !alternative.rejection.empty())
+        selection = runtime::select_native_lowering(request, offers, target, compilation,
+                                                    expected_replays, 0);
+      if (selection.selected != alternative_index) context_.prepare_generated(stream);
       library_ = selection.selected == alternative_index;
       gemm_ = library_ && alternative_index == 3;
       diagnostic_ = {

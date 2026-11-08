@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-11-01
 
+The [2026-11-07 compiler-owned profile decision](../architecture/2026-11-07-compiler-owned-cuda-lowering-profiles.md)
+supersedes the XC method/device ownership described here without broadening the
+original qualification domain or relabelling its historical performance evidence.
+
 ## Problem and evidence
 
 The frozen three-device DF96 integration still has five A100 cold endpoints
