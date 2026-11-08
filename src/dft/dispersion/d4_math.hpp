@@ -7,6 +7,7 @@
 #include <cstdint>
 
 #include "dft/dispersion/d4_types.hpp"
+#include "generated_dispersion_scalar.hpp"
 
 #if defined(__CUDACC__)
 #define GENERATIVEQC_D4_MATH_HD __host__ __device__
@@ -19,11 +20,9 @@ namespace generativeqc::dft::dispersion::math {
 inline constexpr int kMaximumReferences = 7;
 inline constexpr double kReferenceWeightFactor = 6.0;
 inline constexpr double kMinimumWeightNorm = 1.4916681462400413e-154;
-inline constexpr double kCoordinationSteepness = 7.5;
 inline constexpr double kElectronegativityScale = 4.10451;
 inline constexpr double kElectronegativityShift = 19.08857;
 inline constexpr double kElectronegativityWidth = 11.28174;
-inline constexpr double kInverseSqrtPi = 0.5641895835477562869480794515607726;
 
 struct ChargeScale {
   double value;
@@ -35,11 +34,11 @@ GENERATIVEQC_D4_MATH_HD inline ChargeScale charge_scale_impl(double a, double c,
                                                              double qmod) {
   ChargeScale result{exp(a), 0.0};
   if (qmod <= 0.0) return result;
-  const double inner = exp(c * (1.0 - qref / qmod));
-  result.value = exp(a * (1.0 - inner));
+  double values[2]{};
+  ::generativeqc::generated::dispersion::d4_charge<NeedDerivative>(a, c, qref, qmod, values);
+  result.value = values[0];
   if constexpr (NeedDerivative) {
-    if (inner != 0.0 && result.value != 0.0)
-      result.derivative = -a * c * inner * result.value * (qref / qmod) / qmod;
+    result.derivative = values[1];
   }
   return result;
 }
@@ -77,10 +76,10 @@ GENERATIVEQC_D4_MATH_HD inline CoordinationParameters coordination_parameters(
 
 GENERATIVEQC_D4_MATH_HD inline CoordinationPair coordination_pair(CoordinationParameters parameters,
                                                                   double distance) {
-  const double x = kCoordinationSteepness * (distance - parameters.radius) / parameters.radius;
-  return {0.5 * parameters.electronegativity_factor * (1.0 + erf(-x)),
-          -parameters.electronegativity_factor * kCoordinationSteepness * exp(-x * x) *
-              kInverseSqrtPi / parameters.radius};
+  double values[2];
+  ::generativeqc::generated::dispersion::d4_coordination(
+      distance, parameters.radius, parameters.electronegativity_factor, values);
+  return {values[0], values[1]};
 }
 
 template <class FirstElement, class SecondElement>
@@ -103,6 +102,7 @@ GENERATIVEQC_D4_MATH_HD inline double damping_radius(const FirstElement& first,
   return a1 * sqrt(pair_rr(first, second)) + a2;
 }
 
+/** BJ damping value and Cartesian scatter coefficient (damping radial derivative / r). */
 struct PairDamping {
   double value;
   double derivative;
@@ -110,15 +110,9 @@ struct PairDamping {
 
 GENERATIVEQC_D4_MATH_HD inline PairDamping pair_damping(double distance_squared, double rr,
                                                         double r0, double s6, double s8) {
-  const double r2_squared = distance_squared * distance_squared;
-  const double r2_cubed = r2_squared * distance_squared;
-  const double r0_squared = r0 * r0;
-  const double r0_fourth = r0_squared * r0_squared;
-  const double r0_sixth = r0_fourth * r0_squared;
-  const double t6 = 1.0 / (r2_cubed + r0_sixth);
-  const double t8 = 1.0 / (r2_squared * r2_squared + r0_fourth * r0_fourth);
-  return {s6 * t6 + s8 * rr * t8,
-          -6.0 * s6 * r2_squared * t6 * t6 - 8.0 * s8 * rr * r2_cubed * t8 * t8};
+  double values[2];
+  ::generativeqc::generated::dispersion::bj_damping(distance_squared, rr, r0, s6, s8, values);
+  return {values[0], values[1]};
 }
 
 template <class FirstElement, class SecondElement>
@@ -149,12 +143,17 @@ GENERATIVEQC_D4_MATH_HD inline void atom_weights(const ElementData& element,
   for (int local = 0; local < element.reference_count; ++local) {
     const auto reference = references[element.reference_offset + local];
     maximum_reference_cn = fmax(maximum_reference_cn, reference.coordination_number);
-    const double delta = coordination - reference.coordination_number;
     for (int gaussian = 1; gaussian <= reference.gaussian_count; ++gaussian) {
       const double factor = static_cast<double>(gaussian) * kReferenceWeightFactor;
-      const double value = exp(-factor * delta * delta);
-      normalization += value;
-      if (cn_derivatives != nullptr) normalization_derivative -= 2.0 * factor * delta * value;
+      double values[2];
+      if (cn_derivatives != nullptr)
+        ::generativeqc::generated::dispersion::gaussian(coordination, reference.coordination_number,
+                                                        factor, values);
+      else
+        ::generativeqc::generated::dispersion::gaussian<false>(
+            coordination, reference.coordination_number, factor, values);
+      normalization += values[0];
+      if (cn_derivatives != nullptr) normalization_derivative += values[1];
     }
   }
 
@@ -163,24 +162,31 @@ GENERATIVEQC_D4_MATH_HD inline void atom_weights(const ElementData& element,
   const double qmod = (zero_charge ? 0.0 : charge) + element.effective_charge;
   for (int local = 0; local < element.reference_count; ++local) {
     const auto reference = references[element.reference_offset + local];
-    const double delta = coordination - reference.coordination_number;
     double numerator = 0.0;
     double numerator_derivative = 0.0;
     for (int gaussian = 1; gaussian <= reference.gaussian_count; ++gaussian) {
       const double factor = static_cast<double>(gaussian) * kReferenceWeightFactor;
-      const double value = exp(-factor * delta * delta);
-      numerator += value;
-      if (cn_derivatives != nullptr) numerator_derivative -= 2.0 * factor * delta * value;
+      double values[2];
+      if (cn_derivatives != nullptr)
+        ::generativeqc::generated::dispersion::gaussian(coordination, reference.coordination_number,
+                                                        factor, values);
+      else
+        ::generativeqc::generated::dispersion::gaussian<false>(
+            coordination, reference.coordination_number, factor, values);
+      numerator += values[0];
+      if (cn_derivatives != nullptr) numerator_derivative += values[1];
     }
     const double cn_weight =
         inverse_normalization != 0.0
             ? numerator * inverse_normalization
             : (fabs(maximum_reference_cn - reference.coordination_number) < 1.0e-12 ? 1.0 : 0.0);
-    const double cn_derivative =
-        cn_derivatives != nullptr && inverse_normalization != 0.0
-            ? inverse_normalization * (numerator_derivative -
-                                       numerator * normalization_derivative * inverse_normalization)
-            : 0.0;
+    double cn_derivative = 0.0;
+    if (cn_derivatives != nullptr && inverse_normalization != 0.0) {
+      double normalized[2];
+      ::generativeqc::generated::dispersion::normalize(
+          numerator, normalization, numerator_derivative, normalization_derivative, normalized);
+      cn_derivative = normalized[1];
+    }
     const double charge_steepness = gc * element.hardness;
     const double reference_charge = reference.charge + element.effective_charge;
     if (charge_derivatives != nullptr) {
@@ -270,63 +276,32 @@ GENERATIVEQC_D4_MATH_HD inline Coefficient coefficient(
       first_charge_derivatives, second_weights, second_cn_derivatives, second_charge_derivatives);
 }
 
-struct AtmTerms {
-  double r5_product;
-  double damping;
-  double angle;
-  double c9;
+struct AtmResponse {
   double energy;
-  double damping_derivative;
+  double radial[3];
+  double coefficient[3];
 };
 
-template <bool AbsoluteC6Product = false>
-GENERATIVEQC_D4_MATH_HD inline AtmTerms atm_terms(double first_second_r2, double first_third_r2,
-                                                  double second_third_r2, double first_second_r0,
-                                                  double first_third_r0, double second_third_r0,
-                                                  double first_second_c6, double first_third_c6,
-                                                  double second_third_c6, double s9,
-                                                  double exponent = 16.0) {
-  const double r2_product = first_second_r2 * first_third_r2 * second_third_r2;
-  const double r1_product = sqrt(r2_product);
-  const double r3_product = r2_product * r1_product;
-  const double r5_product = r3_product * r2_product;
-  const double ratio = (first_second_r0 * first_third_r0 * second_third_r0) / r1_product;
-  const double ratio_power = pow(ratio, exponent / 3.0);
-  const double damping = 1.0 / (1.0 + 6.0 * ratio_power);
-  const double angle = 0.375 * (first_second_r2 + second_third_r2 - first_third_r2) *
-                           (first_second_r2 - second_third_r2 + first_third_r2) *
-                           (-first_second_r2 + second_third_r2 + first_third_r2) / r5_product +
-                       1.0 / r3_product;
-  double c6_product = first_second_c6 * first_third_c6 * second_third_c6;
-  if constexpr (AbsoluteC6Product) c6_product = fabs(c6_product);
-  const double c9 = -s9 * sqrt(c6_product);
-  return {r5_product,
-          damping,
-          angle,
-          c9,
-          angle * damping * c9,
-          -2.0 * exponent * ratio_power * damping * damping};
-}
-
-GENERATIVEQC_D4_MATH_HD inline double atm_cn_adjoint(double energy, double first_c6,
-                                                     double second_c6, double first_cn,
-                                                     double second_cn) {
-  return -0.5 * energy * (first_cn / first_c6 + second_cn / second_c6);
-}
-
-GENERATIVEQC_D4_MATH_HD inline double atm_radial(double target, double other_first,
-                                                 double other_second, double r5_product,
-                                                 double damping, double angle,
-                                                 double damping_derivative, double c9) {
-  const double angle_derivative =
-      -0.375 *
-      (target * target * target + target * target * (other_first + other_second) +
-       target * (3.0 * other_first * other_first + 2.0 * other_first * other_second +
-                 3.0 * other_second * other_second) -
-       5.0 * (other_first - other_second) * (other_first - other_second) *
-           (other_first + other_second)) /
-      r5_product;
-  return c9 * (-angle_derivative * damping + angle * damping_derivative) / target;
+// Edge responses are Cartesian scatter coefficients, in ij, ik, jk order.
+// Coefficient responses are dE/dC6 in the same order; energy has the physical sign.
+template <bool AbsoluteC6Product = false, bool NeedDerivative = true>
+GENERATIVEQC_D4_MATH_HD inline AtmResponse atm_response(
+    double first_second_r2, double first_third_r2, double second_third_r2, double first_second_r0,
+    double first_third_r0, double second_third_r0, double first_second_c6, double first_third_c6,
+    double second_third_c6, double s9, double exponent = 16.0) {
+  double output[7]{};
+  if constexpr (AbsoluteC6Product) {
+    ::generativeqc::generated::dispersion::atm_absolute<NeedDerivative>(
+        first_second_r2, first_third_r2, second_third_r2,
+        first_second_r0 * first_third_r0 * second_third_r0, first_second_c6, first_third_c6,
+        second_third_c6, s9, exponent, output);
+  } else {
+    ::generativeqc::generated::dispersion::atm<NeedDerivative>(
+        first_second_r2, first_third_r2, second_third_r2,
+        first_second_r0 * first_third_r0 * second_third_r0, first_second_c6, first_third_c6,
+        second_third_c6, s9, exponent, output);
+  }
+  return {output[0], {output[1], output[2], output[3]}, {output[4], output[5], output[6]}};
 }
 
 }  // namespace generativeqc::dft::dispersion::math

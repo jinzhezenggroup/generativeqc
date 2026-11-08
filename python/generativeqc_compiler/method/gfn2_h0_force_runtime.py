@@ -8,7 +8,7 @@ arithmetic so value and force endpoints share the same mathematical owner.
 
 from __future__ import annotations
 
-from generativeqc_compiler.tensor.ad_program import transpose_program
+from generativeqc_compiler.tensor.ad_program import _rebuild, transpose_program
 from generativeqc_compiler.tensor.ir import (
     Node,
     add,
@@ -188,18 +188,22 @@ def build_gfn2_h0_ao_update_program() -> Program:
     """Build one AO contribution to overlap adjoint and shell-pair weight."""
 
     density = _input("density")
-    overlap = _input("overlap")
-    factor = _input("factor")
+    overlap = _input("overlap", differentiable=True)
+    factor = _input("factor", differentiable=True)
     overlap_adjoint = _input("overlap_adjoint")
     block_weight = _input("block_weight")
-    overlap_adjoint_updated = add(
-        overlap_adjoint,
-        multiply(density, factor),
+    primal = Program({"energy": multiply(density, multiply(overlap, factor))})
+    derivative = transpose_program(primal, ("energy",), inputs=("overlap", "factor"))
+    bound = _rebuild(
+        derivative.program,
+        {
+            node: _one()
+            for node in derivative.program.nodes
+            if node.op == "input" and node.attrs["name"] == "bar_energy"
+        },
     )
-    block_weight_updated = add(
-        block_weight,
-        multiply(density, overlap),
-    )
+    overlap_adjoint_updated = add(overlap_adjoint, bound.outputs["bar_overlap"])
+    block_weight_updated = add(block_weight, bound.outputs["bar_factor"])
     return Program(
         {
             "overlap_adjoint_updated": overlap_adjoint_updated,
@@ -209,5 +213,6 @@ def build_gfn2_h0_ao_update_program() -> Program:
             "kind": "gfn2-runtime-h0-ao-update",
             "version": GFN2_H0_FORCE_RUNTIME_VERSION,
             "source_issue": 560,
+            "derivative_hash": derivative.derivative_hash,
         },
     )

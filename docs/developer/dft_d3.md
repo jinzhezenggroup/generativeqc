@@ -30,6 +30,37 @@ Energy is in Hartree; coordinates are in bohr. The correction returns
 response. Forces therefore have the opposite sign. The GFN1 halogen correction,
 Hamiltonian, SCC state and D4 terms are not part of this endpoint.
 
+## Scalar derivative ownership
+
+The retained native CPU/CUDA schedules use
+`generativeqc_compiler.geometry.dispersion_scalar` for Gaussian reference-weight
+responses, normalization, smooth switching, coordination-number radial
+responses, BJ/zero pair damping, and ATM edge/C6 responses. These scalar programs differentiate
+primal expressions with the shared compiler DAG and emit
+`generated_dispersion_scalar.hpp`; no runtime AD objects are required.
+Native owners still select table entries, traverse admitted pairs/triples,
+apply physical atom scatter and preserve the existing underflow/failure policy.
+The same Gaussian, normalization and BJ primitives are shared by the D4 scalar
+adapter, which also uses generated charge scaling and EEQ matrix/RHS responses.
+Zero damping retains independent log-domain scaling of its energy and radial
+response when its damping power overflows; a representable derivative must not
+be rounded away with an underflowed energy. Its inverse-sixth/eighth consumers
+specialize the existing inverse-power loop at compile time.
+
+Native table contractions, bounded solves and physical scatter remain execution
+owners; there is no replacement GeometryIR scheduler in this scalar migration.
+In particular, it does not promote the
+separate GeometryIR ragged CUDA scheduler or replace its endpoint admission
+gates. Independent upstream numerical fixtures remain validation inputs.
+
+The optional `generativeqc_classical_derivative_endpoints` CMake target measures
+complete D3(BJ)+ATM, D3(0), D4-EEQ and gCP energy/gradient calls. It reports cold
+construction/destruction, unchanged replay and changed geometry separately,
+including host publication and pair/triple candidate counts. Match the driver,
+compiler controls, source identity, hardware and allocation for master/candidate
+comparisons; invoke its `cuda` mode only inside a finite Slurm `srun` allocation.
+These correction timings do not qualify a complete SCF or optimization endpoint.
+
 ## Calculator composition
 
 The preferred composite entry point is a spin-explicit `MethodIR`. The method name

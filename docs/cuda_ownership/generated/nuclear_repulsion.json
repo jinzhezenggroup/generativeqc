@@ -1,0 +1,6 @@
+{
+  "name": "nuclear_repulsion",
+  "outputs": ["generated/generated_nuclear_repulsion.hpp"],
+  "owner": "python/generativeqc_compiler/method/nuclear_repulsion.py",
+  "scope": "Shared scalar Coulomb energy DAG and compiler-AD coordinate gradients for host/CUDA nuclear pair traversals; the same DAG supplies directional Hessian roots. Native consumers retain ionic charges, traversal and physical atom scatter. This ownership record is not a real-device endpoint qualification."
+}

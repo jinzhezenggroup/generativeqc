@@ -2,6 +2,6 @@
   "path": "src/dft/dispersion/d4_cuda.cu",
   "role": "runtime",
   "subsystem": "d4_dispersion",
-  "reason": "Bounded block-cooperative CUDA scheduling for fixed-charge D4 pair, ATM and derivative work while retaining d4_reference.hpp as the scalar numerical oracle.",
+  "reason": "Bounded block-cooperative CUDA scheduling for fixed-charge D4 pair, ATM and derivative work. Gaussian reference-weight slopes, normalization JVPs and cached-norm radial pullbacks use the same Graph-generated scalar programs as CPU; native code retains underflow admission, reductions, charge cotangent contractions and scatter.",
   "regions": []
 }

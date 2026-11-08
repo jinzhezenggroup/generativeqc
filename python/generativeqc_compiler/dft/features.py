@@ -9,6 +9,33 @@ import numpy as np
 
 from generativeqc_compiler.common.arrays import immutable
 
+from .density_bilinear_ad import (
+    density_gradient_callable,
+    density_response_callable,
+    sigma_bilinear_callable,
+)
+
+
+def contract_density_response(
+    jets: typing.Any,
+    products: typing.Any,
+    directions: typing.Any,
+    *,
+    owned: typing.Any = None,
+) -> typing.Any:
+    """Execute an AD-derived sparse bilinear with already retained D*AO work.
+
+    Keys of ``jets`` are ordinary spatial multi-indices; keys of ``products``
+    are (multi-index, owned-leg). The schedule exchanges complete legs only
+    under the enclosing symmetric-D contract. Owned-column selection preserves
+    contributions from every unmasked partner, not just the atom's D block.
+    """
+    if owned is None and any(kind == "center" for kind, _ in directions):
+        raise ValueError("center response requires owned AO columns")
+    return density_response_callable(tuple(directions), tuple(products))(
+        jets, products, owned
+    )
+
 
 def spin_densities(density: typing.Any, nao: typing.Any) -> typing.Any:
     """Return [alpha,beta,AO,AO]; RHF input is total D and splits equally.
@@ -75,6 +102,29 @@ def _sigma(gradient: typing.Any) -> typing.Any:
     )
 
 
+def sigma_response(
+    gradient: typing.Any,
+    left: typing.Any,
+    *,
+    right: typing.Any = None,
+    mixed: typing.Any = None,
+) -> typing.Any:
+    """Contract generated first/mixed sigma summands after spin reductions."""
+    if (right is None) != (mixed is None):
+        raise ValueError(
+            "mixed sigma response requires both right and mixed gradient jets"
+        )
+    program = sigma_bilinear_callable(mixed=right is not None)
+    values = []
+    for first, second in ((0, 0), (0, 1), (1, 1)):
+        arguments = (gradient[first], gradient[second], left[first], left[second])
+        if right is not None:
+            arguments += (right[first], right[second], mixed[first], mixed[second])
+        (response,) = program(*arguments)
+        values.append(np.sum(response, axis=1))
+    return np.stack(values)
+
+
 def _contract_density_feature_arrays(
     jets: typing.Any,
     density: typing.Any,
@@ -98,8 +148,7 @@ def _contract_density_feature_arrays(
         if "rho" in requested:
             rho.append(np.sum(value * w, axis=1))
         if need_gradient:
-            for axis, derivative in enumerate(derivatives):
-                gradient[spin_index, :, axis] = 2 * np.sum(derivative * w, axis=1)
+            density_gradient_callable()(jets, w, gradient[spin_index])
         if "tau" in requested:
             tau.append(
                 0.5

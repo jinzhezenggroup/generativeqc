@@ -3,5 +3,6 @@
   "outputs": [
     "generated/generated_gfn2_h0_native.hpp"
   ],
-  "owner": "python/generativeqc_compiler/method/gfn2_h0_force_runtime.py"
+  "owner": "python/generativeqc_compiler/method/gfn2_h0_force_runtime.py",
+  "scope": "TensorIR AD owns CN/radial factor responses and both AO overlap/factor cotangents of the actual H0 energy. Native traversal, stationary Pulay composition, reductions and failure publication remain."
 }

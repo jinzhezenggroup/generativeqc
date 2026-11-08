@@ -14,7 +14,8 @@ from generativeqc_compiler.common.nonlocal_correlation import NonlocalCorrelatio
 from generativeqc_compiler.common.provenance import canonical_hash
 
 from .ao import NativeAO, jet_indices
-from .features import spin_densities
+from .density_bilinear_ad import density_gradient_callable, sigma_pullback_callable
+from .features import contract_density_response, spin_densities
 from .grid import ExplicitGrid, MolecularGrid, checked_int
 from .nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_POLICY,
@@ -258,10 +259,8 @@ class FixedDensityNonlocalCorrelation:
         phi = jets[0]
         weighted = phi @ total_density
         rho = np.sum(phi * weighted, axis=1)
-        gradient = np.stack(
-            [2.0 * np.sum(derivative * weighted, axis=1) for derivative in jets[1:4]],
-            axis=1,
-        )
+        gradient = np.empty((phi.shape[0], 3), dtype=np.float64)
+        density_gradient_callable()(jets, weighted, gradient)
         return rho, gradient
 
     @staticmethod
@@ -276,7 +275,7 @@ class FixedDensityNonlocalCorrelation:
         phi = jets[0]
         derivatives = jets[1:4]
         matrix = phi.T @ ((weights * vrho)[:, None] * phi)
-        spatial = 2.0 * vsigma[:, None] * density_gradient
+        (spatial,) = sigma_pullback_callable()(vsigma[:, None], density_gradient)
         panel = sum(spatial[:, k, None] * derivatives[k] for k in range(3))
         cross = phi.T @ (weights[:, None] * panel)
         matrix += cross + cross.T
@@ -502,18 +501,25 @@ class FixedDensityNonlocalCorrelation:
             derivatives = [jets[index] for index in first]
             weighted = phi @ total_density
             derivative_work = [value @ total_density for value in derivatives]
+            spatial = dict(zip(jet_indices(2), jets, strict=True))
+            products = {((0, 0, 0), False): weighted}
+            products.update(
+                {
+                    (index, False): work
+                    for index, work in zip(
+                        jet_indices(1)[1:], derivative_work, strict=True
+                    )
+                }
+            )
             local_gradient = gradient[begin:end]
-            gradient_coeff = 2.0 * vsigma[begin:end, None] * local_gradient
+            (gradient_coeff,) = sigma_pullback_callable()(
+                vsigma[begin:end, None], local_gradient
+            )
             hessian = hessian_scratch[: end - begin]
             for j in range(3):
                 for k in range(3):
-                    axis = [0, 0, 0]
-                    axis[j] += 1
-                    axis[k] += 1
-                    second = jets[lookup[tuple(axis)]]
-                    hessian[:, j, k] = 2.0 * (
-                        np.sum(second * weighted, axis=1)
-                        + np.sum(derivatives[j] * derivative_work[k], axis=1)
+                    hessian[:, j, k] = contract_density_response(
+                        spatial, products, (("point", j), ("point", k))
                     )
             feature_points = feature_points_scratch[: end - begin]
             for k in range(3):
@@ -526,21 +532,16 @@ class FixedDensityNonlocalCorrelation:
             for atom in range(basis.natom):
                 owned = ao_atoms == atom
                 for k in range(3):
-                    drho = -2.0 * np.sum(
-                        derivatives[k][:, owned] * weighted[:, owned], axis=1
+                    drho = contract_density_response(
+                        spatial, products, (("center", k),), owned=owned
                     )
                     dgradient = dgradient_scratch[: end - begin]
                     for j in range(3):
-                        axis = [0, 0, 0]
-                        axis[j] += 1
-                        axis[k] += 1
-                        second = jets[lookup[tuple(axis)]]
-                        dgradient[:, j] = -2.0 * (
-                            np.sum(second[:, owned] * weighted[:, owned], axis=1)
-                            + np.sum(
-                                derivatives[k][:, owned] * derivative_work[j][:, owned],
-                                axis=1,
-                            )
+                        dgradient[:, j] = contract_density_response(
+                            spatial,
+                            products,
+                            (("point", j), ("center", k)),
+                            owned=owned,
                         )
                     center_partials[atom, k] += float(
                         np.sum(

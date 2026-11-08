@@ -84,10 +84,10 @@ def test_points_reuse_radial_factors() -> None:
     radial = source.split("__global__ void radial_kernel", 1)[1].split(
         "// Angular factors", 1
     )[0]
-    assert "const double r = radii[owner] * t / (1.0 - t);" in radial
-    assert "0.5 * rw[radial_index] * radii[owner] * r * r /" in radial
-    assert "radial[2 * i] = r;" in radial
-    assert "radial[2 * i + 1] = wr;" in radial
+    # Audit the intentional raw-rule ownership boundary, not generated scalar
+    # spelling. Independent native/NumPy/high-precision arithmetic gates live
+    # in test_quadrature_ad; the point phase may only load retained transforms.
+    assert "rn[" in radial and "rw[" in radial and "radii[" in radial
 
     points = source.split("__global__ void points_kernel", 1)[1].split(
         "// Atom-major 2-D launch", 1

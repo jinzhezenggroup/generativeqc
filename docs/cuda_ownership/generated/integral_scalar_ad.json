@@ -1,0 +1,6 @@
+{
+  "name": "integral_scalar_ad",
+  "outputs": ["src/integrals/generated_scalar_ad.hpp"],
+  "owner": "python/generativeqc_compiler/integral/scalar_ad.py",
+  "scope": "Dynamic CPU integral Jet and CUDA Dual/Dual3 recurrence interpreters consume Graph-derived scalar JVPs. Full/LR/SR moment seeds lower AD of the Gaussian integrand to a shifted value moment. Native storage, primal recurrence traversal, channel layout and contractions remain; this is not a full-endpoint performance claim."
+}

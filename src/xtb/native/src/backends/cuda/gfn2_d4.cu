@@ -116,7 +116,6 @@ __device__ std::int64_t system_for_atom(Gfn2D4DeviceBatch batch, std::int64_t at
   return lower;
 }
 
-
 /*
  * Load one ragged member only after the immutable-sequence gate and the
  * peer-local sticky status both permit work. All callers invoke this helper
@@ -179,9 +178,9 @@ __device__ bool evaluate_d4_pair_geometry(Gfn2D4DeviceBatch batch,
         parameters.elements[batch.atomic_numbers[first] - 1];
     const Gfn2D4DeviceElementData second_element =
         parameters.elements[batch.atomic_numbers[second] - 1];
-    const auto damping = d4_math::pair_damping(
-        first_element, second_element, values->distance_squared, kDispersionS6, kDispersionS8,
-        kDispersionA1, kDispersionA2);
+    const auto damping =
+        d4_math::pair_damping(first_element, second_element, values->distance_squared,
+                              kDispersionS6, kDispersionS8, kDispersionA1, kDispersionA2);
     values->damping = damping.value;
     values->damping_derivative = damping.derivative;
   }
@@ -738,7 +737,6 @@ __device__ PairCoefficient pair_coefficient(Gfn2D4DeviceBatch batch,
   return {result.c6, result.first_cn, result.second_cn, result.first_charge, result.second_charge};
 }
 
-
 /* SCC potential mode deliberately reads no CN-derivative workspace. */
 /* SCC energy mode reads only charge-dependent weights and immutable tables. */
 __device__ double pair_c6_coefficient(Gfn2D4DeviceBatch batch, Gfn2D4DeviceParameters parameters,
@@ -1027,12 +1025,7 @@ __global__ void atm_reduction_test_kernel(Gfn2D4DeviceBatch batch, const double*
 }
 #endif
 
-__device__ void atm_distance_gradient(double target, double other_first, double other_second,
-                                      const double* vector, double r5_product, double c9,
-                                      double angle, double damping, double damping_derivative,
-                                      double* output) {
-  const double scale = d4_math::atm_radial(target, other_first, other_second, r5_product, damping,
-                                            angle, damping_derivative, c9);
+__device__ void atm_distance_gradient(double scale, const double* vector, double* output) {
   for (int axis = 0; axis < 3; ++axis) {
     output[axis] = scale * vector[axis];
   }
@@ -1181,10 +1174,10 @@ __global__ void pairlist_atm_energy_kernel(
       const double r0ij = pair_damping_radius(batch, parameters, j, i);
       const double r0ik = pair_damping_radius(batch, parameters, k, i);
       const double r0jk = pair_damping_radius(batch, parameters, k, j);
-      const auto atm = d4_math::atm_terms<true>(
-          ij.distance_squared, ik.distance_squared, jk.distance_squared, r0ij, r0ik, r0jk,
-          c6ij.c6, c6ik.c6, c6jk.c6, kDispersionS9, kAtmExponent);
-      energy -= atm.energy;
+      const auto atm = d4_math::atm_response<true, false>(
+          ij.distance_squared, ik.distance_squared, jk.distance_squared, r0ij, r0ik, r0jk, c6ij.c6,
+          c6ik.c6, c6jk.c6, kDispersionS9, kAtmExponent);
+      energy += atm.energy;
       if (!isfinite(energy)) {
         record_system_error(workspace, system, Gfn2D4DeviceError::kNonfiniteArithmetic);
         energy = 0.0;
@@ -1282,27 +1275,21 @@ __global__ void pairlist_atm_gradient_kernel(
       const double r0ij = pair_damping_radius(batch, parameters, j, i);
       const double r0ik = pair_damping_radius(batch, parameters, k, i);
       const double r0jk = pair_damping_radius(batch, parameters, k, j);
-      const auto atm = d4_math::atm_terms(
-          ij.distance_squared, ik.distance_squared, jk.distance_squared, r0ij, r0ik, r0jk,
-          c6ij.c6, c6ik.c6, c6jk.c6, kDispersionS9, kAtmExponent);
+      const auto atm =
+          d4_math::atm_response(ij.distance_squared, ik.distance_squared, jk.distance_squared, r0ij,
+                                r0ik, r0jk, c6ij.c6, c6ik.c6, c6jk.c6, kDispersionS9, kAtmExponent);
       double dgij[3];
       double dgik[3];
       double dgjk[3];
-      atm_distance_gradient(ij.distance_squared, jk.distance_squared, ik.distance_squared,
-                            ij.vector, atm.r5_product, atm.c9, atm.angle, atm.damping,
-                            atm.damping_derivative, dgij);
-      atm_distance_gradient(ik.distance_squared, jk.distance_squared, ij.distance_squared,
-                            ik.vector, atm.r5_product, atm.c9, atm.angle, atm.damping,
-                            atm.damping_derivative, dgik);
-      atm_distance_gradient(jk.distance_squared, ik.distance_squared, ij.distance_squared,
-                            jk.vector, atm.r5_product, atm.c9, atm.angle, atm.damping,
-                            atm.damping_derivative, dgjk);
+      atm_distance_gradient(atm.radial[0], ij.vector, dgij);
+      atm_distance_gradient(atm.radial[1], ik.vector, dgik);
+      atm_distance_gradient(atm.radial[2], jk.vector, dgjk);
       const double i_adjoint =
-          d4_math::atm_cn_adjoint(atm.energy, c6ij.c6, c6ik.c6, c6ij.first_cn, c6ik.first_cn);
+          atm.coefficient[0] * c6ij.first_cn + atm.coefficient[1] * c6ik.first_cn;
       const double j_adjoint =
-          d4_math::atm_cn_adjoint(atm.energy, c6ij.c6, c6jk.c6, c6ij.second_cn, c6jk.first_cn);
+          atm.coefficient[0] * c6ij.second_cn + atm.coefficient[2] * c6jk.first_cn;
       const double k_adjoint =
-          d4_math::atm_cn_adjoint(atm.energy, c6ik.c6, c6jk.c6, c6ik.second_cn, c6jk.second_cn);
+          atm.coefficient[1] * c6ik.second_cn + atm.coefficient[2] * c6jk.second_cn;
       if (!isfinite(dgij[0]) || !isfinite(dgij[1]) || !isfinite(dgij[2]) || !isfinite(dgik[0]) ||
           !isfinite(dgik[1]) || !isfinite(dgik[2]) || !isfinite(dgjk[0]) || !isfinite(dgjk[1]) ||
           !isfinite(dgjk[2]) || !isfinite(i_adjoint) || !isfinite(j_adjoint) ||
@@ -1358,10 +1345,11 @@ __global__ void pairlist_d4_coordination_vjp_kernel(Gfn2D4DeviceBatch batch,
       const double distance = sqrt(pair.distance_squared);
       const double derivative =
           d4_math::coordination_pair(first_element, second_element, distance).derivative;
-      const double scale =
-          sign * derivative *
-          (workspace.coordination_adjoints[first] + workspace.coordination_adjoints[second]) /
-          distance;
+      double projected[1];
+      ::generativeqc::generated::dispersion::radial_scatter(
+          distance, sign * derivative *
+          (workspace.coordination_adjoints[first] + workspace.coordination_adjoints[second]), projected);
+      const double scale = projected[0];
       for (int axis = 0; axis < 3; ++axis) {
         contribution[axis] += scale * pair.vector[axis];
       }

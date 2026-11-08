@@ -66,9 +66,7 @@ def test_gfn2_cuda_d4_reuses_shared_scalar_math() -> None:
         "d4_math::coordination_pair",
         "d4_math::pair_damping",
         "d4_math::damping_radius",
-        "d4_math::atm_terms",
-        "d4_math::atm_cn_adjoint",
-        "d4_math::atm_radial",
+        "d4_math::atm_response",
     ):
         assert helper in source
     for retired in (
@@ -94,8 +92,7 @@ def test_shared_d4_cpu_and_cuda_use_one_scalar_owner() -> None:
 
     for source in (reference, cuda):
         assert "math::pair_damping" in source
-        assert "math::atm_terms" in source
-        assert "math::atm_cn_adjoint" in source
+        assert "math::atm_response" in source
 
 
 def test_gfn2_cuda_kernels_do_not_take_reference_parameters() -> None:

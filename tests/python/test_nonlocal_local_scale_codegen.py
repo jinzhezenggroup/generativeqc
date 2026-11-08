@@ -8,7 +8,9 @@ import random
 import shutil
 import struct
 import subprocess
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -93,7 +95,7 @@ def test_generated_local_scales_compile_for_a_cuda_device(tmp_path: Path) -> Non
 
 @pytest.mark.parametrize("compiler_name", ["g++", "clang++"])
 def test_emitted_local_scales_preserve_raw_and_transformed_policies(
-    tmp_path: Path, compiler_name: str
+    tmp_path: Path, compiler_name: str, native_cxx: Any
 ) -> None:
     compiler = shutil.which(compiler_name)
     if compiler is None:
@@ -182,23 +184,10 @@ extern "C" int actual_underflow_kernel(double* output) {
 """
     )
     library = tmp_path / "scales.so"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-O2",
-            "-ffp-contract=off",
-            "-fno-fast-math",
-            "-shared",
-            "-fPIC",
-            str(source),
-            "-o",
-            str(library),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    replace(native_cxx, compiler=compiler).build_shared(
+        (source,),
+        library,
+        compile_args=("-std=c++20", "-O2", "-ffp-contract=off", "-fno-fast-math"),
     )
     lib = ctypes.CDLL(str(library))
     values = ctypes.c_double * 6
@@ -226,6 +215,20 @@ extern "C" int actual_underflow_kernel(double* output) {
         for sigma in (0.0, 1e-300, 1.0, 1e300)
         for b in (0.0, 1e-220, 6.0, 1e300)
     )
+    cases.extend(
+        (
+            10 ** rng.uniform(-100, 100),
+            10 ** rng.uniform(-100, 100),
+            10 ** rng.uniform(-200, 200),
+            10 ** rng.uniform(-250, 250),
+        )
+        for _ in range(1024)
+    )
+    cases.extend(
+        (1.0, sigma, 6.0, c)
+        for sigma in (1e150, 5e153, 1e154)
+        for c in (1e-300, 1e-150, 0.01)
+    )
     for mode in range(6):
         for case in cases:
             first, second = values(), values()
@@ -240,3 +243,45 @@ extern "C" int actual_underflow_kernel(double* output) {
     assert (
         output[1] == 0.0
     )  # Positive raw kappa legitimately underflows after validation.
+
+    import mpmath as mp
+
+    with mp.workdps(90):
+        pi = mp.mpf(float(math.pi))
+        plasma = mp.mpf(float(4 * math.pi / 3))
+        b, c = mp.mpf(6), mp.mpf(0.01)
+
+        def omega(rho: Any, sigma: Any) -> Any:
+            return mp.sqrt(c * sigma * sigma / rho**4 + plasma * rho)
+
+        def kappa(rho: Any) -> Any:
+            return b * mp.mpf(1.5) * pi * mp.root(rho / (9 * pi), 6)
+
+        for rho in (1e-5, 0.13, 1.0, 17.0):
+            for sigma in (0.0, 0.07, 12.0):
+                reference_rho, reference_sigma = mp.mpf(rho), mp.mpf(sigma)
+                expected = [
+                    float(omega(reference_rho, reference_sigma)),
+                    float(kappa(reference_rho)),
+                    float(
+                        mp.diff(
+                            lambda value, reference_sigma=reference_sigma: omega(
+                                value, reference_sigma
+                            ),
+                            reference_rho,
+                        )
+                    ),
+                    float(
+                        mp.diff(
+                            lambda value, reference_rho=reference_rho: omega(
+                                reference_rho, value
+                            ),
+                            reference_sigma,
+                        )
+                    ),
+                    float(mp.diff(kappa, reference_rho)),
+                ]
+                for mode in (1, 3):
+                    actual = values()
+                    lib.actual(mode, rho, sigma, float(b), float(c), actual)
+                    assert list(actual)[:5] == pytest.approx(expected, rel=3e-13, abs=0)

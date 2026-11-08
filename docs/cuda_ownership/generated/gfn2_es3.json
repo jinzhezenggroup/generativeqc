@@ -3,5 +3,6 @@
   "outputs": [
     "generated/generated_gfn2_es3_native.cuh"
   ],
-  "owner": "python/generativeqc_compiler/method/gfn2_es3_runtime.py"
+  "owner": "python/generativeqc_compiler/method/gfn2_es3_runtime.py",
+  "scope": "The shared onsite owner converts its actual TensorIR cubic energy to Graph and derives the production potential by AD and exact monomial collection. Qualified finite/scaled factor orders remain; an AD witness alone does not supply production math."
 }

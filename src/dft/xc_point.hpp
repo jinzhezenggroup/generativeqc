@@ -7,6 +7,8 @@
 #include <cmath>
 #include <type_traits>
 
+#include "generated_point_ad.hpp"
+
 // The CPU and ordinary-stream CUDA consumers use this same point contract.
 // Parameters/composition follow xc/expressions.py and the vendored Libxc 7
 // sources. See docs/developer/xc_scf_domain.md for the algebra and boundary policy.
@@ -39,97 +41,6 @@ GENERATIVEQC_XC_HD inline bool finite(double x) { return x >= -DBL_MAX && x <= D
 GENERATIVEQC_XC_HD inline bool valid_gradient_component(double rho, double gradient) {
   return finite(gradient) && (rho != 0.0 || ::fabs(gradient) < DBL_MIN);
 }
-/** Forward differentiation in locally scaled physical coordinates. The scale
- * is fixed during differentiation, so these are physical partial derivatives,
- * including at equal spin densities; it is not a density regularization. */
-template <unsigned DerivativeCount, class Arithmetic = double>
-struct PointJet {
-  static constexpr bool second_order = false;
-  Arithmetic v{};
-  Arithmetic d[DerivativeCount ? DerivativeCount : 1]{};
-  GENERATIVEQC_XC_HD PointJet() {}
-  GENERATIVEQC_XC_HD PointJet(double value) : v(value) {}
-  GENERATIVEQC_XC_HD static PointJet variable(double value, unsigned index) {
-    PointJet out(value);
-    out.d[index] = 1.0;
-    return out;
-  }
-  GENERATIVEQC_XC_HD friend PointJet operator+(const PointJet& left, const PointJet& right) {
-    PointJet out(left.v + right.v);
-    for (unsigned index = 0; index < DerivativeCount; ++index)
-      out.d[index] = left.d[index] + right.d[index];
-    return out;
-  }
-  GENERATIVEQC_XC_HD friend PointJet operator-(const PointJet& left, const PointJet& right) {
-    PointJet out(left.v - right.v);
-    for (unsigned index = 0; index < DerivativeCount; ++index)
-      out.d[index] = left.d[index] - right.d[index];
-    return out;
-  }
-  GENERATIVEQC_XC_HD friend PointJet operator-(const PointJet& value) {
-    return PointJet(0.0) - value;
-  }
-  GENERATIVEQC_XC_HD friend PointJet operator*(const PointJet& left, const PointJet& right) {
-    PointJet out(left.v * right.v);
-    for (unsigned index = 0; index < DerivativeCount; ++index)
-      out.d[index] = left.d[index] * right.v + left.v * right.d[index];
-    return out;
-  }
-  GENERATIVEQC_XC_HD friend PointJet operator/(const PointJet& left, const PointJet& right) {
-    PointJet out(left.v / right.v);
-    // Do not square a small denominator: that spuriously underflows in tails.
-    for (unsigned index = 0; index < DerivativeCount; ++index)
-      out.d[index] = (left.d[index] - out.v * right.d[index]) / right.v;
-    return out;
-  }
-};
-using Jet = PointJet<8>;
-
-template <unsigned DerivativeCount, class Arithmetic>
-GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> power(
-    const PointJet<DerivativeCount, Arithmetic>& value, double exponent) {
-  const auto raised = [](Arithmetic base, double power) {
-    if constexpr (std::is_same_v<Arithmetic, float>)
-      return ::powf(base, static_cast<float>(power));
-    else
-      return ::pow(base, power);
-  };
-  PointJet<DerivativeCount, Arithmetic> out(raised(value.v, exponent));
-  // All powers evaluated at zero here have p>1 and a zero first derivative.
-  const Arithmetic slope =
-      value.v == 0.0 ? Arithmetic{0}
-                     : static_cast<Arithmetic>(exponent) * raised(value.v, exponent - 1.0);
-  for (unsigned index = 0; index < DerivativeCount; ++index) out.d[index] = slope * value.d[index];
-  return out;
-}
-template <unsigned DerivativeCount, class Arithmetic>
-GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> log1p(
-    const PointJet<DerivativeCount, Arithmetic>& value) {
-  const auto logarithm = [](Arithmetic input) {
-    if constexpr (std::is_same_v<Arithmetic, float>)
-      return ::log1pf(input);
-    else
-      return ::log1p(input);
-  };
-  PointJet<DerivativeCount, Arithmetic> out(logarithm(value.v));
-  for (unsigned index = 0; index < DerivativeCount; ++index)
-    out.d[index] = value.d[index] / (Arithmetic{1} + value.v);
-  return out;
-}
-template <unsigned DerivativeCount, class Arithmetic>
-GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> expm1(
-    const PointJet<DerivativeCount, Arithmetic>& value) {
-  const auto exponential = [](Arithmetic input, bool subtract_one) {
-    if constexpr (std::is_same_v<Arithmetic, float>)
-      return subtract_one ? ::expm1f(input) : ::expf(input);
-    else
-      return subtract_one ? ::expm1(input) : ::exp(input);
-  };
-  PointJet<DerivativeCount, Arithmetic> out(exponential(value.v, true));
-  for (unsigned index = 0; index < DerivativeCount; ++index)
-    out.d[index] = exponential(value.v, false) * value.d[index];
-  return out;
-}
 template <class Scalar>
 GENERATIVEQC_XC_HD inline Scalar log1p_over_x(const Scalar& a) {
   // Analytic continuation, including its derivative, when direct subtraction
@@ -145,7 +56,7 @@ GENERATIVEQC_XC_HD inline Scalar log1p_over_x(const Scalar& a) {
 template <class Scalar>
 GENERATIVEQC_XC_HD inline Scalar spin_two_thirds(const Scalar& u) {
   constexpr double cutoff = 1.0e-18;
-  if (u.v >= cutoff) return power(u, 2.0 / 3.0);
+  if (u.v >= cutoff) return power<2, 3>(u);
   const Scalar t = u / cutoff;
   return 1.0e-12 * t * (14.0 / 9.0 + t * (-7.0 / 9.0 + t * (2.0 / 9.0)));
 }
@@ -175,51 +86,17 @@ GENERATIVEQC_XC_HD inline double primal(const PointJet<DerivativeCount, Arithmet
   return value.v;
 }
 GENERATIVEQC_XC_HD inline double cube_root(double x) { return ::cbrt(x); }
-GENERATIVEQC_XC_HD inline Jet cube_root(const Jet& x) {
-  Jet out(::cbrt(x.v));
-  for (unsigned i = 0; i < 8; ++i) out.d[i] = out.v * (x.d[i] / x.v) / 3.0;
-  return out;
-}
 GENERATIVEQC_XC_HD inline double square_root(double x) { return ::sqrt(x); }
-GENERATIVEQC_XC_HD inline Jet square_root(const Jet& x) { return power(x, 0.5); }
-template <unsigned DerivativeCount, class Arithmetic>
-GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> cube_root(
-    const PointJet<DerivativeCount, Arithmetic>& value) {
-  PointJet<DerivativeCount, Arithmetic> result;
-  if constexpr (std::is_same_v<Arithmetic, float>)
-    result.v = ::cbrtf(value.v);
-  else
-    result.v = ::cbrt(value.v);
-  for (unsigned index = 0; index < DerivativeCount; ++index)
-    result.d[index] = result.v * (value.d[index] / value.v) / Arithmetic{3};
-  return result;
-}
 template <unsigned DerivativeCount, class Arithmetic>
 GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> square_root(
     const PointJet<DerivativeCount, Arithmetic>& value) {
-  return power(value, 0.5);
+  return power<1, 2>(value);
 }
 
 GENERATIVEQC_XC_HD inline double subnormal_reduced_gradient(double gradient, double rho,
                                                             double rho13) {
   return (gradient / rho) / rho13;
 }
-template <unsigned DerivativeCount, class Arithmetic>
-GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> subnormal_reduced_gradient(
-    const PointJet<DerivativeCount, Arithmetic>& gradient,
-    const PointJet<DerivativeCount, Arithmetic>& rho,
-    const PointJet<DerivativeCount, Arithmetic>& rho13) {
-  const Arithmetic ratio = gradient.v / rho.v;
-  PointJet<DerivativeCount, Arithmetic> out(ratio / rho13.v);
-  // Divide each directional term before subtraction: the usual quotient
-  // numerator can itself be subnormal, losing a representable response.
-  for (unsigned channel = 0; channel < DerivativeCount; ++channel)
-    out.d[channel] = (gradient.d[channel] / rho.v - ratio * (rho.d[channel] / rho.v) -
-                      ratio * (rho13.d[channel] / rho13.v)) /
-                     rho13.v;
-  return out;
-}
-
 template <class Scalar>
 struct ExchangeValue {
   Scalar energy{}, rho{}, gradient[3]{};
@@ -237,7 +114,7 @@ GENERATIVEQC_XC_HD inline ExchangeValue<Scalar> exchange_value(bool pbe, const S
   const Scalar rho13 = cube_root(rho), rho43 = rho * rho13;
   const double largest = ::fmax(::fabs(primal(gradient[0])),
                                 ::fmax(::fabs(primal(gradient[1])), ::fabs(primal(gradient[2]))));
-  Scalar enhancement = 1.0, radial_response = 0.0;
+  Scalar terms[5];
   if (pbe) {
     Scalar direction[3], norm2 = 0.0;
     // Normalization is a fixed numerical scale, not a differentiated model
@@ -249,35 +126,31 @@ GENERATIVEQC_XC_HD inline ExchangeValue<Scalar> exchange_value(bool pbe, const S
       }
     const Scalar norm = largest == 0.0 ? Scalar(1.0) : square_root(norm2);
     if (largest <= primal(rho43) / primal(norm)) {
-      Scalar u[3], u2 = 0.0;
+      Scalar u[3];
       for (unsigned k = 0; k < 3; ++k) {
         // A subnormal rho^(4/3) loses relative precision even when the
         // reduced gradient and its direction are representable. Factor only
         // that tail division; normal-density arithmetic stays unchanged.
         const bool factored = primal(rho43) < DBL_MIN;
         u[k] = factored ? subnormal_reduced_gradient(gradient[k], rho, rho13) : gradient[k] / rho43;
-        u2 = u2 + u[k] * u[k];
       }
-      const Scalar denominator = kappa + mu * u2;
-      const Scalar response = mu * kappa * kappa / (denominator * denominator);
-      enhancement = enhancement + kappa * mu * u2 / denominator;
-      radial_response = response * u2;
-      for (unsigned k = 0; k < 3; ++k) out.gradient[k] = -2.0 * cx * response * u[k];
+      generated_exchange_low(rho13, rho43, u, Scalar{0.0}, Scalar{cx}, Scalar{kappa}, Scalar{mu},
+                             terms);
     } else {
       // rho43 may itself underflow. Factoring rho/range first retains the
       // reciprocal reduced gradient and representable potential coefficients.
-      const Scalar t = (rho / largest) * (rho13 / norm), t2 = t * t;
-      const Scalar denominator = kappa * t2 + mu;
-      const Scalar response = mu * kappa * kappa / (denominator * denominator);
-      enhancement = enhancement + (kappa - kappa * kappa * t2 / denominator);
-      radial_response = response * t2;
-      for (unsigned k = 0; k < 3; ++k)
-        out.gradient[k] = -2.0 * cx * response * t2 * t * (direction[k] / norm);
+      const Scalar t = (rho / largest) * (rho13 / norm);
+      Scalar unit[3];
+      for (unsigned k = 0; k < 3; ++k) unit[k] = direction[k] / norm;
+      generated_exchange_high(rho13, rho43, unit, t, Scalar{cx}, Scalar{kappa}, Scalar{mu}, terms);
     }
+  } else {
+    generated_exchange_lda(rho13, rho43, gradient, Scalar{0.0}, Scalar{cx}, Scalar{kappa},
+                           Scalar{mu}, terms);
   }
-  out.energy = -cx * rho43 * enhancement;
-  // Evaluate the density derivative independently of energy underflow in rho43.
-  out.rho = -cx * (4.0 / 3.0) * rho13 * (enhancement - 2.0 * radial_response);
+  out.energy = terms[0];
+  out.rho = terms[1];
+  for (unsigned k = 0; k < 3; ++k) out.gradient[k] = terms[2 + k];
   return out;
 }
 GENERATIVEQC_XC_HD inline Exchange exchange(bool pbe, double rho, const double gradient[3]) {
@@ -296,10 +169,9 @@ GENERATIVEQC_XC_HD inline Scalar correlation_per_scale(bool pbe, const Scalar& a
   const double gamma = (1.0 - ::log(2.0)) / (pi * pi);
   const double scale13 = ::cbrt(scale);
   const Scalar n = a + b;
-  const Scalar x = ::pow(scale, 1.0 / 6.0) * power(n, 1.0 / 6.0);
+  const Scalar x = ::pow(scale, 1.0 / 6.0) * power<1, 6>(n);
   const Scalar up = 2.0 * a / n, down = 2.0 * b / n, z = (a - b) / n;
-  const Scalar fz =
-      (power(up, 4.0 / 3.0) + power(down, 4.0 / 3.0) - 2.0) / (::pow(2.0, 4.0 / 3.0) - 2.0);
+  const Scalar fz = (power<4, 3>(up) + power<4, 3>(down) - 2.0) / (::pow(2.0, 4.0 / 3.0) - 2.0);
   const Scalar e0 =
       pw_channel(x, pbe ? 0.0310907 : 0.031091, 0.21370, 7.5957, 3.5876, 1.6382, 0.49294);
   const Scalar e1 =
@@ -307,7 +179,7 @@ GENERATIVEQC_XC_HD inline Scalar correlation_per_scale(bool pbe, const Scalar& a
   const Scalar em =
       pw_channel(x, pbe ? 0.0168869 : 0.016887, 0.11125, 10.357, 3.6231, 0.88026, 0.49671);
   const double fzz = pbe ? 1.709920934161365617563962776245 : 1.709921;
-  Scalar eps = e0 + power(z, 4.0) * fz * (e1 - e0 + em / fzz) - fz * em / fzz;
+  Scalar eps = e0 + power<4>(z) * fz * (e1 - e0 + em / fzz) - fz * em / fzz;
   if (pbe) {
     const Scalar phi = (spin_two_thirds(up) + spin_two_thirds(down)) / 2.0;
     const Scalar phi3 = phi * phi * phi;
@@ -325,8 +197,7 @@ GENERATIVEQC_XC_HD inline Scalar correlation_per_scale(bool pbe, const Scalar& a
       // ratio nor t2 or A*t2 is ever materialized. Multiplication order also
       // preserves d when gradient_ratio^2 alone would underflow.
       const Scalar d = 16.0 * ::pow(2.0, 2.0 / 3.0) * 0.6203504908994001 *
-                       (gradient_ratio * scale13) * gradient_ratio * power(n, 7.0 / 3.0) * phi *
-                       phi;
+                       (gradient_ratio * scale13) * gradient_ratio * power<7, 3>(n) * phi * phi;
       const Scalar aa = beta / (gamma * expm1(-eps / (gamma * phi3)));
       const Scalar denominator = d + aa * g2;
       const Scalar v = d / denominator;

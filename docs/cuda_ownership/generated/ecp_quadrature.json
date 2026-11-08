@@ -3,5 +3,6 @@
   "outputs": [
     "generated/generated_ecp_ao.cuh"
   ],
-  "owner": "python/generativeqc_compiler/integral/ecp_projector.py"
+  "owner": "python/generativeqc_compiler/integral/ecp_projector.py",
+  "scope": "ECP quadrature and A/B/C jets use the compiler scalar DAG. The Legendre Newton slope is a loop-carried JVP of its value recurrence, and the radial-map Jacobian differentiates the same map primal. Grid bounds, Newton stopping and the existing final-iterate weight convention remain."
 }

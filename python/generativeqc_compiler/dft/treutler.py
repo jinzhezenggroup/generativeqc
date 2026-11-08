@@ -17,6 +17,8 @@ from functools import lru_cache
 from pathlib import Path
 
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.integral.quadrature import treutler_radial_roots
+from generativeqc_compiler.integral.scalar_python import scalar_callable
 
 
 @lru_cache(maxsize=1)
@@ -91,29 +93,34 @@ def angular_rule(count: int) -> tuple[tuple[float, float, float, float], ...]:
     return tuple(result)
 
 
+@lru_cache(maxsize=1)
+def _radial_transform() -> typing.Callable:
+    """Compile once; execute AD over a complete radial vector, not per point."""
+    import numpy as np
+
+    graph, roots = treutler_radial_roots()
+    return scalar_callable(graph, roots, ("x", "xi"), np)
+
+
 def radial_rule(atomic_number: int, count: int) -> tuple[tuple[float, float], ...]:
     """Return increasing radii and dr weights for the Treutler M4 transform."""
+    import numpy as np
+
     validate_element_level(atomic_number, 3)
     if type(count) is not int or not 1 <= count <= 512:
         raise ValueError("Treutler radial count must be an integer in [1, 512]")
-    scale = tables()["treutler_xi"][atomic_number] / math.log(2)
     step = math.pi / (count + 1)
-    result = []
-    for index in range(count, 0, -1):
-        angle = index * step
-        x = math.cos(angle)
-        logarithm = math.log((1 - x) / 2)
-        factor = scale * (1 + x) ** 0.6
-        result.append(
-            (
-                -factor * logarithm,
-                step
-                * math.sin(angle)
-                * factor
-                * (-0.6 * logarithm / (1 + x) + 1 / (1 - x)),
-            )
+    angles = np.arange(count, 0, -1) * step
+    radii, derivatives = _radial_transform()(
+        np.cos(angles), tables()["treutler_xi"][atomic_number]
+    )
+    return tuple(
+        zip(
+            map(float, radii),
+            map(float, step * np.sin(angles) * derivatives),
+            strict=True,
         )
-    return tuple(result)
+    )
 
 
 def angular_count(atomic_number: int, radius: float, maximum: int) -> int:

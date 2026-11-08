@@ -66,11 +66,10 @@ GENERATIVEQC_D3_MODEL_HD inline bool d3_pair_term(std::size_t first, std::size_t
     if (pair_cutoff > 0.0 && r2 > pair_cutoff * pair_cutoff) return true;
     const double rd = p.a1 * sqrt(rr) + p.a2;
     if (!(rd > 0.0) || !finite(rd)) return false;
-    const double r4 = r2 * r2, r6 = r4 * r2, r8 = r4 * r4;
-    const double rd2 = rd * rd, rd4 = rd2 * rd2, rd6 = rd4 * rd2, rd8 = rd4 * rd4;
-    const double t6 = 1.0 / (r6 + rd6), t8 = 1.0 / (r8 + rd8);
-    phi = p.s6 * t6 + p.s8 * rr * t8;
-    derivative_over_distance = p.s6 * (-6.0 * r4 * t6 * t6) + p.s8 * rr * (-8.0 * r6 * t8 * t8);
+    double pair[2];
+    ::generativeqc::generated::dispersion::bj_damping(r2, rr, rd, p.s6, p.s8, pair);
+    phi = pair[0];
+    derivative_over_distance = pair[1];
   } else if (model.damping == D3Damping::zero) {
     const auto& p = model.zero;
     pair_cutoff = p.pair_cutoff;
@@ -78,8 +77,8 @@ GENERATIVEQC_D3_MODEL_HD inline bool d3_pair_term(std::size_t first, std::size_t
     if (pair_cutoff > 0.0 && r2 > pair_cutoff * pair_cutoff) return true;
     const double r0 = tables.pairs[pair_index(z[first], z[second])].vdw_radius;
     if (!(r0 > 0.0) || !finite(r0)) return false;
-    const auto term6 = d3_zero_detail::damped_inverse_power(r, r2, p.rs6 * r0, p.alpha6, 6);
-    const auto term8 = d3_zero_detail::damped_inverse_power(r, r2, p.rs8 * r0, p.alpha6 + 2.0, 8);
+    const auto term6 = d3_zero_detail::damped_inverse_power<6>(r, p.rs6 * r0, p.alpha6);
+    const auto term8 = d3_zero_detail::damped_inverse_power<8>(r, p.rs8 * r0, p.alpha6 + 2.0);
     if (!finite(term6.value) || !finite(term8.value) || !finite(term6.derivative_over_distance) ||
         !finite(term8.derivative_over_distance))
       return false;
@@ -93,9 +92,13 @@ GENERATIVEQC_D3_MODEL_HD inline bool d3_pair_term(std::size_t first, std::size_t
   double cutoff_derivative = 0.0;
   const double cutoff = smooth_cutoff(r, pair_cutoff, pair_switch_width, cutoff_derivative);
   out.included = cutoff != 0.0;
-  out.damping = cutoff * phi;
-  out.radial_derivative_over_distance =
-      cutoff * derivative_over_distance + cutoff_derivative * phi / r;
+  double damped[2];
+  double projected[1];
+  ::generativeqc::generated::dispersion::radial_scatter(r, cutoff_derivative, projected);
+  ::generativeqc::generated::dispersion::product_response(phi, cutoff, derivative_over_distance,
+                                                          projected[0], damped);
+  out.damping = damped[0];
+  out.radial_derivative_over_distance = damped[1];
   return finite(out.damping) && finite(out.radial_derivative_over_distance);
 }
 

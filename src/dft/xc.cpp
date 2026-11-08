@@ -875,17 +875,7 @@ R2scanPointValue evaluate_r2scan_point(const double rho[2], const double (&gradi
       throw std::domain_error(detail);
     }
   if (total_density < tail_high) {
-    const double width = tail_high - tail_low;
-    const double x = (total_density - tail_low) / width;
-    const double x2 = x * x;
-    const double x3 = x2 * x;
-    const double scale = x3 * (10.0 + x * (-15.0 + 6.0 * x));
-    const double dscale = 30.0 * x2 * (1.0 - x) * (1.0 - x) / width;
-    const double unscaled_energy = raw.energy_density;
-    raw.energy_density *= scale;
-    raw.feature_derivative[0] = scale * raw.feature_derivative[0] + dscale * unscaled_energy;
-    raw.feature_derivative[1] = scale * raw.feature_derivative[1] + dscale * unscaled_energy;
-    for (unsigned i = 2; i < 7; ++i) raw.feature_derivative[i] *= scale;
+    point::detail::apply_r2scan_tail(total_density, raw.energy_density, raw.feature_derivative);
   }
 
   R2scanPointValue out;

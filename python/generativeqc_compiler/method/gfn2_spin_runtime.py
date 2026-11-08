@@ -7,6 +7,7 @@ atom-local W gives E = m.T W m / 2 and potential = dE/dm = W m.
 
 from __future__ import annotations
 
+from generativeqc_compiler.method.scalar_graph_ad import polynomial_partial
 from generativeqc_compiler.tensor.ad_program import transpose_program
 from generativeqc_compiler.tensor.ir import Node, add, constant, input_tensor, multiply
 from generativeqc_compiler.tensor.program import Program
@@ -22,17 +23,33 @@ def _input(name: str, *, differentiable: bool = False) -> Node:
 
 
 def build_gfn2_spin_potential_update() -> Program:
-    """One ordered W*m update; native lowering preserves the runtime FMA."""
+    """AD-normalized symmetric quadratic summand, retaining the runtime FMA.
+
+    Atom-local W is symmetric, so diagonal and paired off-diagonal terms have
+    the same monomial coefficient. The one-shell energy supplies that exact
+    coefficient through AD, rather than a separately supplied W*m formula.
+    """
+    magnetization = _input("magnetization", differentiable=True)
+    coupling = _input("coupling")
+    energy = multiply(
+        multiply(constant("1/2"), magnetization), multiply(coupling, magnetization)
+    )
+    primal = Program({"energy": energy})
+    potential = polynomial_partial(
+        primal, "energy", "magnetization", ("coupling", "magnetization")
+    )
     return Program(
         {
             "updated": add(
                 _input("accumulated"),
-                multiply(_input("coupling"), _input("magnetization")),
+                potential,
             )
         },
         provenance={
             "kind": "gfn2-spin-potential-update",
             "version": GFN2_SPIN_RUNTIME_VERSION,
+            "primal_logical_hash": primal.logical_hash,
+            "generation": "Graph AD of symmetric quadratic energy",
         },
     )
 
