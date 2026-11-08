@@ -233,7 +233,8 @@ struct Xc {
     throw std::logic_error("AUTO/FP64 must not prepare Fast-only matrix arithmetic");
   }
   void prepare_density(runtime::PrecisionDirective directive, std::uint64_t replays,
-                       std::size_t budget) {
+                       std::size_t budget, bool indexed_gemm) {
+    assert(!indexed_gemm);
     assert(replays == 50);
     // A mapped layout must receive the narrowed strict directive at setup.
     assert(capable || directive.is_strict_fp64());
@@ -294,6 +295,8 @@ int main() {
     const bool mixed_density = automatic && capable && !nonlocal &&
                                qualification == CudaXcCapability::Qualified;
     Layout xc_layout{capable};
+    const std::size_t spins = 1;
+    const auto functional = semilocal_family_code(SemilocalFamily::Pbe);
     Xc owner{{}, {{runtime::strict_fp64_precision()}}, capable};
     owner.qualified = qualified;
     auto* xc = &owner;
@@ -381,6 +384,11 @@ def test_density_preparation_requires_physical_support_and_formal_qualification(
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("requires a host C++ compiler")
+    (tmp_path / "cuda_runtime_api.h").write_text(
+        "#pragma once\nusing cudaError_t = int;\n"
+        "constexpr int cudaSuccess = 0, cudaErrorMemoryAllocation = 2;\n"
+        'inline const char* cudaGetErrorString(int) { return "CUDA error"; }\n'
+    )
     unit = tmp_path / "density_guard.cpp"
     executable = tmp_path / "density_guard"
     emitted = _emit_tiled(XcMatrixSchedule(16))
@@ -395,6 +403,8 @@ def test_density_preparation_requires_physical_support_and_formal_qualification(
 #include <stdexcept>
 #include <vector>
 #include "dft/xc_capabilities.hpp"
+#include "generativeqc/generativeqc.hpp"
+#include "tensor/cuda_error.hpp"
 #include "runtime/lowering_binding.hpp"
 using namespace generativeqc::dft;
 using namespace generativeqc::runtime;
@@ -434,7 +444,7 @@ struct PreparedPanelProduct {
 }
 namespace cuda_xc_detail {
 std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(
-    const Layout&, int, std::size_t) {
+    const Layout&, int, std::size_t, bool) {
   return {};
 }
 template<bool Mixed,bool Tiled>
@@ -457,7 +467,7 @@ struct CudaXcPlan {
   std::vector<std::size_t> ao_offsets_{0, 17, 17, 21};
   void check_device() const {}
   void prepare_density(PrecisionDirective, std::uint64_t expected_replays = 1,
-                       std::size_t provider_budget = 0);
+                       std::size_t provider_budget = 0, bool indexed_gemm = false);
   const tensor::PreparedPanelProduct* density_execution_provider(PrecisionPhase) const;
   const CudaXcDensityBinding& density_binding(PrecisionPhase) const;
 };

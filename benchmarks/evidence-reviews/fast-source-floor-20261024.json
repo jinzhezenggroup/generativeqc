@@ -2,17 +2,9 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "fast-source-floor-20261024",
   "owner": "Fast hybrid proposal-source floor refinement",
-  "reason": "Two separate source-bound cohorts retain all 366 complete E/F endpoints, shared independent references, source/binary/AOT identities and semantic work. All 69 pilot endpoints and 15 pre-execution setup failures remain separate. Explicit replay gates survive optimized Python; existing storage limits are unchanged.",
+  "reason": "Two separate source-bound cohorts retain all 366 complete E/F endpoints, shared independent references, source/binary/AOT identities and semantic work. All 69 pilot endpoints and 15 pre-execution setup failures remain separate. Explicit replay gates survive optimized Python; existing storage limits are unchanged. Shared source-census members are stored losslessly under shared-source-censuses-20261108; original JSON and XZ identities remain independently recoverable offline.",
   "review_document": "benchmarks/results/fast-source-floor-20261024/README.md",
   "files": [
-    {
-      "path": "benchmarks/results/fast-source-floor-20261024/qualification.json.xz",
-      "family": "fast-source-floor-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "source-bound-endpoints-pilots-failures-and-paired-qualification",
-      "bytes": 331896,
-      "sha256": "4c4417db1ef655032ce4a0eebb455944c59883aaa5ca3bf0618545abafa0d789"
-    },
     {
       "path": "benchmarks/results/fast-source-floor-20261024/integration.json.xz",
       "family": "fast-source-floor-20261024",

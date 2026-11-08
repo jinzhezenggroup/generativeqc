@@ -12,6 +12,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from benchmarks._source_census_evidence import read_json_bytes
+
 ROOT = Path(__file__).resolve().parent
 PREVIOUS = ROOT.parent / "readme-wb97mv-20261014"
 PHASE_COUNTS = {"cold": 1, "warm": 5, "moved": 1, "moved-warm": 5}
@@ -19,7 +21,7 @@ PHASE_COUNTS = {"cold": 1, "warm": 5, "moved": 1, "moved-warm": 5}
 
 def read_summary(name: str) -> dict[str, Any]:
     """Read only the newly measured method, leaving historical methods linked."""
-    return json.loads(lzma.decompress((ROOT / name).read_bytes()))
+    return json.loads(read_json_bytes(ROOT / name))
 
 
 def verify_comparison(comparison: dict[str, Any]) -> None:

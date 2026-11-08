@@ -1,5 +1,18 @@
 # H100 cold optimization: force batching, frozen fixed30 and later main integration
 
+Storage-only update (2026-11-08): `records/` uses the existing exact-text/FP64
+codec rather than the two original XZ chunks. It reconstructs the **identical**
+44,542,496-byte UTF8 container (SHA256
+`49ec81dfda9483dd234130ed0dbf990f8895fb1459a1387e7a948483b7c9409f`), all
+1,398 original members and 1,060 distinct blobs. No measurement, original
+member checksum, source identity, negative result or acceptance changes.
+`cohort.json` keeps the former compressed-part identities under
+`records.previous_storage`; they are historical storage provenance, not active
+checkout paths. The ordinary replay authenticates the current streams and
+the reconstructed original container before running the unchanged checks.
+The change saves 460,848 bytes without retiring any other owner's evidence,
+raising the evidence budget, requiring Git recovery or publishing an archive.
+
 This publication keeps separate source-qualified cohorts: the paired selector/negative studies
 on `87bbc0b4f20f7696cfd22974bbe5b207e7d69c38` (native identity
 `d60aea30bf2891a8d5c6976f59ee7f8a3505cd83af5c123dde48093e4b3ea604`, core SHA-256

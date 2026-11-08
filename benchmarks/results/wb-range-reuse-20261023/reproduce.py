@@ -2,14 +2,15 @@
 if not __debug__:
  raise SystemExit("Evidence verification requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE.")
 
-import copy, hashlib, json, lzma
+import copy, hashlib, json
 from pathlib import Path
 from statistics import median
+from benchmarks._source_census_evidence import read_json_bytes
 from benchmarks.readme_defaults_qualification import qualify, _comparison
 from benchmarks.readme_defaults_report import load_records
 root=Path(__file__).resolve().parent; which='wb-pr'
 def read(p):
- return json.loads(lzma.decompress(p.read_bytes()) if p.suffix=='.xz' else p.read_bytes())
+ return json.loads(read_json_bytes(p))
 def stats(b,a):
  bm,am=median(b),median(a); bd=median(abs(v-bm) for v in b); ad=median(abs(v-am) for v in a)
  floor=max(.02,2*(bd/bm+ad/am)); gain=1-am/bm

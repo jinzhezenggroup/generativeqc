@@ -6,20 +6,20 @@
   "review_document": "benchmarks/results/h100-cold-force-fixed30-20261105/README.md",
   "files": [
     {
-      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part00",
-      "bytes": 786432,
-      "sha256": "05cc76d2918c81c65a461c1089d1f408d7946083dac428902dd4a07c2dfefae3",
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/records/fp64.xz",
+      "bytes": 589828,
+      "sha256": "abf6d9428e0b1bb69d3e84e68a00dc93d01bea5916191af78aded1800df8cb6d",
       "family": "h100-cold-force-fixed30-20261105",
       "classification": "required-compact-accepted-evidence",
-      "role": "Lossless content-addressed original complete E/F receipt bytes, producer/plan/science/work/image/source/oracle controls and adverse outcomes; compressed stream part."
+      "role": "Lossless nested exact-text/FP64 encoding reconstructs the unchanged original receipt container and all 1398 members; no scientific record or acceptance changes."
     },
     {
-      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/records.json.xz.part01",
-      "bytes": 586600,
-      "sha256": "51a1eed1451826d447c1c1257fc77bfc7e1fd65dcdf7fe02e61437847f38938a",
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/records/receipts.json.xz",
+      "bytes": 322356,
+      "sha256": "b61633789761f7ea7d9f168a12d021ec610ed73fec42a36aad2a83a2ec5e5dcb",
       "family": "h100-cold-force-fixed30-20261105",
       "classification": "required-compact-accepted-evidence",
-      "role": "Lossless content-addressed original complete E/F receipt bytes, producer/plan/science/work/image/source/oracle controls and adverse outcomes; compressed stream part."
+      "role": "Lossless nested exact-text/FP64 encoding reconstructs the unchanged original receipt container and all 1398 members; no scientific record or acceptance changes."
     }
   ]
 }

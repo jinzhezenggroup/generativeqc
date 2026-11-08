@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import lzma
 from pathlib import Path
 from statistics import median
 
+from benchmarks._source_census_evidence import read_json_bytes
 from benchmarks.readme_defaults_qualification import qualify
 from benchmarks.readme_defaults_report import load_records
 
@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent
 
 def read(path: Path) -> dict:
     """Decode immutable retained JSON."""
-    return json.loads(lzma.decompress(path.read_bytes()) if path.suffix == '.xz' else path.read_bytes())
+    return json.loads(read_json_bytes(path))
 
 
 def integration(generation: str = "") -> int:
