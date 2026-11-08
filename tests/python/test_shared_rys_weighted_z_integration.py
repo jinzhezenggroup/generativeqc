@@ -114,7 +114,7 @@ int main() {
   assert(shared_rys_xy_requested()==R::Invalid); // before dormant shape admission
   setenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY","1",1);
   assert(shared_rys_xy_requested()==R::WeightedZOn);
-  SharedRysXyContext c{};c.sm90=c.quartet_direct=true;c.capability_mask=3;
+  SharedRysXyContext c{};c.profile_supported=c.quartet_direct=true;c.capability_mask=3;
   const auto xy=resolve_shared_rys_xy_policy(R::On,c);
   const auto weighted=resolve_shared_rys_xy_policy(R::WeightedZOn,c);
   assert(xy.active() && weighted.active() && xy.class_mask==weighted.class_mask);
@@ -128,7 +128,7 @@ int main() {
   auto bad=c;bad.capability_mask=0;refuse(bad,A::UnsupportedProfile);
   bad=c;bad.unrestricted=true;refuse(bad,A::Unrestricted);
   bad=c;bad.mixed_precision=true;refuse(bad,A::MixedPrecision);
-  bad=c;bad.sm90=false;refuse(bad,A::UnsupportedProfile);
+  bad=c;bad.profile_supported=false;refuse(bad,A::UnsupportedProfile);
   bad=c;bad.quartet_direct=false;refuse(bad,A::NonPaged);
   bad=c;bad.incremental_jk=true;refuse(bad,A::IncrementalJk);
   bad=c;bad.separate_jk=true;refuse(bad,A::SeparateJk);

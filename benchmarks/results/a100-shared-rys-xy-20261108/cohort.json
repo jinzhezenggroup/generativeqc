@@ -1,0 +1,68 @@
+{
+  "schema": "hf-sm80-shared-xy-cohort.v1",
+  "status": "draft; independent default HF48 gate blocked",
+  "source_identity": "33db42ef97a4ce677b614a0900e18ba395c5837b7021c47df7f1e4ca1664d817",
+  "library_sha256": "60f40b1565c6147fec5cce0bcc77f16338a41eadcc436d8c8f675d08d1871c17",
+  "parent_commit": "76343fcc4a9a0fb71aefaf9ae0438d9f51ed8a97",
+  "master_commit": "74d06855c4c26f7367ab11f8b56cd939a1070394",
+  "capsule_sha256": "6b7fce973022f8b4daa4b9a42ea2b42b7b8790ce8595394c816e9645d16bd315",
+  "retained_text_files": 198,
+  "reference_files": {
+    "48": "oracle-cpu-full-16815/oracle.json",
+    "96": "oracle-hf96-original.json"
+  },
+  "scope": "complete cold E+analytic-forces+host-export and three frozen-own-density warms; not full64",
+  "default_controls": {
+    "energy": 1e-09,
+    "density": 1e-05,
+    "screening": 1e-12
+  },
+  "strict_diagnostic_controls": {
+    "energy": 1e-12,
+    "density": 1e-10,
+    "screening": 1e-14
+  },
+  "gates": {
+    "absolute_energy": 1e-08,
+    "maximum_force": 1e-07,
+    "paired_warm_ratio": 1.03
+  },
+  "archives": {
+    "final2-payload.tar.gz": {
+      "sha256": "0b8ba64facf35f4966fc0d08fb7991cb4c08118b74a0ed3a52c494ad136bc6df",
+      "bytes": 108849212
+    },
+    "final2-results-5090-16818.tar.gz": {
+      "sha256": "efda0c8f8a5416f1cf2ee429a1e9643f9582cac2aa4d4ac218eb4e6f1cff4da9",
+      "bytes": 112783
+    },
+    "native-evidence.tar.gz": {
+      "sha256": "284bcad659085a11cd787cef96e8265b438aac969ee3a9d035736e9020d5bd24",
+      "bytes": 1749567
+    },
+    "oracle-full-fock-cpu-16815.tar.gz": {
+      "sha256": "4571a49ea5ac3ac121801aae17a11a02c5ce19fbb7e799c7fbe277c21f3ad45e",
+      "bytes": 7353
+    },
+    "results-228912.tar.gz": {
+      "sha256": "85d9db1a881a5faf5f5110707227c548d2760bd4a0f06ee63e6e8254ab02f0e4",
+      "bytes": 6475
+    },
+    "results-228940.tar.gz": {
+      "sha256": "f62743dddbddaf3035a9f20d01e6fa265f5337e6ad96e3902b24b8b708e10e62",
+      "bytes": 6500
+    },
+    "results-229003.tar.gz": {
+      "sha256": "44ce3ba39979cf0d08d111e37931730bf1d547a098f700a67a9f34d55f35de95",
+      "bytes": 108763
+    },
+    "results-5090-16811.tar.gz": {
+      "sha256": "37faad4974d50957bf8148280022a08cf51d8aaa680453dce89253540df86f7a",
+      "bytes": 92775
+    },
+    "setup-229002.tar.gz": {
+      "sha256": "c31ff38d7b0a97c31f0bc233174641a582cd5d89651632a375f4e7b2ea467f81",
+      "bytes": 1394
+    }
+  }
+}

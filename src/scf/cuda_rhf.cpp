@@ -785,13 +785,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       shared_rys_xy_request == cuda_policy::SharedRysXyRequest::WeightedZOn
           ? generated::enabled_shared_rys_weighted_z_fock_shell_class_mask()
           : generated::enabled_shared_rys_xy_fock_shell_class_mask();
+  // Only the qualified SM80 profile enables unweighted XY automatically.
+  // SM90 retains its opt-in; the generated mask independently gates weighted Z.
   const auto requested_shared_rys_xy = cuda_policy::resolve_shared_rys_xy_policy(
       shared_rys_xy_request,
       {unrestricted, requested_mixed_precision_fock,
-       direct_target.compute_capability_major == 9 && direct_target.compute_capability_minor == 0,
+       (direct_target.compute_capability_major == 8 ||
+        direct_target.compute_capability_major == 9) && direct_target.compute_capability_minor == 0,
        requested_quartet_direct, requested_incremental_direct_jk, separate_fock_jk,
        (requested_primary_streaming_fock_mask & shared_rys_xy_capabilities) != 0U,
-       requested_persistent_eri, options.export_physical_reference, shared_rys_xy_capabilities});
+       requested_persistent_eri, options.export_physical_reference, shared_rys_xy_capabilities,
+       direct_target.compute_capability_major == 8 && direct_target.compute_capability_minor == 0});
   // A mixed item is promoted to exact FP64 by the target refinement before any
   // consumer runs, so the matrix it retains is target precision. The convergence
   // kernel keeps P_n paired with the F(P_n) that was just evaluated when an item

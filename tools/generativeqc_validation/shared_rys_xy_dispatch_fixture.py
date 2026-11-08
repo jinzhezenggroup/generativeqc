@@ -66,7 +66,7 @@ using SharedPpppShellTask = PrivateDpppShellTask;
             replacement = f'''    using namespace generativeqc::scf;
     auto request = cuda_policy::parse_shared_rys_xy_request("{value}");
     cuda_policy::SharedRysXyContext context{{}};
-    context.sm90=context.quartet_direct=true;
+    context.profile_supported=context.quartet_direct=true;
     context.capability_mask=generated::enabled_shared_rys_xy_fock_shell_class_mask();
     const auto frozen=cuda_policy::resolve_shared_rys_xy_policy(request,context);
     assert(frozen.active()=={str(value == "1").lower()});

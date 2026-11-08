@@ -1,11 +1,12 @@
 {
   "id": "hf.shared-rys-xy",
-  "classification": "retained-opt-in",
+  "classification": "guarded-promotion-candidate",
   "controls": [
     "hf-runtime:GENERATIVEQC_CUDA_HF_SHARED_RYS_XY"
   ],
   "owner_issues": [
-    1598
+    1598,
+    2976
   ],
   "sources": [
     "python/generativeqc/resources_hf.py",
@@ -14,11 +15,13 @@
     "src/scf/cuda/rhf_bucket_internal.hpp",
     "src/scf/cuda_rhf.cpp"
   ],
-  "rationale": "Default-off strict control for restricted FP64 HF SM90 materialized paged DPPP/PPPP companions. Only exact 1 requests admission; invalid values fail before graph preparation. Unsupported valid requests keep the incumbent. Native plan and CUDA-only prepared/restart identity bind the choice. Actual first-queue replay supports integration preparation, not endpoint/default qualification. The source-bound H100 production pilot passes full independent and strict paired E/F gates, with one fixed-order cold pair improving11.04% and three paired warm ratios below1.05. This qualifies a scoped opt-in, not default promotion or the original all30 goal.",
-  "revisit_condition": "Keep the control default-off. The accepted single-pair HF96 cold-plus-three-warm pilot does not replace the original paired endpoint qualification before any broader/default promotion; retain unsupported-domain fallback, strict ownership/resource gates and source-bound adverse histories.",
+  "rationale": "The SM80 promotion candidate reuses unweighted x/y companions for restricted FP64 materialized paged DPPP/PPPP. Internal Auto admits only exact SM80 behind existing domain/resource refusals; explicit 0 rolls back. SM90 remains explicit opt-in and SM120 remains off. Weighted Z remains SM90-only. Source-bound fresh-process A100 HF96/HF48 endpoints improve complete cold timing and protect every paired 5090 warm at the unchanged 3% guard. However, default HF48 misses the additional independent 1e-7 force diagnostic in both incumbent and candidate. A tightly converged independent CPU reference confirms that failure; native parity, the looser README contract and successful sanitizer exits cannot replace it. This remains a reviewable promotion candidate, not a completed independent default qualification or victory over GPU4PySCF.",
+  "revisit_condition": "Resolve the retained default HF48 independent force failure without weakening gates or relabeling strict-request results as default qualification before accepting default promotion. Retain complete endpoint/work/source identities, protected paired warm guards, unsupported-domain fallbacks, strict controls and all adverse histories. H100 qualification remains separately scoped to the original opt-in.",
   "evidence": [
     ".agents/notes/implemented/performance/2026-11-06-hf-shared-rys-xy-opt-in.md",
     "tests/python/test_shared_rys_xy_integration.py",
-    "benchmarks/results/h100-hf-shared-xy-opt-in-20261107/README.md"
+    "benchmarks/results/h100-hf-shared-xy-opt-in-20261107/README.md",
+    ".agents/notes/proposed/2026-11-08-sm80-shared-rys-xy-qualification.md",
+    "benchmarks/results/a100-shared-rys-xy-20261108/README.md"
   ]
 }

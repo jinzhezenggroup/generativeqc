@@ -1,4 +1,4 @@
-"""Executable host admission/dispatch contracts for the opt-in HF companion."""
+"""Executable host admission/dispatch contracts for target-scoped HF companions."""
 
 from __future__ import annotations
 
@@ -43,15 +43,18 @@ def profile(architecture: str = "sm_90") -> ResolvedProductionProfile:
     return resolve_production_profile(MANIFEST, architecture)
 
 
-def test_companion_architecture_capability_and_qualified_mapping() -> None:
-    selected = profile()
+@pytest.mark.parametrize("architecture", ("sm_80", "sm_90"))
+def test_companion_architecture_capability_and_qualified_mapping(architecture: str) -> None:
+    selected = profile(architecture)
     companions = shared_rys_xy_companions(selected)
     assert {c.incumbent.spec.name: c.plan.block_threads for c in companions} == {
         "dppp": 192,
         "pppp": 96,
     }
-    for architecture in ("sm_80", "sm_89", "sm_100", "sm_120"):
-        assert shared_rys_xy_companions(profile(architecture)) == ()
+    for unsupported in ("sm_89", "sm_100", "sm_120"):
+        assert shared_rys_xy_companions(profile(unsupported)) == ()
+    if architecture == "sm_80":
+        assert shared_rys_xy_companions(selected, weighted_z=True) == ()
     assert not shared_rys_xy_companions(
         replace(
             selected,
@@ -126,7 +129,24 @@ int main() {
   for (const char* v : {"true", "false", "01", " 1", "1 ", "-1", "2"})
     assert(parse_shared_rys_xy_request(v) == SharedRysXyRequest::Invalid);
   SharedRysXyContext c{};
-  c.sm90 = c.quartet_direct = true; c.capability_mask = 3;
+  c.profile_supported = c.quartet_direct = true; c.capability_mask = 3;
+  unsetenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY");
+  unsetenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z");
+  assert(shared_rys_xy_requested() == SharedRysXyRequest::Auto);
+  setenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY", "", 1);
+  assert(shared_rys_xy_requested() == SharedRysXyRequest::Auto);
+  setenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z", "0", 1);
+  assert(shared_rys_xy_requested() == SharedRysXyRequest::Auto);
+  setenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY", "0", 1);
+  assert(shared_rys_xy_requested() == SharedRysXyRequest::Off);
+  setenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z", "1", 1);
+  assert(shared_rys_xy_requested() == SharedRysXyRequest::Invalid);
+  unsetenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z");
+  const auto automatic = SharedRysXyRequest::Auto;
+  assert(!resolve_shared_rys_xy_policy(automatic, c).active());
+  c.default_profile = true;
+  const auto default_on = resolve_shared_rys_xy_policy(automatic, c);
+  assert(default_on.active() && default_on.class_mask == 3 && !default_on.weighted_z());
   auto on = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c);
   auto off = resolve_shared_rys_xy_policy(SharedRysXyRequest::Off, c);
   assert(on.active() && on.class_mask == 3 && !off.active() && on != off);
@@ -137,11 +157,14 @@ int main() {
   auto refuse = [&](SharedRysXyContext bad, A why) {
     auto p = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, bad);
     assert(!p.active() && p.class_mask == 0 && p.admission == why && p != on);
+    const auto automatic_refusal = resolve_shared_rys_xy_policy(automatic, bad);
+    assert(!automatic_refusal.active() && automatic_refusal.class_mask == 0 &&
+           automatic_refusal.admission == why);
     std::puts(shared_rys_xy_admission_name(p.admission));
   };
   auto bad = c; bad.unrestricted = true; refuse(bad, A::Unrestricted);
   bad = c; bad.mixed_precision = true; refuse(bad, A::MixedPrecision);
-  bad = c; bad.sm90 = false; refuse(bad, A::UnsupportedProfile);
+  bad = c; bad.profile_supported = false; refuse(bad, A::UnsupportedProfile);
   bad = c; bad.capability_mask = 0; refuse(bad, A::UnsupportedProfile);
   bad = c; bad.quartet_direct = false; refuse(bad, A::NonPaged);
   bad = c; bad.incremental_jk = true; refuse(bad, A::IncrementalJk);

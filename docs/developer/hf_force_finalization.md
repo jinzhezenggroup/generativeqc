@@ -72,6 +72,18 @@ contracts.
 
 ## Work and diagnostics
 
+The shared Rys x/y companion changes recurrence storage, not convergence or
+the force determinant. An internal automatic request selects the exact SM80
+profile; exact SM90 remains opt-in and other profiles retain their incumbent.
+`GENERATIVEQC_CUDA_HF_SHARED_RYS_XY=0` disables it; exact `1` requests it on
+supported profiles. Unset/empty selects the internal automatic policy, while
+invalid explicit values fail before graph preparation. Weighted Z remains a
+separate SM90-only control. Existing restricted-FP64, generated capability,
+materialized-page, no-incremental/separate-JK, no-relevant-streaming,
+no-persistent-ERI and ordinary-output admission gates still apply. The plan
+freezes the request, admission and class mask; unsupported requests use the
+bounded incumbent before enqueue, never a retry after a candidate error.
+
 Eligible large cold restricted owners automatically use a bounded screened FP64
 proposal when `GENERATIVEQC_HF_COLD_SCREENING` is unset. Exact `1` also admits
 the proposal; `0`, `none`, empty and invalid explicit values preserve the ordinary

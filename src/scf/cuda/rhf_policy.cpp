@@ -37,8 +37,12 @@ SharedRysXyRequest parse_shared_rys_xy_request(const char* value) noexcept {
 }
 
 SharedRysXyRequest shared_rys_xy_requested() noexcept {
-  return parse_shared_rys_xy_request(std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY"),
-                                     std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z"));
+  const char* xy = std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY");
+  const auto request = parse_shared_rys_xy_request(
+      xy, std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z"));
+  return request == SharedRysXyRequest::Off && (xy == nullptr || *xy == '\0')
+             ? SharedRysXyRequest::Auto
+             : request;
 }
 
 SharedRysXyRequest parse_shared_rys_xy_request(const char* xy, const char* weighted_z) noexcept {
@@ -54,12 +58,13 @@ SharedRysXyPolicy resolve_shared_rys_xy_policy(SharedRysXyRequest request,
                                                const SharedRysXyContext& c) noexcept {
   using A = SharedRysXyAdmission;
   A admission = A::Off;
-  if (request == SharedRysXyRequest::On || request == SharedRysXyRequest::WeightedZOn) {
+  if (request == SharedRysXyRequest::On || request == SharedRysXyRequest::WeightedZOn ||
+      (request == SharedRysXyRequest::Auto && c.default_profile)) {
     if (c.unrestricted)
       admission = A::Unrestricted;
     else if (c.mixed_precision)
       admission = A::MixedPrecision;
-    else if (!c.sm90 || c.capability_mask == 0)
+    else if (!c.profile_supported || c.capability_mask == 0)
       admission = A::UnsupportedProfile;
     else if (c.persistent_eri)
       admission = A::PersistentEri;

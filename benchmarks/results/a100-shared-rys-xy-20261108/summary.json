@@ -1,0 +1,679 @@
+{
+  "source_identity": "33db42ef97a4ce677b614a0900e18ba395c5837b7021c47df7f1e4ca1664d817",
+  "cards": {
+    "a100": {
+      "default_cases": {
+        "96": {
+          "cold_median_seconds": {
+            "control": 16.163515754044056,
+            "candidate": 14.649752516299486
+          },
+          "paired_timing": [
+            {
+              "candidate_over_control": [
+                0.910462824999872,
+                0.9387247268708422,
+                0.9371716336158394,
+                0.9376066084390875
+              ],
+              "each_warm_within_3pct": true
+            },
+            {
+              "candidate_over_control": [
+                0.9022625236266957,
+                0.9450802817178651,
+                0.9307478288379395,
+                0.9309214611577623
+              ],
+              "each_warm_within_3pct": true
+            }
+          ],
+          "all_120_native_pairs_pass": true,
+          "independent_default_observations": [
+            {
+              "energy": 1.401076588081196e-09,
+              "force": 1.5475644862816829e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.5475939627029867e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.401076588081196e-09,
+              "force": 1.547563750758929e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.401076588081196e-09,
+              "force": 1.5475568430900477e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.4047145668882877e-09,
+              "force": 1.547574290938769e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.4047145668882877e-09,
+              "force": 1.547596245599081e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.4028955774847418e-09,
+              "force": 1.5475960721267334e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.4047145668882877e-09,
+              "force": 1.5476029763261678e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.54736062851768e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.5473643512342594e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.5473411128785752e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.400167093379423e-09,
+              "force": 1.547340630625449e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.4028955774847418e-09,
+              "force": 1.5475331016645555e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.547525340511724e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 1.5475000968157016e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.401076588081196e-09,
+              "force": 1.5475176973200888e-09,
+              "passed": true
+            }
+          ],
+          "target_iterations": [
+            15,
+            15,
+            15,
+            15
+          ],
+          "target_fock_builds": [
+            15,
+            15,
+            15,
+            15
+          ],
+          "initial_guess_fock_builds": [
+            7,
+            7,
+            7,
+            7
+          ],
+          "quartet_work_counters_valid": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "48": {
+          "cold_median_seconds": {
+            "control": 6.096549792215228,
+            "candidate": 5.7378836162388325
+          },
+          "paired_timing": [
+            {
+              "candidate_over_control": [
+                0.9436008839578518,
+                0.9443716260033707,
+                0.9347931885416526,
+                0.9315890341477773
+              ],
+              "each_warm_within_3pct": true
+            },
+            {
+              "candidate_over_control": [
+                0.9387542463514174,
+                0.9360911778831383,
+                0.9347874624087581,
+                0.934392731236575
+              ],
+              "each_warm_within_3pct": true
+            }
+          ],
+          "all_120_native_pairs_pass": true,
+          "independent_default_observations": [
+            {
+              "energy": 2.8194335754960775e-11,
+              "force": 1.818374339313672e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.864908310584724e-11,
+              "force": 1.8183744147047542e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183744411592873e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183745158217857e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183744420093018e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183744596514395e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.8194335754960775e-11,
+              "force": 1.8183745416865127e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183744474736807e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.955857780762017e-11,
+              "force": 1.81837473234997e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183745006603025e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.818374608282547e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183745687308517e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.955857780762017e-11,
+              "force": 1.8183738645025094e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183738276916772e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183739267964294e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183739177411729e-07,
+              "passed": false
+            }
+          ],
+          "target_iterations": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "target_fock_builds": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "initial_guess_fock_builds": [
+            7,
+            7,
+            7,
+            7
+          ],
+          "quartet_work_counters_valid": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "strict_request_hf48": {
+        "control": [
+          {
+            "energy": 2.7284841053187847e-12,
+            "force": 3.794300811044149e-11,
+            "passed": true
+          },
+          {
+            "energy": 3.183231456205249e-12,
+            "force": 3.795383451965506e-11,
+            "passed": true
+          },
+          {
+            "energy": 3.637978807091713e-12,
+            "force": 3.79539039085941e-11,
+            "passed": true
+          },
+          {
+            "energy": 3.183231456205249e-12,
+            "force": 3.795859633559662e-11,
+            "passed": true
+          }
+        ],
+        "candidate": [
+          {
+            "energy": 3.637978807091713e-12,
+            "force": 3.7954941273232734e-11,
+            "passed": true
+          },
+          {
+            "energy": 3.183231456205249e-12,
+            "force": 3.7955499854192e-11,
+            "passed": true
+          },
+          {
+            "energy": 2.7284841053187847e-12,
+            "force": 3.7941587371914665e-11,
+            "passed": true
+          },
+          {
+            "energy": 3.183231456205249e-12,
+            "force": 3.7952302758825773e-11,
+            "passed": true
+          }
+        ]
+      },
+      "moved_and_restored_hf96": [
+        {
+          "name": "hf96-moved",
+          "energy": 1.3010321708861738e-09,
+          "force": 2.6939371372764268e-08,
+          "passed": true,
+          "iterations": 7,
+          "fock_builds": 9
+        },
+        {
+          "name": "hf96-restored",
+          "energy": 1.3783392205368727e-09,
+          "force": 5.708830057987724e-10,
+          "passed": true,
+          "iterations": 1,
+          "fock_builds": 2
+        }
+      ]
+    },
+    "5090": {
+      "default_cases": {
+        "96": {
+          "cold_median_seconds": {
+            "control": 16.905733508989215,
+            "candidate": 16.886990727856755
+          },
+          "paired_timing": [
+            {
+              "candidate_over_control": [
+                0.9984068976094492,
+                1.0004433822011207,
+                0.998817638150832,
+                1.0029820003190795
+              ],
+              "each_warm_within_3pct": true
+            },
+            {
+              "candidate_over_control": [
+                0.9993745009379439,
+                1.0009145524236815,
+                1.0007672228377955,
+                1.000376886193281
+              ],
+              "each_warm_within_3pct": true
+            }
+          ],
+          "all_120_native_pairs_pass": true,
+          "independent_default_observations": [
+            {
+              "energy": 1.3965291145723313e-09,
+              "force": 1.5474291847894506e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 1.5474421743988387e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3965291145723313e-09,
+              "force": 1.5474218226230185e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3965291145723313e-09,
+              "force": 1.5474439160612086e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 1.5474146582150627e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 1.5474084548439127e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3974386092741042e-09,
+              "force": 1.5473786557640423e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.3965291145723313e-09,
+              "force": 1.5474595667364088e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.5475515313667643e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.547595603751395e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.5475883179127958e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.547593723311147e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.547522301276194e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.401076588081196e-09,
+              "force": 1.5474807962823078e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.5474974461582303e-09,
+              "passed": true
+            },
+            {
+              "energy": 1.39925759867765e-09,
+              "force": 1.5474871904730403e-09,
+              "passed": true
+            }
+          ],
+          "target_iterations": [
+            15,
+            15,
+            15,
+            15
+          ],
+          "target_fock_builds": [
+            15,
+            15,
+            15,
+            15
+          ],
+          "initial_guess_fock_builds": [
+            7,
+            7,
+            7,
+            7
+          ],
+          "quartet_work_counters_valid": [
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "48": {
+          "cold_median_seconds": {
+            "control": 6.299592308700085,
+            "candidate": 6.299205655232072
+          },
+          "paired_timing": [
+            {
+              "candidate_over_control": [
+                0.9978249601644378,
+                1.0021786039739355,
+                0.999526233416673,
+                1.0014701464124134
+              ],
+              "each_warm_within_3pct": true
+            },
+            {
+              "candidate_over_control": [
+                1.0020591053517969,
+                0.9989657203779154,
+                1.0014732512692426,
+                1.001525341598115
+              ],
+              "each_warm_within_3pct": true
+            }
+          ],
+          "all_120_native_pairs_pass": true,
+          "independent_default_observations": [
+            {
+              "energy": 2.7284841053187847e-11,
+              "force": 1.8183737923900545e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.8194335754960775e-11,
+              "force": 1.8183737984442394e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.7284841053187847e-11,
+              "force": 1.8183739013653832e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.8194335754960775e-11,
+              "force": 1.8183741224732375e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.818374626687963e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183746888084107e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.864908310584724e-11,
+              "force": 1.818374622333807e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.864908310584724e-11,
+              "force": 1.8183746793368205e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.864908310584724e-11,
+              "force": 1.8183741007718468e-07,
+              "passed": false
+            },
+            {
+              "energy": 3.001332515850663e-11,
+              "force": 1.818374509941073e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183744017290226e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.955857780762017e-11,
+              "force": 1.81837415909325e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.818374134546913e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.864908310584724e-11,
+              "force": 1.8183740294573647e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183740055181807e-07,
+              "passed": false
+            },
+            {
+              "energy": 2.9103830456733704e-11,
+              "force": 1.8183741822344612e-07,
+              "passed": false
+            }
+          ],
+          "target_iterations": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "target_fock_builds": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "initial_guess_fock_builds": [
+            7,
+            7,
+            7,
+            7
+          ],
+          "quartet_work_counters_valid": [
+            false,
+            false,
+            false,
+            false
+          ]
+        }
+      },
+      "strict_request_hf48": {
+        "control": [
+          {
+            "energy": 2.7284841053187847e-12,
+            "force": 3.7986787326804716e-11,
+            "passed": true
+          },
+          {
+            "energy": 2.7284841053187847e-12,
+            "force": 3.7983019507414895e-11,
+            "passed": true
+          },
+          {
+            "energy": 3.637978807091713e-12,
+            "force": 3.7980328951303655e-11,
+            "passed": true
+          },
+          {
+            "energy": 3.183231456205249e-12,
+            "force": 3.7979406078414435e-11,
+            "passed": true
+          }
+        ],
+        "candidate": [
+          {
+            "energy": 2.7284841053187847e-12,
+            "force": 3.794841177406916e-11,
+            "passed": true
+          },
+          {
+            "energy": 3.183231456205249e-12,
+            "force": 3.7943384545435777e-11,
+            "passed": true
+          },
+          {
+            "energy": 2.7284841053187847e-12,
+            "force": 3.794154226910429e-11,
+            "passed": true
+          },
+          {
+            "energy": 2.7284841053187847e-12,
+            "force": 3.7947023995288376e-11,
+            "passed": true
+          }
+        ]
+      },
+      "moved_and_restored_hf96": [
+        {
+          "name": "hf96-moved",
+          "energy": 1.299213181482628e-09,
+          "force": 2.6939454097390028e-08,
+          "passed": true,
+          "iterations": 7,
+          "fock_builds": 9
+        },
+        {
+          "name": "hf96-restored",
+          "energy": 1.3792487152386457e-09,
+          "force": 5.7097195721445e-10,
+          "passed": true,
+          "iterations": 1,
+          "fock_builds": 2
+        }
+      ]
+    }
+  },
+  "independent_gates": {
+    "absolute_energy": 1e-08,
+    "maximum_force": 1e-07
+  },
+  "paired_warm_ratio_ceiling": 1.03,
+  "independent_default_promotion_qualified": false
+}

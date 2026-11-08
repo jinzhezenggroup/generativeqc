@@ -12,8 +12,8 @@
 
 namespace generativeqc::scf::cuda_policy {
 
-/** Strict default-off control, resolved before graph admission. */
-enum class SharedRysXyRequest { Off, On, Invalid, WeightedZOn };
+/** Strict explicit controls, with an internal capability-bound default request. */
+enum class SharedRysXyRequest { Off, On, Invalid, WeightedZOn, Auto };
 enum class SharedRysXyAdmission {
   Off,
   Active,
@@ -28,9 +28,10 @@ enum class SharedRysXyAdmission {
   CompensatedOutput
 };
 struct SharedRysXyContext {
-  bool unrestricted{}, mixed_precision{}, sm90{}, quartet_direct{};
+  bool unrestricted{}, mixed_precision{}, profile_supported{}, quartet_direct{};
   bool incremental_jk{}, separate_jk{}, streaming{}, persistent_eri{}, compensated_output{};
   std::uint64_t capability_mask{};
+  bool default_profile{};
 };
 struct SharedRysXyPolicy {
   SharedRysXyRequest request{SharedRysXyRequest::Off};

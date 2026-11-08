@@ -170,7 +170,7 @@ struct PreparedDispatch {
                 positions,0.5,bounds,density,output,count,head));"""
             case = case[:start] + launch + case[end:]
             context = f'''  generativeqc::scf::cuda_policy::SharedRysXyContext {mode}_context{{}};
-  {mode}_context.sm90={mode}_context.quartet_direct=true;
+  {mode}_context.profile_supported={mode}_context.quartet_direct=true;
   {mode}_context.capability_mask=generativeqc::scf::generated::enabled_shared_rys_{"weighted_z" if weighted else "xy"}_fock_shell_class_mask();
   const auto {mode}_policy=generativeqc::scf::cuda_policy::resolve_shared_rys_xy_policy(
       generativeqc::scf::cuda_policy::parse_shared_rys_xy_request("1","{int(weighted)}"),{mode}_context);
