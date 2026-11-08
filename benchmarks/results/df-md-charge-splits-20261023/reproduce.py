@@ -9,6 +9,7 @@ import lzma
 from pathlib import Path
 from statistics import median
 
+from benchmarks._source_census_evidence import read_json_bytes
 from benchmarks.readme_defaults_qualification import _comparison, qualify
 from benchmarks.readme_defaults_report import load_records
 
@@ -75,7 +76,7 @@ def qualify_cohorts(data: dict, oracles: list, reuse: dict) -> dict:
 def main() -> None:
     """Authenticate retained provenance, then qualify every native call."""
     data = json.loads(lzma.decompress((ROOT / "receipts.json.xz").read_bytes()))
-    manifest = lzma.decompress((ROOT / data["source_manifest_path"]).read_bytes())
+    manifest = read_json_bytes(ROOT / data["source_manifest_path"])
     assert hashlib.sha256(manifest).hexdigest() == data["source_manifest_sha256"]
     assert len(json.loads(manifest)["files"]) == 5984
     oracles = load_records(
@@ -98,7 +99,7 @@ def main() -> None:
         result["timing"][phase] = timing(*populations)
     integration = json.loads(lzma.decompress((ROOT / "integration.json.xz").read_bytes()))
     delta = integration["source_manifest"]
-    original = json.loads(lzma.decompress((ROOT / delta["base"]).read_bytes()))
+    original = json.loads(read_json_bytes(ROOT / delta["base"]))
     files = original["files"]
     for name in delta["removed"]:
         del files[name]

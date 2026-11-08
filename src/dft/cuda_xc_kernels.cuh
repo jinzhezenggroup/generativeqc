@@ -245,7 +245,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
                                         ? local_density_launchers[block.point_start / l.tile_points]
                                         : density_bindings[count == l.tile_points ? 0 : 1].launch;
       const bool occupied_tile =
-          occupied.coefficients && occupied.rank() <= std::size_t(active / 2);
+          occupied.coefficients && occupied.projection_fits(active, l.jets, l.work_jets);
       runtime::cuda_trace::TraceRegion density_region(
           occupied_tile ? "xc_occupied_projection" : "xc_matrix_projection", stream);
       runtime::cuda_trace::trace_counter("xc_projection_tiles", 1);

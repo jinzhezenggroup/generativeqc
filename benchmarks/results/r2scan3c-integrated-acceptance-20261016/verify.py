@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import lzma
 import math
 import runpy
 import struct
@@ -13,6 +12,8 @@ import subprocess
 import tarfile
 from collections import Counter
 from pathlib import Path
+
+from benchmarks._source_census_evidence import read_json_bytes, read_xz_bytes
 
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = ROOT.parents[2]
@@ -30,7 +31,7 @@ def require(condition: bool, message: str) -> None:
 
 def read_compressed(path: Path) -> dict:
     """Read immutable JSON evidence without recreating benchmark measurements."""
-    return json.loads(lzma.decompress(path.read_bytes()))
+    return json.loads(read_json_bytes(path))
 
 
 def restore_dictionary(baseline: object, delta: dict) -> object:
@@ -86,7 +87,7 @@ def verify() -> None:
     delta = frozen["native_input_delta"]
     baseline = REPOSITORY / delta["base"]
     require(
-        hashlib.sha256(baseline.read_bytes()).hexdigest() == delta["base_sha256"],
+        hashlib.sha256(read_xz_bytes(baseline)).hexdigest() == delta["base_sha256"],
         "historical inventory changed",
     )
     historical = read_compressed(baseline)
