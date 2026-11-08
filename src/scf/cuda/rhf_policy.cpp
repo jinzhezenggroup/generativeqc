@@ -38,8 +38,8 @@ SharedRysXyRequest parse_shared_rys_xy_request(const char* value) noexcept {
 
 SharedRysXyRequest shared_rys_xy_requested() noexcept {
   const char* xy = std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY");
-  const auto request = parse_shared_rys_xy_request(
-      xy, std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z"));
+  const auto request =
+      parse_shared_rys_xy_request(xy, std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z"));
   return request == SharedRysXyRequest::Off && (xy == nullptr || *xy == '\0')
              ? SharedRysXyRequest::Auto
              : request;

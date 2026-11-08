@@ -44,7 +44,9 @@ def profile(architecture: str = "sm_90") -> ResolvedProductionProfile:
 
 
 @pytest.mark.parametrize("architecture", ("sm_80", "sm_90"))
-def test_companion_architecture_capability_and_qualified_mapping(architecture: str) -> None:
+def test_companion_architecture_capability_and_qualified_mapping(
+    architecture: str,
+) -> None:
     selected = profile(architecture)
     companions = shared_rys_xy_companions(selected)
     assert {c.incumbent.spec.name: c.plan.block_threads for c in companions} == {

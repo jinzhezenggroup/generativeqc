@@ -791,7 +791,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       shared_rys_xy_request,
       {unrestricted, requested_mixed_precision_fock,
        (direct_target.compute_capability_major == 8 ||
-        direct_target.compute_capability_major == 9) && direct_target.compute_capability_minor == 0,
+        direct_target.compute_capability_major == 9) &&
+           direct_target.compute_capability_minor == 0,
        requested_quartet_direct, requested_incremental_direct_jk, separate_fock_jk,
        (requested_primary_streaming_fock_mask & shared_rys_xy_capabilities) != 0U,
        requested_persistent_eri, options.export_physical_reference, shared_rys_xy_capabilities,
