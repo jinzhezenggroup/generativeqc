@@ -13,7 +13,8 @@
 #include "generated_df_coulomb_lowering.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "runtime/cuda_component_trace.hpp"
-#include "runtime/cuda_fp64_matrix_policy.hpp"
+#include "runtime/cuda_device_facts.hpp"
+#include "runtime/cuda_lowering_profile.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/residency_df_cuda.cuh"
 #include "scf/cuda/df_generated_tiles.hpp"
@@ -460,7 +461,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   if (cuda_error != cudaSuccess) {
     return fail_before_plan(cuda_failure(cuda_error, "select CUDA DF device", detail));
   }
-  int fp32_fp64_ratio = 0;
+  runtime::CudaTargetInfo lowering_target;
   bool gram_library_capable = false;
   const bool gram_capability_needed =
       packed &&
@@ -468,19 +469,18 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   if (packed &&
       (gram_capability_needed ||
        (df_packed_projection_auto_requested() &&
-        df_packed_projection_preferred(nbf, naux, storage.rank_capacity, tile_elements, 2)))) {
+        df_packed_projection_work_admitted(nbf, naux, storage.rank_capacity, tile_elements)))) {
     // Freeze a physical capability with this owner before any captured work.
     // Gram selection needs the same capability independently of an explicit
     // projection override, which must continue to control projection alone.
-    // Read the property record: CUDA compatibility headers can expose this
-    // capability without the corresponding cudaDeviceAttr enum. Zero-initialize
-    // it so a provider leaving the optional field unset retains generated work.
-    cudaDeviceProp properties{};
-    cuda_error = cudaGetDeviceProperties(&properties, device_id);
+    // The shared facts owner retains the compatibility-provider property route.
+    // Unknown throughput keeps generated work, without a second device cache.
+    char device_name[256]{};
+    cuda_error = runtime::cuda_device_facts(device_id, lowering_target, device_name);
     if (cuda_error == cudaSuccess) {
-      fp32_fp64_ratio = properties.singleToDoublePrecisionPerfRatio;
+      constexpr runtime::CudaLoweringProfile gram_profile{true, {}};
       gram_library_capable =
-          runtime::cuda_fp64_matrix_acceleration_supported(properties.major, fp32_fp64_ratio);
+          runtime::cuda_lowering_profile_rejection(gram_profile, lowering_target, {}).empty();
     }
     if (cuda_error == cudaErrorNotSupported || cuda_error == cudaErrorInvalidValue) {
       // Compatibility providers may omit this optional performance attribute.
@@ -489,7 +489,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       const auto pending = cudaGetLastError();
       if (pending != cudaSuccess && pending != cuda_error)
         return fail_before_plan(cuda_failure(pending, "query CUDA DF FP64 throughput", detail));
-      fp32_fp64_ratio = 0;
+      lowering_target = {};
     } else if (cuda_error != cudaSuccess)
       return fail_before_plan(cuda_failure(cuda_error, "query CUDA DF FP64 throughput", detail));
   }
@@ -501,7 +501,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   candidate->resident_exchange_enabled = df_resident_exchange_requested();
   candidate->packed_projection_blas = df_packed_projection_blas_requested();
   candidate->packed_projection_auto = df_packed_projection_auto_requested();
-  candidate->packed_projection_fp32_fp64_ratio = fp32_fp64_ratio;
+  candidate->lowering_target = lowering_target;
   candidate->occupied_gram_library_capable = gram_library_capable;
   candidate->triangular_exchange = df_triangular_exchange_requested();
   candidate->flat_dense_exchange = df_flat_dense_exchange_requested();

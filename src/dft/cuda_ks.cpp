@@ -37,7 +37,6 @@
 #include "molecule/basis.hpp"
 #include "runtime/compiled_execution_region.hpp"
 #include "runtime/cuda_component_trace.hpp"
-#include "runtime/cuda_fp64_matrix_policy.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/host_cache_budget.hpp"
 #include "runtime/host_component_trace.hpp"
@@ -2365,56 +2364,35 @@ struct CudaKsPlan::Impl : KsStateStorage {
                 cuda_ks_precision_region::kXcMatrixContractions) &&
             cuda_xc_detail::mixed_matrix_contractions_supported(xc_layout))
           xc->prepare_mixed_matrix_contractions();
-        // Large strict-FP64 meta-GGA panels amortize mapped matrix products
-        // on FP64 matrix-capable hardware. This
-        // is a capability/work gate, never a GPU model-name whitelist. Public
-        // ledgers and explicit reference budgets keep their bounded incumbent
-        // until a complete optional-provider quote has been qualified there.
+        // Validate the public rollback control even when optional capacity is
+        // unavailable. The compiler adapter owns its qualified GGA domain.
         const char* gga_gemm_control = std::getenv("GENERATIVEQC_CUDA_XC_GGA_GEMM");
         if (gga_gemm_control && std::strcmp(gga_gemm_control, "0") != 0 &&
             std::strcmp(gga_gemm_control, "1") != 0)
           throw std::invalid_argument("GENERATIVEQC_CUDA_XC_GGA_GEMM accepts 0 or 1");
-        const bool qualified_indexed_gga =
-            spins == 1 && xc_layout.work_jets == 1 &&
-            (functional == semilocal_family_code(SemilocalFamily::Pbe) ||
-             functional == semilocal_family_code(SemilocalFamily::B3lyp));
-        const bool indexed_gga =
-            qualified_indexed_gga && (!gga_gemm_control || gga_gemm_control[0] != '0');
-        bool fp64_indexed_matrix = false;
-        if (!runtime::active_device_resource_ledger && !options.reference_memory_budget_bytes &&
-            !precision_schedule.any_lower_precision() && xc_layout.local_ao &&
-            xc_layout.nao >= 512 && xc_layout.npoint >= (1U << 19) &&
-            (xc_layout.work_jets >= 4 || indexed_gga)) {
-          cudaDeviceProp properties{};
-          const auto capability = cudaGetDeviceProperties(&properties, device);
-          if (capability == cudaErrorNotSupported || capability == cudaErrorInvalidValue) {
-            const auto pending = cudaGetLastError();
-            if (pending != cudaSuccess && pending != capability) check(pending);
-          } else {
-            check(capability);
-            fp64_indexed_matrix = runtime::cuda_fp64_matrix_acceleration_supported(
-                properties.major, properties.singleToDoublePrecisionPerfRatio);
-          }
-        }
+        // The method admits optional capacity, not a GPU or matrix recipe.
+        // Compiler adapters refine these budgets using the common profile.
+        const bool optional_lowering = !runtime::active_device_resource_ledger &&
+                                       !options.reference_memory_budget_bytes &&
+                                       !precision_schedule.any_lower_precision();
         const char* density_gemm_control = std::getenv("GENERATIVEQC_CUDA_XC_DENSITY_GEMM");
         if (density_gemm_control && std::strcmp(density_gemm_control, "0") != 0 &&
             std::strcmp(density_gemm_control, "1") != 0)
           throw std::invalid_argument("GENERATIVEQC_CUDA_XC_DENSITY_GEMM accepts 0 or 1");
-        const bool indexed_density_gemm =
-            fp64_indexed_matrix && (!density_gemm_control || density_gemm_control[0] != '0');
-        // The extra provider/cache allowance is outside any public promise.
-        // Resource refusal preserves the same generated indexed contraction.
+        const auto automatic_density_budget =
+            optional_lowering && (!density_gemm_control || density_gemm_control[0] != '0')
+                ? std::min(std::size_t{128ULL << 20}, optional_device_capacity())
+                : 0;
         const auto density_budget =
-            indexed_density_gemm ? std::min(std::size_t{128ULL << 20}, optional_device_capacity())
-            : xc_budget.host_bytes >= tensor::PreparedPanelProduct::host_reservation
+            xc_budget.host_bytes >= tensor::PreparedPanelProduct::host_reservation
                 ? xc_budget.device_bytes
                 : 0;
         const auto prepare_density = [&] {
           xc->prepare_density(
               *admitted_precision.find(cuda_ks_precision_region::kDensityContraction),
-              options.max_iterations, density_budget, indexed_density_gemm);
+              options.max_iterations, density_budget, automatic_density_budget);
         };
-        if (indexed_density_gemm) {
+        if (automatic_density_budget) {
           runtime::DeviceUnpromisedCapacityScope optional_scope;
           prepare_density();
         } else {
@@ -2427,10 +2405,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
           resource.retained_host_numeric_bytes =
               sum(resource.retained_host_numeric_bytes, prepared->host_bytes);
         }
-        if (fp64_indexed_matrix) {
+        if (optional_lowering) {
           runtime::DeviceUnpromisedCapacityScope optional_scope;
           xc->prepare_potential(std::min(std::size_t{128ULL << 20}, optional_device_capacity()),
-                                true);
+                                options.max_iterations);
           const auto& prepared = xc->potential_lowering();
           resource.xc_device_bytes = sum(resource.xc_device_bytes, prepared.matrix_bytes);
           resource.provider_device_bytes =

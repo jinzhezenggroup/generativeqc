@@ -58,7 +58,7 @@ struct CudaDensityFittingJkPlan : BorrowedBlasPlan {
   bool streamed{}, resident_exchange_enabled{}, triangular_exchange{}, resident_raw_coulomb{};
   bool packed_projection_blas{};
   bool packed_projection_auto{};
-  int packed_projection_fp32_fp64_ratio{};
+  generativeqc::runtime::CudaTargetInfo lowering_target;
   bool occupied_gram_library_capable{};
   void* integral_source{};
   std::vector<bool> metric_full_rank;

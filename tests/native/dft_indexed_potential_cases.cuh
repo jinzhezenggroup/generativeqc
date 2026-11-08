@@ -220,7 +220,7 @@ void indexed_potential_discovery_cases(bool gemm) {
         require(!selected.plan->layout().local_ao, "budget miss installed a partial map");
         require(selected.plan->select_local_ao(cutoff, bound.host_peak_bytes),
                 "scaled-PBE local AO admission failed");
-        selected.plan->prepare_potential(128ULL << 20, gemm);
+        selected.plan->prepare_potential(128ULL << 20);
         const auto& diagnostic = selected.plan->potential_lowering();
         require((diagnostic.indexed_candidate.algorithm ==
                  (gemm ? "indexed-symmetric-cross-gemm" : "indexed-symmetric-cross-rank2k")) ==

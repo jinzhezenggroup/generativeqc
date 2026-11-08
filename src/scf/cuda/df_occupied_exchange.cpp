@@ -255,8 +255,7 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
       const bool use_blas =
           plan.packed_projection_blas ||
           (plan.packed_projection_auto &&
-           df_packed_projection_preferred(n, a, r, plan.panel_capacity,
-                                          plan.packed_projection_fp32_fp64_ratio));
+           df_packed_projection_preferred(n, a, r, plan.panel_capacity, plan.lowering_target));
       const auto rows = use_blas ? std::min({n, std::size_t{128}, plan.panel_capacity / n / a}) : 0;
       if (rows) {
         for (std::size_t begin = 0; begin < n; begin += rows) {
