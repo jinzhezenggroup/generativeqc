@@ -17,7 +17,7 @@ dispatch, and all existing resource/scientific gates; no SM/product whitelist,
 
 Source790fd246/ELF47c4c190 change only policy and host test from historical
 source682561e9. The older predictor flag is always false in both arms; these
-mechanism timings do not qualify current merged source0587702d/masterfea412df.
+mechanism timings do not qualify later source0587702d/masterfea412df merges.
 
 | Card / job | Control cold/s | Four-step cold/s | Mean regression |
 |---|---|---|---:|
@@ -50,3 +50,8 @@ and corrected host pass, is lossless in
 `benchmarks/results/hf-earlier-handoff-rejection-20261108/`. Shared semantic
 compression retains all previous raw records and compiler stdout without raising
 the repository budgets. Issue2976 and draft PR3048 retain the decision boundary.
+
+Master1eeb9a20 (#3049) is integrated after measurement, preserving all original
+adaptive changes and its correlated-reference graph-identity/cache fixes. The
+generated Libxc catalog is refreshed from the clean merged index; historical
+numerical qualification stays stale. No790f timing is renamed to this merge.
