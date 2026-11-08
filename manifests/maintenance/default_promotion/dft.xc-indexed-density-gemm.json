@@ -1,0 +1,22 @@
+{
+  "id": "dft.xc-indexed-density-gemm",
+  "classification": "already-default",
+  "controls": [
+    "dft-policy:GENERATIVEQC_CUDA_XC_DENSITY_GEMM"
+  ],
+  "owner_issues": [2976],
+  "sources": [
+    "src/dft/cuda_ks.cpp",
+    "src/dft/cuda_xc.cpp",
+    "src/tensor/cuda_panel_product.cuh",
+    "python/generativeqc_compiler/dft/xc_density_provider.py"
+  ],
+  "rationale": "Large strict-FP64 local meta-GGA density panels may reuse the existing bounded indexed typed-Dgemm recipe on architecture >=8 with positive single/double throughput ratio <=2. Work admission requires >=512 AOs, >=2^19 points and >=4 density-product jets. A public resource ledger, explicit reference budget, any lower-precision schedule, insufficient optional capacity or provider/cache allocation refusal retains generated execution. The additional allowance is capped at 128 MiB and accounts separately for the 96 MiB provider allowance, exact spin-matrix cache and retained host metadata. Unset/1 requests the qualified default; 0 rolls it back and 1 cannot bypass admission. Original symmetric-D, maps, grid, occupied witness, strict handoff, convergence and analytic-force semantics remain unchanged. Independent CPU bilinear and complete source-matched dual-GPU r2SCAN-3c cold/warm evidence qualify the scoped policy, not every eligible workload.",
+  "revisit_condition": "Extend complete-endpoint qualification to other FP64-matrix devices and eligible workloads before claiming universal profitability. Preserve independent numerical gates, explicit opt-out and bounded resource fallback; do not replace the capability/work admission with product-name or molecule-name rules.",
+  "evidence": [
+    "issue:#2976",
+    "note:.agents/notes/implemented/performance/2026-11-07-r2scan-indexed-density-gemm.md",
+    "docs:docs/developer/xc_native_cuda.md",
+    "results:benchmarks/results/r2scan-density-gemm-20261107"
+  ]
+}

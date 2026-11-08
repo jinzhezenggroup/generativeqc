@@ -1321,6 +1321,10 @@ int main(int argc, char** argv) {
       indexed_density_provider_cases();
       return 0;
     }
+    if (argc == 2 && std::string(argv[1]) == "--qualified-indexed-density-provider") {
+      qualified_indexed_density_provider_cases();
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--density-provider") {
       density_provider_cases();
       return 0;

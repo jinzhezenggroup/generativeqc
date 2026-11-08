@@ -471,8 +471,14 @@
     {
       "path": "source-snapshot.manifest.json",
       "role": "input",
-      "bytes": 58566,
-      "sha256": "79316be53f2b77161156e66c2aca3837b1f68ba4f0443791e59763742a9e87b8"
+      "bytes": 314,
+      "sha256": "57a6f9d803b19a3d3c6144b40bed81e850f57d83d57a3a789caa25570a84e81f"
+    },
+    {
+      "path": "source-snapshot.manifest.original.json.xz",
+      "role": "input",
+      "bytes": 13540,
+      "sha256": "fd765df2757fc6917c2fd0da60027f733dad0905c2c2abb1ab3b6a915c9145ba"
     },
     {
       "bytes": 1838,
