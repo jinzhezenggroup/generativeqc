@@ -14,6 +14,9 @@ namespace {
 void* pending_destination = nullptr;
 bool freed_before_drain = false;
 unsigned copies = 0;
+bool inject_dense_failure = false;
+bool dense_failure_observed = false;
+const void* dense_source = nullptr;
 std::size_t available_bytes = 0;
 cudaError_t synchronize_error = cudaSuccess;
 cudaError_t mem_info_error = cudaSuccess;
@@ -22,15 +25,16 @@ bool synchronized = false;
 cudaError_t mock_copy(void* destination, const void* source, std::size_t bytes, cudaMemcpyKind,
                       cudaStream_t) {
   ++copies;
-  if (copies <= 3) {
-    std::memcpy(destination, source, bytes);  // convergence flags and iteration count
-    return cudaSuccess;
+  if (inject_dense_failure && source == dense_source) {
+    if (!pending_destination) {
+      pending_destination = destination;
+      return cudaSuccess;
+    }
+    dense_failure_observed = true;
+    return cudaErrorInvalidValue;
   }
-  if (copies == 4) {
-    pending_destination = destination;
-    return cudaSuccess;
-  }
-  return cudaErrorInvalidValue;  // next copy fails while the first is pending
+  std::memcpy(destination, source, bytes);
+  return cudaSuccess;
 }
 
 cudaError_t mock_synchronize(cudaStream_t) {
@@ -139,8 +143,11 @@ void retention_guard() {
 
 int main() {
   using generativeqc::scf::reference_detail::download;
-  const std::array<const double*, 5> matrices{};
-  const std::array<const double*, 3> scalars{};
+  const std::array<double, 4> values{-442.994749, 1e-12, 7e-8, 9e-9};
+  const std::array<const double*, 4> scalars{&values[0], &values[1], &values[2], &values[3]};
+  const std::array<double, 4> matrix{};
+  const std::array<const double*, 5> matrices{matrix.data(), matrix.data(), matrix.data(),
+                                              matrix.data(), matrix.data()};
   std::uint8_t converged = 0, failed = 0;
   std::uint32_t iterations = 1;
   generativeqc::scf::ScfResult result;
@@ -152,8 +159,21 @@ int main() {
                            nullptr, scalars, &converged, &failed, &iterations, result);
     if (status != GENERATIVEQC_STATUS_NOT_CONVERGED || result.reference)
       throw std::runtime_error("unconverged reference was allocated/published");
+    if (result.iterations != iterations || result.energy != values[0] ||
+        result.energy_change != values[1] || result.density_rms != values[2] ||
+        result.physical_residual_rms != values[3] || result.converged)
+      throw std::runtime_error("unconverged reference lost physical diagnostics");
+    failed = 1;
+    status = download(nullptr, std::numeric_limits<std::size_t>::max(), 1, 0, matrices, nullptr,
+                      scalars, &converged, &failed, &iterations, result);
+    if (status != GENERATIVEQC_STATUS_NUMERICAL_FAILURE || result.reference ||
+        result.iterations != iterations || result.physical_residual_rms != values[3])
+      throw std::runtime_error("numerically failed reference lost status or diagnostics");
+    failed = 0;
     copies = 0;
     converged = 1;
+    dense_source = matrix.data();
+    inject_dense_failure = true;
     bool threw = false;
     try {
       download(nullptr, 2, 1, 0, matrices, nullptr, scalars, &converged, &failed, &iterations,
@@ -161,7 +181,8 @@ int main() {
     } catch (const std::runtime_error&) {
       threw = true;
     }
-    if (!threw || copies != 5 || pending_destination || freed_before_drain || result.reference)
+    if (!threw || !dense_failure_observed || pending_destination || freed_before_drain ||
+        result.reference)
       throw std::runtime_error("failed reference copy did not drain before freeing staging");
     std::cout << "Reference convergence preflight and exceptional staging lifetime passed\n";
     return 0;

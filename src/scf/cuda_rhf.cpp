@@ -3617,7 +3617,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
           static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(nbf),
           unrestricted ? 2 : 1, static_cast<std::uint32_t>(diis_history), fock, residual, active,
           fock_history, residual_history, diis_linear_system, diis_coefficients, diis_count,
-          diis_head, eigensystem, diis_raw_gram, false, diis_work);
+          diis_head, eigensystem, diis_raw_gram, options.export_physical_reference, diis_work);
     } else {
       const bool incremental_gram = plan.incremental_diis_gram;
       if (incremental_gram) {
@@ -3633,7 +3633,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
           static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(nbf),
           unrestricted ? 2 : 1, static_cast<std::uint32_t>(diis_history), fock, residual, active,
           fock_history, residual_history, diis_linear_system, diis_coefficients, diis_count,
-          diis_head, eigensystem, false, false, nullptr, 0, diis_raw_gram);
+          diis_head, eigensystem, options.export_physical_reference, false, nullptr, 0,
+          diis_raw_gram);
     }
     if (unrestricted) {
       iteration_status =
@@ -3710,6 +3711,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       incremental_iteration_enabled ? incremental_delta_updates : nullptr;
   const auto* incremental_energy_refinement_census =
       incremental_energy_refinement_updates != nullptr ? incremental_delta_build_count : nullptr;
+  const ReferenceStartup reference_startup = options.export_physical_reference && !any_system_warm
+                                                 ? ReferenceStartup{diis_count, diis_head}
+                                                 : ReferenceStartup{};
   const auto launch_iteration_post_eigensolver =
       [&](bool append_device_tail, bool allow_mixed_precision) -> generativeqc_status {
     const bool screened_stage = screened_reference_iterations && allow_mixed_precision;
@@ -3775,7 +3779,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               previous_energy, next_density, density, active, converged, iterations, energy_change,
               density_rms, force_convergence_residual, approximate_census,
               qualified_iteration_owner, incremental_energy_refinement_updates,
-              incremental_energy_refinement_census);
+              incremental_energy_refinement_census, reference_startup);
         } else {
           launch_update_convergence_kernel(
               false, static_cast<unsigned>(batch_size),
@@ -3785,7 +3789,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               previous_energy, next_density, density, active, converged, iterations, energy_change,
               density_rms, force_convergence_residual, approximate_census,
               qualified_iteration_owner, incremental_energy_refinement_updates,
-              incremental_energy_refinement_census);
+              incremental_energy_refinement_census, reference_startup);
         }
       }
     }
@@ -4628,10 +4632,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         const auto resident_status = resident_values->audit();
         if (resident_status != GENERATIVEQC_STATUS_SUCCESS) return resident_status;
       }
-      return reference_detail::download(
-          resources.stream_, nbf, host.occupied[0], reference_phase_peak,
-          {overlap, hcore, fock, coefficients, density}, eigenvalues,
-          {energy, energy_change, density_rms}, converged, failed, iterations, outputs[0].scf);
+      // DIIS has finished; reuse one coefficient slot for bounded diagnostics.
+      launch_physical_residual_rms(resources.stream_, matrix_size, residual, diis_coefficients);
+      const auto diagnostic_error = cudaPeekAtLastError();
+      if (diagnostic_error != cudaSuccess) return cuda_status(diagnostic_error);
+      return reference_detail::download(resources.stream_, nbf, host.occupied[0],
+                                        reference_phase_peak,
+                                        {overlap, hcore, fock, coefficients, density}, eigenvalues,
+                                        {energy, energy_change, density_rms, diis_coefficients},
+                                        converged, failed, iterations, outputs[0].scf);
     };
     bool retained_reference_rejected = false;
     try {

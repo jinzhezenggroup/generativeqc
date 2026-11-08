@@ -305,6 +305,128 @@ class Mp2Prepared final : public PreparedCalculation,
               posthf::checked_mul(result.hf_component->forces.capacity(), sizeof(double));
         }
       }
+      // Build optional primal blocks before energy, not after it: a small
+      // occupied/virtual tile must not trigger another complete AO^4 scan.
+      // The same immutable frame and symmetry cover serve the force consumer.
+      struct PrimalCache {
+        std::array<std::vector<double>, 6> blocks;
+        std::size_t bytes{}, peak{};
+        bool force_cover{};
+      };
+      PrimalCache cache;
+      const auto clear_force_cache_allocation_error = [] {
+#if GENERATIVEQC_HAS_CUDA
+        // A refused optional CUDA allocation leaves the runtime's last-error
+        // slot set. Consume only that expected status before bounded replay;
+        // an unrelated asynchronous/backend error must still propagate.
+        const auto error = cudaGetLastError();
+        if (error != cudaSuccess && error != cudaErrorMemoryAllocation)
+          throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(error));
+#endif
+      };
+      const auto* cache_override = std::getenv("GENERATIVEQC_MP2_FORCE_MO_CACHE");
+      const auto* energy_cache_override = std::getenv("GENERATIVEQC_MP2_ENERGY_MO_CACHE");
+      const auto* force_tiling_override = std::getenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
+      const bool cache_forces =
+          compute_forces && (!cache_override || std::string_view(cache_override) != "0") &&
+          (!force_tiling_override || std::string_view(force_tiling_override) != "0");
+      if (cuda && !density_fitted_ &&
+          (cache_forces || !energy_cache_override ||
+           std::string_view(energy_cache_override) != "0")) {
+        const auto build_cache = [&](bool force_cover) {
+          return run_phase([&](std::size_t correlation_budget) {
+            prepare_source();
+            if (!conventional_source->supports_device_read(
+                    integrals::ElectronInteractionOperator::eri, context_.device_id))
+              return PrimalCache{};
+            const auto occupied_count = ref.nocc;
+            const auto virtual_count = ref.nbf - occupied_count;
+            const std::array<std::array<std::size_t, 4>, 6> all_shapes{{
+                {occupied_count, virtual_count, occupied_count, virtual_count},
+                {occupied_count, occupied_count, virtual_count, virtual_count},
+                {occupied_count, virtual_count, occupied_count, occupied_count},
+                {occupied_count, virtual_count, virtual_count, virtual_count},
+                {occupied_count, occupied_count, occupied_count, occupied_count},
+                {virtual_count, virtual_count, virtual_count, virtual_count},
+            }};
+            const auto shapes = std::span(all_shapes).first(force_cover ? 6 : 1);
+            std::size_t cache_bytes = 0;
+            for (const auto& shape : shapes) {
+              std::size_t elements = 1;
+              for (const auto extent : shape) elements = posthf::checked_mul(elements, extent);
+              cache_bytes =
+                  posthf::checked_add(cache_bytes, posthf::checked_mul(elements, sizeof(double)));
+            }
+            // Reserve at most a quarter for optional primal storage. Complete
+            // force admission still checks its real remaining phase budget.
+            if (cache_bytes > correlation_budget / 4) return PrimalCache{};
+            try {
+              std::size_t selected_axis = 0, peak = 0;
+              for (std::size_t axis = ref.nbf; axis > 0; --axis) {
+                try {
+                  posthf::NativeBlockProvider candidate(
+                      *conventional_source, ref, correlation_budget, static_cast<unsigned>(axis),
+                      posthf::AOTileDomain::Basis);
+                  const auto candidate_peak = candidate.batch_bytes(shapes, true);
+                  if (candidate_peak > correlation_budget) continue;
+                  selected_axis = axis;
+                  peak = candidate_peak;
+                  break;
+                } catch (const std::length_error&) {
+                  continue;
+                }
+              }
+              if (!selected_axis) return PrimalCache{};
+              std::vector<std::size_t> occupied(occupied_count), virtuals(virtual_count);
+              std::iota(occupied.begin(), occupied.end(), 0);
+              std::iota(virtuals.begin(), virtuals.end(), occupied_count);
+              std::vector<posthf::MOSlots> requests{
+                  {occupied, virtuals, occupied, virtuals},
+                  {occupied, occupied, virtuals, virtuals},
+                  {occupied, virtuals, occupied, occupied},
+                  {occupied, virtuals, virtuals, virtuals},
+                  {occupied, occupied, occupied, occupied},
+                  {virtuals, virtuals, virtuals, virtuals},
+              };
+              requests.resize(shapes.size());
+              PrimalCache candidate;
+              candidate.peak = peak;
+              candidate.force_cover = force_cover;
+              posthf::NativeBlockProvider producer(*conventional_source, ref, correlation_budget,
+                                                   static_cast<unsigned>(selected_axis),
+                                                   posthf::AOTileDomain::Basis);
+              posthf::ProviderWork work;
+              auto blocks = producer.get_many(requests, true, context_.device_id, nullptr, &work);
+              for (std::size_t index = 0; index < requests.size(); ++index) {
+                candidate.blocks[index] = std::move(blocks[index]);
+                candidate.bytes = posthf::checked_add(
+                    candidate.bytes,
+                    posthf::checked_mul(candidate.blocks[index].capacity(), sizeof(double)));
+                if (candidate.bytes > cache_bytes)
+                  throw std::length_error("MP2 primal cache exceeds its admitted capacity");
+              }
+              runtime::df_progress::Scope::number("mp2_primal_source_scans", work.source_scans);
+              runtime::df_progress::Scope::number("mp2_primal_source_values", work.source_values);
+              return candidate;
+            } catch (const std::length_error&) {
+              clear_force_cache_allocation_error();
+              return PrimalCache{};
+            } catch (const std::bad_alloc&) {
+              clear_force_cache_allocation_error();
+              return PrimalCache{};
+            }
+          });
+        };
+        cache = build_cache(cache_forces);
+        if (!cache.bytes && cache_forces) cache = build_cache(false);
+      }
+      auto completed_phase_capacity = std::max(
+          component_peak,
+          posthf::checked_add(
+              cache.peak, posthf::checked_add(
+                              component_capacity,
+                              posthf::checked_add(warm_capacity,
+                                                  cuda_reference_plan_.retained_numeric_bytes()))));
       const auto corr = run_phase([&](std::size_t correlation_budget) {
         prepare_source();
         runtime::df_progress::Scope::number(
@@ -312,17 +434,24 @@ class Mp2Prepared final : public PreparedCalculation,
             conventional_source &&
                 conventional_source->supports_device_read(
                     integrals::ElectronInteractionOperator::eri, context_.device_id));
-        return density_fitted_
-                   ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget, threshold_,
-                                                options_.density_fitting_relative_threshold, 8,
-                                                fitted_cuda_, context_.device_id)
-                   : mp2::conventional_energy(ref, *conventional_source, correlation_budget,
-                                              threshold_, 8, cuda, context_.device_id);
+        if (cache.bytes >= correlation_budget) cache = {};
+        runtime::df_progress::Scope::number("mp2_energy_mo_cache_bytes", cache.bytes);
+        auto energy =
+            density_fitted_
+                ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget, threshold_,
+                                             options_.density_fitting_relative_threshold, 8,
+                                             fitted_cuda_, context_.device_id)
+                : mp2::conventional_energy(ref, *conventional_source,
+                                           correlation_budget - cache.bytes, threshold_, 8, cuda,
+                                           context_.device_id, cache.blocks[0]);
+        energy.numeric_capacity_bytes =
+            posthf::checked_add(energy.numeric_capacity_bytes, cache.bytes);
+        return energy;
       });
-      // Preserve this completed phase's simultaneous peak if force admission
-      // subsequently retires the optional reference executable.
-      auto completed_phase_capacity = std::max(
-          component_peak,
+      // Preserve completed simultaneous peaks if a later phase retires the
+      // optional reference executable or borrowed source.
+      completed_phase_capacity = std::max(
+          completed_phase_capacity,
           posthf::checked_add(
               posthf::checked_add(corr.numeric_capacity_bytes, component_capacity),
               posthf::checked_add(warm_capacity, cuda_reference_plan_.retained_numeric_bytes())));
@@ -333,9 +462,6 @@ class Mp2Prepared final : public PreparedCalculation,
                                                      reference_source != nullptr ||
                                                      prepared_source.has_value();
       if (compute_forces) {
-        // The provider charges the borrowed CPU owner's actual retained bytes.
-        // Admission/allocation failure releases that owner before retrying the
-        // legacy streaming route; no second molecular ERI tensor is allocated.
         if (!cuda && !share_reference_source) {
           prepared_source.reset();
           cpu_exact_plan_.reset();
@@ -347,117 +473,7 @@ class Mp2Prepared final : public PreparedCalculation,
         response_options.absolute_tolerance = convergence_.response_solve();
         response_options.restart = 30;
         response_options.max_iterations = 200;
-        struct ForceCache {
-          std::array<std::vector<double>, 6> blocks;
-          std::size_t bytes{}, peak{};
-        };
-        ForceCache cache;
-        const auto clear_force_cache_allocation_error = [] {
-#if GENERATIVEQC_HAS_CUDA
-          // A refused optional CUDA allocation leaves the runtime's last-error
-          // slot set. Consume only that expected status before bounded replay;
-          // an unrelated asynchronous/backend error must still propagate.
-          const auto error = cudaGetLastError();
-          if (error != cudaSuccess && error != cudaErrorMemoryAllocation)
-            throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(error));
-#endif
-        };
-        const auto* cache_override = std::getenv("GENERATIVEQC_MP2_FORCE_MO_CACHE");
-        const auto* force_tiling_override = std::getenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
-        if (cuda && !density_fitted_ &&
-            (!cache_override || std::string_view(cache_override) != "0") &&
-            (!force_tiling_override || std::string_view(force_tiling_override) != "0")) {
-          cache = run_phase([&](std::size_t correlation_budget) {
-            prepare_source();
-            if (!conventional_source->supports_device_read(
-                    integrals::ElectronInteractionOperator::eri, context_.device_id))
-              return ForceCache{};
-            const auto occupied_count = ref.nocc;
-            const auto virtual_count = ref.nbf - occupied_count;
-            const std::array<std::array<std::size_t, 4>, 6> shapes{{
-                {occupied_count, virtual_count, occupied_count, virtual_count},
-                {occupied_count, occupied_count, virtual_count, virtual_count},
-                {occupied_count, virtual_count, occupied_count, occupied_count},
-                {occupied_count, virtual_count, virtual_count, virtual_count},
-                {occupied_count, occupied_count, occupied_count, occupied_count},
-                {virtual_count, virtual_count, virtual_count, virtual_count},
-            }};
-            std::size_t cache_bytes = 0;
-            for (const auto& shape : shapes) {
-              std::size_t elements = 1;
-              for (const auto extent : shape) elements = posthf::checked_mul(elements, extent);
-              cache_bytes =
-                  posthf::checked_add(cache_bytes, posthf::checked_mul(elements, sizeof(double)));
-            }
-            // Reserve at most a quarter for optional primal storage. Complete
-            // force admission still checks its real remaining phase budget.
-            if (cache_bytes > correlation_budget / 4) return ForceCache{};
-            try {
-              std::size_t selected_axis = 0, peak = 0;
-              for (std::size_t axis = ref.nbf; axis > 0; --axis) {
-                try {
-                  posthf::NativeBlockProvider candidate(
-                      *conventional_source, ref, correlation_budget, static_cast<unsigned>(axis),
-                      posthf::AOTileDomain::Basis);
-                  std::size_t candidate_peak = 0;
-                  for (const auto& shape : shapes) {
-                    const auto plan = candidate.plan(shape, true);
-                    candidate_peak = std::max(
-                        candidate_peak,
-                        posthf::checked_add(
-                            cache_bytes, posthf::checked_add(plan.host_bytes, plan.device_bytes)));
-                  }
-                  if (candidate_peak > correlation_budget) continue;
-                  selected_axis = axis;
-                  peak = candidate_peak;
-                  break;
-                } catch (const std::length_error&) {
-                  continue;
-                }
-              }
-              if (!selected_axis) return ForceCache{};
-              std::vector<std::size_t> occupied(occupied_count), virtuals(virtual_count);
-              std::iota(occupied.begin(), occupied.end(), 0);
-              std::iota(virtuals.begin(), virtuals.end(), occupied_count);
-              const std::array<posthf::MOSlots, 6> requests{{
-                  {occupied, virtuals, occupied, virtuals},
-                  {occupied, occupied, virtuals, virtuals},
-                  {occupied, virtuals, occupied, occupied},
-                  {occupied, virtuals, virtuals, virtuals},
-                  {occupied, occupied, occupied, occupied},
-                  {virtuals, virtuals, virtuals, virtuals},
-              }};
-              ForceCache candidate;
-              candidate.peak = peak;
-              for (std::size_t index = 0; index < requests.size(); ++index) {
-                posthf::NativeBlockProvider producer(
-                    *conventional_source, ref, correlation_budget - candidate.bytes,
-                    static_cast<unsigned>(selected_axis), posthf::AOTileDomain::Basis);
-                candidate.blocks[index] = producer.get(requests[index], true, context_.device_id);
-                candidate.bytes = posthf::checked_add(
-                    candidate.bytes,
-                    posthf::checked_mul(candidate.blocks[index].capacity(), sizeof(double)));
-                if (candidate.bytes > cache_bytes)
-                  throw std::length_error("MP2 force cache exceeds its admitted capacity");
-              }
-              return candidate;
-            } catch (const std::length_error&) {
-              clear_force_cache_allocation_error();
-              return ForceCache{};
-            } catch (const std::bad_alloc&) {
-              clear_force_cache_allocation_error();
-              return ForceCache{};
-            }
-          });
-          completed_phase_capacity =
-              std::max(completed_phase_capacity,
-                       posthf::checked_add(
-                           cache.peak,
-                           posthf::checked_add(
-                               component_capacity,
-                               posthf::checked_add(
-                                   warm_capacity, cuda_reference_plan_.retained_numeric_bytes()))));
-        }
+        if (!cache.force_cover) cache = {};
         force_diagnostic = run_phase([&](std::size_t correlation_budget) {
           prepare_source();
           runtime::df_progress::Scope::number("mp2_force_cpu_prepared_source",

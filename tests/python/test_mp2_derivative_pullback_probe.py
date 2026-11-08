@@ -263,7 +263,7 @@ def test_physical_eri_derivative_pullback(
     np.ascontiguousarray(np.concatenate(slots), dtype=np.float64).tofile(payload)
     receipts = []
     for executable in pullback_probes:
-        for representation in (1, 3, 2):
+        for representation in (1, 3, 2, 4):
             run = subprocess.run(
                 [
                     str(executable),
@@ -285,3 +285,28 @@ def test_physical_eri_derivative_pullback(
         )
     assert receipts[0]["weights"] == receipts[1]["weights"]
     assert receipts[0]["gradient"] == receipts[1]["gradient"]
+
+
+@pytest.mark.parametrize("case", range(8))
+@pytest.mark.parametrize("sparse", (False, True), ids=("full", "zero-gates"))
+def test_projected_factorized_pullback(
+    pullback_probes: list[Path], case: int, sparse: bool
+) -> None:
+    """Qualify canonical factors against dense weights and the admitted peak."""
+    for executable in pullback_probes:
+        receipts = []
+        for representation in (4, 2):
+            run = subprocess.run(
+                [str(executable), str(case), str(representation), str(int(sparse))],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=45,
+                env={**os.environ, "GENERATIVEQC_DF_PROGRESS_TRACE": ""},
+            )
+            receipts.append(json.loads(run.stdout))
+        assert receipts[0]["gradient"] == pytest.approx(
+            receipts[1]["gradient"], rel=3e-11, abs=3e-11
+        )
+        assert receipts[0]["callbacks"] == receipts[1]["callbacks"]
+        assert receipts[0]["local_elements"] == receipts[1]["local_elements"]
