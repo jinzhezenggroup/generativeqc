@@ -154,6 +154,15 @@ blocked; neither an endpoint gain nor an exit0 sanitizer job resolves it.
 
 ## References
 
+The subsequent one-public-control diagnostic on both cards is retained in
+`benchmarks/results/hf48-control-isolation-20261108/`. Screening-only tightening
+does not change the default force failure; tighter energy-only/density-only
+requests pass at ordinary screening with14/21 target steps. This supports a
+convergence-family boundary for this geometry, but either public request also
+tightens the internal physical gate, so their separate effects are not isolated.
+The bounded next hypothesis, without automatic promotion or new production
+CPU/reference work, is in`2026-11-08-hf48-screened-cold-boundary.md`.
+
 Issue2976; the source-matched capsule under
 `benchmarks/results/a100-shared-rys-xy-20261108/`; local original arrays,
 source/runtime deltas, failures and receipts under
