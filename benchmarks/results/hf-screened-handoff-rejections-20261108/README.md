@@ -27,3 +27,8 @@ Checked-in summaries and CLI output keep every arm, its work counts, numerical
 pass counts/maxima and every paired-warm ratio. They avoid duplicating raw warm
 times and the derived per-sample error table. Each `replay()` function still
 returns the full per-sample calculation, and every raw input is retained.
+
+LZMA2 transport-only recompression saves a further 2,656 bytes for the final
+HF48 force qualification. Both decoded streams and all 459 authenticated texts
+compare identical before and after; only compressed bytes and dependent
+transport bindings change. No evidence budget or scientific gate is relaxed.

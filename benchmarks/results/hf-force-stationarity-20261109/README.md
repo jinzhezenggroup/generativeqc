@@ -2,7 +2,7 @@
 
 This is a source-bound RTX5090 numerical repair, not a speedup, A100 result,
 all-method qualification, or acceptance of an inaccurate performance control.
-Both separate native processes block PySCF/GPU4PySCF imports. Their complete
+All three separate native processes block PySCF/GPU4PySCF imports. Their complete
 cold endpoints include constructor, preparation, SCF, analytic forces and host
 export, followed by three same-owner frozen-own-density warm calls.
 
@@ -15,25 +15,38 @@ unchanged. The reference's orbital-gradient norm is 4.44794e-11.
 | --- | ---: | ---: | ---: |
 | Baseline, Slurm1532 | 6.366749 | 10 /10 | 1.818375e-7: all four fail |
 | Strict force owner, Slurm1533 | 8.002465 | 14 /14 | 1.651619e-9: all four pass |
+| Formatting-only requalification, Slurm1534 | 7.948143 | 14 /14 | 1.651475e-9: all four pass |
 
-Candidate maximum energy error is 1.045919e-11. All warm calls use one
+Maximum energy error is 1.045919e-11 before formatting and 1.318767e-11
+after formatting. All warm calls use one
 iteration/Fock; the original individual times, full arrays and work counters
 remain in the capsule. The stricter force owner costs four extra cold Focks.
 Do not present the failed baseline as an accepted performance population or
-these two diagnostic processes as an ABBA comparison.
+these diagnostic processes as an ABBA comparison. The unchanged baseline was
+not rerun; the formatted candidate is a separate source-bound population.
 
 `cohort.json` binds original per-file UTF-8 texts, native source and ELF hashes,
 source trees, scheduler assignments and the existing independent reference.
-`observations.json.xz` retains both complete endpoint populations, the executed
-oracle-isolated runner, native source patch, device/toolchain/cache receipts and
-the first candidate's missing-include compilation failure. The corrected
-candidate is a new source identity, not a discarded or relabelled sample.
+`receipts.json.xz` and `fp64.xz` use the existing exact-FP64 v3 codec, with both
+streams authenticated by `sha256.txt`. They retain all three complete endpoint
+populations, the executed oracle-isolated runner, both native source patches,
+device/toolchain/cache receipts and the missing-include compilation failure.
+Every original text and its checksum survives under `before-format/`; byte-exact
+decoding was verified during migration. No observation is discarded or relabelled.
+
+The final candidate has native source identity
+`99f7dfb96e87f420abfd75b230e8dc16f105336c868d821d8a91b01f86ab1d6a`
+and ELF SHA256 `2284e04f2e324089cf323eb2d19cad460d0bdd6ecdb58aa7e484f16456476070`.
+The earlier candidate's distinct identities remain in the cohort and original
+receipts. Formatting changed the native source identity, so the final image was
+rebuilt and independently rescored rather than borrowing the earlier image's pass.
 
 The first configuration failed because of a Ninja path; the first finite
 30-minute compilation expired. The resumed 90-minute build completed normally
 with verified sccache0.16.0, Release, SM120-real and fast compilation disabled.
 Both failures and full compiler output remain checksum-indexed in the ignored
-task receipt archive named by the cohort. No evidence budget is increased.
+task receipt archives named by the cohort; the original archive is unchanged.
+No evidence budget is increased.
 
 Replay requires no GPU, reference installation, network or `.git`:
 

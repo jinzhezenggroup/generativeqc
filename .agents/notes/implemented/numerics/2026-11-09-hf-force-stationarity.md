@@ -54,3 +54,20 @@ the corrected candidate's distinct source identity; host-only header controls
 are not sufficient validation of the CUDA translation unit. Full scheduled
 native compilation and all four independent endpoints pass after the include
 fix, without any numerical gate, public-control or evidence-budget change.
+
+The hosted formatter subsequently changed only whitespace in the CUDA host
+source, but that still changes its native source identity. Scheduled Slurm1534
+therefore rebuilds and requalifies the exact formatted source: all four endpoints
+pass, worst energy 1.318767e-11 and force 1.651475e-9, cold 7.948143 seconds with
+14 iterations/Focks and one iteration/Fock for every warm. The baseline is not
+rerun. Both successful candidates and every earlier original receipt remain
+byte-exact in the existing exact-FP64 v3 transport; neither a formatting claim
+nor a source hash substitutes for native-image qualification.
+
+Storage reuses the existing exact-FP64 codec and authenticates its stream
+manifest rather than duplicating the complete member index in the new cohort.
+All per-text checksums remain in the authenticated stream, including the entire
+earlier cohort and its member bindings. Lossless LZMA2 recompression of the
+existing shared HF streams saves 2,656 bytes; both decoded streams and all 459
+original texts compare identical before and after. This pays for the additional
+qualification without raising the evidence cap or dropping failed populations.

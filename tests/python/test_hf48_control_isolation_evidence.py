@@ -87,22 +87,24 @@ def test_strict_force_owner_retains_default_failure_and_independent_acceptance(
 ) -> None:
     summary = stationarity_reader["replay"]()
     assert not summary["arms"]["baseline"]["all_passed"]
-    assert summary["arms"]["candidate"]["all_passed"]
-    assert all(
-        sample["maximum_force"] < 1e-7 and sample["energy"] < 1e-8
-        for sample in summary["arms"]["candidate"]["samples"]
-    )
+    for arm in ("candidate-before-format", "candidate"):
+        assert summary["arms"][arm]["all_passed"]
+        assert all(
+            sample["maximum_force"] < 1e-7 and sample["energy"] < 1e-8
+            for sample in summary["arms"][arm]["samples"]
+        )
 
 
+@pytest.mark.parametrize("stream", ("receipts.json.xz", "fp64.xz", "sha256.txt"))
 def test_strict_force_capsule_corruption_fails_closed(
-    stationarity_reader: dict[str, Any], tmp_path: Path
+    stationarity_reader: dict[str, Any], tmp_path: Path, stream: str
 ) -> None:
     source = ROOT / "benchmarks/results/hf-force-stationarity-20261109"
     destination = tmp_path / source.name
     shutil.copytree(source, destination)
-    payload = destination / "observations.json.xz"
+    payload = destination / stream
     payload.write_bytes(payload.read_bytes() + b"altered")
-    with pytest.raises(ValueError, match="changed force capsule"):
+    with pytest.raises(ValueError, match="changed force capsule|" + stream):
         stationarity_reader["load"](destination)
 
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import lzma
 import math
 import runpy
 from pathlib import Path
@@ -21,18 +20,21 @@ def require(condition: bool, message: str) -> None:
 def load(directory: Path = ROOT) -> tuple[dict, dict[str, str]]:
     """Authenticate every complete original text before decoding measurements."""
     cohort = json.loads((directory / "cohort.json").read_text())
-    require(cohort["schema"] == "generativeqc.hf-force-stationarity.v1", "force schema")
-    payload = (directory / "observations.json.xz").read_bytes()
+    require(cohort["schema"] == "generativeqc.hf-force-stationarity.v2", "force schema")
+    payload = (directory / "sha256.txt").read_bytes()
     require(
-        hashlib.sha256(payload).hexdigest() == cohort["capsule_sha256"],
+        hashlib.sha256(payload).hexdigest() == cohort["stream_manifest_sha256"],
         "changed force capsule",
     )
-    files = json.loads(lzma.decompress(payload))
-    require(files.keys() == cohort["members"].keys(), "incomplete force evidence")
-    for name, text in files.items():
+    codec = runpy.run_path(str(ROOT.parent.parent / "_exact_fp64_evidence.py"))
+    _, files = codec["load"](directory)
+    require(len(files) == cohort["member_count"], "incomplete force evidence")
+    historical = json.loads(files["before-format/cohort.json"])
+    for name, digest in historical["members"].items():
         require(
-            hashlib.sha256(text.encode()).hexdigest() == cohort["members"][name],
-            "changed force evidence member: " + name,
+            hashlib.sha256(files["before-format/" + name].encode()).hexdigest()
+            == digest,
+            "changed historical force evidence member: " + name,
         )
     return cohort, files
 
@@ -87,7 +89,7 @@ def replay(directory: Path = ROOT) -> dict:
     require(reference["direct_scf"] is False, "reference is not full Fock")
     require(reference["actual_orbital_gradient_norm"] < 1e-10, "reference stationarity")
     summary = {"gates": cohort["gates"], "scope": cohort["scope"], "arms": {}}
-    for arm in ("baseline", "candidate"):
+    for arm in ("baseline", "candidate-before-format", "candidate"):
         record = json.loads(files[arm + ".json"])
         identity = cohort["arms"][arm]
         for name in ("source_identity", "library_sha256"):
@@ -136,7 +138,8 @@ def replay(directory: Path = ROOT) -> dict:
             "all_passed": all(result["passed"] for result in results),
         }
     require(not summary["arms"]["baseline"]["all_passed"], "lost failed baseline")
-    require(summary["arms"]["candidate"]["all_passed"], "candidate force gate")
+    for arm in ("candidate-before-format", "candidate"):
+        require(summary["arms"][arm]["all_passed"], arm + " force gate")
     return summary
 
 
