@@ -13,13 +13,13 @@
   "artifacts": [
     {
       "path": "observations.json.xz",
-      "sha256": "2217611d5b6daf5b8a472fd6f485832d11be21830a3c906f96e5a5106062ca68",
-      "bytes": 107408
+      "sha256": "b64afbcf0b738ddd62804ab1eea26f1d9f1a2a173f72e7898d9c37223a1464c2",
+      "bytes": 280
     },
     {
       "path": "receipts.json.xz",
-      "sha256": "429971249796612576bc5c10c774f3ac0b2915ef5f7a856fb9ac53daa1ab2abc",
-      "bytes": 97860
+      "sha256": "e6dce9b249d81e3952ad79a18051be3375dd4f4a085bd07bf9fe30b24740e388",
+      "bytes": 276
     },
     {
       "path": "experiment.patch.xz",

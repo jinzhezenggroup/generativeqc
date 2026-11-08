@@ -18,6 +18,7 @@ from statistics import median
 if not __debug__ or sys.flags.optimize:
     raise RuntimeError("Evidence validation requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE")
 
+from benchmarks._source_census_evidence import read_json_bytes
 from benchmarks.readme_defaults_qualification import _comparison, qualify
 from benchmarks.readme_defaults_report import load_records
 
@@ -46,7 +47,7 @@ def read(name: str) -> dict:
     """Read losslessly retained named receipts."""
     if name in {"stage2-moved", "default-moved", "stage2-pairs", "default-pairs", "stage2-matrix", "default-matrix"}:
         return json.loads(restored_population(name))
-    return json.loads(lzma.decompress((ROOT / (name + ".json.xz")).read_bytes()))
+    return json.loads(read_json_bytes(ROOT / (name + ".json.xz")))
 
 
 def timing(first: list[float], last: list[float]) -> dict:

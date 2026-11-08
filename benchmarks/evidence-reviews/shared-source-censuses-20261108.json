@@ -1,0 +1,33 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "shared-source-censuses-20261108",
+  "owner": "Shared offline source-census and exact historical evidence storage",
+  "reason": "Storage-only sharing of complete source path/hash maps across fifteen published-master evidence containers. Every original JSON byte, numeric/string token, failure, source identity and original XZ transport remains exactly recoverable offline. No numerical gate, budget, source reconstruction or scientific acceptance changes.",
+  "review_document": "benchmarks/results/shared-source-censuses-20261108/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/shared-source-censuses-20261108/source-maps.json.xz",
+      "bytes": 271596,
+      "sha256": "f423f44a0cdcb9d9082289d75ea704711f9f38b28541621f4136134f1620ca09",
+      "family": "shared-source-censuses-20261108",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact shared source-census maps"
+    },
+    {
+      "path": "benchmarks/results/shared-source-censuses-20261108/schedule-campaigns-20261023-24.json.xz",
+      "bytes": 959660,
+      "sha256": "7b2d0e83c00511a8c1116804f14b1413679422ab89fff86a65ea42d1e5023223",
+      "family": "shared-source-censuses-20261108",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete original campaign JSON fragments, including all numerical records and source bindings"
+    },
+    {
+      "path": "benchmarks/results/shared-source-censuses-20261108/r2scan3c-20261015.json.xz",
+      "bytes": 193024,
+      "sha256": "087acbd816542b0596c613962eef047e86576dcc0a0eaecaf85191e7030c471e",
+      "family": "shared-source-censuses-20261108",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete original campaign JSON fragments, including all numerical records and source bindings"
+    }
+  ]
+}
