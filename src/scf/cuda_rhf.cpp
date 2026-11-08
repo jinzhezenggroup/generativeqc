@@ -3812,7 +3812,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     return cuda_status(cudaPeekAtLastError());
   };
 
-  if (first_setup || phase_resident_active || !iteration_graphs.has_iteration()) {
+  const bool reference_startup_enabled = reference_startup.history_count != nullptr;
+  if (first_setup || phase_resident_active || !iteration_graphs.has_iteration() ||
+      plan.captured_reference_startup != reference_startup_enabled) {
     // The graph owner handles capture/instantiate/upload mechanics; this driver
     // supplies only the exact numerical launch order for each captured stage.
     const auto iteration_capture = iteration_graphs.capture_iteration(
@@ -3852,6 +3854,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         return outputs;
       }
     }
+    // Transient resident/screened graphs do not replace the persistent graph.
+    if (&iteration_graphs == &plan.graphs)
+      plan.captured_reference_startup = reference_startup_enabled;
     plan.initialized = true;
   }
   if (inactive_eigensolver_profiling) {

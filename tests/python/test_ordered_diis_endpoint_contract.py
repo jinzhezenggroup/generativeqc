@@ -354,3 +354,70 @@ int main() {
         ),
     )
     subprocess.run([str(executable)], check=True, timeout=30)
+
+
+def test_reference_startup_tracks_persistent_graph_owner(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Replay actual capture admission through cold/warm and transient-owner changes."""
+    driver = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
+    capture = _block(
+        driver,
+        "if (first_setup || phase_resident_active || !iteration_graphs.has_iteration()",
+    )
+    source = tmp_path / "startup.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <stdexcept>
+using generativeqc_status = int;
+constexpr int GENERATIVEQC_STATUS_SUCCESS = 0;
+struct Outcome { int cuda_error=0, body_status=0; bool ok() const { return true; } };
+struct Graph {
+ bool exists=false, startup=false;
+ bool has_iteration() const { return exists; }
+ template<class F> Outcome capture_iteration(int,int,bool,F action) { exists=true; action(); return {}; }
+ template<class F> Outcome capture_post_eigensolver(int,int,F action) { action(); return {}; }
+};
+struct Plan { Graph graphs; bool captured_reference_startup=false, initialized=false,
+ retry_without_matrix_context=false; };
+struct Resources { int device_id_=0,stream_=0; };
+struct Admission { bool requires_provider_context() const { return false; } };
+int cuda_status(int x) { return x; }
+void fill_global_failure(int&,int) { throw std::runtime_error("capture failed"); }
+int execute(Plan& plan, bool cold, bool transient, bool split_provider_iteration) {
+ Graph local;
+ auto& iteration_graphs = transient ? local : plan.graphs;
+ const bool reference_startup_enabled=cold, first_setup=!plan.initialized;
+ const bool phase_resident_active=transient, fock_only_iteration=false;
+ Resources resources; Admission matrix_admission;
+ int status=0,cuda_error=0,outputs=0,graph_eigensolver_family=0;
+ auto launch_iteration_pre_eigensolver=[](bool){return 0;};
+ auto launch_iteration_eigensolver=[](int){return 0;};
+ auto launch_iteration_post_eigensolver=[&](bool,bool) {
+   iteration_graphs.startup=reference_startup_enabled; return 0;
+ };
+"""
+        + capture
+        + r"""
+ assert(iteration_graphs.startup == cold);
+ return outputs;
+}
+int main() {
+ for (bool split : {false,true}) {
+  Plan plan;
+  execute(plan,true,false,split);
+  execute(plan,false,true,split);
+  execute(plan,false,false,split);
+  execute(plan,true,true,split);
+  execute(plan,true,false,split);
+  execute(plan,false,false,split);
+ }
+}
+"""
+    )
+    executable = tmp_path / "startup"
+    required_native_cxx.build_executable(
+        [source], executable, compile_args=("-std=c++20", "-O2")
+    )
+    subprocess.run([str(executable)], check=True, capture_output=True, timeout=10)
