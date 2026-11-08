@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from statistics import median
 
+from benchmarks._exact_fp64_evidence import load
+
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -113,12 +115,16 @@ def main() -> None:
     manifest = json.loads(
         (ROOT / "benchmarks/evidence-reviews" / (family + ".json")).read_text()
     )
-    relative = f"benchmarks/results/{family}/receipts.json.xz"
-    entries = [row for row in manifest["files"] if row["path"] == relative]
-    assert len(entries) == 1, "receipts.json.xz manifest entry"
-    archive = checked_file(relative, entries[0]["sha256"])
-    assert len(archive) == entries[0]["bytes"], "receipts.json.xz size"
-    bundle = json.loads(lzma.decompress(archive))
+    # The review inventory covers large files only. The exact-storage reader
+    # authenticates both streams and every reconstructed original receipt below.
+    for name in ("fp64.xz",):
+        relative = f"benchmarks/results/{family}/{name}"
+        entries = [row for row in manifest["files"] if row["path"] == relative]
+        assert len(entries) == 1, f"{name} manifest entry"
+        archive = checked_file(relative, entries[0]["sha256"])
+        assert len(archive) == entries[0]["bytes"], f"{name} size"
+    _, texts = load(Path(__file__).parent)
+    bundle = json.loads(texts["original-receipts.json"])
     oracle_bytes = checked_file(bundle["oracle_path"], bundle["oracle_sha256"])
     reuse_bytes = checked_file(bundle["reuse_path"], bundle["reuse_sha256"])
     prior = json.loads(
@@ -138,7 +144,9 @@ def main() -> None:
         assert hashlib.sha256(raw).hexdigest() == entry["sha256"], name
         record = records[name] = json.loads(raw)
         if entry.get("stage") == "final" and record["arm"] == "standard":
-            assert record["native_build"]["source_identity"] == bundle["source_identity"]
+            assert (
+                record["native_build"]["source_identity"] == bundle["source_identity"]
+            )
         if args.verify and "qualification" in entry:
             from benchmarks.readme_defaults_qualification import qualify
 

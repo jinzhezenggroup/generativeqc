@@ -1,0 +1,35 @@
+{
+  "scope": "CPU-only schema-v2 plan parity; not a new compiled image or GPU timing",
+  "before": "5424c9881bff2a5d0e5a085d789c8fcb60cf000b",
+  "upstream": "8b99838200d9a7113e2f4d50db75b9a79f3a6239",
+  "rows": [
+    {
+      "architecture": "sm_80",
+      "complete_resolved_dataclass_equal": true,
+      "profile": "portable_cuda",
+      "selection_count": 21,
+      "sha256": "05513735bc4bf94a7d8699b504e7fe7520d30ac149ebb3fde7aa1dbb5967ea7b"
+    },
+    {
+      "architecture": "sm_90",
+      "complete_resolved_dataclass_equal": true,
+      "profile": "portable_cuda",
+      "selection_count": 21,
+      "sha256": "f2c64222c8eeff78c7efd17eee26c5d5acd82f31363da2fb82a6cf9622c41ce9"
+    },
+    {
+      "architecture": "sm_100",
+      "complete_resolved_dataclass_equal": true,
+      "profile": "portable_cuda",
+      "selection_count": 21,
+      "sha256": "77daa429b33c5e9cfa17a48ee847b4621e22c2e14c78a70af7383ecd6a134da8"
+    },
+    {
+      "architecture": "sm_120",
+      "complete_resolved_dataclass_equal": true,
+      "profile": "sm_120",
+      "selection_count": 44,
+      "sha256": "6b3fa64abe25fc614cbd6234001c27d82696d28111cfeff203e988a984be1c3a"
+    }
+  ]
+}

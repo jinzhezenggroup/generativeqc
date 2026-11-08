@@ -29,7 +29,10 @@ from .production_selection import (
     _selection_integral,
     split_independent_consumers,
 )
-from .production_shared_rys_xy import shared_rys_xy_companions
+from .production_shared_rys_xy import (
+    shared_rys_xy_companions,
+    shared_rys_xy_streaming_companions,
+)
 from .shell_spec import ShellClassSpec, shell_pair_class
 from .signature import GeneratedKernelArgument, GeneratedKernelSignature
 
@@ -373,7 +376,10 @@ def _streaming_fock_internal_signature(
 
 
 def _streaming_fock_source(
-    selection: KernelSelection, *, include_work_buckets: bool = True
+    selection: KernelSelection,
+    *,
+    include_work_buckets: bool = True,
+    shared_rys_xy: bool = False,
 ) -> str:
     """Emit fixed-storage shell-pair enumeration for dominant Fock classes."""
 
@@ -432,6 +438,11 @@ def _streaming_fock_source(
         f" ? {coulomb_system_density_bound} : {system_density_bound}))"
     )
     prefix = f"generated_{spec.name}"
+    fock_task = (
+        f"{prefix}_shell_class_fock_shared_xy_task"
+        if shared_rys_xy
+        else f"{prefix}_shell_class_fock_task<Unrestricted>"
+    )
     supports_mixed_fock = selection.has_capability(CAPABILITY_MIXED_FOCK)
     internal_signature = _streaming_fock_internal_signature(selection)
     internal_parameters = internal_signature.parameter_list()
@@ -784,7 +795,7 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
     __syncthreads();
     if (stream_state == 2U) return;
     if (stream_state == 1U) {{
-      {prefix}_shell_class_fock_task<Unrestricted>(
+      {fock_task}(
           stream_task, primitive_pairs, primitive_pair_offsets,
           ao_coefficients, atom_positions, screening_tolerance,
           schwarz_bounds, density, fock, 0U);
@@ -861,7 +872,7 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
       __syncthreads();
       if (stream_state == 2U) break;
       if (stream_state == 1U) {{
-        {prefix}_shell_class_fock_task<Unrestricted>(
+        {fock_task}(
             stream_task, primitive_pairs, primitive_pair_offsets,
             ao_coefficients, atom_positions, screening_tolerance,
             schwarz_bounds, density, fock, 0U);
@@ -917,6 +928,7 @@ def _streaming_fock_launch_wrapper(
     symbol: str | None = None,
     *,
     work_aware: bool = False,
+    restricted_only: bool = False,
 ) -> str:
     """Emit the stable host wrapper adapting to a specialized internal ABI."""
 
@@ -925,6 +937,12 @@ def _streaming_fock_launch_wrapper(
     kernel_infix = "work_" if work_aware else ""
     internal_arguments = _streaming_fock_internal_signature(selection).argument_list(
         wrapper=True
+    )
+    guard = (
+        "if (unrestricted || mixed_precision_enabled || fock.correction != nullptr) "
+        "return cudaErrorNotSupported;\n  "
+        if restricted_only
+        else ""
     )
     return f"""
 extern "C" cudaError_t {symbol or f"generativeqc_launch_generated_{spec.name}_streaming_fock"}(
@@ -938,7 +956,7 @@ extern "C" cudaError_t {symbol or f"generativeqc_launch_generated_{spec.name}_st
     std::uint32_t* bra_head,
     unsigned long long* fp64_work_count,
     unsigned long long* fp32_work_count) {{
-  if (worker_blocks == 0U) return cudaSuccess;
+  {guard}if (worker_blocks == 0U) return cudaSuccess;
   const auto* topology = static_cast<
       const generativeqc::scf::detail::GeneratedShellPairStream*>(
           shell_pair_stream);
@@ -1412,3 +1430,62 @@ def emit_shared_rys_xy_fock_shard(
         )
     body.append("}  // namespace\n")
     return "".join(body)
+
+
+def emit_shared_rys_xy_streaming_fock_shard(
+    profile: ResolvedProductionProfile,
+    selections: Iterable[KernelSelection],
+) -> str:
+    """Package a separately qualified streaming owner and fail-closed preflight."""
+    names = {item.spec.name for item in selections}
+    identifier = (
+        _profile_identifier(profile.target.architecture) + "_shared_rys_xy_streaming"
+    )
+    result = []
+    for companion in shared_rys_xy_streaming_companions(profile):
+        item = companion.incumbent
+        if item.spec.name not in names:
+            continue
+        schedule = _streaming_fock_schedule(item)
+        if (
+            schedule.kind != ScheduleKind.COMPONENT_LANES
+            or schedule.block_threads != companion.plan.block_threads
+            or item.has_capability(CAPABILITY_MIXED_FOCK)
+        ):
+            raise ValueError(
+                "shared streaming requires the qualified strict component mapping"
+            )
+        source = emit_shell_class_fused_cuda(item.spec, companion.plan)
+        source += _streaming_fock_source(
+            item, include_work_buckets=False, shared_rys_xy=True
+        )
+        symbol = f"generativeqc_launch_{identifier}_generated_{item.spec.name}_fock"
+        wrapper = _streaming_fock_launch_wrapper(item, symbol, restricted_only=True)
+        kernel = f"generated_{item.spec.name}_shell_class_fock_rhf_streaming_kernel"
+        wrapper += f"""
+extern "C" bool {symbol}_available() {{
+  cudaFuncAttributes attributes{{}};
+  int blocks = 0;
+  if (cudaFuncGetAttributes(&attributes, {kernel}) != cudaSuccess ||
+      attributes.maxThreadsPerBlock < {companion.plan.block_threads} ||
+      cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+          &blocks, {kernel}, {companion.plan.block_threads}, 0) != cudaSuccess)
+    return false;
+  return blocks > 0;
+}}
+"""
+        result.append(
+            f"\nnamespace generativeqc::scf::generated::profile_{identifier} {{\n"
+        )
+        result.append(
+            _scope_profile_identifiers(
+                _strip_emitter_includes(source), item, identifier
+            )
+        )
+        result.append(
+            _scope_profile_identifiers(wrapper, item, identifier).replace(
+                _scope_profile_identifiers(symbol, item, identifier), symbol
+            )
+        )
+        result.append("}\n")
+    return "".join(result)
