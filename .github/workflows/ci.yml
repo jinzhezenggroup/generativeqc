@@ -97,17 +97,9 @@ jobs:
           cache-suffix: "cpu-compiler-seed-v1"
           prune-cache: true
       - name: Install ccache 4.14
-        run: |
-          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location --retry 3 \
-            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
-            --output "/tmp/${archive}" \
-            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
-          tar -xJf "/tmp/${archive}" -C /tmp
-          sudo install -m 0755 \
-            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
-            /usr/local/bin/ccache
-          ccache --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py ccache
       - name: Restore shared CPU ccache
         id: master_cpu_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -154,9 +146,12 @@ jobs:
               -DCMAKE_SHARED_LINKER_FLAGS="$link_flags"
             cmake --build build --parallel
           done
+      - name: Prepare Python 3.11 environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py python-venv
       - name: Prepare Python native cache seed
         run: |
-          uv venv --python 3.11
           uv pip install --python .venv/bin/python \
             numpy scipy scikit-build-core scipy-openblas32
           xtb_linalg="$(
@@ -279,17 +274,9 @@ jobs:
         run: python3 tools/generate_nvidia_host_api.py --check-usage
       - name: Install ccache 4.14
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        run: |
-          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location --retry 3 \
-            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
-            --output "/tmp/${archive}" \
-            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
-          tar -xJf "/tmp/${archive}" -C /tmp
-          sudo install -m 0755 \
-            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
-            /usr/local/bin/ccache
-          ccache --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py ccache
       - name: Restore shared Linux CPU ccache (CPU CTest)
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: cpu_ccache
@@ -320,10 +307,14 @@ jobs:
           python-version: "3.11"
           enable-cache: true
           cache-suffix: "cpu-cli-compiler-extension-v1"
+      - name: Prepare Python 3.11 environment
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py python-venv
       - name: Prepare CPU CLI compiler-extension interpreter
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
-          uv venv --python 3.11
           # The native CLI stays Python-free. Its explicit Hessian extension's
           # mandatory CTest oracle needs the declared CPU Python dependencies,
           # not a wheel rebuild, reference extras or NVIDIA runtime providers.
@@ -492,17 +483,9 @@ jobs:
           "$CUDACXX" --version
       - name: Install ccache 4.14
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        run: |
-          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location --retry 3 \
-            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
-            --output "/tmp/${archive}" \
-            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
-          tar -xJf "/tmp/${archive}" -C /tmp
-          sudo install -m 0755 \
-            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
-            /usr/local/bin/ccache
-          ccache --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py ccache
       # GitHub scopes actions/cache entries created by merge_group to the
       # temporary gh-readonly-queue ref, so they cannot seed later queue runs.
       # Publish a bounded snapshot from trusted master pushes and consume it
@@ -1025,17 +1008,9 @@ jobs:
           "$CUDACXX" --version
       - name: Install ccache 4.14
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        run: |
-          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location --retry 3 \
-            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
-            --output "/tmp/${archive}" \
-            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
-          tar -xJf "/tmp/${archive}" -C /tmp
-          sudo install -m 0755 \
-            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
-            /usr/local/bin/ccache
-          ccache --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py ccache
       - name: Install native CLI dependencies
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
@@ -1274,17 +1249,9 @@ jobs:
           "$CUDACXX" --version
       - name: Install ccache 4.14
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        run: |
-          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location --retry 3 \
-            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
-            --output "/tmp/${archive}" \
-            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
-          tar -xJf "/tmp/${archive}" -C /tmp
-          sudo install -m 0755 \
-            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
-            /usr/local/bin/ccache
-          ccache --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py ccache
       - name: Install native CLI dependencies
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
@@ -1432,17 +1399,9 @@ jobs:
           prune-cache: true
       - name: Install ccache 4.14
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        run: |
-          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location --retry 3 \
-            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
-            --output "/tmp/${archive}" \
-            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
-          tar -xJf "/tmp/${archive}" -C /tmp
-          sudo install -m 0755 \
-            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
-            /usr/local/bin/ccache
-          ccache --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py ccache
       - name: Restore shared Linux CPU ccache (Python native)
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: python_ccache
@@ -1462,10 +1421,14 @@ jobs:
       - name: Reset ccache statistics
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --zero-stats
+      - name: Prepare Python 3.11 environment
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py python-venv
       - name: Prepare CPU Python test environment
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
-          uv venv --python 3.11
           mapfile -t ci_requirements < <(
             .venv/bin/python - <<'PY_INNER'
           import tomllib
@@ -1815,16 +1778,9 @@ jobs:
           prune-cache: true
       - name: Install ccache 4.14
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
-        run: |
-          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location --retry 3 \
-            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
-            --output "/tmp/${archive}" \
-            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
-          tar -xJf "/tmp/${archive}" -C /tmp
-          sudo install -m 0755 \
-            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
-            /usr/local/bin/ccache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py ccache
       - name: Restore shared Linux CPU ccache (CodSpeed)
         id: benchmark_ccache
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
@@ -1861,10 +1817,14 @@ jobs:
       - name: Summarize compiler cache
         if: always() && env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: python3 tools/report_ci_ccache.py --label "CPU CodSpeed"
+      - name: Prepare Python 3.11 environment
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py python-venv
       - name: Install benchmark dependencies
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: |
-          uv venv --python 3.11
           uv pip install --python .venv/bin/python \
             numpy pytest pytest-codspeed==5.0.3
       - name: Qualify PR CodSpeed comparison
@@ -2179,16 +2139,9 @@ jobs:
       - name: Install ccache 4.14
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
-        run: |
-          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location --retry 3 \
-            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
-            --output "/tmp/${archive}" \
-            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
-          tar -xJf "/tmp/${archive}" -C /tmp
-          sudo install -m 0755 "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
-            /usr/local/bin/ccache
-          ccache --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py ccache
       - name: Test deterministic native CLI packager and static-force contracts
         if: steps.cli_scope.outputs.tier != 'skip'
         run: |

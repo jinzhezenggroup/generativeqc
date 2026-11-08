@@ -31,9 +31,12 @@ jobs:
           python-version: "3.11"
           enable-cache: true
           cache-dependency-glob: docs/requirements.txt
+      - name: Prepare Python 3.11 environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py python-venv
       - name: Install documentation dependencies
         run: |
-          uv venv --python 3.11
           uv pip install --python .venv/bin/python -r docs/requirements.txt
       - name: Test documentation helpers
         run: |
