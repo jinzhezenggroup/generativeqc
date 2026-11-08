@@ -1,0 +1,22 @@
+{
+  "family": "gga-indexed-gemm-20261108",
+  "original_text_count": 333,
+  "files": [
+    {
+      "path": "fp64.xz",
+      "previous_bytes": 229464,
+      "previous_sha256": "0da9b301ecbafd5c1b8f1cebe42ec8df433cab33c07e6cca7f9ba13643e8970a",
+      "bytes": 202424,
+      "sha256": "61ce9e954fe717e7bb2dbf6bf83740bbf19c339e41ff2e2a552e14c0f08a1353"
+    },
+    {
+      "path": "receipts.json.xz",
+      "previous_bytes": 141516,
+      "previous_sha256": "d1e1caf92ea03d1d78ec0d1838cd2c4b9f3cffb1fd21f202471d325ab6fed241",
+      "bytes": 126904,
+      "sha256": "726d0d6da0b794c2a7e63ca6f8b3390063cdd88592cc75a7251c471c3c7c53fd"
+    }
+  ],
+  "all_original_text_bytes_and_experiment_unchanged": true,
+  "saving_bytes": 41652
+}

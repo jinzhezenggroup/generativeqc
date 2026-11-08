@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <stdexcept>
 #include <string>
@@ -22,9 +23,33 @@ void require(bool condition, const char* message) {
 }
 
 void require_close(double actual, double expected, double tolerance, const char* message) {
-  if (std::abs(actual - expected) > tolerance) {
+  if (!std::isfinite(actual) || !std::isfinite(expected) ||
+      std::abs(actual - expected) > tolerance) {
     throw std::runtime_error(std::string(message) + ": actual=" + std::to_string(actual) +
                              " expected=" + std::to_string(expected));
+  }
+}
+
+void check_oracle_comparison_contract() {
+  require_close(1.0, 1.0, 0.0, "exact finite comparison failed");
+  require_close(1.25, 1.0, 0.5, "finite comparison inside tolerance failed");
+  require_close(1.5, 1.0, 0.5, "finite comparison at tolerance failed");
+  const auto rejects = [](double actual, double expected) {
+    bool rejected = false;
+    try {
+      require_close(actual, expected, 0.5, "invalid comparison");
+    } catch (const std::runtime_error&) {
+      rejected = true;
+    }
+    require(rejected, "oracle comparison accepted an invalid value");
+  };
+  rejects(2.0, 1.0);
+  for (const double nonfinite :
+       {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
+        -std::numeric_limits<double>::infinity()}) {
+    rejects(nonfinite, 1.0);
+    rejects(1.0, nonfinite);
+    rejects(nonfinite, nonfinite);
   }
 }
 
@@ -132,6 +157,7 @@ generativeqc::scf::detail::DirectQuartetTaskLayout direct_task_layout(
 
 int main() {
   try {
+    check_oracle_comparison_contract();
     // The generated value-only ERI route must agree with the independent
     // dynamic recurrence for every entry, including normalized contractions,
     // asymmetric geometry, spherical projection, and the derivative fallback.

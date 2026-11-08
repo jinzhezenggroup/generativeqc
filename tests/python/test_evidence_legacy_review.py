@@ -20,7 +20,7 @@ from tools.generativeqc_validation.retention_review import (
     expand_legacy_large_review,
     large_legacy_review_errors,
 )
-from tools.restore_retained_evidence import _records
+from tools.restore_retained_evidence import _manifest, _records
 
 RESULT_ROOT = "benchmarks/results/"
 REVIEW_PATH = "benchmarks/legacy-evidence-review.json"
@@ -164,7 +164,7 @@ def test_retention_488_snapshot_binds_removed_checkout_bytes() -> None:
     manifest = (
         REPOSITORY_ROOT / "benchmarks/results/retention-488/snapshot.manifest.json"
     )
-    audit = json.loads(manifest.read_text(encoding="utf-8"))
+    audit = _manifest(manifest)
     records = _records(manifest)
     assert audit["schema"] == "vibeqc.git-snapshot.v1"
     assert audit["history_rewritten"] is False

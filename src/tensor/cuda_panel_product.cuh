@@ -38,7 +38,8 @@ class CudaPanelProduct final : public PreparedPanelProduct {
                    std::array<runtime::NativeLoweringCandidate, N> offers, std::string_view target,
                    std::string_view compilation, std::size_t columns, std::size_t rows,
                    std::size_t batches, cudaStream_t stream, std::size_t budget,
-                   std::size_t incumbent, std::size_t alternative, bool physical)
+                   std::size_t incumbent, std::size_t alternative, bool physical,
+                   bool qualified_indexed_gemm = false)
       : columns_(columns), rows_(rows), batches_(batches) {
     static_assert(sizeof(CudaPanelProduct) + 3 * sizeof(offers) + 4096 <= host_reservation);
     if (!columns || !rows || !batches || incumbent >= N || alternative >= N)
@@ -54,6 +55,8 @@ class CudaPanelProduct final : public PreparedPanelProduct {
       throw std::invalid_argument("panel product preparation cannot capture");
     auto& offer = offers[alternative];
     bounded_columns_ = offer.algorithm == "bounded-matrix-panel-gemm";
+    if (qualified_indexed_gemm && !bounded_columns_)
+      throw std::invalid_argument("indexed GEMM qualification requires bounded columns");
     if ((!bounded_columns_ && offer.algorithm != "matrix-panel-gemm") ||
         offer.precision >= request.precisions.size() || request.inputs != 2 ||
         request.input_dtypes[0] != runtime::PrecisionDtype::Fp64 ||
@@ -78,10 +81,10 @@ class CudaPanelProduct final : public PreparedPanelProduct {
     }
     offer.provider_bytes = CudaContractionContext::kProviderAllowance;
     offer.cache_bytes = matrix_bytes;
-    bool qualified = false, available = true;
+    bool qualified = qualified_indexed_gemm, available = true;
 #if defined(GENERATIVEQC_TEST_HOOKS)
-    qualified =
-        bounded_columns_ ? panel_product_bounded_library_for_test : panel_product_library_for_test;
+    qualified = qualified || (bounded_columns_ ? panel_product_bounded_library_for_test
+                                               : panel_product_library_for_test);
     available = !panel_product_unavailable_for_test;
 #endif
     if (!physical)
@@ -118,6 +121,12 @@ class CudaPanelProduct final : public PreparedPanelProduct {
     try {
       if (!matrix_) context_.prepare_generated(stream);
       if (matrix_) {
+        // This owner executes only typed FP64 Dgemm. Default math admits FP64
+        // matrix units, never TF32 inputs; unrelated contraction handles keep
+        // their pedantic policy. Set it during preparation, outside capture.
+        if (qualified_indexed_gemm)
+          generativeqc_tensor::blas_check(
+              cublasSetMathMode(context_.handle(), CUBLAS_DEFAULT_MATH));
         std::snprintf(version_.data(), version_.size(), "%d", context_.provider_version());
         offer.provider_version = version_.data();
       }
@@ -139,6 +148,18 @@ class CudaPanelProduct final : public PreparedPanelProduct {
     }
   }
   ~CudaPanelProduct() override { release_matrix(); }
+  void release() override {
+    enabled_ = false;
+    std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+    runtime::CudaDeviceScope device_scope(context_.device(), generativeqc_tensor::cuda_check);
+    if (matrix_) {
+      generativeqc_tensor::cuda_check(cudaStreamSynchronize(context_.stream()));
+      generativeqc_tensor::cuda_check(runtime::resource_cuda_free(matrix_));
+      matrix_ = nullptr;
+    }
+    context_.release_locked();
+    generativeqc_tensor::cuda_check(device_scope.restore());
+  }
   bool enabled() const noexcept override { return enabled_; }
   double* materialized_matrices() const noexcept override { return matrix_; }
   const PanelProductDiagnostic& diagnostic() const noexcept override { return diagnostic_; }

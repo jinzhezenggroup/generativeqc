@@ -141,6 +141,27 @@ results remain separate rather than being relabelled as this candidate. This
 completes the original three-case acceptance boundary; it does not certify
 arbitrary other elements, bases or geometries.
 
+## Unrelated mainline integration boundary
+
+After the complete receipts above, master advances through `74d06855c`
+(DFT indexed-density contractions) and `674672269` (nonfinite independent
+integral-comparison rejection). The PR imports both without changing any
+conventional HF, integral, MP2, CCSD(T), response, method orchestration or public
+runtime Python source from measured production commit `d7231a911`.
+The changed `CudaPanelProduct` headers are consumed only by DFT sources;
+an include/use audit finds no conventional correlated consumer. The one changed
+compiler producer is DFT-specific as well. Exact Git comparisons of all other
+`src/`, `include/` and `python/` paths preserve the measured scientific closure.
+
+The only merge conflicts are the generated Libxc report and compressed snapshot.
+Regeneration changes only `source_identity` and `native_source_identity`;
+guards preserve every retained measurement, capability summary, acknowledgement
+and stale admission state. Source/ownership checks and CI qualify the combined
+tree separately. The complete endpoint times and numerical receipts above still
+belong to `d7231a911`/`ac41a8f7...`: do not relabel them as a newly built combined
+binary or as qualification of the unrelated DFT changes. No release, tag or
+external evidence publication is created for this integration.
+
 ## References
 
 - #3034 and PR #3046.

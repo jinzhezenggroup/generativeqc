@@ -27,6 +27,11 @@ class PreparedPanelProduct {
  public:
   static constexpr std::size_t host_reservation = 16U << 10;
   virtual ~PreparedPanelProduct() = default;
+  /** Retire optional resources after the owner drains dependent work and drops
+   * captured bindings. Execution is disabled before teardown. Failures keep
+   * the owner and original diagnostic charges available for a checked retry;
+   * destructor cleanup is reserved for abandoning the owner. */
+  virtual void release() = 0;
   virtual bool enabled() const noexcept = 0;
   virtual double* materialized_matrices() const noexcept = 0;
   /** Panels are row-major [rows, columns], shared by batches; outputs are
