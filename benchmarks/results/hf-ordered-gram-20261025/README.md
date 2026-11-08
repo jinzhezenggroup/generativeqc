@@ -71,3 +71,9 @@ producer identities; they share geometry, orbital basis and observable contract.
 `negative-trials.json.xz` keeps all four separate HF96 source-cache experiments:
 ordinary cold 19.318 s versus 97.316/64.554/83.060 s for three partial ERI masks.
 They are rejected experiments, not headline samples or new defaults.
+
+Endpoint and moved-geometry JSON now use the existing exact-FP64 v3 codec in
+`receipts.json.xz`, `fp64.xz` and `sha256.txt`. The reader reconstructs every
+original JSON text byte before parsing. Independent references, provenance,
+negative trials and all acceptance gates remain unchanged; no Git history,
+GPU execution or scientific recomputation is needed for replay.

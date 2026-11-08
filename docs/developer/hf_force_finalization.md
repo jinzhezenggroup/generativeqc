@@ -12,13 +12,15 @@ Direct RHF/UHF force solves require the maximum physical AO commutator
 |F P S - S P F|
 ```
 
-to satisfy the owner-qualified HF stationarity limit in addition to the energy
-and density-update criteria. All-electron restricted FP64 ordinary owners use
+to satisfy `min(1e-8, density_tolerance)` in addition to the energy and
+density-update criteria. Standard public controls do not relax the physical
+force criterion. All-electron restricted FP64 energy-only owners may still use
 `min(1e-5, density_tolerance)` when both public controls are Standard or looser
-(`energy_tolerance >= 1e-9`, `density_tolerance >= 1e-5`). Tighter requests and
-unqualified owners retain `min(1e-8, density_tolerance)`. Selecting incremental
-J/K does not change this limit. The maximum includes both UHF spin channels;
-UHF remains on the strict limit. Non-finite residuals cannot pass.
+(`energy_tolerance >= 1e-9`, `density_tolerance >= 1e-5`); tighter requests and
+unqualified owners retain the strict ceiling. Selecting incremental J/K does
+not change either limit. The maximum includes both UHF spin channels;
+non-finite residuals cannot pass. These physical norms are not themselves
+bounds on independent force errors, which require separate numerical gates.
 
 Additional SCF updates remain within the requested iteration limit and are
 included in the public iteration count. A mixed-precision coarse stage retains
@@ -71,6 +73,23 @@ and detached physical-reference execution retain their separate finalization
 contracts.
 
 ## Work and diagnostics
+
+The shared Rys x/y companion changes recurrence storage, not convergence or
+the force determinant. An internal automatic request requires a runtime-reported
+FP32:FP64 throughput ratio in `(0, 2]`, an available generated companion, and
+legal launch resources. Compute-capability numbers and product names do not
+select this default; unknown/reduced-rate FP64 retains the incumbent.
+`GENERATIVEQC_CUDA_HF_SHARED_RYS_XY=0` disables it; exact `1` requests it on
+available companions. Unset/empty selects the internal automatic policy, while
+invalid explicit values fail before graph preparation. Weighted Z remains a
+separate SM90-only control and requires both
+`GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z=1` and
+`GENERATIVEQC_CUDA_HF_SHARED_RYS_XY=1`; enabling weighted Z with XY unset or
+disabled is invalid. Existing restricted-FP64, generated capability,
+materialized-page, no-incremental/separate-JK, no-relevant-streaming,
+no-persistent-ERI and ordinary-output admission gates still apply. The plan
+freezes the request, admission and class mask; unsupported requests use the
+bounded incumbent before enqueue, never a retry after a candidate error.
 
 Eligible large cold restricted owners automatically use a bounded screened FP64
 proposal when `GENERATIVEQC_HF_COLD_SCREENING` is unset. Exact `1` also admits

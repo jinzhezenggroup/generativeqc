@@ -42,6 +42,9 @@ SOURCE_EXACT_ALLOWED = {
     "scf/cuda_rhf.cpp": (
         "scf/shared_rys_weighted_z.hpp",
         "scf/rhf_block_convergence_policy.hpp",
+        # Resolve immutable owner facts before sharing admission with both
+        # convergence consumers; this leaf exposes no solver/provider state.
+        "scf/convergence_limits.hpp",
     ),
     # Optional DIIS counters share CUDA-free size/enablement/readback metadata.
     # This header has no solver, provider or mutable device-owner dependency.

@@ -36,6 +36,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/aot_shell_registry.hpp"
 #include "scf/application_precision.hpp"
+#include "scf/convergence_limits.hpp"
 #include "scf/cuda/arena.hpp"
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/direct_angular_fock.hpp"
@@ -512,6 +513,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
+  // Generated capability registries read CUDA's current device. Re-select
+  // before admission on every execution, including interleaved cached owners.
+  cudaError_t cuda_error = options.reference_provider_initialization_owner &&
+                                   options.reference_provider_initialization_owner->identity_bound()
+                               ? cudaSuccess
+                               : cudaSetDevice(device_id);
+  if (cuda_error != cudaSuccess) {
+    fill_global_failure(outputs, cuda_status(cuda_error));
+    return outputs;
+  }
   plan.last_shell_class_profile.reset();
   plan.last_ppps_queue_profile.reset();
   plan.last_inactive_eigensolver_profile.reset();
@@ -774,13 +785,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       shared_rys_xy_request == cuda_policy::SharedRysXyRequest::WeightedZOn
           ? generated::enabled_shared_rys_weighted_z_fock_shell_class_mask()
           : generated::enabled_shared_rys_xy_fock_shell_class_mask();
+  // Availability comes from the selected generated inventory. Profitability
+  // uses runtime FP64 throughput and launch resources, never an SM whitelist.
   const auto requested_shared_rys_xy = cuda_policy::resolve_shared_rys_xy_policy(
       shared_rys_xy_request,
-      {unrestricted, requested_mixed_precision_fock,
-       direct_target.compute_capability_major == 9 && direct_target.compute_capability_minor == 0,
-       requested_quartet_direct, requested_incremental_direct_jk, separate_fock_jk,
+      {unrestricted, requested_mixed_precision_fock, requested_quartet_direct,
+       requested_incremental_direct_jk, separate_fock_jk,
        (requested_primary_streaming_fock_mask & shared_rys_xy_capabilities) != 0U,
-       requested_persistent_eri, options.export_physical_reference, shared_rys_xy_capabilities});
+       requested_persistent_eri, options.export_physical_reference, shared_rys_xy_capabilities},
+      direct_target);
   // A mixed item is promoted to exact FP64 by the target refinement before any
   // consumer runs, so the matrix it retains is target precision. The convergence
   // kernel keeps P_n paired with the F(P_n) that was just evaluated when an item
@@ -1260,14 +1273,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         reference_base_bytes, runtime::vector_bytes(plan.diis_work_readback),
         options.reference_memory_budget_bytes);
     resources.reference_peak_bytes_ = reference_base_bytes;
-  }
-  cudaError_t cuda_error = options.reference_provider_initialization_owner &&
-                                   options.reference_provider_initialization_owner->identity_bound()
-                               ? cudaSuccess
-                               : cudaSetDevice(device_id);
-  if (cuda_error != cudaSuccess) {
-    fill_global_failure(outputs, cuda_status(cuda_error));
-    return outputs;
   }
   if (quartet_direct || options.export_physical_reference) {
     // The default 1 KiB stack is insufficient for high-order recurrences.
@@ -3686,13 +3691,18 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // FP64 direct and DF share the physical pre-DIIS residual gate for both
   // energy and force endpoints. Coarse mixed stages still defer to refinement.
   const double* force_convergence_residual = residual;
-  const bool qualified_standard_owner =
-      !unrestricted && !mixed_precision_fock && !options.export_physical_reference &&
-      std::all_of(systems.begin(), systems.end(), [](const auto& system) {
-        return system.ecp_terms.empty() &&
-               std::none_of(system.atoms.begin(), system.atoms.end(),
-                            [](const auto& atom) { return atom.ecp_core != 0; });
-      });
+  const bool qualified_standard_owner = standard_hf_stationarity_owner({
+      !unrestricted,
+      !mixed_precision_fock,
+      std::all_of(systems.begin(), systems.end(),
+                  [](const auto& system) {
+                    return system.ecp_terms.empty() &&
+                           std::none_of(system.atoms.begin(), system.atoms.end(),
+                                        [](const auto& atom) { return atom.ecp_core != 0; });
+                  }),
+      options.compute_forces,
+      options.export_physical_reference,
+  });
   // Deltas retire per item after physical stationarity. Full-only energy
   // closure stays within the iteration budget and retains a usable current
   // full-density baseline, including warm solves that never needed a delta.

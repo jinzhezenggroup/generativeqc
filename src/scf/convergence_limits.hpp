@@ -10,6 +10,26 @@
 
 namespace generativeqc::scf {
 
+/** Owner facts for admitting the relaxed Standard energy-only residual gate. */
+struct HfStationarityContext {
+  bool restricted;
+  bool strict_fp64;
+  bool all_electron;
+  bool compute_forces;
+  bool physical_reference;
+};
+
+/** Force publication retains the historical strict physical residual ceiling.
+ * Loose public SCF controls alone do not establish derivative stationarity.
+ * This admission is shared by iteration and final-state consumers; its norm
+ * threshold is not itself a bound on independent force error.
+ */
+GENERATIVEQC_CONVERGENCE_HD constexpr bool standard_hf_stationarity_owner(
+    const HfStationarityContext& context) noexcept {
+  return context.restricted && context.strict_fp64 && context.all_electron &&
+         !context.compute_forces && !context.physical_reference;
+}
+
 /** Standard endpoint controls, qualified against independent E/F references.
  * These are solver tolerances, not bounds on basis, fitting or quadrature error.
  * Either tighter public control retains the historical strict physical gates.

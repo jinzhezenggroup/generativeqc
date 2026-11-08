@@ -114,21 +114,23 @@ int main() {
   assert(shared_rys_xy_requested()==R::Invalid); // before dormant shape admission
   setenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY","1",1);
   assert(shared_rys_xy_requested()==R::WeightedZOn);
-  SharedRysXyContext c{};c.sm90=c.quartet_direct=true;c.capability_mask=3;
-  const auto xy=resolve_shared_rys_xy_policy(R::On,c);
-  const auto weighted=resolve_shared_rys_xy_policy(R::WeightedZOn,c);
+  SharedRysXyContext c{};c.quartet_direct=true;c.capability_mask=3;
+  generativeqc::runtime::CudaTargetInfo target{};
+  target.warp_size=32;target.maximum_threads_per_block=1024;
+  target.maximum_threads_per_sm=2048;target.maximum_blocks_per_sm=32;
+  const auto xy=resolve_shared_rys_xy_policy(R::On,c,target);
+  const auto weighted=resolve_shared_rys_xy_policy(R::WeightedZOn,c,target);
   assert(xy.active() && weighted.active() && xy.class_mask==weighted.class_mask);
   assert(!xy.weighted_z() && weighted.weighted_z() && weighted.selects(1));
   assert(xy!=weighted && weighted!=xy); // opposite control cannot reuse plan/graph
-  assert(weighted==resolve_shared_rys_xy_policy(R::WeightedZOn,c));
+  assert(weighted==resolve_shared_rys_xy_policy(R::WeightedZOn,c,target));
   auto refuse=[&](SharedRysXyContext bad,A why) {
-    const auto p=resolve_shared_rys_xy_policy(R::WeightedZOn,bad);
+    const auto p=resolve_shared_rys_xy_policy(R::WeightedZOn,bad,target);
     assert(!p.active() && !p.selects(1) && p.class_mask==0 && p.admission==why);
   };
   auto bad=c;bad.capability_mask=0;refuse(bad,A::UnsupportedProfile);
   bad=c;bad.unrestricted=true;refuse(bad,A::Unrestricted);
   bad=c;bad.mixed_precision=true;refuse(bad,A::MixedPrecision);
-  bad=c;bad.sm90=false;refuse(bad,A::UnsupportedProfile);
   bad=c;bad.quartet_direct=false;refuse(bad,A::NonPaged);
   bad=c;bad.incremental_jk=true;refuse(bad,A::IncrementalJk);
   bad=c;bad.separate_jk=true;refuse(bad,A::SeparateJk);
