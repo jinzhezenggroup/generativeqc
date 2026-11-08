@@ -39,8 +39,10 @@ def prepare_dispatch_fixture(frozen: Path, output: Path) -> dict:
 #include "scf/aot_shell_registry.hpp"
 #include "scf/generated_shell_task.hpp"
 #include "scf/cuda/rhf_policy.hpp"
+#include "runtime/cuda_device_facts.hpp"
 #include <cuda_runtime.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <utility>
@@ -57,7 +59,10 @@ using SharedPpppShellTask = PrivateDpppShellTask;
     for metadata in receipt["cases"]:
         name = metadata["name"]
         shell_class = 12 if name == "dppp" else 5
-        runner = _case_runner(metadata)
+        runner = _case_runner(metadata).replace(
+            "cudaStream_t stream,bool graph) {",
+            "cudaStream_t stream,bool graph,const generativeqc::runtime::CudaTargetInfo& target) {",
+        )
         for mode, value in (("private", "0"), ("shared", "1")):
             start = runner.index(
                 f"    {mode}_{name}_shell_class_fock_rhf_persistent_kernel<<<"
@@ -66,12 +71,12 @@ using SharedPpppShellTask = PrivateDpppShellTask;
             replacement = f'''    using namespace generativeqc::scf;
     auto request = cuda_policy::parse_shared_rys_xy_request("{value}");
     cuda_policy::SharedRysXyContext context{{}};
-    context.profile_supported=context.quartet_direct=true;
+    context.quartet_direct=true;
     context.capability_mask=generated::enabled_shared_rys_xy_fock_shell_class_mask();
-    const auto frozen=cuda_policy::resolve_shared_rys_xy_policy(request,context);
+    const auto frozen=cuda_policy::resolve_shared_rys_xy_policy(request,context,target);
     assert(frozen.active()=={str(value == "1").lower()});
     auto changed=cuda_policy::resolve_shared_rys_xy_policy(
-        cuda_policy::parse_shared_rys_xy_request("{int(value) ^ 1}"),context);
+        cuda_policy::parse_shared_rys_xy_request("{int(value) ^ 1}"),context,target);
     assert(changed!=frozen); // a different choice cannot reuse this graph plan
     auto launch=frozen.active()?generated::launch_shell_class_shared_rys_xy_fock
                                :generated::launch_shell_class_fock;
@@ -83,6 +88,8 @@ using SharedPpppShellTask = PrivateDpppShellTask;
 int main() {
   int device=0,major=0,minor=0;
   CUDA(cudaGetDevice(&device));
+  generativeqc::runtime::CudaTargetInfo target{};char name[256]{};
+  CUDA(generativeqc::runtime::cuda_device_facts(device,target,name));
   CUDA(cudaDeviceGetAttribute(&major,cudaDevAttrComputeCapabilityMajor,device));
   CUDA(cudaDeviceGetAttribute(&minor,cudaDevAttrComputeCapabilityMinor,device));
   assert(major==9 && minor==0);
@@ -93,7 +100,8 @@ int main() {
   for(bool graph:{false,true}) {
 """)
     source.extend(
-        f"    run_{c['name']}_{c['variant']}(stream,graph);\n" for c in receipt["cases"]
+        f"    run_{c['name']}_{c['variant']}(stream,graph,target);\n"
+        for c in receipt["cases"]
     )
     source.append("""  }
   CUDA(cudaStreamDestroy(stream));

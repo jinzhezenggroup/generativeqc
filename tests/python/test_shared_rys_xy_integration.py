@@ -401,3 +401,123 @@ def test_cuda_only_exact_prepared_identity(monkeypatch: pytest.MonkeyPatch) -> N
         assert identity("cpu") == cpu
         seen.append(current)
     assert len({x.schedule for x in seen}) == 5
+
+
+@pytest.mark.parametrize("weighted", (False, True))
+def test_prepared_dispatch_fixture_compiles_against_native_contract(
+    tmp_path: Path, required_native_cxx: NativeCxx, weighted: bool
+) -> None:
+    """Compile complete generated drivers without a GPU or new oracle work.
+
+    Synthetic arrays exercise only driver/API integration. They are never run
+    or presented as numerical evidence. CUDA declarations are a host double;
+    all policy, registry, task and output contracts come from current headers.
+    """
+    import hashlib
+
+    from tools.generativeqc_validation import (
+        shared_rys_weighted_z_dispatch_fixture,
+        shared_rys_xy_dispatch_fixture,
+    )
+
+    frozen = tmp_path / "frozen"
+    frozen.mkdir()
+    cases = [
+        {
+            "name": name,
+            "variant": variant,
+            "n": 1,
+            "pair_count": 2,
+            "pair_split": 1,
+            "reversed_mask": 0,
+        }
+        for name in ("dppp", "pppp")
+        for variant in ("ordinary", "reversed", "displaced")
+    ]
+    arrays = "".join(
+        f"static const {ctype} {case['name']}_{case['variant']}_{field}[16]={{}};\n"
+        for case in cases
+        for field, ctype in (
+            ("pairs", "double"),
+            ("coefficients", "double"),
+            ("positions", "double"),
+            ("bounds", "double"),
+            ("density", "double"),
+            ("expected", "double"),
+            ("ao_offsets", "std::uint64_t"),
+            ("atoms", "std::uint32_t"),
+            ("primitive_counts", "std::uint64_t"),
+        )
+    )
+    (frozen / "shared_rys_xy_fixture.cu").write_text(arrays)
+    (frozen / "receipt.json").write_text(
+        json.dumps(
+            {
+                "source_sha256": hashlib.sha256(arrays.encode()).hexdigest(),
+                "cases": cases,
+                "masks": ["full", "partial", "one", "two", "zero"],
+                "task_mask_sequence": [0, 4, 1, 2, 3, 0, 4],
+                "fock_tolerances": {"atol": 2e-11, "rtol": 2e-10},
+            }
+        )
+    )
+    driver = (
+        shared_rys_weighted_z_dispatch_fixture
+        if weighted
+        else shared_rys_xy_dispatch_fixture
+    )
+    output = tmp_path / "prepared"
+    driver.prepare_dispatch_fixture(frozen, output)
+    cuda = tmp_path / "cuda_runtime_api.h"
+    cuda.write_text(r"""
+#pragma once
+#include <cstddef>
+using cudaError_t=int;
+using cudaStream_t=void*;
+using cudaGraph_t=void*;
+using cudaGraphExec_t=void*;
+constexpr int cudaSuccess=0, cudaMemcpyHostToDevice=1, cudaMemcpyDeviceToHost=2;
+constexpr int cudaStreamCaptureModeThreadLocal=0;
+constexpr int cudaDevAttrComputeCapabilityMajor=0, cudaDevAttrComputeCapabilityMinor=1;
+struct cudaFuncAttributes {
+  int numRegs{},maxThreadsPerBlock{};
+  std::size_t localSizeBytes{},sharedSizeBytes{};
+};
+const char* cudaGetErrorString(cudaError_t);
+template<class T> cudaError_t cudaMalloc(T**,std::size_t);
+cudaError_t cudaMemcpy(void*,const void*,std::size_t,int);
+cudaError_t cudaMemsetAsync(void*,int,std::size_t,cudaStream_t);
+cudaError_t cudaPeekAtLastError();
+cudaError_t cudaStreamBeginCapture(cudaStream_t,int);
+cudaError_t cudaStreamEndCapture(cudaStream_t,cudaGraph_t*);
+cudaError_t cudaGraphInstantiate(cudaGraphExec_t*,cudaGraph_t,void*,void*,unsigned long long);
+cudaError_t cudaGraphLaunch(cudaGraphExec_t,cudaStream_t);
+cudaError_t cudaStreamSynchronize(cudaStream_t);
+cudaError_t cudaGraphExecDestroy(cudaGraphExec_t);
+cudaError_t cudaGraphDestroy(cudaGraph_t);
+cudaError_t cudaStreamCreate(cudaStream_t*);
+cudaError_t cudaStreamDestroy(cudaStream_t);
+cudaError_t cudaFree(void*);
+cudaError_t cudaGetDevice(int*);
+cudaError_t cudaDeviceGetAttribute(int*,int,int);
+template<class T> cudaError_t cudaFuncGetAttributes(cudaFuncAttributes*,T);
+template<class T> cudaError_t cudaOccupancyMaxActiveBlocksPerMultiprocessor(int*,T,int,std::size_t);
+""")
+    (tmp_path / "cuda_runtime.h").write_text('#include "cuda_runtime_api.h"\n')
+    source = next(output.glob("*.cu"))
+    required_native_cxx.compile_object(
+        source,
+        tmp_path / "driver.o",
+        args=(
+            "-std=c++20",
+            "-x",
+            "c++",
+            "-UNDEBUG",
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(ROOT / "src"),
+            "-I",
+            str(ROOT / "include"),
+        ),
+    )
