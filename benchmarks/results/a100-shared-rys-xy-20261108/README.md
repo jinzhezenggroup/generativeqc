@@ -37,7 +37,15 @@ small-mask private fallback, output scatter and all ownership/resource refusals
 remain. Weighted Z stays SM90-only. No GPU product-name check, CPU seed,
 reference density or oracle import enters timed native production.
 
-Master `74d06855c` is integrated as `76343fcc4`. Final source identity is
+The measured commit is `62d9f2da7`, with master `74d06855c` integrated as
+`76343fcc4`. "Final" in this capsule names that frozen cohort, not a later PR
+head. Master subsequently advanced to `b29247c60` and was integrated as
+`ac7915d27`; that post-measurement HF/reference change has host integration
+checks but **no new source-bound GPU qualification** here. Its results must
+not be relabeled as this cohort, and the current head needs fresh qualification
+before promotion in addition to resolving the retained HF48 blocker.
+
+Measured final source identity is
 `33db42ef97a4ce677b614a0900e18ba395c5837b7021c47df7f1e4ca1664d817`,
 ELF `60f40b1565c6147fec5cce0bcc77f16338a41eadcc436d8c8f675d08d1871c17`.
 Slurm build16816 succeeds with the verified compiler cache; final actual5090

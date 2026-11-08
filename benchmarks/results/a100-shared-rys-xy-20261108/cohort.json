@@ -5,6 +5,14 @@
   "library_sha256": "60f40b1565c6147fec5cce0bcc77f16338a41eadcc436d8c8f675d08d1871c17",
   "parent_commit": "76343fcc4a9a0fb71aefaf9ae0438d9f51ed8a97",
   "master_commit": "74d06855c4c26f7367ab11f8b56cd939a1070394",
+  "measured_commit": "62d9f2da722841d6952fa1fe6eb83b6cbe1e8683",
+  "post_measurement_master_sync": {
+    "master_commit": "b29247c60d3da50f7c94fe72e143db8fd636d881",
+    "merge_commit": "ac7915d27e7fcb3195f45fc44f5870507d8ea30a",
+    "gpu_qualified": false,
+    "host_tests_passed": 61,
+    "qualification_boundary": "No timing or oracle observation in this capsule is relabeled as the later merged image. Current-head GPU qualification remains required before promotion."
+  },
   "capsule_sha256": "6b7fce973022f8b4daa4b9a42ea2b42b7b8790ce8595394c816e9645d16bd315",
   "retained_text_files": 198,
   "reference_files": {

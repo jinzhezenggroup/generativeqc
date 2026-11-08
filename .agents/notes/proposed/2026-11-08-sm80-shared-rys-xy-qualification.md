@@ -132,6 +132,14 @@ zero errors. All adaptive-delta work and the original checkout remain untouched.
 
 ## Rejected alternatives and next decision
 
+After measurement commit`62d9f2da7`, master advanced to`b29247c60` with HF
+physical-reference/startup and correlated-response changes. Merge`ac7915d27`
+integrates it. The original adaptive HF delta is restored with all33 changed
+lines identical and the other12 paths byte-identical. This is a host integration,
+not a new GPU image: retain the33db/60f4 measurement labels and qualify the
+new head separately before promotion. Do not repeatedly measure a new head while
+the already proven independent default HF48 blocker remains unresolved.
+
 The tested combined-J/K output-lane gather is slower on both cards. Do not
 expand it, repeat its census, or infer that every possible gather is hopeless.
 Cooperative-roots and earlier adaptive work remain separate rejected/unqualified
