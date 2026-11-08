@@ -475,22 +475,6 @@ void compute_shell_pair(const BasisPlan& basis, std::size_t bra_shell, std::size
 
 }  // namespace
 
-#if !defined(GENERATIVEQC_XTB_INTEGRALS_KERNEL_VARIANT)
-
-generativeqc_xtb_status_t validate_integral_plan(const BasisPlan& basis, const IntegralPlan& plan,
-                                                 std::string& error) {
-  return validate_plan(basis, plan, error);
-}
-
-void compute_shell_pair_cpu(const BasisPlan& basis, std::size_t bra_shell, std::size_t ket_shell,
-                            const double vector[3], double integral_cutoff, bool with_gradient,
-                            bool with_multipoles, IntegralWorkspace& workspace) {
-  compute_shell_pair<>(basis, bra_shell, ket_shell, vector, integral_cutoff, with_gradient,
-                       with_multipoles, workspace);
-}
-
-#endif
-
 #if defined(_MSC_VER)
 #define GENERATIVEQC_XTB_INTEGRALS_NOINLINE __declspec(noinline)
 #elif defined(__GNUC__) || defined(__clang__)

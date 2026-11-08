@@ -286,16 +286,4 @@ inline DfResolvedBudget resolve_df_subbudget(DfBudgetWorkload workload,
   return result;
 }
 
-/** Compatibility helpers for explicit-only callers. Zero no longer means a
- * hidden implementation default; production resolves zero with workload and
- * resource information through resolve_df_budget. */
-inline std::size_t df_value_budget(std::size_t requested, bool forces) noexcept {
-  if (!requested || !forces) return requested;
-  return resolve_df_budget({1, 1, 1, 1, 0, true}, {}, requested).value_bytes;
-}
-inline std::size_t df_force_budget(std::size_t requested) noexcept {
-  if (!requested) return 0U;
-  return resolve_df_budget({1, 1, 1, 1, 0, true}, {}, requested).response_bytes;
-}
-
 }  // namespace generativeqc::scf

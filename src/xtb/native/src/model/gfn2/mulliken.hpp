@@ -159,8 +159,8 @@ struct MullikenHamiltonianView {
 };
 
 /*
- * Caller-owned unpublished output storage used for whole-batch failure
- * atomicity. population evaluation requires population_scratch_elements;
+ * Caller-owned unpublished output storage used for per-system failure
+ * atomicity. Population evaluation requires population_scratch_elements;
  * Hamiltonian assembly requires hamiltonian_scratch_elements. Counts are
  * doubles, not bytes, and the same allocation may be reused sequentially.
  * Every active numerical range must be disjoint from all other active ranges,
@@ -186,7 +186,10 @@ generativeqc_xtb_status_t make_mulliken_plan(const BasisPlan& basis, const Integ
 
 /*
  * Compute q = n0 - P:S and atomic d/Q = -P:D/Q for exactly one ragged batch
- * member. The density and population pointers retain the full batch layout,
+ * member. The ket AO determines the owning shell and atom. For two spin
+ * channels, alpha/beta contractions become charge and magnetization, with
+ * magnetization N_beta-N_alpha.
+ * The density and population pointers retain the full batch layout,
  * but only the selected system's density slice is read and only its
  * population slices are written. This lets an SCC worker publish a successful
  * member while peers may fail independently.
@@ -201,19 +204,6 @@ generativeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
     const MullikenDensityView& density, const MullikenPopulationView& population,
     std::int64_t system, const MullikenWorkspace& workspace, std::string& error,
     const generativeqc::runtime::ChunkExecutor* parallel = nullptr);
-
-/*
- * Compute q = n0 - P:S and atomic d/Q = -P:D/Q. The ket AO determines the
- * owning shell and atom. For two spin channels, alpha/beta contractions are
- * converted to charge and magnetization, with magnetization N_beta-N_alpha.
- * All outputs are overwritten atomically; successful calls allocate nothing.
- */
-generativeqc_xtb_status_t evaluate_mulliken_population_cpu(const MullikenPlan& plan,
-                                                  const MullikenIntegralView& integrals,
-                                                  const MullikenDensityView& density,
-                                                  const MullikenPopulationView& population,
-                                                  const MullikenWorkspace& workspace,
-                                                  std::string& error);
 
 /*
  * Accumulate the scalar, dipole, and quadrupole SCC potential shifts of
@@ -240,24 +230,6 @@ generativeqc_xtb_status_t add_mulliken_hamiltonian_system_cpu(
     const MullikenPotentialView& potential, const MullikenHamiltonianView& hamiltonian,
     std::int64_t system, const MullikenWorkspace& workspace, std::string& error,
     const generativeqc::runtime::ChunkExecutor* parallel = nullptr);
-
-/*
- * Accumulate scalar, dipole, and quadrupole SCC potential shifts into H:
- *
- *   dH_mn = -S_mn (u_m + u_n)/2
- *            -D_mn(A_n):v_D(A_n)/2 - D_nm(A_m):v_D(A_m)/2
- *            -Q_mn(A_n):v_Q(A_n)/2 - Q_nm(A_m):v_Q(A_m)/2.
- *
- * Q uses the packed dual contraction with no extra factor for off-diagonal
- * components. Charge/magnetization potentials are converted to alpha/beta
- * before assembly. H is unchanged on any failure.
- */
-generativeqc_xtb_status_t add_mulliken_hamiltonian_cpu(const MullikenPlan& plan,
-                                              const MullikenIntegralView& integrals,
-                                              const MullikenPotentialView& potential,
-                                              const MullikenHamiltonianView& hamiltonian,
-                                              const MullikenWorkspace& workspace,
-                                              std::string& error);
 
 }  // namespace generativeqc::xtb::detail::gfn2
 
