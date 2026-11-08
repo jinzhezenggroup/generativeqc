@@ -22,7 +22,7 @@ namespace generativeqc::mp2::detail {
  * allocation failure retains compact occupied-slot staging. Explicit compact
  * and staged layouts exercise the two unsymmetrized validation fallbacks.
  */
-enum class FactorizedFirstLayout { automatic, compact, staged };
+enum class FactorizedFirstLayout { automatic, staged, compact };
 
 using OneElectronDerivativeContract =
     std::function<std::vector<double>(std::span<const double>, std::span<const double>)>;
