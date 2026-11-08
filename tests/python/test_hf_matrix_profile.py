@@ -297,6 +297,7 @@ def test_reload_identity_domain_and_first_use_cost(
 
 
 @pytest.mark.parametrize("library", [False, True])
+@pytest.mark.parametrize("dimension", [1, 7, 17, 32])
 @pytest.mark.parametrize("systems,spins", [(1, 1), (3, 2)])
 @pytest.mark.parametrize(
     "left_spin,right_spin,transpose", itertools.product((False, True), repeat=3)
@@ -305,16 +306,18 @@ def test_profile_selected_prepared_adapter_matches_numpy(
     consumer: ctypes.CDLL,
     tmp_path: Path,
     library: bool,
+    dimension: int,
     systems: int,
     spins: int,
     left_spin: bool,
     right_spin: bool,
     transpose: bool,
 ) -> None:
-    dimension = 7
     path = tmp_path / "profile"
     path.write_text(payload(library=library), encoding="utf-8")
-    assert prepare(consumer, path, systems=systems, spins=spins)[2] == int(library)
+    assert prepare(consumer, path, dimension=dimension, systems=systems, spins=spins)[
+        2
+    ] == int(library)
     # A file edit cannot mutate an already prepared immutable operation binding.
     path.write_text(payload(library=not library), encoding="utf-8")
     rng = np.random.default_rng(597)

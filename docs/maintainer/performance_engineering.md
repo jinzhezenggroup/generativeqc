@@ -19,6 +19,10 @@ Resource-only small-HF queries remain device-inert and use the unknown-target
 fallback; their admitted route agrees with their arena's resident-ERI storage.
 They refuse their native-only bound when `GENERATIVEQC_HF_MATRIX_PROFILE` names
 a profile, without reading that file or querying a device/provider.
+Python resource and restart identities preserve the selected profile path without
+reading it during dry runs; native preparation validates the contents and retains
+the admitted record in capture identity. Historical checkpoints missing this
+control remain eligible for explicit warm import, not an exact restart.
 
 `DirectPersistentScheduleProfile` owns the persistent force/Fock angular-order
 domains emitted with the compiler's resident schedule header. Allocation, queue
