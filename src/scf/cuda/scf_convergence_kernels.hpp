@@ -7,6 +7,19 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+/** Cold restricted-reference safeguard. Both pointers borrow existing DIIS
+ * counters; null leaves ordinary, fitted and warm solves unchanged. Large
+ * initial proposals are mixed convexly and their DIIS history is retired.
+ * Acceptance and reported density RMS always use the undamped proposal. */
+struct ReferenceStartup {
+  std::uint32_t* history_count{};
+  std::uint32_t* history_head{};
+};
+
+/** Reduce the last evaluated FDS-SDF without allocating a host matrix on failure. */
+void launch_physical_residual_rms(cudaStream_t stream, std::size_t size, const double* residual,
+                                  double* result);
+
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_compute_energy_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                   cudaStream_t stream, std::int32_t batch_size, std::int32_t nbf,
@@ -41,7 +54,8 @@ void launch_update_convergence_kernel(
     const double* physical_residual = nullptr,
     const std::uint32_t* approximate_item_census = nullptr, bool qualified_owner = false,
     std::uint32_t* incremental_delta_updates = nullptr,
-    const unsigned long long* incremental_delta_build_count = nullptr);
+    const unsigned long long* incremental_delta_build_count = nullptr,
+    ReferenceStartup reference_startup = {});
 
 /** UHF counterpart; the physical maximum covers both spin channels. */
 void launch_update_uhf_convergence_kernel(

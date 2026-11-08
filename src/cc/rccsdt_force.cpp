@@ -6,10 +6,12 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -874,9 +876,22 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   const response::LinearResponseProblem response_problem(
       dimension, apply, response::LinearResponseSymmetry::Symmetric);
   const auto z_plan = response::prepare_response(response_problem, z_options);
-  auto z = response::solve_response(z_plan, response_problem, correlation.orbital_rhs);
-  if (!z.converged())
-    throw std::runtime_error("RCCSD(T) physical orbital response did not converge");
+  // The checked positive-definite physical Hessian supplies its own diagonal.
+  // Reuse dead matrix-construction scratch; right preconditioning changes only
+  // the Krylov coordinates, never the physical action or acceptance residual.
+  for (std::size_t index = 0; index < dimension; ++index)
+    basis[index] = response_matrix[index * dimension + index];
+  auto z = response::solve_response(z_plan, response_problem, correlation.orbital_rhs, {}, basis);
+  if (!z.converged()) {
+    std::ostringstream detail;
+    detail << std::setprecision(17)
+           << "RCCSD(T) physical orbital response did not converge; stopping_reason="
+           << response::gmres_status_name(z.status) << "; iterations=" << z.iterations
+           << "; restarts=" << z.restarts << "; residual_norm=" << z.residual_norm
+           << "; relative_residual=" << z.relative_residual
+           << "; absolute_tolerance=" << z_options.absolute_tolerance;
+    throw std::runtime_error(detail.str());
+  }
   std::vector<double> independent(dimension, 0.0);
   for (std::size_t row = 0; row < dimension; ++row) {
     for (std::size_t column = 0; column < dimension; ++column)
