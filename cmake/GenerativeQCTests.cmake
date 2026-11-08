@@ -524,9 +524,11 @@ macro(generativeqc_add_native_tests)
     set_target_properties(generativeqc_xc_point_cuda_tests PROPERTIES CUDA_STANDARD 20)
 
     # The resident-grid regression and XC borrowed-grid validation use the
-    # CUDA quadrature owner; the host grid objects do not define those symbols.
+    # CUDA quadrature owner; generated XC also borrows runtime facts and tracing.
     add_executable(generativeqc_dft_cuda_tests tests/native/test_dft_cuda.cu
-      src/dft/cuda_xc.cpp src/dft/cuda_quadrature.cu "${GENERATIVEQC_GRID_SOURCE}"
+      src/dft/cuda_xc.cpp src/dft/cuda_quadrature.cu src/runtime/cuda_device_facts.cpp
+      src/runtime/cuda_component_trace.cpp
+      "${GENERATIVEQC_GRID_SOURCE}"
       $<TARGET_OBJECTS:generativeqc_libxc_semilocal_cuda>
       $<TARGET_OBJECTS:generativeqc_dft_grid_test_objects>
       $<TARGET_OBJECTS:generativeqc_dft_xc_test_objects>)
@@ -535,7 +537,7 @@ macro(generativeqc_add_native_tests)
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}"
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft" "${CMAKE_CURRENT_BINARY_DIR}/generated")
-    target_link_libraries(generativeqc_dft_cuda_tests PRIVATE CUDA::cudart CUDA::cublas)
+    target_link_libraries(generativeqc_dft_cuda_tests PRIVATE CUDA::cudart CUDA::cublas ${CMAKE_DL_LIBS})
     set_target_properties(generativeqc_dft_cuda_tests PROPERTIES CUDA_STANDARD 20)
     add_test(NAME generativeqc_dft_cuda_tests COMMAND generativeqc_dft_cuda_tests)
     add_test(NAME generativeqc_dft_cuda_mixed_matrix_tests COMMAND generativeqc_dft_cuda_tests --mixed-matrix-contractions)

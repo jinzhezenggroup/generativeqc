@@ -37,6 +37,7 @@ from generativeqc_compiler.common.specialization import (
 
 from .xc_bilinear import density_summand
 from .xc_density_provider import emit_density_provider
+from .xc_lowering_profile import emit_indexed_fp64_profile
 
 QUALIFICATION = "dft.cuda.auto/density-contraction-v1"
 
@@ -130,7 +131,12 @@ def density_portfolio(
         TargetInfo("cuda", "current-aot-module", 32, 1024, None)
     )
     source_identity = canonical_hash(
-        {"source": source, "tile": tile, "materializer": emit_density_provider()}
+        {
+            "source": source,
+            "tile": tile,
+            "materializer": emit_density_provider(),
+            "profile": emit_indexed_fp64_profile(),
+        }
     )
     compiler = CompilationIdentity(science, source_identity)
     provider = ProviderDescriptor(

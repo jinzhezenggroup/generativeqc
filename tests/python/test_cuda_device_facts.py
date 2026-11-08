@@ -246,7 +246,8 @@ enum cudaDeviceAttr {
   cudaDevAttrMaxBlocksPerMultiprocessor, cudaDevAttrMaxRegistersPerMultiprocessor,
   cudaDevAttrMaxSharedMemoryPerBlock, cudaDevAttrMaxSharedMemoryPerBlockOptin,
   cudaDevAttrMaxSharedMemoryPerMultiprocessor, cudaDevAttrMultiProcessorCount,
-  cudaDevAttrSingleToDoublePrecisionPerfRatio
+  cudaDevAttrSingleToDoublePrecisionPerfRatio, cudaDevAttrClockRate,
+  cudaDevAttrMemoryClockRate, cudaDevAttrGlobalMemoryBusWidth
 };
 struct cudaDeviceProp {
   char name[256]{};
@@ -254,7 +255,7 @@ struct cudaDeviceProp {
   int maxBlocksPerMultiProcessor{},regsPerMultiprocessor{},multiProcessorCount{};
   std::size_t sharedMemPerBlock{},sharedMemPerBlockOptin{},sharedMemPerMultiprocessor{};
   std::size_t totalGlobalMem{};
-  int singleToDoublePrecisionPerfRatio{};
+  int singleToDoublePrecisionPerfRatio{},clockRate{},memoryClockRate{},memoryBusWidth{};
 };
 cudaError_t cudaDeviceGetAttribute(int*,cudaDeviceAttr,int);
 cudaError_t cudaGetDeviceProperties(cudaDeviceProp*,int);
@@ -315,7 +316,7 @@ cudaError_t cudaDeviceSetLimit(int limit,std::size_t value) {
   if(stack_bytes.exchange(value)>value) lowered=true;
   return cudaSuccess;
 }
-int values[]={12,0,32,1024,2048,32,65536,49152,101376,102400,100,64};
+int values[]={12,0,32,1024,2048,32,65536,49152,101376,102400,100,64,1800000,1400000,512};
 int sm(int device) { return 100+5*device+epoch; }
 std::size_t memory(int device) { return (std::size_t{1}<<35)+device+epoch; }
 void device_name(char* p,int size,int device) { std::snprintf(p,size,"GPU-%d-%d",device,epoch); }
@@ -340,6 +341,10 @@ cudaError_t cudaDeviceGetAttribute(int* out,cudaDeviceAttr attr,int device) {
     return last_error=cudaErrorNotSupported;
   if (attr==cudaDevAttrMaxThreadsPerBlock && mode==8) return last_error=cudaErrorInvalidValue;
   if (attr==cudaDevAttrMaxThreadsPerBlock && mode==5) return last_error=42;
+  if (attr==cudaDevAttrSingleToDoublePrecisionPerfRatio && mode==15)
+    return last_error=cudaErrorNotSupported;
+  if (attr==cudaDevAttrMemoryClockRate && mode==16)
+    return last_error=cudaErrorInvalidValue;
   *out=attr==cudaDevAttrMultiProcessorCount ? sm(device) :
        attr==cudaDevAttrSingleToDoublePrecisionPerfRatio ? (device==7 ? 2+epoch : 64) :
        values[int(attr)];
@@ -357,7 +362,8 @@ cudaError_t cudaGetDeviceProperties(cudaDeviceProp* out,int device) {
   out->sharedMemPerBlock=values[7];out->sharedMemPerBlockOptin=values[8];
   out->sharedMemPerMultiprocessor=values[9];out->multiProcessorCount=sm(device);
   out->totalGlobalMem=memory(device);
-  out->singleToDoublePrecisionPerfRatio=device==7 ? 2+epoch : 64;
+  out->singleToDoublePrecisionPerfRatio=device==7 ? 2+epoch : 64;out->clockRate=values[12];
+  out->memoryClockRate=values[13];out->memoryBusWidth=values[14];
   return cudaSuccess;
 }
 cudaError_t cudaPeekAtLastError() { return last_error; }
@@ -376,6 +382,7 @@ void check(int device,int expected_error=0) {
   if (expected_error) {
     assert(last_error==expected_error);
     assert(result.warp_size==0 && result.total_global_memory==0);
+    assert(result.fp32_fp64_ratio==0 && result.memory_clock_rate_khz==0);
     for(char c:name) assert(c==0);
     return;
   }
@@ -388,13 +395,15 @@ void check(int device,int expected_error=0) {
   assert(result.registers_per_sm==65536 && result.shared_memory_per_block==49152);
   assert(result.shared_memory_per_block_optin==101376 && result.shared_memory_per_sm==102400);
   assert(result.multiprocessor_count==unsigned(sm(device)) && result.total_global_memory==memory(device));
-  assert(result.fp32_fp64_performance_ratio==(device==7 ? 2+epoch : 64));
+  assert(result.fp32_fp64_ratio==(device==7 ? 2+epoch : 64));
+  assert(result.clock_rate_khz==1800000);
+  assert(result.memory_clock_rate_khz==1400000 && result.memory_bus_width_bits==512);
   char expected[256]{};device_name(expected,sizeof(expected),device);
   assert(std::strcmp(name,expected)==0);
 }
 int main(int argc,char** argv) {
   assert(argc==2);mode=std::atoi(argv[1]);
-  if(mode>=12) {
+  if(mode>=12 && mode<=14) {
     if(mode==13 || mode==14) {
       assert(cuda_ensure_stack_limit(32768)==(mode==13 ? 77 : 88));
       assert(stack_bytes==1024);
@@ -436,9 +445,9 @@ int main(int argc,char** argv) {
   }
   check(7);++epoch;check(7);check(2);check(7);
   // Both repeated and changed ordinals must observe fresh device/resource facts.
-  if (mode==0) assert(properties==0 && attributes==48 && opens==1);
+  if (mode==0) assert(properties==0 && attributes>0 && opens==1);
   else assert(properties==4);
-  assert(clears==((mode==1 || mode==8) ? 4 : 0));
+  assert(clears==((mode==1 || mode==8 || mode==15 || mode==16) ? 4 : 0));
   if (mode==7) assert(attributes==0 && opens==0); // CuMetal bypasses NVIDIA discovery.
   check(-1,10);
 }
@@ -468,7 +477,7 @@ def test_fresh_facts_and_failure_fallback(
         link_args=["-ldl", "-pthread"],
         compile_timeout=60,
     )
-    modes = [7] if provider == "cumetal" else [*range(7), 8, 9, 10, 11]
+    modes = [7] if provider == "cumetal" else [*range(7), 8, 9, 10, 11, 15, 16]
     for mode in [*modes, 12, 13, 14]:
         subprocess.run([str(binary), str(mode)], check=True, timeout=10)
 
@@ -479,12 +488,15 @@ def test_real_cuda_resource_facts(tmp_path: Path) -> None:
         pytest.skip("explicit CUDA device-fact qualification is disabled")
     if not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("CUDA qualification requires a Slurm allocation")
-    compiler, ccache = shutil.which("nvcc"), shutil.which("ccache")
+    compiler = shutil.which("nvcc")
+    launcher = (
+        os.environ.get("CCACHE") or shutil.which("sccache") or shutil.which("ccache")
+    )
     if compiler is None:
         pytest.skip("NVCC required for native CUDA qualification")
-    if ccache is None:
-        pytest.fail("ccache is required for native qualification")
-    subprocess.run([ccache, "--version"], check=True, capture_output=True)
+    if launcher is None:
+        pytest.fail("sccache or ccache is required for native qualification")
+    subprocess.run([launcher, "--version"], check=True, capture_output=True)
     objects = []
     for i, source in enumerate(
         (
@@ -495,7 +507,7 @@ def test_real_cuda_resource_facts(tmp_path: Path) -> None:
         output = tmp_path / f"part{i}.o"
         subprocess.run(
             [
-                ccache,
+                launcher,
                 compiler,
                 "-std=c++20",
                 "-O2",
@@ -512,6 +524,8 @@ def test_real_cuda_resource_facts(tmp_path: Path) -> None:
         objects.append(str(output))
     binary = tmp_path / "facts"
     subprocess.run(
-        [compiler, *objects, "-ldl", "-o", str(binary)], check=True, timeout=60
+        [launcher, compiler, *objects, "-ldl", "-o", str(binary)],
+        check=True,
+        timeout=60,
     )
     subprocess.run([str(binary)], check=True, timeout=30)

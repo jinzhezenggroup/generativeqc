@@ -169,7 +169,7 @@ int main() {
   unsetenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z");
   const auto automatic = SharedRysXyRequest::Auto;
   assert(!resolve_shared_rys_xy_policy(automatic, c, target).active());
-  target.fp32_fp64_performance_ratio = 2;
+  target.fp32_fp64_ratio = 2;
   const auto default_on = resolve_shared_rys_xy_policy(automatic, c, target);
   assert(default_on.active() && default_on.class_mask == 3 && !default_on.weighted_z());
   auto on = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c, target);
@@ -186,7 +186,7 @@ int main() {
       other.compute_capability_major = major;
       other.compute_capability_minor = minor;
       for (int ratio : {-1, 0, 1, 2, 3, 32, 64}) {
-        other.fp32_fp64_performance_ratio = ratio;
+        other.fp32_fp64_ratio = ratio;
         assert(resolve_shared_rys_xy_policy(automatic, c, other).active() ==
                (ratio > 0 && ratio <= 2));
         assert(resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c, other).active());

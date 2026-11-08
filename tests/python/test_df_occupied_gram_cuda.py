@@ -22,8 +22,11 @@ def test_generated_gram_ragged_shapes_and_capture(tmp_path: Path) -> None:
     initcheck must therefore reject any accidental read from them.
     """
     assert os.environ.get("SLURM_JOB_ID")
-    ccache = shutil.which("ccache")
-    assert ccache, "the repository requires cached native test compilation"
+    launcher = (
+        os.environ.get("CCACHE") or shutil.which("sccache") or shutil.which("ccache")
+    )
+    assert launcher, "the repository requires cached native test compilation"
+    subprocess.run([launcher, "--version"], check=True, capture_output=True)
     cuda = Path(os.environ.get("CUDA_PATH", "/usr/local/cuda"))
     source = tmp_path / "gram.cu"
     source.write_text(
@@ -101,7 +104,7 @@ int main(int argc,char**) {
     binary = tmp_path / "gram"
     subprocess.run(
         [
-            ccache,
+            launcher,
             str(cuda / "bin/nvcc"),
             "-O3",
             "-std=c++20",

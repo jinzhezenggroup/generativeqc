@@ -57,6 +57,7 @@
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_xc.hpp"
 #include "generated_libxc_semilocal_cuda_registry.hpp"
+#include "runtime/cuda_device_facts.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_direct_jk.hpp"
@@ -675,8 +676,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
           }
         } else if ((fitted_rks_fp64 || (automatic_force && fused_rks_fp64)) && unconstrained &&
                    basis_.nao >= 512 && grid_.point_count() >= (1U << 19)) {
-          cudaDeviceProp properties{};
-          auto status = cudaGetDeviceProperties(&properties, device);
+          runtime::CudaTargetInfo target;
+          char device_name[256]{};
+          auto status = runtime::cuda_device_facts(device, target, device_name);
           if (status == cudaErrorNotSupported || status == cudaErrorInvalidValue) {
             const auto pending = cudaGetLastError();
             if (pending != cudaSuccess && pending != status)
@@ -703,12 +705,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
             // admits the same strict fused RKS owner independently of fitting.
             options_.xc_tile_points = dft::automatic_ks_scf_tile(
                 0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
-                execution_plan_.nonlocal_correlation, properties.major,
-                properties.singleToDoublePrecisionPerfRatio);
+                execution_plan_.nonlocal_correlation, target.compute_capability_major,
+                target.fp32_fp64_ratio);
             if (automatic_force && strict_precision_budget && admitted_cuda_stationary_binding()) {
               options_.xc_force_tile_points = dft::automatic_ks_force_tile(
                   fused_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
-                  basis_.natom, basis_.nao, grid_.point_count(), properties.major);
+                  basis_.natom, basis_.nao, grid_.point_count(), target.compute_capability_major);
               automatic_force_tile_enlarged_ = options_.xc_force_tile_points > 256;
             }
           }

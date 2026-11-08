@@ -546,7 +546,7 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
   runtime::df_progress::Scope::number("max_active", ao_selection_work().max_active);
 }
 
-void CudaXcPlan::prepare_potential(std::size_t provider_budget, bool indexed_gemm) {
+void CudaXcPlan::prepare_potential(std::size_t provider_budget, std::uint64_t expected_replays) {
   check_device();
   if (evaluation_started_)
     throw std::logic_error("XC potential preparation after evaluation began");
@@ -555,8 +555,11 @@ void CudaXcPlan::prepare_potential(std::size_t provider_budget, bool indexed_gem
   if (potential_binding_ && potential_binding_->diagnostic().provider_allowance)
     throw std::logic_error("XC potential provider is already prepared");
   try {
-    potential_binding_ =
-        cuda_xc_detail::prepare_potential(layout_, stream_, provider_budget, indexed_gemm);
+    // Replay phases can lower arithmetic without mutating the physical layout.
+    // They cannot inherit the automatic strict-FP64 library qualification.
+    potential_binding_ = cuda_xc_detail::prepare_potential(
+        layout_, stream_, mixed_matrix_contractions_ || mixed_pbe_ao_ ? 0 : provider_budget,
+        expected_replays);
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     throw std::bad_alloc();
   } catch (const generativeqc_tensor::DeviceRuntimeError& error) {
@@ -607,7 +610,7 @@ void CudaXcPlan::retire_density_provider() {
 
 void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admitted,
                                  std::uint64_t expected_replays, std::size_t provider_budget,
-                                 bool indexed_gemm) {
+                                 std::size_t automatic_provider_budget) {
   check_device();
   if (evaluation_started_)
     throw std::invalid_argument("density binding is immutable after first evaluation");
@@ -615,8 +618,8 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   check(cudaStreamIsCapturing(stream_, &capture));
   if (capture != cudaStreamCaptureStatusNone)
     throw std::invalid_argument("density preparation cannot capture");
-  if (indexed_gemm && (!layout_.local_ao || layout_.response || !admitted.is_strict_fp64()))
-    throw std::invalid_argument("indexed density GEMM requires a physical strict-FP64 local map");
+  if (!admitted.is_strict_fp64() || mixed_matrix_contractions_ || mixed_pbe_ao_)
+    automatic_provider_budget = 0;
   if (!admitted.is_strict_fp64() &&
       !cuda_xc_execution_capabilities(layout_).mixed_density_contraction)
     throw std::invalid_argument("mixed density contraction is not qualified for this domain");
@@ -628,7 +631,8 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
         "mixed CUDA XC density precision is not qualified for this point program");
   // Replacing a live optional owner would transiently charge two provider
   // reservations. A zero-budget replacement can release it transactionally.
-  if (provider_budget && density_provider_ && density_provider_->enabled())
+  if ((provider_budget || automatic_provider_budget) && density_provider_ &&
+      density_provider_->enabled())
     throw std::logic_error("XC density provider is already prepared");
   // Prepare into temporaries so malformed admission/allocation cannot expose
   // a partially changed table. Only the final grid tile has a distinct shape.
@@ -650,9 +654,9 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   const bool nonempty = !layout_.local_ao || ao_offsets_.back() != 0;
   std::unique_ptr<tensor::PreparedPanelProduct> provider;
   try {
-    if (provider_budget && nonempty)
-      provider =
-          cuda_xc_detail::prepare_density_provider(layout_, stream_, provider_budget, indexed_gemm);
+    if ((provider_budget || automatic_provider_budget) && nonempty)
+      provider = cuda_xc_detail::prepare_density_provider(
+          layout_, stream_, provider_budget, automatic_provider_budget, expected_replays);
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     throw std::bad_alloc();
   } catch (const generativeqc_tensor::DeviceRuntimeError& error) {

@@ -81,6 +81,26 @@ revised complete endpoints and default HF48 independent failure remain open;
 the PR stays draft. Latest integrated master is b6c20e73b, not the historical
 measurement base.
 
+## Post-measurement master integration
+
+Masterfea412df1 introduces the canonical `CudaTargetInfo.fp32_fp64_ratio` with
+clock and memory-bus facts. Migrate this branch's policy and fixture consumers
+directly to that field, rather than retaining a second ratio or a compatibility
+alias. Preserve master resource-query fallbacks and both new missing-attribute
+cases, plus the branch's repeated/current-visibility ratio variation checks.
+This is still capability/throughput/resource selection, not an ISA whitelist.
+
+The historical complete-ring DIIS experiment at source682561e9/ELFc368db4b is
+rejected on both scheduled cards and removed; its full observations are at
+`benchmarks/results/hf-fp64-predictor-rejection-20261108/`. That source predates
+this master integration. Its HF96 science/performance observations are not
+current-merge, HF48 or full-README qualification. Keep the PR draft and retain
+the independent default HF48 failure and original acceptance gates.
+
+The clean merge index passes101 focused host checks with one opt-in GPU skip;
+no new GPU endpoint is inferred from these host checks. Regenerated Libxc
+metadata preserves historical measurements as stale, not freshly qualified.
+
 ## References
 
 - Issue #2976 and draft PR #3048.

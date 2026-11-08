@@ -1,6 +1,7 @@
 #include "runtime/cuda_device_facts.hpp"
 
 #include <cstring>
+#include <iterator>
 #include <mutex>
 #include <utility>
 
@@ -179,9 +180,12 @@ cudaError_t selected_facts(int device, CudaTargetInfo& target, char (&name)[256]
                                        cudaDevAttrMaxSharedMemoryPerBlockOptin,
                                        cudaDevAttrMaxSharedMemoryPerMultiprocessor,
                                        cudaDevAttrMultiProcessorCount,
-                                       cudaDevAttrSingleToDoublePrecisionPerfRatio};
-  int values[12]{};
-  for (unsigned i = 0; i < 12; ++i) {
+                                       cudaDevAttrSingleToDoublePrecisionPerfRatio,
+                                       cudaDevAttrClockRate,
+                                       cudaDevAttrMemoryClockRate,
+                                       cudaDevAttrGlobalMemoryBusWidth};
+  int values[std::size(attributes)]{};
+  for (unsigned i = 0; i < std::size(attributes); ++i) {
     const auto error = cudaDeviceGetAttribute(&values[i], attributes[i], device);
     if (error == cudaErrorInvalidValue || error == cudaErrorNotSupported) {
       // Successful property queries do not reset the runtime's last-error slot.
@@ -210,7 +214,10 @@ cudaError_t selected_facts(int device, CudaTargetInfo& target, char (&name)[256]
   target.shared_memory_per_sm = static_cast<std::size_t>(values[9]);
   target.multiprocessor_count = static_cast<unsigned>(values[10]);
   target.total_global_memory = memory;
-  target.fp32_fp64_performance_ratio = values[11];
+  target.fp32_fp64_ratio = values[11];
+  target.clock_rate_khz = static_cast<unsigned>(values[12]);
+  target.memory_clock_rate_khz = static_cast<unsigned>(values[13]);
+  target.memory_bus_width_bits = static_cast<unsigned>(values[14]);
   qualified = true;
   return cudaSuccess;
 }

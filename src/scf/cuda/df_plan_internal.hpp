@@ -8,6 +8,7 @@
 #include <limits>
 #include <optional>
 
+#include "runtime/cuda_target_info.hpp"
 #include "scf/cuda/df_md_owner.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
@@ -131,7 +132,7 @@ struct CudaDensityFittingJkPlan {
   bool resident_exchange_enabled{};
   bool packed_projection_blas{};
   bool packed_projection_auto{};
-  int packed_projection_fp32_fp64_ratio{};
+  runtime::CudaTargetInfo lowering_target;
   // Independent of projection overrides; frozen before any captured Gram.
   bool occupied_gram_library_capable{};
   bool triangular_exchange{};

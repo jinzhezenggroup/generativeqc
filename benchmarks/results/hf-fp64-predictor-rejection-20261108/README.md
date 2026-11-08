@@ -29,6 +29,8 @@ archive checksums are in `cohort.json`. The frozen image retains an older384-AO
 trial for provenance, but this96-atom comparison never enters that domain. That
 separately rejected trial is also removed from the working policy. Do not
 relabel these observations as a later head or full-README qualification.
+Masterfea412df1 is integrated after measurement; it uses canonical runtime
+`fp32_fp64_ratio`. This capsule does not qualify that later merged source.
 
 Run `python benchmarks/results/hf-fp64-predictor-rejection-20261108/replay.py`.
 The lossless capsule includes all endpoint arms, actual kernel-state test16826,
@@ -37,7 +39,7 @@ failed tooling attempts and audited receiver closure. Slurm16825 restores the
 borrowed tree; CPU delta retry only fixes transport, not a GPU recomputation.
 The redundant base64 transport stdout is omitted with its checksum declared in
 the cohort; decoded observation bytes and the closure receipt remain lossless.
-The full compiler stdout is a separate lossless `build.log.xz` record, also
+The full compiler stdout is a separate lossless `compiler-stdout.txt.xz` record, also
 authenticated by the replay, rather than mixed into molecular observations.
 
 The result rejects complete-ring retention, not every possible history-transfer

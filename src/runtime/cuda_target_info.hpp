@@ -9,7 +9,8 @@ namespace generativeqc::runtime {
  *
  * Zero means "unknown" for optional resource facts. Product names are
  * intentionally absent: schedule legality is derived from resources rather
- * than GPU marketing identity.
+ * than GPU marketing identity. Reported clocks and memory bus width are inputs
+ * to evidence-backed models, not measured throughput or Tensor Core admission.
  */
 struct CudaTargetInfo {
   int compute_capability_major{};
@@ -24,7 +25,10 @@ struct CudaTargetInfo {
   std::size_t shared_memory_per_sm{};
   unsigned multiprocessor_count{};
   std::size_t total_global_memory{};
-  int fp32_fp64_performance_ratio{};
+  int fp32_fp64_ratio{};
+  unsigned clock_rate_khz{};
+  unsigned memory_clock_rate_khz{};
+  unsigned memory_bus_width_bits{};
 };
 
 template <class DeviceProperties>
@@ -43,7 +47,10 @@ CudaTargetInfo cuda_target_info_from_properties(const DeviceProperties& properti
   target.shared_memory_per_sm = static_cast<std::size_t>(properties.sharedMemPerMultiprocessor);
   target.multiprocessor_count = static_cast<unsigned>(properties.multiProcessorCount);
   target.total_global_memory = static_cast<std::size_t>(properties.totalGlobalMem);
-  target.fp32_fp64_performance_ratio = properties.singleToDoublePrecisionPerfRatio;
+  target.fp32_fp64_ratio = properties.singleToDoublePrecisionPerfRatio;
+  target.clock_rate_khz = static_cast<unsigned>(properties.clockRate);
+  target.memory_clock_rate_khz = static_cast<unsigned>(properties.memoryClockRate);
+  target.memory_bus_width_bits = static_cast<unsigned>(properties.memoryBusWidth);
   return target;
 }
 
