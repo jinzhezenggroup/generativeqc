@@ -86,14 +86,13 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
   posthf::generated::SourceTilePlan source_tile_plan{};
   bool shared_scan = false;
   std::size_t jobs_per_batch = 1;
+  std::size_t reference_bytes = 0;
+  for (const auto* values : {&ref.overlap, &ref.hcore, &ref.fock, &ref.coefficients,
+                             &ref.orbital_energies, &ref.density, &ref.weighted_density})
+    reference_bytes = posthf::checked_add(reference_bytes,
+                                          posthf::checked_mul(values->capacity(), sizeof(double)));
   auto peak = posthf::checked_add(
-      kernel_reserve,
-      posthf::checked_add(
-          source.retained_numeric_bytes(),
-          posthf::checked_mul(
-              sizeof(double),
-              posthf::checked_add(posthf::checked_mul(5, posthf::checked_mul(ref.nbf, ref.nbf)),
-                                  ref.nbf))));
+      kernel_reserve, posthf::checked_add(source.retained_numeric_bytes(), reference_bytes));
   // Borrowed OVOV storage is charged by the endpoint owner. No AO staging,
   // provider batch or giant job reservation is needed to consume that storage.
   if (ovov.empty()) {
@@ -150,7 +149,7 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
     peak = posthf::checked_add(provider->batch_bytes(block_shape, provider_requests, cuda),
                                kernel_reserve);
   }
-  if (peak > budget) throw std::logic_error("selected MP2 source tile exceeds admitted peak");
+  if (peak > budget) throw std::length_error("MP2 energy phase exceeds numeric memory budget");
 
   Energy result;
   result.minimum_denominator = minimum_denominator;

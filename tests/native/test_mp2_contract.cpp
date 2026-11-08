@@ -577,11 +577,21 @@ void conventional_energy_reuses_ao_scans() {
     (void)generativeqc::mp2::conventional_energy(*hf.reference, unread_source,
                                                  borrowed.numeric_capacity_bytes - 1, 1e-10, 1,
                                                  false, 0, ovov);
-  } catch (const std::logic_error&) {
+  } catch (const std::length_error&) {
     short_rejected = true;
   }
   require(short_rejected && unread_source.reads() == 0,
           "borrowed energy accepted a short budget or traversed the AO source");
+  auto retained_reference = *hf.reference;
+  const auto before_reserve = generativeqc::mp2::conventional_energy(
+      retained_reference, unread_source, 256ULL << 20, 1e-10, 1, false, 0, ovov);
+  const auto old_capacity = retained_reference.weighted_density.capacity();
+  retained_reference.weighted_density.reserve(old_capacity + 17);
+  const auto after_reserve = generativeqc::mp2::conventional_energy(
+      retained_reference, unread_source, 256ULL << 20, 1e-10, 1, false, 0, ovov);
+  require(after_reserve.numeric_capacity_bytes - before_reserve.numeric_capacity_bytes ==
+              (retained_reference.weighted_density.capacity() - old_capacity) * sizeof(double),
+          "borrowed energy omitted a retained reference allocation from admission");
 }
 
 void shell_local_weighted_eri_derivative() {

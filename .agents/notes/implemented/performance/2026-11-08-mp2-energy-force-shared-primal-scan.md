@@ -34,8 +34,10 @@ Borrowed energy consumes OVOV with one reduction job at a time. It does not
 construct an unused AO provider, reserve a budget-sized tile-job collection,
 or charge nonexistent transformation staging. Its own reduction workspace and
 the still-live reference/source remain admitted separately from caller-owned
-OVOV storage. This distinction is necessary even when enough storage exists
-for the complete force cover.
+OVOV storage. Charge all actual reference vector capacities, including the
+weighted density, rather than assuming a fixed matrix count after removing
+the provider's conservative scratch allowance. This distinction is necessary
+even when enough storage exists for the complete force cover.
 
 ## Invariants and fallback
 
