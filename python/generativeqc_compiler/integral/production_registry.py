@@ -33,7 +33,10 @@ from .production_selection import (
     _selection_integral,
     supports_exchange_work_buckets,
 )
-from .production_shared_rys_xy import shared_rys_xy_companions
+from .production_shared_rys_xy import (
+    shared_rys_xy_companions,
+    shared_rys_xy_streaming_companions,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -217,6 +220,9 @@ cudaError_t launch_shell_class_fock(
     std::uint32_t* task_head) noexcept;
 
 std::uint64_t enabled_shared_rys_xy_fock_shell_class_mask() noexcept;
+std::uint64_t available_shared_rys_xy_streaming_fock_shell_class_mask() noexcept;
+cudaError_t launch_shell_class_shared_rys_xy_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept;
 cudaError_t launch_shell_class_shared_rys_xy_fock(
     {_fock_launch_parameter_declaration()}) noexcept;
 
@@ -504,6 +510,11 @@ cudaError_t launch_shell_class_fock(
 }}
 
 std::uint64_t enabled_shared_rys_xy_fock_shell_class_mask() noexcept {{ return 0; }}
+std::uint64_t available_shared_rys_xy_streaming_fock_shell_class_mask() noexcept {{ return 0; }}
+cudaError_t launch_shell_class_shared_rys_xy_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept {{
+  return cudaErrorNotSupported;
+}}
 
 cudaError_t launch_shell_class_shared_rys_xy_fock(
     {_fock_launch_parameter_declaration()}) noexcept {{
@@ -612,6 +623,16 @@ def emit_multi_registry_header(
                 f'    {{"{profile.target.architecture}", "{name}", '
                 f'"shared_rys_weighted_z_fock", '
                 f'"generativeqc_launch_{identifier}_shared_rys_weighted_z_generated_{name}_fock", '
+                f"{shell_class_index(companion.incumbent.spec)}U, "
+                f"{companion.plan.block_threads}U}},"
+            )
+        for companion in shared_rys_xy_streaming_companions(profile):
+            name = companion.incumbent.spec.name
+            identifier = _profile_identifier(profile.target.architecture)
+            companion_rows.append(
+                f'    {{"{profile.target.architecture}", "{name}", '
+                f'"shared_rys_xy_streaming_fock", '
+                f'"generativeqc_launch_{identifier}_shared_rys_xy_streaming_generated_{name}_fock", '
                 f"{shell_class_index(companion.incumbent.spec)}U, "
                 f"{companion.plan.block_threads}U}},"
             )
@@ -781,6 +802,8 @@ def emit_multi_registry_source(
         fock_cases = []
         shared_rys_xy_cases = []
         shared_rys_xy_mask = 0
+        shared_rys_xy_streaming_cases = []
+        shared_rys_xy_streaming_resources = []
         shared_rys_weighted_z_cases = []
         shared_rys_weighted_z_mask = 0
         mixed_fock_cases = []
@@ -837,6 +860,27 @@ def emit_multi_registry_source(
                 f"    case {shell_class}U:\n      return {symbol}({launch_arguments});"
             )
             shared_rys_weighted_z_mask |= 1 << shell_class
+        for companion in shared_rys_xy_streaming_companions(profile):
+            shell_class = shell_class_index(companion.incumbent.spec)
+            symbol = (
+                f"generativeqc_launch_{identifier}_shared_rys_xy_streaming_generated_"
+                f"{companion.incumbent.spec.name}_fock"
+            )
+            declarations.append(
+                f'extern "C" cudaError_t {symbol}('
+                "cudaStream_t, bool, unsigned, const void*, "
+                "const std::int64_t*, const void*, const double*, "
+                "const void*, double, bool, double, const double*, "
+                "const double*, generativeqc::runtime::CompensatedOutput, std::uint32_t*, "
+                "unsigned long long*, unsigned long long*);"
+            )
+            declarations.append(f'extern "C" bool {symbol}_available();')
+            shared_rys_xy_streaming_cases.append(
+                f"    case {shell_class}U:\n      return {symbol}({streaming_fock_arguments});"
+            )
+            shared_rys_xy_streaming_resources.append(
+                f"  if ({symbol}_available()) mask |= UINT64_C({1 << shell_class});"
+            )
         for candidate in direct_rys_task_candidates(profile):
             shell_class = shell_class_index(candidate.spec)
             symbol = (
@@ -1061,6 +1105,20 @@ cudaError_t launch_{identifier}_shared_rys_weighted_z_fock({fock_launch_paramete
   }}
 }}
 
+std::uint64_t available_{identifier}_shared_rys_xy_streaming_fock() noexcept {{
+  std::uint64_t mask = 0;
+{chr(10).join(shared_rys_xy_streaming_resources)}
+  return mask;
+}}
+
+cudaError_t launch_{identifier}_shared_rys_xy_streaming_fock(
+    {streaming_fock_parameters}) noexcept {{
+  switch (shell_class) {{
+{chr(10).join(shared_rys_xy_streaming_cases)}
+    default: return cudaErrorNotSupported;
+  }}
+}}
+
 cudaError_t launch_{identifier}_mixed_fock({fock_launch_parameters}) noexcept {{
   switch (shell_class) {{
 {chr(10).join(mixed_fock_cases)}
@@ -1160,6 +1218,8 @@ constexpr std::array<ShellKernelMetadata, {len(mixed_fock_names)}> kMixedFockNam
       launch_{identifier}_k_block_streaming_fock,
       launch_{identifier}_rys_task_streaming_fock,
       launch_{identifier}_rys_task_work_streaming_fock,
+      launch_{identifier}_shared_rys_xy_streaming_fock,
+      available_{identifier}_shared_rys_xy_streaming_fock,
       launch_{identifier}_resident}},"""
         )
     return f"""#include "generativeqc_generated_shell_registry.hpp"
@@ -1210,6 +1270,8 @@ struct KernelSet {{
   StreamingFockLaunchFunction launch_k_block_streaming_fock;
   StreamingFockLaunchFunction launch_rys_task_streaming_fock;
   StreamingFockLaunchFunction launch_rys_task_work_streaming_fock;
+  StreamingFockLaunchFunction launch_shared_rys_xy_streaming_fock;
+  std::uint64_t (*available_shared_rys_xy_streaming_fock)() noexcept;
   ResidentLaunchFunction launch_resident;
 }};
 
@@ -1430,6 +1492,22 @@ cudaError_t launch_shell_class_mixed_fock(
   return kernels == nullptr ? cudaErrorInvalidValue
                             : kernels->launch_mixed_fock(
       shell_class, {launch_arguments});
+}}
+
+std::uint64_t available_shared_rys_xy_streaming_fock_shell_class_mask() noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr ? 0 : kernels->available_shared_rys_xy_streaming_fock() &
+      enabled_fock_shell_class_mask();
+}}
+
+cudaError_t launch_shell_class_shared_rys_xy_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept {{
+  if (unrestricted || mixed_precision_enabled || fock.correction != nullptr)
+    return cudaErrorNotSupported;
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr ? cudaErrorNotSupported
+                            : kernels->launch_shared_rys_xy_streaming_fock(
+      shell_class, {streaming_fock_arguments});
 }}
 
 cudaError_t launch_shell_class_streaming_fock(

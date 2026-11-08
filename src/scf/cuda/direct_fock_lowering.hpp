@@ -72,19 +72,24 @@ inline std::uint64_t prepare_direct_fock_rys_task_mask() {
 struct DirectExchangeSelection {
   std::uint64_t rys_fock_mask{}, k_block_fock_mask{}, rys_task_fock_mask{};
   detail::GeneratedExchangeTaskSchedule task_schedule{};
+  std::uint64_t shared_rys_xy_streaming_mask{};
 };
 
 /** Resolve both axes once and intersect every alternative with reachable values.
  * Only the registry's qualified task preference is automatic; work kernels cover
  * remaining eligible classes. Explicit lowerings do not enable task preference.
  */
-inline DirectExchangeSelection prepare_direct_exchange_selection(std::uint64_t class_mask) {
+inline DirectExchangeSelection prepare_direct_exchange_selection(std::uint64_t class_mask,
+                                                                 int fp32_fp64_ratio = 0) {
   DirectExchangeSelection selection;
   const auto lowering = prepare_direct_fock_lowering(true);
   selection.task_schedule = prepare_direct_exchange_task_schedule();
   switch (lowering) {
     case DirectFockLowering::Default:
       selection.rys_task_fock_mask = generated::preferred_rys_task_fock_shell_class_mask();
+      if (fp32_fp64_ratio > 0 && fp32_fp64_ratio <= 2)
+        selection.shared_rys_xy_streaming_mask =
+            generated::available_shared_rys_xy_streaming_fock_shell_class_mask();
       break;
     case DirectFockLowering::RysTask:
       selection.rys_task_fock_mask = generated::enabled_rys_task_fock_shell_class_mask();
@@ -101,6 +106,7 @@ inline DirectExchangeSelection prepare_direct_exchange_selection(std::uint64_t c
   selection.rys_fock_mask &= class_mask;
   selection.k_block_fock_mask &= class_mask;
   selection.rys_task_fock_mask &= class_mask;
+  selection.shared_rys_xy_streaming_mask &= class_mask & ~selection.rys_task_fock_mask;
   return selection;
 }
 
@@ -111,6 +117,8 @@ inline DirectExchangeSelection prepare_direct_exchange_selection(std::uint64_t c
 inline auto direct_fock_streaming_launcher(const DirectExchangeSelection& selection,
                                            unsigned shell_class, bool unrestricted) {
   const auto bit = std::uint64_t{1} << shell_class;
+  if (!unrestricted && (selection.shared_rys_xy_streaming_mask & bit))
+    return generated::launch_shell_class_shared_rys_xy_streaming_fock;
   return (selection.rys_task_fock_mask & bit)
              ? (selection.task_schedule == detail::GeneratedExchangeTaskSchedule::Work
                     ? generated::launch_shell_class_rys_task_work_streaming_fock

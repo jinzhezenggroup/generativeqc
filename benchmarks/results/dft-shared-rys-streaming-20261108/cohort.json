@@ -1,0 +1,21 @@
+{
+  "schema": "generativeqc.dft-streaming-xy-native-qualification.v1",
+  "scope": "Qualified strict restricted raw-K streaming; PBE0/B3LYP Direct96 and PBE0 Direct48 scientific checks, not HF, DF or all README methods",
+  "member_count": 135,
+  "default_promotion_qualified": true,
+  "all_readme_leadership_established": false,
+  "raw_k_logs": {
+    "a100": "weighted-pilot-a100/raw-k-numerics.log",
+    "5090": "raw-k-science/fixture-5090-16846/numerics.log"
+  },
+  "sanitizer_logs": [
+    "raw-k-science/fixture-5090-16846/memcheck.log",
+    "raw-k-science/fixture-5090-16846/racecheck.log",
+    "raw-k-science/fixture-5090-16846/synccheck.log"
+  ],
+  "native_jobs": {"a100": "LSF229664", "5090": "Slurm16855"},
+  "reference_outlier": {
+    "card": "a100", "method": "pbe0", "cold_seconds": 142.65706471726298,
+    "policy": "Retain all observations; cause unacquired; do not use this outlier to assert a new cross-engine performance lead"
+  }
+}

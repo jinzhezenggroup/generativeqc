@@ -312,6 +312,8 @@ inline int cudaDeviceGetAttribute(int* v, int a, int) { *v=a==1?gpu_major:0; ret
         stubs.append(
             f'extern "C" cudaError_t {symbol}({args}) {{ ++{count}; return {value}; }}'
         )
+    for symbol in re.findall(r'extern "C" bool (\w+)\(\);', registry):
+        stubs.append(f'extern "C" bool {symbol}() {{ return true; }}')
     registry_path = tmp_path / "registry.cpp"
     registry_path.write_text(registry)
     source = tmp_path / "registry_test.cpp"

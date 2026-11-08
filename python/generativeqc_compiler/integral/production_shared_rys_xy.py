@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 from .capabilities import (
     CAPABILITY_SHARED_RYS_WEIGHTED_Z_FOCK,
     CAPABILITY_SHARED_RYS_XY_FOCK,
+    CAPABILITY_SHARED_RYS_XY_STREAMING_FOCK,
+    CAPABILITY_STREAMING_FOCK,
 )
 from .fused_schedule import FusedShellPlan, build_fused_shell_plan
 from .ir import KernelConsumer
@@ -75,5 +77,37 @@ def shared_rys_xy_companions(
         expected = 192 if item.spec.name == "dppp" else 96
         if plan.block_threads != expected:
             raise ValueError("shared Rys x/y companion mapping changed")
+        result.append(SharedRysXyCompanion(item, plan))
+    return tuple(result)
+
+
+def shared_rys_xy_streaming_companions(
+    profile: ResolvedProductionProfile,
+) -> tuple[SharedRysXyCompanion, ...]:
+    """Keep raw-K streaming qualification independent of paged HF admission.
+
+    The incumbent still owns enumeration, screening and scatter. These plans
+    only share recurrence tables within a component-lane restricted task.
+    """
+    result = []
+    for item in profile.selections:
+        if (
+            KernelConsumer.FOCK not in item.consumers
+            or not item.has_capability(CAPABILITY_SHARED_RYS_XY_STREAMING_FOCK)
+            or not item.has_capability(CAPABILITY_STREAMING_FOCK)
+        ):
+            continue
+        plan = build_fused_shell_plan(
+            item.spec,
+            consumers=(KernelConsumer.FOCK,),
+            recurrence=item.fock_recurrence or item.recurrence,
+            target=profile.target,
+        )
+        plan = build_fused_shell_plan(
+            item.spec,
+            integral=plan.kernel.integral,
+            target=profile.target,
+            schedule=replace(plan.schedule, fock_shared_rys_xy=True),
+        )
         result.append(SharedRysXyCompanion(item, plan))
     return tuple(result)
