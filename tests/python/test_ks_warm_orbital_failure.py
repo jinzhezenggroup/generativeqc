@@ -72,8 +72,6 @@ def orbital_probe(
 #include <stdexcept>
 #include <string>
 #include "scf/coulomb_exchange_work.hpp"
-#include "dft/vv10_rebase_history.hpp"
-namespace vv10_rebase = generativeqc::dft::vv10_rebase;
 constexpr int cudaMemcpyDeviceToDevice = 3;
 int copies = 0, fail_copy = 0, fences = 0;
 int cudaMemcpyAsync(void* target, const void* source, std::size_t bytes, int kind, void*) {
@@ -137,11 +135,6 @@ struct Owner {
   // This orbital-lifetime probe does not run the nonlocal initializer.
   bool confirm_nonlocal_stationary_density = false;
   bool confirm_direct_stationary_density = false;
-  bool rebase_bank_pending = false;
-  bool nonlocal_frozen_stage = false, nonlocal_outer_active = false;
-  void commit_rebase_history() {
-    throw std::logic_error("unexpected history bridge in orbital-lifetime probe");
-  }
   bool early_final_probe_ran = false;
   double warm_energy = -41.0, warm_energy_correction = -0x1p-42;
   struct {
@@ -198,9 +191,6 @@ struct Owner {
   void enqueue_device() { enqueue_legacy(); }
   bool finish_device() { return finish_legacy(); }
   bool finish_legacy() {
-    // This fixture has no nonlocal initializer or strict-refinement handoff.
-    const bool bridge_selected = false, enter_nonlocal_target = false;
-    const bool enter_strict_refinement = false;
     // The precision handoff may fail before acquiring a lease, or after
     // publishing one. Neither preparation layer owns the solver state.
     if (scenario == "handoff-host") throw std::bad_alloc();

@@ -42,14 +42,6 @@ from .resources_hf import (
 )
 from .resources_planning import plan_resources
 
-
-def _vv10_rebase_history_control() -> int:
-    value = os.environ.get("GENERATIVEQC_KS_VV10_REBASE_HISTORY", "")
-    if value not in ("", "0", "1"):
-        raise ValueError("GENERATIVEQC_KS_VV10_REBASE_HISTORY accepts only 0 or 1")
-    return int(value == "1")
-
-
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
 _CUDA_STATIONARY_INVENTORY_KEYS = (
     "grid_numeric",
@@ -935,7 +927,6 @@ def ks_resource_request(
         raise TypeError("include_forces must be boolean")
     if backend not in ("cpu", "cuda"):
         raise NotImplementedError("KS planning requires a native CPU or CUDA backend")
-    rebase_history = _vv10_rebase_history_control() if backend == "cuda" else 0
     if _application_precision_budget is not None:
         from .force_aware_numerics import TargetErrorBudget
 
@@ -1107,8 +1098,6 @@ def ks_resource_request(
         if backend == "cuda"
         else "serialized-native",
     }
-    if backend == "cuda":
-        controls["vv10_rebase_history"] = rebase_history
     has_ecp = any(item["orbital"].get("ecp_terms") for item in items)
     # Serialized generated-force ownership can retain the largest member's
     # arena across the next SCF replay. Charge exactly the execution policy's

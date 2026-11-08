@@ -87,17 +87,9 @@ def test_generated_density_and_ring_combination_contracts(
     # No CUDA runtime, synchronization or device execution is claimed here.
     (tmp_path / "cuda_runtime.h").write_text(
         "#pragma once\n#define __device__\n#define __global__\n"
-        "#include <stdexcept>\n"
-        # Model the CUDA math header's global overload without relying on libc++.
-        "#include <cmath>\nusing std::isfinite;\n"
         "struct Coord { unsigned x = 0; };\n"
         "inline Coord threadIdx{}, blockIdx{}, blockDim{}, gridDim{};\n"
         "inline void __syncwarp() {}\n"
-        # Keep the unrelated full rebuild a parse-only boundary.
-        "inline unsigned __shfl_sync(unsigned, unsigned, int) {\n"
-        '  throw std::logic_error("CUDA shuffle outside retained host scope"); }\n'
-        "inline unsigned atomicExch(unsigned*, unsigned) {\n"
-        '  throw std::logic_error("CUDA atomic outside retained host scope"); }\n'
     )
     for name, source in (
         ("generated_scf_density_cuda.cuh", emit_density_cuda()),

@@ -15,12 +15,6 @@
       "stop": "void launch_update_diis_kernel(",
       "role": "scientific",
       "reason": "Native DIIS Gram assembly, normalization, augmented solve and dependent-history retirement, including local state glue. Final Fock publication binds a shared compiler-generated chronological history contraction."
-    },
-    {
-      "start": "__global__ void rebuild_ordered_diis_gram_kernel",
-      "stop": "void launch_rebuild_ordered_diis_gram(",
-      "role": "scientific",
-      "reason": "DIIS proposed live-window full ordered Gram preparation; finite refusal cannot publish a new active ring."
     }
   ]
 }

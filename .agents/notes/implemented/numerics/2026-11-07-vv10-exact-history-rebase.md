@@ -3,6 +3,10 @@
 Status: implemented, default off; linked-device and complete endpoint qualification pending
 Date: 2026-11-07
 
+Superseded on 2026-11-09 by
+[retirement of the rejected experiment](../../rejected/2026-11-09-retire-vv10-history-rebase.md).
+The implementation described below is historical, not a current runtime option.
+
 The outer VV10 solver clears provisional history before every fresh target. A
 later frozen problem differs from the preceding frozen problem by one isolated
 additive AO potential. The opt-in `GENERATIVEQC_KS_VV10_REBASE_HISTORY=1` banks the

@@ -27,15 +27,8 @@ def test_ordered_ring_adapter_lifetime_and_work(
     # execution, warp synchronization, launch routing or endpoint performance.
     (tmp_path / "cuda_runtime.h").write_text(
         "#pragma once\n#define __device__\n"
-        "#include <stdexcept>\n#include <cmath>\nusing std::isfinite;\n"
         "struct Lane { unsigned x; }; inline Lane threadIdx{};\n"
         "inline void __syncwarp() {}\n"
-        # The adjacent full rebuild is parsed, never host-executed. Refuse
-        # accidental use rather than emulate its CUDA collective/atomic.
-        "inline unsigned __shfl_sync(unsigned, unsigned, int) {\n"
-        '  throw std::logic_error("CUDA shuffle outside host adapter scope"); }\n'
-        "inline unsigned atomicExch(unsigned*, unsigned) {\n"
-        '  throw std::logic_error("CUDA atomic outside host adapter scope"); }\n'
     )
     (tmp_path / "generated_scf_diis_cuda.cuh").write_text(diis_cuda_header())
     source = tmp_path / "ordered_ring_probe.cpp"

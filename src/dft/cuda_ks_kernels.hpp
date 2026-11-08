@@ -5,40 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "dft/vv10_rebase_history.hpp"
-
 namespace generativeqc::dft::cuda_ks_detail {
-/** One optional lease; all pointers remain stable until drained retirement. */
-struct RebaseStorage {
-  double *density{}, *bank_density{}, *bank_fock{}, *bank_residual{}, *potential{};
-  vv10_rebase::SlotTag *tags{}, *bank_tags{};
-  vv10_rebase::Transaction* transaction{};
-};
-void rebase_reset(cudaStream_t stream, unsigned history, RebaseStorage storage);
-void rebase_refuse(cudaStream_t stream, vv10_rebase::Error reason, RebaseStorage storage);
-void rebase_record_density(cudaStream_t stream, std::size_t elements, unsigned history,
-                           const double* density, const std::uint8_t* enabled,
-                           const std::uint32_t* count, const std::uint32_t* head,
-                           vv10_rebase::Key key, RebaseStorage storage);
-void rebase_snapshot(cudaStream_t stream, std::size_t elements, unsigned history,
-                     const double* fock_history, const double* residual_history,
-                     const double* old_potential, const std::uint32_t* count,
-                     const std::uint32_t* head, vv10_rebase::Key key, RebaseStorage storage);
-void rebase_prepare_target(cudaStream_t stream, std::size_t elements, unsigned history,
-                           const double* new_potential, const std::uint32_t* count,
-                           const std::uint32_t* head, vv10_rebase::Key key, RebaseStorage storage);
-/** Checks each source/product and updated F/R for finite values. No live slot
- * is touched here; transaction.ready is sticky false after numerical refusal. */
-void rebase_check_finite(cudaStream_t stream, std::size_t elements, const double* values,
-                         RebaseStorage storage);
-void rebase_accumulate(cudaStream_t stream, std::size_t elements, unsigned bank_slot,
-                       const double* product, bool subtract, bool update_fock,
-                       RebaseStorage storage);
-void rebase_restore(cudaStream_t stream, std::size_t elements, unsigned history,
-                    double* fock_history, double* residual_history, RebaseStorage storage);
-void rebase_publish(cudaStream_t stream, unsigned history, std::uint32_t* count,
-                    std::uint32_t* head, RebaseStorage storage);
-
 /** Detect numerical core-spectrum ties touching the beta frontier. The cold
  * seed, not the physical Hamiltonian, may resolve this otherwise arbitrary
  * gauge. Both adjacent occupied/virtual clusters participate in the check. */
