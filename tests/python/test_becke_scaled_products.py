@@ -344,6 +344,8 @@ def helper(
         ct.POINTER(ct.c_size_t),
     ]
     result.run.restype = ct.c_int
+    result.run_adjusted.argtypes = [*result.run.argtypes, pointer]
+    result.run_adjusted.restype = ct.c_int
     result.product_probe.argtypes = [
         ct.c_size_t,
         ct.c_size_t,
@@ -902,6 +904,121 @@ def test_scaled_phases_keep_geometry_and_pair_work(
         assert actual[2][0] == len(points) * atoms * (atoms - 1) // 2
         assert expected[2][0] == 2 * actual[2][0]
         assert actual[2][2] == 0
+
+
+def run_adjusted(
+    helper: ct.CDLL,
+    points: np.ndarray,
+    centers: np.ndarray,
+    owners: np.ndarray,
+    seeds: np.ndarray,
+    radii: np.ndarray,
+    *,
+    cached: bool = True,
+    scaled: bool = True,
+) -> tuple[int, np.ndarray, np.ndarray]:
+    """Exercise the same radius-aware geometry with independent product schedules."""
+    pointer = ct.POINTER(ct.c_double)
+    output = np.full_like(centers, 12345.0)
+    counts = np.zeros(3, dtype=np.uintp)
+    arrays = [np.ascontiguousarray(array) for array in (points, centers, seeds, radii)]
+    points, centers, seeds, radii = arrays
+    owners = np.ascontiguousarray(owners, dtype=np.int64)
+    status = helper.run_adjusted(
+        points.ctypes.data_as(pointer),
+        len(points),
+        centers.ctypes.data_as(pointer),
+        len(centers),
+        owners.ctypes.data_as(ct.POINTER(ct.c_int64)),
+        seeds.ctypes.data_as(pointer),
+        cached,
+        int(scaled),
+        output.ctypes.data_as(pointer),
+        counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        radii.ctypes.data_as(pointer),
+    )
+    return status, output, counts
+
+
+@pytest.mark.parametrize("atoms", [2, 5, 48, 96, 128])
+@pytest.mark.parametrize("cached", [False, True])
+def test_radius_adjusted_products_preserve_moved_geometry_and_work(
+    helper: ct.CDLL, atoms: int, cached: bool
+) -> None:
+    """Include clipped radius ratios, both pair orientations and live topology reuse."""
+    rng = np.random.default_rng(73100 + atoms)
+    centers = rng.normal(size=(atoms, 3)) * 2
+    points = rng.normal(size=(17, 3)) * 3
+    owners = rng.integers(atoms, size=len(points), dtype=np.int64)
+    seeds = rng.normal(size=len(points))
+    radii = np.resize(np.array([0.2, 0.35, 0.66, 1.4, 2.6, 4.0]), atoms)
+    moved = centers + rng.normal(size=centers.shape) * 0.1
+    for geometry in (centers, moved, centers):
+        arguments = (helper, points, geometry, owners, seeds, radii)
+        expected = run_adjusted(*arguments, cached=cached, scaled=False)
+        actual = run_adjusted(*arguments, cached=cached)
+        assert actual[0] == expected[0] == 0
+        np.testing.assert_allclose(actual[1], expected[1], rtol=2e-12, atol=4e-13)
+        assert actual[2][0] == len(points) * atoms * (atoms - 1) // 2
+        assert expected[2][0] == 2 * actual[2][0]
+        assert actual[2][2] == 0
+
+
+def test_radius_adjusted_products_against_decimal_and_invariances(
+    helper: ct.CDLL,
+) -> None:
+    """The oracle forms unscaled products directly, without generated AD or logs."""
+    from test_grid_response import CENTERS, DC, POINTS, decimal_partition
+
+    owners = np.array([0, 1, 2], dtype=np.int64)
+    seeds = np.array([0.3, -0.2, 0.7])
+    radii = np.array([0.2, 0.66, 4.0])
+    status, gradient, _ = run_adjusted(helper, POINTS, CENTERS, owners, seeds, radii)
+    assert status == 0
+    with localcontext() as context:
+        context.prec = 80
+        step = Decimal("1e-22")
+
+        def moved(
+            values: np.ndarray, motion: np.ndarray, sign: int
+        ) -> list[list[Decimal]]:
+            return [
+                [
+                    Decimal(str(value)) + sign * step * Decimal(str(direction))
+                    for value, direction in zip(row, displacement, strict=True)
+                ]
+                for row, displacement in zip(values, motion, strict=True)
+            ]
+
+        plus, minus = [
+            decimal_partition(
+                moved(POINTS, DC[owners], sign),
+                moved(CENTERS, DC, sign),
+                helper.iterations,
+                [Decimal(str(radius)) for radius in radii],
+            )
+            for sign in (1, -1)
+        ]
+        expected = sum(
+            Decimal(str(seed)) * (upper[owner] - lower[owner]) / (2 * step)
+            for seed, upper, lower, owner in zip(
+                seeds, plus, minus, owners, strict=True
+            )
+        )
+        assert abs(np.sum(gradient * DC) - float(expected)) < 3e-14
+    np.testing.assert_allclose(gradient.sum(axis=0), 0, atol=3e-15)
+    shift = np.array([0.3, -0.7, 0.2])
+    translated = run_adjusted(
+        helper, POINTS + shift, CENTERS + shift, owners, seeds, radii
+    )
+    assert translated[0] == 0
+    np.testing.assert_allclose(translated[1], gradient, atol=3e-15)
+    order = np.array([2, 0, 1])
+    permuted = run_adjusted(
+        helper, POINTS, CENTERS[order], np.argsort(order)[owners], seeds, radii[order]
+    )
+    assert permuted[0] == 0
+    np.testing.assert_allclose(permuted[1], gradient[order], atol=3e-15)
 
 
 @pytest.mark.parametrize(

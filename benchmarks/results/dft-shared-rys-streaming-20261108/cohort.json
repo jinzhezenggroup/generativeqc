@@ -4,6 +4,16 @@
   "member_count": 135,
   "default_promotion_qualified": true,
   "all_readme_leadership_established": false,
+  "native_images": {
+    "control": {
+      "source_identity": "334aea84a9517b2023e36b819a51950c781045be2ea8e5657a416b5d8fe91b91",
+      "library_sha256": "26429e92a70a293c3ef15040beae7721a63cb21ca47e274e37427f3160656b26"
+    },
+    "candidate": {
+      "source_identity": "7fbcd2d2e35fac47b64517f70bba10e6af2d65c3e74112801a6c159a5a7bc51c",
+      "library_sha256": "9a37512dc5f96f8a5d0ca78cae46c33323cb8a693620ff3bc93958f33c82534f"
+    }
+  },
   "raw_k_logs": {
     "a100": "weighted-pilot-a100/raw-k-numerics.log",
     "5090": "raw-k-science/fixture-5090-16846/numerics.log"

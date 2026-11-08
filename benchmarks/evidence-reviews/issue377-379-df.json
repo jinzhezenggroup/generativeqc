@@ -6,12 +6,12 @@
   "review_document": "benchmarks/results/issue377-379-df/README.md",
   "files": [
     {
-      "bytes": 944957,
+      "bytes": 758556,
       "classification": "test-reference-input",
       "family": "issue377-379-df",
       "path": "benchmarks/results/issue377-379-df/inputs/768-occupied-coefficients.npz",
       "role": "reference-input",
-      "sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2"
+      "sha256": "e165812519cc7fa9cfb26ff8a198ae73a71081d59f168f4d0ef725d473846b33"
     }
   ]
 }

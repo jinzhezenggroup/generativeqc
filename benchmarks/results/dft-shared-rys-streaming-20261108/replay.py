@@ -62,7 +62,9 @@ def replay(directory: Path = Path(__file__).parent) -> dict:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(text)
         for card in ("a100", "5090"):
-            cards[card] = qualify_native(destination / ("native-" + card), card)
+            cards[card] = qualify_native(
+                destination / ("native-" + card), card, images=cohort["native_images"]
+            )
             for result in cards[card]["methods"].values():
                 require(result["paired_warm_gate"], "Paired warm regression")
                 limit = 0.98 if card == "a100" else 1.03

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import lzma
+from functools import partial
 from pathlib import Path
 from statistics import mean
 
@@ -22,7 +23,88 @@ from benchmarks.readme_defaults_qualification import (
 from benchmarks.readme_defaults_report import reduce_record
 
 
-def qualify_native(directory: Path, card: str) -> dict:
+def _quadrature_definition(sample: dict) -> tuple:
+    """Match NLC settings, not implementation-specific retained-point counts."""
+    return sample["level"], {
+        key: value
+        for key, value in (sample.get("nonlocal_grid") or {}).items()
+        if key != "points"
+    }
+
+
+def qualify_independent_record(
+    record: dict, *, oracles: list[dict], reference_contracts: dict
+) -> dict:
+    """Gate every phase against unchanged dense, grid-stability and CPU/GPU oracles.
+
+    Reuse contracts bind original independent producers and scientific inputs;
+    neither measurement revisions nor retained oracle receipts are rewritten.
+    This scientific gate alone makes no timing or default-promotion claim.
+    """
+
+    def require(condition: bool, detail: str) -> None:
+        if not condition:
+            raise ValueError(detail)
+
+    require(
+        record.get("status") == "complete"
+        and len(record.get("samples", [])) == record.get("warm_repeats", 0) + 1,
+        "Incomplete independent endpoint population",
+    )
+    reduce_record(record)
+    indexed = {
+        (item["atoms"], item["backend"]): item
+        for item in oracles
+        if item["method"] == record["method"]
+    }
+    target, cpu, gpu = (
+        indexed[key] for key in ((record["atoms"], "cuda"), (3, "cpu"), (3, "cuda"))
+    )
+    for oracle in (target, cpu, gpu):
+        _oracle(oracle)
+        require(oracle["status"] == "complete", "Incomplete independent reference")
+        require(
+            reference_contracts[identity(oracle)]
+            == _reference_contract(record, oracle),
+            "Changed independent producer/input contract",
+        )
+    require(_geometry(target) == _geometry(record), "Changed independent geometry")
+    require(_geometry(cpu) == _geometry(gpu), "Changed CPU/GPU spot geometry")
+    stability = [
+        _comparison(*oracle["samples"], oracle["atoms"], fraction=STABILITY_FRACTION)
+        for oracle in (target, gpu)
+    ]
+    cpu_sample = cpu["samples"][-1]
+    matches = [
+        sample
+        for sample in gpu["samples"]
+        if _quadrature_definition(sample) == _quadrature_definition(cpu_sample)
+    ]
+    require(len(matches) == 1, "Unmatched independent spot quadrature")
+    spot = _comparison(cpu_sample, matches[0], 3, fraction=STABILITY_FRACTION)
+    endpoints = [
+        _comparison(sample, target["samples"][-1], record["atoms"])
+        for sample in record["samples"]
+    ]
+    require(
+        spot["passed"] and all(item["passed"] for item in stability + endpoints),
+        "Independent numerical gate failed",
+    )
+    return {
+        "dense_sha256": identity(target),
+        "cpu_sha256": identity(cpu),
+        "gpu_spot_sha256": identity(gpu),
+        "grid_stability": stability,
+        "cpu_gpu_spot": spot,
+        "endpoints": endpoints,
+        "measurement_packages": record["environment"]["packages"],
+        "reference_packages": target["environment"]["packages"],
+    }
+
+
+def qualify_native(
+    directory: Path, card: str, *, images: dict[str, dict[str, str]]
+) -> dict:
     """Authenticate the complete ABBA, work, numerical and dispatch evidence."""
     if card not in ("a100", "5090"):
         raise ValueError("Unknown qualification card")
@@ -32,77 +114,22 @@ def qualify_native(directory: Path, card: str) -> dict:
         lzma.decompress((legacy_root / "oracles.json.xz").read_bytes())
     )
     legacy = json.loads((legacy_root / "reference-reuse.json").read_text())["entries"]
+    scientific = partial(
+        qualify_independent_record, oracles=oracles, reference_contracts=legacy
+    )
 
     def require(condition: bool, detail: str) -> None:
         if not condition:
             raise ValueError(detail)
 
-    def scientific(record: dict) -> dict:
-        """Use the unchanged dense/CPU contract at the actual measured atom count."""
-        indexed = {
-            (item["atoms"], item["backend"]): item
-            for item in oracles
-            if item["method"] == record["method"]
-        }
-        target, cpu, gpu = (
-            indexed[key] for key in ((record["atoms"], "cuda"), (3, "cpu"), (3, "cuda"))
-        )
-        for oracle in (target, cpu, gpu):
-            _oracle(oracle)
-            require(oracle["status"] == "complete", "Incomplete independent reference")
-            require(
-                legacy[identity(oracle)] == _reference_contract(record, oracle),
-                "Changed independent producer/input contract",
-            )
-        require(_geometry(target) == _geometry(record), "Changed independent geometry")
-        require(_geometry(cpu) == _geometry(gpu), "Changed CPU/GPU spot geometry")
-        stability = [
-            _comparison(
-                *oracle["samples"], oracle["atoms"], fraction=STABILITY_FRACTION
-            )
-            for oracle in (target, gpu)
-        ]
-        cpu_sample = cpu["samples"][-1]
-        matches = [
-            sample
-            for sample in gpu["samples"]
-            if sample["level"] == cpu_sample["level"]
-            and sample.get("nonlocal_grid") == cpu_sample.get("nonlocal_grid")
-        ]
-        require(len(matches) == 1, "Unmatched independent spot quadrature")
-        spot = _comparison(cpu_sample, matches[0], 3, fraction=STABILITY_FRACTION)
-        endpoints = [
-            _comparison(sample, target["samples"][-1], record["atoms"])
-            for sample in record["samples"]
-        ]
-        require(
-            spot["passed"] and all(item["passed"] for item in stability + endpoints),
-            "Independent numerical gate failed",
-        )
-        return {
-            "dense_sha256": identity(target),
-            "cpu_sha256": identity(cpu),
-            "gpu_spot_sha256": identity(gpu),
-            "grid_stability": stability,
-            "cpu_gpu_spot": spot,
-            "endpoints": endpoints,
-            "measurement_packages": record["environment"]["packages"],
-            "reference_packages": target["environment"]["packages"],
-        }
-
     require(
         (directory / "exit-code.txt").read_text().strip() == "0",
         "Failed GPU allocation",
     )
+    require(set(images) == {"control", "candidate"}, "Incomplete native image cohort")
     expected = {
-        "control": (
-            "334aea84a9517b2023e36b819a51950c781045be2ea8e5657a416b5d8fe91b91",
-            "26429e92a70a293c3ef15040beae7721a63cb21ca47e274e37427f3160656b26",
-        ),
-        "candidate": (
-            "7fbcd2d2e35fac47b64517f70bba10e6af2d65c3e74112801a6c159a5a7bc51c",
-            "9a37512dc5f96f8a5d0ca78cae46c33323cb8a693620ff3bc93958f33c82534f",
-        ),
+        arm: (image["source_identity"], image["library_sha256"])
+        for arm, image in images.items()
     }
 
     def require_native_build(record: dict, arm: str) -> None:
@@ -242,6 +269,60 @@ def qualify_native(directory: Path, card: str) -> dict:
                 for name, record in records.items()
             },
         }
+    diagnostic_paths = [
+        directory / f"{method}-df-{arm}.json"
+        for method in ("pbe0", "b3lyp")
+        for arm in ("candidate", "reference")
+    ]
+    if any(path.exists() for path in diagnostic_paths):
+        require(
+            all(path.exists() for path in diagnostic_paths), "Incomplete DF diagnostics"
+        )
+        diagnostics = {}
+        for method in ("pbe0", "b3lyp"):
+            records = {
+                arm: json.loads((directory / f"{method}-df-{arm}.json").read_text())
+                for arm in ("candidate", "reference")
+            }
+            image = json.loads(
+                (directory / f"identity-{method}-df-candidate.json").read_text()
+            )
+            require(
+                (image["source_identity"], image["library_sha256"])
+                == expected["candidate"],
+                "Wrong normal DF ELF",
+            )
+            for record in records.values():
+                require(
+                    record["status"] == "complete"
+                    and len(record["samples"]) == 4
+                    and (record["method"], record["mode"], record["atoms"])
+                    == (method, "df", 96),
+                    "Changed DF diagnostic population",
+                )
+                reduce_record(record)
+            paired = [
+                errors(sample["energy"], sample["forces"], oracle, 96)
+                for sample in records["candidate"]["samples"]
+                for oracle in records["reference"]["samples"]
+            ]
+            require(all(item["passed"] for item in paired), "DF paired E/F failed")
+            diagnostics[method] = {
+                "single_pair_not_abba": True,
+                "independent": {
+                    arm: scientific(record) for arm, record in records.items()
+                },
+                "paired": paired,
+                "cold_seconds": {
+                    arm: record["samples"][0]["seconds"]
+                    for arm, record in records.items()
+                },
+                "warm_seconds": {
+                    arm: [sample["seconds"] for sample in record["samples"][1:]]
+                    for arm, record in records.items()
+                },
+            }
+        report["df_single_pair_diagnostics"] = diagnostics
     small = {
         arm: json.loads((directory / ("pbe0-48-" + arm + ".json")).read_text())
         for arm in ("control", "candidate")
@@ -286,21 +367,60 @@ def qualify_native(directory: Path, card: str) -> dict:
     )
     rows = list(csv.DictReader(proof[1:], delimiter="\t"))
     shared = [item for item in rows if "shared_rys_xy_streaming" in item["name"]]
+    proof_endpoint = json.loads(
+        (directory / "default-execution-proof.json").read_text()
+    )
+    reduce_record(proof_endpoint)
+    report["default_cold_independent"] = scientific(proof_endpoint)
+    cold_focks = proof_endpoint["samples"][0]["fock_builds"]
+    expected_kernels = {
+        f"generated_sm80_shared_rys_xy_streaming_{name}"
+        "_shell_class_fock_rhf_streaming_kernel"
+        for name in ("dppp", "pppp", "dpds", "ddps", "dpdp", "ddpp")
+    }
     if card == "a100":
-        expected_kernels = {
-            f"generated_sm80_shared_rys_xy_streaming_{name}"
-            "_shell_class_fock_rhf_streaming_kernel"
-            for name in ("dppp", "pppp", "dpds", "ddps", "dpdp", "ddpp")
-        }
         require(
-            len(shared) == len(expected_kernels)
-            and {item["name"] for item in shared} == expected_kernels
-            and all(int(item["count"]) == 9 for item in shared),
+            {item["name"] for item in shared} == expected_kernels
+            and len(shared) == len(expected_kernels)
+            and all(int(item["count"]) == cold_focks for item in shared),
             "Automatic shared-XY execution was not proved",
         )
     else:
         require(not shared, "5090 default unexpectedly uses shared-XY")
     report["default_kernel_census"] = shared
+    report["default_cold_fock_builds"] = cold_focks
     report["collector"] = header
+    extra_proof = directory / "b3lyp-default-cold-kernels.tsv"
+    if extra_proof.exists():
+        lines = extra_proof.read_text().splitlines()
+        extra_header = dict(
+            field.split("=", 1) for field in lines[0].removeprefix("# ").split()
+        )
+        require(extra_header == header, "Incomplete B3LYP cold-only collector")
+        extra_endpoint = json.loads(
+            (directory / "b3lyp-default-execution-proof.json").read_text()
+        )
+        reduce_record(extra_endpoint)
+        extra_focks = extra_endpoint["samples"][0]["fock_builds"]
+        extra_rows = list(csv.DictReader(lines[1:], delimiter="\t"))
+        extra_shared = [
+            item for item in extra_rows if "shared_rys_xy_streaming" in item["name"]
+        ]
+        require(
+            (
+                {item["name"] for item in extra_shared} == expected_kernels
+                and len(extra_shared) == len(expected_kernels)
+                and all(int(item["count"]) == extra_focks for item in extra_shared)
+            )
+            if card == "a100"
+            else not extra_shared,
+            "B3LYP automatic dispatch was not proved",
+        )
+        report["b3lyp_cold_diagnostic"] = {
+            "collector": extra_header,
+            "cold_fock_builds": extra_focks,
+            "kernel_census": extra_shared,
+            "independent": scientific(extra_endpoint),
+        }
     report["unacquired_counts"] = ["quartet_evaluations", "recurrence_evaluations"]
     return report
