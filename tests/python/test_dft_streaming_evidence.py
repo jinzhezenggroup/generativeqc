@@ -114,3 +114,32 @@ def test_master_diagnostics_reject_incomplete_or_changed_evidence(
     cohort = json.loads((MASTER / "cohort.json").read_text())
     with pytest.raises(ValueError, match=message):
         qualify_native(tmp_path, "a100", images=cohort["native_images"])
+
+
+@pytest.mark.parametrize("family", (FAMILY, MASTER), ids=("historical", "master"))
+@pytest.mark.parametrize("arm", ("control", "candidate", "both"))
+@pytest.mark.parametrize("corruption", ("empty", "partial", "failed"))
+def test_small_population_must_be_complete(
+    tmp_path: Path, arm: str, corruption: str, family: Path
+) -> None:
+    _, files = load(family)
+    for name, text in files.items():
+        if name.startswith("native-a100/"):
+            path = tmp_path / name.removeprefix("native-a100/")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+    arms = ("control", "candidate") if arm == "both" else (arm,)
+    for selected in arms:
+        path = tmp_path / f"pbe0-48-{selected}.json"
+        record = json.loads(path.read_text())
+        if corruption == "failed":
+            record["status"] = "failed"
+        else:
+            record["samples"] = [] if corruption == "empty" else record["samples"][:1]
+        path.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="Incomplete 48-atom population"):
+        qualify_native(
+            tmp_path,
+            "a100",
+            images=json.loads((family / "cohort.json").read_text())["native_images"],
+        )
