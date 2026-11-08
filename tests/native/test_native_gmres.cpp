@@ -1290,6 +1290,34 @@ void stable_norm_extremes() {
   }
   require(rejected, "unrepresentable finite norm was accepted");
 }
+
+void physical_hessian_diagonal_preconditioning() {
+  constexpr std::size_t dimension = 96;
+  DenseOperator hessian{dimension, std::vector<double>(dimension * dimension, 0.0)};
+  std::vector<double> diagonal(dimension), rhs(dimension);
+  for (std::size_t index = 0; index < dimension; ++index) {
+    diagonal[index] = std::pow(10.0, 8.0 * index / (dimension - 1));
+    hessian.values[index * dimension + index] = diagonal[index];
+    rhs[index] = std::sin(0.7 * (index + 1));
+    if (index) {
+      const double coupling = 0.02 * std::sqrt(diagonal[index - 1] * diagonal[index]);
+      hessian.values[(index - 1) * dimension + index] = coupling;
+      hessian.values[index * dimension + index - 1] = coupling;
+    }
+  }
+  GmresOptions options;
+  options.relative_tolerance = 0.0;
+  options.absolute_tolerance = 1e-11;
+  const generativeqc::response::LinearResponseProblem problem(
+      dimension, std::ref(hessian), generativeqc::response::LinearResponseSymmetry::Symmetric);
+  const auto plan = generativeqc::response::prepare_response(problem, options);
+  const auto conditioned = generativeqc::response::solve_response(plan, problem, rhs, {}, diagonal);
+  require(conditioned.converged(), "physical-Hessian diagonal did not resolve the response");
+  require(explicit_residual(hessian, conditioned.solution, rhs) <= options.absolute_tolerance,
+          "preconditioned solve accepted only a scaled residual");
+  require(conditioned.workspace_bytes <= options.max_workspace_bytes,
+          "diagonal preconditioning exceeded bounded Krylov storage");
+}
 }  // namespace
 
 int main() {
@@ -1314,6 +1342,7 @@ int main() {
     response_sequence_contract();
     amortized_true_residuals();
     stable_norm_extremes();
+    physical_hessian_diagonal_preconditioning();
     measured_workspace_owns_returned_storage();
     workspace_covers_restarts_and_optional_diagnostics();
     std::cout << "Native GMRES contracts passed\n";

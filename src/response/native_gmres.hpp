@@ -20,6 +20,31 @@ enum class GmresStatus {
   nonfinite_preconditioner,
 };
 
+/** Stable stopping reasons for diagnostics; convergence remains a true-residual gate. */
+inline const char* gmres_status_name(GmresStatus status) noexcept {
+  switch (status) {
+    case GmresStatus::initial_residual:
+      return "initial_residual";
+    case GmresStatus::converged:
+      return "converged";
+    case GmresStatus::workspace_limit:
+      return "workspace_limit";
+    case GmresStatus::max_iterations:
+      return "max_iterations";
+    case GmresStatus::breakdown:
+      return "breakdown";
+    case GmresStatus::stagnation:
+      return "stagnation";
+    case GmresStatus::nonfinite_input:
+      return "nonfinite_input";
+    case GmresStatus::nonfinite_operator:
+      return "nonfinite_operator";
+    case GmresStatus::nonfinite_preconditioner:
+      return "nonfinite_preconditioner";
+  }
+  return "unknown";
+}
+
 struct GmresOptions {
   double relative_tolerance{1e-10};
   double absolute_tolerance{};
