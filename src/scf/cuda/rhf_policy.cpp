@@ -62,8 +62,7 @@ SharedRysXyPolicy resolve_shared_rys_xy_policy(SharedRysXyRequest request,
   // Shared scalar-FP64 recurrence storage is a throughput-class choice, not
   // an ISA identity. Unknown or reduced-rate FP64 retains the incumbent;
   // explicit trials may bypass profitability, never capability or legality.
-  const bool full_rate_fp64 =
-      target.fp32_fp64_ratio > 0 && target.fp32_fp64_ratio <= 2;
+  const bool full_rate_fp64 = target.fp32_fp64_ratio > 0 && target.fp32_fp64_ratio <= 2;
   if (request == SharedRysXyRequest::On || request == SharedRysXyRequest::WeightedZOn ||
       (request == SharedRysXyRequest::Auto && full_rate_fp64)) {
     if (c.unrestricted)
