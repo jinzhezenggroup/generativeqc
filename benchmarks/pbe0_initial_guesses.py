@@ -225,7 +225,9 @@ def measure(args: argparse.Namespace) -> None:
     for name in (
         "python/generativeqc/initial_guess.py",
         "src/scf/initial_guess/minao.cpp",
-        "src/scf/initial_guess/minao_data.hpp",
+        "src/integrals/minao_basis.cpp",
+        "src/integrals/minao_basis.hpp",
+        "src/integrals/minao_basis_data.hpp",
         "src/scf/solver/proposal_control.cpp",
         "src/scf/solver/eigen_frame.cpp",
         "src/scf/cuda/df_eigensystem.cpp",

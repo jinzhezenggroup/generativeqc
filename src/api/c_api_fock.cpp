@@ -15,11 +15,11 @@
 #include "scf/mean_field.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
-#include <cublas_v2.h>
 #include <cuda_runtime_api.h>
 
 #include "runtime/resource_cuda.cuh"
 #include "scf/cuda_direct_jk_device.hpp"
+#include "tensor/cuda_dense_operations.hpp"
 #endif
 
 struct generativeqc_fock_plan {
@@ -35,7 +35,7 @@ struct generativeqc_rhf_response_resident {
   generativeqc::scf::CudaDirectJkPlan* direct{};
   int device_id{-1};
   cudaStream_t stream{};
-  cublasHandle_t blas{};
+  generativeqc::tensor::CudaDenseOperations operations;
   void* allocation{};
   std::size_t allocation_bytes{};
   std::size_t nbf{}, nocc{}, nvirt{}, dimension{}, vector_slots{};
@@ -62,7 +62,7 @@ struct generativeqc_uhf_response_resident {
   generativeqc::scf::CudaDirectJkPlan* direct{};
   int device_id{-1};
   cudaStream_t stream{};
-  cublasHandle_t blas{};
+  generativeqc::tensor::CudaDenseOperations operations;
   void* allocation{};
   std::size_t allocation_bytes{};
   std::size_t nbf{}, nocc_alpha{}, nvirt_alpha{}, nocc_beta{}, nvirt_beta{}, dimension{},
@@ -541,10 +541,9 @@ static generativeqc_status create_response_resident(
     owner->density_response = density_response;
 
     resident_cuda(cudaSetDevice(owner->device_id));
-    resident_blas(cublasCreate(&owner->blas));
+    resident_blas(owner->operations.create());
     try {
-      resident_blas(cublasSetStream(owner->blas, owner->stream));
-      resident_blas(cublasSetPointerMode(owner->blas, CUBLAS_POINTER_MODE_HOST));
+      resident_blas(owner->operations.bind(owner->stream));
       resident_cuda(generativeqc::runtime::resource_cuda_malloc(&owner->allocation, bytes));
       auto* cursor = static_cast<double*>(owner->allocation);
       owner->slots = cursor;
@@ -594,9 +593,8 @@ static generativeqc_status create_response_resident(
         (void)generativeqc::runtime::resource_cuda_free(owner->allocation);
         owner->allocation = nullptr;
       }
-      if (owner->blas) {
-        (void)cublasDestroy(owner->blas);
-        owner->blas = nullptr;
+      if (owner->operations) {
+        (void)owner->operations.close();
       }
       throw;
     }
@@ -672,7 +670,7 @@ extern "C" void generativeqc_rhf_response_resident_destroy(
   if (owner->device_id >= 0) (void)cudaSetDevice(owner->device_id);
   if (owner->stream) (void)cudaStreamSynchronize(owner->stream);
   if (owner->allocation) (void)generativeqc::runtime::resource_cuda_free(owner->allocation);
-  if (owner->blas) (void)cublasDestroy(owner->blas);
+  if (owner->operations) (void)owner->operations.close();
 #endif
   delete owner;
 }
@@ -773,9 +771,9 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_copy(
     generativeqc_rhf_response_resident* owner, uint32_t destination, uint32_t source) {
 #if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
-    resident_blas(cublasDcopy(owner->blas, static_cast<int>(owner->dimension),
-                              resident_slot(owner, source), 1, resident_slot(owner, destination),
-                              1));
+    resident_blas(owner->operations.copy(static_cast<int>(owner->dimension),
+                                         resident_slot(owner, source), 1,
+                                         resident_slot(owner, destination), 1));
     ++owner->blas_calls;
   });
 #else
@@ -791,8 +789,8 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_scale(
 #if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(std::isfinite(alpha), "resident RHF scale must be finite");
-    resident_blas(cublasDscal(owner->blas, static_cast<int>(owner->dimension), &alpha,
-                              resident_slot(owner, slot), 1));
+    resident_blas(owner->operations.scale(static_cast<int>(owner->dimension), &alpha,
+                                          resident_slot(owner, slot), 1));
     ++owner->blas_calls;
   });
 #else
@@ -809,9 +807,9 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_axpy(
 #if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(std::isfinite(alpha), "resident RHF axpy coefficient must be finite");
-    resident_blas(cublasDaxpy(owner->blas, static_cast<int>(owner->dimension), &alpha,
-                              resident_slot(owner, source), 1, resident_slot(owner, destination),
-                              1));
+    resident_blas(owner->operations.add(static_cast<int>(owner->dimension), &alpha,
+                                        resident_slot(owner, source), 1,
+                                        resident_slot(owner, destination), 1));
     ++owner->blas_calls;
   });
 #else
@@ -828,8 +826,9 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_dot(
 #if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(value, "resident RHF dot requires output");
-    resident_blas(cublasDdot(owner->blas, static_cast<int>(owner->dimension),
-                             resident_slot(owner, left), 1, resident_slot(owner, right), 1, value));
+    resident_blas(owner->operations.dot(static_cast<int>(owner->dimension),
+                                        resident_slot(owner, left), 1, resident_slot(owner, right),
+                                        1, value));
     ++owner->blas_calls;
     owner->d2h_bytes += sizeof(double);
     resident_sync(owner);
@@ -849,8 +848,8 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_norm(
 #if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(value, "resident RHF norm requires output");
-    resident_blas(cublasDnrm2(owner->blas, static_cast<int>(owner->dimension),
-                              resident_slot(owner, slot), 1, value));
+    resident_blas(owner->operations.norm(static_cast<int>(owner->dimension),
+                                         resident_slot(owner, slot), 1, value));
     ++owner->blas_calls;
     owner->d2h_bytes += sizeof(double);
     resident_sync(owner);
@@ -880,14 +879,14 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_apply(
     const auto* c_occ = owner->coefficients;
     const auto* c_virt = owner->coefficients + owner->nbf * owner->nocc;
 
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, o, v, &one, c_virt, n, x, v,
-                              &zero, owner->transform_one, n));
+    resident_blas(owner->operations.product(false, false, n, o, v, &one, c_virt, n, x, v, &zero,
+                                            owner->transform_one, n));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, o, &two,
-                              owner->transform_one, n, c_occ, n, &zero, owner->density, n));
+    resident_blas(owner->operations.product(false, true, n, n, o, &two, owner->transform_one, n,
+                                            c_occ, n, &zero, owner->density, n));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, o, &two, c_occ, n,
-                              owner->transform_one, n, &one, owner->density, n));
+    resident_blas(owner->operations.product(false, true, n, n, o, &two, c_occ, n,
+                                            owner->transform_one, n, &one, owner->density, n));
     ++owner->blas_calls;
 
     auto spec = owner->parent->strategy().spec;
@@ -903,7 +902,7 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_apply(
     const auto* xc =
         owner->density_response ? owner->density_response(owner->density, owner->stream) : nullptr;
     require(!owner->density_response || xc, "resident XC response returned no potential");
-    resident_blas(cublasDcopy(owner->blas, n * n, owner->coulomb, 1, owner->density, 1));
+    resident_blas(owner->operations.copy(n * n, owner->coulomb, 1, owner->density, 1));
     ++owner->blas_calls;
     // Reuse the resident potential-combination gateway for every admitted
     // contribution; absent components do not submit vendor work.
@@ -911,27 +910,26 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_apply(
         {owner->exchange_coefficient, owner->exchange}, {one, xc}};
     for (const auto& [coefficient, potential] : contributions) {
       if (coefficient != 0.0 && potential) {
-        resident_blas(
-            cublasDaxpy(owner->blas, n * n, &coefficient, potential, 1, owner->density, 1));
+        resident_blas(owner->operations.add(n * n, &coefficient, potential, 1, owner->density, 1));
         ++owner->blas_calls;
       }
     }
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, o, n, &one, owner->density,
-                              n, c_occ, n, &zero, owner->transform_two, n));
+    resident_blas(owner->operations.product(false, false, n, o, n, &one, owner->density, n, c_occ,
+                                            n, &zero, owner->transform_two, n));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_T, CUBLAS_OP_N, v, o, n, &one, c_virt, n,
-                              owner->transform_two, n, &zero, y, v));
+    resident_blas(owner->operations.product(true, false, v, o, n, &one, c_virt, n,
+                                            owner->transform_two, n, &zero, y, v));
     ++owner->blas_calls;
 
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, v, o, v, &one,
-                              owner->energy_virt, v, x, v, &zero, owner->gap_scratch, v));
+    resident_blas(owner->operations.product(false, false, v, o, v, &one, owner->energy_virt, v, x,
+                                            v, &zero, owner->gap_scratch, v));
     ++owner->blas_calls;
-    resident_blas(cublasDaxpy(owner->blas, dim, &one, owner->gap_scratch, 1, y, 1));
+    resident_blas(owner->operations.add(dim, &one, owner->gap_scratch, 1, y, 1));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, v, o, o, &one, x, v,
-                              owner->energy_occ, o, &zero, owner->gap_scratch, v));
+    resident_blas(owner->operations.product(false, false, v, o, o, &one, x, v, owner->energy_occ, o,
+                                            &zero, owner->gap_scratch, v));
     ++owner->blas_calls;
-    resident_blas(cublasDaxpy(owner->blas, dim, &minus, owner->gap_scratch, 1, y, 1));
+    resident_blas(owner->operations.add(dim, &minus, owner->gap_scratch, 1, y, 1));
     ++owner->blas_calls;
 
     int numerical_error = 0;
@@ -985,19 +983,19 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_reconstruct_v1
                                   cudaMemcpyHostToDevice, owner->stream));
     owner->h2d_bytes += mo1.size() * sizeof(double);
     for (std::size_t i = 0; i < o; ++i) {
-      resident_blas(cublasDaxpy(owner->blas, static_cast<int>(v), &one, x + i * v, 1,
-                                owner->transform_one + i * n + o, 1));
+      resident_blas(owner->operations.add(static_cast<int>(v), &one, x + i * v, 1,
+                                          owner->transform_one + i * n + o, 1));
       ++owner->blas_calls;
     }
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, o, n, &one,
-                              owner->coefficients, n, owner->transform_one, n, &zero,
-                              owner->transform_two, n));
+    resident_blas(owner->operations.product(false, false, n, o, n, &one, owner->coefficients, n,
+                                            owner->transform_one, n, &zero, owner->transform_two,
+                                            n));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, o, &two,
-                              owner->transform_two, n, c_occ, n, &zero, owner->density, n));
+    resident_blas(owner->operations.product(false, true, n, n, o, &two, owner->transform_two, n,
+                                            c_occ, n, &zero, owner->density, n));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, o, &two, c_occ, n,
-                              owner->transform_two, n, &one, owner->density, n));
+    resident_blas(owner->operations.product(false, true, n, n, o, &two, c_occ, n,
+                                            owner->transform_two, n, &one, owner->density, n));
     ++owner->blas_calls;
 
     auto spec = owner->parent->strategy().spec;
@@ -1009,55 +1007,41 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_reconstruct_v1
     if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "resident reconstruction J/K failed" : detail);
 
-    resident_blas(cublasDscal(owner->blas, static_cast<int>(matrix), &half, owner->exchange, 1));
+    resident_blas(owner->operations.scale(static_cast<int>(matrix), &half, owner->exchange, 1));
     ++owner->blas_calls;
-    resident_blas(cublasDaxpy(owner->blas, static_cast<int>(matrix), &one, owner->coulomb, 1,
-                              owner->exchange, 1));
+    resident_blas(owner->operations.add(static_cast<int>(matrix), &one, owner->coulomb, 1,
+                                        owner->exchange, 1));
     ++owner->blas_calls;
     resident_cuda(cudaMemcpyAsync(owner->transform_one, hs.data(), hs.size() * sizeof(double),
                                   cudaMemcpyHostToDevice, owner->stream));
     owner->h2d_bytes += hs.size() * sizeof(double);
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, o, n, &one, owner->exchange,
-                              n, c_occ, n, &zero, owner->coulomb, n));
+    resident_blas(owner->operations.product(false, false, n, o, n, &one, owner->exchange, n, c_occ,
+                                            n, &zero, owner->coulomb, n));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_T, CUBLAS_OP_N, n, o, n, &one,
-                              owner->coefficients, n, owner->coulomb, n, &one, owner->transform_one,
-                              n));
+    resident_blas(owner->operations.product(true, false, n, o, n, &one, owner->coefficients, n,
+                                            owner->coulomb, n, &one, owner->transform_one, n));
     ++owner->blas_calls;
     for (std::size_t i = 0; i < o; ++i) {
       const double ei = owner->orbital_energies[i];
       resident_blas(
-          cublasDscal(owner->blas, static_cast<int>(n), &ei, owner->transform_two + i * n, 1));
+          owner->operations.scale(static_cast<int>(n), &ei, owner->transform_two + i * n, 1));
       ++owner->blas_calls;
     }
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, o, &two,
-                              owner->transform_two, n, c_occ, n, &zero, owner->coulomb, n));
+    resident_blas(owner->operations.product(false, true, n, n, o, &two, owner->transform_two, n,
+                                            c_occ, n, &zero, owner->coulomb, n));
     ++owner->blas_calls;
-#if GENERATIVEQC_CUDA_PROVIDER_CUMETAL
-    // CuMetal does not expose cublasDgeam. Preserve the same column-major A + A^T
-    // operation with its supported Level-1 surface, without changing the NVIDIA path.
     resident_blas(
-        cublasDcopy(owner->blas, static_cast<int>(matrix), owner->coulomb, 1, owner->exchange, 1));
-    ++owner->blas_calls;
-    for (std::size_t column = 0; column < n; ++column) {
-      resident_blas(cublasDaxpy(owner->blas, static_cast<int>(n), &one, owner->coulomb + column,
-                                static_cast<int>(n), owner->exchange + column * n, 1));
-      ++owner->blas_calls;
-    }
-#else
-    resident_blas(cublasDgeam(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, &one, owner->coulomb, n,
-                              &one, owner->coulomb, n, owner->exchange, n));
-    ++owner->blas_calls;
-#endif
+        owner->operations.transpose_sum(n, owner->coulomb, owner->exchange, &owner->blas_calls));
 
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, o, o, &one, c_occ, n,
-                              owner->transform_one, n, &zero, owner->transform_two, n));
+    resident_blas(owner->operations.product(false, false, n, o, o, &one, c_occ, n,
+                                            owner->transform_one, n, &zero, owner->transform_two,
+                                            n));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, o, &two,
-                              owner->transform_two, n, c_occ, n, &one, owner->exchange, n));
+    resident_blas(owner->operations.product(false, true, n, n, o, &two, owner->transform_two, n,
+                                            c_occ, n, &one, owner->exchange, n));
     ++owner->blas_calls;
     resident_blas(
-        cublasDcopy(owner->blas, static_cast<int>(matrix), owner->exchange, 1, owner->coulomb, 1));
+        owner->operations.copy(static_cast<int>(matrix), owner->exchange, 1, owner->coulomb, 1));
     ++owner->blas_calls;
     int numerical_error = 0;
     resident_cuda(cudaMemcpyAsync(&numerical_error, owner->numerical_error, sizeof(int),
@@ -1228,10 +1212,9 @@ extern "C" generativeqc_status generativeqc_uhf_response_resident_create(
     // while earlier asynchronous copies still borrow these host buffers.
     std::vector<double> alpha_column_major(matrix), beta_column_major(matrix);
     std::vector<double> eoa(oa * oa, 0.0), eva(va * va, 0.0), eob(ob * ob, 0.0), evb(vb * vb, 0.0);
-    resident_blas(cublasCreate(&owner->blas));
+    resident_blas(owner->operations.create());
     try {
-      resident_blas(cublasSetStream(owner->blas, owner->stream));
-      resident_blas(cublasSetPointerMode(owner->blas, CUBLAS_POINTER_MODE_HOST));
+      resident_blas(owner->operations.bind(owner->stream));
       resident_cuda(generativeqc::runtime::resource_cuda_malloc(&owner->allocation, bytes));
       auto* cursor = static_cast<double*>(owner->allocation);
       owner->slots = cursor;
@@ -1303,9 +1286,8 @@ extern "C" generativeqc_status generativeqc_uhf_response_resident_create(
         (void)generativeqc::runtime::resource_cuda_free(owner->allocation);
         owner->allocation = nullptr;
       }
-      if (owner->blas) {
-        (void)cublasDestroy(owner->blas);
-        owner->blas = nullptr;
+      if (owner->operations) {
+        (void)owner->operations.close();
       }
       throw;
     }
@@ -1335,7 +1317,7 @@ extern "C" void generativeqc_uhf_response_resident_destroy(
   if (owner->device_id >= 0) (void)cudaSetDevice(owner->device_id);
   if (owner->stream) (void)cudaStreamSynchronize(owner->stream);
   if (owner->allocation) (void)generativeqc::runtime::resource_cuda_free(owner->allocation);
-  if (owner->blas) (void)cublasDestroy(owner->blas);
+  if (owner->operations) (void)owner->operations.close();
 #endif
   delete owner;
 }
@@ -1443,9 +1425,9 @@ extern "C" generativeqc_status generativeqc_uhf_response_resident_copy(
 #if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(destination != source, "resident UHF copy source/output must be distinct");
-    resident_blas(cublasDcopy(owner->blas, static_cast<int>(owner->dimension),
-                              uhf_resident_slot(owner, source), 1,
-                              uhf_resident_slot(owner, destination), 1));
+    resident_blas(owner->operations.copy(static_cast<int>(owner->dimension),
+                                         uhf_resident_slot(owner, source), 1,
+                                         uhf_resident_slot(owner, destination), 1));
     ++owner->blas_calls;
   });
 #else
@@ -1461,8 +1443,8 @@ extern "C" generativeqc_status generativeqc_uhf_response_resident_scale(
 #if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(std::isfinite(alpha), "resident UHF scale must be finite");
-    resident_blas(cublasDscal(owner->blas, static_cast<int>(owner->dimension), &alpha,
-                              uhf_resident_slot(owner, slot), 1));
+    resident_blas(owner->operations.scale(static_cast<int>(owner->dimension), &alpha,
+                                          uhf_resident_slot(owner, slot), 1));
     ++owner->blas_calls;
   });
 #else
@@ -1479,9 +1461,9 @@ extern "C" generativeqc_status generativeqc_uhf_response_resident_axpy(
 #if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(std::isfinite(alpha), "resident UHF axpy coefficient must be finite");
-    resident_blas(cublasDaxpy(owner->blas, static_cast<int>(owner->dimension), &alpha,
-                              uhf_resident_slot(owner, source), 1,
-                              uhf_resident_slot(owner, destination), 1));
+    resident_blas(owner->operations.add(static_cast<int>(owner->dimension), &alpha,
+                                        uhf_resident_slot(owner, source), 1,
+                                        uhf_resident_slot(owner, destination), 1));
     ++owner->blas_calls;
   });
 #else
@@ -1498,9 +1480,9 @@ extern "C" generativeqc_status generativeqc_uhf_response_resident_dot(
 #if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(value, "resident UHF dot requires output");
-    resident_blas(cublasDdot(owner->blas, static_cast<int>(owner->dimension),
-                             uhf_resident_slot(owner, left), 1, uhf_resident_slot(owner, right), 1,
-                             value));
+    resident_blas(owner->operations.dot(static_cast<int>(owner->dimension),
+                                        uhf_resident_slot(owner, left), 1,
+                                        uhf_resident_slot(owner, right), 1, value));
     ++owner->blas_calls;
     owner->d2h_bytes += sizeof(double);
     uhf_resident_sync(owner);
@@ -1520,8 +1502,8 @@ extern "C" generativeqc_status generativeqc_uhf_response_resident_norm(
 #if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(value, "resident UHF norm requires output");
-    resident_blas(cublasDnrm2(owner->blas, static_cast<int>(owner->dimension),
-                              uhf_resident_slot(owner, slot), 1, value));
+    resident_blas(owner->operations.norm(static_cast<int>(owner->dimension),
+                                         uhf_resident_slot(owner, slot), 1, value));
     ++owner->blas_calls;
     owner->d2h_bytes += sizeof(double);
     uhf_resident_sync(owner);
@@ -1554,26 +1536,26 @@ extern "C" generativeqc_status generativeqc_uhf_response_resident_apply(
     const auto* ca_virt = owner->coefficients_alpha + owner->nbf * owner->nocc_alpha;
     const auto* cb_occ = owner->coefficients_beta;
     const auto* cb_virt = owner->coefficients_beta + owner->nbf * owner->nocc_beta;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, oa, va, &one, ca_virt, n,
-                              xa, va, &zero, owner->transform_alpha, n));
+    resident_blas(owner->operations.product(false, false, n, oa, va, &one, ca_virt, n, xa, va,
+                                            &zero, owner->transform_alpha, n));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, oa, &one,
-                              owner->transform_alpha, n, ca_occ, n, &zero, owner->density_alpha,
-                              n));
+    resident_blas(owner->operations.product(false, true, n, n, oa, &one, owner->transform_alpha, n,
+                                            ca_occ, n, &zero, owner->density_alpha, n));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, oa, &one, ca_occ, n,
-                              owner->transform_alpha, n, &one, owner->density_alpha, n));
+    resident_blas(owner->operations.product(false, true, n, n, oa, &one, ca_occ, n,
+                                            owner->transform_alpha, n, &one, owner->density_alpha,
+                                            n));
     ++owner->blas_calls;
     if (ob > 0) {
-      resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, ob, vb, &one, cb_virt, n,
-                                xb, vb, &zero, owner->transform_beta, n));
+      resident_blas(owner->operations.product(false, false, n, ob, vb, &one, cb_virt, n, xb, vb,
+                                              &zero, owner->transform_beta, n));
       ++owner->blas_calls;
-      resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, ob, &one,
-                                owner->transform_beta, n, cb_occ, n, &zero, owner->density_beta,
-                                n));
+      resident_blas(owner->operations.product(false, true, n, n, ob, &one, owner->transform_beta, n,
+                                              cb_occ, n, &zero, owner->density_beta, n));
       ++owner->blas_calls;
-      resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, ob, &one, cb_occ, n,
-                                owner->transform_beta, n, &one, owner->density_beta, n));
+      resident_blas(owner->operations.product(false, true, n, n, ob, &one, cb_occ, n,
+                                              owner->transform_beta, n, &one, owner->density_beta,
+                                              n));
       ++owner->blas_calls;
     } else {
       resident_cuda(cudaMemsetAsync(owner->density_beta, 0,
@@ -1588,54 +1570,56 @@ extern "C" generativeqc_status generativeqc_uhf_response_resident_apply(
         detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "resident UHF direct J/K enqueue failed" : detail);
-    resident_blas(cublasDcopy(owner->blas, n * n, owner->coulomb, 1, owner->density_alpha, 1));
+    resident_blas(owner->operations.copy(n * n, owner->coulomb, 1, owner->density_alpha, 1));
     ++owner->blas_calls;
     resident_blas(
-        cublasDaxpy(owner->blas, n * n, &minus, owner->exchange_alpha, 1, owner->density_alpha, 1));
+        owner->operations.add(n * n, &minus, owner->exchange_alpha, 1, owner->density_alpha, 1));
     ++owner->blas_calls;
-    resident_blas(cublasDcopy(owner->blas, n * n, owner->coulomb, 1, owner->density_beta, 1));
+    resident_blas(owner->operations.copy(n * n, owner->coulomb, 1, owner->density_beta, 1));
     ++owner->blas_calls;
     resident_blas(
-        cublasDaxpy(owner->blas, n * n, &minus, owner->exchange_beta, 1, owner->density_beta, 1));
+        owner->operations.add(n * n, &minus, owner->exchange_beta, 1, owner->density_beta, 1));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, oa, n, &one,
-                              owner->density_alpha, n, ca_occ, n, &zero, owner->transform_alpha,
-                              n));
+    resident_blas(owner->operations.product(false, false, n, oa, n, &one, owner->density_alpha, n,
+                                            ca_occ, n, &zero, owner->transform_alpha, n));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_T, CUBLAS_OP_N, va, oa, n, &one, ca_virt, n,
-                              owner->transform_alpha, n, &zero, ya, va));
+    resident_blas(owner->operations.product(true, false, va, oa, n, &one, ca_virt, n,
+                                            owner->transform_alpha, n, &zero, ya, va));
     ++owner->blas_calls;
     if (ob > 0) {
-      resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, ob, n, &one,
-                                owner->density_beta, n, cb_occ, n, &zero, owner->transform_beta,
-                                n));
+      resident_blas(owner->operations.product(false, false, n, ob, n, &one, owner->density_beta, n,
+                                              cb_occ, n, &zero, owner->transform_beta, n));
       ++owner->blas_calls;
-      resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_T, CUBLAS_OP_N, vb, ob, n, &one, cb_virt, n,
-                                owner->transform_beta, n, &zero, yb, vb));
+      resident_blas(owner->operations.product(true, false, vb, ob, n, &one, cb_virt, n,
+                                              owner->transform_beta, n, &zero, yb, vb));
       ++owner->blas_calls;
     }
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, va, oa, va, &one,
-                              owner->energy_virt_alpha, va, xa, va, &zero, owner->gap_alpha, va));
+    resident_blas(owner->operations.product(false, false, va, oa, va, &one,
+                                            owner->energy_virt_alpha, va, xa, va, &zero,
+                                            owner->gap_alpha, va));
     ++owner->blas_calls;
-    resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, va, oa, oa, &one, xa, va,
-                              owner->energy_occ_alpha, oa, &zero, owner->transform_alpha, va));
+    resident_blas(owner->operations.product(false, false, va, oa, oa, &one, xa, va,
+                                            owner->energy_occ_alpha, oa, &zero,
+                                            owner->transform_alpha, va));
     ++owner->blas_calls;
     resident_blas(
-        cublasDaxpy(owner->blas, va * oa, &minus, owner->transform_alpha, 1, owner->gap_alpha, 1));
+        owner->operations.add(va * oa, &minus, owner->transform_alpha, 1, owner->gap_alpha, 1));
     ++owner->blas_calls;
-    resident_blas(cublasDaxpy(owner->blas, va * oa, &one, owner->gap_alpha, 1, ya, 1));
+    resident_blas(owner->operations.add(va * oa, &one, owner->gap_alpha, 1, ya, 1));
     ++owner->blas_calls;
     if (ob > 0) {
-      resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, vb, ob, vb, &one,
-                                owner->energy_virt_beta, vb, xb, vb, &zero, owner->gap_beta, vb));
+      resident_blas(owner->operations.product(false, false, vb, ob, vb, &one,
+                                              owner->energy_virt_beta, vb, xb, vb, &zero,
+                                              owner->gap_beta, vb));
       ++owner->blas_calls;
-      resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, vb, ob, ob, &one, xb, vb,
-                                owner->energy_occ_beta, ob, &zero, owner->transform_beta, vb));
+      resident_blas(owner->operations.product(false, false, vb, ob, ob, &one, xb, vb,
+                                              owner->energy_occ_beta, ob, &zero,
+                                              owner->transform_beta, vb));
       ++owner->blas_calls;
       resident_blas(
-          cublasDaxpy(owner->blas, vb * ob, &minus, owner->transform_beta, 1, owner->gap_beta, 1));
+          owner->operations.add(vb * ob, &minus, owner->transform_beta, 1, owner->gap_beta, 1));
       ++owner->blas_calls;
-      resident_blas(cublasDaxpy(owner->blas, vb * ob, &one, owner->gap_beta, 1, yb, 1));
+      resident_blas(owner->operations.add(vb * ob, &one, owner->gap_beta, 1, yb, 1));
       ++owner->blas_calls;
     }
     int numerical_error = 0;

@@ -10,6 +10,7 @@
 #include "scf/cuda/arena.hpp"
 #include "scf/cuda/resources.hpp"
 #include "scf/cuda/rhf_graph.hpp"
+#include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/diis_work.hpp"
@@ -95,6 +96,7 @@ struct CudaRhfBucketPlan {
   bool quartet_direct{};
   bool transformed_direct{};
   bool bounded_direct_streaming{};
+  cuda_policy::SharedRysXyPolicy shared_rys_xy{};
   /** Frozen with the optional arena regions and captured block predicates. */
   bool fp32_block_screening{};
   bool unrestricted{};
@@ -111,6 +113,8 @@ struct CudaRhfBucketPlan {
   std::uint64_t primary_streaming_fock_mask{};
   bool graph_native_eigensolver_override{};
   bool reuse_converged_fock{};
+  /** Frozen launch geometry, including for retained warm graph replay. */
+  bool block_convergence{};
   bool mixed_precision_fock{};
   /** True only when #990's retained-anchor iteration route is allocated/captured. */
   bool incremental_direct_jk{};
@@ -120,8 +124,8 @@ struct CudaRhfBucketPlan {
   /** Exact per-system mixed-capable tile census the per-item budget divides. */
   std::vector<std::uint32_t> mixed_precision_system_census;
   bool warm_start_updates_enabled{true};
-  bool cublas_enabled{true};
-  bool retry_without_cublas{};
+  bool matrix_context_enabled{true};
+  bool retry_without_matrix_context{};
   bool initialized{};
 };
 

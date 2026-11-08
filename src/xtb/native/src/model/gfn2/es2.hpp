@@ -185,20 +185,6 @@ generativeqc_xtb_status_t evaluate_es2_potential_system_cpu(const ES2Plan& plan,
                                                    double* shell_potentials, std::string& error);
 
 /*
- * Accumulate one Hartree energy per batch member,
- *
- *   E2 = 1/2 q^T Gamma q.
- *
- * The geometry cache is reused unchanged across SCC iterations.
- * workspace.batch_scratch holds one unpublished contribution per member.
- * Writable output, cache, and scratch storage must not alias plan storage;
- * active buffers must not alias the plan, cache, or workspace descriptors.
- */
-generativeqc_xtb_status_t add_es2_energy_cpu(const ES2Plan& plan, const ES2GeometryCache& cache,
-                                    const double* shell_charges, double* energies,
-                                    const ES2Workspace& workspace, std::string& error);
-
-/*
  * Accumulate the ES2 energy for exactly one ragged batch member. The charge
  * pointer still addresses the complete packed shell array, but numerical data
  * outside system's shell slice is neither read nor validated. This permits an

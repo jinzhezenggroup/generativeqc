@@ -1,0 +1,41 @@
+{
+  "schema": "generativeqc.hf-xy-opt-in-publication.v1",
+  "measured_source": {
+    "revision": "a694beec91645e0c7002bcb84976e2041ae02fa3",
+    "tree": "73f7c92a0f8508e0953f0eae45a7ba90ba4e6655",
+    "native_identity": "fea322c023b121519d3b35b50ed92fa022f6096ccdeed3b5b1fcf20f9598bc18",
+    "core_sha256": "136cc845ed20041978dd6f98bafdd2610b84c93a40724298a8573f8493545443",
+    "gpu_uuid": "GPU-2b5c4936-338e-88e5-49e3-e4d3cceccf52"
+  },
+  "integration_base": "17babea1beeced50a11254684b879cbf26157d72",
+  "scope": {
+    "default": "off",
+    "publication_tree_device_measured": false,
+    "all30_complete": false,
+    "timing_population": "one fixed-order off/on cold pair plus three warm calls per owner",
+    "reader": "retained full E/F array and provenance replay; no CUDA/SCF/oracle execution"
+  },
+  "capsule": {
+    "path": "evidence.json.xz",
+    "bytes": 125748,
+    "sha256": "a6403d4c1a57752a87c79adbf0ef3703aa1df847040936dda6800217532ee5cd",
+    "decoded_json_bytes": 559869,
+    "original_payload_count": 34,
+    "original_payload_bytes": 416484
+  },
+  "preserved_pilot_status": "INTEGRATION_PILOT_CORRECTNESS_PASS_PENDING_TIMING_DECISION",
+  "acceptance_authority": "support/endpoint-review.json",
+  "predecessors": {
+    "synthetic": "../h100-shared-rys-xy-phase-a-20261106/README.md",
+    "actual_queue_replay": "source-bound 9be recovery and d56 failed-capture histories remain in original owner; exact approved local replay proof is referenced by dispatch/build review, not relabelled as this pilot",
+    "native_source_commit": "https://github.com/jinzhezenggroup/generativeqc/commit/a694beec91645e0c7002bcb84976e2041ae02fa3"
+  },
+  "omitted_artifacts": "native binaries, generated shards, large build/resource streams and CUDA caches remain in bound owner roots; their hashes do not make omitted files recoverable from this capsule",
+  "latest_publication_master_merge": {
+    "revision": "22b33b081fe201e004199b6e2bda569354e9f519",
+    "source": "merged coefficient-bound resident exchange #3030; earlier MP2/current-main changes retained",
+    "new_device_measurement": false,
+    "measured_pilot_unchanged": true,
+    "previous_revision": "dafa29f839c3f6e146c5f088bb5d5592bf14125a"
+  }
+}

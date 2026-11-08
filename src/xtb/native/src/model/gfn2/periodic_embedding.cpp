@@ -234,63 +234,6 @@ generativeqc_xtb_status_t validate_workspace_shape(const PeriodicEmbeddingPlan& 
   return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-generativeqc_xtb_status_t validate_view_binding_ranges(const PeriodicEmbeddingPlan& plan,
-                                              const PeriodicEmbeddingView& view,
-                                              const PeriodicEmbeddingView& destination,
-                                              std::string& error) {
-  std::array<AddressRange, 7> active;
-  if (!range_for_count(view.shifts, plan.total_atoms(), sizeof(double), active[0]) ||
-      !range_for_count(view.response_matrices, plan.total_matrix_elements(), sizeof(double),
-                       active[1]) ||
-      !range_for_count(view.atomic_charges, plan.total_atoms(), sizeof(double), active[2]) ||
-      !range_for_count(view.atomic_potentials, plan.total_atoms(), sizeof(double), active[3]) ||
-      !range_for_count(view.energies, plan.batch_size(), sizeof(double), active[4]) ||
-      !range_for_count(view.system_statuses, plan.batch_size(), sizeof(generativeqc_xtb_status_t),
-                       active[5]) ||
-      !make_range(&error, sizeof(error), active[6])) {
-    error = "periodic embedding view ranges exceed addressable host storage";
-    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-  }
-  if (!pairwise_disjoint(active)) {
-    error = "periodic embedding view buffers and error storage must not overlap";
-    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-  }
-  AddressRange destination_range;
-  if (!make_range(&destination, sizeof(destination), destination_range)) {
-    error = "periodic embedding view descriptor range is invalid";
-    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-  }
-  for (const AddressRange& range : active) {
-    if (overlaps_plan_storage(plan, range) || ranges_overlap(range, destination_range)) {
-      error = "periodic embedding view buffers must not overlap plan or descriptor storage";
-      return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-    }
-  }
-  return GENERATIVEQC_XTB_STATUS_SUCCESS;
-}
-
-generativeqc_xtb_status_t validate_workspace_binding_range(const PeriodicEmbeddingPlan& plan,
-                                                  const PeriodicEmbeddingWorkspace& workspace,
-                                                  const PeriodicEmbeddingWorkspace& destination,
-                                                  std::string& error) {
-  AddressRange scratch;
-  AddressRange error_range;
-  AddressRange destination_range;
-  if (!range_for_count(workspace.potential_scratch, plan.maximum_atoms(), sizeof(double),
-                       scratch) ||
-      !make_range(&error, sizeof(error), error_range) ||
-      !make_range(&destination, sizeof(destination), destination_range)) {
-    error = "periodic embedding workspace ranges exceed addressable host storage";
-    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-  }
-  if (ranges_overlap(scratch, error_range) || overlaps_plan_storage(plan, scratch) ||
-      ranges_overlap(scratch, destination_range)) {
-    error = "periodic embedding scratch must not overlap plan, descriptor, or error storage";
-    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-  }
-  return GENERATIVEQC_XTB_STATUS_SUCCESS;
-}
-
 generativeqc_xtb_status_t validate_active_ranges(const PeriodicEmbeddingPlan& plan,
                                         const PeriodicEmbeddingView& view,
                                         const PeriodicEmbeddingWorkspace& workspace,
@@ -552,79 +495,6 @@ generativeqc_xtb_status_t make_periodic_embedding_plan(std::int64_t batch_size, 
   }
 }
 
-generativeqc_xtb_status_t bind_periodic_embedding_view(
-    const PeriodicEmbeddingPlan& plan, const double* shifts, std::size_t shift_elements,
-    const double* response_matrices, std::size_t response_elements, const double* atomic_charges,
-    std::size_t charge_elements, double* atomic_potentials, std::size_t potential_elements,
-    double* energies, std::size_t energy_elements, generativeqc_xtb_status_t* system_statuses,
-    std::size_t status_elements, PeriodicEmbeddingView& view, std::string& error) {
-  generativeqc_xtb_status_t status = validate_plan(plan, error);
-  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
-    return status;
-  }
-  const auto fits_i64 = [](std::size_t value) {
-    return value <= static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max());
-  };
-  if (!fits_i64(shift_elements) || !fits_i64(response_elements) || !fits_i64(charge_elements) ||
-      !fits_i64(potential_elements) || !fits_i64(energy_elements) || !fits_i64(status_elements)) {
-    error = "periodic embedding view counts exceed signed backend dimensions";
-    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-  }
-
-  PeriodicEmbeddingView completed{shifts,
-                                  static_cast<std::int64_t>(shift_elements),
-                                  response_matrices,
-                                  static_cast<std::int64_t>(response_elements),
-                                  atomic_charges,
-                                  static_cast<std::int64_t>(charge_elements),
-                                  atomic_potentials,
-                                  static_cast<std::int64_t>(potential_elements),
-                                  energies,
-                                  static_cast<std::int64_t>(energy_elements),
-                                  system_statuses,
-                                  static_cast<std::int64_t>(status_elements),
-                                  plan.identity()};
-  status = validate_view_shape(plan, completed, error);
-  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
-    return status;
-  }
-  status = validate_view_binding_ranges(plan, completed, view, error);
-  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
-    return status;
-  }
-  view = completed;
-  error.clear();
-  return GENERATIVEQC_XTB_STATUS_SUCCESS;
-}
-
-generativeqc_xtb_status_t bind_periodic_embedding_workspace(const PeriodicEmbeddingPlan& plan,
-                                                   double* potential_scratch,
-                                                   std::size_t potential_elements,
-                                                   PeriodicEmbeddingWorkspace& workspace,
-                                                   std::string& error) {
-  generativeqc_xtb_status_t status = validate_plan(plan, error);
-  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
-    return status;
-  }
-  if (potential_elements > static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max())) {
-    error = "periodic embedding workspace count exceeds signed backend dimensions";
-    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-  }
-  PeriodicEmbeddingWorkspace completed{
-      potential_scratch, static_cast<std::int64_t>(potential_elements), plan.identity()};
-  status = validate_workspace_shape(plan, completed, error);
-  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
-    return status;
-  }
-  status = validate_workspace_binding_range(plan, completed, workspace, error);
-  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
-    return status;
-  }
-  workspace = completed;
-  error.clear();
-  return GENERATIVEQC_XTB_STATUS_SUCCESS;
-}
-
 generativeqc_xtb_status_t evaluate_periodic_embedding_system_cpu(const PeriodicEmbeddingPlan& plan,
                                                         std::int64_t system,
                                                         const PeriodicEmbeddingView& view,
@@ -642,30 +512,6 @@ generativeqc_xtb_status_t evaluate_periodic_embedding_system_cpu(const PeriodicE
   if (!evaluate_system_unchecked(plan, system_index, view, workspace)) {
     view.system_statuses[system_index] = GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
     error = "periodic embedding system contains invalid numerical data or overflowed";
-    return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
-  }
-  error.clear();
-  return GENERATIVEQC_XTB_STATUS_SUCCESS;
-}
-
-generativeqc_xtb_status_t evaluate_periodic_embedding_batch_cpu(const PeriodicEmbeddingPlan& plan,
-                                                       const PeriodicEmbeddingView& view,
-                                                       const PeriodicEmbeddingWorkspace& workspace,
-                                                       std::string& error) {
-  const generativeqc_xtb_status_t status = validate_call(plan, view, workspace, error);
-  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
-    return status;
-  }
-
-  bool failed = false;
-  for (std::size_t system = 0u; system < static_cast<std::size_t>(plan.batch_size()); ++system) {
-    if (!evaluate_system_unchecked(plan, system, view, workspace)) {
-      view.system_statuses[system] = GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
-      failed = true;
-    }
-  }
-  if (failed) {
-    error = "periodic embedding failed numerically for at least one system";
     return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
   }
   error.clear();

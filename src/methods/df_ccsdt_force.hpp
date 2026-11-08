@@ -72,8 +72,9 @@ struct DFCorrelationDemand {
  * The optional CCSD-only mode omits triples and is an independent closure gate.
  * Disabling df_auxiliary_reduction retains expanded Lambda actions for matched
  * endpoint validation; it changes only the response schedule, not the method.
- * Disabling df_matrix_gemm selects the scalar DF residual for matched energy
- * and force endpoint comparisons with the same compiled library.
+ * Explicit qualification exclusions retain ordered graphs for matched energy
+ * and force comparisons. Production uses compiler-shape/resource admission
+ * followed by the shared prepared Tensor binding, not method GEMM selectors.
  * All phase bounds charge simultaneously live owners; no CPU integral/CC
  * reference fallback or four-index full MO Hamiltonian is used.
  * request_triples_gap_cotangents is a matched-schedule control: full-Fock
@@ -104,8 +105,8 @@ struct DFCorrelationDemand {
  * lambda_core_reuse retains compiler-proven primal intermediates in one
  * immutable Lambda owner. Its complete storage is optional; disabling it or
  * refusing its budget/allocation preserves the original FP64 matrix actions.
- * lambda_audit_matrix lowers the original independent expanded equations
- * through bounded FP64 GEMM; resource refusal retains their scalar schedule.
+ * The original independent expanded audit equations use their own prepared
+ * contraction region; resource refusal retains their ordered schedule.
  * Lambda defaults request batch 32 and original-graph matrix fresh replay.
  * Complete host/device budgets and currently free VRAM admit actual storage;
  * smaller batches and the original scalar replay remain bounded fallbacks.
@@ -122,14 +123,13 @@ struct DFCorrelationDemand {
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
     const generativeqc_method_descriptor&, bool forces = true, bool with_triples = true,
-    bool df_auxiliary_reduction = true, bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
+    bool df_auxiliary_reduction = true, const cc::DFContractionQualification& qualification = {},
     std::size_t lambda_batch_limit = 32, std::size_t ccsd_batch_limit = 0,
     const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true,
     bool packed_diis = false, bool parallel_gap_reduction = true,
     bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = true,
     runtime::PrecisionDirective admitted_triples_w = {},
     std::size_t lambda_true_residual_interval = 30, bool lambda_core_reuse = true,
-    bool lambda_audit_matrix = true, bool lambda_primal_matrix = true,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
     bool lambda_serial_scratch_reuse = true,
     std::optional<bool> ccsd_mixed_precision = std::nullopt, bool lambda_mixed_precision = false,

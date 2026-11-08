@@ -1,0 +1,47 @@
+{
+  "image": {
+    "source_identity": "0644bc072403a966f646672cabdd8210cff351bacf1be1eb812781db9b14e60a",
+    "library_sha256": "2dd1887b8e29f21bdec8d2b2764fc6835df29193c9e6b17b1035c2e710c2215f"
+  },
+  "fresh_paired_performance_claim": false,
+  "devices": {
+    "RTX5090": {
+      "scheduler_job": 16641,
+      "samples": [
+        {
+          "phase": "cold",
+          "seconds": 168.20502461493015,
+          "historical_default_seconds": 168.19824840128422,
+          "native_energy_error_per_atom": 4.736951571734001e-15,
+          "native_max_force_error": 8.313350008393172e-13
+        },
+        {
+          "phase": "warm",
+          "seconds": 12.722291622310877,
+          "historical_default_seconds": 12.760090067982674,
+          "native_energy_error_per_atom": 4.736951571734001e-15,
+          "native_max_force_error": 1.163513729807164e-12
+        }
+      ]
+    },
+    "A100": {
+      "scheduler_job": 226710,
+      "samples": [
+        {
+          "phase": "cold",
+          "seconds": 82.58823073655367,
+          "historical_default_seconds": 83.33496180921793,
+          "native_energy_error_per_atom": 2.3684757858670007e-14,
+          "native_max_force_error": 6.59916565837193e-13
+        },
+        {
+          "phase": "warm",
+          "seconds": 13.920897495001554,
+          "historical_default_seconds": 13.918370828032494,
+          "native_energy_error_per_atom": 2.3684757858670007e-14,
+          "native_max_force_error": 6.679101716144942e-13
+        }
+      ]
+    }
+  }
+}

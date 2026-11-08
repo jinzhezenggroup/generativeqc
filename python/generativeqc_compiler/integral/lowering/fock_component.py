@@ -491,10 +491,21 @@ void generated_dppp_shell_class_fock_uhf_persistent_kernel(
         return source
     if force_support:
         raise ValueError("shared Rys x/y does not support derivative recurrence tables")
-    return _with_shared_rys_xy_task(source, bra_extent, ket_extent)
+    return _with_shared_rys_xy_task(
+        source,
+        bra_extent,
+        ket_extent,
+        weighted_z_spec=spec if plan.schedule.fock_shared_rys_weighted_z else None,
+    )
 
 
-def _with_shared_rys_xy_task(source: str, bra_extent: int, ket_extent: int) -> str:
+def _with_shared_rys_xy_task(
+    source: str,
+    bra_extent: int,
+    ket_extent: int,
+    *,
+    weighted_z_spec: ShellClassSpec | None = None,
+) -> str:
     """Add a restricted task while preserving the private/UHF instantiation.
 
     The fixture capability does not replace UHF, mixed, streaming or work-K
@@ -569,6 +580,12 @@ def _with_shared_rys_xy_task(source: str, bra_extent: int, ket_extent: int) -> s
             f"              : generated_dppp_rys3_value_axis(",
             1,
         )
+    guard = ""
+    if weighted_z_spec is not None:
+        task = _with_shared_rys_weighted_z_task(
+            task, weighted_z_spec, bra_extent, ket_extent
+        )
+        guard = _emit_weighted_z_match_cuda()
     fill = f"""
 /** Fill an unweighted root/axis table; HRR remains component-local. */
 __device__ __forceinline__ void generated_dppp_rys3_fill_axis(
@@ -580,6 +597,7 @@ __device__ __forceinline__ void generated_dppp_rys3_fill_axis(
     result = (
         source[:task_begin]
         + fill
+        + guard
         + source[task_begin:task_end]
         + task
         + source[task_end:]
@@ -611,3 +629,120 @@ __device__ __forceinline__ void generated_dppp_rys3_fill_axis(
         + result[end:]
     )
     return result
+
+
+def _emit_weighted_z_match_cuda() -> str:
+    """The executable bit guard used by the companion and host controls."""
+    return """
+__device__ __forceinline__ bool generated_dppp_weighted_z_matches(
+    double angular_coefficient, double representative) {
+  return isfinite(representative) &&
+      __double_as_longlong(angular_coefficient) ==
+          __double_as_longlong(representative);
+}
+
+"""
+
+
+def _with_shared_rys_weighted_z_task(
+    task: str, spec: ShellClassSpec, bra_extent: int, ket_extent: int
+) -> str:
+    """Reuse identical weighted seeds within the single incumbent XY lifetime.
+
+    The complete task votes before primitive work. A refusal keeps the original
+    XY expressions and private Z, without another task call or shared struct.
+    """
+    first = spec.center_components[0]
+    groups = tuple(
+        0 if spec.name == "pppp" or label[0] == label[1] else 1 for label in first
+    )
+    expected = (0, 0, 0) if spec.name == "pppp" else (0, 1, 1, 0, 1, 0)
+    if spec.name not in ("dppp", "pppp") or groups != expected:
+        raise ValueError("weighted-Z representatives require the admitted Cartesian IR")
+    representatives = tuple(groups.index(g) for g in range(max(groups) + 1))
+    names = _emitted_component_names(spec)
+    ngroups = len(representatives)
+    task = task.replace(
+        f"    volatile double xy[3][2][{bra_extent}][{ket_extent}];",
+        f"    volatile double xy[3][2][{bra_extent}][{ket_extent}];\n"
+        f"    volatile double weighted_z[3][{ngroups}][{bra_extent}][{ket_extent}];\n"
+        f"    double weighted_z_alpha[{ngroups}];\n"
+        "    unsigned weighted_z_finite;",
+        1,
+    )
+    begin = task.index("      ? ao_coefficients[")
+    end = task.index("\n      : 0.0;", begin)
+    alpha = task[begin + len("      ? ") : end]
+    assignments = []
+    for group, representative in enumerate(representatives):
+        expression = alpha
+        for center, name in enumerate(names):
+            expression = expression.replace(
+                f"+ {name}]", f"+ {representative if center == 0 else 0}U]"
+            )
+        assignments.append(
+            f"    shared.weighted_z_alpha[{group}] =\n        {expression};\n"
+        )
+    assignments.append(
+        "    shared.weighted_z_finite = "
+        + " && ".join(f"isfinite(shared.weighted_z_alpha[{g}])" for g in range(ngroups))
+        + ";\n"
+    )
+    publish = "  }\n  __syncthreads();\n\n  const bool component_lane"
+    task = task.replace(publish, "".join(assignments) + publish, 1)
+    group_expression = "0U"
+    if ngroups == 2:
+        group_expression = (
+            "("
+            + " || ".join(
+                f"{names[0]} == {i}U" for i, group in enumerate(groups) if group == 1
+            )
+            + ") ? 1U : 0U"
+        )
+    task = task.replace(
+        "  const bool share_xy = retained_count > 2U;",
+        "  const bool share_xy = retained_count > 2U;\n"
+        f"  const unsigned weighted_z_group = {group_expression};\n"
+        "  // One uniform vote before any primitive/root evaluation or Fock update.\n"
+        "  const bool share_weighted_z = share_xy && !__syncthreads_or(\n"
+        "      !shared.weighted_z_finite || (retained_by_schwarz &&\n"
+        "       !generated_dppp_weighted_z_matches(\n"
+        "           angular_coefficient, shared.weighted_z_alpha[weighted_z_group])));",
+        1,
+    )
+    producer = f"""      // Producer ownership is independent of output screening.
+      if (share_weighted_z && lane >= 6U && lane < {6 + 3 * ngroups}U) {{
+        const unsigned root_index = (lane - 6U) / {ngroups}U;
+        const unsigned group = (lane - 6U) % {ngroups}U;
+        const GeneratedDpppRys3Primitive& primitive = shared.primitive;
+        const double root = shared.roots_weights[2U * root_index];
+        const double weighted_root =
+            shared.roots_weights[2U * root_index + 1U] *
+            primitive.primitive_prefactor * shared.weighted_z_alpha[group];
+        const double root_over_sum = root / (primitive.p + primitive.q);
+        const double root_bra = root_over_sum * primitive.q;
+        const double root_ket = root_over_sum * primitive.p;
+        const double b10 = 0.5 / primitive.p * (1.0 - root_bra);
+        const double b00 = 0.5 * root_over_sum;
+        const double b01 = 0.5 / primitive.q * (1.0 - root_ket);
+        generated_dppp_rys3_fill_axis(
+            shared.weighted_z[root_index][group],
+            primitive.paz - primitive.dz * root_bra,
+            primitive.qcz + primitive.dz * root_ket,
+            b10, b00, b01, weighted_root);
+      }}
+"""
+    task = task.replace(
+        "      __syncthreads();\n      if (retained_by_schwarz) {",
+        producer + "      __syncthreads();\n      if (retained_by_schwarz) {",
+        1,
+    )
+    return task.replace(
+        "          const double z = generated_dppp_rys3_value_axis(",
+        "          const double z = share_weighted_z\n"
+        "              ? generated_dppp_rys3_state(\n"
+        "                    shared.weighted_z[root_index][weighted_z_group],\n"
+        "                    az, bz, cz, dz_order, primitive.abz, primitive.cdz)\n"
+        "              : generated_dppp_rys3_value_axis(",
+        1,
+    )

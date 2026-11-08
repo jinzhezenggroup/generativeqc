@@ -119,8 +119,8 @@ class RccsdtPrepared final : public PreparedCalculation, public ReferenceSeededC
     auto state = run_rccsd_native_state(
         execution_, system_, descriptor_, &cpu_exact_plan_,
         initial_state ? &initial_state->density : nullptr, warm_start_fallback, warm_capacity,
-        nullptr, false, true, execution_.cuda_requested() ? cuda_reference_plan_.slot() : nullptr,
-        8, true, false, std::nullopt, cc::SolverOptions{}.df_mixed_precision_switch_residual, false,
+        nullptr, false, {}, execution_.cuda_requested() ? cuda_reference_plan_.slot() : nullptr, 8,
+        true, false, std::nullopt, cc::SolverOptions{}.df_mixed_precision_switch_residual, false,
         false, convergence_);
     last_ = state.diagnostic;
     last_performance_ = state.performance;

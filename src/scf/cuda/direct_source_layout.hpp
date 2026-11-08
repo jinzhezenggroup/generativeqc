@@ -17,6 +17,8 @@ struct CanonicalDirectSourceSink {
   const std::uint64_t* prefix{};
   std::size_t dimension{}, first_begin{}, second_begin{};
   bool same_bucket{};
+  /** Nonzero only for an immutable FP64 LR + scale*Full value producer. */
+  double full_range_scale{};
 
   GENERATIVEQC_SOURCE_HD std::size_t offset(std::size_t first, std::size_t second,
                                             std::size_t third, std::size_t fourth) const {

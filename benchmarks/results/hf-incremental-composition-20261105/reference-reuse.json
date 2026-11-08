@@ -1,0 +1,16 @@
+{
+  "small_reference": {
+    "path": "benchmarks/results/incremental-hf-full-energy-refinement-20261015/validation.json.xz",
+    "sha256": "5c074a353bfcdf4ab7a752baad46be0a1e930527b4934db79b9a29d9ecef79bd",
+    "published_base": "ee9e454f33778489a1b5c3aa5ed95b6d6b44d182"
+  },
+  "review": "Only independent full-density CPU PySCF original/displaced E/F arrays and scientific fixtures are reused. Historical native samples, library and winner flags are not reused. No oracle density seeds production.",
+  "large_reference": {
+    "path": "references/atoms96.json.xz",
+    "producer": "GPU4PySCF full-density RHF",
+    "job": "15983",
+    "gpu4pyscf": "1.8.1",
+    "pyscf": "2.14.0",
+    "review": "96 atoms / 768 spherical def2-SVP AOs; independent fresh full-Fock orbital gradients below 1e-10; same original/displaced geometries."
+  }
+}

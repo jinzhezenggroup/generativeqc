@@ -278,11 +278,6 @@ bool bind_h0_pair(const BasisPlan& basis, const H0Plan& plan, std::size_t first,
 
 }  // namespace
 
-generativeqc_xtb_status_t validate_h0_plan(const BasisPlan& basis, const IntegralPlan& integrals,
-                                     const H0Plan& plan, std::string& error) {
-  return validate_plan(basis, integrals, plan, error);
-}
-
 generativeqc_xtb_status_t make_h0_plan(const BasisPlan& basis, const IntegralPlan& integrals,
                                  const std::int32_t* atomic_numbers, H0Plan& plan,
                                  std::string& error) {

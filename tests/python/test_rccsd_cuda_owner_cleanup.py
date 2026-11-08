@@ -87,6 +87,7 @@ PREFIX = r"""
 #include "generated_df_ccsd_spectator_pairs_cpu.hpp"
 #include "runtime/allocation_measurement.hpp"
 #include "solver/diis_ring.hpp"
+#include <optional>
 #include <functional>
 #include <algorithm>
 #include <array>
@@ -293,15 +294,15 @@ int main() {
     calls = 0; fail_at = 0;
     int constructor_calls = 0;
     { generativeqc::cc::Owner good(p, options, 0); constructor_calls = calls;
-      saw_matrix = saw_matrix || good.plan.matrix_gemm || good.conventional_prepared;
-      if (handles != (good.plan.matrix_gemm || good.conventional_prepared ? 1 : 0)) return 10;
+      saw_matrix = saw_matrix || good.plan.contractions.has_value() || good.conventional_prepared;
+      if (handles != (good.plan.contractions.has_value() || good.conventional_prepared ? 1 : 0)) return 10;
       const auto detached = (good.n1 + good.n2) * sizeof(double);
       if (good.diagnostic.numeric_capacity_bytes < 128 + good.layout.total + detached) {
         std::cerr << "CUDA detached result storage was not reserved\n"; return 8;
       }
       // Both numeric allocations coexist with prepared host descriptors.
       auto expected_capacity = 128 + good.layout.total + good.layout.history_bytes + detached;
-      if (good.plan.matrix_gemm) {
+      if (good.plan.contractions.has_value()) {
         const auto batch=good.plan.auxiliary_batch_size,tail=naux%batch;
         const auto variants=batch>1 ? 1+(tail>1) : 0;
         expected_capacity+=generativeqc::cc::kContractionProviderAllowance+
@@ -392,10 +393,10 @@ int main() {
     calls = fail_at = 0;
     arena_alloc_failures = failures;
     generativeqc::cc::SolverOptions options;
-    options.df_replay_matrix_gemm=false;
+    options.qualification.ordered_replay=true;
     options.df_occupied_pairs=false;
     { generativeqc::cc::Owner retry(p, options, 0);
-      if (retry.plan.matrix_gemm != (failures < 2)) return 12;
+      if (retry.plan.contractions.has_value() != (failures < 2)) return 12;
       if (retry.plan.auxiliary_batch_size != (failures == 0 ? 2U : 1U)) return 13;
     }
     if (streams || events || allocations || handles || device != 7) return 14;
@@ -409,7 +410,7 @@ int main() {
     options.df_occupied_pairs=false;
     { generativeqc::cc::Owner retry(p, options, 0);
       if (retry.replay_matrix != (failures == 0)) return 37;
-      if (retry.plan.matrix_gemm != (failures < 3)) return 38;
+      if (retry.plan.contractions.has_value() != (failures < 3)) return 38;
       if (retry.plan.auxiliary_batch_size != (failures < 2 ? 2U : 1U)) return 39;
     }
     if (streams || events || allocations || handles || device != 7) return 40;
@@ -418,7 +419,7 @@ int main() {
   provider_alloc_failures = 1;
   { generativeqc::cc::SolverOptions options;
     generativeqc::cc::Owner retry(p, options, 0);
-    if (retry.plan.matrix_gemm || retry.plan.auxiliary_batch_size != 1) return 15;
+    if (retry.plan.contractions.has_value() || retry.plan.auxiliary_batch_size != 1) return 15;
   }
   if (streams || events || allocations || handles || device != 7) return 16;
   for (const int refusal : {0,1,2}) {
@@ -449,7 +450,7 @@ int main() {
     {generativeqc::cc::Owner retry(p,options,0);
       if(retry.pairs_enabled!=(failures==0)) return 43;
       if(retry.replay_matrix!=(failures<2)) return 44;
-      if(retry.plan.matrix_gemm!=(failures<4)) return 45;
+      if(retry.plan.contractions.has_value()!=(failures<4)) return 45;
       if(retry.plan.auxiliary_batch_size!=(failures<3 ? 8U : 1U)) return 46;
       if(retry.diagnostic.df_pair_resource_refused!=(failures>0)) return 47;
     }
@@ -457,7 +458,7 @@ int main() {
   }
   for(const bool packed:{false,true}) {
     generativeqc::cc::SolverOptions options;options.diis_size=8;options.packed_diis=packed;
-    options.df_replay_matrix_gemm=false;
+    options.qualification.ordered_replay=true;
     options.df_occupied_pairs=false;
     std::size_t wide_base=0,history_bytes=0,narrow_total=0,wide_non_history_capacity=0;
     {generativeqc::cc::Owner wide(p,options,0);
@@ -476,7 +477,7 @@ int main() {
     if(narrow_total>memory_limit) return 23;
     try {
       generativeqc::cc::Owner retry(p,options,0);
-      if(!retry.plan.matrix_gemm || retry.plan.auxiliary_batch_size!=1 ||
+      if(!retry.plan.contractions.has_value() || retry.plan.auxiliary_batch_size!=1 ||
          live_bytes!=narrow_total || retry.packed!=packed) return 24;
       if(retry.diagnostic.owned_device_bytes<wide_base+generativeqc::cc::kContractionProviderAllowance ||
          retry.diagnostic.numeric_capacity_bytes<wide_non_history_capacity ||
@@ -491,7 +492,7 @@ int main() {
       history_alloc_failures=failures;numeric_attempts=history_attempts=0;
       try {
         generativeqc::cc::Owner retry(p,options,0);
-        if(failures==3 || retry.plan.matrix_gemm!=(failures==1) ||
+        if(failures==3 || retry.plan.contractions.has_value()!=(failures==1) ||
            retry.plan.auxiliary_batch_size!=1 || retry.packed!=packed) return 27;
       } catch(const std::runtime_error&) {if(failures!=3) return 28;}
       if(history_attempts!=std::min(failures+1,3) || numeric_attempts!=2*history_attempts ||
@@ -523,7 +524,7 @@ int main() {
       try {
         generativeqc::cc::Owner retry(p,options,0);
         if(failures==2 || retry.conventional_prepared!=(failures==0) ||
-           retry.plan.matrix_gemm || retry.packed!=packed) return 33;
+           retry.plan.contractions.has_value() || retry.packed!=packed) return 33;
         if(!failures) {
           prepared_base=retry.layout.total;
           prepared_non_history=retry.diagnostic.numeric_capacity_bytes-retry.layout.history_bytes;

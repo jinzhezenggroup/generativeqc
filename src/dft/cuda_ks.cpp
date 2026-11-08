@@ -515,6 +515,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool range_source_active() const noexcept {
     return phase_source_range && phase_source && phase_source->active();
   }
+  bool combined_range_source_active() const noexcept {
+    return range_source_active() && phase_source->combined_exchange();
+  }
   std::uint64_t phase_submitted_begin{};
   std::size_t phase_device_bytes{}, phase_host_bytes{};
   double phase_source_screening{};
@@ -745,6 +748,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
             !nonlocal_correlation && standard_convergence_model && spins == 1 &&
             maximum_angular <= 2 && configured_chunk_width() == 1,
         source_strategy.screening_tolerance);
+    const char* combined_source = std::getenv("GENERATIVEQC_KS_COMBINED_RANGE_SOURCE");
+    const bool combine_source_requested =
+        combined_source ? std::strcmp(combined_source, "1") == 0 : automatic_range;
+    const bool combine_source_eligible =
+        combine_source_requested && has_range_correction && has_exchange && !mixed_source &&
+        !fitted_coulomb && !fitted_exchange && spins == 1 && !incremental_direct_jk &&
+        configured_chunk_width() == 1 && !runtime::active_device_resource_ledger;
+    const char* composite_build = std::getenv("GENERATIVEQC_KS_COMBINED_RANGE_BUILD");
+    std::optional<DirectJkExchangeCombination> combination;
+    if (combine_source_eligible && (!composite_build || std::strcmp(composite_build, "0") != 0))
+      combination = DirectJkExchangeCombination{provider.strategy().spec, range_correction->spec};
     check(phase_source->prepare(
               device, {system}, options.max_iterations, direct_nbf, required,
               options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
@@ -758,8 +772,30 @@ struct CudaKsPlan::Impl : KsStateStorage {
                (has_exchange && (host.ceiling || disk.ceiling) && !mixed_source)) &&
                   !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
               has_exchange && !mixed_source ? host.ceiling : 0, host.mask, host_tile.ceiling,
-              has_exchange && !mixed_source ? disk.ceiling : 0, disk.mask, disk_directory),
+              has_exchange && !mixed_source ? disk.ceiling : 0, disk.mask, disk_directory,
+              combination ? &*combination : nullptr),
           phase_source->reason());
+    // Default only inside the existing repeated cold range-source admission;
+    // explicit qualification may exercise smaller or non-automatic owners.
+    if (combine_source_eligible && phase_source->active() &&
+        !phase_source->combined_source_build()) {
+      // The temporary full source must fit alongside the already admitted
+      // complete consumer and LR lease. Retained storage keeps the LR ceiling.
+      const auto live = sum(required, phase_source->capacity_bytes());
+      const auto budget = options.reference_memory_budget_bytes
+                              ? options.reference_memory_budget_bytes
+                              : std::numeric_limits<std::size_t>::max();
+      constexpr std::size_t reserve = 512ULL << 20;
+      const auto remaining = budget > live ? budget - live : 0;
+      const auto transient =
+          remaining > reserve ? std::min(buckets.ceiling, remaining - reserve) : 0;
+      check(phase_source->combine_full_exchange(provider.strategy().spec, range_correction->spec,
+                                                transient),
+            phase_source->reason());
+      if (phase_source->combined_exchange())
+        movement.phase_resident_numeric_peak_bytes = std::max(
+            movement.phase_resident_numeric_peak_bytes, sum(live, sum(transient, reserve)));
+    }
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
     // Publication can refuse after ERIs have completed. Include that discarded
@@ -816,6 +852,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   generativeqc_status enqueue_primary_jk(const double* alpha, const double* beta, bool mixed,
                                          std::string& detail, bool use_source = true) {
+    if (use_source && combined_range_source_active() && !mixed) {
+      auto spec = provider.strategy().spec;
+      spec.exchange.present = false;
+      // The range slot supplies both weighted K terms. Clear the ordinary K
+      // slot so unchanged Fock/energy assembly applies each coefficient once.
+      check(cudaMemsetAsync(exchange, 0, elements * sizeof(double), stream));
+      const auto status =
+          scf::enqueue_cuda_direct_jk_device(provider.cuda_direct_source(), spec, alpha, beta,
+                                             matrix, j, nullptr, nullptr, jk_error, detail);
+      return observe_value_dispatch(status, spec.coulomb.present, 0);
+    }
     const bool resident_source = use_source && !phase_source_range && phase_source &&
                                  phase_source->active() &&
                                  mixed == phase_source->mixed_recurrence();
@@ -3398,13 +3445,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // the per-action counter and preserve their source storage in the census.
       if (mixed_exchange)
         check(cudaMemsetAsync(mixed_coulomb_work_counter() + 1, 0, sizeof(std::uint64_t), stream));
-      check(
-          observe_value_dispatch(
-              phase_source->enqueue(range_correction->spec, alpha_density, nullptr, range_exchange,
-                                    range_jk_error, range_correction->screening_tolerance, detail,
-                                    beta_density, spins == 2 ? range_exchange + matrix : nullptr),
-              false, 1, collect_work),
-          detail);
+      const auto source_status =
+          combined_range_source_active()
+              ? phase_source->enqueue_combined_exchange(
+                    provider.strategy().spec, range_correction->spec, alpha_density, range_exchange,
+                    range_jk_error, range_correction->screening_tolerance, detail)
+              : phase_source->enqueue(range_correction->spec, alpha_density, nullptr,
+                                      range_exchange, range_jk_error,
+                                      range_correction->screening_tolerance, detail, beta_density,
+                                      spins == 2 ? range_exchange + matrix : nullptr);
+      check(observe_value_dispatch(source_status, false, 1, collect_work), detail);
       pending_mixed_range_resident = mixed_exchange;
       return;
     }
@@ -5817,9 +5867,12 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
 
     if (impl_->has_range_correction) {
       profile.milliseconds[2] = timed([&] {
-        impl_->enqueue_range_correction(impl_->density, beta, detail, true, false, false);
+        // This diagnostic profiles independent raw K terms, not a weighted
+        // composite. Its ordinary full K must not be added a second time.
+        impl_->enqueue_range_correction(impl_->density, beta, detail,
+                                        !impl_->combined_range_source_active(), false, false);
       });
-      if (impl_->range_source_active()) {
+      if (impl_->range_source_active() && !impl_->combined_range_source_active()) {
         check(impl_->phase_source->audit(), "fixed-density resident range K audit failed");
         impl_->phase_source->observe_completed(1);
       }

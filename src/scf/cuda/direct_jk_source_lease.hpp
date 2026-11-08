@@ -8,6 +8,11 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+/** Immutable scientific identities for a directly constructed Full/LR source. */
+struct DirectJkExchangeCombination {
+  FockBuildSpec full, range;
+};
+
 /** Method-neutral lease of immutable operator- and precision-bound ERIs.
  * The common Direct provider remains the scientific owner. Consumers assemble
  * their own HF/KS equations and retire captured borrowers before this lease.
@@ -44,6 +49,9 @@ class DirectJkSourceLease {
    * expected reuse count.
    * bucket_mask defaults to complete residency. Partial masks share the full
    * source's immutable Schwarz layout; uncached buckets remain exact Direct.
+   * combination optionally binds signed exact Full/LR exchange terms during
+   * complete strict restricted GPU construction, avoiding a second source.
+   * Unsupported combinations retain a usable raw lease with unchanged identity.
    */
   generativeqc_status prepare(
       int device, const std::vector<core::System>& systems, unsigned maximum_iterations,
@@ -55,7 +63,8 @@ class DirectJkSourceLease {
       bool fit_buckets_to_capacity = false, std::size_t host_ceiling = 0,
       std::uint32_t host_bucket_mask = (1U << 28) - 1, std::size_t host_tile_bytes = 256ULL << 20,
       std::size_t disk_ceiling = 0, std::uint32_t disk_bucket_mask = (1U << 28) - 1,
-      const std::string& disk_directory = {});
+      const std::string& disk_directory = {},
+      const DirectJkExchangeCombination* combination = nullptr);
   bool active() const noexcept { return direct_ != nullptr; }
   bool mixed_recurrence() const noexcept { return mixed_recurrence_; }
   std::size_t capacity_bytes() const noexcept { return capacity_bytes_; }
@@ -72,6 +81,23 @@ class DirectJkSourceLease {
                               double* exchange, int* numerical_error, double screening,
                               std::string& detail, const double* beta = nullptr,
                               double* beta_exchange = nullptr);
+  /** Prepare a coefficient-bound RSH K source before its first consumer.
+   * Retains LR + (c_full/c_range) Full in the existing allocation. A finite
+   * temporary-memory refusal preserves ordinary LR replay. Neither raw J nor
+   * raw LR consumers may borrow an accepted composite source.
+   */
+  generativeqc_status combine_full_exchange(FockBuildSpec full, FockBuildSpec range,
+                                            std::size_t maximum_transient_bytes);
+  bool combined_exchange() const noexcept { return combined_exchange_; }
+  /** Direct construction has no second full-source allocation or mutation. */
+  bool combined_source_build() const noexcept { return combined_source_build_; }
+  /** Enqueue K_LR + (c_full/c_range) K_full for the frozen restricted terms.
+   * The consumer applies c_range once; ordinary raw-LR/J entry points reject it.
+   */
+  generativeqc_status enqueue_combined_exchange(FockBuildSpec full, FockBuildSpec range,
+                                                const double* density, double* exchange,
+                                                int* numerical_error, double screening,
+                                                std::string& detail);
   /** Fence finite/census validation before publishing the last action.
    * At the frozen Schwarz threshold every uncached value must be evaluated.
    * A stricter replay predicate may skip recurrences but not source visits.
@@ -99,6 +125,9 @@ class DirectJkSourceLease {
   }
 
  private:
+  generativeqc_status enqueue_impl(FockBuildSpec spec, const double* density, double* coulomb,
+                                   double* exchange, int* numerical_error, double screening,
+                                   std::string& detail, const double* beta, double* beta_exchange);
   void release_values() noexcept;
   cudaStream_t stream_{};
   FockOperator source_operator_{FockOperator::FullRange};
@@ -116,6 +145,9 @@ class DirectJkSourceLease {
   double source_screening_{}, last_screening_{};
   std::size_t host_value_bytes_{}, host_capacity_bytes_{}, disk_value_bytes_{};
   bool prepared_{};
+  bool combined_exchange_{};
+  bool combined_source_build_{};
+  FockTermSpec combined_full_term_{}, combined_range_term_{};
   const char* selection_{"auto"};
   std::string reason_{"ineligible"};
 };

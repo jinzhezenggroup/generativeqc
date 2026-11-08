@@ -17,6 +17,10 @@ struct PhysicalReference;
 
 namespace generativeqc::mp2::detail {
 
+/** Select compact factorized support or the full staged validation fallback.
+ * The compact first stage preserves its occupied third-slot support through
+ * the second stage; it never enlarges the admitted full staging footprint.
+ */
 enum class FactorizedFirstLayout { automatic, staged };
 
 using OneElectronDerivativeContract =

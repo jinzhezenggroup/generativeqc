@@ -2,8 +2,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "generativeqc/generativeqc.h"
@@ -103,6 +105,53 @@ bool cuda_device_available() {
   const generativeqc_status status = generativeqc_context_create(&descriptor, &context);
   if (context != nullptr) generativeqc_context_destroy(context);
   return status == GENERATIVEQC_STATUS_SUCCESS;
+}
+
+/** Exercise the actual cached native owner, without running the CPU oracle or
+ * the historical UHF suite. An opposite launch policy must not reuse its graph;
+ * returning to the frozen policy must leave the admitted warm owner usable. */
+void verify_rhf_block_convergence_cached_policy() {
+  using namespace generativeqc::scf;
+  constexpr const char* control = "GENERATIVEQC_HF_BLOCK_CONVERGENCE";
+  struct RestoreControl {
+    bool present;
+    std::string value;
+    ~RestoreControl() {
+      if (present)
+        setenv(control, value.c_str(), 1);
+      else
+        unsetenv(control);
+    }
+  } restore{std::getenv(control) != nullptr, std::getenv(control) ? std::getenv(control) : ""};
+  ScfOptions options;
+  options.energy_tolerance = 1e-12;
+  options.density_tolerance = 1e-10;
+  options.screening_tolerance = 1e-14;
+  options.compute_forces = true;  // Exercise quartet Direct, not persistent ERIs.
+  const std::vector<generativeqc::core::System> systems{hydrogen_molecular_singlet(1.4)};
+  for (const char* selected : {"0", "1"}) {
+    require(setenv(control, selected, 1) == 0, "cannot select RHF convergence fixture policy");
+    CudaRhfBucketPlan* raw = nullptr;
+    std::unique_ptr<CudaRhfBucketPlan, decltype(&destroy_rhf_cuda_bucket_plan)> owner(
+        nullptr, destroy_rhf_cuda_bucket_plan);
+    const auto cold = run_rhf_cuda_bucket_cached(&raw, systems, options, {nullptr}, 0);
+    owner.reset(raw);
+    require(
+        cold.size() == 1 && cold[0].status == GENERATIVEQC_STATUS_SUCCESS && cold[0].scf.converged,
+        "cached RHF convergence policy failed cold initialization");
+    const std::vector<double> density = cold[0].scf.density;
+    require(setenv(control, selected[0] == '0' ? "1" : "0", 1) == 0,
+            "cannot change RHF convergence fixture policy");
+    const auto refused = run_rhf_cuda_bucket_cached(&raw, systems, options, {&density}, 0);
+    require(refused.size() == 1 && refused[0].status == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "native cached graph accepted a changed RHF convergence launch policy");
+    require(setenv(control, selected, 1) == 0, "cannot restore RHF convergence fixture policy");
+    const auto warm = run_rhf_cuda_bucket_cached(&raw, systems, options, {&density}, 0);
+    require(warm.size() == 1 && warm[0].status == GENERATIVEQC_STATUS_SUCCESS &&
+                warm[0].scf.converged && warm[0].scf.iterations == 1 &&
+                std::abs(warm[0].scf.energy - cold[0].scf.energy) < 1e-10,
+            "native policy refusal corrupted the original cached RHF warm graph");
+  }
 }
 
 generativeqc::core::System large_ao_atom(bool unrestricted) {
@@ -297,8 +346,19 @@ void verify_fleet_fixed_warm_start() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string_view(argv[1]) == "--rhf-block-convergence-cache") {
+#if GENERATIVEQC_HAS_CUDA
+      require(cuda_device_available(), "explicit cached RHF policy fixture has no CUDA device");
+      verify_rhf_block_convergence_cached_policy();
+      std::cout << "RHF convergence cached-policy bidirectional refusal passed\n";
+      return EXIT_SUCCESS;
+#else
+      return 77;
+#endif
+    }
+    if (argc != 1) return 2;
     const generativeqc::scf::ScfResult center = evaluate(1.4);
     require(center.converged, "H2+ UHF did not converge");
     require(std::abs(center.energy - (-0.53851134755010321)) < 2.0e-10,

@@ -210,11 +210,16 @@ smaller than the admitted legacy `di*N^3` buffer. Its internal explicit staged
 layout remains available for bounded comparison. The second transform omits
 structurally zero slots and preserves the original occupied exchange / virtual
 correlation reduction order, including the overlapping Coulomb diagonal.
+The compact route also stores only the occupied third-MO-slot support in the
+second buffer: `di*dj*O*N` rather than `di*dj*N^2` doubles. The third transform
+reduces over those `O` slots in the original order, omitting only structural
+zeros. The explicit staged route retains both full buffers and the full
+reduction domain for independent comparison.
 
 Dense weights retain the original eightfold projection and staged layout.
-Second, third and shell-local buffers, ordered factorized callbacks and atom
+Third and shell-local buffer shapes, ordered factorized callbacks and atom
 scatter remain unchanged. The production resource plan conservatively admits
-the legacy first buffer; this representation change supplies no measured
+the legacy full buffers; this representation change supplies no measured
 endpoint telemetry and does not retire the remaining materializations.
 
 `tests/python/test_mp2_derivative_pullback_probe.py` compares the actual common
@@ -224,7 +229,8 @@ ERI center derivatives cover all four slots, repeated atoms, Cartesian d and
 spherical d/f shells. Source-bound accumulation counters and allocation
 lifetimes qualify this host transform; complete endpoint and device evidence
 must be assessed separately. See the
-[decision note](../../.agents/notes/implemented/performance/2026-10-11-compact-factorized-mp2-first-stage.md).
+[first-stage decision](../../.agents/notes/implemented/performance/2026-10-11-compact-factorized-mp2-first-stage.md)
+and the [second-stage decision](../../.agents/notes/implemented/performance/2026-11-06-compact-factorized-mp2-second-stage.md).
 
 ## Native path and placement
 

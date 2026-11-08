@@ -8,8 +8,47 @@
 #include "generativeqc/generativeqc.h"
 #include "runtime/cuda_provider.hpp"
 #include "runtime/cuda_target_info.hpp"
+#include "tensor/cuda_matrix_product_admission.hpp"
 
 namespace generativeqc::scf::cuda_policy {
+
+/** Strict default-off control, resolved before graph admission. */
+enum class SharedRysXyRequest { Off, On, Invalid, WeightedZOn };
+enum class SharedRysXyAdmission {
+  Off,
+  Active,
+  Unrestricted,
+  MixedPrecision,
+  UnsupportedProfile,
+  NonPaged,
+  IncrementalJk,
+  SeparateJk,
+  Streaming,
+  PersistentEri,
+  CompensatedOutput
+};
+struct SharedRysXyContext {
+  bool unrestricted{}, mixed_precision{}, sm90{}, quartet_direct{};
+  bool incremental_jk{}, separate_jk{}, streaming{}, persistent_eri{}, compensated_output{};
+  std::uint64_t capability_mask{};
+};
+struct SharedRysXyPolicy {
+  SharedRysXyRequest request{SharedRysXyRequest::Off};
+  SharedRysXyAdmission admission{SharedRysXyAdmission::Off};
+  std::uint64_t class_mask{};
+  bool active() const noexcept { return admission == SharedRysXyAdmission::Active; }
+  bool weighted_z() const noexcept { return request == SharedRysXyRequest::WeightedZOn; }
+  bool selects(unsigned shell_class) const noexcept {
+    return active() && shell_class < 64U && (class_mask & (std::uint64_t{1} << shell_class)) != 0U;
+  }
+  bool operator==(const SharedRysXyPolicy&) const = default;
+};
+SharedRysXyRequest parse_shared_rys_xy_request(const char* value) noexcept;
+SharedRysXyRequest parse_shared_rys_xy_request(const char* xy, const char* weighted_z) noexcept;
+SharedRysXyRequest shared_rys_xy_requested() noexcept;
+SharedRysXyPolicy resolve_shared_rys_xy_policy(SharedRysXyRequest request,
+                                               const SharedRysXyContext& context) noexcept;
+const char* shared_rys_xy_admission_name(SharedRysXyAdmission admission) noexcept;
 
 /**
  * Explicit Direct-J/K tuning evidence.
@@ -25,21 +64,11 @@ namespace generativeqc::scf::cuda_policy {
  * volume itself is derived exactly from the workload, so changing the GPU does
  * not require re-benchmarking every AO size or molecule.
  */
-struct SmallHfMatrixCalibration {
-  double native_launch_nanoseconds{};
-  double native_fp64_flops_per_nanosecond{};
-  double native_bytes_per_nanosecond{};
-  double cublas_launch_nanoseconds{};
-  double cublas_fp64_flops_per_nanosecond{};
-  double cublas_bytes_per_nanosecond{};
-};
-
 struct SmallHfProfitabilityProfile {
   // Compatibility evidence used only when no complete device calibration is
   // available. These values are not CUDA semantics.
   std::size_t fallback_persistent_eri_ao_limit{16};
-  std::size_t fallback_cublas_matrix_product_ao_threshold{17};
-  SmallHfMatrixCalibration matrix{};
+  tensor::CudaMatrixProductProfile matrix{};
 };
 
 struct SmallHfWorkload {
@@ -53,11 +82,7 @@ struct SmallHfWorkload {
 };
 
 struct SmallHfAnalyticEstimate {
-  std::uint64_t matrix_flops{};
-  std::uint64_t native_matrix_semantic_bytes{};
-  std::uint64_t cublas_matrix_semantic_bytes{};
-  std::uint64_t native_matrix_blocks{};
-  std::uint64_t native_matrix_waves{};
+  tensor::CudaMatrixProductEstimate matrix;
   std::uint64_t eri_elements{};
   std::uint64_t eri_bytes{};
   std::uint64_t cached_fock_ao_quartets{};
@@ -65,11 +90,8 @@ struct SmallHfAnalyticEstimate {
 
 struct SmallHfProfitabilityPolicy {
   SmallHfAnalyticEstimate estimate{};
-  bool use_cublas{};
+  tensor::CudaMatrixProductAdmission matrix;
   bool persistent_eri{};
-  bool cublas_from_calibration{};
-  double native_matrix_nanoseconds{};
-  double cublas_matrix_nanoseconds{};
 };
 
 SmallHfAnalyticEstimate estimate_small_hf_workload(const runtime::CudaTargetInfo& target,
@@ -152,8 +174,9 @@ struct ColdHfScreeningPolicy {
  * driver must reset DIIS and converge the original target operator before any
  * publication, charging both stages to the same user iteration allowance.
  * Zero policy keeps ordinary execution; warm/imported/moved owners never inherit
- * the preliminary graph. Only GENERATIVEQC_HF_COLD_SCREENING=1 opts in;
- * the unset/default route preserves the incumbent operator and page policy. */
+ * the preliminary graph. Unset/1 admits eligible cold owners; every other
+ * explicit value disables the proposal. Automatic admission requires the strict
+ * physical target gate; bounded scratch admission is independent of seed history. */
 ColdHfScreeningPolicy resolve_cold_hf_screening(const ColdHfScreeningDomain& domain,
                                                 double target_screening) noexcept;
 

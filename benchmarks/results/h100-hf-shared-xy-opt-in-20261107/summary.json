@@ -1,0 +1,41 @@
+{
+  "status": "RETAINED_ARRAY_PROVENANCE_REPLAY_PASS",
+  "source": "a694beec91645e0c7002bcb84976e2041ae02fa3",
+  "full_EF_arrays": 8,
+  "strict_pairs": 4,
+  "cold_seconds": {
+    "off": 11.957423616200686,
+    "on": 10.637876398861408
+  },
+  "cold_reduction_percent": 11.035380694813469,
+  "warm_seconds": {
+    "off": [
+      1.5849162302911282,
+      1.5878549441695213,
+      1.5829769484698772
+    ],
+    "on": [
+      1.4804518930613995,
+      1.4758048839867115,
+      1.4775780625641346
+    ]
+  },
+  "paired_warm_on_over_off": [
+    0.9340884172720346,
+    0.9294330627654316,
+    0.9334172958060934
+  ],
+  "maximum_dense_errors": {
+    "energy_abs_per_atom_hartree": 3.1737575530617807e-13,
+    "force_max_abs_hartree_per_bohr": 4.880257077101435e-08,
+    "force_rms_hartree_per_bohr": 2.5259064939764528e-08
+  },
+  "maximum_strict_errors": {
+    "energy_abs_per_atom_hartree": 6.631732200427602e-14,
+    "force_max_abs_hartree_per_bohr": 3.848137086759351e-13,
+    "force_rms_hartree_per_bohr": 9.758558451117383e-14
+  },
+  "default": "off",
+  "new_CUDA_SCF_or_oracle_execution": false,
+  "all30_complete": false
+}

@@ -125,6 +125,7 @@ struct CudaDirectJkPlan {
   std::unique_ptr<DirectJkHostCache> host_cache;
   float* resident_mixed_values{};
   FockOperator resident_operator{FockOperator::FullRange};
+  double resident_full_exchange_scale{};
   double resident_omega{};
   std::size_t resident_value_count{};
   /** Empty preserves the established complete-source traversal. Partial leases

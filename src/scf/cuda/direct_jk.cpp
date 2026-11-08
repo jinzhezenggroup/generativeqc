@@ -33,6 +33,7 @@
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/direct_task_layout.hpp"
 #include "scf/md_transform_layout.hpp"
+#include "tensor/cuda_vector_accumulation.hpp"
 
 namespace generativeqc::scf {
 
@@ -2721,9 +2722,10 @@ std::size_t cuda_direct_jk_selected_resident_value_bytes(const CudaDirectJkPlan*
   return direct_jk_product(count, sizeof(double));
 }
 
-generativeqc_status prepare_cuda_direct_jk_range_resident_values(
+static generativeqc_status prepare_cuda_direct_jk_range_resident_values_impl(
     CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::uint32_t bucket_mask,
-    FockOperator source_operator, double omega, std::string& detail) {
+    FockOperator source_operator, double omega, std::string& detail, double full_scale,
+    bool composite_producer = false) {
   if ((source_operator != FockOperator::FullRange && source_operator != FockOperator::ShortRange &&
        source_operator != FockOperator::LongRange) ||
       !std::isfinite(omega) || omega < 0.0 ||
@@ -2731,11 +2733,14 @@ generativeqc_status prepare_cuda_direct_jk_range_resident_values(
     detail = "invalid resident radial operator";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  if (bucket_mask >= (1U << 28)) {
+  if (bucket_mask >= (1U << 28) || !std::isfinite(full_scale) ||
+      (composite_producer && (full_scale == 0.0 || source_operator != FockOperator::LongRange ||
+                              bucket_mask != (1U << 28) - 1))) {
     detail = "invalid resident Direct bucket mask";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  if (bucket_mask == (1U << 28) - 1 && source_operator == FockOperator::FullRange)
+  if (full_scale == 0.0 && bucket_mask == (1U << 28) - 1 &&
+      source_operator == FockOperator::FullRange)
     return prepare_cuda_direct_jk_resident_values(plan, maximum_bytes, detail);
   const auto preparation = prepare_cuda_direct_jk_resident_layout(plan, detail);
   if (preparation != GENERATIVEQC_STATUS_SUCCESS) return preparation;
@@ -2744,17 +2749,27 @@ generativeqc_status prepare_cuda_direct_jk_range_resident_values(
     direct_jk_check(cudaGetDevice(&current));
     direct_jk_require(current == plan->device_id, "resident Direct source device mismatch");
     direct_jk_require(!plan->resident_mixed_values, "resident Direct precision is immutable");
-    if (plan->resident_values) {
-      direct_jk_require(plan->resident_bucket_mask == bucket_mask &&
-                            plan->resident_operator == source_operator &&
-                            plan->resident_omega == omega,
-                        "resident Direct selection is immutable");
+    if (composite_producer)
+      direct_jk_require(!plan->resident_values && plan->canonical_cartesian && !plan->host_cache,
+                        "composite source requires an unpublished complete Cartesian LR lease");
+    if (plan->resident_values && full_scale == 0.0) {
+      direct_jk_require(
+          plan->resident_bucket_mask == bucket_mask && plan->resident_operator == source_operator &&
+              plan->resident_omega == omega && plan->resident_full_exchange_scale == 0.0,
+          "resident Direct selection is immutable");
       if (plan->diagnostic.resident_value_bytes > maximum_bytes) throw std::bad_alloc();
       return;
     }
     const auto required = cuda_direct_jk_selected_resident_value_bytes(plan, bucket_mask);
     if (!required) return;
     if (required > maximum_bytes) throw std::bad_alloc();
+    if (full_scale != 0.0 && !composite_producer)
+      direct_jk_require(plan->resident_values &&
+                            plan->resident_operator == FockOperator::LongRange &&
+                            plan->resident_bucket_mask == bucket_mask &&
+                            plan->diagnostic.resident_value_bytes == required &&
+                            plan->resident_full_exchange_scale == 0.0 && !plan->host_cache,
+                        "combined exchange requires an unused complete GPU LR source");
     const auto total = direct_jk_sum(plan->device_bytes, required);
     const auto diagnostic_total = direct_jk_sum(plan->diagnostic.device_bytes, required);
     std::vector<std::array<std::size_t, 28>> layout(plan->diagnostic.batch_size);
@@ -2830,7 +2845,8 @@ generativeqc_status prepare_cuda_direct_jk_range_resident_values(
                 dimension,
                 offsets[first],
                 offsets[second],
-                first == second};
+                first == second,
+                composite_producer ? full_scale : 0.0};
             launch_materialized_canonical_jk_kernel(
                 plan->stream, plan->materialized_batch, first + second,
                 {plan->materialized_pair_order,
@@ -2853,7 +2869,8 @@ generativeqc_status prepare_cuda_direct_jk_range_resident_values(
                 : source_operator == FockOperator::LongRange ? DirectCoulombRange::Long
                                                              : DirectCoulombRange::Short,
                 omega, plan->screening_tolerance, plan->canonical_bounds, nullptr, nullptr, nullptr,
-                nullptr, lease.values + value_offset, nullptr, nullptr, count);
+                nullptr, lease.values + value_offset, nullptr, nullptr, count, 0,
+                composite_producer ? full_scale : 0.0);
           }
           direct_jk_check(cudaGetLastError());
           value_offset += count;
@@ -2879,6 +2896,39 @@ generativeqc_status prepare_cuda_direct_jk_range_resident_values(
     if (failure)
       throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                             "nonfinite resident Direct source values"};
+    if (full_scale != 0.0 && !composite_producer) {
+      tensor::CudaVectorAccumulation combination;
+      const auto created = combination.prepare(plan->stream);
+      if (created == CUBLAS_STATUS_ALLOC_FAILED) throw std::bad_alloc();
+      direct_jk_require(created == CUBLAS_STATUS_SUCCESS,
+                        "combined exchange BLAS preparation failed");
+      // Both producers use this plan's identical immutable rows: no cross-owner
+      // sorting, coordinate identity or source-index equivalence is assumed.
+      // Refusal after the first write cannot reuse the original raw LR data.
+      plan->resident_full_exchange_scale = std::numeric_limits<double>::quiet_NaN();
+      for (std::size_t offset = 0; offset < value_offset;) {
+        const auto count = static_cast<int>(
+            std::min<std::size_t>(value_offset - offset, std::numeric_limits<int>::max()));
+        if (combination.enqueue(count, full_scale, lease.values + offset,
+                                plan->resident_values + offset) != CUBLAS_STATUS_SUCCESS)
+          throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                                "combined exchange source mutation failed"};
+        offset += static_cast<std::size_t>(count);
+      }
+      direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
+      launch_independent_jk_finite_kernel(plan->stream, plan->resident_values, value_offset,
+                                          plan->numerical_failure);
+      direct_jk_check(cudaGetLastError());
+      DirectJkDownloadFence combined_fence{plan->stream};
+      direct_jk_check(cudaMemcpyAsync(&failure, plan->numerical_failure, sizeof(int),
+                                      cudaMemcpyDeviceToHost, plan->stream));
+      combined_fence.complete();
+      if (failure)
+        throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                              "nonfinite combined exchange source"};
+      plan->resident_full_exchange_scale = full_scale;
+      return;
+    }
     const auto old_capacity = plan->allocations.capacity();
     plan->allocations.push_back(lease.values);
     plan->resident_bucket_offsets = std::move(layout);
@@ -2886,6 +2936,7 @@ generativeqc_status prepare_cuda_direct_jk_range_resident_values(
     plan->resident_values = lease.values;
     plan->resident_operator = source_operator;
     plan->resident_omega = omega;
+    plan->resident_full_exchange_scale = composite_producer ? full_scale : 0.0;
     plan->resident_value_count = value_offset;
     lease.values = nullptr;
     plan->device_bytes = total;
@@ -2897,6 +2948,39 @@ generativeqc_status prepare_cuda_direct_jk_range_resident_values(
     plan->diagnostic.host_bytes += host_growth;
     plan->diagnostic.host_preparation_bytes += host_growth;
   });
+}
+
+generativeqc_status prepare_cuda_direct_jk_range_resident_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::uint32_t bucket_mask,
+    FockOperator source_operator, double omega, std::string& detail, double full_range_scale) {
+  return prepare_cuda_direct_jk_range_resident_values_impl(
+      plan, maximum_bytes, bucket_mask, source_operator, omega, detail, full_range_scale,
+      full_range_scale != 0.0);
+}
+
+generativeqc_status prepare_cuda_direct_jk_combined_range_values(
+    CudaDirectJkPlan* plan, double full_scale, std::size_t maximum_transient_bytes,
+    std::string& detail) {
+  if (!plan || !std::isfinite(full_scale) || full_scale == 0.0) {
+    detail = "invalid combined exchange source request";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  if (plan->resident_full_exchange_scale != 0.0) {
+    detail = "combined exchange source identity is immutable";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  plan->diagnostic.resident_values_submitted = 0;
+  plan->diagnostic.resident_values_completed = 0;
+  // A compact mask can cover every nonempty bucket without matching the
+  // all-bucket temporary producer's identity. Keep that valid raw LR lease
+  // rather than turning an optional optimization into an endpoint failure.
+  if (plan->resident_bucket_mask != (1U << 28) - 1) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  const auto status = prepare_cuda_direct_jk_range_resident_values_impl(
+      plan, maximum_transient_bytes, (1U << 28) - 1, FockOperator::FullRange, 0.0, detail,
+      full_scale);
+  if (status != GENERATIVEQC_STATUS_SUCCESS && plan->resident_full_exchange_scale != 0.0)
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  return status;
 }
 
 std::size_t cuda_direct_jk_host_value_bytes(const CudaDirectJkPlan* plan) noexcept {

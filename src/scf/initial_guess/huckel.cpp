@@ -177,10 +177,6 @@ std::pair<unsigned, unsigned> huckel_atomic_configuration(int atomic_number) {
   return {6, static_cast<unsigned>(atomic_number - 6)};
 }
 
-std::size_t huckel_maximum_atomic_aos(const core::System& system) {
-  return huckel_capacity_shape(system).atomic_aos;
-}
-
 HuckelDensityResult huckel_density(const core::System& system,
                                    const integrals::IntegralData& target,
                                    const PreliminaryOptions& policy,

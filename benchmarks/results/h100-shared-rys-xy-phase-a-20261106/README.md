@@ -26,7 +26,7 @@ driver 595.58.03. The executable SHA256 is
 The immutable v2 bundle manifest SHA256 is
 `e57a64f960777a965e97df25f2344269702f3f77c298c8d8af8cfcd2019d27ac`.
 Exact CUDA 12.9, GCC12, sccache 0.16.0 and sanitizer binaries/support-file
-bindings, commands and stage outcomes remain in `qualification.json`.
+bindings, commands and stage outcomes remain in logical `qualification.json` ([stored bytes](qualification.json.xz)).
 
 One executable contains private/shared variants and six independent Libcint
 fixtures: DPPP/PPPP, each Cartesian, coincident and reversed-pair geometry.
@@ -103,3 +103,8 @@ Actual HF96 task/density capture and actual-task performance remain separate
 phase-B work. This fixture supplies no HF96 speedup, molecular E/F endpoint
 qualification or coherent 30-case win. The original full30 goal and all of its
 independent energy/force, paired cold and warm-regression gates remain unmet.
+
+Selected JSON receipts are stored as lossless `.json.xz` files. `cohort.json`
+retains each original logical filename, decoded length and SHA256, separately
+from the stored path/length/hash. The bounded reader decodes them before the
+unchanged scientific report audit; original failure bytes remain unchanged.

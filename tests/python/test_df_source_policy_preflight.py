@@ -108,7 +108,7 @@ RccsdNativeState execute_rccsd_prepared(
   assert(plan == nullptr);
   assert(!df_mp2_mode && !df_reference);
   ++rhf_calls;
-  assert(auxiliary && policy && retain_df_response && !options.df_matrix_gemm);
+  assert(auxiliary && policy && retain_df_response && options.qualification.ordered_iteration);
   // A mid-RHF diagnostic change must not alter the already admitted source.
   setenv("GENERATIVEQC_DF_VALUE_MATH", "invalid-after-rhf", 1);
   setenv("GENERATIVEQC_DF_VALUE_MAPPING", "primitive", 1);
@@ -142,12 +142,15 @@ int main(int argc, char** argv) {
   core::System orbital, auxiliary;
   orbital.shells = {{0, unsigned(std::atoi(argv[3])), {{1.0, 1.0}}}};
   auxiliary.shells = {{0, unsigned(std::atoi(argv[4])), {{1.0, 1.0}}}};
-  if (endpoint == "range") {
+  if (endpoint == "range" || endpoint == "export") {
     scf::CudaDfSourcePolicy policy;
     std::string detail;
     const bool resolved = scf::resolve_cuda_df_source_policy(policy, detail);
-    policy.range_omega = .3;
-    assert((resolved && scf::cuda_df_value_domain(orbital, auxiliary, policy, detail)) == admitted);
+    if (endpoint == "range") policy.range_omega = .3;
+    const bool domain = resolved && (endpoint == "export"
+        ? scf::cuda_df_integral_export_domain(orbital, auxiliary, policy, detail)
+        : scf::cuda_df_value_domain(orbital, auxiliary, policy, detail));
+    assert(domain == admitted);
     assert(!source_calls && !rhf_calls && !allocations);
   } else if (endpoint == "factory") {
     scf::CudaDensityFittingIntegralSource sentinel;
@@ -179,7 +182,8 @@ int main(int argc, char** argv) {
     RccsdNativeState output;
     try {
       output = run_rccsd_native_state(execution, orbital, descriptor, &cache, &density,
-                                      &warm_fallback, 0, &auxiliary, true, false, nullptr);
+                                      &warm_fallback, 0, &auxiliary, true,
+                                      cc::DFContractionQualification{.ordered_iteration=true}, nullptr);
       assert(admitted && rhf_calls == 1 && source_calls == 1);
       assert(!warm_fallback);
     } catch (const MethodError& error) {
@@ -285,7 +289,7 @@ def host_policy_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("endpoint", ("admission", "factory", "range"))
+@pytest.mark.parametrize("endpoint", ("admission", "factory", "range", "export"))
 @pytest.mark.parametrize(
     "selection,orbital,auxiliary,expected",
     [

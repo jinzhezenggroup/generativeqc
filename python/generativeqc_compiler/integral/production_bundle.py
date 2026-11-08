@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING
 from generativeqc_compiler.common.cuda_target import normalize_cuda_architecture
 
 from .production_cost import _partition_production_selections
-from .production_emission import emit_production_shard, emit_profile_shard
+from .production_emission import (
+    emit_production_shard,
+    emit_profile_shard,
+    emit_shared_rys_xy_fock_shard,
+)
 from .production_k_block import direct_k_block_candidates
 from .production_profile import (
     _profile_identifier,
@@ -113,6 +117,8 @@ def write_production_bundles(
             )
             return (
                 emit_profile_shard(profile, unit)
+                + emit_shared_rys_xy_fock_shard(profile, unit)
+                + emit_shared_rys_xy_fock_shard(profile, unit, weighted_z=True)
                 + emit_profile_shard(profile, rys_alternatives, variant="_rys_value")
                 + emit_profile_shard(profile, k_block_alternatives, variant="_k_block")
                 + emit_profile_shard(

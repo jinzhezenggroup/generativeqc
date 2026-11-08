@@ -56,6 +56,8 @@ std::uint64_t enabled_fock_shell_class_mask() noexcept;
 std::uint64_t preferred_streaming_fock_shell_class_mask() noexcept;
 
 /** Optional value-only Rys inventory; unsupported classes keep exact incumbents. */
+std::uint64_t enabled_shared_rys_xy_fock_shell_class_mask() noexcept;
+
 std::uint64_t enabled_rys_fock_shell_class_mask() noexcept;
 
 /** Optional restricted raw-K shell-block inventory; incumbent remains default. */
@@ -85,6 +87,15 @@ cudaError_t launch_shell_class(unsigned shell_class, cudaStream_t stream, bool u
  * The correction plane, when present, uses the same offsets as the Fock sum.
  */
 cudaError_t launch_shell_class_fock(
+    unsigned shell_class, cudaStream_t stream, bool unrestricted, unsigned worker_blocks,
+    const void* tasks, const std::uint32_t* task_offset, const std::int64_t* primitive_pair_offsets,
+    const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
+    double screening_tolerance, const double* schwarz_bounds, const double* density,
+    runtime::CompensatedOutput fock, const std::uint32_t* task_count,
+    std::uint32_t* task_head) noexcept;
+
+/** Frozen HF admission uses this optional restricted-FP64 companion. */
+cudaError_t launch_shell_class_shared_rys_xy_fock(
     unsigned shell_class, cudaStream_t stream, bool unrestricted, unsigned worker_blocks,
     const void* tasks, const std::uint32_t* task_offset, const std::int64_t* primitive_pair_offsets,
     const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,

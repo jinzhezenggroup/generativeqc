@@ -1,0 +1,21 @@
+{
+  "id": "hf.shared-rys-weighted-z",
+  "classification": "retained-opt-in",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z"
+  ],
+  "owner_issues": [1598],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/rhf_policy.cpp",
+    "src/scf/cuda/rhf_policy.hpp",
+    "src/scf/cuda_rhf.cpp",
+    "src/scf/shared_rys_weighted_z.hpp"
+  ],
+  "rationale": "Default-off exact weighted-Z companion to the independently controlled shared-XY route. Strict 1 requires XY=1; malformed or incompatible requests fail before shape/graph admission. The immutable existing request enum distinguishes the modes without changing policy layout. Independent capability, CUDA resource identity and graph-plan equality bind the requested specialization. Standalone complete sealed-queue numerical/resource gates and fixed ten-pair local gains support endpoint integration preparation only.",
+  "revisit_condition": "Keep default-off and restricted to strict FP64 SM90 materialized DPPP/PPPP. Endpoint cold-plus-three-warm comparison remains a separate gate; no local timing result authorizes default promotion or the original all30 claim. Retain the original XY fallback and separate failed-capture/recovery history.",
+  "evidence": [
+    ".agents/notes/implemented/performance/2026-11-07-weighted-z-endpoint-opt-in.md",
+    "tests/python/test_shared_rys_weighted_z_integration.py"
+  ]
+}

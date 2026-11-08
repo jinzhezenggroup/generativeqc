@@ -14,6 +14,74 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+@pytest.mark.parametrize("unrelated", ("rhf_graph.hpp", "direct_jk_kernels.hpp"))
+def test_hf_page_policy_cannot_acquire_execution_dependencies(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """The owner-specific page contract remains a pure host policy leaf."""
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    (source / "rhf_policy.hpp").write_text("\n")
+    (source / unrelated).write_text("\n")
+    owner = source / "hf_bounded_page_policy.hpp"
+    owner.write_text('#include "scf/cuda/rhf_policy.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "scf/cuda/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_hf_bounded_page_policy dependency" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "unrelated",
+    (
+        "shared_rys_weighted_z.hpp_impl.hpp",
+        "shared_rys_weighted_z_internal.hpp",
+        "shared_rys_weighted_z.cuh",
+    ),
+)
+def test_hf_driver_weighted_dispatch_is_one_exact_leaf(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """A typed dispatch leaf does not admit adjacent implementation headers."""
+    source = tmp_path / "src/scf"
+    source.mkdir(parents=True)
+    (source / "shared_rys_weighted_z.hpp").write_text("// Typed declarations only\n")
+    (source / unrelated).write_text("// Unrelated implementation\n")
+    owner = source / "cuda_rhf.cpp"
+    owner.write_text('#include "scf/shared_rys_weighted_z.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "scf/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert f"forbidden cuda_hf_driver dependency on scf/{unrelated}" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "unrelated",
+    (
+        "rhf_block_convergence_policy_impl.hpp",
+        "rhf_block_convergence_policy.hpp_impl.hpp",
+    ),
+)
+def test_hf_driver_block_convergence_borrows_only_the_exact_private_policy(
+    tmp_path: Path, unrelated: str
+) -> None:
+    source = tmp_path / "src/scf"
+    source.mkdir(parents=True)
+    (source / "rhf_block_convergence_policy.hpp").write_text(
+        "// Host declarations only\n"
+    )
+    (source / unrelated).write_text("// Unrelated implementation\n")
+    owner = source / "cuda_rhf.cpp"
+    owner.write_text('#include "scf/rhf_block_convergence_policy.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "scf/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert f"forbidden cuda_hf_driver dependency on scf/{unrelated}" in errors[0]
+
+
 @pytest.mark.parametrize(
     "unrelated",
     ("range_exchange_runtime.hpp", "execution_qualifiers.hpp_impl.hpp", "eri.hpp"),
@@ -122,6 +190,26 @@ def test_md_j_host_borrows_interface_not_recurrence(tmp_path: Path, owner: str) 
     errors = audit_scf_structure(tmp_path)["errors"]
     assert len(errors) == 1
     assert "forbidden cuda_direct_provider_host" in errors[0]
+
+
+@pytest.mark.parametrize("owner", ["direct_jk.cpp", "direct_jk_plan.hpp"])
+def test_combined_source_borrows_only_its_semantic_vector_provider(
+    tmp_path: Path, owner: str
+) -> None:
+    """The new vector boundary neither imports Tensor kernels nor widens plan ownership."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / "tensor").mkdir()
+    header = source / "tensor/cuda_vector_accumulation.hpp"
+    header.write_text("\n")
+    adapter = source / "scf/cuda" / owner
+    adapter.write_text('#include "tensor/cuda_vector_accumulation.hpp"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert bool(errors) == (owner != "direct_jk.cpp")
+    runtime = source / "tensor/cuda_runtime.cuh"
+    runtime.write_text("\n")
+    adapter.write_text('#include "tensor/cuda_runtime.cuh"\n')
+    assert audit_scf_structure(tmp_path)["errors"]
 
 
 @pytest.mark.parametrize("kernel", ["direct_md_j.cu", "direct_md_jk.cu"])

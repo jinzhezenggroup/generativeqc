@@ -218,11 +218,6 @@ struct DensityFittingUhfGradient {
     const std::vector<double>& metric, const std::vector<double>& inverse_square_root,
     const std::vector<double>& response, std::size_t dimension, double relative_threshold = 0.0);
 
-/** Construct d(M+) for one coordinate, with optional explicit rank-crossing checks. */
-[[nodiscard]] std::vector<double> density_fitting_metric_pseudoinverse_derivative(
-    const integrals::DensityFittingIntegralData& integrals, const std::vector<double>& inverse,
-    std::size_t coordinate, double relative_threshold = 0.0);
-
 /**
  * Assemble a complete RHF analytic force vector for a DF two-electron
  * energy. This combines the DF response above with orbital one-electron

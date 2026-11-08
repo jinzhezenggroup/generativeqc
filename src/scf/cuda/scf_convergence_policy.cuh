@@ -41,24 +41,36 @@ __device__ inline bool hf_iteration_converged(double energy, double previous_ene
              hf_stationarity_tolerance(energy_tolerance, density_tolerance, qualified_owner);
 }
 
-/** Lane zero may retire screened deltas once the physical gates pass. Screening
- * makes full and reconstructed energies differ even at stationary density, so
- * retain ordinary full builds for the rest of this item/solve. The caller must
- * discard the cross-operator energy baseline and require two fresh full Focks;
- * this transition is not convergence and never widens an acceptance tolerance.
- * Null state leaves ordinary/unscreened callers and no-delta warm solves alone. */
-__device__ inline bool begin_hf_full_energy_refinement(
-    std::int32_t system, double energy, double density_tolerance, double density_rms,
-    double physical_maximum, bool physical_target, std::uint32_t* delta_updates,
-    const unsigned long long* delta_build_count) {
+enum class HfEnergyRefinementTransition { none, retain_full_baseline, discard_delta_baseline };
+
+/** Retire deltas within one decade of the physical gates, without changing
+ * acceptance. Starting full-only refinement before stationarity lets the two
+ * fresh full energies overlap the ordinary SCF tail rather than extend it.
+ * This phase-selection margin never enters hf_iteration_converged.
+ * A current full evaluation can establish the first full-energy baseline; a
+ * delta evaluation cannot. After actual deltas, both transitions block current
+ * convergence and require consecutive full energies. A stationary no-delta
+ * solve keeps ordinary convergence but latches full-only if another step is
+ * needed, avoiding a pointless delta/full transition on an energy-only tail.
+ * Null state leaves ordinary callers alone. */
+__device__ inline HfEnergyRefinementTransition begin_hf_full_energy_refinement(
+    std::int32_t system, double energy, double energy_tolerance, double density_tolerance,
+    double density_rms, double physical_maximum, bool physical_target, bool qualified_owner,
+    std::uint32_t* delta_updates, const unsigned long long* delta_build_count) {
+  constexpr double refinement_margin = 10.0;
   if (delta_updates == nullptr || delta_build_count == nullptr || !physical_target ||
-      delta_build_count[system] == 0ULL ||
       delta_updates[system] == kIncrementalDirectJkFullEnergyRefinement || !isfinite(energy) ||
-      !isfinite(density_rms) || !isfinite(physical_maximum) || density_rms >= density_tolerance ||
-      physical_maximum > fmin(1e-8, density_tolerance))
-    return false;
+      !isfinite(density_rms) || !isfinite(physical_maximum) ||
+      density_rms / refinement_margin >= density_tolerance ||
+      physical_maximum >
+          refinement_margin *
+              hf_stationarity_tolerance(energy_tolerance, density_tolerance, qualified_owner))
+    return HfEnergyRefinementTransition::none;
+  const bool current_full_build = delta_updates[system] == 0U;
   delta_updates[system] = kIncrementalDirectJkFullEnergyRefinement;
-  return true;
+  if (delta_build_count[system] == 0ULL) return HfEnergyRefinementTransition::none;
+  return current_full_build ? HfEnergyRefinementTransition::retain_full_baseline
+                            : HfEnergyRefinementTransition::discard_delta_baseline;
 }
 
 /** One-warp maximum of the physical pre-DIIS FDS-SDF residual. Null is reserved

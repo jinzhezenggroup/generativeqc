@@ -1,0 +1,284 @@
+{
+  "decision": "reject-default",
+  "source_image": {
+    "source_identity": "ef7f04bd77cae25a87aca1452c4640ac30ca95c7ff89817ae95e517fe24d9191",
+    "library_sha256": "53b8e6ca2d11ba260d30857d28d1fcea04542756bd5e2e304a6f2ae09e4a2ee4"
+  },
+  "fresh_gpu4pyscf_ranking": false,
+  "independent_comparisons": 32,
+  "worst_reference_errors": [
+    9.004944937866336e-12,
+    1.0464819029110117e-06,
+    4.754375741169946e-07
+  ],
+  "worst_paired_errors": [
+    1.7384612268263784e-12,
+    5.864964567336983e-07,
+    3.16219992466541e-07
+  ],
+  "unmeasured": [
+    "active compact points",
+    "force pair sweeps",
+    "exclusive rebase/Gram time"
+  ],
+  "devices": {
+    "A100": {
+      "scheduler": {
+        "SLURM_JOB_ID": null,
+        "SLURM_JOB_NODELIST": null,
+        "LSB_JOBID": "227923",
+        "LSB_QUEUE": "gpu_chem",
+        "LSB_HOSTS": "gpu22 gpu22 gpu22 gpu22 gpu22 gpu22 gpu22 gpu22",
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "baseline": {
+        "cold_seconds": 82.60521936044097,
+        "warm_median_seconds": 13.785436436533928,
+        "cold_focks": 16,
+        "phase_focks": {
+          "provisional-semilocal-rsh": 7,
+          "full-target": 5,
+          "provisional-frozen-vv10": 4
+        },
+        "nonlocal_work": {
+          "provisional_focks": 11,
+          "target_focks": 5,
+          "pair_cache_probes": 4,
+          "pair_cache_hits": 1,
+          "pair_sweeps": 4
+        },
+        "bridge_receipts": []
+      },
+      "candidate": {
+        "cold_seconds": 88.44953653216362,
+        "warm_median_seconds": 13.805635936558247,
+        "cold_focks": 15,
+        "phase_focks": {
+          "provisional-semilocal-rsh": 7,
+          "full-target": 5,
+          "provisional-frozen-vv10": 3
+        },
+        "nonlocal_work": {
+          "provisional_focks": 10,
+          "target_focks": 5,
+          "pair_cache_probes": 4,
+          "pair_cache_hits": 0,
+          "pair_sweeps": 5
+        },
+        "bridge_receipts": [
+          {
+            "owner": 1,
+            "solve": 1,
+            "request": 1,
+            "admission": 2,
+            "allocated_bytes": 141558528,
+            "density_writes": 15,
+            "snapshots": 3,
+            "successful_rebases": 2,
+            "entries_transferred": 14,
+            "refusals": 0,
+            "last_error": 0,
+            "bank_anchor": 11,
+            "target_anchor": 0,
+            "metric": 1,
+            "converged": 1,
+            "failed": 0
+          },
+          {
+            "owner": 1,
+            "solve": 2,
+            "request": 1,
+            "admission": 3,
+            "allocated_bytes": 141558528,
+            "density_writes": 0,
+            "snapshots": 0,
+            "successful_rebases": 0,
+            "entries_transferred": 0,
+            "refusals": 0,
+            "last_error": 0,
+            "bank_anchor": 0,
+            "target_anchor": 0,
+            "metric": 1,
+            "converged": 1,
+            "failed": 0
+          },
+          {
+            "owner": 1,
+            "solve": 3,
+            "request": 1,
+            "admission": 3,
+            "allocated_bytes": 141558528,
+            "density_writes": 0,
+            "snapshots": 0,
+            "successful_rebases": 0,
+            "entries_transferred": 0,
+            "refusals": 0,
+            "last_error": 0,
+            "bank_anchor": 0,
+            "target_anchor": 0,
+            "metric": 1,
+            "converged": 1,
+            "failed": 0
+          },
+          {
+            "owner": 1,
+            "solve": 4,
+            "request": 1,
+            "admission": 3,
+            "allocated_bytes": 141558528,
+            "density_writes": 0,
+            "snapshots": 0,
+            "successful_rebases": 0,
+            "entries_transferred": 0,
+            "refusals": 0,
+            "last_error": 0,
+            "bank_anchor": 0,
+            "target_anchor": 0,
+            "metric": 1,
+            "converged": 1,
+            "failed": 0
+          }
+        ]
+      },
+      "cold_ratio": 1.0707499746017435,
+      "warm_ratios": [
+        1.0052907283484953,
+        1.001465278238909,
+        1.00286183841257
+      ],
+      "independent_EF_passed": true,
+      "paired_EF_passed": false,
+      "cold_protection_passed": false,
+      "warm_protection_passed": true
+    },
+    "RTX5090": {
+      "scheduler": {
+        "SLURM_JOB_ID": "16695",
+        "SLURM_JOB_NODELIST": "node1",
+        "LSB_JOBID": null,
+        "LSB_QUEUE": null,
+        "LSB_HOSTS": null,
+        "CUDA_VISIBLE_DEVICES": "3"
+      },
+      "baseline": {
+        "cold_seconds": 165.17359836772084,
+        "warm_median_seconds": 12.532695434987545,
+        "cold_focks": 16,
+        "phase_focks": {
+          "provisional-semilocal-rsh": 7,
+          "full-target": 5,
+          "provisional-frozen-vv10": 4
+        },
+        "nonlocal_work": {
+          "provisional_focks": 11,
+          "target_focks": 5,
+          "pair_cache_probes": 4,
+          "pair_cache_hits": 1,
+          "pair_sweeps": 4
+        },
+        "bridge_receipts": []
+      },
+      "candidate": {
+        "cold_seconds": 184.78558457642794,
+        "warm_median_seconds": 12.534535814076662,
+        "cold_focks": 15,
+        "phase_focks": {
+          "provisional-semilocal-rsh": 7,
+          "full-target": 5,
+          "provisional-frozen-vv10": 3
+        },
+        "nonlocal_work": {
+          "provisional_focks": 10,
+          "target_focks": 5,
+          "pair_cache_probes": 4,
+          "pair_cache_hits": 0,
+          "pair_sweeps": 5
+        },
+        "bridge_receipts": [
+          {
+            "owner": 1,
+            "solve": 1,
+            "request": 1,
+            "admission": 2,
+            "allocated_bytes": 141558528,
+            "density_writes": 15,
+            "snapshots": 3,
+            "successful_rebases": 2,
+            "entries_transferred": 14,
+            "refusals": 0,
+            "last_error": 0,
+            "bank_anchor": 11,
+            "target_anchor": 0,
+            "metric": 1,
+            "converged": 1,
+            "failed": 0
+          },
+          {
+            "owner": 1,
+            "solve": 2,
+            "request": 1,
+            "admission": 3,
+            "allocated_bytes": 141558528,
+            "density_writes": 0,
+            "snapshots": 0,
+            "successful_rebases": 0,
+            "entries_transferred": 0,
+            "refusals": 0,
+            "last_error": 0,
+            "bank_anchor": 0,
+            "target_anchor": 0,
+            "metric": 1,
+            "converged": 1,
+            "failed": 0
+          },
+          {
+            "owner": 1,
+            "solve": 3,
+            "request": 1,
+            "admission": 3,
+            "allocated_bytes": 141558528,
+            "density_writes": 0,
+            "snapshots": 0,
+            "successful_rebases": 0,
+            "entries_transferred": 0,
+            "refusals": 0,
+            "last_error": 0,
+            "bank_anchor": 0,
+            "target_anchor": 0,
+            "metric": 1,
+            "converged": 1,
+            "failed": 0
+          },
+          {
+            "owner": 1,
+            "solve": 4,
+            "request": 1,
+            "admission": 3,
+            "allocated_bytes": 141558528,
+            "density_writes": 0,
+            "snapshots": 0,
+            "successful_rebases": 0,
+            "entries_transferred": 0,
+            "refusals": 0,
+            "last_error": 0,
+            "bank_anchor": 0,
+            "target_anchor": 0,
+            "metric": 1,
+            "converged": 1,
+            "failed": 0
+          }
+        ]
+      },
+      "cold_ratio": 1.1187355994088446,
+      "warm_ratios": [
+        0.9997680030357199,
+        0.9990221123523767,
+        1.0002614682892492
+      ],
+      "independent_EF_passed": true,
+      "paired_EF_passed": false,
+      "cold_protection_passed": false,
+      "warm_protection_passed": true
+    }
+  }
+}

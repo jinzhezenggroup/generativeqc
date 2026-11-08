@@ -1,0 +1,32 @@
+{
+  "schema": "generativeqc.cbs-source-preflight-summary.v1",
+  "overall_status": "INCOMPLETE",
+  "source_gate": "STOP",
+  "reason": "closed_shell_df_default_fallback_changed",
+  "build_status": "NOT_RUN",
+  "scientific_status": "NOT_RUN",
+  "planned_calls": {
+    "primary_ef": 73,
+    "startup_ef": 20,
+    "energy_only": 13
+  },
+  "observed_calls": {
+    "primary_ef": 0,
+    "startup_ef": 0,
+    "energy_only": 0
+  },
+  "execution_identity": {
+    "core_identity": null,
+    "binary_sha256": null,
+    "gpu_model": null,
+    "gpu_uuid": null,
+    "driver": null,
+    "image_or_os": null,
+    "slurm_job_id": null,
+    "slurm_step_id": null,
+    "allocation_node": null
+  },
+  "budget_changed": false,
+  "automatic_retries": 0,
+  "recommendation": "Freeze final integrated source and remeasure both H100 and RTX 5090."
+}
