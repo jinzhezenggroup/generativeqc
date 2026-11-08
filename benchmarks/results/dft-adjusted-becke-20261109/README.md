@@ -26,6 +26,12 @@ Both arms use experimental source `9d11d755` / ELF `f44e143a`. The control
 explicitly disables scaled products; the candidate leaves the selector unset.
 Neither arm is an execution of the restored source `75d94b32` / ELF `549ed9a2`.
 
+Subsequent synchronization with master `8b9983820` changes the checkout source
+identity to `8b1b284f`. `master8b-plan-audit.json` records unchanged explicit
+schema-v2 build selections, not a newly linked image or GPU measurement. The
+restoration identity in this historical capsule remains `75d94b32`; no old
+timing is relabeled as a measurement of the later checkout.
+
 | GPU | Direct96 complete cold | Control | Candidate | Change |
 | --- | --- | ---: | ---: | ---: |
 | A100 | PBE0 | 11.751200 s | 11.686492 s | -0.551% |
