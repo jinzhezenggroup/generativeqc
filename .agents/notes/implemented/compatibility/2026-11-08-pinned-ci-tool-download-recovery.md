@@ -29,9 +29,14 @@ API path. Local I/O, usage, certificate and size-limit errors stay fatal.
 Failure of the alternate path is also fatal.
 
 For Python, first run the original `uv venv --python 3.11`. Recovery requires
-exit status 2, the exact pinned CPython URL and the observed `504 Gateway
-Timeout` diagnostic. Unrelated failures propagate. Refuse an existing `.venv`,
-including an unexpected directory left by the failed normal path.
+exit status 2 and the exact pinned CPython URL. The eligible diagnostics are
+the observed `504 Gateway Timeout`, or the complete observed cause chain
+`client error (SendRequest)`, `http2 error`, and `stream error received: refused
+stream before processing any application logic`. The HTTP/2 case was added
+after two hosted attempts reproduced that exact pre-response failure. Matching
+an arbitrary HTTP/2 error or an arbitrary uv exit status is insufficient.
+Unrelated failures propagate. Refuse an existing `.venv`, including an
+unexpected directory left by the failed normal path.
 
 Both paths use the same pinned asset, not a substitute version or mirror:
 
@@ -98,6 +103,13 @@ A generic catch-all Python fallback would also hide real environment failures.
   the normal uv path, dependency installation and complete documentation build
   passed. This is not an explanation for the separate external Read the Docs
   failure, whose detailed logs were unavailable.
+- Both attempts of the later [download-contract preflight](https://github.com/njzjz-bot/vibeqc/actions/runs/42472314590)
+  failed before tests while downloading that same pinned Python asset, with uv
+  exit status 2 and the complete refused-HTTP/2-stream cause chain above. The
+  first helper revision correctly rejected it under its 504-only boundary.
+  Repeating the job once did not repair the route; this observed repetition
+  justified adding that one explicit transport case to the same-asset recovery
+  policy. It does not justify a catch-all uv failure handler.
 - Python API recovery is verified by the explicitly scoped live preflight;
   these reviewed production logs do not establish an instance of that fallback.
   None of these transport checks is a new GPU endpoint or timing campaign.
@@ -108,6 +120,8 @@ Revisit the pinned assets and tests when the selected ccache or uv/Python
 version changes, when GitHub's asset API contract changes, or when observed
 transport evidence shows this path is no longer necessary. Preserve equivalent
 identity, lifetime and failure guarantees when simplifying the implementation.
+Unknown failure diagnostics remain fatal. Expanding the accepted diagnostics
+requires observed transport evidence and executable positive/negative cases.
 
 Agent: /root (ChatGPT)
 Model: GPT-6 Astra Pro

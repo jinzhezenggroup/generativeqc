@@ -250,10 +250,21 @@ def _python_venv() -> int:
     print(original.stdout, end="")
     if original.returncode == 0:
         return 0
+    # Only the observed pre-response HTTP/2 refusal joins the existing 504
+    # recovery. Keep the complete, ordered cause chain and exact URL token.
+    diagnostic = (
+        "\n" + "\n".join(line.strip() for line in original.stdout.splitlines()) + "\n"
+    )
+    refused_stream = (
+        "\nCaused by: client error (SendRequest)\n"
+        "Caused by: http2 error\n"
+        "Caused by: stream error received: refused stream before processing any application logic\n"
+    ) in diagnostic
+    urls = {word.strip("`'\"():") for word in original.stdout.split()}
     if not (
         original.returncode == 2
-        and PYTHON.url in original.stdout
-        and "504 Gateway Timeout" in original.stdout
+        and PYTHON.url in urls
+        and ("504 Gateway Timeout" in original.stdout or refused_stream)
     ):
         return (
             original.returncode
