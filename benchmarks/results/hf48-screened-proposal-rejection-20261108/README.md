@@ -27,3 +27,8 @@ drivers, patch, restoration receipt and authenticated receiver closure.
 
 The later bounded-FP64-DIIS-predictor experiment is a separate hypothesis and
 source identity. This result is not evidence for or against its history policy.
+
+All original raw bytes and per-file hashes now share semantic compression with
+the two related handoff experiments. See
+`../hf-screened-handoff-rejections-20261108/README.md`; no observation or verdict
+changes, including the failed default force diagnostic and A100 warm guards.

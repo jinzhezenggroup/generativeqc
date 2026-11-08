@@ -1,15 +1,19 @@
-"""Replay the complete-ring predictor experiment without hiding negative arms."""
+"""Replay bounded HF96 handoff experiments without hiding negative arms."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import lzma
 import math
+import runpy
 import statistics
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+support = runpy.run_path(
+    str(ROOT.parent / "hf-screened-handoff-rejections-20261108" / "replay_support.py")
+)
+load_observations = support["load_observations"]
 
 
 def require(condition: bool, message: str) -> None:
@@ -21,29 +25,14 @@ def require(condition: bool, message: str) -> None:
 def replay(directory: Path = ROOT) -> dict:
     """Recompute every independent gate and matched warm, not only medians."""
     cohort = json.loads((directory / "cohort.json").read_text())
+    files = load_observations(directory, cohort)
     build_entry = cohort["build_log"]
-    build_payload = (directory / build_entry["path"]).read_bytes()
-    require(
-        hashlib.sha256(build_payload).hexdigest() == build_entry["sha256"],
-        "build capsule changed",
-    )
-    build_log = lzma.decompress(build_payload)
+    build_log = files[build_entry["member"]].encode()
     require(len(build_log) == build_entry["uncompressed_bytes"], "incomplete build log")
     require(
         hashlib.sha256(build_log).hexdigest() == build_entry["uncompressed_sha256"],
         "build log changed",
     )
-    payload = (directory / "observations.json.xz").read_bytes()
-    require(
-        hashlib.sha256(payload).hexdigest() == cohort["capsule_sha256"],
-        "capsule changed",
-    )
-    files = json.loads(lzma.decompress(payload))
-    require(set(files) == set(cohort["members"]), "incomplete population")
-    for name, text in files.items():
-        require(
-            hashlib.sha256(text.encode()).hexdigest() == cohort["members"][name], name
-        )
     reference = json.loads(files["reference/oracle.json"])
     geometry = json.loads(files["reference/geometry.json"])
     require(len(geometry) == len(reference["forces"]) == 96, "reference shape")
@@ -150,4 +139,4 @@ def replay(directory: Path = ROOT) -> dict:
 
 
 if __name__ == "__main__":
-    print(json.dumps(replay(), indent=2, allow_nan=False))
+    print(json.dumps(support["compact_summary"](replay()), indent=2, allow_nan=False))

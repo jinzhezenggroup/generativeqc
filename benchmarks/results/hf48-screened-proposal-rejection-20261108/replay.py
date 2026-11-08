@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import lzma
 import math
+import runpy
 import statistics
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+support = runpy.run_path(
+    str(ROOT.parent / "hf-screened-handoff-rejections-20261108" / "replay_support.py")
+)
+load_observations = support["load_observations"]
 
 
 def require(condition: bool, message: str) -> None:
@@ -21,17 +24,7 @@ def require(condition: bool, message: str) -> None:
 def replay(directory: Path = ROOT) -> dict:
     """Keep negative timings and every failed independent gate in the result."""
     cohort = json.loads((directory / "cohort.json").read_text())
-    payload = (directory / "observations.json.xz").read_bytes()
-    require(
-        hashlib.sha256(payload).hexdigest() == cohort["capsule_sha256"],
-        "capsule changed",
-    )
-    files = json.loads(lzma.decompress(payload))
-    require(set(files) == set(cohort["members"]), "incomplete observations")
-    for name, text in files.items():
-        require(
-            hashlib.sha256(text.encode()).hexdigest() == cohort["members"][name], name
-        )
+    files = load_observations(directory, cohort)
     reference = json.loads(files[cohort["reference"]])
     summary = {
         "decision": cohort["decision"],
@@ -131,4 +124,4 @@ def replay(directory: Path = ROOT) -> dict:
 
 
 if __name__ == "__main__":
-    print(json.dumps(replay(), indent=2, allow_nan=False))
+    print(json.dumps(support["compact_summary"](replay()), indent=2, allow_nan=False))

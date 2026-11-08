@@ -97,3 +97,9 @@ unchanged and excluded from the experiment and PR.
 Issue2976; draft PR3048; local immutable experiments under
 `.artifacts/hf-fp64-predictor-handoff-20261108/`; lossless published capsule at
 `benchmarks/results/hf-fp64-predictor-rejection-20261108/`.
+
+The distinct four-step earlier-handoff experiment is also rejected on both
+cards; see `2026-11-08-hf-earlier-screened-handoff.md`. Its source and observations
+remain separate. All raw records and complete compiler stdout now share lossless
+semantic compression across these related experiments; per-file identities and
+the historical numerical verdicts are unchanged.
