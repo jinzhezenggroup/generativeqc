@@ -12,13 +12,15 @@ Direct RHF/UHF force solves require the maximum physical AO commutator
 |F P S - S P F|
 ```
 
-to satisfy the owner-qualified HF stationarity limit in addition to the energy
-and density-update criteria. All-electron restricted FP64 ordinary owners use
+to satisfy `min(1e-8, density_tolerance)` in addition to the energy and
+density-update criteria. Standard public controls do not relax the physical
+force criterion. All-electron restricted FP64 energy-only owners may still use
 `min(1e-5, density_tolerance)` when both public controls are Standard or looser
-(`energy_tolerance >= 1e-9`, `density_tolerance >= 1e-5`). Tighter requests and
-unqualified owners retain `min(1e-8, density_tolerance)`. Selecting incremental
-J/K does not change this limit. The maximum includes both UHF spin channels;
-UHF remains on the strict limit. Non-finite residuals cannot pass.
+(`energy_tolerance >= 1e-9`, `density_tolerance >= 1e-5`); tighter requests and
+unqualified owners retain the strict ceiling. Selecting incremental J/K does
+not change either limit. The maximum includes both UHF spin channels;
+non-finite residuals cannot pass. These physical norms are not themselves
+bounds on independent force errors, which require separate numerical gates.
 
 Additional SCF updates remain within the requested iteration limit and are
 included in the public iteration count. A mixed-precision coarse stage retains

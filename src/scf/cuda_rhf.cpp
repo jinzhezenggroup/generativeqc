@@ -36,6 +36,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/aot_shell_registry.hpp"
 #include "scf/application_precision.hpp"
+#include "scf/convergence_limits.hpp"
 #include "scf/cuda/arena.hpp"
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/direct_angular_fock.hpp"
@@ -3699,13 +3700,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // FP64 direct and DF share the physical pre-DIIS residual gate for both
   // energy and force endpoints. Coarse mixed stages still defer to refinement.
   const double* force_convergence_residual = residual;
-  const bool qualified_standard_owner =
-      !unrestricted && !mixed_precision_fock && !options.export_physical_reference &&
+  const bool qualified_standard_owner = standard_hf_stationarity_owner({
+      !unrestricted,
+      !mixed_precision_fock,
       std::all_of(systems.begin(), systems.end(), [](const auto& system) {
         return system.ecp_terms.empty() &&
                std::none_of(system.atoms.begin(), system.atoms.end(),
                             [](const auto& atom) { return atom.ecp_core != 0; });
-      });
+      }),
+      options.compute_forces,
+      options.export_physical_reference,
+  });
   // Deltas retire per item after physical stationarity. Full-only energy
   // closure stays within the iteration budget and retains a usable current
   // full-density baseline, including warm solves that never needed a delta.

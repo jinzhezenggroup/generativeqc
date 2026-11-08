@@ -72,3 +72,49 @@ def test_nonfinite_forces_cannot_pass(reader: dict[str, Any], value: float) -> N
     actual = {**target, "forces": [[value, 0.0, 0.0] for _ in range(48)]}
     with pytest.raises(ValueError, match="nonfinite force"):
         reader["observable_error"](actual, target)
+
+
+@pytest.fixture(scope="module")
+def stationarity_reader() -> dict[str, Any]:
+    """Load the separately measured default-control CUDA force repair."""
+    return runpy.run_path(
+        str(ROOT / "benchmarks/results/hf-force-stationarity-20261109/replay.py")
+    )
+
+
+def test_strict_force_owner_retains_default_failure_and_independent_acceptance(
+    stationarity_reader: dict[str, Any],
+) -> None:
+    summary = stationarity_reader["replay"]()
+    assert not summary["arms"]["baseline"]["all_passed"]
+    assert summary["arms"]["candidate"]["all_passed"]
+    assert all(
+        sample["maximum_force"] < 1e-7 and sample["energy"] < 1e-8
+        for sample in summary["arms"]["candidate"]["samples"]
+    )
+
+
+def test_strict_force_capsule_corruption_fails_closed(
+    stationarity_reader: dict[str, Any], tmp_path: Path
+) -> None:
+    source = ROOT / "benchmarks/results/hf-force-stationarity-20261109"
+    destination = tmp_path / source.name
+    shutil.copytree(source, destination)
+    payload = destination / "observations.json.xz"
+    payload.write_bytes(payload.read_bytes() + b"altered")
+    with pytest.raises(ValueError, match="changed force capsule"):
+        stationarity_reader["load"](destination)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+def test_strict_force_nonfinite_errors_cannot_pass(
+    stationarity_reader: dict[str, Any], value: float
+) -> None:
+    target = {
+        "converged": True,
+        "energy": 0.0,
+        "forces": [[0.0] * 3 for _ in range(48)],
+    }
+    actual = {**target, "forces": [[value, 0.0, 0.0] for _ in range(48)]}
+    with pytest.raises(ValueError, match="nonfinite force"):
+        stationarity_reader["observable_error"](actual, target)
