@@ -49,3 +49,31 @@ per-warm and resource/default-execution gates are still required for this source
 - Issue2976, old draft PR3048 and DFT commit31da3e16a.
 - `benchmarks/results/dft-shared-rys-streaming-20261108/` is explicitly the older
   qualified image; do not relabel it with the new source identities.
+
+## Independent PR and qualification continuation
+
+The exact independent tree was published as draft PR #3051, remote commit
+`3ad8c2dc6b758d16e240f7b5af0a3f42d7534587`. Authenticated Git data API publication
+was needed after fork SSH write refusal and stalled smart HTTPS. Its tree equals
+the original local 1263ddd0c tree exactly; parent and attributed message are also
+verified. Only commit representation differs, not scientific source identity.
+
+Control build16857 reached the internal1500-second compile timeout (exit124),
+after271/710 tasks, and restored the original source/runtime exactly. Its never-run
+dependencies16858/16859/16860 were cancelled. The cache-preserving finite CPU
+continuations are16861/16862, with dependent5090 endpoint16863 and complete-ELF
+transport16864. A failed first resubmission used SSH alias n1 as a Slurm node name;
+the scheduler rejected it before creating any job. The corrected scheduler name is
+node1. These are compilation/transport facts, not new GPU performance evidence.
+
+The same forthcoming A100 allocation also retains one fresh PBE0/B3LYP DF96
+population per engine to check the other remaining DFT cold cases. These single
+paired comparisons are not balanced ABBA optimization qualification. Separate
+PBE0 and B3LYP cold-only kernel attribution is collected without counting warm
+kernels. All endpoint populations still include their own three measured warms.
+
+Initial hosted core-a stops at the Libxc catalog's checked input identities;
+the exact live summary and stale campaign state are unchanged. The official
+metadata-only reconciliation is recorded in
+`../implemented/compatibility/2026-11-08-dft-streaming-catalog-binding.md`.
+It does not turn historical Libxc or DFT measurements into current qualification.
