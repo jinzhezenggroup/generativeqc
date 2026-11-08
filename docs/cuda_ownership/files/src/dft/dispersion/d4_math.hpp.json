@@ -2,6 +2,6 @@
   "path": "src/dft/dispersion/d4_math.hpp",
   "role": "scientific",
   "subsystem": "d4_dispersion",
-  "reason": "Shared handwritten D4 scalar mathematics consumed by the retained reference evaluator and GFN2 CUDA. This consolidates existing formulas; generated replacement and CPU/CUDA parity remain required before retirement.",
+  "reason": "Shared D4 adapter consumes compiler-AD charge scaling, coordination, reference weights, pair damping and ATM energy/edge/C6 responses. Native table/C6 contractions and response accumulation remain conservatively scientific ownership; derivative formulas are not maintained in this header.",
   "regions": []
 }

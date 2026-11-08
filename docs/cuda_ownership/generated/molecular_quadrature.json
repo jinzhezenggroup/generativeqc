@@ -1,6 +1,6 @@
 {
   "name": "molecular_quadrature",
-  "outputs": ["generated/generated_quadrature.cuh"],
+  "outputs": ["generated/generated_quadrature.cuh", "generated/generated_atomic_grid.hpp"],
   "owner": "python/generativeqc_compiler/xc/quadrature_cuda.py",
-  "scope": "CUDA atom/radial/polar/azimuth point construction, reused distances, Becke graph lowering, reference-oriented log normalization, bounded tile layout and exact allocation inventory. Native code owns allocation, execution and retained host exports."
+  "scope": "CPU/CUDA quadrature shares rational and Treutler primals and AD Jacobians. Legendre Newton slopes are JVPs of the polynomial recurrence; consumer stopping and final-slope policies remain distinct. CUDA retains one rational transform per atom/radial pair, reused distances, Becke graph lowering, bounded tiles and exact allocation accounting. Native code owns storage, execution and exports."
 }

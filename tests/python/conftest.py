@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -182,6 +183,29 @@ def _native_cxx(
     cache = os.path.abspath(cache)
     subprocess.run([cache, "--version"], check=True, capture_output=True, text=True)
     return NativeCxx(compiler, cache, tmp_path_factory.getbasetemp())
+
+
+@pytest.fixture(scope="session")
+def generated_classical_headers(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Materialize production scalar headers for probes built outside CMake."""
+    root = Path(__file__).resolve().parents[2]
+    directory = tmp_path_factory.mktemp("generated-classical-headers")
+    for name in ("nuclear_repulsion", "dispersion_scalar", "gcp_scalar"):
+        subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-S",
+                str(root / "tools" / f"generate_{name}.py"),
+                "--output",
+                str(directory / f"generated_{name}.hpp"),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    return directory
 
 
 @pytest.fixture(scope="session")

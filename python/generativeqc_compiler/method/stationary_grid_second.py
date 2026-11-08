@@ -50,46 +50,6 @@ GRID_FIELD_WORKSPACE_PANELS = 32
 
 
 @cache
-def _nuclear_pair_program() -> tuple:
-    graph = Graph()
-    displacement = [graph.variable(f"r{axis}") for axis in range(3)]
-    energy = graph.variable("charge_product") * graph.sum(
-        value * value for value in displacement
-    ).pow(-0.5)
-    gradient = [graph.differentiate(energy, value) for value in displacement]
-    leaves = {f"r{axis}": graph.variable(f"dr{axis}") for axis in range(3)}
-    roots = tuple(
-        graph.differentiate(value, graph.variable("direction"), leaves)
-        for value in gradient
-    )
-    return graph, roots
-
-
-def nuclear_repulsion_hvp(
-    centers: np.ndarray, charges: np.ndarray, direction: np.ndarray
-) -> np.ndarray:
-    """Apply the compiler-differentiated 1/r pair Hessian with physical scatter."""
-    first, second = np.triu_indices(len(centers), 1)
-    result = np.zeros_like(centers)
-    if not len(first):
-        return result
-    delta = centers[first] - centers[second]
-    moving = direction[first] - direction[second]
-    if np.any(np.linalg.norm(delta, axis=1) == 0):
-        raise ValueError("nuclear Hessian requires distinct centers")
-    graph, roots = _nuclear_pair_program()
-    variables = {
-        "charge_product": charges[first] * charges[second],
-        **{f"r{axis}": delta[:, axis] for axis in range(3)},
-        **{f"dr{axis}": moving[:, axis] for axis in range(3)},
-    }
-    values = np.asarray(evaluate_array_graph(graph, roots, variables)).T
-    np.add.at(result, first, values)
-    np.add.at(result, second, -values)
-    return result
-
-
-@cache
 def feature_programs(points: int, nao: int) -> tuple:
     """Generate primal/first/mixed rho, Cartesian gradient and tau programs.
 

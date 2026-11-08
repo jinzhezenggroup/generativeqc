@@ -253,12 +253,6 @@ generativeqc_xtb_status_t initialize_scc_driver_state_cpu(const SccDriverPlan& p
                                                     const SccDriverState& state,
                                                     std::string& error);
 
-/* Restart one system from its current public multipoles (raw when converged). */
-generativeqc_xtb_status_t restart_scc_driver_system_cpu(const SccDriverPlan& plan, std::int64_t system,
-                                                  const WavefunctionView& wavefunction,
-                                                  const SccMixerState& mixer_state,
-                                                  const SccDriverState& state, std::string& error);
-
 /*
  * Advance every active system by one SCC iteration.
  *

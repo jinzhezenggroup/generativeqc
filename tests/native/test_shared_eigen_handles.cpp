@@ -1,3 +1,4 @@
+#include <cublas_v2.h>
 #include <cusolverDn.h>
 
 #include <cassert>
@@ -29,6 +30,7 @@ bool private_gfn2_published(void*);
 bool private_gfn2_empty(void*);
 void private_gfn2_destroy(void*);
 void private_scf_lifetime(const std::string&, void*);
+std::int32_t private_matrix_preparation(void*, bool&);
 
 namespace {
 std::vector<std::string> calls;
@@ -311,6 +313,20 @@ void scf_lifetime(const std::string& mode) {
     assert(current_device == 3);  // RHF deliberately preserves its existing selection contract.
   }
 }
+
+void matrix_preparation(int failed) {
+  fail_stage = failed;
+  fail_status = static_cast<cusolverStatus_t>(CUBLAS_STATUS_ALLOC_FAILED);
+  bool retained = false;
+  const auto status = private_matrix_preparation(stream, retained);
+  assert(status == (failed ? GENERATIVEQC_STATUS_OUT_OF_MEMORY : GENERATIVEQC_STATUS_SUCCESS));
+  assert(retained == (failed != 1));
+  std::vector<std::string> expected{"blas-create", "blas-stream", "blas-pointer", "blas-workspace"};
+  if (failed) expected.resize(failed);
+  expected.push_back("set-device-3");
+  if (retained) expected.push_back("destroy-blas");
+  expect_calls(expected);
+}
 }  // namespace
 
 cudaError_t cudaGetDevice(int* device) {
@@ -340,6 +356,15 @@ std::uint32_t trace_blas_bind(void* handle, void* input) {
 }
 std::uint32_t trace_blas_destroy(void* handle) {
   return release("destroy-blas", handle, live_blas);
+}
+std::uint32_t trace_blas_pointer_mode(void* handle, std::uint32_t mode) {
+  assert(live_blas.count(handle) == 1 && mode == CUBLAS_POINTER_MODE_HOST);
+  return record("blas-pointer");
+}
+std::uint32_t trace_blas_workspace(void* handle, void* workspace, std::size_t bytes) {
+  assert(live_blas.count(handle) == 1 && workspace == reinterpret_cast<void*>(0x5000) &&
+         bytes == 128);
+  return record("blas-workspace");
 }
 void trace_external(const char* name) { calls.emplace_back(name); }
 void begin_teardown_trace() {
@@ -413,6 +438,9 @@ int main(int argc, char** argv) {
   } else if (operation == "scf-lifetime") {
     assert(argc == 3);
     scf_lifetime(argv[2]);
+  } else if (operation == "matrix-preparation") {
+    assert(argc == 3);
+    matrix_preparation(std::atoi(argv[2]));
   } else {
     return 2;
   }

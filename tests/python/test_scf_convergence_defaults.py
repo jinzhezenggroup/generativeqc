@@ -43,6 +43,124 @@ def test_restricted_mo_gradient_from_nonorthogonal_physical_commutator() -> None
     )
 
 
+def test_cold_hf_automatic_proposal_preserves_domain_and_page_bounds(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Execute the real host policy without a native library or GPU context."""
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    subprocess.run(
+        [
+            sys.executable,
+            str(root / "tools/generate_one_electron_kernels.py"),
+            "--derivatives",
+            "--derivative-policy-output",
+            str(tmp_path / "generated_one_electron_derivative_policy.cuh"),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=60,
+    )
+    source = tmp_path / "cold_policy.cpp"
+    source.write_text(r"""
+#include <cassert>
+#include <cstdlib>
+#include <initializer_list>
+#include <limits>
+#include "scf/cuda/rhf_policy.hpp"
+#include "scf/cuda/hf_bounded_page_policy.hpp"
+int main() {
+  using namespace generativeqc::scf::cuda_policy;
+  const ColdHfScreeningDomain cold{768, 1, 2, 100, true, false, false,
+                                  false, true, false, false, false, false};
+  for (const char* value : {static_cast<const char*>(nullptr), "1"}) {
+    if (value) setenv("GENERATIVEQC_HF_COLD_SCREENING", value, 1);
+    else unsetenv("GENERATIVEQC_HF_COLD_SCREENING");
+    const auto admitted = resolve_cold_hf_screening(cold, 1e-12);
+    assert(admitted.maximum_iterations == 8 && admitted.tolerance == 8e-8);
+    for (auto member : {&ColdHfScreeningDomain::warm_seed,
+                        &ColdHfScreeningDomain::unrestricted,
+                        &ColdHfScreeningDomain::physical_reference,
+                        &ColdHfScreeningDomain::persistent_eri,
+                        &ColdHfScreeningDomain::resident_values,
+                        &ColdHfScreeningDomain::mixed_precision,
+                        &ColdHfScreeningDomain::incremental_jk}) {
+      auto ineligible = cold;
+      ineligible.*member = true;
+      assert(resolve_cold_hf_screening(ineligible, 1e-12).maximum_iterations == 0);
+    }
+    for (double cutoff : {0.0, 8e-8, -1.0,
+                          std::numeric_limits<double>::infinity(),
+                          std::numeric_limits<double>::quiet_NaN()}) {
+      const auto policy = resolve_cold_hf_screening(cold, cutoff);
+      assert((cutoff == 0.0) == (policy.maximum_iterations != 0));
+    }
+    for (unsigned allowance : {1U, 8U, 23U}) {
+      auto short_solve = cold;
+      short_solve.maximum_iterations = allowance;
+      assert(resolve_cold_hf_screening(short_solve, 1e-12).maximum_iterations == 0);
+    }
+  }
+  unsetenv("GENERATIVEQC_HF_COLD_SCREENING");
+  const auto ordinary_page = resolve_hf_direct_tuning_profile(false);
+  assert(ordinary_page.bounded_streaming.maximum_task_capacity == 8U * 1024U * 1024U);
+  assert(ordinary_page.bounded_streaming.maximum_arena_bytes == (std::size_t{3} << 29));
+  generativeqc::runtime::CudaTargetInfo target;
+  target.total_global_memory = std::size_t{32} << 30;
+  const HfBoundedPageDomain page_domain{768, 1, 2, 100, false, false, false, false};
+  auto page = resolve_hf_bounded_page_policy(target, page_domain);
+  assert(page.bounded_streaming.task_capacity_ceiling == 32U * 1024U * 1024U);
+  assert(page.bounded_streaming.arena_maximum_bytes == (std::size_t{6} << 30));
+  for (auto member : {&HfBoundedPageDomain::unrestricted,
+                      &HfBoundedPageDomain::physical_reference,
+                      &HfBoundedPageDomain::mixed_precision,
+                      &HfBoundedPageDomain::incremental_jk}) {
+    auto ineligible = page_domain;
+    ineligible.*member = true;
+    assert(resolve_hf_bounded_page_policy(target, ineligible)
+               .bounded_streaming.task_capacity_ceiling == 8U * 1024U * 1024U);
+  }
+  for (auto ineligible : {HfBoundedPageDomain{511, 1, 2, 100},
+                          HfBoundedPageDomain{768, 2, 2, 100},
+                          HfBoundedPageDomain{768, 1, 3, 100},
+                          HfBoundedPageDomain{768, 1, 2, 23}})
+    assert(resolve_hf_bounded_page_policy(target, ineligible)
+               .bounded_streaming.task_capacity_ceiling == 8U * 1024U * 1024U);
+  for (std::size_t bytes : {std::size_t{0}, std::size_t{16} << 30}) {
+    target.total_global_memory = bytes;
+    page = resolve_hf_bounded_page_policy(target, page_domain);
+    assert(page.bounded_streaming.arena_maximum_bytes ==
+           (bytes ? bytes / 16 : std::size_t{256} << 20));
+  }
+  target.total_global_memory = std::size_t{32} << 30;
+  for (const char* value : {"0", "", "none", "invalid", " 1", "1 "}) {
+    setenv("GENERATIVEQC_HF_COLD_SCREENING", value, 1);
+    const auto refused = resolve_cold_hf_screening(cold, 1e-12);
+    assert(refused.maximum_iterations == 0 && refused.tolerance == 0.0);
+    assert(resolve_hf_bounded_page_policy(target, page_domain)
+               .bounded_streaming.task_capacity_ceiling == 8U * 1024U * 1024U);
+  }
+}
+""")
+    executable = required_native_cxx.build_executable(
+        [
+            source,
+            root / "src/scf/cuda/rhf_policy.cpp",
+            root / "src/runtime/cuda_provider.cpp",
+        ],
+        tmp_path / "cold-policy",
+        compile_args=(
+            "-std=c++20",
+            f"-I{root / 'src'}",
+            f"-I{root / 'include'}",
+            f"-I{tmp_path}",
+        ),
+    )
+    subprocess.run([executable], check=True, capture_output=True, timeout=20)
+
+
 @pytest.fixture
 def library(monkeypatch: pytest.MonkeyPatch, policy_library: Any) -> SimpleNamespace:
     """Borrow real model/policy queries without allocating a CUDA context."""
@@ -213,6 +331,105 @@ int main() {
         compile_args=["-std=c++20", f"-I{Path(__file__).resolve().parents[2] / 'src'}"],
     )
     subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_rhf_block_convergence_strict_selection(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Compile the actual private parser/resolver, without a CUDA or SCF run."""
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    subprocess.run(
+        [
+            sys.executable,
+            str(root / "tools/generate_one_electron_kernels.py"),
+            "--derivatives",
+            "--derivative-policy-output",
+            str(tmp_path / "generated_one_electron_derivative_policy.cuh"),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=60,
+    )
+    source = tmp_path / "block_policy.cpp"
+    source.write_text(r"""
+#include "scf/rhf_block_convergence_policy.hpp"
+#include <cassert>
+#include <cstdlib>
+#include <initializer_list>
+int main() {
+  using namespace generativeqc::scf::cuda_policy;
+  using R = RhfBlockConvergenceRequest;
+  assert(parse_rhf_block_convergence_request(nullptr) == R::Off);
+  assert(parse_rhf_block_convergence_request("0") == R::Off);
+  assert(parse_rhf_block_convergence_request("1") == R::On);
+  for (const char* bad : {"", "01", "true", "auto", " 1", "1 ", "-1", "2"})
+    assert(parse_rhf_block_convergence_request(bad) == R::Invalid);
+  unsetenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE");
+  assert(rhf_block_convergence_requested() == R::Off);
+  setenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE", "1", 1);
+  assert(rhf_block_convergence_requested() == R::On);
+  for (unsigned mask = 0; mask != 32; ++mask) {
+    const bool unrestricted = mask & 1, mixed = mask & 2, incremental = mask & 4;
+    const bool quartet = mask & 8, physical = mask & 16;
+    assert(resolve_rhf_block_convergence(R::On, unrestricted, mixed, incremental,
+                                        quartet, physical) == (mask == 8));
+    for (auto request : {R::Off, R::Invalid})
+      assert(!resolve_rhf_block_convergence(request, unrestricted, mixed, incremental,
+                                            quartet, physical));
+  }
+}
+""")
+    executable = required_native_cxx.build_executable(
+        [
+            source,
+            root / "src/scf/cuda/rhf_policy.cpp",
+            root / "src/runtime/cuda_provider.cpp",
+        ],
+        tmp_path / "block-policy",
+        compile_args=(
+            "-std=c++20",
+            f"-I{root / 'src'}",
+            f"-I{root / 'include'}",
+            f"-I{tmp_path}",
+        ),
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_rhf_block_convergence_is_part_of_cuda_resource_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    from generativeqc import estimate_hf_resources
+    from test_hf_cuda_fleet_resources import H2, layout_library
+
+    def identity(backend: str) -> Any:
+        return (
+            estimate_hf_resources([H2], backend=backend, library=layout_library())
+            .requests[0]
+            .identity
+        )
+
+    cpu = identity("cpu")
+    schedules = []
+    for value in (None, "0", "1", "invalid"):
+        if value is None:
+            monkeypatch.delenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE", raising=False)
+        else:
+            monkeypatch.setenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE", value)
+        current = identity("cuda")
+        assert (
+            json.loads(current.schedule)["runtime_policy"][
+                "GENERATIVEQC_HF_BLOCK_CONVERGENCE"
+            ]
+            == value
+        )
+        assert identity("cpu") == cpu
+        schedules.append(current.schedule)
+    assert len(set(schedules)) == 4
 
 
 def test_nonlocal_confirmation_requires_active_stationarity_and_no_rejected_proof(

@@ -4,6 +4,7 @@
 #include <type_traits>
 
 #include "integrals/execution_qualifiers.hpp"
+#include "integrals/generated_scalar_ad.hpp"
 
 // Shared device scalar/AD and special-function arithmetic. Ordinary inline
 // linkage permits reuse across CUDA owners without forcing compiler inlining.
@@ -77,46 +78,48 @@ operator*(double a, MixedPrecisionFloat b) {
 }
 
 GENERATIVEQC_ERI_DEVICE inline Dual operator+(Dual a, Dual b) {
-  return {a.value + b.value, a.derivative + b.derivative};
+  const integrals::generated_scalar_ad::Add operation(a.value, b.value);
+  return {operation.value, operation.tangent(a.derivative, b.derivative)};
 }
 GENERATIVEQC_ERI_DEVICE inline Dual operator-(Dual a, Dual b) {
-  return {a.value - b.value, a.derivative - b.derivative};
+  const integrals::generated_scalar_ad::Subtract operation(a.value, b.value);
+  return {operation.value, operation.tangent(a.derivative, b.derivative)};
 }
 GENERATIVEQC_ERI_DEVICE inline Dual operator*(Dual a, Dual b) {
-  return {a.value * b.value, a.derivative * b.value + a.value * b.derivative};
+  const integrals::generated_scalar_ad::Multiply operation(a.value, b.value);
+  return {operation.value, operation.tangent(a.derivative, b.derivative)};
 }
 GENERATIVEQC_ERI_DEVICE inline Dual operator/(Dual a, Dual b) {
-  const double inverse_square = 1.0 / (b.value * b.value);
-  return {a.value / b.value, (a.derivative * b.value - a.value * b.derivative) * inverse_square};
+  const integrals::generated_scalar_ad::Divide operation(a.value, b.value);
+  return {operation.value, operation.tangent(a.derivative, b.derivative)};
 }
 GENERATIVEQC_ERI_DEVICE inline Dual operator*(double a, Dual b) { return Dual{a, 0.0} * b; }
 GENERATIVEQC_ERI_DEVICE inline Dual operator/(Dual a, double b) { return a / Dual{b, 0.0}; }
 GENERATIVEQC_ERI_DEVICE inline Dual operator/(double a, Dual b) { return Dual{a, 0.0} / b; }
 
 GENERATIVEQC_ERI_DEVICE inline Dual3 operator+(Dual3 a, Dual3 b) {
-  return {a.value + b.value, a.derivative_x + b.derivative_x, a.derivative_y + b.derivative_y,
-          a.derivative_z + b.derivative_z};
+  const integrals::generated_scalar_ad::Add operation(a.value, b.value);
+  return {operation.value, operation.tangent(a.derivative_x, b.derivative_x),
+          operation.tangent(a.derivative_y, b.derivative_y),
+          operation.tangent(a.derivative_z, b.derivative_z)};
 }
 GENERATIVEQC_ERI_DEVICE inline Dual3 operator-(Dual3 a, Dual3 b) {
-  return {a.value - b.value, a.derivative_x - b.derivative_x, a.derivative_y - b.derivative_y,
-          a.derivative_z - b.derivative_z};
+  const integrals::generated_scalar_ad::Subtract operation(a.value, b.value);
+  return {operation.value, operation.tangent(a.derivative_x, b.derivative_x),
+          operation.tangent(a.derivative_y, b.derivative_y),
+          operation.tangent(a.derivative_z, b.derivative_z)};
 }
 GENERATIVEQC_ERI_DEVICE inline Dual3 operator*(Dual3 a, Dual3 b) {
-  return {
-      a.value * b.value,
-      a.derivative_x * b.value + a.value * b.derivative_x,
-      a.derivative_y * b.value + a.value * b.derivative_y,
-      a.derivative_z * b.value + a.value * b.derivative_z,
-  };
+  const integrals::generated_scalar_ad::Multiply operation(a.value, b.value);
+  return {operation.value, operation.tangent(a.derivative_x, b.derivative_x),
+          operation.tangent(a.derivative_y, b.derivative_y),
+          operation.tangent(a.derivative_z, b.derivative_z)};
 }
 GENERATIVEQC_ERI_DEVICE inline Dual3 operator/(Dual3 a, Dual3 b) {
-  const double inverse_square = 1.0 / (b.value * b.value);
-  return {
-      a.value / b.value,
-      (a.derivative_x * b.value - a.value * b.derivative_x) * inverse_square,
-      (a.derivative_y * b.value - a.value * b.derivative_y) * inverse_square,
-      (a.derivative_z * b.value - a.value * b.derivative_z) * inverse_square,
-  };
+  const integrals::generated_scalar_ad::Divide operation(a.value, b.value);
+  return {operation.value, operation.tangent(a.derivative_x, b.derivative_x),
+          operation.tangent(a.derivative_y, b.derivative_y),
+          operation.tangent(a.derivative_z, b.derivative_z)};
 }
 GENERATIVEQC_ERI_DEVICE inline Dual3 operator*(double a, Dual3 b) {
   return Dual3{a, 0.0, 0.0, 0.0} * b;
@@ -154,12 +157,12 @@ GENERATIVEQC_ERI_DEVICE inline double scalar_value(Scalar value) {
 template <typename Scalar>
 GENERATIVEQC_ERI_DEVICE inline Scalar qexp(Scalar value) {
   if constexpr (std::is_same_v<Scalar, Dual>) {
-    const double result = exp(value.value);
-    return {result, result * value.derivative};
+    const integrals::generated_scalar_ad::Exp operation(value.value);
+    return {operation.value, operation.tangent(value.derivative)};
   } else if constexpr (std::is_same_v<Scalar, Dual3>) {
-    const double result = exp(value.value);
-    return {result, result * value.derivative_x, result * value.derivative_y,
-            result * value.derivative_z};
+    const integrals::generated_scalar_ad::Exp operation(value.value);
+    return {operation.value, operation.tangent(value.derivative_x),
+            operation.tangent(value.derivative_y), operation.tangent(value.derivative_z)};
   } else if constexpr (std::is_same_v<Scalar, MixedPrecisionFloat>) {
     return static_cast<double>(expf(value.value));
   } else {
@@ -170,13 +173,12 @@ GENERATIVEQC_ERI_DEVICE inline Scalar qexp(Scalar value) {
 template <typename Scalar>
 GENERATIVEQC_ERI_DEVICE inline Scalar qsqrt(Scalar value) {
   if constexpr (std::is_same_v<Scalar, Dual>) {
-    const double result = sqrt(value.value);
-    return {result, 0.5 * value.derivative / result};
+    const integrals::generated_scalar_ad::Sqrt operation(value.value);
+    return {operation.value, operation.tangent(value.derivative)};
   } else if constexpr (std::is_same_v<Scalar, Dual3>) {
-    const double result = sqrt(value.value);
-    const double scale = 0.5 / result;
-    return {result, scale * value.derivative_x, scale * value.derivative_y,
-            scale * value.derivative_z};
+    const integrals::generated_scalar_ad::Sqrt operation(value.value);
+    return {operation.value, operation.tangent(value.derivative_x),
+            operation.tangent(value.derivative_y), operation.tangent(value.derivative_z)};
   } else if constexpr (std::is_same_v<Scalar, MixedPrecisionFloat>) {
     return static_cast<double>(sqrtf(value.value));
   } else {
@@ -187,14 +189,12 @@ GENERATIVEQC_ERI_DEVICE inline Scalar qsqrt(Scalar value) {
 template <typename Scalar>
 GENERATIVEQC_ERI_DEVICE inline Scalar qerf(Scalar value) {
   if constexpr (std::is_same_v<Scalar, Dual>) {
-    const double result = erf(value.value);
-    const double factor = 2.0 / sqrt(kPi) * exp(-value.value * value.value);
-    return {result, factor * value.derivative};
+    const integrals::generated_scalar_ad::Erf operation(value.value);
+    return {operation.value, operation.tangent(value.derivative)};
   } else if constexpr (std::is_same_v<Scalar, Dual3>) {
-    const double result = erf(value.value);
-    const double factor = 2.0 / sqrt(kPi) * exp(-value.value * value.value);
-    return {result, factor * value.derivative_x, factor * value.derivative_y,
-            factor * value.derivative_z};
+    const integrals::generated_scalar_ad::Erf operation(value.value);
+    return {operation.value, operation.tangent(value.derivative_x),
+            operation.tangent(value.derivative_y), operation.tangent(value.derivative_z)};
   } else if constexpr (std::is_same_v<Scalar, MixedPrecisionFloat>) {
     return static_cast<double>(erff(value.value));
   } else {

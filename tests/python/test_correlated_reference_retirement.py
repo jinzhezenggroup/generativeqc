@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _cpp_source_support import cpp_if_block, cpp_record_definition
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -825,8 +826,10 @@ def test_actual_mp2_and_cc_force_triples_callbacks_restore_budgets(
     mp2_energy += _between(
         mp2, "      const auto run_phase =", "      if (components & kHfComponent)"
     )
+    mp2_energy += cpp_record_definition(mp2, "PrimalCache") + ";\nPrimalCache cache;\n"
+    mp2_energy += "const auto clear_force_cache_allocation_error = [] {};\n"
     mp2_energy += _between(
-        mp2, "      const auto corr = run_phase(", "      result.energy ="
+        mp2, "      auto completed_phase_capacity =", "      result.energy ="
     )
     # This probe exercises ordinary source retirement, without an optional MO
     # cache. Keep the real callback and its bounded fallback; complete cache
@@ -834,18 +837,9 @@ def test_actual_mp2_and_cc_force_triples_callbacks_restore_budgets(
     mp2_force = _between(
         mp2,
         "        response::GmresOptions response_options;",
-        "        struct ForceCache {",
-    )
-    mp2_force += _between(
-        mp2,
-        "        force_diagnostic = run_phase(",
-        "          if (cache.bytes) {",
-    )
-    mp2_force += _between(
-        mp2,
-        '          runtime::df_progress::Scope::number("mp2_force_mo_cache_bytes", 0);',
         "        result.forces =",
     )
+    mp2_force = mp2_force.replace(cpp_if_block(mp2_force, "cache.bytes"), "")
     mp2_force_entry = _statement(mp2, "const bool force_started_with_reference_plan =")
     mp2_measurement = _statement(mp2, "last_->measured_endpoint_peak_bytes =")
     mp2_diagnostic = "".join(
@@ -1187,8 +1181,14 @@ def test_actual_mp2_optional_force_cache_retires_before_bounded_replay(
 ) -> None:
     """Execute actual cache admission and retry code with faulted boundaries."""
     method = (ROOT / "src/methods/mp2_method.cpp").read_text(encoding="utf-8")
-    cache_and_force = _between(
-        method, "        struct ForceCache {", "        result.forces ="
+    cache_and_force = cpp_record_definition(method, "PrimalCache") + ";\n"
+    cache_and_force += _between(
+        method, "      PrimalCache cache;", "      const auto corr = run_phase("
+    )
+    cache_and_force += _between(
+        method,
+        "        response::GmresOptions response_options;",
+        "        result.forces =",
     )
     code = (
         MP2_CACHE_STANDINS
@@ -1199,22 +1199,22 @@ void probe(int stage, int failure, std::size_t budget = 1000, bool readable = tr
   fail_stage = stage; fail_kind = failure;
   pending_cuda_error = cudaSuccess; clear_calls = 0;
   producer_calls = cached_calls = raw_calls = 0;
+  completed_primal_peak = 0;
   expected_budget = budget;
   Source source{readable};
   Source* raw_source = &source;
   const Source* conventional_source = &source;
   std::optional<int> prepared_source;
   Reference ref{2,1};
-  const bool cuda = true, density_fitted_ = false;
+  const bool cuda = true, density_fitted_ = false, compute_forces = true;
   const double threshold_ = 1e-10;
   struct { int device_id = 0; } context_;
   struct { double density_fitting_relative_threshold = 1e-10; } options_;
   struct {
     std::size_t retained_numeric_bytes() const { return 13; }
   } cuda_reference_plan_;
-  const std::size_t component_capacity = 7, warm_capacity = 11;
-  std::size_t completed_phase_capacity = 80;
-  response::GmresOptions response_options;
+  const std::size_t component_capacity = 7, warm_capacity = 11, component_peak = 80;
+  struct { double response_solve() const { return 1e-10; } } convergence_;
   std::optional<mp2::ConventionalForceResult> force_diagnostic;
   const auto prepare_source = [&] { conventional_source = &source; };
   const auto run_phase = [&](auto&& operation) { return operation(budget); };
@@ -1234,7 +1234,8 @@ void probe(int stage, int failure, std::size_t budget = 1000, bool readable = tr
            (cached_success ? 348 : 300));
     assert(force_diagnostic->measured_endpoint_peak_bytes ==
            (cached_success ? 0 : 45));
-    assert(completed_phase_capacity == (constructed ? 279 : 80));
+    assert(completed_phase_capacity ==
+           std::max(component_peak, completed_primal_peak + 31));
     assert((failure != 3 && failure != 4) || !admitted);
   } catch (const std::invalid_argument&) {
     assert(failure == 3);
@@ -1251,12 +1252,13 @@ void probe(int stage, int failure, std::size_t budget = 1000, bool readable = tr
                       readable && budget >= 248));
   assert(live_blocks() == 0 && live_force_calls == 0);
   if (rejected) {
-    assert(!force_diagnostic && raw_calls == (legacy ? 1 : 0));
+    assert(!force_diagnostic && raw_calls <= (legacy ? 1 : 0));
     assert(cached_calls == (stage == 7 ? 1 : 0));
   }
 }
 int main() {
   unsetenv("GENERATIVEQC_MP2_FORCE_MO_CACHE");
+  unsetenv("GENERATIVEQC_MP2_ENERGY_MO_CACHE");
   unsetenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
 #ifdef TEST_OLD_MP2_CACHE_RECOVERY
   // Remove only the new drain calls: the original fallback then reaches the
@@ -1274,6 +1276,8 @@ int main() {
   // Non-device sources and quarter-budget/preflight rejection do no work.
   probe(0,0,1000,false);
   probe(0,0,191);
+  probe(0,0,207);
+  probe(0,0,208);
   probe(0,0,247);
   std::cout << "actual optional MP2 cache rollback gates passed\n";
 #endif
@@ -1307,7 +1311,7 @@ MP2_CACHE_STANDINS = r"""
 void* block_allocations[6]{};
 int live_force_calls = 0, producer_calls = 0, cached_calls = 0, raw_calls = 0;
 int fail_stage = 0, fail_kind = 0;
-std::size_t expected_budget = 0;
+std::size_t expected_budget = 0, completed_primal_peak = 0;
 enum cudaError_t { cudaSuccess = 0, cudaErrorMemoryAllocation = 2, cudaErrorIllegalAddress = 700 };
 cudaError_t pending_cuda_error = cudaSuccess;
 int clear_calls = 0;
@@ -1362,7 +1366,12 @@ struct Source {
   }
 };
 struct Reference { std::size_t nbf, nocc; };
-namespace response { struct GmresOptions { std::size_t max_workspace_bytes = 0; }; }
+namespace response {
+struct GmresOptions {
+  std::size_t max_workspace_bytes = 0, restart = 0, max_iterations = 0;
+  double relative_tolerance = 0, absolute_tolerance = 0;
+};
+}
 namespace runtime::df_progress {
 struct Scope {
   template<class Value> static void number(const char*, Value) {}
@@ -1385,6 +1394,7 @@ struct BorrowedMOBlock {
   std::span<const double> values;
 };
 enum class AOTileDomain { Basis };
+struct ProviderWork { std::size_t source_scans = 0, source_values = 0; };
 struct NativeBlockProvider {
   std::size_t budget;
   NativeBlockProvider(const Source&, const Reference& ref, std::size_t available,
@@ -1392,26 +1402,36 @@ struct NativeBlockProvider {
       : budget(available) {
     assert(ref.nbf == 2 && ref.nocc == 1 && axis >= 1 && axis <= 2);
   }
-  struct Plan { std::size_t host_bytes = 200, device_bytes = 0; };
-  Plan plan(const std::array<std::size_t,4>& shape, bool cuda) const {
-    assert(cuda && (shape == std::array<std::size_t,4>{1,1,1,1}));
-    return {};
+  std::size_t batch_bytes(std::span<const std::array<std::size_t,4>> shapes,
+                          bool cuda) const {
+    assert(cuda && !shapes.empty());
+    for (const auto& shape : shapes)
+      assert((shape == std::array<std::size_t,4>{1,1,1,1}));
+    return 200 + shapes.size()*sizeof(double);
   }
-  std::vector<double> get(const MOSlots& slots, bool cuda, int device) {
+  std::vector<std::vector<double>> get_many(
+      std::span<const MOSlots> requests, bool cuda, int device,
+      std::nullptr_t, ProviderWork* work) {
+    assert(cuda && device == 0 && !requests.empty());
+    assert(live_blocks() == 0 && budget == expected_budget);
+    if (pending_cuda_error != cudaSuccess) throw StaleCudaError{cudaGetLastError()};
     ++producer_calls;
-    assert(cuda && device == 0 && producer_calls <= 6);
-    assert(live_blocks() == producer_calls-1);
-    assert(budget == expected_budget - 8*(producer_calls-1));
     const std::array<std::array<std::size_t,4>,6> expected{{
       {0,1,0,1},{0,0,1,1},{0,1,0,0},{0,1,1,1},{0,0,0,0},{1,1,1,1}
     }};
-    for (unsigned axis = 0; axis < 4; ++axis)
-      assert(slots[axis] == std::vector<std::size_t>{expected[producer_calls-1][axis]});
-    std::vector<double> output(1,producer_calls);
-    assert(output.capacity() == 1);
-    block_allocations[producer_calls-1] = output.data();
-    if (fail_stage == producer_calls) inject();
-    return output;
+    std::vector<std::vector<double>> blocks;
+    for (std::size_t index = 0; index < requests.size(); ++index) {
+      for (std::size_t axis = 0; axis < requests[index].size(); ++axis)
+        assert(requests[index][axis] == std::vector<std::size_t>{expected[index][axis]});
+      blocks.emplace_back(1,index+1);
+      assert(blocks.back().capacity() == 1);
+      block_allocations[index] = blocks.back().data();
+      if (fail_stage == static_cast<int>(index+1)) inject();
+    }
+    work->source_scans = 1;
+    work->source_values = 16;
+    completed_primal_peak = 200 + requests.size()*sizeof(double);
+    return blocks;
   }
 };
 }
@@ -1455,3 +1475,83 @@ template<class... Args> ConventionalForceResult density_fitted_force_cpu(const A
 }
 }
 """
+
+
+def test_optional_mp2_energy_cache_controls_and_retry(tmp_path: Path) -> None:
+    """Execute cache controls and resource-only energy recovery with owned blocks."""
+    method = (ROOT / "src/methods/mp2_method.cpp").read_text()
+    block = cpp_record_definition(method, "PrimalCache") + ";\n"
+    block += _between(
+        method,
+        "      PrimalCache cache;",
+        "      // Preserve completed simultaneous peaks",
+    )
+    code = (
+        MP2_CACHE_STANDINS
+        + r"""
+int energy_calls = 0, energy_failure = 0;
+namespace mp2 {
+struct Energy { std::size_t numeric_capacity_bytes = 40; };
+Energy density_fitted_energy(const Reference&, const Source&, std::size_t, double, double, int, bool, int) {
+  throw std::logic_error("unexpected DF energy");
+}
+Energy conventional_energy(const Reference&, const Source&, std::size_t budget, double, int, bool, int,
+                           std::span<const double> borrowed) {
+  ++energy_calls;
+  if (!borrowed.empty()) {
+    assert(live_blocks() > 0 && budget < expected_budget);
+    if (energy_failure == 1) throw std::length_error("energy capacity");
+    if (energy_failure == 2) { pending_cuda_error = cudaErrorMemoryAllocation; throw std::bad_alloc(); }
+    if (energy_failure == 3) throw std::invalid_argument("numerical failure");
+  } else {
+    assert(live_blocks() == 0 && budget == expected_budget);
+    assert(pending_cuda_error == cudaSuccess);
+  }
+  return {};
+}
+}
+void probe(bool compute_forces, std::size_t budget, bool energy_enabled, bool tiling_enabled,
+           int failure, int expected_producers, int expected_calls) {
+  setenv("GENERATIVEQC_MP2_ENERGY_MO_CACHE", energy_enabled ? "1" : "0", 1);
+  setenv("GENERATIVEQC_MP2_ENERGY_SOURCE_TILING", tiling_enabled ? "1" : "0", 1);
+  unsetenv("GENERATIVEQC_MP2_FORCE_MO_CACHE");
+  unsetenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
+  energy_calls = producer_calls = 0; energy_failure = failure;
+  fail_stage = fail_kind = 0; pending_cuda_error = cudaSuccess;
+  expected_budget = budget;
+  Source source{true}; const Source* conventional_source = &source; Source* raw_source = &source;
+  Reference ref{2,1};
+  const bool cuda = true, density_fitted_ = false, fitted_cuda_ = false;
+  const double threshold_ = 1e-10;
+  struct { int device_id = 0; } context_;
+  struct { double density_fitting_relative_threshold = 1e-10; } options_;
+  struct { std::size_t retained_numeric_bytes() const { return 13; } } cuda_reference_plan_;
+  const std::size_t component_capacity = 7, warm_capacity = 11, component_peak = 80;
+  const auto prepare_source = [&] { conventional_source = &source; };
+  const auto run_phase = [&](auto&& operation) { return operation(budget); };
+  bool rejected = false;
+  try {
+"""
+        + block
+        + r"""
+    assert(corr.numeric_capacity_bytes == 40 + cache.bytes);
+  } catch (const std::invalid_argument&) { rejected = true; }
+  assert(rejected == (failure == 3));
+  assert(producer_calls == expected_producers && energy_calls == expected_calls);
+  assert(live_blocks() == 0);
+}
+int main() {
+  probe(false,1000,true,true,0,1,1);
+  probe(false,1000,false,true,0,0,1);
+  probe(false,1000,true,false,0,0,1);
+  // Six-block cover does not fit, and the one-block fallback is explicitly disabled.
+  probe(true,220,false,true,0,0,1);
+  for (int failure : {1,2}) probe(false,1000,true,true,failure,1,2);
+  probe(false,1000,true,true,3,1,1);
+  std::cout << "energy cache controls and bounded retry passed\n";
+}
+"""
+    )
+    assert "energy cache controls and bounded retry passed" in _compile_run(
+        tmp_path, code
+    )

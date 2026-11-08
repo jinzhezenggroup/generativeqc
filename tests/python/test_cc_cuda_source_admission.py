@@ -142,6 +142,7 @@ PREFIX = r"""
 #include "methods/execution_failure.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 #include "scf/rhf_source_handoff.hpp"
+#include "scf/reference_failure.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
 int live=0,source_live=0,plan_live=0,native_calls=0,host_calls=0;
 int source_mode=0,warm_failure=0,df_calls=0,df_live=0;

@@ -62,16 +62,14 @@ def main():
     args=parser.parse_args()
     check(not sys.flags.optimize and (args.output is None or not args.output.exists()),'Use unoptimized Python and preserve output')
     cohort=read(BUNDLE/'cohort.json')
-    chunks=[]
-    for item in cohort['records']['parts']:
-        path=Path(item['path']);check(path.name==item['path'],'Unsafe stored part')
-        data=(BUNDLE/path).read_bytes();check(len(data)==item['bytes'] and sha(data)==item['sha256'],'Stored part differs')
-        chunks.append(data)
-    compressed=b''.join(chunks)
-    check(sha(compressed)==cohort['records']['sha256'] and len(compressed)==cohort['records']['bytes'],'Stored container differs')
+    sys.path.insert(0,str(args.repository))
+    from benchmarks._exact_fp64_evidence import load as load_exact
+    directory=cohort['records']['exact_storage']
+    check(Path(directory).name==directory,'Unsafe exact storage directory')
+    _,decoded=load_exact(BUNDLE/directory)
+    raw=json.dumps(json.loads(decoded['canonical-container.json']),ensure_ascii=False,separators=(',',':')).encode()
     size=cohort['records']['decoded_bytes'];check(type(size) is int and 0<size<=256<<20,'Unexpected decoded size')
-    decoder=lzma.LZMADecompressor(memlimit=192<<20);raw=decoder.decompress(compressed,max_length=size+1)
-    check(decoder.eof and not decoder.unused_data and len(raw)==size,'Decoded container differs')
+    check(len(raw)==size and sha(raw)==cohort['records']['decoded_sha256'],'Decoded container differs')
     payload=json.loads(raw);check(payload['schema']=='generativeqc.h100-cold-receipt-files.v2','Unknown receipt container')
     entries=payload['files'];blobs=payload['blobs']
     check(len(entries)==cohort['records']['files'] and len({e['path'] for e in entries})==len(entries) and {e['sha256'] for e in entries}==set(blobs),'Member/blob population differs')

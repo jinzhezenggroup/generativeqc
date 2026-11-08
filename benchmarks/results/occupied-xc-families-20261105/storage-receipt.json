@@ -1,0 +1,52 @@
+{
+  "schema": "generativeqc.lossless-storage-receipt.v1",
+  "source_revision": "e71606ddecf9d7a8e527ff79572427bb2acbb309",
+  "representation": "generativeqc.exact-fp64-evidence.v3",
+  "original_xz_recipe": {
+    "format": "xz",
+    "check": "crc64",
+    "preset": 6
+  },
+  "originals": [
+    {
+      "path": "endpoints.json.xz",
+      "bytes": 650544,
+      "sha256": "5b9edbbdbc6a389faefc7c1591c49df28773f730a9bf750d11a8fda3de9dd79d",
+      "git_blob_sha1": "0855403a06328e4c074dfc1eb8bb611fc3765fc2",
+      "text_path": "endpoints.json",
+      "text_bytes": 16859428,
+      "text_sha256": "6a14ca7cf383033070c70c13a75652e6ad83e069526db2a59f17475aea95c89d"
+    },
+    {
+      "path": "integration.json.xz",
+      "bytes": 50176,
+      "sha256": "10059a7e7250332300c9153211ace2fb44b8d96263d11ef02a4036febbbce40f",
+      "git_blob_sha1": "a75f7368486ade5258b4e0ca097fcddb74e32bc1",
+      "text_path": "integration.json",
+      "text_bytes": 706849,
+      "text_sha256": "b89451ca3690892c2ff6d1ad37630bbc0f612aa855656532d48dc0c3883ec9b6"
+    }
+  ],
+  "stored_streams": [
+    {
+      "path": "fp64.xz",
+      "bytes": 404824,
+      "sha256": "419031b56317bccf439197f1dcd1cb59b33253bd7d186e8760aad2eed775223c"
+    },
+    {
+      "path": "receipts.json.xz",
+      "bytes": 20284,
+      "sha256": "99c6400f0382a1c284d938f0529891d93495043f18a3e544b42cb8946f4086a5"
+    },
+    {
+      "path": "sha256.txt",
+      "bytes": 157,
+      "sha256": "e521a3d5ff74cea4cacbbf8b96ccc6a1f5345ef26166721b52367161607027b5"
+    }
+  ],
+  "original_stream_bytes": 700720,
+  "stored_bundle_bytes": 425265,
+  "float_count": 418921,
+  "verification": "Every original JSON text byte, field type, list order and FP64 word is unchanged. The original XZ streams and Git blob identities are reconstructed and authenticated offline; source_revision is additional provenance, not the sole recovery source.",
+  "payload_bytes_saved": 275455
+}

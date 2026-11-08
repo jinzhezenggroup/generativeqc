@@ -392,7 +392,7 @@ __global__ void parallel_pair_finalize(ParallelPairInputs input, ParallelPairOut
       output.point_derivative[3 * row + axis] *= input.coefficient * factor;
       invalid = invalid || !isfinite(output.point_derivative[3 * row + axis]);
     }
-    output.weight_derivative[row] = input.coefficient * rho * (input.beta + phi);
+    weight_feature_value(phi, rho, input.beta, input.coefficient, output.weight_derivative[row]);
     invalid = invalid || !isfinite(output.weight_derivative[row]);
   }
   if (invalid) atomicExch(output.failed, 1);

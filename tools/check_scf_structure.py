@@ -39,7 +39,10 @@ ALLOWED = {
 # projection and all reference modules retain their narrower dependency rules.
 SOURCE_EXACT_ALLOWED = {
     # Private generated-dispatch declarations expose no recurrence or owner state.
-    "scf/cuda_rhf.cpp": ("scf/shared_rys_weighted_z.hpp",),
+    "scf/cuda_rhf.cpp": (
+        "scf/shared_rys_weighted_z.hpp",
+        "scf/rhf_block_convergence_policy.hpp",
+    ),
     # Optional DIIS counters share CUDA-free size/enablement/readback metadata.
     # This header has no solver, provider or mutable device-owner dependency.
     "scf/cuda/arena.cpp": ("scf/diis_work.hpp",),
@@ -370,8 +373,11 @@ CUDA_ALLOWED["cuda_direct_fock_lowering"] = ("scf/aot_shell_registry.hpp",)
 CUDA_EXACT_ALLOWED = {
     "cuda_df_runtime": ("tensor/cuda_square_linalg.hpp",),
     "cuda_direct_fock_lowering": ("scf/generated_shell_task.hpp",),
-    # Qualifier-only leaf permits the same numerical owner to lower on CPU.
-    "cuda_integral_numerics": ("integrals/execution_qualifiers.hpp",),
+    # Shared leaf arithmetic carries generated scalar AD, not integral traversal.
+    "cuda_integral_numerics": (
+        "integrals/execution_qualifiers.hpp",
+        "integrals/generated_scalar_ad.hpp",
+    ),
     # Generic rounded accumulation changes no compiler-owned spin/operator
     # equations. Admit this leaf only, not the broader runtime implementation.
     "cuda_direct_contractions": ("runtime/compensated_atomic.cuh",),
@@ -698,6 +704,8 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
     "scf/cuda_batch.hpp",
     "scf/fock_build.hpp",
 )
+CUDA_MODULES["cuda_hf_bounded_page_policy"] = ("hf_bounded_page_policy",)
+CUDA_ALLOWED["cuda_hf_bounded_page_policy"] = ("scf/cuda/rhf_policy.hpp",)
 CUDA_MODULES["cuda_hf_graph"] = ("rhf_graph",)
 CUDA_ALLOWED["cuda_hf_graph"] = (
     "scf/provider_initialization_teardown.hpp",
@@ -807,6 +815,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/rhf_bucket_internal.hpp",
     "scf/cuda/rhf_policy.hpp",
     "scf/cuda/rhf_resident_values.hpp",
+    "scf/cuda/hf_bounded_page_policy.hpp",
     "scf/cuda/runtime_support.hpp",
     "scf/cuda/scf_convergence_kernels.hpp",
     "scf/cuda/scf_density_kernels.hpp",

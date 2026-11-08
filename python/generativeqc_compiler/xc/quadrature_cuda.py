@@ -6,6 +6,7 @@ point-by-atom-by-atom tensor or atom-count-dependent thread-local storage.
 Native code owns allocations, quadrature rule inputs, launches and downloads.
 """
 
+from generativeqc_compiler.integral.quadrature import rational_radial_roots
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 from .grid_response_ir import grid_response_program
@@ -137,12 +138,7 @@ __global__ void radial_kernel(size_t na, size_t nr, const double* radii,
   for (size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < na * nr;
        i += size_t(blockDim.x) * gridDim.x) {
     const size_t owner = i / nr, radial_index = i % nr;
-    const double t = 0.5 * (rn[radial_index] + 1.0);
-    const double r = radii[owner] * t / (1.0 - t);
-    const double wr = 0.5 * rw[radial_index] * radii[owner] * r * r /
-                      ((1.0 - t) * (1.0 - t));
-    radial[2 * i] = r;
-    radial[2 * i + 1] = wr;
+@RADIAL_AD@
   }
 }
 // Angular factors depend only on the fixed quadrature rules, not on atoms or
@@ -331,5 +327,23 @@ def emit_quadrature_cuda() -> str:
             f"    case {iterations}: partition_kernel<{iterations}><<<atom_point_grid(count, na), 128, 0, stream>>>"
             "(count, na, distances, inverse_separation, logs, adjustments); break;"
         )
-    lines.append(_KERNELS.replace("@PARTITION_CASES@", "\n".join(cases)))
+    graph, roots = rational_radial_roots()
+    emitter = ScalarCEmitter(
+        graph,
+        {
+            "node": "rn[radial_index]",
+            "scale": "radii[owner]",
+            "weight": "rw[radial_index]",
+        },
+    )
+    emitter.emit(roots)
+    radial_lines = emitter.lines + [
+        f"    radial[2 * i] = {emitter.reference(roots[0])};",
+        f"    radial[2 * i + 1] = {emitter.reference(roots[1])};",
+    ]
+    lines.append(
+        _KERNELS.replace("@PARTITION_CASES@", "\n".join(cases)).replace(
+            "@RADIAL_AD@", "\n".join(radial_lines)
+        )
+    )
     return "\n".join(lines)

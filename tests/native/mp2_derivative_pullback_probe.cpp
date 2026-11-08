@@ -27,6 +27,9 @@ struct alignas(std::max_align_t) Header {
 };
 bool enabled = false;
 std::size_t live = 0, peak = 0, calls = 0, total = 0;
+std::size_t fail_stage = 0, reservation_bytes = 0;
+bool reserving = false;
+bool faulted = false;
 // Allocation ownership follows its creation epoch even while callbacks pause
 // observation. Callback/oracle scratch never counts toward transform receipts.
 struct Pause {
@@ -36,6 +39,13 @@ struct Pause {
 };
 }  // namespace allocation
 void* operator new(std::size_t bytes) {
+  if (allocation::enabled && allocation::fail_stage) {
+    if (bytes == allocation::reservation_bytes) allocation::reserving = true;
+    if (allocation::reserving && --allocation::fail_stage == 0) {
+      allocation::faulted = true;
+      throw std::bad_alloc();
+    }
+  }
   auto* header = static_cast<allocation::Header*>(std::malloc(sizeof(allocation::Header) + bytes));
   if (!header) throw std::bad_alloc();
   header->bytes = bytes;
@@ -349,10 +359,16 @@ int main(int argc, char** argv) {
     require(argc == 4 || argc == 5, "expected case, factorized, sparse and optional physical data");
     const unsigned id = std::stoul(argv[1]);
     const unsigned representation = std::stoul(argv[2]);
-    const bool factorized = representation == 1 || representation == 3;
-    const bool compact = representation == 1, sparse = std::stoi(argv[3]);
+    const auto* fail = std::getenv("PROBE_RESERVATION_FAILURE");
+    const unsigned failure_stage = fail ? std::stoul(fail) : 0;
+    const bool projected = representation == 4 && !failure_stage;
+    const bool factorized = representation == 1 || representation == 3 || failure_stage;
+    const bool compact = representation == 1 || failure_stage, sparse = std::stoi(argv[3]);
     auto f = fixture(id, representation, sparse);
     const auto n = f.reference.nbf, h = f.system.shells.size();
+    std::size_t maximum_shell = 0;
+    for (std::size_t shell = 0; shell < h; ++shell)
+      maximum_shell = std::max(maximum_shell, f.offsets[shell + 1] - f.offsets[shell]);
     if (argc == 5) {
       physical_n = n;
       physical_derivatives.resize(12 * n * n * n * n);
@@ -382,6 +398,7 @@ int main(int argc, char** argv) {
       allocation::Pause pause;
       require(factorized || canonical(q), "noncanonical dense callback");
       require(!e.seen[index(h, q)]++, "duplicate callback");
+      if (failure_stage) require(allocation::faulted, "callback before reservation refusal");
       ++callbacks;
       elements += local.size();
       const auto di = f.offsets[q[0] + 1] - f.offsets[q[0]];
@@ -391,10 +408,15 @@ int main(int argc, char** argv) {
       require(local.size() == di * dj * dk * dl, "local shape");
       const auto shell_bytes =
           sizeof(double) *
-          (di * (compact
-                     ? f.reference.nocc * (2 * n + (n - f.reference.nocc) * (n - f.reference.nocc))
-                     : n * n * n) +
-           di * dj * (compact ? f.reference.nocc : n) * n + di * dj * dk * n + local.size());
+          ((projected ? maximum_shell : di) *
+               (compact
+                    ? f.reference.nocc * (2 * n + (n - f.reference.nocc) * (n - f.reference.nocc))
+                    : n * n * n) +
+           (projected ? maximum_shell * maximum_shell * n * n +
+                            maximum_shell * maximum_shell * maximum_shell * n +
+                            maximum_shell * maximum_shell * maximum_shell * maximum_shell
+                      : di * dj * (compact ? f.reference.nocc : n) * n + di * dj * dk * n +
+                            local.size()));
       const auto persistent = sizeof(double) * 2 * n * n + sizeof(std::size_t) * (h + 1);
       require(allocation::live == persistent + shell_bytes, "active quartet allocation ownership");
       measured_shell_peak = std::max(measured_shell_peak, allocation::live - persistent);
@@ -423,31 +445,35 @@ int main(int argc, char** argv) {
             }
       return center;
     };
+    // Identify the full first-stage reservation by its numeric capacity, not
+    // allocation counts in unrelated matrix pullbacks or callback setup.
+    allocation::reservation_bytes = sizeof(double) * maximum_shell * n * n * n;
+    allocation::fail_stage = failure_stage;
     allocation::enabled = true;
     {
       auto result = mp2::detail::conventional_derivative(
           f.system, f.reference, f.weights, one, shell,
-          compact ? mp2::detail::FactorizedFirstLayout::automatic
-                  : mp2::detail::FactorizedFirstLayout::staged);
+          representation == 4 ? mp2::detail::FactorizedFirstLayout::automatic
+          : compact           ? mp2::detail::FactorizedFirstLayout::compact
+                              : mp2::detail::FactorizedFirstLayout::staged);
       allocation::enabled = false;
       require(allocation::live == 0, "common allocations escaped invocation");
       require(initial_gradient.empty(), "callback output was not ownership-transferred");
-      require(allocation::peak == e.peak, "allocation high-water mismatch");
-      require(allocation::calls == e.allocation_calls, "allocation call mismatch");
-      require(allocation::total == e.total_bytes, "allocation total mismatch");
-      require(measured_shell_peak == e.shell_peak, "shell allocation peak mismatch");
+      if (!projected && !failure_stage) {
+        require(allocation::peak == e.peak, "allocation high-water mismatch");
+        require(allocation::calls == e.allocation_calls, "allocation call mismatch");
+        require(allocation::total == e.total_bytes, "allocation total mismatch");
+        require(measured_shell_peak == e.shell_peak, "shell allocation peak mismatch");
+      }
       require(callbacks == e.callbacks && elements == e.elements, "callback work mismatch");
       for (std::size_t t = 0; t < result.size(); ++t)
         close(result[t], e.gradient[t], "atom scatter");
-      if (probe::instrumented)
+      if (probe::instrumented && !projected)
         require(probe::counts == e.iterations, "executed accumulation count mismatch");
       // The production plan's numeric-buffer bound includes rank-two/output
       // owners and all four stages. Shell offsets are separate metadata bytes.
       response::GmresPlan response;
       response.dimension = f.reference.nocc * (n - f.reference.nocc);
-      std::size_t maximum_shell = 0;
-      for (std::size_t i = 0; i < h; ++i)
-        maximum_shell = std::max(maximum_shell, f.offsets[i + 1] - f.offsets[i]);
       const auto plan =
           mp2::conventional_gradient_plan(n, f.reference.nocc, 0, response, maximum_shell,
                                           result.size(), 0, static_cast<std::size_t>(INT64_MAX));

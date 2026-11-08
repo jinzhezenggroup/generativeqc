@@ -38,7 +38,6 @@
 #include "molecule/basis.hpp"
 #include "runtime/compiled_execution_region.hpp"
 #include "runtime/cuda_component_trace.hpp"
-#include "runtime/cuda_fp64_matrix_policy.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/host_cache_budget.hpp"
 #include "runtime/host_component_trace.hpp"
@@ -2383,14 +2382,40 @@ struct CudaKsPlan::Impl : KsStateStorage {
                 cuda_ks_precision_region::kXcMatrixContractions) &&
             cuda_xc_detail::mixed_matrix_contractions_supported(xc_layout))
           xc->prepare_mixed_matrix_contractions();
-        // Host and device reservations must both precede optional preparation.
-        // The lowering layer owns qualification and implementation selection.
+        // Validate the public rollback control even when optional capacity is
+        // unavailable. The compiler adapter owns its qualified GGA domain.
+        const char* gga_gemm_control = std::getenv("GENERATIVEQC_CUDA_XC_GGA_GEMM");
+        if (gga_gemm_control && std::strcmp(gga_gemm_control, "0") != 0 &&
+            std::strcmp(gga_gemm_control, "1") != 0)
+          throw std::invalid_argument("GENERATIVEQC_CUDA_XC_GGA_GEMM accepts 0 or 1");
+        // The method admits optional capacity, not a GPU or matrix recipe.
+        // Compiler adapters refine these budgets using the common profile.
+        const bool optional_lowering = !runtime::active_device_resource_ledger &&
+                                       !options.reference_memory_budget_bytes &&
+                                       !precision_schedule.any_lower_precision();
+        const char* density_gemm_control = std::getenv("GENERATIVEQC_CUDA_XC_DENSITY_GEMM");
+        if (density_gemm_control && std::strcmp(density_gemm_control, "0") != 0 &&
+            std::strcmp(density_gemm_control, "1") != 0)
+          throw std::invalid_argument("GENERATIVEQC_CUDA_XC_DENSITY_GEMM accepts 0 or 1");
+        const auto automatic_density_budget =
+            optional_lowering && (!density_gemm_control || density_gemm_control[0] != '0')
+                ? std::min(std::size_t{128ULL << 20}, optional_device_capacity())
+                : 0;
         const auto density_budget =
             xc_budget.host_bytes >= tensor::PreparedPanelProduct::host_reservation
                 ? xc_budget.device_bytes
                 : 0;
-        xc->prepare_density(*admitted_precision.find(cuda_ks_precision_region::kDensityContraction),
-                            options.max_iterations, density_budget);
+        const auto prepare_density = [&] {
+          xc->prepare_density(
+              *admitted_precision.find(cuda_ks_precision_region::kDensityContraction),
+              options.max_iterations, density_budget, automatic_density_budget);
+        };
+        if (automatic_density_budget) {
+          runtime::DeviceUnpromisedCapacityScope optional_scope;
+          prepare_density();
+        } else {
+          prepare_density();
+        }
         if (const auto* prepared = xc->density_provider_diagnostic()) {
           resource.xc_device_bytes = sum(resource.xc_device_bytes, prepared->matrix_bytes);
           resource.provider_device_bytes =
@@ -2398,32 +2423,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
           resource.retained_host_numeric_bytes =
               sum(resource.retained_host_numeric_bytes, prepared->host_bytes);
         }
-        // A large strict-FP64 meta-GGA panel can amortize indexed publication
-        // with a library cross product on FP64 matrix-capable hardware. This
-        // is a capability/work gate, never a GPU model-name whitelist. Public
-        // ledgers and explicit reference budgets keep their bounded incumbent
-        // until a complete optional-provider quote has been qualified there.
-        if (!runtime::active_device_resource_ledger && !options.reference_memory_budget_bytes &&
-            !precision_schedule.any_lower_precision() && xc_layout.local_ao &&
-            xc_layout.nao >= 512 && xc_layout.npoint >= (1U << 19) && xc_layout.work_jets >= 4) {
-          cudaDeviceProp properties{};
-          const auto capability = cudaGetDeviceProperties(&properties, device);
-          if (capability == cudaErrorNotSupported || capability == cudaErrorInvalidValue) {
-            const auto pending = cudaGetLastError();
-            if (pending != cudaSuccess && pending != capability) check(pending);
-          } else {
-            check(capability);
-            if (runtime::cuda_fp64_matrix_acceleration_supported(
-                    properties.major, properties.singleToDoublePrecisionPerfRatio)) {
-              runtime::DeviceUnpromisedCapacityScope optional_scope;
-              xc->prepare_potential(std::min(std::size_t{128ULL << 20}, optional_device_capacity()),
-                                    true);
-              const auto& prepared = xc->potential_lowering();
-              resource.xc_device_bytes = sum(resource.xc_device_bytes, prepared.matrix_bytes);
-              resource.provider_device_bytes =
-                  sum(resource.provider_device_bytes, prepared.provider_allowance);
-            }
-          }
+        if (optional_lowering) {
+          runtime::DeviceUnpromisedCapacityScope optional_scope;
+          xc->prepare_potential(std::min(std::size_t{128ULL << 20}, optional_device_capacity()),
+                                options.max_iterations);
+          const auto& prepared = xc->potential_lowering();
+          resource.xc_device_bytes = sum(resource.xc_device_bytes, prepared.matrix_bytes);
+          resource.provider_device_bytes =
+              sum(resource.provider_device_bytes, prepared.provider_allowance);
         }
         // Default batching retains the compiler's bounded admission and the
         // one-tile fallback. Overrides keep the incumbent available for ablations;
@@ -3599,20 +3606,32 @@ struct CudaKsPlan::Impl : KsStateStorage {
       runtime::cuda_trace::trace_counter("xc_point_ao_visits", prepared_ao_work.point_ao_visits);
       runtime::cuda_trace::trace_counter("xc_point_ao_square_sum",
                                          prepared_ao_work.point_ao_square_sum);
+      const auto* density_provider = xc->density_provider_diagnostic();
+      runtime::cuda_trace::trace_counter(
+          "xc_density_provider_allowance",
+          density_provider ? density_provider->provider_allowance : 0);
+      runtime::cuda_trace::trace_counter("xc_density_matrix_bytes",
+                                         density_provider ? density_provider->matrix_bytes : 0);
+      runtime::cuda_trace::trace_counter("xc_potential_provider_allowance",
+                                         xc->potential_lowering().provider_allowance);
       CudaXcOccupiedDensity occupied_frame;
-      const auto occupied_rank = std::max(occupations[0], spins == 2 ? occupations[1] : 0);
+      const CudaXcOccupiedDensity candidate{
+          density,         tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
+          next_generation, true};
       // Do not start a provisional epoch without useful projection work and
       // two strict submits for a fresh energy comparison inside the caller's budget.
       if (occupied_xc_requested && occupied_xc_frame_ready && !strict_refinement &&
           output.iterations < options.max_iterations &&
-          options.max_iterations - output.iterations > 2 && occupied_rank &&
-          occupied_rank < prepared_ao_work.max_active && output.physical_residual_rms > 1e-6 &&
+          options.max_iterations - output.iterations > 2 &&
+          candidate.projection_fits(prepared_ao_work.max_active, xc_layout.jets,
+                                    xc_layout.work_jets) &&
+          output.physical_residual_rms > 1e-4 &&
           phase == generativeqc::runtime::PrecisionPhase::Admitted && !device_chunk_mode &&
           !device_nonlocal && !precision_schedule.any_lower_precision() &&
-          xc_layout.feature_terms == 5 && xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
-        occupied_frame = {
-            density,         tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
-            next_generation, true};
+          (xc_layout.feature_terms == 1 || xc_layout.feature_terms == 4 ||
+           xc_layout.feature_terms == 5) &&
+          xc_layout.ao_precision == CudaXcAoPrecision::Fp64) {
+        occupied_frame = candidate;
       }
       // tmp1 is borrowed only until residual/DIIS work reuses it on this stream.
       occupied_xc_frame_ready = false;
@@ -4094,8 +4113,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   bool incremental_delta_admitted() const noexcept {
+    // XC-only reassociation never changes the strict J/K operator or its
+    // density anchor. Preserve its ordinary delta/full schedule at handoff;
+    // precision transitions and the physical full-energy tail still forbid
+    // deltas. Occupied admission excludes every lower-precision schedule.
     if (!incremental_direct_jk || !incremental_anchored || incremental_energy_refinement ||
-        final_closure || strict_refinement)
+        final_closure || (strict_refinement && !occupied_xc_executed))
       return false;
     const auto interval = ks_incremental_proposal_interval(
         incremental_proposals_active, incremental_direct_jk_policy.requested_rebuild_interval,
@@ -4224,11 +4247,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     pending_occupied_xc = false;
     try {
       // Mixed history is only a bounded proposal accelerator. Every physical
-      // energy/residual after handoff is rebuilt in FP64; six unsuccessful
-      // strict proposals discard all provisional history and retain the
-      // incumbent exact refinement. No mixed operator certifies publication.
-      if ((experimental_mixed_history && strict_refinement && refinement_iterations == 6) ||
-          (occupied_xc_executed && strict_refinement && occupied_xc_refinement_iterations == 6)) {
+      // energy/residual after handoff is rebuilt in FP64. Retain the separate
+      // FP32 experiment's six-sweep reset, but do not erase the strict DIIS
+      // predictor accumulated after an occupied-FP64 handoff. Its provisional
+      // entries age out through the ordinary bounded chronological ring
+      // (at most options.diis_history strict insertions). None certifies a
+      // physical state; only the fresh stored-D target can do that.
+      if (experimental_mixed_history && strict_refinement && refinement_iterations == 6) {
         check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       }
@@ -4685,11 +4710,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Approximate features are proposals, not a new point-functional contract.
     // Bound their lifetime, then reuse the existing strict target handoff:
     // fresh energy epoch and unchanged publication gates. Old DIIS entries
-    // may only predict new densities; six unsuccessful strict sweeps clear
-    // them. No historical/provisional Fock can certify a physical state.
+    // may only predict new densities and expire through the bounded DIIS ring.
+    // No historical/provisional Fock can certify a physical state.
     // The first strict Fock has no comparable prior target energy. Reserve
     // two strict submits, while retaining the established 11-proposal cap.
-    const MixedPrecisionWarmup occupied_warmup{1e-6, 12};
+    // Switch before the nearly stationary tail: a late energy-epoch reset can
+    // otherwise add a Fock solely to obtain a second comparable strict energy.
+    const MixedPrecisionWarmup occupied_warmup{1e-4, 12};
     const bool enter_occupied_audit =
         occupied_warmup.enter_refinement(occupied_stage, converged, output.iterations,
                                          options.max_iterations, physical.residual_rms) ||
@@ -4838,8 +4865,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       }
       // Mixed J needs a new strict source lease; an XC-only warmup may retain
-      // its unchanged FP64 J/K source. Existing resource/seed guards still apply.
-      prepare_phase_source(phase_source_cold);
+      // its unchanged FP64 J/K source. Re-preparing that lease repeats ERI
+      // generation and allocation without changing the target. An absent
+      // source stays on the existing bounded direct path; a genuinely mixed
+      // source still retires/rebuilds under its original precision guards.
+      if (!enter_occupied_audit ||
+          (phase_source && phase_source->active() && phase_source->mixed_recurrence()))
+        prepare_phase_source(phase_source_cold);
     } else if (pending_nonlocal_seed || pending_nonlocal_frozen) {
       // Never export a provisional density, energy, residual or force as a
       // converged target. The original total iteration budget remains finite.
@@ -6169,24 +6201,43 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
     std::size_t free_before{}, free_after{}, total{}, retired{};
     check(cudaMemGetInfo(&free_before, &total));
     free_after = free_before;
-    if (additional_device_bytes > free_before &&
-        (impl_->fast_anchor_arena || impl_->nonlocal_anchor_arena || impl_->phase_source)) {
+    const auto* density_provider = impl_->xc ? impl_->xc->density_provider_diagnostic() : nullptr;
+    const bool density_storage = density_provider && (density_provider->matrix_bytes ||
+                                                      density_provider->provider_allowance);
+    const bool density_retirement_pending =
+        impl_->xc && impl_->xc->density_provider_retirement_pending();
+    if ((additional_device_bytes > free_before || density_retirement_pending) &&
+        (impl_->fast_anchor_arena || impl_->nonlocal_anchor_arena || impl_->phase_source ||
+         density_storage)) {
       // The final-state token excludes active/pending SCF work. Drain its
       // producer before freeing optional cold-SCF storage. Downstream D/W/XC
       // leases borrow neither the anchor nor the independently owned ERIs.
       check(cudaStreamSynchronize(impl_->stream));
       ++impl_->movement.synchronizations;
-      if (impl_->nonlocal_anchor_arena) {
+      if (additional_device_bytes > free_before && impl_->nonlocal_anchor_arena) {
         retired = impl_->retire_nonlocal_anchor_storage();
         check(cudaMemGetInfo(&free_after, &total));
       }
-      if (impl_->fast_anchor_arena) {
+      if (additional_device_bytes > free_before && impl_->fast_anchor_arena) {
         retired += impl_->retire_fast_anchor_storage();
         check(cudaMemGetInfo(&free_after, &total));
       }
       if (additional_device_bytes > free_after && impl_->phase_source) {
         retired += impl_->phase_device_bytes;
         impl_->retire_phase_source(false);  // Successful SCF already audited it.
+        check(cudaMemGetInfo(&free_after, &total));
+      }
+      if ((additional_device_bytes > free_after || density_retirement_pending) && density_storage) {
+        const auto prepared = *density_provider;
+        // A subsequent warm SCF must rebind to the retained generated kernels.
+        // Release graph executables before destroying any provider they borrow.
+        impl_->device_chunk_region.invalidate();
+        impl_->solver_region_executor.invalidate();
+        impl_->xc->retire_density_provider();
+        impl_->resource.xc_device_bytes -= prepared.matrix_bytes;
+        impl_->resource.provider_device_bytes -= prepared.provider_allowance;
+        impl_->resource.retained_host_numeric_bytes -= prepared.host_bytes;
+        retired += prepared.matrix_bytes + prepared.provider_allowance;
         check(cudaMemGetInfo(&free_after, &total));
       }
     }

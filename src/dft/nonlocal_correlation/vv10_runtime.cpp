@@ -292,9 +292,10 @@ generativeqc_status Vv10Plan::execute(
           const auto partner = weighted_density_[j];
           sum_phi += partner * pair.phi;
           if (MaskZeroWeights || want_features) {
-            const auto dphi_drho =
-                pair.dphi_domega * domega_drho_[i] + pair.dphi_dkappa * dkappa_drho_[i];
-            const auto dphi_dsigma = pair.dphi_domega * domega_dsigma_[i];
+            double dphi_drho{}, dphi_dsigma{};
+            generated::pair_feature_values(pair.dphi_domega, pair.dphi_dkappa, domega_drho_[i],
+                                           domega_dsigma_[i], dkappa_drho_[i], dphi_drho,
+                                           dphi_dsigma);
             sum_rho += partner * dphi_drho;
             sum_sigma += partner * dphi_dsigma;
           }
@@ -308,15 +309,16 @@ generativeqc_status Vv10Plan::execute(
       }
       total_energy += weighted_density_[i] * (beta + 0.5 * sum_phi);
       if (MaskZeroWeights || want_features) {
-        vrho[i] = coefficient * (beta + sum_phi + density[i] * sum_rho);
-        vsigma[i] = coefficient * density[i] * sum_sigma;
+        generated::row_sum_values(sum_phi, sum_rho, sum_sigma, density[i], beta, coefficient,
+                                  vrho[i], vsigma[i]);
       }
       if (!MaskZeroWeights && want_geometry) {
         const auto prefactor = coefficient * weighted_density_[i];
         point_derivative[3 * i] = prefactor * coordinate_sum[0];
         point_derivative[3 * i + 1] = prefactor * coordinate_sum[1];
         point_derivative[3 * i + 2] = prefactor * coordinate_sum[2];
-        weight_derivative[i] = coefficient * density[i] * (beta + sum_phi);
+        generated::weight_feature_value(sum_phi, density[i], beta, coefficient,
+                                        weight_derivative[i]);
       }
     }
     return GENERATIVEQC_STATUS_SUCCESS;

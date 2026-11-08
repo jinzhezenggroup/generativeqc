@@ -97,32 +97,6 @@ generativeqc_xtb_status_t make_periodic_embedding_plan(std::int64_t batch_size, 
                                               PeriodicEmbeddingPlan& plan, std::string& error);
 
 /*
- * Validate and bind caller-owned numerical storage. Supplied element counts
- * may exceed the required extents, but only the required prefixes are active.
- * Across an evaluation, all active inputs, outputs, statuses, scratch, error
- * objects, descriptors, the plan object, and immutable plan backing storage
- * must be mutually disjoint. Exact and partial overlaps are rejected. The
- * output descriptor is unchanged on failure.
- */
-generativeqc_xtb_status_t bind_periodic_embedding_view(
-    const PeriodicEmbeddingPlan& plan, const double* shifts, std::size_t shift_elements,
-    const double* response_matrices, std::size_t response_elements, const double* atomic_charges,
-    std::size_t charge_elements, double* atomic_potentials, std::size_t potential_elements,
-    double* energies, std::size_t energy_elements, generativeqc_xtb_status_t* system_statuses,
-    std::size_t status_elements, PeriodicEmbeddingView& view, std::string& error);
-
-/*
- * Bind caller-owned scratch. Scratch must not overlap the plan, destination
- * descriptor, or error object; evaluation additionally rejects overlap with
- * any active view range. The output descriptor is unchanged on failure.
- */
-generativeqc_xtb_status_t bind_periodic_embedding_workspace(const PeriodicEmbeddingPlan& plan,
-                                                   double* potential_scratch,
-                                                   std::size_t potential_elements,
-                                                   PeriodicEmbeddingWorkspace& workspace,
-                                                   std::string& error);
-
-/*
  * Evaluate one system. Structural errors publish nothing. Nonfinite values,
  * a nonsymmetric A, or floating-point range failure leave that system's v and
  * E unchanged and publish GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR only to its status.
@@ -135,16 +109,6 @@ generativeqc_xtb_status_t evaluate_periodic_embedding_system_cpu(const PeriodicE
                                                         const PeriodicEmbeddingView& view,
                                                         const PeriodicEmbeddingWorkspace& workspace,
                                                         std::string& error);
-
-/*
- * Serial ragged-batch wrapper. Structural validation is whole-call atomic.
- * Numerical failures are isolated: all peers are still attempted, and the
- * call returns GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR after processing the full batch.
- */
-generativeqc_xtb_status_t evaluate_periodic_embedding_batch_cpu(const PeriodicEmbeddingPlan& plan,
-                                                       const PeriodicEmbeddingView& view,
-                                                       const PeriodicEmbeddingWorkspace& workspace,
-                                                       std::string& error);
 
 }  // namespace generativeqc::xtb::detail::gfn2
 

@@ -1,0 +1,6 @@
+{
+  "name": "nonlocal_pair",
+  "outputs": ["generated/generated_nonlocal_pair_native.hpp"],
+  "owner": "python/generativeqc_compiler/method/nonlocal_pair.py",
+  "scope": "Graph AD derives CPU/CUDA local-scale, raw/preconditioned VV10/rVV10 pair, rational/shared-reciprocal, row feature and weight pullbacks. TensorIR lowers the scalar schedules; positive-log factorization and opt-in rational-product normalization preserve qualified exceptional domains. Native traversal, screening, bounded admission, reduction, residency, failure publication and linear scatter remain."
+}

@@ -491,16 +491,7 @@ __device__ inline StationaryPointValue stationary_evaluate_point(
   for (double value : derivative) out.valid = out.valid && isfinite(value);
   if (!out.valid) return out;
   if (total < tail_high) {
-    const double width = tail_high - tail_low;
-    const double x = (total - tail_low) / width;
-    const double x2 = x * x, x3 = x2 * x;
-    const double scale = x3 * (10.0 + x * (-15.0 + 6.0 * x));
-    const double dscale = 30.0 * x2 * (1.0 - x) * (1.0 - x) / width;
-    const double unscaled = energy;
-    energy *= scale;
-    derivative[0] = scale * derivative[0] + dscale * unscaled;
-    derivative[1] = scale * derivative[1] + dscale * unscaled;
-    for (unsigned index = 2; index < 7; ++index) derivative[index] *= scale;
+    generativeqc::dft::point::detail::apply_r2scan_tail(total, energy, derivative);
   }
   out.energy = energy;
   out.rho[0] = derivative[0];

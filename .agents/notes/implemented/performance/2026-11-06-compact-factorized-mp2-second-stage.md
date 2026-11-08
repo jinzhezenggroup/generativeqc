@@ -136,3 +136,11 @@ supplies actual metric host-transform links and named HF replay-boundary
 qualification. Historical failed records are not rewritten; global implicit/
 graph-wait coverage remains unqualified even when the declared observed scope
 passes its own contract.
+
+## Subsequent conventional default
+
+The [canonical factorized projection decision](2026-11-08-canonical-factorized-derivative-projection.md)
+supersedes ordered compact staging as the conventional default when the
+already-admitted full first stage is available. Occupied-slot compaction
+remains the bounded ordered fallback and explicit comparison path. This does
+not change the historical DF-residency evidence or its qualification boundary.

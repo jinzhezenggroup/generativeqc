@@ -104,3 +104,11 @@ cost and independent scientific gates justify replacing its retained regions.
 - docs/developer/mp2.md
 - docs/maintainer/performance_engineering.md
 - ../numerics/2026-10-09-common-derivative-pullback-validation.md
+
+## Subsequent default selection
+
+The [canonical factorized projection decision](2026-11-08-canonical-factorized-derivative-projection.md)
+supersedes compact ordered staging as the default when the already-admitted
+full first stage can be reserved. This compact layout remains the bounded
+resource fallback and an explicit independent validation path; its historical
+measurements and acceptance above are unchanged.

@@ -1,0 +1,6 @@
+{
+  "name": "dispersion_scalar",
+  "outputs": ["generated/generated_dispersion_scalar.hpp"],
+  "owner": "python/generativeqc_compiler/geometry/dispersion_scalar.py",
+  "scope": "Shared Gaussian, normalization, switching, coordination, BJ/zero damping, D4 charge scaling, ATM edge/C6 responses, EEQ RHS/Coulomb-matrix primals, and cached Cartesian-norm radial pullbacks derived by automatic differentiation. Overflowed zero damping reconstructs energy and response independently in the log2 domain. Native traversal, contraction, bounded LU solves and scatter remain; no separate scheduler promotion is claimed."
+}

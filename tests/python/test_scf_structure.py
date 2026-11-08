@@ -14,6 +14,24 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+@pytest.mark.parametrize("unrelated", ("rhf_graph.hpp", "direct_jk_kernels.hpp"))
+def test_hf_page_policy_cannot_acquire_execution_dependencies(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """The owner-specific page contract remains a pure host policy leaf."""
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    (source / "rhf_policy.hpp").write_text("\n")
+    (source / unrelated).write_text("\n")
+    owner = source / "hf_bounded_page_policy.hpp"
+    owner.write_text('#include "scf/cuda/rhf_policy.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "scf/cuda/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_hf_bounded_page_policy dependency" in errors[0]
+
+
 @pytest.mark.parametrize(
     "unrelated",
     (
@@ -32,6 +50,31 @@ def test_hf_driver_weighted_dispatch_is_one_exact_leaf(
     (source / unrelated).write_text("// Unrelated implementation\n")
     owner = source / "cuda_rhf.cpp"
     owner.write_text('#include "scf/shared_rys_weighted_z.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "scf/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert f"forbidden cuda_hf_driver dependency on scf/{unrelated}" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "unrelated",
+    (
+        "rhf_block_convergence_policy_impl.hpp",
+        "rhf_block_convergence_policy.hpp_impl.hpp",
+    ),
+)
+def test_hf_driver_block_convergence_borrows_only_the_exact_private_policy(
+    tmp_path: Path, unrelated: str
+) -> None:
+    source = tmp_path / "src/scf"
+    source.mkdir(parents=True)
+    (source / "rhf_block_convergence_policy.hpp").write_text(
+        "// Host declarations only\n"
+    )
+    (source / unrelated).write_text("// Unrelated implementation\n")
+    owner = source / "cuda_rhf.cpp"
+    owner.write_text('#include "scf/rhf_block_convergence_policy.hpp"\n')
     assert not audit_scf_structure(tmp_path)["errors"]
     owner.write_text(f'#include "scf/{unrelated}"\n')
     errors = audit_scf_structure(tmp_path)["errors"]
@@ -735,3 +778,32 @@ def test_shared_cpu_target_algebra_boundary(
     report = audit_scf_structure(tmp_path)
     allowed = owner == "solver" and header == "cpu_linalg.hpp"
     assert bool(report["errors"]) != allowed
+
+
+@pytest.mark.parametrize(
+    "unrelated",
+    ("generated_scalar_ad.hpp_impl.hpp", "generated_scalar_ad_impl.hpp"),
+)
+def test_cuda_integral_numerics_borrows_only_exact_shared_arithmetic(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """Generated scalar AD admits one shared leaf, not adjacent implementation."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / "integrals").mkdir()
+    (source / "integrals/execution_qualifiers.hpp").write_text("\n")
+    (source / "integrals/generated_scalar_ad.hpp").write_text("\n")
+    (source / "integrals" / unrelated).write_text("\n")
+    owner = source / "scf/cuda/scalar_math.cuh"
+    owner.write_text(
+        '#include "integrals/execution_qualifiers.hpp"\n'
+        '#include "integrals/generated_scalar_ad.hpp"\n'
+    )
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "integrals/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert (
+        f"forbidden cuda_integral_numerics dependency on integrals/{unrelated}"
+        in errors[0]
+    )

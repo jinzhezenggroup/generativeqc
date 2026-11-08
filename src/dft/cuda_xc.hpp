@@ -132,6 +132,22 @@ struct CudaXcOccupiedDensity {
       std::size_t rank() const noexcept {
     return occupations[0] > occupations[1] ? occupations[0] : occupations[1];
   }
+  /** Cheap work/scratch admission, not a numerical or convergence certificate. */
+#if defined(__CUDACC__)
+  __host__ __device__
+#endif
+      bool projection_fits(std::size_t active, std::size_t jets,
+                           std::size_t work_jets) const noexcept {
+    // GGA projects C^T*phi, then reconstructs C*(C^T*phi) during the feature
+    // reduction. Both contractions must beat one D*phi; only the rank-sized
+    // value panel occupies dead work storage. LDA needs no reconstruction.
+    if (!rank() || !active ||
+        !((jets == 1 && work_jets == 1) || (jets == 4 && (work_jets == 1 || work_jets == 4))))
+      return false;
+    if (provisional) return rank() <= (active - 1) / (jets == 4 && work_jets == 1 ? 2 : 1);
+    // The exact certificate still has the five-feature, two-panel contract.
+    return jets == 4 && work_jets == 4 && rank() <= active / 2;
+  }
   bool matches(const double* current_density, std::size_t current_nao, std::size_t current_spins,
                std::uint64_t current_generation) const noexcept {
     return density && density == current_density && coefficients && nao == current_nao &&
@@ -291,9 +307,10 @@ class CudaXcPlan {
    * numeric arena and covers opaque provider storage plus any compact-output
    * cache, reported separately by the binding. Discover maps before preparing
    * optional resources; a dense preparation does not qualify indexed scatter.
-   * The method owner must explicitly admit a qualified indexed GEMM recipe;
-   * budget alone never promotes a library path. */
-  void prepare_potential(std::size_t provider_budget = 0, bool indexed_gemm = false);
+   * The compiler adapter owns hardware/workload qualification; the method only
+   * supplies its admitted budget and expected reuse. Unknown costs preserve the
+   * existing qualified profile, without probing kernels or cold autotuning. */
+  void prepare_potential(std::size_t provider_budget = 0, std::uint64_t expected_replays = 1);
   const tensor::SymmetricProductDiagnostic& potential_lowering() const noexcept {
     return potential_binding_->diagnostic();
   }
@@ -306,10 +323,21 @@ class CudaXcPlan {
    * Before evaluation, generated/disabled bindings may be replaced. With an
    * enabled provider, another nonzero-budget preparation is rejected before
    * binding/provider setup; use zero budget to release it transactionally first.
-   * A failed preparation preserves the previous tables and provider. */
+   * A failed preparation preserves the previous tables and provider. Indexed
+   * GEMM qualification belongs to the compiler; automatic capacity is separate
+   * from the ordinary resource quote. Compiler
+   * admission checks hardware, workload and precision; budgets do not force GEMM. */
   void prepare_density(generativeqc::runtime::PrecisionDirective admitted,
-                       std::uint64_t expected_replays = 1, std::size_t provider_budget = 0);
+                       std::uint64_t expected_replays = 1, std::size_t provider_budget = 0,
+                       std::size_t automatic_provider_budget = 0);
   const CudaXcDensityBinding& density_binding(generativeqc::runtime::PrecisionPhase phase) const;
+  /** Release optional density storage after its caller drains the stream and
+   * invalidates every captured execution region that borrowed the provider.
+   * Generated strict/admitted bindings and published XC output stay valid.
+   * A failed checked release disables provider execution but retains its owner
+   * and original charges; a later handoff must finish this retirement. */
+  void retire_density_provider();
+  bool density_provider_retirement_pending() const noexcept;
   /** Optional owner charges are separate from the ordinary arena. A positive
    * device allowance alone does not qualify a new endpoint/provider profile. */
   const tensor::PanelProductDiagnostic* density_provider_diagnostic() const noexcept {
@@ -457,18 +485,17 @@ namespace cuda_xc_detail {
 bool compact_point_batch_admitted(const CudaXcLayout& layout,
                                   const std::vector<std::size_t>& ao_offsets,
                                   std::size_t first_tile, std::size_t end_tile, bool ragged);
-std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(const CudaXcLayout& layout,
-                                                                    cudaStream_t stream,
-                                                                    std::size_t provider_budget,
-                                                                    bool indexed_gemm = false);
+std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(
+    const CudaXcLayout& layout, cudaStream_t stream, std::size_t provider_budget,
+    std::uint64_t expected_replays = 1);
 /** Compiler-emitted bounded selection; no CUDA calls and no runtime probing. */
 CudaXcDensityBinding prepare_density_binding(std::int64_t n, std::int64_t count, std::int64_t spins,
                                              std::int64_t work_jets,
                                              generativeqc::runtime::PrecisionDirective admitted,
                                              std::uint64_t expected_replays);
-std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(const CudaXcLayout& layout,
-                                                                       cudaStream_t stream,
-                                                                       std::size_t provider_budget);
+std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(
+    const CudaXcLayout& layout, cudaStream_t stream, std::size_t provider_budget,
+    std::size_t automatic_budget, std::uint64_t expected_replays);
 
 /** Populate one host flag per global AO from all actual jets in a point tile.
  * The caller lends full-capacity panels and owns stream/error lifetimes. */

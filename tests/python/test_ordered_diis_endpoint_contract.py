@@ -126,6 +126,7 @@ template <class... Args> void launch_update_diis_kernel(Args...) { ++legacy_call
 """
     bindings = r"""
   struct { bool ordered_diis_gram, incremental_diis_gram; } plan{ordered, incremental};
+  struct { bool export_physical_reference = false; } options;
   const bool ordered_diis_gram = ordered, incremental_diis_gram = incremental;
   struct { void* stream_ = nullptr; } resources;
   void* stream = nullptr;
@@ -246,7 +247,7 @@ struct Plan {
  unsigned primary_streaming_fock_mask{};
  bool graph_native_eigensolver_override{},reuse_converged_fock{},incremental_diis_gram{},ordered_diis_gram{};
  bool one_electron_value_mapping{},mixed_precision_fock{},bounded_direct_streaming{},diis_work_enabled{};
- bool fp32_block_screening{},incremental_direct_jk{};
+ bool fp32_block_screening{},incremental_direct_jk{},block_convergence{};
  double mixed_precision_fock_threshold{};
  cuda_policy::SharedRysXyPolicy shared_rys_xy{};
 };
@@ -296,6 +297,7 @@ std::vector<int> replay_probe(bool saved_incremental,bool saved_ordered,bool sav
  const bool shell_class_profiling=false,inactive_eigensolver_profiling=false,bounded_fock_class_timing=false;
  const bool bounded_direct_fock_only_diagnostic=false,requested_graph_native_eigensolver_override=false;
  const bool requested_reuse_converged_fock=false,requested_incremental_direct_jk=false,requested_mixed_precision_fock=false;
+ const bool requested_block_convergence=false;
  const unsigned requested_primary_streaming_fock_mask=0;
  const std::optional<double> requested_mixed_precision_fock_threshold;
  const cuda_policy::SharedRysXyPolicy requested_shared_rys_xy{};
@@ -352,3 +354,70 @@ int main() {
         ),
     )
     subprocess.run([str(executable)], check=True, timeout=30)
+
+
+def test_reference_startup_tracks_persistent_graph_owner(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Replay actual capture admission through cold/warm and transient-owner changes."""
+    driver = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
+    capture = _block(
+        driver,
+        "if (first_setup || phase_resident_active || !iteration_graphs.has_iteration()",
+    )
+    source = tmp_path / "startup.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <stdexcept>
+using generativeqc_status = int;
+constexpr int GENERATIVEQC_STATUS_SUCCESS = 0;
+struct Outcome { int cuda_error=0, body_status=0; bool ok() const { return true; } };
+struct Graph {
+ bool exists=false, startup=false;
+ bool has_iteration() const { return exists; }
+ template<class F> Outcome capture_iteration(int,int,bool,F action) { exists=true; action(); return {}; }
+ template<class F> Outcome capture_post_eigensolver(int,int,F action) { action(); return {}; }
+};
+struct Plan { Graph graphs; bool captured_reference_startup=false, initialized=false,
+ retry_without_matrix_context=false; };
+struct Resources { int device_id_=0,stream_=0; };
+struct Admission { bool requires_provider_context() const { return false; } };
+int cuda_status(int x) { return x; }
+void fill_global_failure(int&,int) { throw std::runtime_error("capture failed"); }
+int execute(Plan& plan, bool cold, bool transient, bool split_provider_iteration) {
+ Graph local;
+ auto& iteration_graphs = transient ? local : plan.graphs;
+ const bool reference_startup_enabled=cold, first_setup=!plan.initialized;
+ const bool phase_resident_active=transient, fock_only_iteration=false;
+ Resources resources; Admission matrix_admission;
+ int status=0,cuda_error=0,outputs=0,graph_eigensolver_family=0;
+ auto launch_iteration_pre_eigensolver=[](bool){return 0;};
+ auto launch_iteration_eigensolver=[](int){return 0;};
+ auto launch_iteration_post_eigensolver=[&](bool,bool) {
+   iteration_graphs.startup=reference_startup_enabled; return 0;
+ };
+"""
+        + capture
+        + r"""
+ assert(iteration_graphs.startup == cold);
+ return outputs;
+}
+int main() {
+ for (bool split : {false,true}) {
+  Plan plan;
+  execute(plan,true,false,split);
+  execute(plan,false,true,split);
+  execute(plan,false,false,split);
+  execute(plan,true,true,split);
+  execute(plan,true,false,split);
+  execute(plan,false,false,split);
+ }
+}
+"""
+    )
+    executable = tmp_path / "startup"
+    required_native_cxx.build_executable(
+        [source], executable, compile_args=("-std=c++20", "-O2")
+    )
+    subprocess.run([str(executable)], check=True, capture_output=True, timeout=10)

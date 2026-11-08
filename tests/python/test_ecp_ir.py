@@ -10,7 +10,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 from generativeqc_compiler.integral.ecp import build_ecp_ir, gaussian_roots
-from generativeqc_compiler.integral.ecp_grid import harmonic_roots, radial_map_roots
+from generativeqc_compiler.integral.ecp_grid import (
+    harmonic_roots,
+    radial_map_roots,
+)
 from generativeqc_compiler.integral.ecp_projector import (
     emit_ecp_quadrature_cpp,
     pair_roots,
@@ -21,6 +24,7 @@ from generativeqc_compiler.integral.ir_serialization import (
     integral_from_payload,
     integral_to_payload,
 )
+from generativeqc_compiler.integral.quadrature import legendre_step_roots
 from generativeqc_compiler.integral.shell_spec import cartesian_components
 
 
@@ -48,6 +52,37 @@ def test_generated_grid_radial_map_and_jacobian() -> None:
         derivative = graph.differentiate(radius, graph.variable("z"))
         assert graph.evaluate(weight, values) == pytest.approx(
             0.37 * graph.evaluate(derivative, values)
+        )
+
+
+@pytest.mark.parametrize("order", (8, 16, 32, 96, 256, 512))
+def test_legendre_recurrence_joint_ad(order: int) -> None:
+    """Compare all loop-carried AD channels to an independent Legendre basis."""
+    from numpy.polynomial.legendre import legder, legval
+
+    graph, (following, tangent) = legendre_step_roots()
+    coefficients = np.zeros(order + 1)
+    coefficients[-1] = 1
+    for coordinate in (-1.0, -0.999, -0.43, 0.0, 0.27, 0.999, 1.0):
+        value, previous, derivative, previous_derivative = 1.0, 0.0, 0.0, 0.0
+        for degree in range(1, order + 1):
+            fields = {
+                "k": degree,
+                "z": coordinate,
+                "p": value,
+                "previous": previous,
+                "dp": derivative,
+                "dprevious": previous_derivative,
+            }
+            next_value = graph.evaluate(following, fields)
+            next_derivative = graph.evaluate(tangent, fields)
+            previous, value = value, next_value
+            previous_derivative, derivative = derivative, next_derivative
+        assert value == pytest.approx(
+            legval(coordinate, coefficients), abs=3e-12, rel=3e-12
+        )
+        assert derivative == pytest.approx(
+            legval(coordinate, legder(coefficients)), abs=2e-8, rel=2e-11
         )
 
 

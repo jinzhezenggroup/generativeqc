@@ -266,9 +266,9 @@ __global__ void update_diis_kernel(
       static_cast<std::size_t>(history_capacity + 1) * (history_capacity + 1);
   double* matrix = linear_system + static_cast<std::size_t>(system) * system_stride;
   double* rhs = coefficients + static_cast<std::size_t>(system) * (history_capacity + 1);
-  // Normalized KS DIIS retires the oldest dependent error and retries, as
-  // CPU Diis does. Preserve chronological ring order without moving matrices.
-  // Historical HF callers retain their unnormalized slot order and fallback.
+  // Normalized KS and physical-reference DIIS retire the oldest dependent
+  // error and retry, as CPU Diis does. Preserve chronological ring order
+  // without moving matrices; ordinary HF retains its existing schedule.
   std::uint32_t first =
       normalize_metric ? (slot + 1 + history_capacity - count) % history_capacity : 0;
   int nonsingular = 1;
@@ -342,9 +342,9 @@ __global__ void update_diis_kernel(
     }
     diis_owner_barrier<WideVectors>();
     if (threadIdx.x == 0) {
-      // A single common scale preserves the augmented DIIS solution. KS uses
-      // this to avoid treating every residual below 1e-7 as an absolute-pivot
-      // singularity. Existing HF callers retain the historical default path.
+      // A common Gram scale preserves the affine DIIS solution. Tight physical
+      // references need this too: an absolute pivot cutoff otherwise discards
+      // useful small errors well before their density/stationarity gates pass.
       if (normalize_metric) {
         double scale = 0.0;
         for (std::uint32_t row = 0; row < count; ++row)

@@ -6,6 +6,15 @@ that DAG has been built.
 
 ## Dense HF preparation
 
+The dynamic CPU recurrence interpreter and CUDA generic fallback use packaged
+`integral.scalar_ad` schedules for first-channel arithmetic. Scalar Graph AD
+owns the binary/unary chain rules; Gaussian-integrand differentiation and
+monomial integration supply full/LR/SR moment seeds. Native code owns channel
+storage, primal recurrence traversal, contractions and publication, not a
+second set of derivative formulas. The dynamic recurrence remains structurally
+independent of unrolled integral DAGs; independent libcint/energy-oracle tests
+also remain required. Regenerate with `tools/generate_integral_scalar_ad.py`.
+
 Value-only full-range s/p/d ERI quartets share primitive geometry, Boys values
 and Coulomb auxiliaries across their Cartesian components. Eligibility is
 per quartet: adding an f/g shell does not disable this reuse for the remaining

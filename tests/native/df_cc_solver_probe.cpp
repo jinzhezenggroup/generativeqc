@@ -28,8 +28,8 @@ int main(int argc, char* argv[]) {
     options.max_iterations = header[4];
     options.diis_size = header[5];
     options.df_auxiliary_reduction = !(header[6] & 4);
-    options.df_matrix_gemm = !(header[6] & 8);
-    options.df_replay_matrix_gemm = !(header[6] & 64);
+    options.qualification.ordered_iteration = header[6] & 8;
+    options.qualification.ordered_replay = header[6] & 64;
     options.df_occupied_pairs = !(header[6] & 128);
     options.packed_diis = header[6] & 32;
     options.df_mixed_precision = header[6] & (1ULL << 63);

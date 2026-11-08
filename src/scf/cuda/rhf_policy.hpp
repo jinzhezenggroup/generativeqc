@@ -8,6 +8,7 @@
 #include "generativeqc/generativeqc.h"
 #include "runtime/cuda_provider.hpp"
 #include "runtime/cuda_target_info.hpp"
+#include "tensor/cuda_matrix_product_admission.hpp"
 
 namespace generativeqc::scf::cuda_policy {
 
@@ -63,21 +64,11 @@ const char* shared_rys_xy_admission_name(SharedRysXyAdmission admission) noexcep
  * volume itself is derived exactly from the workload, so changing the GPU does
  * not require re-benchmarking every AO size or molecule.
  */
-struct SmallHfMatrixCalibration {
-  double native_launch_nanoseconds{};
-  double native_fp64_flops_per_nanosecond{};
-  double native_bytes_per_nanosecond{};
-  double cublas_launch_nanoseconds{};
-  double cublas_fp64_flops_per_nanosecond{};
-  double cublas_bytes_per_nanosecond{};
-};
-
 struct SmallHfProfitabilityProfile {
   // Compatibility evidence used only when no complete device calibration is
   // available. These values are not CUDA semantics.
   std::size_t fallback_persistent_eri_ao_limit{16};
-  std::size_t fallback_cublas_matrix_product_ao_threshold{17};
-  SmallHfMatrixCalibration matrix{};
+  tensor::CudaMatrixProductProfile matrix{};
 };
 
 struct SmallHfWorkload {
@@ -91,11 +82,7 @@ struct SmallHfWorkload {
 };
 
 struct SmallHfAnalyticEstimate {
-  std::uint64_t matrix_flops{};
-  std::uint64_t native_matrix_semantic_bytes{};
-  std::uint64_t cublas_matrix_semantic_bytes{};
-  std::uint64_t native_matrix_blocks{};
-  std::uint64_t native_matrix_waves{};
+  tensor::CudaMatrixProductEstimate matrix;
   std::uint64_t eri_elements{};
   std::uint64_t eri_bytes{};
   std::uint64_t cached_fock_ao_quartets{};
@@ -103,11 +90,8 @@ struct SmallHfAnalyticEstimate {
 
 struct SmallHfProfitabilityPolicy {
   SmallHfAnalyticEstimate estimate{};
-  bool use_cublas{};
+  tensor::CudaMatrixProductAdmission matrix;
   bool persistent_eri{};
-  bool cublas_from_calibration{};
-  double native_matrix_nanoseconds{};
-  double cublas_matrix_nanoseconds{};
 };
 
 SmallHfAnalyticEstimate estimate_small_hf_workload(const runtime::CudaTargetInfo& target,
@@ -190,8 +174,9 @@ struct ColdHfScreeningPolicy {
  * driver must reset DIIS and converge the original target operator before any
  * publication, charging both stages to the same user iteration allowance.
  * Zero policy keeps ordinary execution; warm/imported/moved owners never inherit
- * the preliminary graph. Only GENERATIVEQC_HF_COLD_SCREENING=1 opts in;
- * the unset/default route preserves the incumbent operator and page policy. */
+ * the preliminary graph. Unset/1 admits eligible cold owners; every other
+ * explicit value disables the proposal. Automatic admission requires the strict
+ * physical target gate; bounded scratch admission is independent of seed history. */
 ColdHfScreeningPolicy resolve_cold_hf_screening(const ColdHfScreeningDomain& domain,
                                                 double target_screening) noexcept;
 

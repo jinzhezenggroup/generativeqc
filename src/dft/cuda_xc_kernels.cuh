@@ -4,6 +4,7 @@
 // Reuse compiler-emitted AO traversal, XC point algebra and dense contractions;
 // this header keeps only validation and launch/runtime glue.
 #include "dft/cuda_xc.hpp"
+#include "runtime/cuda_component_trace.hpp"
 
 namespace generativeqc::dft::cuda_xc_detail {
 namespace {
@@ -229,11 +230,13 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
       auto* features = batch_features + (begin - batch_begin) * l.spins * l.feature_terms;
       // Route B changes only AO arithmetic. The AO panel and all downstream
       // density/XC reductions stay FP64 so this is a clean precision ablation.
+      runtime::cuda_trace::TraceRegion ao_region("xc_ao", stream);
       if (active)
         scheduled_ao(stream, basis, l.natom, l.nprimitive, active, points + 3 * begin, count,
                      l.jets, ao, error, ids,
                      l.ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage);
       cuda_check(cudaGetLastError());
+      ao_region.finish();
       if (compact) {
         ao_offset += count * active * l.jets;
         continue;
@@ -242,7 +245,15 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
                                         ? local_density_launchers[block.point_start / l.tile_points]
                                         : density_bindings[count == l.tile_points ? 0 : 1].launch;
       const bool occupied_tile =
-          occupied.coefficients && occupied.rank() <= std::size_t(active / 2);
+          occupied.coefficients && occupied.projection_fits(active, l.jets, l.work_jets);
+      runtime::cuda_trace::TraceRegion density_region(
+          occupied_tile ? "xc_occupied_projection" : "xc_matrix_projection", stream);
+      runtime::cuda_trace::trace_counter("xc_projection_tiles", 1);
+      runtime::cuda_trace::trace_counter("xc_active_point_ao", count * active);
+      runtime::cuda_trace::trace_counter("xc_matrix_tile_square_sum", active * active);
+      if (!occupied_tile)
+        runtime::cuda_trace::trace_counter("xc_matrix_projection_fma_pairs",
+                                           count * active * active * l.spins * l.work_jets);
       if (occupied_tile) {
         launch_occupied_density(stream, occupied, ao, active, count, work, features,
                                 l.feature_terms, error, ids);
@@ -264,10 +275,13 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
         density_launcher(stream, density, ao, active, count, l.spins, l.work_jets, work, error, ids,
                          l.nao);
       cuda_check(cudaGetLastError());
+      density_region.finish();
+      runtime::cuda_trace::TraceRegion feature_region("xc_density_features", stream);
       if (!occupied_tile)
         scheduled_density_features(stream, ao, work, active, count, l.spins, l.jets, l.work_jets,
                                    l.feature_terms, l.functional, features, error);
       cuda_check(cudaGetLastError());
+      feature_region.finish();
       if (total_density) {
         scheduled_total_density_features(stream, features, count, l.spins, l.feature_terms, begin,
                                          total_density, total_gradient, error);
@@ -288,6 +302,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
     const auto tile_count = 1 + (batch_count - 1) / l.tile_points;
     const auto* descriptors = compact ? batch_descriptors + batch_begin / l.tile_points : nullptr;
     if (compact) {
+      runtime::cuda_trace::TraceRegion region("xc_compact_density", stream);
       launch_batch_density(stream, l, descriptors, tile_count, max_active, density, batch_ao,
                            batch_work, batch_features, batch_begin, ao_ids, error, occupied);
       cuda_check(cudaGetLastError());
@@ -301,6 +316,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
           cuda_check(cudaGetLastError());
         }
     }
+    runtime::cuda_trace::TraceRegion point_region("xc_points", stream);
     if (batch_tiles > 1)
       point_batch_launcher(stream, batch_features, weights + batch_begin, batch_count, l.spins,
                            batch_coefficients, batch_totals, error, l.functional, l.exchange_scale,
@@ -310,7 +326,9 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
                      batch_coefficients, batch_totals, error, l.functional, l.exchange_scale,
                      l.correlation_scale, delta_features);
     cuda_check(cudaGetLastError());
+    point_region.finish();
     if (compact) {
+      runtime::cuda_trace::TraceRegion region("xc_compact_potential", stream);
       launch_batch_potential(stream, l, descriptors, tile_count, max_active, batch_ao,
                              batch_coefficients, weights, batch_work, batch_potential,
                              compensate_totals ? nullptr : batch_totals, batch_begin, ao_ids,
@@ -331,6 +349,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
       const auto block = bind_native_ao_grid_block(l, ao_offsets, ao_ids, begin);
       const I count = block.npoint, active = block.nactive;
       const auto feature_offset = (begin - batch_begin) * l.spins * l.feature_terms;
+      runtime::cuda_trace::TraceRegion region("xc_potential", stream);
       scheduled_potential(stream, batch_ao + ao_offset, batch_coefficients + feature_offset,
                           weights + begin, active, count, l.spins, l.feature_terms, l.work_jets,
                           work,

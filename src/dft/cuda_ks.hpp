@@ -394,10 +394,11 @@ class CudaKsPlan {
                                        bool compute_weighted_density, VerifiedKsFinalState& state,
                                        std::string& detail);
   /** At an idle force boundary, retire the optional cold-SCF anchor first,
-   * then optional SCF ERIs only if the requested additional device envelope
-   * still exceeds free memory. D/W/XC, the
-   * exact final token and the last-good warm seed remain owned by this plan.
-   * Receipt: requested bytes, free before, free after, retired device bytes.
+   * then optional SCF ERIs and the density provider if the requested additional
+   * device envelope still exceeds free memory. Captured execution regions are
+   * invalidated before provider release; future SCF uses generated bindings.
+   * D/W/XC, the exact final token and the last-good warm seed remain owned by this plan.
+   * Receipt: requested bytes, free before, free after, retired reserved device bytes.
    * This is not a reservation: the actual consumer still owns allocation and
    * budget failure. A conservative upper bound must not reject a smaller fit. */
   generativeqc_status prepare_force_memory(const CudaKsFinalStateToken& expected,

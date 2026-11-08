@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import copy
 import json
-import lzma
 from pathlib import Path
 from statistics import median
 
+from benchmarks._source_census_evidence import read_json_bytes
 from benchmarks.readme_defaults_accuracy import errors
 from benchmarks.readme_defaults_qualification import qualify
 from benchmarks.readme_defaults_report import checked_sample, load_records
@@ -23,7 +23,7 @@ REFERENCE = ROOT.parent / "readme-final-20261022"
 
 def read(name: str) -> dict:
     """Load a losslessly retained set of complete named receipts."""
-    return json.loads(lzma.decompress((ROOT / name).read_bytes()))
+    return json.loads(read_json_bytes(ROOT / name))
 
 
 def timing(first: list[float], last: list[float]) -> dict:

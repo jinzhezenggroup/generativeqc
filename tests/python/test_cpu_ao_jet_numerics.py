@@ -6,20 +6,21 @@ construction, the native library ABI, or a complete DFT endpoint.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def ao_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++20 compiler")
+def ao_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx) -> Path:
+    """Compile the actual evaluator and its generated axis-AD dependency."""
     source = (ROOT / "src/dft/ao_grid.cpp").read_text(encoding="utf-8")
     helpers = source[source.index("namespace {") : source.index("AoBasis::AoBasis")]
     evaluate = source[source.index("void AoBasis::evaluate(") :]
@@ -37,6 +38,7 @@ def ao_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <limits>
 #include <stdexcept>
 #include <vector>
+#include "dft/generated_ao_axis.hpp"
 namespace molecule {
 using Component = std::array<unsigned,3>;
 std::vector<Component> cartesian_components(unsigned degree) {
@@ -165,20 +167,16 @@ int main(int argc,char** argv) {
     directory = tmp_path_factory.mktemp("ao-jets")
     cpp, executable = directory / "probe.cpp", directory / "probe"
     cpp.write_text(harness, encoding="utf-8")
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [cpp],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-O3",
             "-ffp-contract=off",
-            str(cpp),
-            "-o",
-            str(executable),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+            f"-I{ROOT / 'src'}",
+        ),
+        compile_timeout=30,
     )
     return executable
 

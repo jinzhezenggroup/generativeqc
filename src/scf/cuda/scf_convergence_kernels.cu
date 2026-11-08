@@ -9,6 +9,32 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+__global__ void physical_residual_rms_kernel(std::size_t size, const double* residual,
+                                             double* result) {
+  double maximum = 0.0;
+  for (std::size_t index = threadIdx.x; index < size; index += blockDim.x)
+    maximum = isfinite(residual[index]) ? fmax(maximum, fabs(residual[index])) : CUDART_INF;
+  for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1)
+    maximum = fmax(maximum, __shfl_down_sync(0xffffffffU, maximum, delta));
+  maximum = __shfl_sync(0xffffffffU, maximum, 0);
+  double square = 0.0;
+  if (maximum > 0.0 && isfinite(maximum)) {
+    for (std::size_t index = threadIdx.x; index < size; index += blockDim.x) {
+      const double scaled = residual[index] / maximum;
+      square += scaled * scaled;
+    }
+    for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1)
+      square += __shfl_down_sync(0xffffffffU, square, delta);
+  }
+  if (threadIdx.x == 0)
+    *result = isfinite(maximum) ? maximum * sqrt(square / static_cast<double>(size)) : maximum;
+}
+
+void launch_physical_residual_rms(cudaStream_t stream, std::size_t size, const double* residual,
+                                  double* result) {
+  physical_residual_rms_kernel<<<1, 32, 0, stream>>>(size, residual, result);
+}
+
 __global__ void compute_energy_kernel(std::int32_t batch_size, std::int32_t nbf,
                                       const double* density, const double* hcore,
                                       const double* fock, const double* nuclear_repulsion,
@@ -55,7 +81,7 @@ __global__ void compute_uhf_energy_kernel(std::int32_t batch_size, std::int32_t 
 }
 
 // Shared-policy convergence state transitions.
-template <bool RetainConvergedDensity>
+template <bool RetainConvergedDensity, unsigned ReductionThreads = 32>
 __global__ void update_convergence_kernel(
     std::int32_t batch_size, std::int32_t nbf, double energy_tolerance, double density_tolerance,
     bool guard_energy_roundoff, const double* energy, double* previous_energy,
@@ -63,30 +89,68 @@ __global__ void update_convergence_kernel(
     std::uint32_t* iterations, double* energy_change, double* density_rms,
     const double* physical_residual, const std::uint32_t* approximate_item_census,
     bool qualified_owner, std::uint32_t* incremental_delta_updates,
-    const unsigned long long* incremental_delta_build_count) {
-  // A warp owns one system.  This is intentionally a one-warp block because
-  // all scalar state transitions are performed by lane zero after the warp
-  // reduction; the matrix walk itself is spread over the 32 lanes.
+    const unsigned long long* incremental_delta_build_count, ReferenceStartup reference_startup) {
+  // One block owns one system. Only the explicitly selected specialization
+  // widens the matrix walk; lane zero retains the same scalar state policy.
+  static_assert(ReductionThreads == 32 || ReductionThreads == 256);
   const std::int32_t system = static_cast<std::int32_t>(blockIdx.x);
   if (system >= batch_size || active[system] == 0) return;
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
   const std::size_t offset = static_cast<std::size_t>(system) * matrix_size;
+  const bool safeguard = reference_startup.history_count && reference_startup.history_head;
   const bool target_operator =
       approximate_item_census == nullptr || approximate_item_census[system] == 0;
-  const double physical_maximum = maximum_physical_residual(
-      physical_residual && target_operator ? physical_residual + offset : nullptr, matrix_size);
+  double physical_maximum = 0.0;
   double square = 0.0;
-  for (std::size_t element = threadIdx.x; element < matrix_size; element += blockDim.x) {
-    const double delta = next_density[offset + element] - density[offset + element];
-    square += delta * delta;
-    if constexpr (!RetainConvergedDensity) {
-      density[offset + element] = next_density[offset + element];
+  if constexpr (ReductionThreads == 32) {
+    physical_maximum = maximum_physical_residual(
+        physical_residual && target_operator ? physical_residual + offset : nullptr, matrix_size);
+    for (std::size_t element = threadIdx.x; element < matrix_size; element += blockDim.x) {
+      const double delta = next_density[offset + element] - density[offset + element];
+      square += delta * delta;
+      if constexpr (!RetainConvergedDensity) {
+        if (!safeguard) density[offset + element] = next_density[offset + element];
+      }
+    }
+    for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1) {
+      square += __shfl_down_sync(0xffffffffU, square, delta);
+    }
+  } else {
+    constexpr unsigned warps = ReductionThreads / 32;
+    __shared__ double warp_squares[warps], warp_maxima[warps];
+    for (std::size_t element = threadIdx.x; element < matrix_size; element += blockDim.x) {
+      if (physical_residual && target_operator) {
+        const double value = physical_residual[offset + element];
+        physical_maximum = isfinite(value) ? fmax(physical_maximum, fabs(value)) : CUDART_INF;
+      }
+      const double delta = next_density[offset + element] - density[offset + element];
+      square += delta * delta;
+      if constexpr (!RetainConvergedDensity) {
+        if (!safeguard) density[offset + element] = next_density[offset + element];
+      }
+    }
+    for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1) {
+      square += __shfl_down_sync(0xffffffffU, square, delta);
+      physical_maximum =
+          fmax(physical_maximum, __shfl_down_sync(0xffffffffU, physical_maximum, delta));
+    }
+    if (threadIdx.x % 32 == 0) {
+      warp_squares[threadIdx.x / 32] = square;
+      warp_maxima[threadIdx.x / 32] = physical_maximum;
+    }
+    __syncthreads();
+    if (threadIdx.x < 32) {
+      square = threadIdx.x < warps ? warp_squares[threadIdx.x] : 0.0;
+      physical_maximum = threadIdx.x < warps ? warp_maxima[threadIdx.x] : 0.0;
+      for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1) {
+        square += __shfl_down_sync(0xffffffffU, square, delta);
+        physical_maximum =
+            fmax(physical_maximum, __shfl_down_sync(0xffffffffU, physical_maximum, delta));
+      }
     }
   }
-  for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1) {
-    square += __shfl_down_sync(0xffffffffU, square, delta);
-  }
   int copy_next_density = 0;
+  int damp_next_density = 0;
   if (threadIdx.x == 0) {
     const std::uint32_t iteration = iterations[system] + 1;
     const bool has_energy_baseline = isfinite(previous_energy[system]);
@@ -96,12 +160,12 @@ __global__ void update_convergence_kernel(
     iterations[system] = iteration;
     energy_change[system] = change;
     density_rms[system] = rms;
-    const bool enter_full_energy_refinement = begin_hf_full_energy_refinement(
-        system, energy[system], density_tolerance, rms, physical_maximum,
-        target_operator && physical_residual != nullptr, incremental_delta_updates,
+    const auto energy_refinement = begin_hf_full_energy_refinement(
+        system, energy[system], energy_tolerance, density_tolerance, rms, physical_maximum,
+        target_operator && physical_residual != nullptr, qualified_owner, incremental_delta_updates,
         incremental_delta_build_count);
     const bool did_converge =
-        !enter_full_energy_refinement &&
+        energy_refinement == HfEnergyRefinementTransition::none &&
         hf_iteration_converged(energy[system], previous_energy[system], energy_tolerance,
                                density_tolerance, rms, physical_maximum, guard_energy_roundoff,
                                qualified_owner);
@@ -109,18 +173,41 @@ __global__ void update_convergence_kernel(
       converged[system] = 1;
       active[system] = 0;
     } else {
-      previous_energy[system] = enter_full_energy_refinement ? CUDART_INF : energy[system];
+      previous_energy[system] =
+          energy_refinement == HfEnergyRefinementTransition::discard_delta_baseline
+              ? CUDART_INF
+              : energy[system];
       copy_next_density = 1;
+      if (safeguard && iteration <= kReferenceStartupIterations &&
+          rms > kReferenceStartupDensityRms) {
+        damp_next_density = 1;
+        reference_startup.history_count[system] = 0;
+        reference_startup.history_head[system] = 0;
+      }
     }
   }
-  copy_next_density = __shfl_sync(0xffffffffU, copy_next_density, 0);
-  if constexpr (RetainConvergedDensity) {
+  if constexpr (ReductionThreads == 32) {
+    copy_next_density = __shfl_sync(0xffffffffU, copy_next_density, 0);
+    damp_next_density = __shfl_sync(0xffffffffU, damp_next_density, 0);
+  } else {
+    __shared__ int block_copy_next_density, block_damp_next_density;
+    if (threadIdx.x == 0) {
+      block_copy_next_density = copy_next_density;
+      block_damp_next_density = damp_next_density;
+    }
+    __syncthreads();
+    copy_next_density = block_copy_next_density;
+    damp_next_density = block_damp_next_density;
+  }
+  if (RetainConvergedDensity || safeguard) {
     // The raw Fock matrix still corresponds to P_n. Advance to P_{n+1} only
     // when another SCF iteration is required, so finalization can reuse the
     // already computed F(P_n) after convergence instead of rebuilding it.
-    if (copy_next_density != 0) {
+    if (!RetainConvergedDensity || copy_next_density != 0) {
       for (std::size_t element = threadIdx.x; element < matrix_size; element += blockDim.x) {
-        density[offset + element] = next_density[offset + element];
+        density[offset + element] = damp_next_density ? 0.5 * density[offset + element] +
+                                                            0.5 * next_density[offset + element]
+                                                      : next_density[offset + element];
       }
     }
   }
@@ -169,13 +256,15 @@ __global__ void update_uhf_convergence_kernel(
     energy_change[system] = change;
     density_rms[system] = rms;
     ++iterations[system];
-    const bool enter_full_energy_refinement = begin_hf_full_energy_refinement(
-        system, energy[system], density_tolerance, rms, physical_maximum,
-        target_operator && physical_residual != nullptr, incremental_delta_updates,
+    const auto energy_refinement = begin_hf_full_energy_refinement(
+        system, energy[system], energy_tolerance, density_tolerance, rms, physical_maximum,
+        target_operator && physical_residual != nullptr, false, incremental_delta_updates,
         incremental_delta_build_count);
-    previous_energy[system] = enter_full_energy_refinement ? CUDART_INF : energy[system];
+    previous_energy[system] =
+        energy_refinement == HfEnergyRefinementTransition::discard_delta_baseline ? CUDART_INF
+                                                                                  : energy[system];
     const bool did_converge =
-        !enter_full_energy_refinement &&
+        energy_refinement == HfEnergyRefinementTransition::none &&
         hf_iteration_converged(energy[system], baseline, energy_tolerance, density_tolerance, rms,
                                physical_maximum, guard_energy_roundoff);
     if (did_converge) {
@@ -330,19 +419,35 @@ void launch_update_convergence_kernel(
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
     const double* physical_residual, const std::uint32_t* approximate_item_census,
     bool qualified_owner, std::uint32_t* incremental_delta_updates,
-    const unsigned long long* incremental_delta_build_count) {
+    const unsigned long long* incremental_delta_build_count, ReferenceStartup reference_startup) {
   if (retain_converged_density) {
-    update_convergence_kernel<true><<<grid, block, shared_bytes, stream>>>(
-        batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
-        previous_energy, next_density, density, active, converged, iterations, energy_change,
-        density_rms, physical_residual, approximate_item_census, qualified_owner,
-        incremental_delta_updates, incremental_delta_build_count);
+    if (block.x == 256 && block.y == 1 && block.z == 1) {
+      update_convergence_kernel<true, 256><<<grid, block, shared_bytes, stream>>>(
+          batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
+          previous_energy, next_density, density, active, converged, iterations, energy_change,
+          density_rms, physical_residual, approximate_item_census, qualified_owner,
+          incremental_delta_updates, incremental_delta_build_count, reference_startup);
+    } else {
+      update_convergence_kernel<true><<<grid, block, shared_bytes, stream>>>(
+          batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
+          previous_energy, next_density, density, active, converged, iterations, energy_change,
+          density_rms, physical_residual, approximate_item_census, qualified_owner,
+          incremental_delta_updates, incremental_delta_build_count, reference_startup);
+    }
   } else {
-    update_convergence_kernel<false><<<grid, block, shared_bytes, stream>>>(
-        batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
-        previous_energy, next_density, density, active, converged, iterations, energy_change,
-        density_rms, physical_residual, approximate_item_census, qualified_owner,
-        incremental_delta_updates, incremental_delta_build_count);
+    if (block.x == 256 && block.y == 1 && block.z == 1) {
+      update_convergence_kernel<false, 256><<<grid, block, shared_bytes, stream>>>(
+          batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
+          previous_energy, next_density, density, active, converged, iterations, energy_change,
+          density_rms, physical_residual, approximate_item_census, qualified_owner,
+          incremental_delta_updates, incremental_delta_build_count, reference_startup);
+    } else {
+      update_convergence_kernel<false><<<grid, block, shared_bytes, stream>>>(
+          batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
+          previous_energy, next_density, density, active, converged, iterations, energy_change,
+          density_rms, physical_residual, approximate_item_census, qualified_owner,
+          incremental_delta_updates, incremental_delta_build_count, reference_startup);
+    }
   }
 }
 

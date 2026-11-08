@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes as ct
+import math
 import typing
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,57 @@ from generativeqc_compiler.dft.envelopes import _axis_bound
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
+
+
+def _reference_axis_bound(
+    power: int, derivative: int, alpha: float, lower: float, upper: float
+) -> float:
+    """Independent pre-migration directed-rounding recurrence, test-only."""
+
+    def add(left: float, right: float) -> float:
+        return (
+            right
+            if left == 0
+            else left
+            if right == 0
+            else math.nextafter(left + right, math.inf)
+        )
+
+    def multiply(left: float, right: float) -> float:
+        return (
+            0.0
+            if left == 0 or right == 0
+            else math.nextafter(float(left) * float(right), math.inf)
+        )
+
+    coefficients = [0.0] * (power + derivative + 1)
+    coefficients[power] = 1.0
+    for order in range(derivative):
+        following = [0.0] * len(coefficients)
+        for degree in range(power + order + 1):
+            if degree:
+                following[degree - 1] = add(
+                    following[degree - 1], multiply(degree, coefficients[degree])
+                )
+            following[degree + 1] = add(
+                following[degree + 1],
+                multiply(multiply(2.0, alpha), coefficients[degree]),
+            )
+        coefficients = following
+    maximum = max(abs(lower), abs(upper))
+    minimum = 0.0 if lower <= 0 <= upper else min(abs(lower), abs(upper))
+    polynomial, monomial = 0.0, 1.0
+    for coefficient in coefficients:
+        polynomial = add(polynomial, multiply(coefficient, monomial))
+        monomial = multiply(monomial, maximum)
+    if not math.isfinite(polynomial):
+        return math.inf
+    square = max(0.0, math.nextafter(minimum * minimum, -math.inf))
+    exponent = max(0.0, math.nextafter(alpha * square, -math.inf))
+    gaussian = multiply(
+        math.nextafter(math.exp(-exponent), math.inf), 1 + 32 * np.finfo(float).eps
+    )
+    return multiply(polynomial, gaussian)
 
 
 @pytest.fixture(scope="module")
@@ -50,13 +102,19 @@ def test_scalar_bounds_match_existing_oracle(native_axis: typing.Any) -> None:
                     (17.0, 21.0),
                     (1e154, 1e155),
                 ):
-                    assert native_axis(
+                    expected = _reference_axis_bound(
                         power, derivative, alpha, lower, upper
-                    ) == _axis_bound(power, derivative, alpha, lower, upper)
+                    )
+                    assert (
+                        native_axis(power, derivative, alpha, lower, upper) == expected
+                    )
+                    assert (
+                        _axis_bound(power, derivative, alpha, lower, upper) == expected
+                    )
             for lower, upper in np.sort(rng.normal(size=(12, 2)), axis=1):
-                assert native_axis(power, derivative, 0.7, lower, upper) == _axis_bound(
-                    power, derivative, 0.7, lower, upper
-                )
+                expected = _reference_axis_bound(power, derivative, 0.7, lower, upper)
+                assert native_axis(power, derivative, 0.7, lower, upper) == expected
+                assert _axis_bound(power, derivative, 0.7, lower, upper) == expected
 
 
 def test_unsupported_degree_and_nonfinite_regions_retain(

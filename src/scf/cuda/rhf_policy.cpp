@@ -8,8 +8,27 @@
 #include <limits>
 
 #include "generated_one_electron_derivative_policy.cuh"
+#include "scf/cuda/hf_bounded_page_policy.hpp"
+#include "scf/rhf_block_convergence_policy.hpp"
 
 namespace generativeqc::scf::cuda_policy {
+
+RhfBlockConvergenceRequest parse_rhf_block_convergence_request(const char* value) noexcept {
+  if (value == nullptr || std::strcmp(value, "0") == 0) return RhfBlockConvergenceRequest::Off;
+  return std::strcmp(value, "1") == 0 ? RhfBlockConvergenceRequest::On
+                                      : RhfBlockConvergenceRequest::Invalid;
+}
+
+RhfBlockConvergenceRequest rhf_block_convergence_requested() noexcept {
+  return parse_rhf_block_convergence_request(std::getenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE"));
+}
+
+bool resolve_rhf_block_convergence(RhfBlockConvergenceRequest request, bool unrestricted,
+                                   bool mixed_precision, bool incremental, bool quartet_direct,
+                                   bool physical_reference) noexcept {
+  return request == RhfBlockConvergenceRequest::On && !unrestricted && !mixed_precision &&
+         !incremental && quartet_direct && !physical_reference;
+}
 
 SharedRysXyRequest parse_shared_rys_xy_request(const char* value) noexcept {
   if (value == nullptr || *value == '\0' || std::strcmp(value, "0") == 0)
@@ -97,40 +116,11 @@ constexpr std::size_t kBoundedStreamingArenaDeviceMemoryDivisor = 16;
 constexpr std::size_t kLargeBoundedStreamingArenaDeviceMemoryDivisor = 4;
 constexpr std::size_t kLargeBoundedStreamingTargetBytes = std::size_t{24} << 30;
 constexpr unsigned kUnknownTargetPersistentQuartetWarpsPerSm = 4;
-constexpr std::uint64_t kSmallHfNativeMatrixThreads = 32;
 
 std::uint64_t saturating_multiply(std::uint64_t first, std::uint64_t second) noexcept {
   if (first == 0 || second == 0) return 0;
   const auto maximum = std::numeric_limits<std::uint64_t>::max();
   return second > maximum / first ? maximum : first * second;
-}
-
-std::uint64_t saturating_add(std::uint64_t first, std::uint64_t second) noexcept {
-  const auto maximum = std::numeric_limits<std::uint64_t>::max();
-  return second > maximum - first ? maximum : first + second;
-}
-
-std::uint64_t ceiling_divide(std::uint64_t numerator, std::uint64_t denominator) noexcept {
-  if (denominator == 0 || numerator == 0) return 0;
-  return 1 + (numerator - 1) / denominator;
-}
-
-bool positive_finite(double value) noexcept { return value > 0.0 && std::isfinite(value); }
-
-bool complete_matrix_calibration(const SmallHfMatrixCalibration& calibration) noexcept {
-  return positive_finite(calibration.native_launch_nanoseconds) &&
-         positive_finite(calibration.native_fp64_flops_per_nanosecond) &&
-         positive_finite(calibration.native_bytes_per_nanosecond) &&
-         positive_finite(calibration.cublas_launch_nanoseconds) &&
-         positive_finite(calibration.cublas_fp64_flops_per_nanosecond) &&
-         positive_finite(calibration.cublas_bytes_per_nanosecond);
-}
-
-double roofline_nanoseconds(double launch_nanoseconds, std::uint64_t flops, std::uint64_t bytes,
-                            double flops_per_nanosecond, double bytes_per_nanosecond) noexcept {
-  const double arithmetic = static_cast<double>(flops) / flops_per_nanosecond;
-  const double traffic = static_cast<double>(bytes) / bytes_per_nanosecond;
-  return launch_nanoseconds + std::max(arithmetic, traffic);
 }
 
 constexpr double kDefaultMixedPrecisionFockThreshold = 1.0e-6;
@@ -166,6 +156,13 @@ bool selected(const char* variable, const char* value) noexcept {
          (std::strcmp(selection, "1") == 0 || std::strcmp(selection, value) == 0);
 }
 
+DirectJkTuningProfile expanded_hf_direct_profile() noexcept {
+  DirectJkTuningProfile profile;
+  profile.bounded_streaming.maximum_task_capacity = 32U * 1024U * 1024U;
+  profile.bounded_streaming.maximum_arena_bytes = std::size_t{6} << 30;
+  return profile;
+}
+
 std::size_t resolve_target_memory_budget(std::size_t total_global_memory,
                                          std::size_t profile_ceiling, std::size_t unknown_fallback,
                                          std::size_t divisor) noexcept {
@@ -197,35 +194,13 @@ SmallHfAnalyticEstimate estimate_small_hf_workload(const runtime::CudaTargetInfo
   if (n == 0) return estimate;
 
   const std::uint64_t n2 = saturating_multiply(n, n);
-  const std::uint64_t n3 = saturating_multiply(n2, n);
   const std::uint64_t n4 = saturating_multiply(n2, n2);
-  const std::uint64_t matrices = static_cast<std::uint64_t>(workload.matrix_count);
   const std::uint64_t systems = static_cast<std::uint64_t>(workload.system_count);
   const std::uint64_t fock_states = static_cast<std::uint64_t>(workload.fock_state_count);
 
-  // The native product assigns one output element to one 32-thread block lane.
-  // Every output performs n FP64 multiply-adds and, without explicit tiling,
-  // semantically requests two doubles per inner-loop iteration plus one store.
-  const std::uint64_t matrix_outputs = saturating_multiply(matrices, n2);
-  estimate.matrix_flops = saturating_multiply(saturating_multiply(2U, matrices), n3);
-  const std::uint64_t native_bytes_per_output = saturating_add(saturating_multiply(16U, n), 8U);
-  estimate.native_matrix_semantic_bytes =
-      saturating_multiply(matrix_outputs, native_bytes_per_output);
-  // A tiled GEMM must at least consume A and B and produce C once. Provider
-  // internals may move more bytes; the calibrated effective rates absorb that.
-  estimate.cublas_matrix_semantic_bytes =
-      saturating_multiply(saturating_multiply(24U, matrices), n2);
-  estimate.native_matrix_blocks = ceiling_divide(matrix_outputs, kSmallHfNativeMatrixThreads);
-
-  if (estimate.native_matrix_blocks != 0 && target.multiprocessor_count != 0 &&
-      target.maximum_blocks_per_sm != 0 && target.maximum_threads_per_sm != 0) {
-    const std::uint64_t thread_blocks = target.maximum_threads_per_sm / kSmallHfNativeMatrixThreads;
-    const std::uint64_t blocks_per_sm =
-        std::min<std::uint64_t>(target.maximum_blocks_per_sm, thread_blocks);
-    const std::uint64_t resident_blocks =
-        saturating_multiply(target.multiprocessor_count, blocks_per_sm);
-    estimate.native_matrix_waves = ceiling_divide(estimate.native_matrix_blocks, resident_blocks);
-  }
+  estimate.matrix =
+      tensor::CudaMatrixProductAdmission::resolve(target, workload.nbf, workload.matrix_count)
+          .estimate();
 
   estimate.eri_elements = saturating_multiply(systems, n4);
   estimate.eri_bytes = saturating_multiply(8U, estimate.eri_elements);
@@ -246,21 +221,8 @@ SmallHfProfitabilityPolicy resolve_small_hf_profitability(
   // a profitability comparison is meaningful.
   policy.persistent_eri = workload.nbf <= profile.fallback_persistent_eri_ao_limit;
 
-  if (!complete_matrix_calibration(profile.matrix)) {
-    policy.use_cublas = workload.nbf >= profile.fallback_cublas_matrix_product_ao_threshold;
-    return policy;
-  }
-
-  policy.native_matrix_nanoseconds = roofline_nanoseconds(
-      profile.matrix.native_launch_nanoseconds, policy.estimate.matrix_flops,
-      policy.estimate.native_matrix_semantic_bytes, profile.matrix.native_fp64_flops_per_nanosecond,
-      profile.matrix.native_bytes_per_nanosecond);
-  policy.cublas_matrix_nanoseconds = roofline_nanoseconds(
-      profile.matrix.cublas_launch_nanoseconds, policy.estimate.matrix_flops,
-      policy.estimate.cublas_matrix_semantic_bytes, profile.matrix.cublas_fp64_flops_per_nanosecond,
-      profile.matrix.cublas_bytes_per_nanosecond);
-  policy.use_cublas = policy.cublas_matrix_nanoseconds < policy.native_matrix_nanoseconds;
-  policy.cublas_from_calibration = true;
+  policy.matrix = tensor::CudaMatrixProductAdmission::resolve(
+      target, workload.nbf, workload.matrix_count, profile.matrix);
   return policy;
 }
 
@@ -321,21 +283,41 @@ bool reuse_converged_fock_requested() noexcept {
 }
 
 DirectJkTuningProfile resolve_hf_direct_tuning_profile(bool physical_reference) noexcept {
-  DirectJkTuningProfile profile;
-  if (!physical_reference && selected("GENERATIVEQC_HF_COLD_SCREENING", "1")) {
-    profile.bounded_streaming.maximum_task_capacity = 32U * 1024U * 1024U;
-    profile.bounded_streaming.maximum_arena_bytes = std::size_t{6} << 30;
+  return !physical_reference && selected("GENERATIVEQC_HF_COLD_SCREENING", "1")
+             ? expanded_hf_direct_profile()
+             : DirectJkTuningProfile{};
+}
+
+DirectJkSchedulePolicy resolve_hf_bounded_page_policy(const runtime::CudaTargetInfo& target,
+                                                      const HfBoundedPageDomain& domain) noexcept {
+  auto profile = resolve_hf_direct_tuning_profile(domain.physical_reference);
+  const bool automatic = std::getenv("GENERATIVEQC_HF_COLD_SCREENING") == nullptr &&
+                         domain.nbf >= 512 && domain.systems == 1 &&
+                         domain.maximum_shell_angular <= 2 && domain.maximum_iterations >= 24 &&
+                         !domain.unrestricted && !domain.physical_reference &&
+                         !domain.mixed_precision && !domain.incremental_jk;
+  if (automatic) {
+    profile = expanded_hf_direct_profile();
   }
-  return profile;
+  auto policy = resolve_direct_jk_schedule_policy(target, profile);
+  // The generic schedule remains conservative for other consumers and custom
+  // profiles. Only this admitted HF owner may use the qualified larger fraction.
+  if (automatic && target.total_global_memory >= kLargeBoundedStreamingTargetBytes) {
+    policy.bounded_streaming.arena_maximum_bytes = resolve_target_memory_budget(
+        target.total_global_memory, profile.bounded_streaming.maximum_arena_bytes,
+        kUnknownTargetBoundedStreamingArenaBytes, kLargeBoundedStreamingArenaDeviceMemoryDivisor);
+  }
+  return policy;
 }
 
 ColdHfScreeningPolicy resolve_cold_hf_screening(const ColdHfScreeningDomain& domain,
                                                 double target_screening) noexcept {
   constexpr double cutoff = 8.0e-8;
+  const char* selection = std::getenv("GENERATIVEQC_HF_COLD_SCREENING");
   // Qualification covers large closed-shell through-d direct owners. Keep
   // small/batched/reference and seeded solves on their existing paths; never
   // consume a short user allowance with a proposal that needs a target tail.
-  if (!selected("GENERATIVEQC_HF_COLD_SCREENING", "1") || domain.nbf < 512 || domain.systems != 1 ||
+  if ((selection && std::strcmp(selection, "1") != 0) || domain.nbf < 512 || domain.systems != 1 ||
       domain.maximum_shell_angular > 2 || domain.maximum_iterations < 24 || !domain.first_setup ||
       domain.warm_seed || domain.unrestricted || domain.physical_reference ||
       !domain.bounded_quartet_direct || domain.persistent_eri || domain.resident_values ||

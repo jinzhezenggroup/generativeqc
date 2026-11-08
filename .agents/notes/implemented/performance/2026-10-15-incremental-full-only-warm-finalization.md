@@ -3,6 +3,11 @@
 Status: implemented; incremental J/K remains experimental and off by default
 Date: 2026-10-15
 
+Superseded by [ordinary-policy composition](../numerics/2026-11-05-incremental-hf-convergence-composition.md):
+full-energy-confirmed incremental iterates now retain the same current-density
+generation directly, rather than restoring an anchor only for no-delta warm
+solves. Historical evidence below remains unchanged.
+
 ## Problem
 
 The fixed-anchor delta-D experiment exposed a separate finalization cost. A

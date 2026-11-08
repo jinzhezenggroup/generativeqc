@@ -13,12 +13,12 @@ import math
 import os
 import random
 import re
-import shutil
 import struct
 import subprocess
 import sys
 from decimal import Decimal, localcontext
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -299,10 +299,9 @@ extern "C" void pair_probe(int mode, const double* x, double* actual, double* ex
 
 
 @pytest.fixture(scope="module")
-def native_pair_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def native_pair_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: Any
+) -> ct.CDLL:
     directory = tmp_path_factory.mktemp("nonlocal-pair-codegen")
     _generate(directory / "generated_nonlocal_pair_native.hpp")
     branches = []
@@ -337,23 +336,10 @@ extern "C" void denominator_probe(int geometry, const double* x, double* actual,
 """,
         encoding="utf-8",
     )
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-O2",
-            "-fno-fast-math",
-            "-ffp-contract=off",
-            "-shared",
-            "-fPIC",
-            str(source),
-            "-o",
-            str(library),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
+    native_cxx.build_shared(
+        (source,),
+        library,
+        compile_args=("-std=c++17", "-O2", "-fno-fast-math", "-ffp-contract=off"),
     )
     native = ct.CDLL(str(library))
     native.pair_probe.argtypes = [ct.c_int, *(ct.POINTER(ct.c_double),) * 3]

@@ -1,24 +1,29 @@
 {
   "id": "hf.cold-screening",
-  "classification": "negative-evidence",
+  "classification": "already-default",
   "controls": [
     "hf-runtime:GENERATIVEQC_HF_COLD_SCREENING"
   ],
   "owner_issues": [
-    1598
+    1598,
+    2976
   ],
   "sources": [
     "python/generativeqc/resources_hf.py",
     "src/scf/cuda/rhf_policy.hpp",
+    "src/scf/cuda/hf_bounded_page_policy.hpp",
     "src/scf/cuda/rhf_policy.cpp",
     "src/scf/cuda_rhf.cpp"
   ],
-  "rationale": "Only exact GENERATIVEQC_HF_COLD_SCREENING=1 selects the bounded cold FP64 proposal and larger reusable pages. Unset/0/none/empty/invalid values preserve the incumbent ordinary operator and 8M-task/1.5-GiB/one-sixteenth-memory page policy. The frozen pre-containment source improved HF96 timing but increased default force error from 5.10e-8 to 3.02e-7 Eh/Bohr, failing the unchanged additional 1e-7 diagnostic. Tighter requests qualified the optional route, not the failed default; all measured failures and historical source identities remain retained. The speedup is not claimed for restored defaults.",
-  "revisit_condition": "Before any default promotion, resolve the retained default-request force failure and requalify the bounded affected cold/warm case against its independent reference without changing thresholds. Preserve complete FP64 work, iteration allowances, physical-reference admission and page-refusal behavior. Historical tight-target results are not default qualification.",
+  "rationale": "Unset now admits bounded screened FP64 proposals for large singleton unseeded through-d RHF bounded Direct owners, with a strict physical target tail and a fresh target DIIS/energy epoch inside one iteration allowance. Separately admitted large exact RHF owners may reuse up to 32M tasks/6 GiB, with memory-fraction caps and incumbent-page retry before upload/capture. Explicit 0/none/empty/invalid selections retain ordinary/conservative behavior; exact 1 retains its existing diagnostic scope. Actual final HF-only source/ELF qualification on A100 227737 and RTX5090 16672 passes six independent default/lifetime/allowance/page-refusal and sixteen signed Libcint cases per card, plus 5090 sanitizers. One cold pair improves 6.49%/6.91%, warm medians also improve, and three DFT negative controls preserve work and protected ratios. The historical failed 1e-7 default-force gate and slower small-page 5090 result remain retained; the new default passes that unchanged independent gate. This is scoped endpoint qualification, not universal superiority or completion of HF's pre-existing fine-grained precision inventory.",
+  "revisit_condition": "Before broadening automatic scope, changing resource limits or weakening fallbacks, retain independent default-request energy/force gates, complete Fock work and user allowances, cold/moved/warm/checkpoint behavior, unsupported/physical-reference policy and page-refusal cleanup on both protected GPU classes. Do not relabel the rejected DFT combined image, earlier explicit-page experiments or historical tighter requests as final default qualification.",
   "evidence": [
     "docs:docs/developer/hf_force_finalization.md",
     ".agents/notes/implemented/performance/2026-10-26-cold-hf-screening-pages.md",
+    ".agents/notes/implemented/performance/2026-11-07-cold-hf-strict-screened-tail.md",
     "benchmarks/results/cold-hf-defaults-20261026/README.md",
+    "benchmarks/results/hf-cold-defaults-20261107/README.md",
+    "tests/python/test_hf_cold_default_evidence.py",
     "tests/python/test_hf_cold_screening_cuda.py",
     "tests/native/test_precision_policy.cpp"
   ]

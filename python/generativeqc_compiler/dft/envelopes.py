@@ -16,6 +16,7 @@ import numpy as np
 from generativeqc_compiler.common.arrays import immutable
 
 from .ao import NativeAO, jet_indices
+from .ao_axis import axis_bound_transitions
 
 
 def derivative_domain(derivatives: typing.Any) -> typing.Any:
@@ -59,8 +60,8 @@ def _axis_bound(
 ) -> typing.Any:
     """Bound |d^d(x^l exp(-a*x*x))| without polynomial cancellation.
 
-    Differentiation maps P to P'-2axP. Propagating absolute coefficients
-    bounds every term, including derivatives at AO nodes. Bounding the
+    The Gaussian primal's sparse AD operator propagates absolute coefficients
+    before cancellation, including derivatives at AO nodes. Bounding the
     polynomial and Gaussian separately is conservative on any interval.
     Positive arithmetic rounds upward; the Gaussian exponent rounds toward
     zero. A small libm guard and a positive underflow floor avoid screening on
@@ -69,14 +70,17 @@ def _axis_bound(
     alpha, lower, upper = float(alpha), float(lower), float(upper)
     coefficients = [0.0] * (power + derivative + 1)
     coefficients[power] = 1.0
+    transitions = axis_bound_transitions(power + derivative)
     for degree in range(derivative):
         following = [0.0] * len(coefficients)
         for k in range(power + degree + 1):
-            if k:
-                following[k - 1] = _add(following[k - 1], _multiply(k, coefficients[k]))
-            following[k + 1] = _add(
-                following[k + 1], _multiply(_multiply(2.0, alpha), coefficients[k])
-            )
+            for target, factor, alpha_power in transitions[k]:
+                weighted_factor = factor
+                for _ in range(alpha_power):
+                    weighted_factor = _multiply(weighted_factor, alpha)
+                following[target] = _add(
+                    following[target], _multiply(weighted_factor, coefficients[k])
+                )
         coefficients = following
     maximum = max(abs(lower), abs(upper))
     minimum = 0.0 if lower <= 0 <= upper else min(abs(lower), abs(upper))

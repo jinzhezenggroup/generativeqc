@@ -176,16 +176,6 @@ generativeqc_xtb_status_t evaluate_aes2_potential_system_cpu(
     const AES2Workspace& workspace, std::string& error);
 
 /*
- * Accumulate one AES2 energy per ragged batch member. Existing energies must
- * be finite. workspace.batch_scratch stages every contribution before any
- * caller output is updated, preserving call-level failure atomicity.
- */
-generativeqc_xtb_status_t add_aes2_energy_cpu(const AES2Plan& plan, const AES2GeometryCache& cache,
-                                     const double* atomic_charges, const double* atomic_dipoles,
-                                     const double* atomic_quadrupoles, double* energies,
-                                     const AES2Workspace& workspace, std::string& error);
-
-/*
  * Accumulate the AES2 energy of one ragged batch member into
  * accumulated_energy. The multipole pointers retain the full-batch layout,
  * but only the selected atom and pair slices are inspected. Consequently a

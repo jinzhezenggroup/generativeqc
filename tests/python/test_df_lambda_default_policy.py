@@ -55,12 +55,12 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     definition += (
         " { "
         + resolution[0]
-        + " return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
+        + " return {!qualification.ordered_iteration,forces,!qualification.ordered_response,frame_options,"
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
         "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
         "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
-        "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix,lambda_primal_matrix,"
+        "lambda_true_residual_interval,lambda_core_reuse,!qualification.ordered_audit,!qualification.ordered_primal,"
         "reference_experiment,lambda_serial_scratch_reuse,ccsd_mixed_precision,lambda_mixed_precision,lambda_resident_krylov,ccsd_mixed_switch_residual,demand}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
@@ -116,6 +116,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
 #include <optional>
 #include "cc/solver.hpp"
 #include "cc/lambda_response.hpp"
+#include "cc/df_qualification.hpp"
 #include "hf/rhf_frame_response.hpp"
 #include "runtime/execution_precision.hpp"
 namespace generativeqc {
@@ -222,19 +223,18 @@ int main() {
   check_reference_benchmark();
   check_complete_probe();
   generativeqc::cc::LambdaOptions options;
-  if(!options.df_matrix_gemm || !options.df_auxiliary_reduction ||
+  if(options.qualification.ordered_response || !options.df_auxiliary_reduction ||
      options.gmres.true_residual_every != 1 || options.df_mixed_precision ||
      options.serial_scratch_reuse ||
-     options.df_auxiliary_batch_limit != 32 || !options.df_primal_matrix_gemm) return 1;
-  options.df_matrix_gemm=false;
-  if(options.df_matrix_gemm) return 2;
+     options.df_auxiliary_batch_limit != 32 || options.qualification.ordered_primal) return 1;
+  options.qualification.ordered_response=true;
+  if(!options.qualification.ordered_response) return 2;
   generativeqc::runtime::ExecutionContext context;
   generativeqc::core::System system;
   generativeqc_method_descriptor descriptor{};
   using generativeqc::methods::detail::run_df_ccsdt_native;
   auto ordinary=run_df_ccsdt_native(context,system,system,descriptor);
-  auto explicit_matrix=run_df_ccsdt_native(context,system,system,descriptor,
-                                         true,true,true,true,true,8);
+  auto explicit_matrix=run_df_ccsdt_native(context, system, system, descriptor, true, true, true, {}, 8);
   if(!ordinary.primal || !ordinary.lambda || !explicit_matrix.lambda ||
      !ordinary.derived_denominators || !explicit_matrix.derived_denominators ||
      ordinary.packed_diis || explicit_matrix.packed_diis || !ordinary.parallel_gap ||
@@ -256,8 +256,7 @@ int main() {
   explicit_frame.profile_jk = true;
   explicit_frame.bilinear_derivative = true;
   explicit_frame.symmetric_polarization = false;
-  auto explicit_scalar=run_df_ccsdt_native(context,system,system,descriptor,
-                                         true,true,true,false,false,8,3,explicit_frame);
+  auto explicit_scalar=run_df_ccsdt_native(context, system, system, descriptor, true, true, true, generativeqc::cc::DFContractionQualification{.ordered_iteration = true, .ordered_response = true}, 8, 3, explicit_frame);
   if(explicit_scalar.primal || explicit_scalar.lambda ||
      explicit_scalar.frame.orbital_screening_tolerance != 1e-7 ||
      !explicit_scalar.frame.profile_jk || !explicit_scalar.frame.bilinear_derivative ||
@@ -268,18 +267,13 @@ int main() {
     auto opt_out = explicit_frame;
     opt_out.bilinear_derivative = false;
     opt_out.symmetric_polarization = symmetric;
-    const auto selected=run_df_ccsdt_native(context,system,system,descriptor,
-                                          true,true,true,true,true,8,3,opt_out);
+    const auto selected=run_df_ccsdt_native(context, system, system, descriptor, true, true, true, {}, 8, 3, opt_out);
     if(selected.frame.bilinear_derivative ||
        selected.frame.symmetric_polarization != symmetric) return 54;
   }
-  const auto strict_lambda=run_df_ccsdt_native(
-      context,system,system,descriptor,true,true,true,true,true,8,8,{},
-      true,false,true,false,false,{},1);
+  const auto strict_lambda=run_df_ccsdt_native(context, system, system, descriptor, true, true, true, {}, 8, 8, {}, true, false, true, false, false, {}, 1);
   if(strict_lambda.lambda_interval != 1) return 44;
-  const auto resident_lambda=run_df_ccsdt_native(
-      context,system,system,descriptor,true,true,true,true,true,8,8,{},
-      true,false,true,false,false,{},30,true,true,true,nullptr,false,false,false,true);
+  const auto resident_lambda=run_df_ccsdt_native(context, system, system, descriptor, true, true, true, {}, 8, 8, {}, true, false, true, false, false, {}, 30, true, nullptr, false, false, false, true);
   if(!resident_lambda.resident_krylov || resident_lambda.serial_scratch_reuse) return 51;
   const char* missing[]{"endpoint","input","output","1"};
   const char* matrix[]{"endpoint","input","output","1","1","1","1"};
@@ -370,8 +364,7 @@ int main() {
     catch(const std::invalid_argument&) {}
   }
     for(bool derived : {false,true}) {
-    const auto direct=run_df_ccsdt_native(context,system,system,descriptor,
-                                          true,true,true,true,true,5,3,explicit_frame,derived);
+    const auto direct=run_df_ccsdt_native(context, system, system, descriptor, true, true, true, {}, 5, 3, explicit_frame, derived);
     if(direct.derived_denominators!=derived || direct.batch_limit!=5 ||
        direct.ccsd_batch_limit!=3 || direct.frame.orbital_screening_tolerance!=1e-7 ||
        !direct.frame.profile_jk || !direct.frame.bilinear_derivative) return 20;
@@ -632,7 +625,9 @@ def test_shared_state_probe_keeps_a_scalar_control() -> None:
     source = (ROOT / "benchmarks/df_lambda_shared_state.cpp").read_text()
     first = source.index("generativeqc::cc::LambdaOptions options;")
     matrix = source.index("const auto matrix =", first)
-    scalar_option = source.index("options.df_matrix_gemm = false;", matrix)
+    scalar_option = source.index(
+        "options.qualification.ordered_response = true;", matrix
+    )
     scalar = source.index("const auto scalar =", scalar_option)
     assert first < matrix < scalar_option < scalar
 
@@ -657,7 +652,7 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
     definition = re.sub(r"\s*=\s*[^,)]+", "", declaration).strip().removesuffix(";")
     definition += (
         " { return {cuda_reference_plan,df_auxiliary_batch_limit,derived_denominators,"
-        "retain_df_response,df_matrix_gemm,correlation_auxiliary,packed_diis,"
+        "retain_df_response,!qualification.ordered_iteration,correlation_auxiliary,packed_diis,"
         "external_reservation_bytes,initial_density,warm_start_fallback,df_mixed_precision,df_mixed_precision_switch_residual,df_mp2_mode,convergence}; }\n"
     )
     owner = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
@@ -722,6 +717,7 @@ int probe() {
   for(core::CorrelationConvergence convergence :
       {core::CorrelationConvergence{}, core::CorrelationConvergence{0.25}})
   for(std::size_t ccsd_batch_limit : {1,3,8}) {
+  const cc::DFContractionQualification qualification{.ordered_iteration=!df_matrix_gemm};
   const DFCorrelationDemand demand{mp2,0};
   for(bool seeded : {false,true}) {
     const auto* reference_seed=seeded ? &seed : nullptr;
@@ -748,15 +744,13 @@ int probe() {
      ordinary.switch_residual!=cc::SolverOptions{}.df_mixed_precision_switch_residual) return 2;
   scf::CudaRhfBucketPlan resident;
   auto* reference=&resident;
-  const auto explicit_state=run_rccsd_native_state(execution,system,descriptor,
-      nullptr,nullptr,nullptr,0,&auxiliary,true,true,&reference,3,false);
+  const auto explicit_state=run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr, 0, &auxiliary, true, {}, &reference, 3, false);
   if(explicit_state.reference_plan!=&reference || reference!=&resident ||
      explicit_state.batch!=3 || explicit_state.derived || explicit_state.factors_only ||
      explicit_state.switch_residual!=cc::SolverOptions{}.df_mixed_precision_switch_residual) return 3;
   // Old callers can stop after the residual; the appended MP2 selector defaults
   // independently, even when the residual is nonzero and converts to true.
-  const auto residual_only=run_rccsd_native_state(execution,system,descriptor,
-      nullptr,nullptr,nullptr,0,&auxiliary,true,true,nullptr,3,false,false,false,1e-4);
+  const auto residual_only=run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr, 0, &auxiliary, true, {}, nullptr, 3, false, false, false, 1e-4);
   if(residual_only.mixed!=false || residual_only.switch_residual!=1e-4 ||
      residual_only.factors_only) return 4;
   return 0;

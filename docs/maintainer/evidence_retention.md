@@ -98,6 +98,14 @@ acceptance checks; do not make normal CI fetch history just to pass a storage te
 
 ## Shared storage for necessary publication records
 
+Repeated source-file censuses may share a complete path table and base/delta
+maps while retaining all original JSON fragments. The
+[source-census reader](../../benchmarks/results/shared-source-censuses-20261108/README.md)
+checks exact original JSON bytes and can reconstruct and hash-check original XZ
+transports for compressed-identity consumers. Member descriptors, physical storage
+bindings and current consumers must move together; this adds no Git-history or
+network dependency to offline replay.
+
 Retained datasets that still have numerical consumers use the shared plain/gzip
 reader and the publication's declared role/path, rather than campaign-specific
 decoders or hard-coded `.json` filenames. For example,
@@ -272,7 +280,7 @@ files, preserving the original array bytes and numeric identity checks.
 The same retention checker also enforces the optional
 `benchmark_results_max_bytes` policy field across **all** indexed files under
 `benchmarks/results/`, including manifests and summaries. Its current budget is
-84 MiB. Many individually sub-limit files cannot bypass this aggregate guard;
+85 MiB. Many individually sub-limit files cannot bypass this aggregate guard;
 classification exceptions cannot waive it. Permanent fixtures under
 `tests/reference_data/`, `tests/data/`, audited `upstream/` sources and
 `manifests/` provenance are not counted. Changing the budget is an explicit policy review, not an automatic

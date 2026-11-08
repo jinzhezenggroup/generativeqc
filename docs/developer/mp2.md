@@ -107,21 +107,31 @@ timing. The public conventional CUDA path still stages MO blocks on the host;
 source reuse is not a claim that the complete response/adjoint is GPU-resident.
 
 Conventional CUDA E+F may additionally retain an optional six-block MO symmetry
-cover: OVOV, OOVV, OVOO, OVVV, OOOO, and VVVV. The energy adjoint, orbital RHS,
-response actions and relaxed-weight replay borrow compatible blocks in the
-same canonical frame instead of repeating their AO-to-MO transformations.
-Construction runs on CUDA; returned blocks remain host-owned. Admission limits
+cover: OVOV, OOVV, OVOO, OVVV, OOOO, and VVVV. Construction precedes the MP2
+energy reduction. The energy, energy adjoint, orbital RHS, response actions and
+relaxed-weight replay borrow compatible blocks in the same canonical frame
+instead of repeating their AO-to-MO transformations. One heterogeneous CUDA
+provider batch shares the AO scan across all admitted blocks, including their
+compatible transformation prefixes; returned blocks remain host-owned. Admission limits
 the cache to one quarter of the remaining correlation phase budget and charges
 its actual vector capacities alongside producer scratch and the full force
-consumer. A memory refusal drops the optional cache and restores bounded force
-reconstruction without changing the reference or swallowing numerical errors.
-CPU, energy-only and RI paths do not build this cache. Full VVVV storage is
+consumer. If the complete cover is refused, construction can instead admit
+OVOV alone for energy. CUDA energy-only calculations use that smaller store.
+Borrowed energy consumption reserves its own reduction workspace, not a second
+AO provider batch. An energy or force memory refusal drops the optional cache and restores
+bounded streamed reconstruction without changing the reference or swallowing
+numerical errors. Energy-only diagnostic tiling disables also suppress the
+independent OVOV cache, including fallback after a refused six-block cover. CPU and RI paths do not build this cache. Full VVVV storage is
 quartic, so admission is optional rather than an arbitrary-basis work bound.
 
 `GENERATIVEQC_MP2_FORCE_MO_CACHE=0` disables only this optional cache for
 qualification. Disabling force source tiling also disables its construction,
-preserving the diagnostic shell-sized route. The progress journal records
-`mp2_force_mo_cache_bytes` and actual `borrowed_mo_blocks` reads; positive cache
+preserving the diagnostic shell-sized force route. Set
+`GENERATIVEQC_MP2_ENERGY_MO_CACHE=0` as well to disable the independent OVOV-only
+energy store; an enabled complete force cover still supplies its existing OVOV
+to energy. The progress journal records `mp2_energy_mo_cache_bytes`,
+`mp2_force_mo_cache_bytes`, `mp2_primal_source_scans`, `mp2_primal_source_values`
+and actual `borrowed_mo_blocks` reads; positive cache
 storage alone is not evidence that a consumer reused it. Same-basis CBS groups
 can instead borrow the correction calculation's compatible CC blocks; see the
 [CBS workflow](../user/ccsdt_cbs.md).
@@ -133,6 +143,16 @@ library and input provenance accompany the results. This does not enable CUDA
 RI-MP2 forces or enlarge the native force domain available to CBS composition.
 
 ## Response and force contracts
+
+An exact stationary RHF two-electron cotangent uses the occupied AO projector
+directly instead of rebuilding it through generic rank-four MO staging. This
+route requires exactly unit occupied-diagonal Fock weights and exactly zero
+correlation weights; small nonzero correlation contributions are not discarded.
+The eightfold-symmetrized density products visit canonical shell quartets with
+their actual orbit multiplicities, including repeated shells and atoms. It
+retains the same one-electron/ECP, overlap, nuclear and bounded derivative
+consumers. General correlated weights retain their existing streamed pullback;
+the explicit staged layout remains available for independent validation.
 
 CPU RI-MP2 analytic forces compose the native MP2 adjoint and
 true-residual RHF response with the shared fixed-rank inverse-square-root VJP and
@@ -203,7 +223,16 @@ ERIs with a checked capacity; CUDA RHF uses the bounded matrix-direct route.
 
 ## Conventional factorized derivative staging
 
-The common host pullback stores the first factorized shell stage as separate
+The default common host pullback projects factorized MO weights onto all eight
+exact ERI permutations before transforming the first AO slot. This uses at most
+the already-admitted `di*N^3` first-stage buffer and contracts only canonical
+shell quartets, with distinct shell-orbit multiplicities. It does not allocate
+a molecular AO-rank-four tensor or approximate small correlation weights.
+The complete largest first-stage reservation is attempted before submitting any
+quartet. Resource-only reservation failure retains the compact ordered route;
+it cannot mix canonical and ordered contributions within one invocation.
+
+The compact fallback stores the first factorized shell stage as separate
 Coulomb, exchange and correlation regions. With shell width `di`, `N` orbitals,
 `O` occupied orbitals and `V=N-O`, it uses `di*O*(2*N+V^2)` doubles when this is
 smaller than the admitted legacy `di*N^3` buffer. Its internal explicit staged
@@ -217,10 +246,10 @@ zeros. The explicit staged route retains both full buffers and the full
 reduction domain for independent comparison.
 
 Dense weights retain the original eightfold projection and staged layout.
-Third and shell-local buffer shapes, ordered factorized callbacks and atom
-scatter remain unchanged. The production resource plan conservatively admits
-the legacy full buffers; this representation change supplies no measured
-endpoint telemetry and does not retire the remaining materializations.
+Explicit compact and full staged layouts retain ordered factorized callbacks
+for independent numerical and resource comparisons. Third and shell-local
+buffer shapes and atom scatter remain unchanged. The production resource plan
+conservatively admits the legacy full buffers for all three layouts.
 
 `tests/python/test_mp2_derivative_pullback_probe.py` compares the actual common
 translation unit with an independent direct tensor oracle, the explicit staged
@@ -231,6 +260,8 @@ lifetimes qualify this host transform; complete endpoint and device evidence
 must be assessed separately. See the
 [first-stage decision](../../.agents/notes/implemented/performance/2026-10-11-compact-factorized-mp2-first-stage.md)
 and the [second-stage decision](../../.agents/notes/implemented/performance/2026-11-06-compact-factorized-mp2-second-stage.md).
+The [canonical projection decision](../../.agents/notes/implemented/performance/2026-11-08-canonical-factorized-derivative-projection.md)
+records the current default and its complete-endpoint qualification boundary.
 
 ## Native path and placement
 

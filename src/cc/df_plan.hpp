@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <optional>
 
 #include "generated_df_ccsd_hoisted_cpu.hpp"
 
@@ -15,16 +16,21 @@ struct DFIterationPlan {
   bool hoisted{};
   std::size_t iteration{}, auxiliary{}, preparation{}, accumulation{};
   std::size_t preparation_terms{}, auxiliary_terms{}, core_terms{};
-  bool matrix_gemm{};
+  /** Compiler layout admitted before allocating or preparing any provider.
+   * Dimensions are retained for binding, not a vendor/algorithm selection.
+   * A missing layout is the complete bounded ordered-graph fallback.
+   */
+  struct ContractionLayout {
+    std::size_t occupied, virtuals, auxiliary;
+  };
+  std::optional<ContractionLayout> contractions;
   std::size_t auxiliary_batch_size{1};
   bool mixed_auxiliary{};
   std::size_t strict_auxiliary_batch_size{1};
 };
 
-inline DFIterationPlan df_iteration_plan(std::size_t o, std::size_t v, std::size_t q, bool cuda,
-                                         bool allow_hoisting, bool matrix_gemm = false,
-                                         std::size_t auxiliary_batch_size = 1,
-                                         bool mixed_auxiliary = false) {
+inline DFIterationPlan df_ordered_iteration_plan(std::size_t o, std::size_t v, std::size_t q,
+                                                 bool cuda, bool allow_hoisting) {
   using generated::df::checked_add;
   using generated::df::checked_mul;
   namespace fast = generated::dfhoist;
@@ -58,8 +64,22 @@ inline DFIterationPlan df_iteration_plan(std::size_t o, std::size_t v, std::size
   plan.preparation_terms = prepare_work;
   plan.auxiliary_terms = q_work;
   plan.core_terms = core_work;
-  if (cuda && matrix_gemm) {
-    plan.matrix_gemm = true;
+  return plan;
+}
+
+/** Admit compiler contraction layouts from shapes, never a method selector.
+ * The enclosing owner charges the complete arena and provider allowance and
+ * may retain df_ordered_iteration_plan on budget or preparation refusal.
+ */
+inline DFIterationPlan df_iteration_plan(std::size_t o, std::size_t v, std::size_t q, bool cuda,
+                                         bool allow_hoisting, std::size_t auxiliary_batch_size = 1,
+                                         bool mixed_auxiliary = false) {
+  using generated::df::checked_add;
+  namespace fast = generated::dfhoist;
+  auto plan = df_ordered_iteration_plan(o, v, q, cuda, allow_hoisting);
+  if (cuda && plan.hoisted && fast::prepare_packed_dimensions_fit(o, v) &&
+      fast::auxiliary_packed_dimensions_fit(o, v) && fast::iteration_packed_dimensions_fit(o, v)) {
+    plan.contractions.emplace(DFIterationPlan::ContractionLayout{o, v, q});
     plan.mixed_auxiliary = mixed_auxiliary;
     plan.iteration = fast::iteration_packed_arena_elements(o, v);
     plan.auxiliary = std::max(plan.auxiliary, fast::auxiliary_packed_arena_elements(o, v));

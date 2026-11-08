@@ -38,13 +38,13 @@ from generativeqc_compiler.method import (
     StationaryMeanField,
     compile_ks_execution_plan,
 )
+from generativeqc_compiler.method.nuclear_repulsion_array import nuclear_repulsion_hvp
 from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
 from generativeqc_compiler.method.stationary_grid_second import (
     GRID_FIELD_WORKSPACE_PANELS,
     SemilocalPointPartials,
     StationaryGridSecondOrder,
     features,
-    nuclear_repulsion_hvp,
 )
 from generativeqc_compiler.tensor import execute
 from generativeqc_compiler.xc.grid_response import (

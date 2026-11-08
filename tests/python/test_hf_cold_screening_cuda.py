@@ -1,6 +1,6 @@
-"""Opt-in large-owner qualification for screened cold HF and bounded pages.
+"""Large-owner qualification for automatic screened HF and bounded pages.
 
-These complete endpoints require a finite Slurm allocation. GPU4PySCF supplies
+These complete endpoints require a finite GPU scheduler allocation. GPU4PySCF supplies
 an independent target-operator energy/force oracle; it never seeds native SCF.
 """
 
@@ -18,14 +18,14 @@ import pytest
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_HF_COLD_CUDA_TEST") != "1"
-    or not os.environ.get("SLURM_JOB_ID"),
-    reason="explicit large HF cold qualification under finite Slurm",
+    or not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")),
+    reason="explicit large HF cold qualification under finite Slurm or LSF",
 )
 
 
 @pytest.fixture(autouse=True)
 def explicit_cold_policy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """These tests qualify the optional route, not the restored default."""
+    """Keep explicit-route gates; the automatic case removes this selection."""
     monkeypatch.setenv("GENERATIVEQC_HF_COLD_SCREENING", "1")
 
 
@@ -177,10 +177,13 @@ def device_allowance(library: Any, limit: int) -> Any:
         destroy(handle)
 
 
+@pytest.mark.parametrize("automatic", (False, True))
 def test_page_refusal_retries_bounded_owner_and_releases(
-    independent_targets: Any,
+    independent_targets: Any, automatic: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A 4-GiB ceiling refuses the optional 6-GiB page but admits the old page."""
+    if automatic:
+        monkeypatch.delenv("GENERATIVEQC_HF_COLD_SCREENING", raising=False)
     atoms, _, targets = independent_targets
     calc = calculator()
     limit = 4 << 30
@@ -217,14 +220,19 @@ def test_energy_only_iteration_allowance(
         calc.clear_cache()
 
 
-def test_default_request_retains_incumbent_operator(
-    independent_targets: Any, monkeypatch: pytest.MonkeyPatch
+def test_automatic_default_request_passes_strict_force_gate(
+    independent_targets: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Check the actual default request, not the tighter opt-in helper above."""
+    """Qualify unchanged public defaults against the stronger independent gate.
+
+    Unlike historical screened defaults, the automatic proposal must finish with
+    a strict physical residual. Exercise default cold and displaced trajectories,
+    frozen replay and checkpoint import rather than reusing a tight-request pass.
+    """
     from generativeqc import Calculator
 
     monkeypatch.delenv("GENERATIVEQC_HF_COLD_SCREENING", raising=False)
-    atoms, _, targets = independent_targets
+    atoms, moved, targets = independent_targets
     calc = Calculator(
         method="rhf",
         basis="def2-svp",
@@ -236,11 +244,27 @@ def test_default_request_retains_incumbent_operator(
         with calc.prepare_batch([atoms], warm_start=True) as owner:
             cold = owner.execute(strict=True).items[0]
             check_target(cold, targets[0])
-            assert cold.precision["refinement_iterations"] == 0
+            assert 0 < cold.precision["refinement_iterations"] < cold.iterations
+            checkpoint = tmp_path / "automatic-cold.npz"
+            owner.save_checkpoint(checkpoint)
             owner.set_warm_start_updates(False)
             warm = owner.execute(strict=True).items[0]
             check_target(warm, targets[0])
             assert warm.warm_start_used
             assert warm.precision["refinement_iterations"] == 0
+            shifted = owner.execute(
+                [[position for _, position in moved]], strict=True
+            ).items[0]
+            check_target(shifted, targets[1])
+            restored = owner.execute(
+                [[position for _, position in atoms]], strict=True
+            ).items[0]
+            check_target(restored, targets[0])
+        with calc.prepare_batch([atoms], warm_start=True) as imported:
+            imported.load_checkpoint(checkpoint)
+            result = imported.execute(strict=True).items[0]
+            check_target(result, targets[0])
+            assert result.warm_start_used
+            assert result.precision["refinement_iterations"] == 0
     finally:
         calc.clear_cache()

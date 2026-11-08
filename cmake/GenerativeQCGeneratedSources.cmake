@@ -31,6 +31,42 @@ endfunction()
 macro(generativeqc_register_host_generated_sources target)
   generativeqc_register_named_ks_catalog(${target})
   generativeqc_register_generated_sources(
+    NAME generativeqc_gcp_scalar_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_gcp_scalar.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gcp_scalar.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/geometry/gcp_scalar.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/expr.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/scalar_c.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gcp_scalar.hpp"
+    COMMENT "Generating shared gCP Slater-overlap energies and automatic derivatives")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_dispersion_scalar_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_dispersion_scalar.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_dispersion_scalar.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/geometry/dispersion_scalar.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/expr.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/scalar_c.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_dispersion_scalar.hpp"
+    COMMENT "Generating shared dispersion scalar energies and automatic derivatives")
+  if(TARGET generativeqc_gfn2_cuda)
+    add_dependencies(generativeqc_gfn2_cuda generativeqc_dispersion_scalar_codegen)
+  endif()
+  generativeqc_register_generated_sources(
+    NAME generativeqc_nuclear_repulsion_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_nuclear_repulsion.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_nuclear_repulsion.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/nuclear_repulsion.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/expr.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/scalar_c.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_nuclear_repulsion.hpp"
+    COMMENT "Generating shared nuclear-repulsion energy and coordinate derivatives")
+  generativeqc_register_generated_sources(
     NAME generativeqc_basis_catalog_codegen
     TARGET ${target}
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_basis_pack.py"

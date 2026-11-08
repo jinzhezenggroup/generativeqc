@@ -49,16 +49,6 @@ struct alignas(double) IntegralWorkspace {
       spherical_multipole_gradient;
 };
 
-/*
- * Evaluate one shell pair into IntegralWorkspace.  This is intentionally an
- * internal, allocation-free bridge: periodic callers pass the same vectors
- * and flags as the molecular evaluator, preserving the reviewed shell-pair
- * arithmetic and all spherical/multipole conventions.
- */
-void compute_shell_pair_cpu(const BasisPlan& basis, std::size_t bra_shell, std::size_t ket_shell,
-                            const double vector[3], double integral_cutoff, bool with_gradient,
-                            bool with_multipoles, IntegralWorkspace& workspace);
-
 /* Geometry-independent packed layout for ragged one-electron matrices. */
 struct IntegralPlan {
   std::int64_t batch_size = 0;
@@ -67,10 +57,6 @@ struct IntegralPlan {
   std::size_t workspace_size_bytes = 0;
   std::vector<std::int64_t> matrix_offsets;
 };
-
-/* Validate the immutable basis/integral relationship without numerical inputs. */
-generativeqc_xtb_status_t validate_integral_plan(const BasisPlan& basis, const IntegralPlan& plan,
-                                        std::string& error);
 
 /* tblite's default dimensionless Gaussian-product cutoff at accuracy 1.0. */
 inline constexpr double kDefaultIntegralCutoff = 25.0;

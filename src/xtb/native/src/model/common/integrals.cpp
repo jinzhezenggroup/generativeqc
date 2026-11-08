@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "model/common/integrals.hpp"
+
 #include "generated_gfn2_sdq_native.hpp"
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
@@ -14,7 +15,8 @@
 #include <stdexcept>
 #include <utility>
 
-#if defined(GENERATIVEQC_XTB_INTEGRALS_BASELINE_VARIANT) || defined(GENERATIVEQC_XTB_INTEGRALS_AVX2_FMA_VARIANT)
+#if defined(GENERATIVEQC_XTB_INTEGRALS_BASELINE_VARIANT) || \
+    defined(GENERATIVEQC_XTB_INTEGRALS_AVX2_FMA_VARIANT)
 #define GENERATIVEQC_XTB_INTEGRALS_KERNEL_VARIANT 1
 #endif
 
@@ -227,7 +229,7 @@ generativeqc_xtb_status_t validate_basis(const BasisPlan& basis, std::string& er
 }
 
 generativeqc_xtb_status_t validate_plan(const BasisPlan& basis, const IntegralPlan& plan,
-                               std::string& error) {
+                                        std::string& error) {
   generativeqc_xtb_status_t status = validate_basis(basis, error);
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     return status;
@@ -266,8 +268,8 @@ generativeqc_xtb_status_t validate_plan(const BasisPlan& basis, const IntegralPl
 }
 
 generativeqc_xtb_status_t validate_evaluation(const BasisPlan& basis, const IntegralPlan& plan,
-                                     const double* positions, const void* workspace,
-                                     std::size_t workspace_size, std::string& error) {
+                                              const double* positions, const void* workspace,
+                                              std::size_t workspace_size, std::string& error) {
   generativeqc_xtb_status_t status = validate_plan(basis, plan, error);
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     return status;
@@ -331,63 +333,6 @@ void transform_shell_pair(const SphericalTransform& bra, const SphericalTransfor
   }
 }
 
-/*
- * Pull back the explicit ket-to-bra origin translation used for the reverse
- * matrix element. Local moment derivatives are supplied by the compiler-generated
- * primitive DAG; this helper returns only adjoints of local S/D and the
- * explicit displacement dependence.
- */
-void add_multipole_shift_pullback(
-    const double vector[3], double overlap, const std::array<double, kDipoleComponents>& dipole,
-    const std::array<double, kDipoleComponents>& reverse_dipole_adjoint,
-    const std::array<double, kQuadrupoleComponents>& reverse_quadrupole_adjoint,
-    double& overlap_adjoint, std::array<double, kDipoleComponents>& dipole_adjoint,
-    std::array<double, 3>& vector_adjoint) {
-  for (std::size_t coordinate = 0; coordinate < 3u; ++coordinate) {
-    overlap_adjoint += reverse_dipole_adjoint[coordinate] * vector[coordinate];
-    dipole_adjoint[coordinate] += reverse_dipole_adjoint[coordinate];
-    vector_adjoint[coordinate] += reverse_dipole_adjoint[coordinate] * overlap;
-  }
-
-  /* Pull the traceless projection back to the six raw second-moment shifts. */
-  const double diagonal_sum =
-      reverse_quadrupole_adjoint[0] + reverse_quadrupole_adjoint[2] + reverse_quadrupole_adjoint[5];
-  const std::array<double, kQuadrupoleComponents> raw_shift_adjoint{
-      1.5 * reverse_quadrupole_adjoint[0] - 0.5 * diagonal_sum,
-      1.5 * reverse_quadrupole_adjoint[1],
-      1.5 * reverse_quadrupole_adjoint[2] - 0.5 * diagonal_sum,
-      1.5 * reverse_quadrupole_adjoint[3],
-      1.5 * reverse_quadrupole_adjoint[4],
-      1.5 * reverse_quadrupole_adjoint[5] - 0.5 * diagonal_sum,
-  };
-
-  const double x = vector[0];
-  const double y = vector[1];
-  const double z = vector[2];
-  const double dx = dipole[0];
-  const double dy = dipole[1];
-  const double dz = dipole[2];
-  const double axx = raw_shift_adjoint[0];
-  const double axy = raw_shift_adjoint[1];
-  const double ayy = raw_shift_adjoint[2];
-  const double axz = raw_shift_adjoint[3];
-  const double ayz = raw_shift_adjoint[4];
-  const double azz = raw_shift_adjoint[5];
-
-  overlap_adjoint +=
-      axx * x * x + axy * x * y + ayy * y * y + axz * x * z + ayz * y * z + azz * z * z;
-  dipole_adjoint[0] += 2.0 * axx * x + axy * y + axz * z;
-  dipole_adjoint[1] += axy * x + 2.0 * ayy * y + ayz * z;
-  dipole_adjoint[2] += axz * x + ayz * y + 2.0 * azz * z;
-
-  vector_adjoint[0] +=
-      axx * (2.0 * dx + 2.0 * x * overlap) + axy * (dy + y * overlap) + axz * (dz + z * overlap);
-  vector_adjoint[1] +=
-      axy * (dx + x * overlap) + ayy * (2.0 * dy + 2.0 * y * overlap) + ayz * (dz + z * overlap);
-  vector_adjoint[2] +=
-      axz * (dx + x * overlap) + ayz * (dy + y * overlap) + azz * (2.0 * dz + 2.0 * z * overlap);
-}
-
 template <int BraAngularMomentum = -1, int KetAngularMomentum = -1>
 void compute_shell_pair(const BasisPlan& basis, std::size_t bra_shell, std::size_t ket_shell,
                         const double vector[3], double integral_cutoff, bool with_gradient,
@@ -439,9 +384,8 @@ void compute_shell_pair(const BasisPlan& basis, std::size_t bra_shell, std::size
         continue;
       }
 
-      const double primitive_weight =
-          basis.primitive_coefficients[ket_primitive_index] *
-          basis.primitive_coefficients[bra_primitive_index];
+      const double primitive_weight = basis.primitive_coefficients[ket_primitive_index] *
+                                      basis.primitive_coefficients[bra_primitive_index];
 
       // Every Cartesian consumer shares this primitive pair's Gaussian and
       // recurrence DAG. Generate the bounded block once; retain the existing
@@ -478,9 +422,10 @@ void compute_shell_pair(const BasisPlan& basis, std::size_t bra_shell, std::size
                   primitive_weight * primitive.ket_gradient[coordinate][0];
               if (with_multipoles) {
                 for (std::size_t component = 0; component < kMultipoleComponents; ++component) {
-                  workspace.cartesian_multipole_gradient
-                      [(coordinate * kMultipoleComponents + component) * cartesian_block_size +
-                       cartesian_index] +=
+                  workspace.cartesian_multipole_gradient[(coordinate * kMultipoleComponents +
+                                                          component) *
+                                                             cartesian_block_size +
+                                                         cartesian_index] +=
                       primitive_weight * primitive.ket_gradient[coordinate][component + 1u];
                 }
               }
@@ -529,22 +474,6 @@ void compute_shell_pair(const BasisPlan& basis, std::size_t bra_shell, std::size
 }
 
 }  // namespace
-
-#if !defined(GENERATIVEQC_XTB_INTEGRALS_KERNEL_VARIANT)
-
-generativeqc_xtb_status_t validate_integral_plan(const BasisPlan& basis, const IntegralPlan& plan,
-                                        std::string& error) {
-  return validate_plan(basis, plan, error);
-}
-
-void compute_shell_pair_cpu(const BasisPlan& basis, std::size_t bra_shell, std::size_t ket_shell,
-                            const double vector[3], double integral_cutoff, bool with_gradient,
-                            bool with_multipoles, IntegralWorkspace& workspace) {
-  compute_shell_pair<>(basis, bra_shell, ket_shell, vector, integral_cutoff, with_gradient,
-                       with_multipoles, workspace);
-}
-
-#endif
 
 #if defined(_MSC_VER)
 #define GENERATIVEQC_XTB_INTEGRALS_NOINLINE __declspec(noinline)
@@ -653,8 +582,8 @@ const IntegralKernelTable& integral_kernels_for_cpu_isa(
 
 #if !defined(GENERATIVEQC_XTB_INTEGRALS_KERNEL_VARIANT)
 
-generativeqc_xtb_status_t make_integral_plan(const BasisPlan& basis, IntegralPlan& plan, std::string& error,
-                                    double integral_cutoff) {
+generativeqc_xtb_status_t make_integral_plan(const BasisPlan& basis, IntegralPlan& plan,
+                                             std::string& error, double integral_cutoff) {
   generativeqc_xtb_status_t status = validate_basis(basis, error);
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     return status;
@@ -696,8 +625,9 @@ generativeqc_xtb_status_t make_integral_plan(const BasisPlan& basis, IntegralPla
 }
 
 generativeqc_xtb_status_t evaluate_overlap_cpu(const BasisPlan& basis, const IntegralPlan& plan,
-                                      const double* positions, double* overlap, void* workspace,
-                                      std::size_t workspace_size, std::string& error) {
+                                               const double* positions, double* overlap,
+                                               void* workspace, std::size_t workspace_size,
+                                               std::string& error) {
   generativeqc_xtb_status_t status =
       validate_evaluation(basis, plan, positions, workspace, workspace_size, error);
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
@@ -769,9 +699,9 @@ generativeqc_xtb_status_t evaluate_overlap_cpu(const BasisPlan& basis, const Int
 }
 
 generativeqc_xtb_status_t evaluate_multipole_cpu(const BasisPlan& basis, const IntegralPlan& plan,
-                                        const double* positions, double* dipole, double* quadrupole,
-                                        void* workspace, std::size_t workspace_size,
-                                        std::string& error) {
+                                                 const double* positions, double* dipole,
+                                                 double* quadrupole, void* workspace,
+                                                 std::size_t workspace_size, std::string& error) {
   generativeqc_xtb_status_t status =
       validate_evaluation(basis, plan, positions, workspace, workspace_size, error);
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
@@ -873,27 +803,14 @@ generativeqc_xtb_status_t evaluate_multipole_cpu(const BasisPlan& basis, const I
                   continue;
                 }
                 std::array<double, kDipoleComponents> shifted_dipole{};
-                for (std::size_t component = 0; component < kDipoleComponents; ++component) {
-                  shifted_dipole[component] = local_dipole[component] + vector[component] * overlap;
+                std::array<double, kQuadrupoleComponents> shifted_quadrupole{};
+                generativeqc::xtb::generated::gfn2_origin_shift(
+                    vector, overlap, local_dipole.data(), local_quadrupole.data(),
+                    shifted_dipole.data(), shifted_quadrupole.data());
+                for (std::size_t component = 0; component < kDipoleComponents; ++component)
                   dipole[component * matrix_elements + reverse] = shifted_dipole[component];
-                }
-
-                std::array<double, kQuadrupoleComponents> shift{};
-                shift[0] = 2.0 * vector[0] * local_dipole[0] + vector[0] * vector[0] * overlap;
-                shift[1] = vector[0] * local_dipole[1] + vector[1] * local_dipole[0] +
-                           vector[0] * vector[1] * overlap;
-                shift[2] = 2.0 * vector[1] * local_dipole[1] + vector[1] * vector[1] * overlap;
-                shift[3] = vector[0] * local_dipole[2] + vector[2] * local_dipole[0] +
-                           vector[0] * vector[2] * overlap;
-                shift[4] = vector[1] * local_dipole[2] + vector[2] * local_dipole[1] +
-                           vector[1] * vector[2] * overlap;
-                shift[5] = 2.0 * vector[2] * local_dipole[2] + vector[2] * vector[2] * overlap;
-                const double trace = 0.5 * (shift[0] + shift[2] + shift[5]);
                 for (std::size_t component = 0; component < kQuadrupoleComponents; ++component) {
-                  const bool diagonal = component == 0u || component == 2u || component == 5u;
-                  const double shifted = local_quadrupole[component] + 1.5 * shift[component] -
-                                         (diagonal ? trace : 0.0);
-                  quadrupole[component * matrix_elements + reverse] = shifted;
+                  quadrupole[component * matrix_elements + reverse] = shifted_quadrupole[component];
                 }
               }
             }
@@ -1015,9 +932,10 @@ generativeqc_xtb_status_t add_multipole_gradient_cpu(
 
                 double overlap_adjoint = 0.0;
                 std::array<double, 3> vector_adjoint{};
-                add_multipole_shift_pullback(vector, overlap, dipole, reverse_dipole_adjoint,
-                                             reverse_quadrupole_adjoint, overlap_adjoint,
-                                             dipole_adjoint, vector_adjoint);
+                generativeqc::xtb::generated::gfn2_origin_shift_pullback(
+                    vector, overlap, dipole.data(), reverse_dipole_adjoint.data(),
+                    reverse_quadrupole_adjoint.data(), &overlap_adjoint, dipole_adjoint.data(),
+                    vector_adjoint.data());
 
                 for (std::size_t coordinate = 0; coordinate < 3u; ++coordinate) {
                   double derivative =
@@ -1055,9 +973,10 @@ generativeqc_xtb_status_t add_multipole_gradient_cpu(
 }
 
 generativeqc_xtb_status_t add_overlap_gradient_cpu(const BasisPlan& basis, const IntegralPlan& plan,
-                                          const double* positions, const double* dE_doverlap,
-                                          double* gradients, void* workspace,
-                                          std::size_t workspace_size, std::string& error) {
+                                                   const double* positions,
+                                                   const double* dE_doverlap, double* gradients,
+                                                   void* workspace, std::size_t workspace_size,
+                                                   std::string& error) {
   generativeqc_xtb_status_t status =
       validate_evaluation(basis, plan, positions, workspace, workspace_size, error);
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {

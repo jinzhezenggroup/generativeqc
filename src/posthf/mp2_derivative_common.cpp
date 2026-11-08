@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <new>
 #include <stdexcept>
 
 #include "hf/reference.hpp"
@@ -55,12 +56,135 @@ double symmetric_eri_weight(std::span<const double> weights, std::size_t n, std:
          0.125 * at(r, s, q, p) + 0.125 * at(s, r, q, p);
 }
 
+bool stationary_two_electron_weights(const FactorizedTwoElectronWeights& factors) {
+  if (!std::all_of(factors.correlation_iajb.begin(), factors.correlation_iajb.end(),
+                   [](double value) { return value == 0.0; }))
+    return false;
+  for (std::size_t row = 0; row < factors.orbitals; ++row)
+    for (std::size_t column = 0; column < factors.orbitals; ++column)
+      if (factors.fock[row * factors.orbitals + column] !=
+          (row == column && row < factors.occupied ? 1.0 : 0.0))
+        return false;
+  return true;
+}
+
+/** Project sparse MO factors before the first AO slot is transformed.
+ * Averaging all eight permutations commutes with the common coefficient
+ * transform. Duplicate MO indices deliberately retain repeated contributions;
+ * shell-orbit multiplicity is applied only after the complete AO pullback.
+ */
+void projected_factorized_first(const hf::PhysicalReference& reference,
+                                const FactorizedTwoElectronWeights& factors,
+                                std::size_t first_offset, std::size_t first_count,
+                                std::span<double> first) {
+  const auto orbitals = reference.nbf;
+  const auto occupied = reference.nocc;
+  const auto virtuals = orbitals - occupied;
+  const auto tail_elements = posthf::checked_mul(orbitals, square(orbitals));
+  constexpr std::array<std::array<std::size_t, 4>, 8> permutations{{
+      {0, 1, 2, 3},
+      {1, 0, 2, 3},
+      {0, 1, 3, 2},
+      {1, 0, 3, 2},
+      {2, 3, 0, 1},
+      {3, 2, 0, 1},
+      {2, 3, 1, 0},
+      {3, 2, 1, 0},
+  }};
+  const auto accumulate = [&](const std::array<std::size_t, 4>& indices, double weight) {
+    if (weight == 0.0) return;
+    const double projected_weight = 0.125 * weight;
+    for (const auto& permutation : permutations) {
+      const auto first_orbital = indices[permutation[0]];
+      const auto tail = (indices[permutation[1]] * orbitals + indices[permutation[2]]) * orbitals +
+                        indices[permutation[3]];
+      for (std::size_t local_ao = 0; local_ao < first_count; ++local_ao)
+        first[local_ao * tail_elements + tail] +=
+            reference.coefficients[(first_offset + local_ao) * orbitals + first_orbital] *
+            projected_weight;
+    }
+  };
+  for (std::size_t left = 0; left < orbitals; ++left)
+    for (std::size_t right = 0; right < orbitals; ++right) {
+      const double weight = factors.fock[left * orbitals + right];
+      if (weight == 0.0) continue;
+      for (std::size_t orbital = 0; orbital < occupied; ++orbital) {
+        accumulate({left, right, orbital, orbital}, 2.0 * weight);
+        accumulate({left, orbital, orbital, right}, -weight);
+      }
+    }
+  for (std::size_t occupied_left = 0; occupied_left < occupied; ++occupied_left)
+    for (std::size_t occupied_right = 0; occupied_right < occupied; ++occupied_right)
+      for (std::size_t virtual_left = 0; virtual_left < virtuals; ++virtual_left)
+        for (std::size_t virtual_right = 0; virtual_right < virtuals; ++virtual_right) {
+          const auto index =
+              ((occupied_left * occupied + occupied_right) * virtuals + virtual_left) * virtuals +
+              virtual_right;
+          accumulate(
+              {occupied_left, occupied + virtual_left, occupied_right, occupied + virtual_right},
+              factors.correlation_iajb[index]);
+        }
+}
+
+/** Exact RHF two-electron cotangent, without a staged four-index MO pullback.
+ * P is the one-spin occupied projector in this same coefficient frame. The
+ * eightfold ERI projection is 2 P_uv P_wx - (P_uw P_vx + P_ux P_vw)/2.
+ * Its shell-orbit multiplicity is valid even for repeated shells/atoms. */
+void stationary_two_electron_derivative(const core::System& system,
+                                        const hf::PhysicalReference& reference,
+                                        const std::vector<std::size_t>& offsets,
+                                        const EriShellDerivativeAccumulate& eri_shell,
+                                        std::vector<double>& derivative) {
+  const auto orbitals = reference.nbf;
+  std::vector<double> projector(square(orbitals));
+  for (std::size_t row = 0; row < orbitals; ++row)
+    for (std::size_t column = 0; column <= row; ++column) {
+      double value = 0;
+      for (std::size_t occupied = 0; occupied < reference.nocc; ++occupied)
+        value += reference.coefficients[row * orbitals + occupied] *
+                 reference.coefficients[column * orbitals + occupied];
+      projector[row * orbitals + column] = projector[column * orbitals + row] = value;
+    }
+  const auto shell_count = system.shells.size();
+  for (std::size_t first = 0; first < shell_count; ++first)
+    for (std::size_t second = 0; second <= first; ++second)
+      for (std::size_t third = 0; third <= first; ++third)
+        for (std::size_t fourth = 0; fourth <= third; ++fourth) {
+          if (first == third && fourth > second) continue;
+          const auto orbit = (first == second ? 1 : 2) * (third == fourth ? 1 : 2) *
+                             (first == third && second == fourth ? 1 : 2);
+          const std::array<std::size_t, 4> shells{first, second, third, fourth};
+          std::size_t elements = 1;
+          for (const auto shell : shells)
+            elements = posthf::checked_mul(elements, offsets[shell + 1] - offsets[shell]);
+          std::vector<double> local(elements);
+          std::size_t element = 0;
+          for (auto first_ao = offsets[first]; first_ao < offsets[first + 1]; ++first_ao)
+            for (auto second_ao = offsets[second]; second_ao < offsets[second + 1]; ++second_ao)
+              for (auto third_ao = offsets[third]; third_ao < offsets[third + 1]; ++third_ao)
+                for (auto fourth_ao = offsets[fourth]; fourth_ao < offsets[fourth + 1];
+                     ++fourth_ao) {
+                  local[element++] = orbit * (2.0 * projector[first_ao * orbitals + second_ao] *
+                                                  projector[third_ao * orbitals + fourth_ao] -
+                                              0.5 * projector[first_ao * orbitals + third_ao] *
+                                                  projector[second_ao * orbitals + fourth_ao] -
+                                              0.5 * projector[first_ao * orbitals + fourth_ao] *
+                                                  projector[second_ao * orbitals + third_ao]);
+                }
+          eri_shell(shells, local, derivative);
+        }
+}
+
+struct ProjectedStaging {
+  std::vector<double> first, second, third, local;
+};
+
 void transform_remaining_shells(const core::System& system, const hf::PhysicalReference& reference,
                                 const std::vector<std::size_t>& offsets, std::size_t si,
                                 std::span<const double> first,
                                 const EriShellDerivativeAccumulate& eri_shell,
                                 std::vector<double>& derivative, bool canonical_shells,
-                                bool compact_first) {
+                                bool compact_first, ProjectedStaging* staging = nullptr) {
   const auto n = reference.nbf;
   const auto di = offsets[si + 1] - offsets[si];
   // Factorized weights have an occupied third MO slot. Preserve that exact
@@ -70,7 +194,9 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
   for (std::size_t sj = 0; sj < system.shells.size(); ++sj) {
     if (canonical_shells && sj > si) continue;
     const auto dj = offsets[sj + 1] - offsets[sj];
-    std::vector<double> second(
+    std::vector<double> fallback_second;
+    auto& second = staging ? staging->second : fallback_second;
+    second.assign(
         posthf::checked_mul(posthf::checked_mul(di, dj), posthf::checked_mul(second_rows, n)), 0.0);
     if (compact_first) {
       const auto occupied = reference.nocc, virtuals = n - occupied;
@@ -111,8 +237,10 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
     for (std::size_t sk = 0; sk < system.shells.size(); ++sk) {
       if (canonical_shells && sk > si) continue;
       const auto dk = offsets[sk + 1] - offsets[sk];
-      std::vector<double> third(
-          posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), n), 0.0);
+      std::vector<double> fallback_third;
+      auto& third = staging ? staging->third : fallback_third;
+      third.assign(posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), n),
+                   0.0);
       for (std::size_t iu = 0; iu < di; ++iu)
         for (std::size_t jv = 0; jv < dj; ++jv)
           for (std::size_t kw = 0; kw < dk; ++kw)
@@ -124,8 +252,10 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
       for (std::size_t sl = 0; sl < system.shells.size(); ++sl) {
         if (canonical_shells && (sl > sk || (si == sk && sl > sj))) continue;
         const auto dl = offsets[sl + 1] - offsets[sl];
-        std::vector<double> local(
-            posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), dl), 0.0);
+        std::vector<double> fallback_local;
+        auto& local = staging ? staging->local : fallback_local;
+        local.assign(posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), dl),
+                     0.0);
         for (std::size_t iu = 0; iu < di; ++iu)
           for (std::size_t jv = 0; jv < dj; ++jv)
             for (std::size_t kw = 0; kw < dk; ++kw)
@@ -199,75 +329,112 @@ std::vector<double> conventional_derivative_accumulate(
     };
   }
   const auto& shell_contract = trace.enabled() ? measured_shell : eri_shell;
-  for (std::size_t si = 0; si < system.shells.size(); ++si) {
-    const auto di = offsets[si + 1] - offsets[si];
-    const auto first_elements = posthf::checked_mul(di, posthf::checked_mul(n, square(n)));
-    const auto occupied = reference.nocc, virtuals = n - occupied;
-    const auto compact_elements =
-        factorized_two
-            ? posthf::checked_mul(
-                  di, posthf::checked_mul(occupied, posthf::checked_add(posthf::checked_mul(2, n),
-                                                                        square(virtuals))))
-            : first_elements;
-    // Never enlarge the admitted legacy staging footprint. The explicit staged
-    // route remains available to bounded consumers and independent validation.
-    const bool compact_first = factorized_two && first_layout == FactorizedFirstLayout::automatic &&
-                               compact_elements < first_elements;
-    std::vector<double> first(compact_first ? compact_elements : first_elements, 0.0);
-    if (dense_two) {
-      for (std::size_t iu = 0; iu < di; ++iu)
-        for (std::size_t q = 0; q < n; ++q)
-          for (std::size_t r = 0; r < n; ++r)
-            for (std::size_t s = 0; s < n; ++s)
-              for (std::size_t p = 0; p < n; ++p)
-                first[((iu * n + q) * n + r) * n + s] +=
-                    reference.coefficients[(offsets[si] + iu) * n + p] *
-                    symmetric_eri_weight(weights.two_electron, n, p, q, r, s);
-    } else {
-      const auto& factors = weights.two_electron_factors;
-      const auto exchange_offset = di * n * occupied;
-      const auto correlation_offset = 2 * exchange_offset;
-      auto g_index = [occupied, virtuals](std::size_t i, std::size_t j, std::size_t a,
-                                          std::size_t b) {
-        return ((i * occupied + j) * virtuals + a) * virtuals + b;
-      };
-      for (std::size_t iu = 0; iu < di; ++iu) {
-        const auto mu = offsets[si] + iu;
-        for (std::size_t p = 0; p < n; ++p) {
-          const double coefficient = reference.coefficients[mu * n + p];
-          if (coefficient == 0.0) continue;
-          for (std::size_t q = 0; q < n; ++q) {
-            const double weight = factors.fock[p * n + q];
-            if (weight == 0.0) continue;
-            for (std::size_t i = 0; i < occupied; ++i) {
-              const auto coulomb =
-                  compact_first ? (iu * n + q) * occupied + i : ((iu * n + q) * n + i) * n + i;
-              const auto exchange = !compact_first ? ((iu * n + i) * n + i) * n + q
-                                    : q == i       ? (iu * n + i) * occupied + i
-                                                   : exchange_offset + (iu * occupied + i) * n + q;
-              first[coulomb] += 2.0 * coefficient * weight;
-              first[exchange] -= coefficient * weight;
+  // Recognize only the exact stationary algebra, never a tolerance-based
+  // approximation to a small correlation contribution. The explicit staged
+  // layout remains an independent numerical/resource fallback for validation.
+  const bool stationary_two = factorized_two && first_layout == FactorizedFirstLayout::automatic &&
+                              stationary_two_electron_weights(weights.two_electron_factors);
+  ProjectedStaging projected;
+  bool projected_two = false;
+  if (factorized_two && !stationary_two && first_layout == FactorizedFirstLayout::automatic) {
+    std::size_t maximum_shell = 0;
+    for (std::size_t shell = 0; shell < system.shells.size(); ++shell)
+      maximum_shell = std::max(maximum_shell, offsets[shell + 1] - offsets[shell]);
+    // Reserve the already-admitted full staging bound before any quartet is
+    // submitted. A resource-only failure can then retain the compact ordered
+    // route without mixing canonical and ordered contributions to a gradient.
+    try {
+      projected.first.reserve(
+          posthf::checked_mul(maximum_shell, posthf::checked_mul(n, square(n))));
+      projected.second.reserve(posthf::checked_mul(square(maximum_shell), square(n)));
+      projected.third.reserve(
+          posthf::checked_mul(posthf::checked_mul(square(maximum_shell), maximum_shell), n));
+      projected.local.reserve(fourth(maximum_shell));
+      projected_two = true;
+    } catch (const std::bad_alloc&) {
+      projected = {};
+    } catch (const std::length_error&) {
+      projected = {};
+    }
+  }
+  if (stationary_two) {
+    stationary_two_electron_derivative(system, reference, offsets, shell_contract, derivative);
+  } else
+    for (std::size_t si = 0; si < system.shells.size(); ++si) {
+      const auto di = offsets[si + 1] - offsets[si];
+      const auto first_elements = posthf::checked_mul(di, posthf::checked_mul(n, square(n)));
+      const auto occupied = reference.nocc, virtuals = n - occupied;
+      const auto compact_elements =
+          factorized_two
+              ? posthf::checked_mul(
+                    di, posthf::checked_mul(occupied, posthf::checked_add(posthf::checked_mul(2, n),
+                                                                          square(virtuals))))
+              : first_elements;
+      // Never enlarge the admitted legacy staging footprint. The explicit staged
+      // route remains available to bounded consumers and independent validation.
+      const bool compact_first = factorized_two && !projected_two &&
+                                 first_layout != FactorizedFirstLayout::staged &&
+                                 compact_elements < first_elements;
+      std::vector<double> fallback_first;
+      auto& first = projected_two ? projected.first : fallback_first;
+      first.assign(compact_first ? compact_elements : first_elements, 0.0);
+      if (dense_two) {
+        for (std::size_t iu = 0; iu < di; ++iu)
+          for (std::size_t q = 0; q < n; ++q)
+            for (std::size_t r = 0; r < n; ++r)
+              for (std::size_t s = 0; s < n; ++s)
+                for (std::size_t p = 0; p < n; ++p)
+                  first[((iu * n + q) * n + r) * n + s] +=
+                      reference.coefficients[(offsets[si] + iu) * n + p] *
+                      symmetric_eri_weight(weights.two_electron, n, p, q, r, s);
+      } else if (projected_two) {
+        projected_factorized_first(reference, weights.two_electron_factors, offsets[si], di, first);
+      } else {
+        const auto& factors = weights.two_electron_factors;
+        const auto exchange_offset = di * n * occupied;
+        const auto correlation_offset = 2 * exchange_offset;
+        auto g_index = [occupied, virtuals](std::size_t i, std::size_t j, std::size_t a,
+                                            std::size_t b) {
+          return ((i * occupied + j) * virtuals + a) * virtuals + b;
+        };
+        for (std::size_t iu = 0; iu < di; ++iu) {
+          const auto mu = offsets[si] + iu;
+          for (std::size_t p = 0; p < n; ++p) {
+            const double coefficient = reference.coefficients[mu * n + p];
+            if (coefficient == 0.0) continue;
+            for (std::size_t q = 0; q < n; ++q) {
+              const double weight = factors.fock[p * n + q];
+              if (weight == 0.0) continue;
+              for (std::size_t i = 0; i < occupied; ++i) {
+                const auto coulomb =
+                    compact_first ? (iu * n + q) * occupied + i : ((iu * n + q) * n + i) * n + i;
+                const auto exchange = !compact_first ? ((iu * n + i) * n + i) * n + q
+                                      : q == i ? (iu * n + i) * occupied + i
+                                               : exchange_offset + (iu * occupied + i) * n + q;
+                first[coulomb] += 2.0 * coefficient * weight;
+                first[exchange] -= coefficient * weight;
+              }
             }
           }
-        }
-        for (std::size_t i = 0; i < occupied; ++i) {
-          const double coefficient = reference.coefficients[mu * n + i];
-          if (coefficient == 0.0) continue;
-          for (std::size_t j = 0; j < occupied; ++j)
-            for (std::size_t a = 0; a < virtuals; ++a)
-              for (std::size_t b = 0; b < virtuals; ++b) {
-                const auto correlation =
-                    compact_first
-                        ? correlation_offset + ((iu * virtuals + a) * occupied + j) * virtuals + b
-                        : ((iu * n + occupied + a) * n + j) * n + occupied + b;
-                first[correlation] += coefficient * factors.correlation_iajb[g_index(i, j, a, b)];
-              }
+          for (std::size_t i = 0; i < occupied; ++i) {
+            const double coefficient = reference.coefficients[mu * n + i];
+            if (coefficient == 0.0) continue;
+            for (std::size_t j = 0; j < occupied; ++j)
+              for (std::size_t a = 0; a < virtuals; ++a)
+                for (std::size_t b = 0; b < virtuals; ++b) {
+                  const auto correlation =
+                      compact_first
+                          ? correlation_offset + ((iu * virtuals + a) * occupied + j) * virtuals + b
+                          : ((iu * n + occupied + a) * n + j) * n + occupied + b;
+                  first[correlation] += coefficient * factors.correlation_iajb[g_index(i, j, a, b)];
+                }
+          }
         }
       }
+      transform_remaining_shells(system, reference, offsets, si, first, shell_contract, derivative,
+                                 dense_two || projected_two, compact_first,
+                                 projected_two ? &projected : nullptr);
     }
-    transform_remaining_shells(system, reference, offsets, si, first, shell_contract, derivative,
-                               dense_two, compact_first);
-  }
   const auto finalize_started = now();
   if (finalize) finalize(derivative);
   const auto finalize_ns =
@@ -283,7 +450,9 @@ std::vector<double> conventional_derivative_accumulate(
     // Disjoint intervals. The shell callback may contain nested GPU consumer
     // work; the remainder measures host pullback/scatter and bookkeeping.
     Scope::number("ao_functions", n);
-    Scope::number("canonical_shells", dense_two);
+    Scope::number("canonical_shells", dense_two || stationary_two || projected_two);
+    Scope::number("stationary_density_products", stationary_two);
+    Scope::number("projected_factorized_first", projected_two);
     Scope::number("rank_two_pullback_ns", ns(one_started - started));
     Scope::number("one_electron_ns", ns(two_started - one_started));
     Scope::number("two_electron_shell_calls", shell_calls);

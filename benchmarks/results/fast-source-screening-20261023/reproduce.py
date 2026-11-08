@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import lzma
 import math
 import statistics
 import sys
@@ -172,6 +171,10 @@ def reproduce(payload: dict) -> dict:
 
 
 if __name__ == "__main__":
-    with lzma.open(ROOT / "qualification.json.xz", "rt") as stream:
-        retained = json.load(stream)
+    repository = str(ROOT.parents[2])
+    if repository not in sys.path:
+        sys.path.insert(0, repository)
+    from benchmarks._source_census_evidence import read_json_bytes
+
+    retained = json.loads(read_json_bytes(ROOT / "qualification.json.xz"))
     print(json.dumps(reproduce(retained), indent=2, allow_nan=False))

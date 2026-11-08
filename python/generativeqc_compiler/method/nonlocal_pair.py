@@ -29,6 +29,14 @@ from generativeqc_compiler.tensor.ir import (
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import TensorSpec
 
+from .nonlocal_pair_ad import (
+    local_scale_primal_cpp,
+    local_scale_response_cpp,
+    row_feature_responses,
+    rvv10_pair_responses,
+    vv10_pair_responses,
+)
+
 NONLOCAL_PAIR_LOWERING_VERSION = "nonlocal-pair-ordered-native-fp64-v1"
 NONLOCAL_PAIR_RATIONAL_VERSION = "nonlocal-pair-vv10-bounded-energy-denominator-fp64-v1"
 NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION = (
@@ -113,12 +121,13 @@ def vv10_grid_pair_expression(
 def native_local_scale_cpp() -> str:
     """Emit the qualified CPU/CUDA local-scale policies from one compiler owner.
 
-    These spell the existing operation orders verbatim. CPU forms rho^4 and
+    The value policies keep their qualified operation orders. CPU forms rho^4 and
     sigma^2 explicitly; CUDA forms sigma/rho^2 before squaring and optionally
     emits rVV10 preconditioning separately. Runtime callers validate the raw
     scales before converting representation, preserving the prior failure domain.
     """
-    return r"""
+    return (
+        r"""
 struct LocalScaleValues {
   double omega{};
   double kappa{};
@@ -135,16 +144,11 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline LocalScaleValues local_scales_cpu(
   const double rho2 = rho * rho;
   const double rho4 = rho2 * rho2;
   const double sigma2 = sigma * sigma;
-  const double omega2 = c * sigma2 / rho4 + four_pi_over_three * rho;
   LocalScaleValues out{};
-  out.omega = ::sqrt(omega2);
-  out.kappa = b * 1.5 * pi * ::pow(rho / (9.0 * pi), 1.0 / 6.0);
+@CPU_PRIMAL@
   if constexpr (Features) {
     const double rho5 = rho4 * rho;
-    out.domega_drho =
-        (four_pi_over_three - 4.0 * c * sigma2 / rho5) / (2.0 * out.omega);
-    out.domega_dsigma = c * sigma / (out.omega * rho4);
-    out.dkappa_drho = out.kappa / (6.0 * rho);
+@CPU_RESPONSE@
   }
   return out;
 }
@@ -156,14 +160,9 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline LocalScaleValues local_scales_cuda(
   constexpr double four_pi_over_three = 4.0 * pi / 3.0;
   const double ratio = sigma / (rho * rho);
   LocalScaleValues out{};
-  out.omega = ::sqrt(c * ratio * ratio + four_pi_over_three * rho);
-  out.kappa = b * 1.5 * pi * ::pow(rho / (9.0 * pi), 1.0 / 6.0);
+@CUDA_PRIMAL@
   if constexpr (Features) {
-    out.domega_drho =
-        (four_pi_over_three - 4.0 * c * sigma * sigma / ::pow(rho, 5.0)) /
-        (2.0 * out.omega);
-    out.domega_dsigma = c * sigma / (out.omega * ::pow(rho, 4.0));
-    out.dkappa_drho = out.kappa / (6.0 * rho);
+@CUDA_RESPONSE@
   }
   return out;
 }
@@ -178,7 +177,11 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline void precondition_local_scales_cuda(
     kappa *= ::sqrt(kappa);
   }
 }
-"""
+""".replace("@CPU_RESPONSE@", local_scale_response_cpp(cuda=False))
+        .replace("@CUDA_RESPONSE@", local_scale_response_cpp(cuda=True))
+        .replace("@CPU_PRIMAL@", local_scale_primal_cpp(cuda=False))
+        .replace("@CUDA_PRIMAL@", local_scale_primal_cpp(cuda=True))
+    )
 
 
 def build_nonlocal_pair_program(
@@ -238,7 +241,7 @@ def build_nonlocal_pair_program(
     r2, wi, wj, ki, kj, row_inverse = (
         input_tensor(name, scalar) for name in PAIR_INPUT_ORDER
     )
-    one, minus_one, minus_three_halves = constant(1), constant(-1), constant("-3/2")
+    one, minus_three_halves = constant(1), constant("-3/2")
     outputs = {}
     if variant == RVV10:
         ai, aj = (wi, wj) if preconditioned else (divide(wi, ki), divide(wj, kj))
@@ -251,32 +254,25 @@ def build_nonlocal_pair_program(
         zsum = add(zi, zj)
         denominator = multiply(multiply(multiply(kappa_factor, zi), zj), zsum)
         phi = divide(minus_three_halves, denominator)
-        negative_phi = multiply(minus_one, phi)
         outputs["phi"] = phi
-        if features:
-            factor_z = add(divide(one, zi), divide(one, zsum))
-            omega_numerator = multiply(negative_phi, r2)
-            if preconditioned:
-                omega_factor = multiply(omega_numerator, row_inverse)
-                kappa_prefactor = multiply(phi, row_inverse)
-            else:
-                omega_factor = divide(omega_numerator, ki)
-                kappa_prefactor = divide(phi, ki)
-            outputs["dphi_domega"] = multiply(omega_factor, factor_z)
-            outputs["dphi_dkappa"] = multiply(
-                kappa_prefactor,
-                add(
-                    minus_three_halves,
-                    multiply(add(zi, one, coefficients=(1, -1)), factor_z),
-                ),
+        if features or geometry:
+            responses = rvv10_pair_responses(
+                zi,
+                zj,
+                ai,
+                aj,
+                r2,
+                ki,
+                row_inverse,
+                phi,
+                preconditioned=preconditioned,
             )
-        if geometry:
-            logarithmic = add(
-                add(divide(ai, zi), divide(aj, zj)), divide(add(ai, aj), zsum)
-            )
-            outputs["dphi_dr2"] = multiply(negative_phi, logarithmic)
+            names = ["dphi_domega", "dphi_dkappa"] if features else []
+            if geometry:
+                names += ["dphi_dr2"]
+            outputs.update((name, responses[name]) for name in names)
     else:
-        gi, gj, gsum, denominator = _vv10_pair_factors(r2, wi, wj, ki, kj)
+        gi, gj, _, denominator = _vv10_pair_factors(r2, wi, wj, ki, kj)
         # A unit numerator selects the compiler's FP64 reciprocal lowering.
         # The admitted domain keeps both reciprocal and product normal/finite;
         # the extra rounding is deliberate and independently qualified.
@@ -286,50 +282,25 @@ def build_nonlocal_pair_program(
             if reciprocal_energy
             else divide(minus_three_halves, denominator)
         )
-        negative_phi = multiply(minus_one, phi)
         outputs["phi"] = phi
-        if features:
-            if rational_derivatives:
-                # phi = -3/(2*D), so (2/3)*phi^2 = 3/(2*D^2).
-                # Reuse the ordered energy's denominator without another divide.
-                # The generated caller bounds all positive factors before this
-                # reassociation; the original closure owns extreme inputs.
-                denominator_partial = (
-                    multiply(negative_phi, energy_reciprocal)
-                    if shared_reciprocal_derivatives
-                    else multiply(constant("2/3"), multiply(negative_phi, negative_phi))
-                )
-                dphi_dgi = multiply(multiply(denominator_partial, gj), add(gi, gsum))
-            else:
-                dphi_dgi = multiply(
-                    negative_phi, add(divide(one, gi), divide(one, gsum))
-                )
-            outputs["dphi_domega"] = multiply(dphi_dgi, r2)
-            outputs["dphi_dkappa"] = dphi_dgi
-        if geometry or partner_features:
-            if rational_derivatives:
-                # Positive denominator factors avoid cancellation in each
-                # logarithmic partial. This shares dphi/dg_i with SCF features.
-                dphi_dgj = multiply(multiply(denominator_partial, gi), add(gj, gsum))
-                if partner_features:
-                    outputs["dphi_domega_j"] = multiply(dphi_dgj, r2)
-                    outputs["dphi_dkappa_j"] = dphi_dgj
-                if geometry:
-                    outputs["dphi_dr2"] = add(
-                        multiply(wi, dphi_dgi), multiply(wj, dphi_dgj)
-                    )
-            else:
-                if partner_features:
-                    dphi_dgj = multiply(
-                        negative_phi, add(divide(one, gj), divide(one, gsum))
-                    )
-                    outputs["dphi_domega_j"] = multiply(dphi_dgj, r2)
-                    outputs["dphi_dkappa_j"] = dphi_dgj
-                if geometry:
-                    logarithmic = add(
-                        add(divide(wi, gi), divide(wj, gj)), divide(add(wi, wj), gsum)
-                    )
-                    outputs["dphi_dr2"] = multiply(negative_phi, logarithmic)
+        if features or geometry:
+            responses = vv10_pair_responses(
+                gi,
+                gj,
+                wi,
+                wj,
+                r2,
+                phi,
+                energy_reciprocal,
+                rational=rational_derivatives,
+                shared_reciprocal=shared_reciprocal_derivatives,
+            )
+            names = ["dphi_domega", "dphi_dkappa"] if features else []
+            if partner_features:
+                names += ["dphi_domega_j", "dphi_dkappa_j"]
+            if geometry:
+                names += ["dphi_dr2"]
+            outputs.update((name, responses[name]) for name in names)
     return Program(
         outputs,
         provenance={
@@ -385,20 +356,9 @@ def build_nonlocal_row_feature_program() -> Program:
     its rounding policy is distinct from summing fully chained pair features.
     """
     scalar = TensorSpec((), role="input", differentiable=True)
-    phi, dw, dk, rho, wrho, wsigma, krho, beta, coefficient = (
-        input_tensor(name, scalar) for name in ROW_FEATURE_INPUT_ORDER
-    )
+    bindings = {name: input_tensor(name, scalar) for name in ROW_FEATURE_INPUT_ORDER}
     return Program(
-        {
-            "vrho": multiply(
-                coefficient,
-                add(
-                    add(beta, phi),
-                    multiply(rho, add(multiply(dw, wrho), multiply(dk, krho))),
-                ),
-            ),
-            "vsigma": multiply(multiply(coefficient, rho), multiply(dw, wsigma)),
-        },
+        row_feature_responses(bindings),
         provenance={
             "kind": "nonlocal-correlation-row-feature-contraction",
             "scientific_version": NONLOCAL_CORRELATION_VERSION,

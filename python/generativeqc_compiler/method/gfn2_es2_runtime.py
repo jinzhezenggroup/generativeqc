@@ -21,6 +21,8 @@ from generativeqc_compiler.tensor.ir import (
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import TensorSpec
 
+from .radial_kernel_ad import cached_radial_weight
+
 GFN2_ES2_RUNTIME_VERSION = "gfn2-es2-runtime-ir-v1"
 
 
@@ -122,22 +124,17 @@ def build_gfn2_es2_energy_update_program() -> Program:
 
 
 def build_gfn2_es2_cached_gradient_weight_program() -> Program:
-    """Optimized cached-Gamma lowering of the generated pair VJP."""
+    """Automatically factor the pair primal's response through cached Gamma."""
 
-    kernel = _input("kernel")
-    first_charge = _input("first_charge")
-    second_charge = _input("second_charge")
-    # Preserve the runtime's scaling order before multiplying large charges.
-    weight = multiply(first_charge, kernel)
-    weight = multiply(weight, second_charge)
-    weight = multiply(weight, kernel)
-    weight = multiply(weight, kernel)
+    primal = build_gfn2_es2_pair_primal()
+    weight = cached_radial_weight(primal, ("first_charge", "second_charge"))
     return Program(
         {"weight": weight},
         provenance={
             "kind": "gfn2-runtime-es2-cached-gradient-weight",
             "version": GFN2_ES2_RUNTIME_VERSION,
             "derived_from": build_gfn2_es2_pair_vjp().derivative_hash,
+            "generated_from_primal": primal.logical_hash,
         },
     )
 

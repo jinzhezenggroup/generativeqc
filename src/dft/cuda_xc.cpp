@@ -546,7 +546,7 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
   runtime::df_progress::Scope::number("max_active", ao_selection_work().max_active);
 }
 
-void CudaXcPlan::prepare_potential(std::size_t provider_budget, bool indexed_gemm) {
+void CudaXcPlan::prepare_potential(std::size_t provider_budget, std::uint64_t expected_replays) {
   check_device();
   if (evaluation_started_)
     throw std::logic_error("XC potential preparation after evaluation began");
@@ -555,8 +555,11 @@ void CudaXcPlan::prepare_potential(std::size_t provider_budget, bool indexed_gem
   if (potential_binding_ && potential_binding_->diagnostic().provider_allowance)
     throw std::logic_error("XC potential provider is already prepared");
   try {
-    potential_binding_ =
-        cuda_xc_detail::prepare_potential(layout_, stream_, provider_budget, indexed_gemm);
+    // Replay phases can lower arithmetic without mutating the physical layout.
+    // They cannot inherit the automatic strict-FP64 library qualification.
+    potential_binding_ = cuda_xc_detail::prepare_potential(
+        layout_, stream_, mixed_matrix_contractions_ || mixed_pbe_ao_ ? 0 : provider_budget,
+        expected_replays);
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     throw std::bad_alloc();
   } catch (const generativeqc_tensor::DeviceRuntimeError& error) {
@@ -587,8 +590,27 @@ void CudaXcPlan::prepare_mixed_matrix_contractions() {
   mixed_matrix_contractions_ = true;
 }
 
+bool CudaXcPlan::density_provider_retirement_pending() const noexcept {
+  return density_provider_ && !density_provider_->enabled() &&
+         (density_provider_->diagnostic().matrix_bytes ||
+          density_provider_->diagnostic().provider_allowance);
+}
+
+void CudaXcPlan::retire_density_provider() {
+  try {
+    if (density_provider_) density_provider_->release();
+  } catch (const generativeqc_tensor::DeviceAllocationError&) {
+    throw std::bad_alloc();
+  } catch (const generativeqc_tensor::DeviceRuntimeError& error) {
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, error.what());
+  }
+  provider_density_binding_.reset();
+  density_provider_.reset();
+}
+
 void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admitted,
-                                 std::uint64_t expected_replays, std::size_t provider_budget) {
+                                 std::uint64_t expected_replays, std::size_t provider_budget,
+                                 std::size_t automatic_provider_budget) {
   check_device();
   if (evaluation_started_)
     throw std::invalid_argument("density binding is immutable after first evaluation");
@@ -596,6 +618,8 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   check(cudaStreamIsCapturing(stream_, &capture));
   if (capture != cudaStreamCaptureStatusNone)
     throw std::invalid_argument("density preparation cannot capture");
+  if (!admitted.is_strict_fp64() || mixed_matrix_contractions_ || mixed_pbe_ao_)
+    automatic_provider_budget = 0;
   if (!admitted.is_strict_fp64() &&
       !cuda_xc_execution_capabilities(layout_).mixed_density_contraction)
     throw std::invalid_argument("mixed density contraction is not qualified for this domain");
@@ -607,7 +631,8 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
         "mixed CUDA XC density precision is not qualified for this point program");
   // Replacing a live optional owner would transiently charge two provider
   // reservations. A zero-budget replacement can release it transactionally.
-  if (provider_budget && density_provider_ && density_provider_->enabled())
+  if ((provider_budget || automatic_provider_budget) && density_provider_ &&
+      density_provider_->enabled())
     throw std::logic_error("XC density provider is already prepared");
   // Prepare into temporaries so malformed admission/allocation cannot expose
   // a partially changed table. Only the final grid tile has a distinct shape.
@@ -627,9 +652,16 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   // remain available for mixed arithmetic, signed response and empty maps.
   // An empty indexed domain needs no materialized matrix or provider handle.
   const bool nonempty = !layout_.local_ao || ao_offsets_.back() != 0;
-  auto provider = provider_budget && nonempty
-                      ? cuda_xc_detail::prepare_density_provider(layout_, stream_, provider_budget)
-                      : nullptr;
+  std::unique_ptr<tensor::PreparedPanelProduct> provider;
+  try {
+    if ((provider_budget || automatic_provider_budget) && nonempty)
+      provider = cuda_xc_detail::prepare_density_provider(
+          layout_, stream_, provider_budget, automatic_provider_budget, expected_replays);
+  } catch (const generativeqc_tensor::DeviceAllocationError&) {
+    throw std::bad_alloc();
+  } catch (const generativeqc_tensor::DeviceRuntimeError& error) {
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, error.what());
+  }
   std::unique_ptr<CudaXcDensityBinding> provider_binding;
   if (provider && provider->enabled()) {
     provider_binding = std::make_unique<CudaXcDensityBinding>(strict[0]);
@@ -1003,9 +1035,14 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
   const auto count = size_mul(layout_.spins, matrix, "CUDA XC density size overflow");
   if (elements != count) throw std::invalid_argument("CUDA XC density size is invalid");
   density_binding(phase);  // Validate before any submission.
+  const bool occupied_layout =
+      (layout_.feature_terms == 1 && layout_.jets == 1 && layout_.work_jets == 1) ||
+      (layout_.feature_terms == 4 && layout_.jets == 4 && layout_.work_jets == 1) ||
+      (layout_.feature_terms == 5 && layout_.jets == 4 && layout_.work_jets == 4);
   if ((occupied.provisional && phase != PrecisionPhase::Admitted) || !publish_generation ||
-      layout_.response || layout_.jets != 4 || layout_.work_jets != 4 ||
-      layout_.feature_terms != 5 || layout_.ao_precision != CudaXcAoPrecision::Fp64 ||
+      layout_.response || !occupied_layout ||
+      (!occupied.provisional && layout_.feature_terms != 5) ||
+      layout_.ao_precision != CudaXcAoPrecision::Fp64 ||
       !density_binding(phase).precision.arithmetic.is_strict_fp64() ||
       !occupied.matches(density, layout_.nao, layout_.spins, generation))
     occupied = {};

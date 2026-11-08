@@ -152,10 +152,6 @@ GENERATIVEQC_D4_HD inline void add_pair_gradient(int i, int j, const double* v, 
     grad[3 * j + a] -= scale * v[a];
   }
 }
-GENERATIVEQC_D4_HD inline double atm_radial(double x, double y, double z, double r5, double damp,
-                                            double angle, double ddamp, double c9) {
-  return math::atm_radial(x, y, z, r5, damp, angle, ddamp, c9);
-}
 }  // namespace d4_detail
 
 // Shared cached-geometry D4 primitives for SCC/runtime consumers that already
@@ -299,24 +295,15 @@ GENERATIVEQC_D4_HD inline D4Status evaluate_d4_fixed_charge_impl(
           const auto cik = coefficient(i, k, z, t, w, wc, wq);
           const auto cjk = coefficient(j, k, z, t, w, wc, wq);
           if (!(cij.c6 > 0.0 && cik.c6 > 0.0 && cjk.c6 > 0.0)) return D4Status::numerical_failure;
-          const auto atm = math::atm_terms(a, b, c, radius(i, j, z, t, p), radius(i, k, z, t, p),
-                                           radius(j, k, z, t, p), cij.c6, cik.c6, cjk.c6, p.s9);
-          e3 -= atm.energy;
-          add_pair_gradient(i, j, vij,
-                            atm_radial(a, c, b, atm.r5_product, atm.damping, atm.angle,
-                                       atm.damping_derivative, atm.c9),
-                            g);
-          add_pair_gradient(i, k, vik,
-                            atm_radial(b, c, a, atm.r5_product, atm.damping, atm.angle,
-                                       atm.damping_derivative, atm.c9),
-                            g);
-          add_pair_gradient(j, k, vjk,
-                            atm_radial(c, b, a, atm.r5_product, atm.damping, atm.angle,
-                                       atm.damping_derivative, atm.c9),
-                            g);
-          adj[i] += math::atm_cn_adjoint(atm.energy, cij.c6, cik.c6, cij.ci, cik.ci);
-          adj[j] += math::atm_cn_adjoint(atm.energy, cij.c6, cjk.c6, cij.cj, cjk.ci);
-          adj[k] += math::atm_cn_adjoint(atm.energy, cik.c6, cjk.c6, cik.cj, cjk.cj);
+          const auto atm = math::atm_response(a, b, c, radius(i, j, z, t, p), radius(i, k, z, t, p),
+                                              radius(j, k, z, t, p), cij.c6, cik.c6, cjk.c6, p.s9);
+          e3 += atm.energy;
+          add_pair_gradient(i, j, vij, atm.radial[0], g);
+          add_pair_gradient(i, k, vik, atm.radial[1], g);
+          add_pair_gradient(j, k, vjk, atm.radial[2], g);
+          adj[i] += atm.coefficient[0] * cij.ci + atm.coefficient[1] * cik.ci;
+          adj[j] += atm.coefficient[0] * cij.cj + atm.coefficient[2] * cjk.ci;
+          adj[k] += atm.coefficient[1] * cik.cj + atm.coefficient[2] * cjk.cj;
         }
       }
   }
@@ -327,7 +314,9 @@ GENERATIVEQC_D4_HD inline D4Status evaluate_d4_fixed_charge_impl(
       if (r > p.cn_cutoff) continue;
       double cv, dc;
       cn_pair(i, j, z, t, r, cv, dc);
-      add_pair_gradient(i, j, v, dc * (adj[i] + adj[j]) / r, g);
+      double projected[1];
+      ::generativeqc::generated::dispersion::radial_scatter(r, dc * (adj[i] + adj[j]), projected);
+      add_pair_gradient(i, j, v, projected[0], g);
     }
   if (!finite(e2) || !finite(e3)) return D4Status::numerical_failure;
   for (int i = 0; i < 3 * n; ++i)

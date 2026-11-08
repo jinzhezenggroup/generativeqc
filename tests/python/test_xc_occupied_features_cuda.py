@@ -99,6 +99,7 @@ def occupied_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         + [ct.c_void_p] * 4
         + [ct.c_size_t] * 4
         + [ct.c_void_p] * 2
+        + [ct.c_size_t, ct.c_bool]
     )
     native.compact_probe.restype = ct.c_int
     native.compact_proposal_probe.argtypes = native.compact_probe.argtypes
@@ -362,6 +363,8 @@ def test_compact_gpu_batches_preserve_original_features_and_scratch_owners(
         occupations[1] if spins == 2 else 0,
         features.ctypes.data,
         work.ctypes.data,
+        5,
+        True,
     )
     assert status == (1 if scale == 1e165 else 0)
     if scale == 1e165:
@@ -373,6 +376,97 @@ def test_compact_gpu_batches_preserve_original_features_and_scratch_owners(
             features.view(np.uint64), expected.view(np.uint64)
         )
     np.testing.assert_array_equal(work[protected_work], -123.0)
+
+
+@pytest.mark.parametrize("terms", (1, 4, 5))
+@pytest.mark.parametrize("occupations", ((3,), (3, 2), (0, 7)))
+@pytest.mark.parametrize("compact", (False, True))
+@pytest.mark.parametrize("poison_density", (False, True))
+def test_all_feature_families_share_bounded_projection_and_fallback(
+    occupied_probe: ct.CDLL,
+    terms: int,
+    occupations: tuple[int, ...],
+    compact: bool,
+    poison_density: bool,
+) -> None:
+    """Check LDA/GGA/meta-GGA, spin padding, maps, mixed ranks and scratch guards.
+
+    An admitted ordinary point must not read D; poisoned matrices make that an
+    executed contract, rather than a source/call-count assertion. A separate
+    cohort retains real D for the capacity fallbacks in the same compact group.
+    """
+    rng = np.random.default_rng(20261105)
+    nao, spins = 48, len(occupations)
+    jets, work_jets = (1 if terms == 1 else 4), (4 if terms == 5 else 1)
+    frames = np.stack(
+        [np.linalg.qr(rng.normal(size=(nao, nao)))[0] for _ in occupations]
+    )
+    coefficients = np.ascontiguousarray(frames.transpose(0, 2, 1))
+    density = np.stack(
+        [
+            (2.0 if spins == 1 else 1.0) * frame[:, :count] @ frame[:, :count].T
+            for frame, count in zip(frames, occupations, strict=True)
+        ]
+    )
+    ao_parts, maps, descriptors, expected_parts = [], [], [], []
+    ao_size, work_size, map_size, begin = 7, 11, 5, 11
+    for active, points in ((33, 3),) if poison_density else ((33, 3), (17, 7), (5, 2)):
+        selected = np.sort(rng.choice(nao, active, replace=False)).astype(np.uintp)
+        panel = np.ascontiguousarray(rng.normal(size=(jets, points, active)) * 0.1)
+        expected = np.zeros((spins, terms, points))
+        for spin in range(spins):
+            products = panel @ density[spin][np.ix_(selected, selected)]
+            expected[spin, 0] = np.sum(panel[0] * products[0], axis=-1)
+            if terms >= 4:
+                expected[spin, 1:4] = 2.0 * np.sum(panel[1:] * products[0], axis=-1)
+            if terms == 5:
+                expected[spin, 4] = 0.5 * np.sum(panel[1:] * products[1:], axis=(0, 2))
+        descriptors.append(
+            CompactTile(begin, points, active, map_size, ao_size, work_size, 0)
+        )
+        ao_parts.append((ao_size, panel.ravel()))
+        maps.append((map_size, selected))
+        expected_parts.append(expected.ravel())
+        ao_size += panel.size + 7
+        map_size += active + 5
+        work_size += spins * work_jets * points * active + 11
+        begin += points
+    tiles = (CompactTile * len(descriptors))(*descriptors)
+    ao = np.zeros(ao_size - 7)
+    indices = np.zeros(map_size - 5, dtype=np.uintp)
+    for offset, values in ao_parts:
+        ao[offset : offset + len(values)] = values
+    for offset, values in maps:
+        indices[offset : offset + len(values)] = values
+    expected = np.concatenate((*expected_parts, np.full(7, -456.0)))
+    features, scratch = np.empty_like(expected), np.empty(work_size)
+    protected = np.ones(work_size, dtype=bool)
+    for tile in tiles:
+        protected[
+            tile.work_offset : tile.work_offset
+            + spins * work_jets * tile.count * tile.active
+        ] = False
+    if poison_density:
+        density[:] = np.nan
+    status = occupied_probe.compact_proposal_probe(
+        tiles,
+        len(tiles),
+        density.ctypes.data,
+        coefficients.ctypes.data,
+        ao.ctypes.data,
+        indices.ctypes.data,
+        nao,
+        spins,
+        occupations[0],
+        occupations[1] if spins == 2 else 0,
+        features.ctypes.data,
+        scratch.ctypes.data,
+        terms,
+        compact,
+    )
+    assert status == 0
+    np.testing.assert_allclose(features, expected, rtol=5e-13, atol=5e-14)
+    np.testing.assert_array_equal(scratch[protected], -123.0)
 
 
 @pytest.mark.parametrize("active", [17, 32, 41])
@@ -635,17 +729,19 @@ extern "C" int form_density(const double* coefficients, const std::int32_t* occu
 }
 extern "C" int compact_probe(const CudaXcCompactTile* tiles, size_t tile_count,
     const double* density, const double* coefficients, const double* ao, const size_t* ids,
-    size_t nao, size_t spins, size_t alpha, size_t beta, double* output, double* scratch) {
+    size_t nao, size_t spins, size_t alpha, size_t beta, double* output, double* scratch,
+    size_t terms, bool compact) {
   try {
     using generativeqc_tensor::cuda_check;
     size_t ao_count=0, work_count=0, map_count=0, feature_count=0, max_active=0, max_points=0;
+    const size_t jets=terms==1?1:4, work_jets=terms==5?4:1;
     const size_t begin=tiles[0].begin;
     for (size_t index=0; index<tile_count; ++index) {
       const auto& tile=tiles[index];
-      ao_count=std::max(ao_count,tile.ao_offset+4*tile.count*tile.active);
-      work_count=std::max(work_count,tile.work_offset+spins*4*tile.count*tile.active);
+      ao_count=std::max(ao_count,tile.ao_offset+jets*tile.count*tile.active);
+      work_count=std::max(work_count,tile.work_offset+spins*work_jets*tile.count*tile.active);
       map_count=std::max(map_count,tile.map_offset+tile.active);
-      feature_count=std::max(feature_count,(tile.begin+tile.count-begin)*spins*5);
+      feature_count=std::max(feature_count,(tile.begin+tile.count-begin)*spins*terms);
       max_active=std::max(max_active,tile.active);
       max_points=std::max(max_points,tile.count);
     }
@@ -674,13 +770,25 @@ extern "C" int compact_probe(const CudaXcCompactTile* tiles, size_t tile_count,
     cuda_check(cudaMemcpyAsync(features.value,feature_initial.data(),feature_count*sizeof(double),
                                cudaMemcpyHostToDevice,stream.value));
     CudaXcOccupiedDensity witness{matrix.value,frame.value,nao,spins,{alpha,beta},1};
-    batch_density_products<double,true><<<dim3((max_active+15)/16,(max_points+15)/16,
-        tile_count*spins*4),dim3(16,16),0,stream.value>>>(metadata.value,matrix.value,
-            orbitals.value,work.value,nao,spins,4,map.value,error.value,witness);
-    cuda_check(cudaGetLastError());
-    batch_density_features<true><<<dim3((spins*max_points*32+127)/128,tile_count),
-        128,0,stream.value>>>(metadata.value,orbitals.value,work.value,features.value,
-            begin,spins,4,4,5,2,map.value,error.value,witness);
+    if (compact) {
+      batch_density_products<double,true><<<dim3((max_active+15)/16,(max_points+15)/16,
+          tile_count*spins*work_jets),dim3(16,16),0,stream.value>>>(metadata.value,matrix.value,
+              orbitals.value,work.value,nao,spins,work_jets,map.value,error.value,witness,jets);
+      cuda_check(cudaGetLastError());
+      batch_density_features<true><<<dim3((spins*max_points*32+127)/128,tile_count),
+          128,0,stream.value>>>(metadata.value,orbitals.value,work.value,features.value,
+              begin,spins,jets,work_jets,terms,2,map.value,error.value,witness);
+    } else {
+      for (size_t index=0; index<tile_count; ++index) {
+        const auto& tile=tiles[index];
+        // The standalone launcher owns a same-point stored-D fallback even
+        // when its projection cannot fit. No original product panel is needed.
+        launch_occupied_density(stream.value,witness,orbitals.value+tile.ao_offset,
+            tile.active,tile.count,work.value+tile.work_offset,
+            features.value+(tile.begin-begin)*spins*terms,terms,error.value,
+            tile.active<nao?map.value+tile.map_offset:nullptr);
+      }
+    }
     cuda_check(cudaGetLastError());
     int failure=0;
     cuda_check(cudaMemcpyAsync(output,features.value,feature_count*sizeof(double),

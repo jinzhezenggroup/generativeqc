@@ -6,11 +6,14 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include "scf/cuda/df_scf_kernels.hpp"
 #include "scf/cuda/direct_density_bounds.hpp"
+#include "scf/cuda/scf_constants.hpp"
 #include "scf/cuda/scf_convergence_kernels.hpp"
+#include "scf/cuda/scf_diis_kernels.hpp"
 #include "scf/cuda/scf_incremental_policy.cuh"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 
@@ -136,8 +139,12 @@ void check_convergence(unsigned spins, bool retain, bool require_physical, bool 
       converged(std::vector<std::uint8_t>(batch, 0));
   Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 1));
   Device<std::uint32_t> census(std::vector<std::uint32_t>{0, 0, 1, 1, 0, 0});
-  const auto launch =
-      spins == 1 ? launch_update_convergence_kernel : launch_update_uhf_convergence_kernel;
+  const auto launch = [spins](auto... arguments) {
+    if (spins == 1)
+      launch_update_convergence_kernel(arguments...);
+    else
+      launch_update_uhf_convergence_kernel(arguments...);
+  };
   launch(retain, batch, 32, 0, nullptr, batch, n, energy_tolerance, tolerance, false, energy.data,
          previous.data, next.data, density.data, active.data, converged.data, iterations.data,
          change.data, rms.data, require_physical ? d_residual.data : nullptr,
@@ -229,9 +236,12 @@ void check_direct_df_acceptance(unsigned spins) {
     Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 0));
     if (!fitted) {
       Device<double> current(density), proposal(next);
-      const auto launch =
-          spins == 1 ? generativeqc::scf::cuda_execution::launch_update_convergence_kernel
-                     : generativeqc::scf::cuda_execution::launch_update_uhf_convergence_kernel;
+      const auto launch = [spins](auto... arguments) {
+        if (spins == 1)
+          generativeqc::scf::cuda_execution::launch_update_convergence_kernel(arguments...);
+        else
+          generativeqc::scf::cuda_execution::launch_update_uhf_convergence_kernel(arguments...);
+      };
       launch(false, batch, 32, 0, nullptr, batch, n, 1e-12, 1e-10, true, d_energy.data,
              previous.data, proposal.data, current.data, active.data, converged.data,
              iterations.data, change.data, rms.data, d_residual.data, nullptr, false, nullptr,
@@ -277,39 +287,50 @@ void check_direct_df_acceptance(unsigned spins) {
  * A manufactured stationary tail must retire deltas, reject a reconstructed
  * baseline, and require consecutive full evaluations. Neighbors retain their
  * own warm/coarse/invalid/inactive state, for both spin and density lifetimes. */
-void check_incremental_energy_refinement(unsigned spins, bool retain) {
+void check_incremental_energy_refinement(unsigned spins, bool retain, bool standard,
+                                         unsigned reduction_threads = 32) {
   using namespace generativeqc::scf::cuda_execution;
-  constexpr unsigned batch = 8, basis_size = 16;
-  constexpr double tolerance = 1e-9;
+  constexpr unsigned batch = 10, basis_size = 16;
+  const double tolerance = standard ? 1e-5 : 1e-9;
+  const double energy_tolerance = standard ? 1e-9 : 1e-12;
+  const double physical_tolerance = standard && spins == 1 ? 1e-5 : std::min(1e-8, tolerance);
   const std::size_t matrix_size = basis_size * basis_size;
   const std::size_t vector_size = spins * matrix_size;
   const std::size_t total = batch * vector_size;
   const unsigned blocks = static_cast<unsigned>((total + 127) / 128);
   const double nan = std::numeric_limits<double>::quiet_NaN();
   std::vector<double> energies(batch, -1200.0), baselines(batch, -1200.0);
-  baselines[0] += 1e-8;
+  baselines[0] += 1e-6;
+  baselines[8] += 1e-6;
   energies[6] = nan;
   std::vector<double> residual(total, 0.0), proposal(total, 0.25 + 1e-12);
-  residual[4 * vector_size - 1] = 2 * tolerance;
+  residual[2 * vector_size - 1] = physical_tolerance / 2;
+  residual[4 * vector_size - 1] = 20 * physical_tolerance;
   residual[5 * vector_size - 1] = nan;
-  proposal.back() += 1e-6;
+  residual[9 * vector_size - 1] = physical_tolerance / 2;
+  residual[10 * vector_size - 1] = physical_tolerance / 2;
+  proposal[8 * vector_size - 1] += 20 * tolerance * std::sqrt(static_cast<double>(vector_size));
   Device<double> energy(energies), previous(baselines), physical(residual), next(proposal),
       density(std::vector<double>(total, 0.25)), change(std::vector<double>(batch, nan)),
       rms(std::vector<double>(batch, nan));
-  Device<std::uint8_t> active(std::vector<std::uint8_t>{1, 1, 1, 1, 0, 1, 1, 1}),
+  Device<std::uint8_t> active(std::vector<std::uint8_t>{1, 1, 1, 1, 0, 1, 1, 1, 1, 1}),
       converged(std::vector<std::uint8_t>(batch, 0)), full(std::vector<std::uint8_t>(batch, 0));
   Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 0)),
-      updates(std::vector<std::uint32_t>{2, 2, 0, 2, 2, 2, 2, 2}),
-      census(std::vector<std::uint32_t>{0, 0, 0, 0, 0, 1, 0, 0});
+      updates(std::vector<std::uint32_t>{2, 2, 0, 2, 2, 2, 2, 2, 0, 0}),
+      census(std::vector<std::uint32_t>{0, 0, 0, 0, 0, 1, 0, 0, 0, 0});
   Device<unsigned long long> full_count(std::vector<unsigned long long>(batch, 0)),
-      delta_count(std::vector<unsigned long long>{2, 2, 0, 2, 2, 2, 2, 2});
-  const auto launch =
-      spins == 1 ? launch_update_convergence_kernel : launch_update_uhf_convergence_kernel;
+      delta_count(std::vector<unsigned long long>{2, 2, 0, 2, 2, 2, 2, 2, 0, 2});
+  const auto launch = [spins](auto... arguments) {
+    if (spins == 1)
+      launch_update_convergence_kernel(arguments...);
+    else
+      launch_update_uhf_convergence_kernel(arguments...);
+  };
   const auto converge = [&] {
-    launch(retain, batch, 32, 0, nullptr, batch, basis_size, 1e-12, tolerance, true, energy.data,
-           previous.data, next.data, density.data, active.data, converged.data, iterations.data,
-           change.data, rms.data, physical.data, census.data, false, updates.data,
-           delta_count.data);
+    launch(retain, batch, reduction_threads, 0, nullptr, batch, basis_size, energy_tolerance,
+           tolerance, true, energy.data, previous.data, next.data, density.data, active.data,
+           converged.data, iterations.data, change.data, rms.data, physical.data, census.data,
+           standard, updates.data, delta_count.data);
     check(cudaGetLastError());
   };
   converge();
@@ -321,10 +342,14 @@ void check_incremental_energy_refinement(unsigned spins, bool retain) {
       !std::isinf(baseline_after[0]) || !std::isinf(baseline_after[1]) ||
       !(change.read()[0] > 1e-9))
     throw std::runtime_error("stationary delta tail retained a reconstructed energy baseline");
-  if (flags[2] != 1 || states[2] != 0 || states[3] != 2 || states[4] != 2 || states[5] != 2 ||
-      states[6] != 2 || states[7] != 2 || flags[3] || flags[4] || flags[6] || flags[7] ||
-      iterations.read()[4] != 0)
+  if (flags[2] != 1 || states[2] != kIncrementalDirectJkFullEnergyRefinement || states[3] != 2 ||
+      states[4] != 2 || states[5] != 2 || states[6] != 2 || states[7] != 2 || flags[3] ||
+      flags[4] || flags[6] || flags[7] || iterations.read()[4] != 0)
     throw std::runtime_error("full-energy fallback contaminated a neighboring item");
+  if (states[8] != kIncrementalDirectJkFullEnergyRefinement ||
+      states[9] != kIncrementalDirectJkFullEnergyRefinement || flags[8] || flags[9] ||
+      baseline_after[8] != energies[8] || baseline_after[9] != energies[9])
+    throw std::runtime_error("stationary full evaluation lost its usable energy baseline");
 
   const double full_provider_value = std::nextafter(1.0, 0.0);
   Device<double> hcore(std::vector<double>(batch * matrix_size, 0.5)),
@@ -364,20 +389,307 @@ void check_incremental_energy_refinement(unsigned spins, bool retain) {
     const bool expected_convergence = full_iteration == 2;
     if (flags[0] != expected_convergence || flags[1] != expected_convergence)
       throw std::runtime_error("fallback did not require two consecutive full Focks");
+    if (!flags[8] || !flags[9] || delta_count.read()[8] != 0 || delta_count.read()[9] != 2 ||
+        full_count.read()[8] != 1 || full_count.read()[9] != 1)
+      throw std::runtime_error("stationary full-energy tail introduced unnecessary delta work");
+  }
+}
+
+/** Near-stationary deltas retire before acceptance. Neither a full baseline nor
+ * full-only mode may turn the phase-selection margin into a stopping margin. */
+void check_incremental_approach(unsigned spins, bool standard, bool density_limited,
+                                unsigned reduction_threads = 32) {
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr unsigned batch = 3, basis_size = 8;
+  const double tolerance = standard ? 1e-5 : 1e-9;
+  const double energy_tolerance = standard ? 1e-9 : 1e-12;
+  const double physical_tolerance = standard && spins == 1 ? 1e-5 : std::min(1e-8, tolerance);
+  const std::size_t vector_size = spins * basis_size * basis_size;
+  std::vector<double> residual(batch * vector_size, 0.0);
+  std::vector<double> proposal(batch * vector_size, 0.25);
+  for (unsigned item = 0; item < batch; ++item) {
+    if (density_limited)
+      proposal[item * vector_size] += 5 * tolerance * std::sqrt(static_cast<double>(vector_size));
+    else
+      residual[item * vector_size] = 5 * physical_tolerance;
+  }
+  Device<double> energy(std::vector<double>(batch, -1200.0)),
+      previous(std::vector<double>(batch, -1200.0)), physical(residual), next(proposal),
+      density(std::vector<double>(batch * vector_size, 0.25)),
+      change(std::vector<double>(batch, 0.0)), rms(std::vector<double>(batch, 0.0));
+  Device<std::uint8_t> active(std::vector<std::uint8_t>(batch, 1)),
+      converged(std::vector<std::uint8_t>(batch, 0));
+  Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 0)),
+      updates(std::vector<std::uint32_t>{2, 0, 0});
+  Device<unsigned long long> delta_count(std::vector<unsigned long long>{2, 2, 0});
+  const auto launch = [spins](auto... arguments) {
+    if (spins == 1)
+      launch_update_convergence_kernel(arguments...);
+    else
+      launch_update_uhf_convergence_kernel(arguments...);
+  };
+  for (unsigned evaluation = 0; evaluation < 3; ++evaluation) {
+    const std::vector<double> unchanged_density(batch * vector_size, 0.25);
+    check(cudaMemcpy(density.data, unchanged_density.data(),
+                     unchanged_density.size() * sizeof(double), cudaMemcpyHostToDevice));
+    launch(false, batch, reduction_threads, 0, nullptr, batch, basis_size, energy_tolerance,
+           tolerance, true, energy.data, previous.data, next.data, density.data, active.data,
+           converged.data, iterations.data, change.data, rms.data, physical.data, nullptr, standard,
+           updates.data, delta_count.data);
+    check(cudaGetLastError());
+    if (updates.read() !=
+            std::vector<std::uint32_t>(batch, kIncrementalDirectJkFullEnergyRefinement) ||
+        converged.read() != std::vector<std::uint8_t>(batch, 0))
+      throw std::runtime_error("early full-only selection relaxed the physical acceptance gates");
+    if (evaluation == 0 && (!std::isinf(previous.read()[0]) || previous.read()[1] != -1200.0 ||
+                            previous.read()[2] != -1200.0))
+      throw std::runtime_error("early refinement confused full and delta energy baselines");
+  }
+}
+/** Independent scalar RMS/retention oracle for the actual 32/256 launchers.
+ * Residual peaks sit in the matrix tail, including other warps and nonfinite
+ * entries. The exact density boundary is dyadic; other deltas include signed
+ * cancellation and a serial long-double sum independent of the device tree. */
+void check_rhf_matrix_walk(unsigned n, unsigned reduction_threads, bool retain, bool graph,
+                           unsigned residual_route = 0) {
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr unsigned batch = 7;
+  const auto matrix = static_cast<std::size_t>(n) * n;
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double infinity = std::numeric_limits<double>::infinity();
+  const double tolerance = std::ldexp(1.0, -24), physical_bound = 1e-8;
+  std::vector<double> old(batch * matrix), proposal(batch * matrix), residual(batch * matrix, 0.0);
+  std::vector<long double> square(batch, 0.0L);
+  for (unsigned item = 0; item < batch; ++item) {
+    for (std::size_t k = 0; k < matrix; ++k) {
+      const auto index = item * matrix + k;
+      old[index] = item == 1 ? 0.0 : (k % 2 ? -0.25 : 0.25);
+      proposal[index] = old[index] + (static_cast<int>(k % 13) - 6) * 1e-12;
+      if (item == 1) proposal[index] = tolerance;
+      if (item == batch - 1) {
+        old[index] = nan;
+        proposal[index] = 97.0;
+      }
+      const double delta = proposal[index] - old[index];
+      square[item] += static_cast<long double>(delta) * delta;
+    }
+  }
+  residual[3 * matrix - 1] = physical_bound;
+  residual[4 * matrix - 1] = std::nextafter(physical_bound, infinity);
+  residual[5 * matrix - 1] = nan;
+  residual[6 * matrix - 1] = infinity;
+  residual[7 * matrix - 1] = nan;
+  Device<double> density(old), next(proposal), physical(residual),
+      energy(std::vector<double>(batch, -1.0)), previous(std::vector<double>(batch, -1.0)),
+      change(std::vector<double>(batch, -7.0)), rms(std::vector<double>(batch, -8.0));
+  Device<std::uint8_t> active(std::vector<std::uint8_t>{1, 1, 1, 1, 1, 1, 0}),
+      converged(std::vector<std::uint8_t>{0, 0, 0, 0, 0, 0, 9});
+  Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 3)),
+      census(std::vector<std::uint32_t>(batch, 1));
+  const auto launch = [&](cudaStream_t stream) {
+    launch_update_convergence_kernel(
+        retain, batch, reduction_threads, 0, stream, batch, n, 1e-12, tolerance, false, energy.data,
+        previous.data, next.data, density.data, active.data, converged.data, iterations.data,
+        change.data, rms.data, residual_route == 1 ? nullptr : physical.data,
+        residual_route == 2 ? census.data : nullptr);
+    check(cudaGetLastError());
+  };
+  if (graph) {
+    cudaStream_t stream{};
+    cudaGraph_t captured{};
+    cudaGraphExec_t executable{};
+    check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
+    launch(stream);
+    check(cudaStreamEndCapture(stream, &captured));
+    check(cudaGraphInstantiate(&executable, captured, nullptr, nullptr, 0));
+    check(cudaGraphLaunch(executable, stream));
+    check(cudaStreamSynchronize(stream));
+    check(cudaGraphExecDestroy(executable));
+    check(cudaGraphDestroy(captured));
+    check(cudaStreamDestroy(stream));
+  } else {
+    launch(nullptr);
+  }
+  const auto flags = converged.read(), mask = active.read();
+  const auto count = iterations.read();
+  const auto current = density.read(), rms_out = rms.read(), delta_energy = change.read(),
+             baseline = previous.read();
+  for (unsigned item = 0; item < batch; ++item) {
+    const bool inactive = item == batch - 1;
+    const bool accepted = !inactive && item != 1 && (item < 3 || residual_route != 0);
+    if (flags[item] != (inactive ? 9 : accepted) || mask[item] != (!inactive && !accepted) ||
+        count[item] != (inactive ? 3U : 4U) || baseline[item] != -1.0 ||
+        delta_energy[item] != (inactive ? -7.0 : 0.0))
+      throw std::runtime_error("RHF block reduction changed scalar acceptance or inactive state");
+    const double expected_rms = std::sqrt(static_cast<double>(square[item] / matrix));
+    // Positive-square accumulation: bound multiply/add rounds per thread,
+    // the fixed warp/block trees, division and sqrt via gamma_k. This compares
+    // arithmetic only; it never changes the kernel's physical stopping limit.
+    const double unit_roundoff = std::numeric_limits<double>::epsilon() / 2;
+    const auto steps = 2 * ((matrix + reduction_threads - 1) / reduction_threads) + 14;
+    const double gamma = steps * unit_roundoff / (1 - steps * unit_roundoff);
+    if ((inactive && rms_out[item] != -8.0) ||
+        (!inactive && (!std::isfinite(rms_out[item]) || rms_out[item] < 0.0 ||
+                       std::abs(rms_out[item] - expected_rms) > 4 * gamma * expected_rms)))
+      throw std::runtime_error("RHF block RMS differs from independent full-matrix arithmetic");
+    for (std::size_t k = 0; k < matrix; ++k) {
+      const auto index = item * matrix + k;
+      const double expected = inactive || (retain && accepted) ? old[index] : proposal[index];
+      if (!(current[index] == expected || (std::isnan(current[index]) && std::isnan(expected))))
+        throw std::runtime_error("RHF block copy lost a matrix tail or converged density");
+    }
+  }
+}
+void check_reference_diis_scaling() {
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr unsigned matrix_size = 4, history = 3;
+  for (const double scale : {1.0, 1e-10, 1e-100, 1e100}) {
+    Device<double> fock{std::vector<double>(matrix_size)},
+        residual{std::vector<double>(matrix_size)};
+    Device<double> fock_history{std::vector<double>(matrix_size * history)};
+    Device<double> residual_history{std::vector<double>(matrix_size * history)};
+    Device<double> system{std::vector<double>((history + 1) * (history + 1))};
+    Device<double> coefficients{std::vector<double>(history + 1)};
+    Device<double> effective{std::vector<double>(matrix_size)};
+    Device<std::uint32_t> count({0}), head({0});
+    Device<std::uint8_t> active({1});
+    for (unsigned sample = 1; sample <= 6; ++sample) {
+      const std::vector<double> matrix{3.0 * sample - 2.0, 0, 0, 4.0 * sample - 1.0};
+      const std::vector<double> error{0, scale * sample, -scale * sample, 0};
+      check(cudaMemcpy(fock.data, matrix.data(), matrix_size * sizeof(double),
+                       cudaMemcpyHostToDevice));
+      check(cudaMemcpy(residual.data, error.data(), matrix_size * sizeof(double),
+                       cudaMemcpyHostToDevice));
+      launch_update_diis_kernel(1, 32, 0, nullptr, 1, 2, 1, history, fock.data, residual.data,
+                                active.data, fock_history.data, residual_history.data, system.data,
+                                coefficients.data, count.data, head.data, effective.data, true);
+      const auto result = effective.read();
+      if (sample >= 2 && (std::abs(result[0] + 2.0) > 1e-10 || std::abs(result[3] + 1.0) > 1e-10))
+        throw std::runtime_error(
+            "physical-reference DIIS lost scale invariance or ring retirement");
+    }
+  }
+}
+
+void check_reference_residual_diagnostics() {
+  using namespace generativeqc::scf::cuda_execution;
+  for (const double scale : {0.0, 1e-200, 1e-10, 1.0, 1e200}) {
+    std::vector<double> values(37, 0.0);
+    values[0] = scale;
+    values[36] = -2 * scale;
+    Device<double> residual(values), result({-1.0});
+    launch_physical_residual_rms(nullptr, values.size(), residual.data, result.data);
+    const double expected = std::hypot(values[0], values[36]) / std::sqrt(double(values.size()));
+    if (std::abs(result.read()[0] - expected) > std::abs(expected) * 1e-14)
+      throw std::runtime_error("physical commutator diagnostic overflowed or underflowed");
+  }
+  for (const double nonfinite :
+       {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+    Device<double> residual({0.0, nonfinite}), result({0.0});
+    launch_physical_residual_rms(nullptr, residual.size, residual.data, result.data);
+    if (std::isfinite(result.read()[0]))
+      throw std::runtime_error("nonfinite physical residual was hidden in diagnostics");
+  }
+}
+
+void check_reference_startup(bool retain, unsigned threads, unsigned basis_size) {
+  using namespace generativeqc::scf::cuda_execution;
+  const std::size_t matrix_size = static_cast<std::size_t>(basis_size) * basis_size;
+  for (const unsigned before : {0U, kReferenceStartupIterations - 1, kReferenceStartupIterations}) {
+    std::vector<double> initial(2 * matrix_size, 97.0), next(2 * matrix_size, -4.0);
+    std::fill_n(initial.begin(), matrix_size, 0.0);
+    std::fill_n(next.begin(), matrix_size, 0.0);
+    initial[0] = 2.0;
+    next[matrix_size - 1] = 2.0;
+    Device<double> density(initial), proposal(next);
+    Device<double> physical(std::vector<double>(2 * matrix_size, 0.0));
+    Device<double> energy({-1, -1}), previous({-1, -1}), change({-1, -1}), rms({-1, -1});
+    Device<std::uint8_t> active({1, 0}), converged({0, 0});
+    Device<std::uint32_t> iterations({before, 0}), history({3, 7}), head({2, 5});
+    launch_update_convergence_kernel(
+        retain, 2, threads, 0, nullptr, 2, basis_size, 1e-9, 0.1, true, energy.data, previous.data,
+        proposal.data, density.data, active.data, converged.data, iterations.data, change.data,
+        rms.data, physical.data, nullptr, false, nullptr, nullptr, {history.data, head.data});
+    const bool mixed = before < kReferenceStartupIterations;
+    const auto values = density.read();
+    if (converged.read()[0] || std::abs(rms.read()[0] - std::sqrt(8.0 / matrix_size)) > 1e-14)
+      throw std::runtime_error("startup mixing manufactured density convergence");
+    for (std::size_t element = 0; element < values.size(); ++element) {
+      const double expected = element >= matrix_size ? initial[element]
+                              : mixed                ? 0.5 * (initial[element] + next[element])
+                                                     : next[element];
+      if (values[element] != expected)
+        throw std::runtime_error("cold reference lost convex density or inactive neighbor");
+    }
+    if (history.read()[0] != (mixed ? 0U : 3U) || head.read()[0] != (mixed ? 0U : 2U) ||
+        history.read()[1] != 7 || head.read()[1] != 5)
+      throw std::runtime_error("startup DIIS retirement escaped its bounded active item");
+  }
+  for (const double delta : {1e-12, 1e-2}) {
+    Device<double> density({1, 0, 0, 1}), proposal({1 + delta, 0, 0, 1 - delta});
+    Device<double> physical({0, 0, 0, 0});
+    Device<double> energy({-1}), previous({-1}), change({-1}), rms({-1});
+    Device<std::uint8_t> active({1}), converged({0});
+    Device<std::uint32_t> iterations({0}), history({3}), head({2});
+    launch_update_convergence_kernel(
+        retain, 1, threads, 0, nullptr, 1, 2, 1e-9, 1e-10, true, energy.data, previous.data,
+        proposal.data, density.data, active.data, converged.data, iterations.data, change.data,
+        rms.data, physical.data, nullptr, false, nullptr, nullptr, {history.data, head.data});
+    const bool accepted = delta < 1e-10;
+    const auto values = density.read();
+    if (bool(converged.read()[0]) != accepted || bool(active.read()[0]) == accepted)
+      throw std::runtime_error("small cold-reference proposals changed acceptance");
+    if (values[0] != (retain && accepted ? 1 : 1 + delta) ||
+        values[3] != (retain && accepted ? 1 : 1 - delta))
+      throw std::runtime_error("cold startup changed the retained converged density/Fock pair");
+    if (history.read()[0] != 3 || head.read()[0] != 2)
+      throw std::runtime_error("small cold-reference proposals unnecessarily retired DIIS");
   }
 }
 }  // namespace
 
-int main() {
-  if (!std::getenv("SLURM_JOB_ID")) return 77;
+int main(int argc, char** argv) {
+  const bool block_only = argc == 2 && std::string_view(argv[1]) == "--rhf-block-convergence";
+  if (argc != 1 && !block_only) return 2;
+  if (!block_only && !std::getenv("SLURM_JOB_ID")) return 77;
   try {
     check(cudaSetDevice(0));
+    if (block_only) {
+      for (unsigned threads : {32U, 256U}) {
+        for (bool retain : {false, true}) {
+          for (unsigned basis_size : {2U, 17U})
+            check_reference_startup(retain, threads, basis_size);
+          for (unsigned n : {1U, 3U, 17U, 33U, 768U})
+            for (bool graph : {false, true}) check_rhf_matrix_walk(n, threads, retain, graph);
+          for (unsigned route : {1U, 2U}) check_rhf_matrix_walk(33, threads, retain, true, route);
+          for (bool standard : {false, true})
+            check_incremental_energy_refinement(1, retain, standard, threads);
+        }
+        for (bool standard : {false, true})
+          for (bool density_limited : {false, true})
+            check_incremental_approach(1, standard, density_limited, threads);
+      }
+      std::cout << "RHF 32/256 matrix-walk and energy-refinement controls passed\n";
+      return 0;
+    }
+    check_reference_diis_scaling();
+    check_reference_residual_diagnostics();
+    for (unsigned threads : {32U, 256U})
+      for (bool retain : {false, true})
+        for (unsigned basis_size : {2U, 17U}) check_reference_startup(retain, threads, basis_size);
     for (unsigned spins : {1U, 2U})
       for (unsigned threads : {32U, 128U, 256U})
         for (bool masked : {false, true})
           for (bool tiny : {false, true}) check_density_bounds(spins, threads, masked, tiny);
     for (unsigned spins : {1U, 2U})
-      for (bool retain : {false, true}) check_incremental_energy_refinement(spins, retain);
+      for (bool standard : {false, true})
+        for (bool density_limited : {false, true})
+          check_incremental_approach(spins, standard, density_limited);
+    for (unsigned spins : {1U, 2U})
+      for (bool retain : {false, true})
+        for (bool standard : {false, true})
+          check_incremental_energy_refinement(spins, retain, standard);
     for (unsigned spins : {1U, 2U}) check_direct_df_acceptance(spins);
     for (unsigned spins : {1U, 2U})
       for (bool retain : {false, true})

@@ -202,6 +202,38 @@ std::size_t NativeBlockProvider::batch_capacity(const std::array<std::size_t, 4>
   return (budget_ - common) / per_request;
 }
 
+std::size_t NativeBlockProvider::batch_bytes(std::span<const std::array<std::size_t, 4>> shapes,
+                                             bool cuda) const {
+  if (const auto* fitted = dynamic_cast<const DensityFittedInteractionSource*>(&source_)) {
+    auto bytes = checked_add(source_bytes_, reference_bytes_);
+    for (const auto& shape : shapes) {
+      (void)plan(shape, cuda);
+      bytes = checked_add(bytes, fitted->block_capacity(shape, cuda));
+    }
+    return bytes;
+  }
+  const auto host_common = common_host_bytes();
+  auto bytes = host_common;
+  std::size_t device_common = 0;
+  for (std::size_t index = 0; index < shapes.size(); ++index) {
+    const auto block = plan(shapes[index], cuda);
+    if (block.host_bytes < host_common || (cuda && block.device_bytes < block.aligned_numeric))
+      throw std::logic_error("native MO batch accounting underflow");
+    bytes = checked_add(bytes, block.host_bytes - host_common);
+    if (cuda) {
+      const auto fixed = block.device_bytes - block.aligned_numeric;
+      if (index == 0) {
+        device_common = fixed;
+        bytes = checked_add(bytes, fixed);
+      } else if (fixed != device_common) {
+        throw std::logic_error("native MO batch fixed device allowance changed by request shape");
+      }
+      bytes = checked_add(bytes, block.aligned_numeric);
+    }
+  }
+  return bytes;
+}
+
 std::vector<std::vector<double>> NativeBlockProvider::get_many(
     const std::vector<MOSlots>& requests, bool cuda, int device,
     generativeqc_tensor::Metrics* metrics, ProviderWork* work) const {
@@ -277,10 +309,6 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many_impl(
   std::vector<NumericBlockPlan> plans;
   shapes.reserve(requests.size());
   plans.reserve(requests.size());
-  const auto host_common = common_host_bytes();
-  auto batch_memory = host_common;
-  std::size_t shared_device_fixed = 0;
-  bool shared_device_fixed_set = false;
   for (const auto& request : requests) {
     std::array<std::size_t, 4> shape{};
     for (unsigned k = 0; k < 4; ++k) {
@@ -288,28 +316,11 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many_impl(
         throw std::invalid_argument("native MO slot spin owner out of range");
       shape[k] = (*request.slots)[k].size();
     }
-    const auto p = plan(shape, cuda);
-    if (p.host_bytes < host_common)
-      throw std::logic_error("native MO batch host accounting underflow");
-    auto incremental = p.host_bytes - host_common;
-    if (cuda) {
-      if (p.device_bytes < p.aligned_numeric)
-        throw std::logic_error("native MO batch device accounting underflow");
-      const auto fixed = p.device_bytes - p.aligned_numeric;
-      if (!shared_device_fixed_set) {
-        shared_device_fixed = fixed;
-        shared_device_fixed_set = true;
-        batch_memory = checked_add(batch_memory, shared_device_fixed);
-      } else if (fixed != shared_device_fixed) {
-        throw std::logic_error("native MO batch fixed device allowance changed by request shape");
-      }
-      incremental = checked_add(incremental, p.aligned_numeric);
-    }
-    batch_memory = checked_add(batch_memory, incremental);
     shapes.push_back(shape);
-    plans.push_back(p);
+    plans.push_back(plan(shape, cuda));
   }
-  if (batch_memory > budget_) throw std::length_error("native MO batch exceeds memory budget");
+  if (batch_bytes(shapes, cuda) > budget_)
+    throw std::length_error("native MO batch exceeds memory budget");
 
   std::vector<std::array<std::size_t, 4>> prefix_keys(requests.size());
   std::vector<std::pair<std::vector<std::size_t>, unsigned>> slot_keys;

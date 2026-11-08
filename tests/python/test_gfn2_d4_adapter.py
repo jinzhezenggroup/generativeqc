@@ -5,6 +5,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from generativeqc_compiler.geometry.dispersion_scalar import (
+    emit_dispersion_scalar_header,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -14,6 +17,9 @@ def adapter(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) -> Pat
     if sys.platform != "linux":
         pytest.skip("ELF section-GC fixture requires Linux")
     output = tmp_path_factory.mktemp("gfn2-d4-adapter") / "probe"
+    (output.parent / "generated_dispersion_scalar.hpp").write_text(
+        emit_dispersion_scalar_header()
+    )
     runtime = ROOT / "src/xtb/native"
     subprocess.run(
         [
