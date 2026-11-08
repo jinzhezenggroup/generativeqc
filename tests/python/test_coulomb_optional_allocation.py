@@ -39,7 +39,10 @@ void fault(int stage) {
   if(injected_kind==2) throw cudaErrorUnknown;
   throw std::logic_error("not an allocation failure");
 }
-struct cudaDeviceProp { int major=12, minor=0, multiProcessorCount=1; };
+struct cudaDeviceProp {
+  int major=12, minor=0, multiProcessorCount=1;
+  int singleToDoublePrecisionPerfRatio=64;
+};
 cudaError_t cudaGetDeviceProperties(cudaDeviceProp*,int) { return cudaSuccess; }
 cudaError_t cudaDeviceGetLimit(std::size_t* n,int) { *n=100000; return cudaSuccess; }
 cudaError_t cudaDeviceSetLimit(int,std::size_t) { return cudaSuccess; }
@@ -141,6 +144,7 @@ struct GeneratedShellPairStream {
 struct GeneratedCoulombPlan {
   DeviceBatch batch{};
   cudaStream_t stream{};
+  int fp32_fp64_ratio{};
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
   std::uint64_t class_mask{}, value_class_mask{}, rys_fock_mask{};
