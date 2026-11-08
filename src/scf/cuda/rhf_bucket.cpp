@@ -54,6 +54,7 @@ bool small_hf_cuda_resource_layout(std::size_t nbf, std::size_t direct_nbf, std:
                                    std::size_t shells, std::size_t primitives,
                                    std::size_t diis_history, std::size_t spins,
                                    std::size_t& arena_bytes, std::size_t& plan_object_bytes) {
+  if (cuda_policy::hf_matrix_profile_requested()) return false;
   // This contract intentionally covers the provider with no cuBLAS/cuSOLVER
   // workspace or exact-quartet descriptor table. Other routes need their own
   // compact provider-workspace query before they can advertise a global bound.
@@ -94,6 +95,7 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
                                       int precision_mode, double energy_tolerance,
                                       double screening_tolerance, std::size_t& arena_bytes,
                                       std::size_t& plan_object_bytes) {
+  if (cuda_policy::hf_matrix_profile_requested()) return false;
   using namespace cuda_execution;
   if (shell_angular_values == nullptr || shell_primitive_counts == nullptr || nbf == 0 ||
       nbf > kSmallEigensolverLimit || direct_nbf < nbf || direct_nbf > 2 * nbf || atoms == 0 ||
@@ -470,7 +472,9 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
   preflight_reference_provider_initialization(options.reference_provider_initialization,
                                               options.export_physical_reference);
   runtime::CudaTargetInfo topology_target{};
-  const auto topology_target_status = query_hf_cuda_target(device_id, topology_target);
+  cuda_policy::HfMatrixProfileAdmission topology_profile;
+  const auto topology_target_status = query_hf_cuda_target(
+      device_id, topology_target, options.export_physical_reference ? nullptr : &topology_profile);
   if (topology_target_status != GENERATIVEQC_STATUS_SUCCESS) {
     std::vector<RhfBucketItem> outputs(systems.size());
     fill_global_failure(outputs, topology_target_status);
@@ -489,7 +493,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
   if (!pack_host_batch(systems, initial_densities, candidate, unrestricted,
                        options.export_physical_reference && !reference_quartets,
                        options.compute_forces || reference_quartets, ResidentPsssPolicy::Build,
-                       HostBasisPacking::Scf, topology_target)) {
+                       HostBasisPacking::Scf, topology_target, {}, topology_profile)) {
     std::vector<RhfBucketItem> outputs(systems.size());
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;

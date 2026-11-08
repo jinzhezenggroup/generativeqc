@@ -115,7 +115,8 @@ bool pack_host_batch(const std::vector<core::System>& systems,
                      HostBatch& host, bool unrestricted, bool matrix_direct,
                      bool require_direct_transform, ResidentPsssPolicy resident_psss,
                      HostBasisPacking packing, const runtime::CudaTargetInfo& target,
-                     cuda_policy::SmallHfProfitabilityProfile profile) {
+                     cuda_policy::SmallHfProfitabilityProfile profile,
+                     const cuda_policy::HfMatrixProfileAdmission& matrix_profile) {
   if (systems.empty() || systems.size() != initial_densities.size()) return false;
   const bool df_values = packing == HostBasisPacking::DfValues;
   // The DF owner independently expands public spherical AOs after packing.
@@ -138,10 +139,24 @@ bool pack_host_batch(const std::vector<core::System>& systems,
   host.spin_count = unrestricted ? 2 : 1;
   std::size_t fock_states = 0;
   if (!runtime::checked_multiply(systems.size(), host.spin_count, fock_states)) return false;
-  host.persistent_eri = !df_values && !matrix_direct &&
-                        cuda_policy::resolve_small_hf_profitability(
-                            target, {host.nbf, fock_states, systems.size(), fock_states}, profile)
-                            .persistent_eri;
+  if (!df_values && !matrix_direct) {
+    if (matrix_profile.status == cuda_policy::HfMatrixProfileStatus::Admitted &&
+        matrix_profile.profile && matrix_profile.profile->context.target == target &&
+        matrix_profile.profile->covers(host.nbf, systems.size()) &&
+        matrix_profile.profile->covers(host.nbf, fock_states)) {
+      host.matrix_profile = matrix_profile.profile;
+      profile.matrix = host.matrix_profile->matrix_profile();
+    }
+    const auto resolved = cuda_policy::resolve_small_hf_profitability(
+        target, {host.nbf, fock_states, systems.size(), fock_states}, profile);
+    host.persistent_eri = resolved.persistent_eri;
+    host.matrix_admission = resolved.matrix;
+  } else if (!df_values) {
+    // Matrix-only reference exporters own a separate capacity/initialization
+    // contract. Keep that path free of Direct-HF calibration and ERI policy.
+    host.matrix_admission =
+        tensor::CudaMatrixProductAdmission::resolve(target, host.nbf, fock_states, profile.matrix);
+  }
   if (host.nbf == 0 || host.direct_nbf == 0 ||
       host.nbf > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
       host.direct_nbf > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
@@ -389,6 +404,8 @@ bool same_topology(const HostBatch& first, const HostBatch& second) {
   for (std::size_t i = 0; i < first.ecp_systems.size(); ++i)
     if (first.ecp_systems[i].ecp_terms != second.ecp_systems[i].ecp_terms) return false;
   return first.nbf == second.nbf && first.direct_nbf == second.direct_nbf &&
+         first.matrix_admission == second.matrix_admission &&
+         first.matrix_profile == second.matrix_profile &&
          first.persistent_eri == second.persistent_eri && first.spin_count == second.spin_count &&
          first.atom_offsets == second.atom_offsets && first.atom_systems == second.atom_systems &&
          first.atomic_numbers == second.atomic_numbers &&

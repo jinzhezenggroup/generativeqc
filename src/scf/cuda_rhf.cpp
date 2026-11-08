@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "build_identity.hpp"
 #include "generated_direct_resident_psss_schedule.cuh"
 #include "integrals/ecp_cuda.hpp"
 #include "molecule/basis.hpp"
@@ -31,6 +32,7 @@
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_device_facts.hpp"
 #include "runtime/df_progress_trace.hpp"
+#include "runtime/loaded_provider_identity.hpp"
 #include "runtime/residency_cuda.cuh"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -586,12 +588,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
-  const cuda_policy::SmallHfWorkload small_hf_workload{nbf, spin_batch_size, batch_size,
-                                                       spin_batch_size};
-  const cuda_policy::SmallHfProfitabilityPolicy small_hf_profitability =
-      cuda_policy::resolve_small_hf_profitability(direct_target, small_hf_workload);
-  const auto matrix_admission =
-      small_hf_profitability.matrix.available_if(plan.matrix_context_enabled);
+  const auto matrix_admission = host.matrix_admission.available_if(plan.matrix_context_enabled);
   const std::size_t total_atoms = host.atomic_numbers.size();
   const std::size_t total_shells = host.shell_atoms.size();
   const std::size_t total_shell_pairs = host.shell_pair_first.size();
@@ -6030,9 +6027,64 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
 
 }  // namespace
 
-generativeqc_status query_hf_cuda_target(int device_id, runtime::CudaTargetInfo& target) {
+generativeqc_status query_hf_cuda_target(int device_id, runtime::CudaTargetInfo& target,
+                                         cuda_policy::HfMatrixProfileAdmission* matrix_profile) {
   char device_name[256]{};
-  return cuda_execution::cuda_status(runtime::cuda_device_facts(device_id, target, device_name));
+  const auto status =
+      cuda_execution::cuda_status(runtime::cuda_device_facts(device_id, target, device_name));
+  if (matrix_profile) *matrix_profile = {};
+  if (status != GENERATIVEQC_STATUS_SUCCESS || !matrix_profile ||
+      !cuda_policy::hf_matrix_profile_requested())
+    return status;
+  *matrix_profile = cuda_policy::load_hf_matrix_profile(
+      std::getenv("GENERATIVEQC_HF_MATRIX_PROFILE"), query_hf_cuda_matrix_profile_context(target));
+  return status;
+}
+
+cuda_policy::HfMatrixProfileContext query_hf_cuda_matrix_profile_context(
+    const runtime::CudaTargetInfo& target) {
+  // This query never creates a cuBLAS handle. Unsupported/missing stack
+  // identity fails closed to the same bounded no-calibration preparation.
+  cuda_policy::HfMatrixProfileContext context;
+  context.target = target;
+  context.provider = runtime::active_cuda_provider().kind;
+  context.release_build = GENERATIVEQC_TUNING_RELEASE_BUILD;
+  context.fast_compile = GENERATIVEQC_CUDA_FAST_COMPILE;
+  const std::string_view source = kGenerativeQCSourceIdentity;
+  if (source.size() == context.source_identity.size() - 1)
+    std::copy(source.begin(), source.end(), context.source_identity.begin());
+#if defined(CUDART_VERSION)
+  context.toolkit_version = CUDART_VERSION;
+#endif
+#if !GENERATIVEQC_CUDA_PROVIDER_CUMETAL
+  if (context.provider == runtime::CudaProviderKind::Nvidia &&
+      cudaRuntimeGetVersion(&context.runtime_version) == cudaSuccess &&
+      cudaDriverGetVersion(&context.driver_version) == cudaSuccess &&
+      cublasGetProperty(MAJOR_VERSION, &context.cublas_version[0]) == CUBLAS_STATUS_SUCCESS &&
+      cublasGetProperty(MINOR_VERSION, &context.cublas_version[1]) == CUBLAS_STATUS_SUCCESS &&
+      cublasGetProperty(PATCH_LEVEL, &context.cublas_version[2]) == CUBLAS_STATUS_SUCCESS) {
+    const auto runtime_identity =
+        runtime::loaded_provider_identity("libcudart.so.12", "cudaRuntimeGetVersion",
+                                          reinterpret_cast<const void*>(&cudaRuntimeGetVersion));
+    const auto driver_identity =
+        runtime::loaded_provider_identity("libcuda.so.1", "cuDriverGetVersion");
+    const auto native_identity = runtime::loaded_provider_identity(
+        "libgenerativeqc.so.0", "generativeqc_get_source_identity",
+        reinterpret_cast<const void*>(&generativeqc_get_source_identity));
+    const auto retain_id = [](const runtime::LoadedBuildIdentity& identity, auto& destination) {
+      if (identity.status == runtime::LoadedIdentityStatus::available &&
+          identity.build_id.size() < destination.size())
+        std::copy(identity.build_id.begin(), identity.build_id.end(), destination.begin());
+    };
+    retain_id(runtime_identity, context.runtime_build_id);
+    retain_id(driver_identity, context.driver_build_id);
+    retain_id(native_identity, context.native_build_id);
+    const auto identity = runtime::loaded_provider_identity(
+        "libcublas.so.12", "cublasDgemm_v2", reinterpret_cast<const void*>(&cublasDgemm));
+    retain_id(identity, context.cublas_build_id);
+  }
+#endif
+  return context;
 }
 
 std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(
