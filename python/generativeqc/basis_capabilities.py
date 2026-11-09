@@ -65,6 +65,11 @@ def basis_capability(
     ``consumer="scf_df"`` admits full-range CUDA HF/KS fitting auxiliaries through h for
     values and first derivatives, using the bounded six-term nuclear sink.
     Neither widens generic CUDA DF exports, orbital shells or higher derivatives.
+
+    The report retains the selected ``consumer``, the largest supplied angular
+    momentum and the route's supported maximum, even when admission fails.
+    A supported maximum of ``None`` means no route is registered, not unlimited
+    angular momentum. These bounds do not qualify a complete molecular endpoint.
     """
     from .calculator import Atom
 
@@ -172,6 +177,9 @@ def basis_capability(
         "derivative_order": derivative_order,
         "representation": mode,
         "role": role,
+        "consumer": consumer,
+        "max_angular_momentum": max((row[3] for row in rows), default=None),
+        "max_supported_angular_momentum": maximum,
         "shells_checked": len(rows),
         "reasons": reasons,
         "validated_element_model": False,

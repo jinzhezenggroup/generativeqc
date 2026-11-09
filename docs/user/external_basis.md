@@ -135,10 +135,44 @@ operator and derivative order where applicable.
 | Modified nuclear charge, other derivatives/operators/backends | — | Rejected | Rejected |
 
 Complete CUDA HF/KS DF calculations additionally admit fitting auxiliaries
-through g for values and first nuclear derivatives. Their scoped `scf_df`
+through h for values and first nuclear derivatives. Their scoped `scf_df`
 consumer uses the native six-term spherical expansion and bounded nuclear
 response; generic standalone exports and orbital admission retain the table's
 limits. See [density-fitted DFT](dft_density_fitting.md).
+
+For a configured calculator, inspect the complete basis-operator preflight rather
+than stopping at its first missing overlap shell:
+
+```python
+report = calculator.basis_capability_report(atoms, compute_forces=True)
+for check in report["checks"]:
+    print(
+        check["role"], check["backend"], check["operator"],
+        check["derivative_order"], check["consumer"],
+        check["max_angular_momentum"], check["max_supported_angular_momentum"],
+        check["eligible"],
+    )
+```
+
+Each check retains every contraction on every supplied atom. The report includes
+both admitted and rejected operators, the selected auxiliary consumer and all
+missing-shell reasons. `compute_forces=False` omits nuclear derivatives but
+retains spatial AO jets required for DFT energies. Calculation preflight uses the
+same report and raises with the combined reasons before native preparation.
+Fitted calculations check the orbital three-center domain separately from the
+auxiliary metric/three-center domain; auxiliary consumer limits never apply to
+orbital indices.
+Use the standalone `basis_capability` function to inspect individual routes
+without constructing a calculator or loading a native library.
+
+In particular, the full-DF correlated route selects `correlation_df`, not
+`scf_df`; qualifying HF fitting auxiliaries does not qualify correlation fitting
+auxiliaries. Neither consumer promotes orbital shells. The report's `eligible`
+is only a basis-operator admission result: it does **not** qualify MP2/CC
+amplitudes, orbital response, analytic force contractions, a complete CBS recipe,
+or GPU memory/time bounds. An absent supported maximum (`None`) means no
+registered route, not unrestricted support. No basis shells are removed to make
+a report eligible.
 
 Public HF energy-plus-force endpoints preflight both values and first nuclear
 derivatives. `eligible` states that a generic mathematical route exists. Native
