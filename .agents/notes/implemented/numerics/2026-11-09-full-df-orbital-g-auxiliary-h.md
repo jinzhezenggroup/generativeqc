@@ -120,3 +120,11 @@ the paired integral provider. Keep all caller host/device caps unchanged.
 The host-compiled parity probe now includes the real basis header instead of
 copying only the obsolete three-slot constant. Boundary admission tests retain
 exact-fit success and one-byte-short refusal at the corrected actual usage.
+
+The dry capacity qualification tool independently reconstructs this layout and
+must charge the same six slots. Its previous hard-coded three-slot oracle was
+missed in the initial reservation repair. Keep that independent fail-closed
+check rather than importing the production result as its own expected value.
+The capacity-suite mutation now restores the obsolete three-slot reservation
+and requires rejection; complete report and provider-admission tests cover
+the same dependency chain without increasing the caller's byte limits.

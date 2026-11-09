@@ -302,6 +302,13 @@ def test_fitted_geometry_semantic_contract_rejects_admission_drift(
     "relative,owner,old,new,message",
     [
         (
+            "python/generativeqc_compiler/method/stationary_resources.py",
+            "stationary_native_pair_reserve",
+            "91 * aos",
+            "58 * aos",
+            "geometry-resource contract changed: paired native reserve",
+        ),
+        (
             "python/generativeqc/_ks_snapshot.py",
             "stationary_integral_device_reserve",
             "self.check_current()",
@@ -1034,7 +1041,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     assert water32["resource_requirements"]["additional_device_peak_bound"] == (
         356_801_792
         + 48 * (96 * 95 // 2)
-        + 4_851_008
+        + 4_901_696
         + 39_755_392
         + 8 * (2 * 96 + 1)  # Immutable atom offsets and partition radii.
         + grid_binding_host_bytes
@@ -1045,7 +1052,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     ] == 48 * (96 * 95 // 2)
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
         192_187_488
-        + 4_851_008
+        + 4_901_696
         + grid_binding_host_bytes
         + 8 * (48 * 4096 + 7 * 768)
         - 8 * (12 * 768**2 + 2 * 768)
@@ -4023,12 +4030,12 @@ def test_paired_host_reserve_is_charged_before_inclusive_host_admission(
         if row["id"] == "pbe0/rks/water32/fp64_energy_forces"
     )
     memory = row["resource_requirements"]
-    assert memory["stationary_native_integral_host_reserve_bytes"] == 4_851_008
+    assert memory["stationary_native_integral_host_reserve_bytes"] == 4_901_696
     # Combined publishes three channels and Separate four, but neither may
     # discount the conservative paired-provider reserve or its v1 fallback.
     # Keep that reserve and add the separate grid binding once.
     assert memory["additional_host_numeric_bound"] == (
-        197_047_712
+        197_098_400
         + (32 << 10)
         + 8 * (48 * 4096 + 7 * 768)
         - 8 * (12 * 768**2 + 2 * 768)

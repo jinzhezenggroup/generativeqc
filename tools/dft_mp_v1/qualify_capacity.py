@@ -1221,8 +1221,11 @@ def _check_geometry_resources(module: ModuleType) -> None:
             native(**basis) == (atoms > 32 or aos > 128 or primitives > 4096),
             "native-integral-only boundary",
         )
+        # Independent native layout arithmetic: two int32, two int64,
+        # one count byte and six (three angular bytes + FP64 coefficient) slots.
+        per_ao = 2 * 4 + 2 * 8 + 1 + 6 * (3 + 8)
         reserve = (
-            2 * (58 * aos + 52 * atoms + 16 * primitives + 4 * aos * (aos + 1) + 32)
+            2 * (per_ao * aos + 52 * atoms + 16 * primitives + 4 * aos * (aos + 1) + 32)
             + 48 * atoms
         )
         require(
