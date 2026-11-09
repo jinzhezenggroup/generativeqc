@@ -3,6 +3,11 @@
 Status: proposed; only the basis-operator inventory is implemented here
 Date: 2026-11-09
 
+The QZ implementation and its retained fallback decisions are superseded by
+[the implemented closure note](../implemented/numerics/2026-11-09-full-df-orbital-g-auxiliary-h.md).
+This proposal preserves the original diagnostic-only stage; its optional
+heavy-atom 5Z extension remains proposed.
+
 ## Problem
 
 Issue #3055 requests unmodified augmented orbital and JKFIT bases for full-DF

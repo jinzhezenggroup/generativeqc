@@ -9,19 +9,33 @@ from .ir_serialization import integral_to_payload
 
 
 def df_derivative_inventory(
-    *, auxiliary_g: bool = False, auxiliary_h: bool = False, scalar_type: str = "double"
+    *,
+    auxiliary_g: bool = False,
+    auxiliary_h: bool = False,
+    scalar_type: str = "double",
+    maximum_orbital: int = 3,
 ) -> typing.Any:
-    """Separate the external-response contract from native tiling decisions."""
+    """Describe one emitted response domain, independent of native tiling.
+
+    Orbital g uses the through-h variant's raised-moment workspace; it is not
+    admission of external orbital h or auxiliary i shells.
+    """
     if scalar_type not in ("double", "float"):
         raise ValueError("scalar type must be double or float")
     if auxiliary_g and auxiliary_h:
         raise ValueError("select one auxiliary derivative domain")
+    if maximum_orbital not in (3, 4) or (maximum_orbital == 4 and not auxiliary_h):
+        raise ValueError("orbital g requires the auxiliary-through-h response domain")
     auxiliary_extent = 6 if auxiliary_h else 5 if auxiliary_g else 4
     inventory = {
         "schema": "generativeqc.df_derivatives",
         "version": 1,
         "precision": "fp64",
-        "maximum_boys_order": 12 if auxiliary_h else 11 if auxiliary_g else 10,
+        "maximum_boys_order": max(
+            2 * (auxiliary_extent - 1),
+            2 * maximum_orbital + auxiliary_extent - 1,
+        )
+        + 1,
         "lowering": "gaussian_moment_polynomials",
         "radial_kernels": {
             "coulomb": {"omega": "zero", "kernel": "1/r"},
@@ -38,7 +52,10 @@ def df_derivative_inventory(
             )
             for family, extents in (
                 ("coulomb_metric", (auxiliary_extent,) * 2),
-                ("three_center_eri", (4, 4, auxiliary_extent)),
+                (
+                    "three_center_eri",
+                    (maximum_orbital + 1, maximum_orbital + 1, auxiliary_extent),
+                ),
             )
             for angular in product(*(range(size) for size in extents))
             for weighted in (False, True)
@@ -204,7 +221,11 @@ __device__ double dot(unsigned da,const double* a,unsigned db,const double* b,
 
 
 def emit_df_derivatives_cuda(
-    *, auxiliary_g: bool = False, auxiliary_h: bool = False, scalar_type: str = "double"
+    *,
+    auxiliary_g: bool = False,
+    auxiliary_h: bool = False,
+    scalar_type: str = "double",
+    maximum_orbital: int = 3,
 ) -> str:
     """Share base axis moments and Boys values across all independent centers.
 
@@ -217,6 +238,8 @@ def emit_df_derivatives_cuda(
     namespace; requesting it does not promote any public force capability.
     The separately selected h variant owns thirteen slots and F12. Both share
     the same moment DAG and analytic single-center Gaussian derivative rule.
+    Selecting ``maximum_orbital=4`` with the h variant owns fifteen slots/F14,
+    including either raised orbital center without admitting public orbital h.
 
     Positive omega selects the same radial kernel in the metric and the
     three-center response. Zero preserves Coulomb. Long-range production uses
@@ -231,6 +254,8 @@ def emit_df_derivatives_cuda(
     """
     if scalar_type not in ("double", "float"):
         raise ValueError("scalar type must be double or float")
+    if maximum_orbital not in (3, 4) or (maximum_orbital == 4 and not auxiliary_h):
+        raise ValueError("orbital g requires the auxiliary-through-h response domain")
     prefix = r"""// Generated DF metric/three-center first derivatives.
 #ifndef GENERATIVEQC_GENERATED_DF_DERIVATIVES_CUH
 #define GENERATIVEQC_GENERATED_DF_DERIVATIVES_CUH
@@ -253,9 +278,11 @@ __device__ __noinline__ void axis_polynomial(unsigned a,unsigned b,unsigned c,
     auxiliary_maximum = 5 if auxiliary_h else 4 if auxiliary_g else 3
     lines = [prefix.replace("__DF_BOYS__", emit_df_boys_cuda())]
     for a, b, c in product(
-        range(auxiliary_maximum + 2), range(5), range(auxiliary_maximum + 1)
+        range(auxiliary_maximum + 2),
+        range(maximum_orbital + 2),
+        range(auxiliary_maximum + 1),
     ):
-        if a == b == 4 or (a > 4 and b != 0):
+        if a == b == maximum_orbital + 1 or (a > maximum_orbital + 1 and b != 0):
             continue
         graph, roots = axis_polynomial(
             a,
@@ -263,10 +290,15 @@ __device__ __noinline__ void axis_polynomial(unsigned a,unsigned b,unsigned c,
             c,
             auxiliary_g_derivative=auxiliary_g,
             auxiliary_h_derivative=auxiliary_h,
+            maximum_orbital=maximum_orbital,
         )
         emitter = CudaEmitter(graph, {}, scalar_type=scalar_type)
         emitter.emit(roots)
-        key = a * 5 * (auxiliary_maximum + 1) + b * (auxiliary_maximum + 1) + c
+        key = (
+            a * (maximum_orbital + 2) * (auxiliary_maximum + 1)
+            + b * (auxiliary_maximum + 1)
+            + c
+        )
         lines += [f"    case {key}U: {{", *emitter.lines]
         lines += [
             f"      out[{i}]={emitter.reference(root)};" for i, root in enumerate(roots)
@@ -382,19 +414,20 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
             )
         )
     if auxiliary_h:
+        slots = 2 * maximum_orbital + 7
         source = (
             source.replace(
                 "GENERATIVEQC_GENERATED_DF_DERIVATIVES",
                 "GENERATIVEQC_GENERATED_DF_AUXILIARY_H_DERIVATIVES",
             )
             .replace("generated_df_derivatives", "generated_df_auxiliary_h_derivatives")
-            .replace("a*20U+b*4U+c", "a*30U+b*6U+c")
-            .replace("f[11]", "f[13]")
-            .replace("base[3][11]", "base[3][13]")
-            .replace("raised[11],lowered[11]", "raised[13],lowered[13]")
+            .replace("a*20U+b*4U+c", f"a*{(maximum_orbital + 2) * 6}U+b*6U+c")
+            .replace("f[11]", f"f[{slots}]")
+            .replace("base[3][11]", f"base[3][{slots}]")
+            .replace("raised[11],lowered[11]", f"raised[{slots}],lowered[{slots}]")
             .replace(
                 "order(a)>3 || order(b)>3 || order(c)>3",
-                "order(a)>(metric?5U:3U) || order(b)>3 || order(c)>5",
+                f"order(a)>(metric?5U:{maximum_orbital}U) || order(b)>{maximum_orbital} || order(c)>5",
             )
         )
     if scalar_type == "float":
@@ -405,7 +438,11 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
 
 
 def emit_df_derivatives_cpu(
-    *, auxiliary_g: bool = False, auxiliary_h: bool = False, scalar_type: str = "double"
+    *,
+    auxiliary_g: bool = False,
+    auxiliary_h: bool = False,
+    scalar_type: str = "double",
+    maximum_orbital: int = 3,
 ) -> str:
     """Lower the same generated DF derivative algebra to ordinary host C++.
 
@@ -415,7 +452,10 @@ def emit_df_derivatives_cpu(
     """
 
     source = emit_df_derivatives_cuda(
-        auxiliary_g=auxiliary_g, auxiliary_h=auxiliary_h, scalar_type=scalar_type
+        auxiliary_g=auxiliary_g,
+        auxiliary_h=auxiliary_h,
+        scalar_type=scalar_type,
+        maximum_orbital=maximum_orbital,
     )
     if auxiliary_h:
         source = source.replace(

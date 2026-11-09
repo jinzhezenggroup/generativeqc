@@ -55,7 +55,9 @@ generativeqc_status build_cuda_one_electron_integrals_batch_impl(
   // One-electron exports need AO/pair metadata, not direct-ERI resident tasks.
   // The matrix-only packing policy keeps preparation quadratic in shell count
   // and also matches the spin-independent evaluator for open-shell fleets.
-  if (!pack_host_batch(cartesian_systems, no_warm, host, true, true) || host.nbf == 0U) {
+  if (!pack_host_batch(cartesian_systems, no_warm, host, true, true, false,
+                       ResidentPsssPolicy::Skip, HostBasisPacking::OneElectronValues) ||
+      host.nbf == 0U) {
     detail = "Cartesian one-electron batch cannot be represented by CUDA";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }

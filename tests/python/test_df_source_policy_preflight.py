@@ -304,7 +304,7 @@ def host_policy_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ("candidate", 3, 3, 3),
         ("invalid", 3, 3, -1),
         ("invalid", 3, 4, -1),
-        ("auto", 4, 4, -1),
+        ("auto", 4, 4, 0),
         ("generic", 3, 5, -1),
         ("generic", 3, 6, -1),
         ("polynomial", 3, 5, -1),
@@ -318,7 +318,9 @@ def test_real_policy_rejects_before_work_and_freezes_admitted_source(
     auxiliary: int,
     expected: int,
 ) -> None:
-    if endpoint == "factory" and selection == "generic" and auxiliary == 5:
+    if endpoint in ("admission", "range") and orbital == 4:
+        expected = -1
+    if endpoint in ("factory", "export") and selection == "generic" and auxiliary == 5:
         expected = 0
     subprocess.run(
         [

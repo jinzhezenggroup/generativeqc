@@ -1765,7 +1765,13 @@ class Calculator:
         if not isinstance(selected_basis, BasisSet):
             selected_basis = _snapshot_basis(selected_basis, self._representation_name)
         auxiliary = basis is not None
-        selected_operator = operator or ("df_metric" if auxiliary else "eri")
+        selected_operator = operator or (
+            "df_metric"
+            if auxiliary
+            else "df_three_center"
+            if self._full_df_basis_consumer("df_three_center")
+            else "eri"
+        )
         require_basis(
             selected_basis,
             atoms,
@@ -1778,7 +1784,7 @@ class Calculator:
             else self._representation_name,
             consumer=self._auxiliary_basis_consumer(selected_operator, derivative_order)
             if auxiliary
-            else None,
+            else self._full_df_basis_consumer(selected_operator, derivative_order),
         )
         return selected_basis
 
@@ -1795,7 +1801,13 @@ class Calculator:
             atoms, basis, operator=operator, derivative_order=derivative_order
         )
         auxiliary = basis is not None
-        selected_operator = operator or ("df_metric" if auxiliary else "eri")
+        selected_operator = operator or (
+            "df_metric"
+            if auxiliary
+            else "df_three_center"
+            if self._full_df_basis_consumer("df_three_center")
+            else "eri"
+        )
         return (
             selected_basis.shells_for(
                 atoms,
@@ -1809,7 +1821,7 @@ class Calculator:
                     selected_operator, derivative_order
                 )
                 if auxiliary
-                else None,
+                else self._full_df_basis_consumer(selected_operator, derivative_order),
             )
             if isinstance(selected_basis, BasisSet)
             else tuple(selected_basis)
@@ -1822,6 +1834,28 @@ class Calculator:
             return "cuda"
         return self._device_name
 
+    def _full_df_basis_consumer(
+        self, operator: str, derivative_order: int = 0
+    ) -> str | None:
+        """Admit only the closed-shell Coulomb full-DF operator closure, not ERIs."""
+        if (
+            self._device_name == "cuda"
+            and self._density_fitting_mode == _native.DENSITY_FITTING_FULL_CUDA
+            and self._auxiliary_basis is not None
+            and self._method in (_native.METHOD_MP2, _native.METHOD_DF_RCCSD_T)
+            and derivative_order in (0, 1)
+            and operator
+            in (
+                "overlap",
+                "kinetic",
+                "nuclear_attraction",
+                "df_metric",
+                "df_three_center",
+            )
+        ):
+            return "full_df"
+        return None
+
     def _auxiliary_basis_consumer(
         self, operator: str, derivative_order: int = 0
     ) -> str | None:
@@ -1832,6 +1866,9 @@ class Calculator:
         use that same scoped policy. HF/KS uses a separate role for its complete
         value/first-derivative owner; older libraries retain their f boundary.
         """
+        full_df = self._full_df_basis_consumer(operator, derivative_order)
+        if full_df:
+            return full_df
         if (
             operator in {"df_metric", "df_three_center"}
             and self._density_fitting_backend() == "cuda"
@@ -2153,7 +2190,9 @@ class Calculator:
         checks = []
         derivative_orders = (0, 1) if compute_forces else (0,)
         auxiliary_backend = self._density_fitting_backend()
-        orbital_operators = ["overlap", "kinetic", "nuclear_attraction", "eri"]
+        orbital_operators = ["overlap", "kinetic", "nuclear_attraction"]
+        if not self._full_df_basis_consumer("df_three_center"):
+            orbital_operators.append("eri")
         if self._auxiliary_basis is not None:
             orbital_operators.append("df_three_center")
         if self._capabilities.family == "density_functional":
@@ -2191,7 +2230,7 @@ class Calculator:
                             else self._representation_name,
                             consumer=self._auxiliary_basis_consumer(operator, order)
                             if role == "auxiliary"
-                            else None,
+                            else self._full_df_basis_consumer(operator, order),
                         )
                     )
         reasons = [reason for check in checks for reason in check["reasons"]]
@@ -2459,7 +2498,7 @@ class Calculator:
             create_system = getattr(
                 self._library,
                 "generativeqc_correlation_auxiliary_system_create_v1"
-                if auxiliary_consumer == "correlation_df"
+                if auxiliary_consumer in ("correlation_df", "full_df")
                 else (
                     "generativeqc_scf_auxiliary_system_create_v1"
                     if auxiliary_consumer == "scf_df"

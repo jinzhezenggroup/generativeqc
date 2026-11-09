@@ -218,13 +218,11 @@ def query_integral_capability(
             ),
         )
     if backend in ("cuda_one_electron_values", "cuda_one_electron_derivatives") and any(
-        l > 3 for l in integral.signature.angular
+        l > 4 for l in integral.signature.angular
     ):
         return CapabilityCheck(
             False,
-            reasons=(
-                "production one-electron CUDA tables support l<=3; use the bounded component emitter for g",
-            ),
+            reasons=("production one-electron CUDA tables support l<=4",),
         )
     if backend == "cuda_one_electron_values":
         from .one_electron_values import build_one_electron_component_kernel

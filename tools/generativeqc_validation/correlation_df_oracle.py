@@ -57,12 +57,14 @@ def basis_snapshot(name: str, elements: Sequence[int]) -> BasisSet:
 
 def energies(
     atoms: Sequence,
-    orbital: str,
+    orbital: str | dict,
     auxiliary: str,
     *,
     triples: bool = False,
     df_reference: bool = False,
     cartesian: bool = False,
+    charge: int = 0,
+    diagnostics: dict | None = None,
 ) -> dict[str, float]:
     """Independent DF correlation with an explicitly selected RHF Hamiltonian.
 
@@ -74,7 +76,12 @@ def energies(
 
     lib.num_threads(1)
     molecule = gto.M(
-        atom=list(atoms), basis=orbital, unit="Bohr", verbose=0, cart=cartesian
+        atom=list(atoms),
+        basis=orbital,
+        unit="Bohr",
+        verbose=0,
+        cart=cartesian,
+        charge=charge,
     )
     reference = scf.RHF(molecule)
     if df_reference:
@@ -108,6 +115,45 @@ def energies(
     reference.kernel()
     if not reference.converged:
         raise RuntimeError("independent conventional RHF oracle did not converge")
+    if diagnostics is not None:
+        import numpy as np
+
+        overlap = reference.get_ovlp()
+        diagnostics.update(
+            {
+                "converged": bool(reference.converged),
+                "nao": molecule.nao_nr(),
+                "electrons": molecule.nelectron,
+                "charge": molecule.charge,
+                "spin": molecule.spin,
+                "occupations": reference.mo_occ.tolist(),
+                "orbital_energies": reference.mo_energy.tolist(),
+                "orbital_gradient_norm": float(
+                    np.linalg.norm(
+                        reference.get_grad(reference.mo_coeff, reference.mo_occ)
+                    )
+                ),
+                "overlap_min_eigenvalue": float(np.linalg.eigvalsh(overlap)[0]),
+                "electron_trace": float(
+                    np.einsum("ij,ji", reference.make_rdm1(), overlap)
+                ),
+            }
+        )
+        if df_reference:
+            auxiliary_molecule = reference.with_df.auxmol
+            metric = auxiliary_molecule.intor("int2c2e")
+            if cartesian:
+                normalization = 1 / np.sqrt(
+                    np.diag(auxiliary_molecule.intor("int1e_ovlp"))
+                )
+                metric *= normalization[:, None] * normalization[None, :]
+            spectrum = np.linalg.eigvalsh(metric)
+            diagnostics["metric"] = {
+                "auxiliary_count": len(spectrum),
+                "relative_threshold": 1e-10,
+                "retained_rank": int(np.count_nonzero(spectrum > 1e-10 * spectrum[-1])),
+                "minimum_relative_eigenvalue": float(spectrum[0] / spectrum[-1]),
+            }
     mp2 = dfmp2.DFMP2(reference).density_fit(auxbasis=auxiliary)
     if df_reference:
         mp2.with_df = reference.with_df
@@ -123,5 +169,7 @@ def energies(
         coupled_cluster.kernel()
         if not coupled_cluster.converged:
             raise RuntimeError("independent DF-CCSD oracle did not converge")
+        if diagnostics is not None:
+            diagnostics["ccsd_converged"] = bool(coupled_cluster.converged)
         result["df-ccsd(t)"] = float(coupled_cluster.e_tot + coupled_cluster.ccsd_t())
     return result

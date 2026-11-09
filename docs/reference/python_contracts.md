@@ -101,6 +101,12 @@ missing basis routes and is also used for calculation preflight errors. GFN2-xTB
 reports `applicable=False`, `eligible=True` and empty checks/reasons because it
 does not use an external Gaussian basis. This report does not assess correlation
 or response closure, endpoint numerical qualification or resource feasibility.
+Closed-shell `density_fitting="full_cuda"` selects the scoped `full_df`
+consumer: orbital S/T/V and three-center values/first nuclear derivatives
+through g and auxiliary metric/three-center values/first derivatives through h.
+Its dependency report does not require conventional four-center ERIs, because
+RI-JK and its matching response define the reference. Exact-reference,
+unrestricted, DFT, AO-jet and higher-derivative domains remain independent.
 `load_r2scan3c_basis` supplies the canonical composite basis rather than accepting
 an interchangeable named basis.
 

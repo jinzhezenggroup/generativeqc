@@ -371,6 +371,13 @@ generativeqc_status try_prepare_cuda_df_md_raw_source(CudaDensityFittingIntegral
   if (state.batch_size != 1 || !state.automatic_value_mapping || state.value_math ||
       !additional_device_budget || !additional_host_budget)
     return GENERATIVEQC_STATUS_SUCCESS;
+  // The optional Hermite evaluator owns only f/f/g. Higher classes retain
+  // the complete bounded polynomial source rather than entering its layout.
+  if (std::any_of(orbital.shells.begin(), orbital.shells.end(),
+                  [](const auto& shell) { return shell.angular_momentum > 3; }) ||
+      std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
+                  [](const auto& shell) { return shell.angular_momentum > 4; }))
+    return GENERATIVEQC_STATUS_SUCCESS;
   if (!cuda_density_fitting_integral_source_geometry_matches(source, 0, orbital, auxiliary)) {
     detail = "raw Hermite preparation inputs differ from the physical source";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

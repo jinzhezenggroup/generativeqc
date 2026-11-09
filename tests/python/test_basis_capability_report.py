@@ -70,7 +70,8 @@ def shells(angular: int) -> tuple[Shell, ...]:
 @pytest.mark.parametrize("order", (0, 1))
 @pytest.mark.parametrize("operator", ("df_metric", "df_three_center"))
 @pytest.mark.parametrize(
-    "consumer,maximum", ((None, 3), ("correlation_df", 4), ("scf_df", 5))
+    "consumer,maximum",
+    ((None, 3), ("correlation_df", 4), ("scf_df", 5), ("full_df", 5)),
 )
 def test_selected_auxiliary_boundary_is_explicit(
     order: int, operator: str, consumer: str | None, maximum: int
@@ -134,11 +135,17 @@ def test_canonical_records_count_all_contractions_on_all_atoms(
 
 @pytest.mark.parametrize("compute_forces", (False, True))
 @pytest.mark.parametrize("method", (_native.METHOD_MP2, _native.METHOD_DF_RCCSD_T))
+@pytest.mark.parametrize(
+    "orbital_max,auxiliary_max,eligible", ((4, 5, True), (5, 6, False))
+)
 def test_report_and_singlepoint_rejection_cover_the_same_complete_closure(
     compute_forces: bool,
     method: int,
+    orbital_max: int,
+    auxiliary_max: int,
+    eligible: bool,
 ) -> None:
-    orbital, auxiliary = shells(4), shells(5)
+    orbital, auxiliary = shells(orbital_max), shells(auxiliary_max)
     calculator = configured_calculator(orbital, auxiliary, method=method)
     report = calculator.basis_capability_report(
         iter(ATOMS), compute_forces=compute_forces
@@ -149,7 +156,6 @@ def test_report_and_singlepoint_rejection_cover_the_same_complete_closure(
             "overlap",
             "kinetic",
             "nuclear_attraction",
-            "eri",
             "df_three_center",
         )
         for order in ((0, 1) if compute_forces else (0,))
@@ -162,20 +168,20 @@ def test_report_and_singlepoint_rejection_cover_the_same_complete_closure(
         (check["role"], check["operator"], check["derivative_order"])
         for check in report["checks"]
     } == expected
-    assert not report["eligible"]
+    assert report["eligible"] == eligible
     for check in report["checks"]:
-        assert not check["eligible"]
+        assert check["eligible"] == eligible
         assert check["shells_checked"] == len(ATOMS)
+        assert check["consumer"] == "full_df"
         if check["role"] == "auxiliary":
-            assert check["consumer"] == "correlation_df"
-            assert check["max_supported_angular_momentum"] == 4
+            assert check["max_supported_angular_momentum"] == 5
         else:
-            assert check["consumer"] is None
-            assert check["max_supported_angular_momentum"] == 3
-    properties = ("energy", "forces") if compute_forces else ("energy",)
-    with pytest.raises(NotImplementedError) as failure:
-        calculator.singlepoint(ATOMS, charge=-1, properties=properties)
-    assert str(failure.value) == "; ".join(report["reasons"])
+            assert check["max_supported_angular_momentum"] == 4
+    if not eligible:
+        properties = ("energy", "forces") if compute_forces else ("energy",)
+        with pytest.raises(NotImplementedError) as failure:
+            calculator.singlepoint(ATOMS, charge=-1, properties=properties)
+        assert str(failure.value) == "; ".join(report["reasons"])
     assert calculator._basis == orbital
     assert calculator._auxiliary_basis == auxiliary
 
@@ -201,9 +207,9 @@ def test_scf_auxiliary_closure_does_not_promote_orbitals_or_correlation(
         else:
             assert check["max_supported_angular_momentum"] == maximum
             assert check["eligible"] == linked
-    correlation = configured_calculator(shells(3), shells(5)).basis_capability_report(
-        ATOMS
-    )
+    correlation = configured_calculator(
+        shells(3), shells(5), fitting=_native.DENSITY_FITTING_CORRELATION_CUDA
+    ).basis_capability_report(ATOMS)
     assert not correlation["eligible"]
     assert all(
         check["eligible"]
@@ -311,7 +317,7 @@ def test_complete_augmented_cn_families_are_inspected_without_truncation(
     report = configured_calculator(
         orbital, auxiliary, method=method
     ).basis_capability_report(ATOMS)
-    assert report["eligible"] == (cardinal == "t")
+    assert report["eligible"] == (cardinal in ("t", "q"))
     for check in report["checks"]:
         assert check["shells_checked"] == len(
             orbital if check["role"] == "orbital" else auxiliary
@@ -321,7 +327,7 @@ def test_complete_augmented_cn_families_are_inspected_without_truncation(
         )
     if cardinal == "q":
         assert sum(2 * shell.angular_momentum + 1 for shell in orbital) == 160
-    if cardinal != "t":
+    if cardinal == "5":
         assert any(
             f"l={orbital_max}" in reason and "orbital" in reason
             for reason in report["reasons"]

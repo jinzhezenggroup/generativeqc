@@ -162,7 +162,7 @@ def test_selected_g_cartesian_components_against_pyscf(
             )
 
 
-def test_g_codegen_is_explicit_and_production_capability_stays_fail_closed() -> None:
+def test_g_codegen_and_production_one_electron_capability() -> None:
     from generativeqc_compiler.integral.capabilities import query_integral_capability
     from generativeqc_compiler.integral.one_electron_cuda import (
         _component_layout,
@@ -191,8 +191,7 @@ def test_g_codegen_is_explicit_and_production_capability_stays_fail_closed() -> 
 
     request = build_one_electron_value_ir("kinetic", (4, 0))
     production = query_integral_capability(request, backend="cuda_one_electron_values")
-    assert not production.supported
-    assert "production one-electron CUDA tables support l<=3" in production.reasons[0]
+    assert production.supported
     bounded = query_integral_capability(
         request,
         backend="cuda_bounded_component",

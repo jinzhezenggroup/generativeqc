@@ -1,0 +1,6179 @@
+{
+  "result": {
+    "energy": -38.060409075702395,
+    "forces": [
+      [
+        0.006926483463663306,
+        -0.00923531128488807,
+        0.055411867709668244
+      ],
+      [
+        -0.006926483463663794,
+        0.009235311284975865,
+        -0.05541186770982787
+      ]
+    ],
+    "hf_energy": -37.8954027451536,
+    "mp2_correlation_energy": -0.13165101937344575,
+    "delta_ccsdt_energy": -0.033355311175348845,
+    "hf_forces": [
+      [
+        0.008731385328155445,
+        -0.011641847104174818,
+        0.06985108262620285
+      ],
+      [
+        -0.0087313853281936,
+        0.01164184710410657,
+        -0.06985108262642845
+      ]
+    ],
+    "mp2_correlation_forces": [
+      [
+        -0.0010895245378970096,
+        0.0014526993838274006,
+        -0.008716196303793552
+      ],
+      [
+        0.001089524537932374,
+        -0.001452699383672964,
+        0.008716196303862193
+      ]
+    ],
+    "delta_ccsdt_forces": [
+      [
+        -0.0007153773265951291,
+        0.0009538364354593487,
+        -0.005723018612741049
+      ],
+      [
+        0.0007153773265974328,
+        -0.0009538364354577389,
+        0.005723018612738384
+      ]
+    ],
+    "hf_weights": [
+      -0.24367215584898735,
+      1.2436721558489874
+    ],
+    "mp2_weights": [
+      -0.7297297297297299,
+      1.72972972972973
+    ],
+    "components": [
+      {
+        "roles": [
+          "correction_ccsdt"
+        ],
+        "method": "df-ccsd(t)",
+        "basis_identity": "16a3c8012617d0bee7c804d9612124d27d58cf497db7498de9cba91e5c949767",
+        "coefficient": 1.0,
+        "result": {
+          "energy": -38.02549981561655,
+          "forces": [
+            [
+              0.007407788580522129,
+              -0.009877051440712326,
+              0.059262308644218775
+            ],
+            [
+              -0.007407788580520797,
+              0.009877051440710966,
+              -0.05926230864421944
+            ]
+          ],
+          "converged": true,
+          "iterations": 26,
+          "energy_change": 6.937228569370291e-13,
+          "density_rms": 1.5849335732731618e-12,
+          "executed_backend": "cuda",
+          "basis_metadata": {
+            "orbital": {
+              "name": "aug-cc-pvtz",
+              "role": "orbital",
+              "mathematical_identity": "bc920dd946d720ddec45b0bc760735e8ea74b962e43d1332a858e960234b5c60",
+              "basis_identity": "16a3c8012617d0bee7c804d9612124d27d58cf497db7498de9cba91e5c949767",
+              "representation": "spherical",
+              "provenance": {
+                "source": "local PySCF basis library",
+                "version": "2.14.0",
+                "license": "Apache-2.0",
+                "checksum": "a17306075c1816c1ea5679b30e9cfff5b29c4792d90d330357481b649a74012f"
+              },
+              "electrons": {
+                "atomic_numbers": [
+                  6,
+                  1
+                ],
+                "nuclear_charges": [
+                  6,
+                  1
+                ],
+                "ecp_core_electrons": [
+                  0,
+                  0
+                ],
+                "ionic_charge": 1,
+                "electron_count": 6,
+                "multiplicity": 1,
+                "nalpha": 3,
+                "nbeta": 3
+              },
+              "shell_count": 23,
+              "primitive_count": 41
+            },
+            "auxiliary": {
+              "name": "aug-cc-pvtz-jkfit",
+              "role": "auxiliary",
+              "mathematical_identity": "98de7795d3d3ca17a89e0f9f1fae8df36fbc7c43c2144c948727026373f4c5ef",
+              "basis_identity": "59d71c2ce23c6ace8b4ba377abe035ed17febd3792c0d1364404c07d8b17b23b",
+              "representation": "spherical",
+              "provenance": {
+                "source": "local PySCF basis library",
+                "version": "2.14.0",
+                "license": "Apache-2.0",
+                "checksum": "1d09a5581fa47381039090141c4eac9e00f515fdc9229f327f98dfdb027210f3"
+              },
+              "electrons": {
+                "atomic_numbers": [
+                  6,
+                  1
+                ],
+                "nuclear_charges": [
+                  6,
+                  1
+                ],
+                "ecp_core_electrons": [
+                  0,
+                  0
+                ],
+                "ionic_charge": 1,
+                "electron_count": 6,
+                "multiplicity": 1,
+                "nalpha": 3,
+                "nbeta": 3
+              },
+              "shell_count": 44,
+              "primitive_count": 44
+            },
+            "model_identity": "6013128e0cb27a7befec463f2c33d7c3cad6b15895479d81fb4187a45ad9b43f"
+          },
+          "accuracy": null,
+          "resource_diagnostics": null,
+          "precision": {
+            "policy_version": 1,
+            "requested_mode": "fp64",
+            "effective_bits": 64,
+            "mixed_precision_fock_threshold": 0.0,
+            "strict_refinement_applied": false,
+            "mixed_precision_reserved_error": 0.0,
+            "refinement_iterations": 0,
+            "mixed_stage_fock_builds": 0,
+            "strict_stage_fock_builds": 0,
+            "post_scf_fock_builds": 0,
+            "execution_retries": 0,
+            "mixed_admission_census": 0,
+            "final_residual_audits": 0,
+            "skipped_final_fock_builds": 0,
+            "operator_work_counters_valid": false,
+            "detail_version": 1,
+            "complete": false,
+            "operator_inventory_complete": false,
+            "conversion_count": 0,
+            "fallback_count": 0,
+            "returned_state_identity": null,
+            "scf_fock_timeline": [],
+            "operators": [],
+            "native_provenance": {
+              "policy_version": 1,
+              "requested_mode": "fp64",
+              "effective_bits": 64,
+              "mixed_precision_fock_threshold": 0.0,
+              "strict_refinement_applied": false,
+              "mixed_precision_reserved_error": 0.0,
+              "refinement_iterations": 0,
+              "mixed_stage_fock_builds": 0,
+              "strict_stage_fock_builds": 0,
+              "post_scf_fock_builds": 0,
+              "execution_retries": 0,
+              "mixed_admission_census": 0,
+              "final_residual_audits": 0,
+              "skipped_final_fock_builds": 0,
+              "operator_work_counters_valid": false
+            }
+          },
+          "incremental_direct_jk": {
+            "policy_version": 1,
+            "requested": false,
+            "active": false,
+            "quartet_work_counters_valid": false,
+            "anchor_full_builds": 0,
+            "delta_builds": 0,
+            "periodic_rebuilds": 0,
+            "bypass_full_builds": 0,
+            "post_scf_full_builds": 0,
+            "anchor_updates": 0,
+            "max_abs_delta_density": 0.0,
+            "full_candidate_shell_quartets": 0,
+            "full_rejected_shell_quartets": 0,
+            "full_admitted_shell_quartets": 0,
+            "full_admitted_quartet_tiles": 0,
+            "delta_candidate_shell_quartets": 0,
+            "delta_rejected_shell_quartets": 0,
+            "delta_admitted_shell_quartets": 0,
+            "delta_admitted_quartet_tiles": 0
+          },
+          "correlation": {
+            "reference_energy": -37.893396298493435,
+            "opposite_spin_energy": 0.0,
+            "same_spin_energy": 0.0,
+            "minimum_absolute_denominator": 0.5249062223893906,
+            "reference_residual": 9.89989340505204e-13,
+            "numeric_capacity_bytes": 2147456992,
+            "energy_tile_count": 0,
+            "mo_host_staging": true,
+            "correlation_owned_device_bytes": 180777728,
+            "correlation_provider_retained_bytes": 6431400,
+            "mo_transfer_bytes": 6469488,
+            "host_to_device_ms": 0.0,
+            "device_to_host_ms": 0.0,
+            "transform_library_ms": 0.0,
+            "tensor_kernel_ms": 0.0,
+            "equation_hash": "23e78659f0c425843a0fb9d82d39a0ddfb0181659f190e83253263c00a3dbd44",
+            "response_iterations": 10,
+            "response_restarts": 0,
+            "response_absolute_residual": 6.527086335419766e-13,
+            "response_relative_residual": 2.871175412385687e-10,
+            "response_workspace_bytes": 122456,
+            "derivative_workspace_bytes": 0,
+            "planned_endpoint_peak_bytes": 2147456992,
+            "measured_endpoint_peak_bytes": 0,
+            "force_provenance_flags": 15,
+            "response_operator_hash": "e511cc6d2677e37fba767e8edf262ba6dfb7bdfe77315d623b9a6def66ff03aa",
+            "measured_response_workspace_peak_bytes": 120872,
+            "response_workspace_allocation_count": 17,
+            "ccsd_iterations": 26,
+            "ccsd_diis_restarts": 0,
+            "ccsd_correlation_energy": -0.12939895462945494,
+            "ccsd_energy_change": 6.937228569370291e-13,
+            "ccsd_singles_residual_max": 3.8750383110630615e-13,
+            "ccsd_doubles_residual_max": 1.5849335732731618e-12,
+            "ccsd_replay_singles_residual_max": 3.8750513214891313e-13,
+            "ccsd_replay_doubles_residual_max": 1.584989084424393e-12,
+            "ccsd_setup_h2d_bytes": 6774456,
+            "ccsd_scalar_d2h_bytes": 1980,
+            "ccsd_amplitude_d2h_bytes": 315216,
+            "ccsd_synchronizations": 105,
+            "ccsd_replay_equation_hash": "895007fd09d45283af4598084fa8d15b9c1786da4fa9c9bf741fc9e6f145c6e1",
+            "ccsd_t_triples_energy": -0.00270456249365237,
+            "ccsd_t_virtual_triples": 50116,
+            "ccsd_t_workspace_bytes": 175448832,
+            "ccsd_t_equation_hash": "",
+            "reference_execution_plan_reused": false,
+            "reference_execution_plan_owned_device_bytes": 0
+          },
+          "cc_performance": {
+            "reference_seconds": 0.178184095,
+            "problem_seconds": 10.003060729,
+            "provider_seconds": 10.001732639,
+            "source_seconds": 1.937e-05,
+            "solver_seconds": 1.202482139,
+            "iteration_seconds": 0.7242462730000001,
+            "replay_seconds": 0.45605427,
+            "update_seconds": 0.00148608,
+            "diis_seconds": 0.015268100000000001,
+            "triples_seconds": 0.207660486,
+            "source_scans": 1,
+            "source_reads": 69,
+            "source_values": 714150,
+            "transform_fmas": 223596450,
+            "transform_stages": 76,
+            "mo_blocks": 5,
+            "cuda_transform_calls": 1,
+            "cuda_batch_calls": 0,
+            "iteration_graph_calls": 26,
+            "replay_graph_calls": 1,
+            "update_calls": 25,
+            "generated_error_checks": 26,
+            "diis_gram_calls": 25,
+            "diis_coefficient_calls": 24,
+            "diis_combine_calls": 48,
+            "ccsd_fp32_requested": false,
+            "ccsd_fp32_executed": false,
+            "ccsd_fp32_refused": false,
+            "ccsd_fp32_evaluations": 0,
+            "ccsd_fp32_gemm_calls": 0,
+            "ccsd_fp32_cast_elements": 0,
+            "lambda_seconds": 2.173642479,
+            "source_response_seconds": 3.20160471,
+            "orbital_seconds": 3.859582628,
+            "lambda_fp32_requested": false,
+            "lambda_fp32_executed": false,
+            "lambda_fp32_refused": false,
+            "lambda_fp32_iterations": 0,
+            "lambda_fp64_iterations": 21,
+            "lambda_fp32_actions": 0,
+            "lambda_fp64_actions": 22,
+            "lambda_fp32_gemm_calls": 0,
+            "lambda_fp32_cast_elements": 0,
+            "lambda_auxiliary_batch_size": 32,
+            "lambda_numeric_capacity_bytes": 1302842838,
+            "lambda_owned_device_bytes": 197606360
+          },
+          "physical_residual_rms": null,
+          "ks_diagnostic": null,
+          "ks_transport_diagnostic": null,
+          "dispersion": null,
+          "initial_guess": null,
+          "precision_validation": null,
+          "dipole": null,
+          "charges": null,
+          "lowdin_charges": null,
+          "density": null
+        },
+        "elapsed_seconds": 20.843587767332792
+      },
+      {
+        "roles": [
+          "mp2_low",
+          "correction_mp2"
+        ],
+        "method": "mp2",
+        "basis_identity": "16a3c8012617d0bee7c804d9612124d27d58cf497db7498de9cba91e5c949767",
+        "coefficient": -1.7297297297297298,
+        "result": {
+          "energy": -37.9921445044412,
+          "forces": [
+            [
+              0.008123165907117258,
+              -0.010830887876171674,
+              0.06498532725695982
+            ],
+            [
+              -0.00812316590711823,
+              0.010830887876168704,
+              -0.06498532725695783
+            ]
+          ],
+          "converged": true,
+          "iterations": 26,
+          "energy_change": 6.937228569370291e-13,
+          "density_rms": 1.5849335732731618e-12,
+          "executed_backend": "cuda",
+          "basis_metadata": {},
+          "accuracy": null,
+          "resource_diagnostics": null,
+          "precision": null,
+          "incremental_direct_jk": null,
+          "correlation": {
+            "reference_energy": -37.893396298493435,
+            "opposite_spin_energy": -0.09104099651621113,
+            "same_spin_energy": -0.007707209431552961,
+            "minimum_absolute_denominator": 1.049812444778781,
+            "reference_residual": 9.89989340505204e-13,
+            "numeric_capacity_bytes": 1714818808,
+            "energy_tile_count": 0,
+            "mo_host_staging": true,
+            "correlation_owned_device_bytes": 0,
+            "correlation_provider_retained_bytes": 0,
+            "mo_transfer_bytes": 0,
+            "host_to_device_ms": 0.0,
+            "device_to_host_ms": 0.0,
+            "transform_library_ms": 0.0,
+            "tensor_kernel_ms": 0.0,
+            "equation_hash": "a88ee75a51be4c6987e790b9fc7232e495573faf498a1773c3e7245a6c310bea",
+            "response_iterations": 12,
+            "response_restarts": 0,
+            "response_absolute_residual": 1.040140614871821e-13,
+            "response_relative_residual": 1.1048090314152155e-12,
+            "response_workspace_bytes": 122456,
+            "derivative_workspace_bytes": 0,
+            "planned_endpoint_peak_bytes": 1714818808,
+            "measured_endpoint_peak_bytes": 0,
+            "force_provenance_flags": 7,
+            "response_operator_hash": "e511cc6d2677e37fba767e8edf262ba6dfb7bdfe77315d623b9a6def66ff03aa",
+            "measured_response_workspace_peak_bytes": 120872,
+            "response_workspace_allocation_count": 17,
+            "ccsd_iterations": 0,
+            "ccsd_diis_restarts": 0,
+            "ccsd_correlation_energy": 0.0,
+            "ccsd_energy_change": 0.0,
+            "ccsd_singles_residual_max": 0.0,
+            "ccsd_doubles_residual_max": 0.0,
+            "ccsd_replay_singles_residual_max": 0.0,
+            "ccsd_replay_doubles_residual_max": 0.0,
+            "ccsd_setup_h2d_bytes": 0,
+            "ccsd_scalar_d2h_bytes": 0,
+            "ccsd_amplitude_d2h_bytes": 0,
+            "ccsd_synchronizations": 0,
+            "ccsd_replay_equation_hash": "",
+            "ccsd_t_triples_energy": 0.0,
+            "ccsd_t_virtual_triples": 0,
+            "ccsd_t_workspace_bytes": 0,
+            "ccsd_t_equation_hash": "",
+            "reference_execution_plan_reused": false,
+            "reference_execution_plan_owned_device_bytes": 0
+          },
+          "cc_performance": null,
+          "physical_residual_rms": null,
+          "ks_diagnostic": null,
+          "ks_transport_diagnostic": null,
+          "dispersion": null,
+          "initial_guess": null,
+          "precision_validation": null,
+          "dipole": null,
+          "charges": null,
+          "lowdin_charges": null,
+          "density": null
+        },
+        "elapsed_seconds": 20.843587767332792
+      },
+      {
+        "roles": [
+          "hf_low"
+        ],
+        "method": "rhf",
+        "basis_identity": "16a3c8012617d0bee7c804d9612124d27d58cf497db7498de9cba91e5c949767",
+        "coefficient": 0.48605757388074255,
+        "result": {
+          "energy": -37.893396298493435,
+          "forces": [
+            [
+              0.008701140294409687,
+              -0.011601520392549858,
+              0.0696091223552131
+            ],
+            [
+              -0.008701140294409632,
+              0.011601520392550163,
+              -0.0696091223552302
+            ]
+          ],
+          "converged": true,
+          "iterations": 26,
+          "energy_change": 6.937228569370291e-13,
+          "density_rms": 1.5849335732731618e-12,
+          "executed_backend": "cuda",
+          "basis_metadata": {},
+          "accuracy": null,
+          "resource_diagnostics": null,
+          "precision": null,
+          "incremental_direct_jk": null,
+          "correlation": null,
+          "cc_performance": null,
+          "physical_residual_rms": null,
+          "ks_diagnostic": null,
+          "ks_transport_diagnostic": null,
+          "dispersion": null,
+          "initial_guess": null,
+          "precision_validation": null,
+          "dipole": null,
+          "charges": null,
+          "lowdin_charges": null,
+          "density": null
+        },
+        "elapsed_seconds": 20.843587767332792
+      },
+      {
+        "roles": [
+          "mp2_high"
+        ],
+        "method": "mp2",
+        "basis_identity": "875d7f85625c35d344111ed5f0b2ef6b50fffb80bc9ce4ee4e725598657c2295",
+        "coefficient": 1.72972972972973,
+        "result": {
+          "energy": -38.012779767873454,
+          "forces": [
+            [
+              0.007851745113463482,
+              -0.010468993484617939,
+              0.06281396090814595
+            ],
+            [
+              -0.00785174511347414,
+              0.010468993484651024,
+              -0.06281396090828295
+            ]
+          ],
+          "converged": true,
+          "iterations": 14,
+          "energy_change": 7.105427357601002e-15,
+          "density_rms": 1.2741596398648757e-12,
+          "executed_backend": "cuda",
+          "basis_metadata": {
+            "orbital": {
+              "name": "aug-cc-pvqz",
+              "role": "orbital",
+              "mathematical_identity": "c75e677694262716651996e0a0190d961fbd6d65212ca31d257bd8cf3ac3e5a8",
+              "basis_identity": "875d7f85625c35d344111ed5f0b2ef6b50fffb80bc9ce4ee4e725598657c2295",
+              "representation": "spherical",
+              "provenance": {
+                "source": "local PySCF basis library",
+                "version": "2.14.0",
+                "license": "Apache-2.0",
+                "checksum": "a67588e2538f7b4119de7e7ef70b305c96fd6151f163f0f525b9d983ace7bdc8"
+              },
+              "electrons": {
+                "atomic_numbers": [
+                  6,
+                  1
+                ],
+                "nuclear_charges": [
+                  6,
+                  1
+                ],
+                "ecp_core_electrons": [
+                  0,
+                  0
+                ],
+                "ionic_charge": 1,
+                "electron_count": 6,
+                "multiplicity": 1,
+                "nalpha": 3,
+                "nbeta": 3
+              },
+              "shell_count": 34,
+              "primitive_count": 54
+            },
+            "auxiliary": {
+              "name": "aug-cc-pvqz-jkfit",
+              "role": "auxiliary",
+              "mathematical_identity": "78ed6dee9a92b93190d48623a787c70a76334827d31a31d53d0815880d0cd9c5",
+              "basis_identity": "aaa37dd73180d2a204941dc7b701ee85650763e3a9d6374e11b65fb3f0ea21fb",
+              "representation": "spherical",
+              "provenance": {
+                "source": "local PySCF basis library",
+                "version": "2.14.0",
+                "license": "Apache-2.0",
+                "checksum": "9bbddd69621a36ab3766d60df4b05f6308a3ff6c5e48cbc0c33825a581eeb2c0"
+              },
+              "electrons": {
+                "atomic_numbers": [
+                  6,
+                  1
+                ],
+                "nuclear_charges": [
+                  6,
+                  1
+                ],
+                "ecp_core_electrons": [
+                  0,
+                  0
+                ],
+                "ionic_charge": 1,
+                "electron_count": 6,
+                "multiplicity": 1,
+                "nalpha": 3,
+                "nbeta": 3
+              },
+              "shell_count": 52,
+              "primitive_count": 52
+            },
+            "model_identity": "1b117f04f904ff4e2d07567f724f858d9ba1c57ff3fd7940a4aee40442be82f0"
+          },
+          "accuracy": null,
+          "resource_diagnostics": null,
+          "precision": {
+            "policy_version": 1,
+            "requested_mode": "fp64",
+            "effective_bits": 64,
+            "mixed_precision_fock_threshold": 0.0,
+            "strict_refinement_applied": false,
+            "mixed_precision_reserved_error": 0.0,
+            "refinement_iterations": 0,
+            "mixed_stage_fock_builds": 0,
+            "strict_stage_fock_builds": 0,
+            "post_scf_fock_builds": 0,
+            "execution_retries": 0,
+            "mixed_admission_census": 0,
+            "final_residual_audits": 0,
+            "skipped_final_fock_builds": 0,
+            "operator_work_counters_valid": false,
+            "detail_version": 1,
+            "complete": false,
+            "operator_inventory_complete": false,
+            "conversion_count": 0,
+            "fallback_count": 0,
+            "returned_state_identity": null,
+            "scf_fock_timeline": [],
+            "operators": [],
+            "native_provenance": {
+              "policy_version": 1,
+              "requested_mode": "fp64",
+              "effective_bits": 64,
+              "mixed_precision_fock_threshold": 0.0,
+              "strict_refinement_applied": false,
+              "mixed_precision_reserved_error": 0.0,
+              "refinement_iterations": 0,
+              "mixed_stage_fock_builds": 0,
+              "strict_stage_fock_builds": 0,
+              "post_scf_fock_builds": 0,
+              "execution_retries": 0,
+              "mixed_admission_census": 0,
+              "final_residual_audits": 0,
+              "skipped_final_fock_builds": 0,
+              "operator_work_counters_valid": false
+            }
+          },
+          "incremental_direct_jk": {
+            "policy_version": 1,
+            "requested": false,
+            "active": false,
+            "quartet_work_counters_valid": false,
+            "anchor_full_builds": 0,
+            "delta_builds": 0,
+            "periodic_rebuilds": 0,
+            "bypass_full_builds": 0,
+            "post_scf_full_builds": 0,
+            "anchor_updates": 0,
+            "max_abs_delta_density": 0.0,
+            "full_candidate_shell_quartets": 0,
+            "full_rejected_shell_quartets": 0,
+            "full_admitted_shell_quartets": 0,
+            "full_admitted_quartet_tiles": 0,
+            "delta_candidate_shell_quartets": 0,
+            "delta_rejected_shell_quartets": 0,
+            "delta_admitted_shell_quartets": 0,
+            "delta_admitted_quartet_tiles": 0
+          },
+          "correlation": {
+            "reference_energy": -37.89500962291397,
+            "opposite_spin_energy": -0.10855202452253321,
+            "same_spin_energy": -0.009218120436953454,
+            "minimum_absolute_denominator": 1.0504701299036239,
+            "reference_residual": 1.3682874278053703e-12,
+            "numeric_capacity_bytes": 2147436016,
+            "energy_tile_count": 0,
+            "mo_host_staging": true,
+            "correlation_owned_device_bytes": 84493012,
+            "correlation_provider_retained_bytes": 27044208,
+            "mo_transfer_bytes": 27171216,
+            "host_to_device_ms": 0.0,
+            "device_to_host_ms": 0.0,
+            "transform_library_ms": 0.0,
+            "tensor_kernel_ms": 0.0,
+            "equation_hash": "a88ee75a51be4c6987e790b9fc7232e495573faf498a1773c3e7245a6c310bea",
+            "response_iterations": 12,
+            "response_restarts": 0,
+            "response_absolute_residual": 1.2833495324366005e-13,
+            "response_relative_residual": 1.3272470713833522e-12,
+            "response_workspace_bytes": 220952,
+            "derivative_workspace_bytes": 0,
+            "planned_endpoint_peak_bytes": 2147436016,
+            "measured_endpoint_peak_bytes": 0,
+            "force_provenance_flags": 7,
+            "response_operator_hash": "e511cc6d2677e37fba767e8edf262ba6dfb7bdfe77315d623b9a6def66ff03aa",
+            "measured_response_workspace_peak_bytes": 218000,
+            "response_workspace_allocation_count": 17,
+            "ccsd_iterations": 0,
+            "ccsd_diis_restarts": 0,
+            "ccsd_correlation_energy": 0.0,
+            "ccsd_energy_change": 0.0,
+            "ccsd_singles_residual_max": 0.0,
+            "ccsd_doubles_residual_max": 0.0,
+            "ccsd_replay_singles_residual_max": 0.0,
+            "ccsd_replay_doubles_residual_max": 0.0,
+            "ccsd_setup_h2d_bytes": 0,
+            "ccsd_scalar_d2h_bytes": 0,
+            "ccsd_amplitude_d2h_bytes": 0,
+            "ccsd_synchronizations": 0,
+            "ccsd_replay_equation_hash": "",
+            "ccsd_t_triples_energy": 0.0,
+            "ccsd_t_virtual_triples": 0,
+            "ccsd_t_workspace_bytes": 0,
+            "ccsd_t_equation_hash": "",
+            "reference_execution_plan_reused": false,
+            "reference_execution_plan_owned_device_bytes": 0
+          },
+          "cc_performance": null,
+          "physical_residual_rms": null,
+          "ks_diagnostic": null,
+          "ks_transport_diagnostic": null,
+          "dispersion": null,
+          "initial_guess": null,
+          "precision_validation": null,
+          "dipole": null,
+          "charges": null,
+          "lowdin_charges": null,
+          "density": null
+        },
+        "elapsed_seconds": 43.86182984337211
+      },
+      {
+        "roles": [
+          "hf_high"
+        ],
+        "method": "rhf",
+        "basis_identity": "875d7f85625c35d344111ed5f0b2ef6b50fffb80bc9ce4ee4e725598657c2295",
+        "coefficient": -0.48605757388074267,
+        "result": {
+          "energy": -37.89500962291397,
+          "forces": [
+            [
+              0.008725459431574184,
+              -0.0116339459087402,
+              0.0698036754533522
+            ],
+            [
+              -0.008725459431604854,
+              0.011633945908685384,
+              -0.06980367545353694
+            ]
+          ],
+          "converged": true,
+          "iterations": 14,
+          "energy_change": 7.105427357601002e-15,
+          "density_rms": 1.2741596398648757e-12,
+          "executed_backend": "cuda",
+          "basis_metadata": {},
+          "accuracy": null,
+          "resource_diagnostics": null,
+          "precision": null,
+          "incremental_direct_jk": null,
+          "correlation": null,
+          "cc_performance": null,
+          "physical_residual_rms": null,
+          "ks_diagnostic": null,
+          "ks_transport_diagnostic": null,
+          "dispersion": null,
+          "initial_guess": null,
+          "precision_validation": null,
+          "dipole": null,
+          "charges": null,
+          "lowdin_charges": null,
+          "density": null
+        },
+        "elapsed_seconds": 43.86182984337211
+      }
+    ],
+    "converged": true,
+    "executed_backend": "cuda",
+    "basis_metadata": {
+      "mp2": [
+        {
+          "identity": "16a3c8012617d0bee7c804d9612124d27d58cf497db7498de9cba91e5c949767",
+          "name": "aug-cc-pvtz",
+          "cardinal": 3
+        },
+        {
+          "identity": "875d7f85625c35d344111ed5f0b2ef6b50fffb80bc9ce4ee4e725598657c2295",
+          "name": "aug-cc-pvqz",
+          "cardinal": 4
+        }
+      ],
+      "correction": {
+        "identity": "16a3c8012617d0bee7c804d9612124d27d58cf497db7498de9cba91e5c949767",
+        "name": "aug-cc-pvtz"
+      },
+      "representation": "spherical",
+      "hf_extrapolation": "exponential",
+      "hf_exponent": 1.63,
+      "correlation_exponent": 3.0,
+      "frozen_core": 0,
+      "ecp_core_electrons": [
+        0,
+        0
+      ],
+      "density_fitting": true,
+      "hf_reference": "df",
+      "spin_reference": "rhf",
+      "charge": 1,
+      "multiplicity": 1,
+      "auxiliary_basis_identities": {
+        "16a3c8012617d0bee7c804d9612124d27d58cf497db7498de9cba91e5c949767": "59d71c2ce23c6ace8b4ba377abe035ed17febd3792c0d1364404c07d8b17b23b",
+        "875d7f85625c35d344111ed5f0b2ef6b50fffb80bc9ce4ee4e725598657c2295": "aaa37dd73180d2a204941dc7b701ee85650763e3a9d6374e11b65fb3f0ea21fb"
+      }
+    },
+    "endpoint_seconds": 64.70591250061989,
+    "execution_groups": [
+      {
+        "basis_identity": "16a3c8012617d0bee7c804d9612124d27d58cf497db7498de9cba91e5c949767",
+        "primary": "df-ccsd(t)",
+        "methods": [
+          "df-ccsd(t)",
+          "mp2",
+          "rhf"
+        ],
+        "elapsed_seconds": 20.843587767332792
+      },
+      {
+        "basis_identity": "875d7f85625c35d344111ed5f0b2ef6b50fffb80bc9ce4ee4e725598657c2295",
+        "primary": "mp2",
+        "methods": [
+          "mp2",
+          "rhf"
+        ],
+        "elapsed_seconds": 43.86182984337211
+      }
+    ],
+    "convergence": {
+      "requested_policy": "tight",
+      "preconvergence": "fp64",
+      "selected": "strict_fp64",
+      "arithmetic_request": "fp64",
+      "reason": "tight_convergence",
+      "budget": null,
+      "component_budget": null,
+      "coefficient_l1": 5.431574607220945,
+      "scale": 0.0,
+      "limits": {
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-11,
+        "ccsd_energy_tolerance": 1e-12,
+        "ccsd_residual_tolerance": 1e-10,
+        "lambda_residual_tolerance": 1e-09,
+        "response_absolute_tolerance": 1e-12,
+        "orbital_residual_tolerance": 1e-10,
+        "stationarity_tolerance": 1e-08
+      },
+      "preconvergence_fallback": null,
+      "preconvergence_selection": "fp64",
+      "arithmetic": "fp64",
+      "lambda_arithmetic_request": "fp64",
+      "lambda_arithmetic": "fp64"
+    }
+  },
+  "atoms_bohr": [
+    [
+      6,
+      [
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    [
+      1,
+      [
+        0.3,
+        -0.4,
+        2.4
+      ]
+    ]
+  ],
+  "charge": 1,
+  "basis_snapshots": {
+    "orbital": [
+      {
+        "name": "aug-cc-pvtz",
+        "elements": [
+          {
+            "atomic_number": 1,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "3387E-2",
+                  "5095E-3",
+                  "1159E-3"
+                ],
+                "coefficients": [
+                  [
+                    "6068E-6",
+                    "45308E-6",
+                    "202822E-6"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "3258E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "1027E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "2526E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "1407E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "388E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "102E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "1057E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "247E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 1,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          },
+          {
+            "atomic_number": 6,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "8236E0",
+                  "1235E0",
+                  "2808E-1",
+                  "7927E-2",
+                  "2559E-2",
+                  "8997E-3",
+                  "3319E-3",
+                  "3643E-4"
+                ],
+                "coefficients": [
+                  [
+                    "531E-6",
+                    "4108E-6",
+                    "21087E-6",
+                    "81853E-6",
+                    "234817E-6",
+                    "434401E-6",
+                    "346129E-6",
+                    "-8983E-6"
+                  ],
+                  [
+                    "-113E-6",
+                    "-878E-6",
+                    "-454E-5",
+                    "-18133E-6",
+                    "-5576E-5",
+                    "-126895E-6",
+                    "-170352E-6",
+                    "598684E-6"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "9059E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "1285E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "4402E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "1871E-2",
+                  "4133E-3",
+                  "12E-1"
+                ],
+                "coefficients": [
+                  [
+                    "14031E-6",
+                    "86866E-6",
+                    "290216E-6"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "3827E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "1209E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "3569E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "1097E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "318E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "1E-1"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "761E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "268E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 6,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          }
+        ],
+        "provenance": {
+          "source": "local PySCF basis library",
+          "version": "2.14.0",
+          "license": "Apache-2.0",
+          "checksum": "a17306075c1816c1ea5679b30e9cfff5b29c4792d90d330357481b649a74012f"
+        },
+        "representation": "spherical",
+        "normalization": "normalized-primitives; native-normalized-contractions",
+        "exponent_units": "bohr^-2",
+        "ordering": "CCA-cartesian; libcint-real-spherical"
+      },
+      {
+        "name": "aug-cc-pvqz",
+        "elements": [
+          {
+            "atomic_number": 1,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "8264E-2",
+                  "1241E-2",
+                  "2824E-3"
+                ],
+                "coefficients": [
+                  [
+                    "2006E-6",
+                    "15343E-6",
+                    "75579E-6"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "7977E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "2581E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "8989E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "2363E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "2292E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "838E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "292E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "848E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "2062E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "662E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "19E-2"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "1397E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "36E-2"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 1,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          },
+          {
+            "atomic_number": 6,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "3398E1",
+                  "5089E0",
+                  "1157E0",
+                  "3266E-1",
+                  "1061E-1",
+                  "3811E-2",
+                  "1475E-2",
+                  "6035E-3",
+                  "253E-2"
+                ],
+                "coefficients": [
+                  [
+                    "91E-6",
+                    "704E-6",
+                    "3693E-6",
+                    "1536E-5",
+                    "52929E-6",
+                    "147043E-6",
+                    "305631E-6",
+                    "399345E-6",
+                    "217051E-6"
+                  ],
+                  [
+                    "-19E-6",
+                    "-151E-6",
+                    "-785E-6",
+                    "-3324E-6",
+                    "-11512E-6",
+                    "-3416E-5",
+                    "-77173E-6",
+                    "-141493E-6",
+                    "-118019E-6"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "7355E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "2905E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "1111E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "4145E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "3451E-2",
+                  "7915E-3",
+                  "2368E-3"
+                ],
+                "coefficients": [
+                  [
+                    "5378E-6",
+                    "36132E-6",
+                    "142493E-6"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "8132E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "289E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "1007E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "3218E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "1848E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "649E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "228E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "766E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "1419E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "485E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "187E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "1011E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "424E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 6,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          }
+        ],
+        "provenance": {
+          "source": "local PySCF basis library",
+          "version": "2.14.0",
+          "license": "Apache-2.0",
+          "checksum": "a67588e2538f7b4119de7e7ef70b305c96fd6151f163f0f525b9d983ace7bdc8"
+        },
+        "representation": "spherical",
+        "normalization": "normalized-primitives; native-normalized-contractions",
+        "exponent_units": "bohr^-2",
+        "ordering": "CCA-cartesian; libcint-real-spherical"
+      },
+      {
+        "name": "aug-cc-pvtz",
+        "elements": [
+          {
+            "atomic_number": 1,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "3387E-2",
+                  "5095E-3",
+                  "1159E-3"
+                ],
+                "coefficients": [
+                  [
+                    "6068E-6",
+                    "45308E-6",
+                    "202822E-6"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "3258E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "1027E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "2526E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "1407E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "388E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "102E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "1057E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "247E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 1,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          },
+          {
+            "atomic_number": 6,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "8236E0",
+                  "1235E0",
+                  "2808E-1",
+                  "7927E-2",
+                  "2559E-2",
+                  "8997E-3",
+                  "3319E-3",
+                  "3643E-4"
+                ],
+                "coefficients": [
+                  [
+                    "531E-6",
+                    "4108E-6",
+                    "21087E-6",
+                    "81853E-6",
+                    "234817E-6",
+                    "434401E-6",
+                    "346129E-6",
+                    "-8983E-6"
+                  ],
+                  [
+                    "-113E-6",
+                    "-878E-6",
+                    "-454E-5",
+                    "-18133E-6",
+                    "-5576E-5",
+                    "-126895E-6",
+                    "-170352E-6",
+                    "598684E-6"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "9059E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "1285E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "4402E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "1871E-2",
+                  "4133E-3",
+                  "12E-1"
+                ],
+                "coefficients": [
+                  [
+                    "14031E-6",
+                    "86866E-6",
+                    "290216E-6"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "3827E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "1209E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "3569E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "1097E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "318E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "1E-1"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "761E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "268E-3"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 6,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          }
+        ],
+        "provenance": {
+          "source": "local PySCF basis library",
+          "version": "2.14.0",
+          "license": "Apache-2.0",
+          "checksum": "a17306075c1816c1ea5679b30e9cfff5b29c4792d90d330357481b649a74012f"
+        },
+        "representation": "spherical",
+        "normalization": "normalized-primitives; native-normalized-contractions",
+        "exponent_units": "bohr^-2",
+        "ordering": "CCA-cartesian; libcint-real-spherical"
+      }
+    ],
+    "auxiliary": [
+      {
+        "name": "aug-cc-pvtz-jkfit",
+        "elements": [
+          {
+            "atomic_number": 1,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "953024933E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "191745062E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "68424049E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "28413256E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "11798675E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "29133232E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "126212054E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "50199776E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "19966536E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "231353291E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "71290724E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "21967992E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "165657261E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "66262904E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 1,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          },
+          {
+            "atomic_number": 6,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "11139867719E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "3691623418E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "12179275232E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "4812711454E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "20365074E-6"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "808835969E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "250686566E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "124385374E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "484499E-6"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "1918516E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "7596927E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "10299176249E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "2813259401E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "983643182E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "33490545E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "149476186E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "57690109E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "20320063E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "7157292E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "1059406836E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "359971954E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "133556911E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "51949765E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "19954125E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "7664464E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "119486634E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "41586634E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "14473988E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "85886634E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "34354654E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 6,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          }
+        ],
+        "provenance": {
+          "source": "local PySCF basis library",
+          "version": "2.14.0",
+          "license": "Apache-2.0",
+          "checksum": "1d09a5581fa47381039090141c4eac9e00f515fdc9229f327f98dfdb027210f3"
+        },
+        "representation": "spherical",
+        "normalization": "normalized-primitives; native-normalized-contractions",
+        "exponent_units": "bohr^-2",
+        "ordering": "CCA-cartesian; libcint-real-spherical"
+      },
+      {
+        "name": "aug-cc-pvqz-jkfit",
+        "elements": [
+          {
+            "atomic_number": 1,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "953024933E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "191745062E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "68424049E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "28413256E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "11798675E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "29133232E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "126212054E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "50199776E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "19966536E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "288320839E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "128017017E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "52511318E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "21539625E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "274894484E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "119008855E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "51521978E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "147526627E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "59010651E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 1,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          },
+          {
+            "atomic_number": 6,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "11139867719E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "3691623418E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "12179275232E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "4812711454E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "20365074E-6"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "808835969E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "250686566E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "124385374E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "484499E-6"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "1918516E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "7596927E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "10299176249E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "2813259401E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "983643182E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "33490545E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "149476186E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "57690109E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "20320063E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "7157292E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "1059406836E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "359971954E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "133556911E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "51949765E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "19954125E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "7664464E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "19539E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "7549E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "3339E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "14768739E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "15249E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "5909E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "22897423E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 5,
+                "exponents": [
+                  "11169E-4"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 5,
+                "exponents": [
+                  "44676E-5"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 6,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          }
+        ],
+        "provenance": {
+          "source": "local PySCF basis library",
+          "version": "2.14.0",
+          "license": "Apache-2.0",
+          "checksum": "9bbddd69621a36ab3766d60df4b05f6308a3ff6c5e48cbc0c33825a581eeb2c0"
+        },
+        "representation": "spherical",
+        "normalization": "normalized-primitives; native-normalized-contractions",
+        "exponent_units": "bohr^-2",
+        "ordering": "CCA-cartesian; libcint-real-spherical"
+      },
+      {
+        "name": "aug-cc-pvtz-jkfit",
+        "elements": [
+          {
+            "atomic_number": 1,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "953024933E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "191745062E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "68424049E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "28413256E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "11798675E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "29133232E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "126212054E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "50199776E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "19966536E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "231353291E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "71290724E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "21967992E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "165657261E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "66262904E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 1,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          },
+          {
+            "atomic_number": 6,
+            "shells": [
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "11139867719E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "3691623418E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "12179275232E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "4812711454E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "20365074E-6"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "808835969E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "250686566E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "124385374E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "484499E-6"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "1918516E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 0,
+                "exponents": [
+                  "7596927E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "10299176249E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "2813259401E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "983643182E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "33490545E-7"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "149476186E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "57690109E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "20320063E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 1,
+                "exponents": [
+                  "7157292E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "1059406836E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "359971954E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "133556911E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "51949765E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "19954125E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 2,
+                "exponents": [
+                  "7664464E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "119486634E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "41586634E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 3,
+                "exponents": [
+                  "14473988E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "85886634E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              },
+              {
+                "angular_momentum": 4,
+                "exponents": [
+                  "34354654E-8"
+                ],
+                "coefficients": [
+                  [
+                    "1E0"
+                  ]
+                ],
+                "source_group": 0
+              }
+            ],
+            "nuclear_charge": 6,
+            "ecp_core_electrons": 0,
+            "ecp_data": null
+          }
+        ],
+        "provenance": {
+          "source": "local PySCF basis library",
+          "version": "2.14.0",
+          "license": "Apache-2.0",
+          "checksum": "1d09a5581fa47381039090141c4eac9e00f515fdc9229f327f98dfdb027210f3"
+        },
+        "representation": "spherical",
+        "normalization": "normalized-primitives; native-normalized-contractions",
+        "exponent_units": "bohr^-2",
+        "ordering": "CCA-cartesian; libcint-real-spherical"
+      }
+    ]
+  },
+  "finite_differences": [
+    {
+      "step_bohr": 0.0001,
+      "direction": [
+        [
+          0.41690821550543844,
+          -0.6148193989737354,
+          -0.07611259471732182
+        ],
+        [
+          -0.16055518978440322,
+          0.43647657376342075,
+          0.4755015783402636
+        ]
+      ],
+      "component_slopes": [
+        0.01802849908472126,
+        0.019769527810353793,
+        0.021176156828062176,
+        0.019108967563852275,
+        0.021235345037950992
+      ]
+    },
+    {
+      "step_bohr": 3e-05,
+      "direction": [
+        [
+          0.41690821550543844,
+          -0.6148193989737354,
+          -0.07611259471732182
+        ],
+        [
+          -0.16055518978440322,
+          0.43647657376342075,
+          0.4755015783402636
+        ]
+      ],
+      "component_slopes": [
+        0.0180284970952016,
+        0.01976952373657544,
+        0.0211761554661886,
+        0.019108955721473347,
+        0.021235333491631536
+      ]
+    }
+  ],
+  "memory_observation": {
+    "sampling_interval_ms": 100,
+    "process_id": 2990183,
+    "samples": 639,
+    "sampled_device_process_peak_bytes": 5452595200,
+    "includes": "native allocations, CUDA libraries and driver/context overhead"
+  },
+  "slurm_job_id": "16947",
+  "source_identity": "e16c84a00de8664836da846ed0e2300e4dbd896a\n8065f3f2bd509b57f84c79648a792d31a5fcb39156c3d70323a7e3cc56659bdf  -\n6a89c622ea5fbe7e8a96984bc6683e02f686a668d2c49bc4c57043b20028038a  build/cuda/libgenerativeqc.so.0.1.0",
+  "oracle_roots": [
+    {
+      "basis": "aug-cc-pvtz",
+      "atoms_bohr": [
+        [
+          6,
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          1,
+          [
+            0.3,
+            -0.4,
+            2.4
+          ]
+        ]
+      ],
+      "root": {
+        "converged": true,
+        "nao": 69,
+        "electrons": 6,
+        "charge": 1,
+        "spin": 0,
+        "occupations": [
+          2.0,
+          2.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orbital_energies": [
+          -11.843470105709251,
+          -1.1977711091089782,
+          -0.8504689511528722,
+          -0.32556272876434444,
+          -0.3255627287643303,
+          -0.15003288146469718,
+          -0.07753515623454543,
+          -0.0692135310220178,
+          -0.06921353102201698,
+          -0.05468293648682998,
+          -0.018151630552793563,
+          0.035089620349941515,
+          0.035089620349948156,
+          0.06785465061607136,
+          0.06785465061607904,
+          0.15041687233460443,
+          0.16277806329527333,
+          0.17332472562621265,
+          0.1733247256262293,
+          0.3006317436271905,
+          0.30063174362720596,
+          0.30593906268849413,
+          0.34380604750922483,
+          0.5826898629732317,
+          0.5826898629732347,
+          0.6022176032804911,
+          0.6022176032805027,
+          0.6665284484916718,
+          0.7326590841128602,
+          0.7326590841128624,
+          0.7564110523675412,
+          0.7564110523675605,
+          0.7725935478518042,
+          0.7725935478518086,
+          0.7859944073098024,
+          0.9590065636529044,
+          0.9719323981265916,
+          0.9719323981265965,
+          0.9972292014400338,
+          0.99722920144004,
+          1.3389207932482021,
+          1.4028333653498408,
+          1.4028333653498763,
+          1.4518523924573756,
+          2.1419049049959447,
+          2.14190490499596,
+          2.401599320202717,
+          2.8511046402389892,
+          2.8511046402389932,
+          2.871688822325506,
+          2.9820219285695386,
+          2.982021928569555,
+          3.0188601930259518,
+          3.0188601930259598,
+          3.0281133093927495,
+          3.0281133093927513,
+          3.1443841800189487,
+          3.206110624102619,
+          3.206110624102628,
+          3.2491640342382118,
+          3.6595914615434655,
+          3.6595914615434766,
+          4.080887798372988,
+          4.080887798373018,
+          4.297335305332093,
+          4.2973353053320995,
+          4.492552317578985,
+          4.687026241582335,
+          7.962689194643384
+        ],
+        "orbital_gradient_norm": 7.061337774135216e-12,
+        "overlap_min_eigenvalue": 0.00036564962929715243,
+        "electron_trace": 6.000000000000016,
+        "metric": {
+          "auxiliary_count": 150,
+          "relative_threshold": 1e-10,
+          "retained_rank": 150,
+          "minimum_relative_eigenvalue": 2.245810510902396e-07
+        },
+        "ccsd_converged": true
+      }
+    },
+    {
+      "basis": "aug-cc-pvqz",
+      "atoms_bohr": [
+        [
+          6,
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          1,
+          [
+            0.3,
+            -0.4,
+            2.4
+          ]
+        ]
+      ],
+      "root": {
+        "converged": true,
+        "nao": 126,
+        "electrons": 6,
+        "charge": 1,
+        "spin": 0,
+        "occupations": [
+          2.0,
+          2.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orbital_energies": [
+          -11.842942655181393,
+          -1.1975065122357655,
+          -0.8507928497300519,
+          -0.32555778478016195,
+          -0.32555778478014596,
+          -0.15007985513598499,
+          -0.08315364811267155,
+          -0.07445131735798245,
+          -0.07445131735798076,
+          -0.059986507643532375,
+          -0.0248129378372397,
+          0.007180050339282711,
+          0.007180050339285326,
+          0.02428343877099489,
+          0.02428343877101061,
+          0.09631705059319615,
+          0.105978764170446,
+          0.1092077261997529,
+          0.10920772619978156,
+          0.19507103944988413,
+          0.2063898386095141,
+          0.20638983860952576,
+          0.26048893010151986,
+          0.37871469363119464,
+          0.3787146936312101,
+          0.40234960921661805,
+          0.40234960921663426,
+          0.4573032959751657,
+          0.48679926706113485,
+          0.4867992670611487,
+          0.49358328559033504,
+          0.493583285590345,
+          0.5094206284294213,
+          0.5426729367239452,
+          0.5426729367239966,
+          0.6307049634368731,
+          0.6588786986632742,
+          0.6588786986632961,
+          0.659119730772191,
+          0.6591197307721974,
+          0.8163092894071866,
+          0.9711098275162153,
+          0.9711098275162688,
+          1.067952388033401,
+          1.337350084870433,
+          1.3373500848704447,
+          1.3849049000516402,
+          1.4014620208445203,
+          1.4014620208445574,
+          1.5164078859348058,
+          1.5164078859348653,
+          1.5412952706707443,
+          1.6448039181731597,
+          1.6448039181731753,
+          1.7544480092303054,
+          1.7781412780292272,
+          1.7781412780292458,
+          1.8294309435924931,
+          1.8294309435924956,
+          1.855250412041342,
+          1.855250412041371,
+          1.8662826879357206,
+          1.8662826879357237,
+          1.9064806184847316,
+          1.906480618484745,
+          1.9717441207543658,
+          2.0144710202713116,
+          2.014471020271325,
+          2.0278400034168746,
+          2.0278400034168813,
+          2.0510331268490054,
+          2.0510331268490134,
+          2.076368033036424,
+          2.3436895365594363,
+          2.343689536559474,
+          2.4339528290891543,
+          2.613346784252659,
+          2.924860347895005,
+          2.924860347895039,
+          2.937300139741774,
+          2.9373001397418053,
+          3.494294237574916,
+          3.604506040580087,
+          3.6045060405801292,
+          3.7752374504316535,
+          5.44051133437531,
+          5.440511334375318,
+          5.458145533902005,
+          5.4581455339020355,
+          5.4911426581385205,
+          5.491142658138536,
+          5.541667285399718,
+          5.541667285399734,
+          5.62658051101106,
+          5.626580511011076,
+          5.6450423617789,
+          5.911375689131486,
+          5.911375689131519,
+          5.944650989312088,
+          5.9446509893120965,
+          5.948372463244253,
+          6.010229233628608,
+          6.010229233628621,
+          6.025623558728396,
+          6.146757172407878,
+          6.146757172407892,
+          6.286485642723439,
+          6.28648564272345,
+          6.577102466753732,
+          6.577102466753761,
+          6.7040266901909025,
+          6.868480183469717,
+          6.868480183469721,
+          7.608020507077427,
+          7.608020507077452,
+          7.761501298226532,
+          8.165425818276972,
+          8.290245847231516,
+          8.290245847231535,
+          8.585735341658014,
+          8.585735341658053,
+          8.906888323357744,
+          8.906888323357885,
+          9.620230566003638,
+          10.80848244085746,
+          21.32377788790051
+        ],
+        "orbital_gradient_norm": 2.0764710581560118e-11,
+        "overlap_min_eigenvalue": 0.0001105012426280208,
+        "electron_trace": 6.00000000000001,
+        "metric": {
+          "auxiliary_count": 218,
+          "relative_threshold": 1e-10,
+          "retained_rank": 218,
+          "minimum_relative_eigenvalue": 2.2257858963488393e-07
+        }
+      }
+    },
+    {
+      "basis": "aug-cc-pvtz",
+      "atoms_bohr": [
+        [
+          6,
+          [
+            4.1690821550543845e-05,
+            -6.148193989737354e-05,
+            -7.611259471732182e-06
+          ]
+        ],
+        [
+          1,
+          [
+            0.29998394448102156,
+            -0.39995635234262367,
+            2.4000475501578338
+          ]
+        ]
+      ],
+      "root": {
+        "converged": true,
+        "nao": 69,
+        "electrons": 6,
+        "charge": 1,
+        "spin": 0,
+        "occupations": [
+          2.0,
+          2.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orbital_energies": [
+          -11.84347041136634,
+          -1.1977671376360695,
+          -0.8504664249381078,
+          -0.32556213578509746,
+          -0.3255621357850836,
+          -0.15003448989861834,
+          -0.07753595672337621,
+          -0.06921342862929968,
+          -0.06921342862929629,
+          -0.05468470722521612,
+          -0.01815176843638877,
+          0.035089286340202024,
+          0.03508928634020575,
+          0.06785494045982869,
+          0.06785494045982872,
+          0.1504152537796326,
+          0.1627784936844856,
+          0.17332493784277048,
+          0.1733249378427837,
+          0.3006313702588937,
+          0.30063137025889747,
+          0.30593877264418823,
+          0.3438061066261717,
+          0.5826896950903834,
+          0.5826896950903877,
+          0.6022191125272499,
+          0.6022191125272568,
+          0.666527516317795,
+          0.7326586613884898,
+          0.7326586613884929,
+          0.7564092935952063,
+          0.7564092935952144,
+          0.7725940087829155,
+          0.7725940087829167,
+          0.785993616029244,
+          0.9590028706906857,
+          0.9719295176847761,
+          0.9719295176847879,
+          0.9972266555238448,
+          0.9972266555238524,
+          1.3389313629305555,
+          1.402831709859683,
+          1.4028317098596985,
+          1.4518371615193555,
+          2.141894910550001,
+          2.1418949105500347,
+          2.4015870829909263,
+          2.8511105404114785,
+          2.8511105404114825,
+          2.8716976229175337,
+          2.9820223105527854,
+          2.982022310552794,
+          3.018864881134115,
+          3.0188648811341237,
+          3.0281138927348357,
+          3.02811389273484,
+          3.144379223570099,
+          3.206105855680802,
+          3.206105855680809,
+          3.249170548954317,
+          3.6595830993000904,
+          3.6595830993000966,
+          4.080876696816704,
+          4.08087669681671,
+          4.297307491051196,
+          4.297307491051203,
+          4.492541361204358,
+          4.686998308690825,
+          7.962484626560752
+        ],
+        "orbital_gradient_norm": 2.6919699536086866e-11,
+        "overlap_min_eigenvalue": 0.0003656680736715077,
+        "electron_trace": 6.0000000000000115,
+        "metric": {
+          "auxiliary_count": 150,
+          "relative_threshold": 1e-10,
+          "retained_rank": 150,
+          "minimum_relative_eigenvalue": 2.2458133519645875e-07
+        },
+        "ccsd_converged": true
+      }
+    },
+    {
+      "basis": "aug-cc-pvqz",
+      "atoms_bohr": [
+        [
+          6,
+          [
+            4.1690821550543845e-05,
+            -6.148193989737354e-05,
+            -7.611259471732182e-06
+          ]
+        ],
+        [
+          1,
+          [
+            0.29998394448102156,
+            -0.39995635234262367,
+            2.4000475501578338
+          ]
+        ]
+      ],
+      "root": {
+        "converged": true,
+        "nao": 126,
+        "electrons": 6,
+        "charge": 1,
+        "spin": 0,
+        "occupations": [
+          2.0,
+          2.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orbital_energies": [
+          -11.842942962353394,
+          -1.1975025406862265,
+          -0.8507903216064996,
+          -0.32555719131341576,
+          -0.3255571913134039,
+          -0.1500814681378131,
+          -0.08315443982677925,
+          -0.07445122789887428,
+          -0.07445122789886428,
+          -0.059987976452369,
+          -0.024813027541039645,
+          0.0071798435282689945,
+          0.007179843528272219,
+          0.024283663041368104,
+          0.024283663041378745,
+          0.09631567485734661,
+          0.10597859284518948,
+          0.1092079523782334,
+          0.10920795237826286,
+          0.19507112342099633,
+          0.2063892091471293,
+          0.20638920914714592,
+          0.26048896173195146,
+          0.37871584385730656,
+          0.3787158438573167,
+          0.40234974581961114,
+          0.4023497458196176,
+          0.45730077881703224,
+          0.4867996550469333,
+          0.4867996550469577,
+          0.4935832487444803,
+          0.4935832487444985,
+          0.5094196072522645,
+          0.5426710529215876,
+          0.5426710529216102,
+          0.6307043913864874,
+          0.658878112693789,
+          0.6588781126937936,
+          0.6591195351251673,
+          0.6591195351251773,
+          0.816311584849359,
+          0.9711098849702856,
+          0.9711098849702957,
+          1.0679481536812254,
+          1.33734847799318,
+          1.3373484779931808,
+          1.3849010015502234,
+          1.4014617255784305,
+          1.401461725578467,
+          1.5164025458664459,
+          1.5164025458664783,
+          1.541292681939293,
+          1.6448006917530889,
+          1.644800691753094,
+          1.7544477434925447,
+          1.7781418069848969,
+          1.7781418069849002,
+          1.8294346907081878,
+          1.8294346907082093,
+          1.8552506807465408,
+          1.8552506807465545,
+          1.8662855690932565,
+          1.866285569093263,
+          1.9064810754681965,
+          1.9064810754682187,
+          1.9717464264951658,
+          2.0144664584228265,
+          2.014466458422851,
+          2.027838569690129,
+          2.02783856969014,
+          2.0510315166994855,
+          2.0510315166995094,
+          2.0763678326453388,
+          2.3436907401773364,
+          2.343690740177382,
+          2.433942332026259,
+          2.6133260722746385,
+          2.924838011511573,
+          2.924838011511581,
+          2.9372833062997765,
+          2.9372833062998116,
+          3.4942727511286726,
+          3.6044905337420494,
+          3.6044905337421254,
+          3.775252727546494,
+          5.4405178496471915,
+          5.440517849647217,
+          5.458146790372351,
+          5.458146790372382,
+          5.491143247734851,
+          5.4911432477348665,
+          5.5416712787138405,
+          5.541671278713852,
+          5.626568313487078,
+          5.626568313487112,
+          5.645042902560601,
+          5.911374576874239,
+          5.91137457687427,
+          5.9446598921700025,
+          5.94465989217001,
+          5.948358736127119,
+          6.0102290829036855,
+          6.010229082903722,
+          6.025620473730154,
+          6.146757566812885,
+          6.146757566812905,
+          6.286480358212527,
+          6.286480358212538,
+          6.577083663564414,
+          6.577083663564468,
+          6.704019690754157,
+          6.868447606365798,
+          6.868447606365811,
+          7.607991987513414,
+          7.607991987513454,
+          7.761480509519412,
+          8.165377418138048,
+          8.290230303464176,
+          8.29023030346418,
+          8.585670355962424,
+          8.58567035596244,
+          8.906880977174207,
+          8.906880977174374,
+          9.620215441461639,
+          10.808392359134679,
+          21.323709886137436
+        ],
+        "orbital_gradient_norm": 1.7087624000062676e-11,
+        "overlap_min_eigenvalue": 0.00011050623042147966,
+        "electron_trace": 6.000000000000014,
+        "metric": {
+          "auxiliary_count": 218,
+          "relative_threshold": 1e-10,
+          "retained_rank": 218,
+          "minimum_relative_eigenvalue": 2.2257892795771765e-07
+        }
+      }
+    },
+    {
+      "basis": "aug-cc-pvtz",
+      "atoms_bohr": [
+        [
+          6,
+          [
+            -4.1690821550543845e-05,
+            6.148193989737354e-05,
+            7.611259471732182e-06
+          ]
+        ],
+        [
+          1,
+          [
+            0.3000160555189784,
+            -0.4000436476573764,
+            2.399952449842166
+          ]
+        ]
+      ],
+      "root": {
+        "converged": true,
+        "nao": 69,
+        "electrons": 6,
+        "charge": 1,
+        "spin": 0,
+        "occupations": [
+          2.0,
+          2.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orbital_energies": [
+          -11.843469800088371,
+          -1.1977750798257825,
+          -0.8504714767541186,
+          -0.32556332161140594,
+          -0.3255633216113897,
+          -0.15003127353744805,
+          -0.07753435604015113,
+          -0.06921363339281088,
+          -0.06921363339280806,
+          -0.05468116594265293,
+          -0.018151492681669268,
+          0.035089954288197105,
+          0.03508995428820713,
+          0.06785436083793388,
+          0.06785436083793646,
+          0.15041849050235445,
+          0.16277763306802306,
+          0.17332451344417532,
+          0.17332451344418504,
+          0.30063211695624614,
+          0.3006321169562515,
+          0.30593935268536715,
+          0.3438059885529139,
+          0.5826900308013315,
+          0.582690030801336,
+          0.6022160943186514,
+          0.6022160943186631,
+          0.6665293803803989,
+          0.7326595067676541,
+          0.7326595067676601,
+          0.7564128109006298,
+          0.7564128109006356,
+          0.7725930870244506,
+          0.7725930870244536,
+          0.7859951983301192,
+          0.959010255685179,
+          0.9719352779244337,
+          0.971935277924435,
+          0.9972317468021443,
+          0.9972317468021462,
+          1.338910225429668,
+          1.4028350203298123,
+          1.4028350203298405,
+          1.4518676207560253,
+          2.141914897378501,
+          2.1419148973785083,
+          2.4016115544394427,
+          2.851098741723333,
+          2.8510987417233373,
+          2.871680021158711,
+          2.982021546426302,
+          2.982021546426309,
+          3.0188555062383235,
+          3.0188555062383275,
+          3.0281127261795175,
+          3.028112726179522,
+          3.144389132850045,
+          3.20611539142439,
+          3.206115391424398,
+          3.249157525637357,
+          3.659599822286285,
+          3.659599822286305,
+          4.080898897632595,
+          4.080898897632617,
+          4.297363113947873,
+          4.297363113947885,
+          4.492563273643761,
+          4.687054168898699,
+          7.962893727617901
+        ],
+        "orbital_gradient_norm": 2.6818120193191685e-11,
+        "overlap_min_eigenvalue": 0.0003656311898821915,
+        "electron_trace": 5.999999999999975,
+        "metric": {
+          "auxiliary_count": 150,
+          "relative_threshold": 1e-10,
+          "retained_rank": 150,
+          "minimum_relative_eigenvalue": 2.2458076692860335e-07
+        },
+        "ccsd_converged": true
+      }
+    },
+    {
+      "basis": "aug-cc-pvqz",
+      "atoms_bohr": [
+        [
+          6,
+          [
+            -4.1690821550543845e-05,
+            6.148193989737354e-05,
+            7.611259471732182e-06
+          ]
+        ],
+        [
+          1,
+          [
+            0.3000160555189784,
+            -0.4000436476573764,
+            2.399952449842166
+          ]
+        ]
+      ],
+      "root": {
+        "converged": true,
+        "nao": 126,
+        "electrons": 6,
+        "charge": 1,
+        "spin": 0,
+        "occupations": [
+          2.0,
+          2.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orbital_energies": [
+          -11.842942348039596,
+          -1.1975104830235352,
+          -0.8507953772423811,
+          -0.32555837811018273,
+          -0.3255583781101736,
+          -0.15007824264795744,
+          -0.08315285666410561,
+          -0.07445140679718298,
+          -0.07445140679716762,
+          -0.05998503900552921,
+          -0.02481284814203022,
+          0.007180257104540075,
+          0.007180257104542536,
+          0.024283214553383243,
+          0.02428321455338512,
+          0.09631842588142778,
+          0.1059789356678171,
+          0.10920750006237376,
+          0.10920750006239786,
+          0.19507095554149834,
+          0.20639046797735913,
+          0.206390467977373,
+          0.2604888985312037,
+          0.3787135436729984,
+          0.37871354367301724,
+          0.4023494726041704,
+          0.40234947260418596,
+          0.45730581261297587,
+          0.48679887916298714,
+          0.4867988791630114,
+          0.4935833224306255,
+          0.4935833224306554,
+          0.5094216493840573,
+          0.5426748201185989,
+          0.5426748201186038,
+          0.6307055353477296,
+          0.6588792844776538,
+          0.6588792844776562,
+          0.6591199263581808,
+          0.659119926358184,
+          0.816306994527892,
+          0.9711097700294353,
+          0.9711097700295186,
+          1.0679566216021001,
+          1.337351691400489,
+          1.337351691400503,
+          1.3849087968932912,
+          1.4014623148335497,
+          1.4014623148335927,
+          1.5164132262146626,
+          1.516413226214678,
+          1.5412978598479903,
+          1.6448071435820055,
+          1.6448071435820213,
+          1.754448274787702,
+          1.7781407491967987,
+          1.7781407491968009,
+          1.8294271960497135,
+          1.8294271960497182,
+          1.855250143210555,
+          1.8552501432105628,
+          1.8662798089071055,
+          1.8662798089071124,
+          1.906480161591465,
+          1.9064801615914804,
+          1.9717418154477677,
+          2.0144755811702995,
+          2.0144755811703208,
+          2.027841436818237,
+          2.02784143681825,
+          2.051034736794218,
+          2.0510347367942248,
+          2.076368233367962,
+          2.343688332910208,
+          2.3436883329103355,
+          2.4339633238712075,
+          2.613367491756346,
+          2.924882679458338,
+          2.924882679458373,
+          2.9373169695791765,
+          2.937316969579233,
+          3.4943157198379815,
+          3.6045215437115172,
+          3.604521543711694,
+          3.7752221767709173,
+          5.440504821644047,
+          5.44050482164405,
+          5.4581442773705815,
+          5.4581442773706,
+          5.491142068678687,
+          5.49114206867871,
+          5.541663292661743,
+          5.541663292661775,
+          5.626592706268572,
+          5.6265927062686325,
+          5.645041820360182,
+          5.911376801217687,
+          5.911376801217703,
+          5.944642087932717,
+          5.944642087932725,
+          5.948386190670314,
+          6.010229384365139,
+          6.010229384365168,
+          6.0256266428196685,
+          6.146756777849584,
+          6.146756777849603,
+          6.286490926579708,
+          6.286490926579751,
+          6.577121266983259,
+          6.577121266983287,
+          6.704033688505513,
+          6.868512753841358,
+          6.868512753841365,
+          7.608049018696053,
+          7.608049018696073,
+          7.761522081508225,
+          8.165474208264017,
+          8.290261388477562,
+          8.290261388477585,
+          8.585800316524221,
+          8.585800316524224,
+          8.906895667110856,
+          8.906895667110936,
+          9.620245687969856,
+          10.808572501435988,
+          21.323845883295256
+        ],
+        "orbital_gradient_norm": 2.5125611640778206e-11,
+        "overlap_min_eigenvalue": 0.00011049625620479411,
+        "electron_trace": 6.000000000000011,
+        "metric": {
+          "auxiliary_count": 218,
+          "relative_threshold": 1e-10,
+          "retained_rank": 218,
+          "minimum_relative_eigenvalue": 2.2257825125227638e-07
+        }
+      }
+    },
+    {
+      "basis": "aug-cc-pvtz",
+      "atoms_bohr": [
+        [
+          6,
+          [
+            1.2507246465163153e-05,
+            -1.8444581969212064e-05,
+            -2.2833778415196547e-06
+          ]
+        ],
+        [
+          1,
+          [
+            0.29999518334430647,
+            -0.3999869057027871,
+            2.40001426504735
+          ]
+        ]
+      ],
+      "root": {
+        "converged": true,
+        "nao": 69,
+        "electrons": 6,
+        "charge": 1,
+        "spin": 0,
+        "occupations": [
+          2.0,
+          2.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orbital_energies": [
+          -11.843470197404958,
+          -1.19776991774913,
+          -0.8504681933517881,
+          -0.32556255088642383,
+          -0.32556255088641173,
+          -0.15003336393954303,
+          -0.07753539635066442,
+          -0.06921350030706402,
+          -0.06921350030705747,
+          -0.05468346768717236,
+          -0.018151671916669443,
+          0.035089520156316306,
+          0.035089520156322954,
+          0.06785473756121194,
+          0.06785473756121584,
+          0.15041638681215996,
+          0.16277819239406455,
+          0.17332478928646253,
+          0.17332478928647688,
+          0.30063163161938816,
+          0.3006316316193972,
+          0.30593897568093975,
+          0.3438060652263406,
+          0.5826898126174166,
+          0.5826898126174229,
+          0.6022180560278182,
+          0.6022180560278197,
+          0.6665281688739189,
+          0.7326589573005463,
+          0.7326589573005566,
+          0.7564105247638615,
+          0.7564105247638989,
+          0.7725936861180678,
+          0.7725936861180704,
+          0.7859941699531676,
+          0.9590054558609147,
+          0.971931534061,
+          0.9719315340610024,
+          0.9972284377229216,
+          0.9972284377229229,
+          1.3389239639551063,
+          1.402832868757717,
+          1.4028328687577498,
+          1.451847823459289,
+          2.1419019068781373,
+          2.1419019068781404,
+          2.4015956493569828,
+          2.851106410117449,
+          2.8511064101174592,
+          2.8716914625665533,
+          2.98202204317885,
+          2.9820220431788673,
+          3.018861599318428,
+          3.01886159931843,
+          3.0281134843792747,
+          3.0281134843792787,
+          3.1443826934651975,
+          3.2061091936878627,
+          3.2061091936878703,
+          3.249165988008585,
+          3.6595889530367813,
+          3.6595889530368706,
+          4.080884468160283,
+          4.0808844681602965,
+          4.297326961649135,
+          4.297326961649138,
+          4.492549030708078,
+          4.687017862306917,
+          7.962627827905405
+        ],
+        "orbital_gradient_norm": 2.697875772323734e-11,
+        "overlap_min_eigenvalue": 0.00036565516208762576,
+        "electron_trace": 6.0,
+        "metric": {
+          "auxiliary_count": 150,
+          "relative_threshold": 1e-10,
+          "retained_rank": 150,
+          "minimum_relative_eigenvalue": 2.2458113632585266e-07
+        },
+        "ccsd_converged": true
+      }
+    },
+    {
+      "basis": "aug-cc-pvqz",
+      "atoms_bohr": [
+        [
+          6,
+          [
+            1.2507246465163153e-05,
+            -1.8444581969212064e-05,
+            -2.2833778415196547e-06
+          ]
+        ],
+        [
+          1,
+          [
+            0.29999518334430647,
+            -0.3999869057027871,
+            2.40001426504735
+          ]
+        ]
+      ],
+      "root": {
+        "converged": true,
+        "nao": 126,
+        "electrons": 6,
+        "charge": 1,
+        "spin": 0,
+        "occupations": [
+          2.0,
+          2.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orbital_energies": [
+          -11.842942747330437,
+          -1.1975053208516648,
+          -0.8507920913569222,
+          -0.3255576067550379,
+          -0.3255576067550371,
+          -0.15008033898204687,
+          -0.08315388559904337,
+          -0.07445129052248657,
+          -0.0744512905224732,
+          -0.05998694826809156,
+          -0.0248129647475821,
+          0.007179988301086852,
+          0.007179988301110057,
+          0.02428350604626709,
+          0.02428350604627952,
+          0.09631663792005353,
+          0.1059787127548852,
+          0.10920779404876756,
+          0.10920779404879696,
+          0.19507106463448737,
+          0.206389649780323,
+          0.20638964978034646,
+          0.260488939584242,
+          0.37871503867150913,
+          0.3787150386715282,
+          0.4023496501990258,
+          0.40234965019904095,
+          0.45730254088333666,
+          0.486799383447073,
+          0.4867993834470894,
+          0.4935832745364644,
+          0.4935832745364856,
+          0.5094203221003588,
+          0.542672371626238,
+          0.5426723716262821,
+          0.6307047918360134,
+          0.6588785228887405,
+          0.6588785228887661,
+          0.659119672084399,
+          0.6591196720844181,
+          0.8163099779804632,
+          0.9711098447560816,
+          0.9711098447561088,
+          1.0679511178123917,
+          1.3373496028447789,
+          1.3373496028447884,
+          1.3849037306766765,
+          1.4014619323990025,
+          1.4014619323990156,
+          1.5164062838929782,
+          1.5164062838930106,
+          1.5412944940060953,
+          1.6448029503544086,
+          1.6448029503544483,
+          1.7544479295276574,
+          1.778141436702089,
+          1.7781414367021002,
+          1.8294320677727465,
+          1.8294320677727494,
+          1.855250492667243,
+          1.8552504926672526,
+          1.866283552059311,
+          1.8662835520593206,
+          1.9064807555693677,
+          1.9064807555693783,
+          1.971744812430451,
+          2.0144696518159595,
+          2.0144696518159897,
+          2.0278395733317485,
+          2.0278395733317502,
+          2.0510326438245157,
+          2.051032643824525,
+          2.0763679729245688,
+          2.3436898976484075,
+          2.343689897648411,
+          2.433949680212148,
+          2.613340571129669,
+          2.9248536474871676,
+          2.9248536474871774,
+          2.9372950900897745,
+          2.9372950900898056,
+          3.494287792082435,
+          3.604501388919188,
+          3.6045013889192496,
+          3.7752420332070358,
+          5.440513288690073,
+          5.440513288690084,
+          5.458145910848886,
+          5.458145910848907,
+          5.491142835002213,
+          5.491142835002235,
+          5.541668483332777,
+          5.541668483332804,
+          5.626576851991889,
+          5.626576851991911,
+          5.645042524080171,
+          5.911375355471433,
+          5.911375355471442,
+          5.944653660013114,
+          5.944653660013123,
+          5.948368345077487,
+          6.010229188409182,
+          6.010229188409205,
+          6.025622633323193,
+          6.146757290744549,
+          6.14675729074456,
+          6.2864840574417995,
+          6.286484057441806,
+          6.577096826107274,
+          6.57709682610729,
+          6.70402459047922,
+          6.868470411047781,
+          6.868470411047789,
+          7.608011952045529,
+          7.6080119520455645,
+          7.761495062187322,
+          8.165411299304163,
+          8.290241184369966,
+          8.290241184369977,
+          8.585715847089235,
+          8.585715847089268,
+          8.906886119761772,
+          8.906886119761863,
+          9.620226028915434,
+          10.808455418565678,
+          21.323757488048134
+        ],
+        "orbital_gradient_norm": 2.5150645813635203e-11,
+        "overlap_min_eigenvalue": 0.00011050273882256081,
+        "electron_trace": 6.000000000000022,
+        "metric": {
+          "auxiliary_count": 218,
+          "relative_threshold": 1e-10,
+          "retained_rank": 218,
+          "minimum_relative_eigenvalue": 2.2257869125007675e-07
+        }
+      }
+    },
+    {
+      "basis": "aug-cc-pvtz",
+      "atoms_bohr": [
+        [
+          6,
+          [
+            -1.2507246465163153e-05,
+            1.8444581969212064e-05,
+            2.2833778415196547e-06
+          ]
+        ],
+        [
+          1,
+          [
+            0.3000048166556935,
+            -0.40001309429721293,
+            2.39998573495265
+          ]
+        ]
+      ],
+      "root": {
+        "converged": true,
+        "nao": 69,
+        "electrons": 6,
+        "charge": 1,
+        "spin": 0,
+        "occupations": [
+          2.0,
+          2.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orbital_energies": [
+          -11.843470014019896,
+          -1.1977723004040888,
+          -0.8504697088974753,
+          -0.3255629066328853,
+          -0.32556290663287535,
+          -0.15003239903273435,
+          -0.07753491614544306,
+          -0.06921356173570412,
+          -0.06921356173569551,
+          -0.054682405302970416,
+          -0.018151589190197548,
+          0.03508972053939206,
+          0.035089720539403325,
+          0.06785456367546687,
+          0.06785456367546923,
+          0.15041735782651955,
+          0.16277793420979503,
+          0.17332466196767315,
+          0.17332466196767565,
+          0.30063185562966765,
+          0.3006318556296718,
+          0.30593914969277036,
+          0.34380602980505603,
+          0.5826899133283004,
+          0.5826899133283027,
+          0.6022171505628533,
+          0.6022171505628574,
+          0.6665287280894239,
+          0.7326592109160159,
+          0.7326592109160186,
+          0.7564115799533588,
+          0.7564115799533745,
+          0.7725934095921544,
+          0.7725934095921554,
+          0.7859946446432318,
+          0.9590076713599665,
+          0.971933262133368,
+          0.9719332621333703,
+          0.9972299651067233,
+          0.9972299651067364,
+          1.3389176227060977,
+          1.4028338618977534,
+          1.4028338618977816,
+          1.4518569612255918,
+          2.141907902927201,
+          2.141907902927205,
+          2.4016029907874756,
+          2.8511028705103914,
+          2.8511028705103976,
+          2.871686182036414,
+          2.9820218139426915,
+          2.9820218139426995,
+          3.018858786850656,
+          3.018858786850659,
+          3.0281131344145766,
+          3.02811313441459,
+          3.144385666248345,
+          3.2061120544137296,
+          3.2061120544137394,
+          3.249162081015271,
+          3.659593969926159,
+          3.6595939699261604,
+          4.080891128395379,
+          4.080891128395398,
+          4.297343648513291,
+          4.297343648513294,
+          4.492555604433237,
+          4.6870346203643125,
+          7.962750558223086
+        ],
+        "orbital_gradient_norm": 1.3394428779790245e-11,
+        "overlap_min_eigenvalue": 0.00036564409695009903,
+        "electron_trace": 5.999999999999999,
+        "metric": {
+          "auxiliary_count": 150,
+          "relative_threshold": 1e-10,
+          "retained_rank": 150,
+          "minimum_relative_eigenvalue": 2.2458096573220458e-07
+        },
+        "ccsd_converged": true
+      }
+    },
+    {
+      "basis": "aug-cc-pvqz",
+      "atoms_bohr": [
+        [
+          6,
+          [
+            -1.2507246465163153e-05,
+            1.8444581969212064e-05,
+            2.2833778415196547e-06
+          ]
+        ],
+        [
+          1,
+          [
+            0.3000048166556935,
+            -0.40001309429721293,
+            2.39998573495265
+          ]
+        ]
+      ],
+      "root": {
+        "converged": true,
+        "nao": 126,
+        "electrons": 6,
+        "charge": 1,
+        "spin": 0,
+        "occupations": [
+          2.0,
+          2.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orbital_energies": [
+          -11.842942563036008,
+          -1.1975077035525494,
+          -0.8507936080477592,
+          -0.3255579627938199,
+          -0.32555796279381266,
+          -0.15007937133537297,
+          -0.08315341065023356,
+          -0.07445134419190953,
+          -0.07445134419190749,
+          -0.05998606703412343,
+          -0.024812910927920484,
+          0.007180112373823865,
+          0.007180112373842298,
+          0.024283371500008744,
+          0.02428337150001047,
+          0.09631746322662765,
+          0.10597881560168723,
+          0.10920765835410079,
+          0.1092076583541122,
+          0.19507101427061846,
+          0.2063900274295699,
+          0.20639002742957685,
+          0.26048892062381057,
+          0.37871434861592446,
+          0.37871434861593517,
+          0.402349568234146,
+          0.4023495682341601,
+          0.457304051020742,
+          0.4867991506821628,
+          0.4867991506821775,
+          0.49358329664263084,
+          0.49358329664265177,
+          0.5094209347394808,
+          0.5426735017852287,
+          0.5426735017852867,
+          0.6307051350245771,
+          0.6588788744238833,
+          0.658878874423911,
+          0.6591197894543402,
+          0.6591197894543653,
+          0.8163086008830014,
+          0.9711098102737362,
+          0.9711098102737967,
+          1.0679536581872462,
+          1.337350566866455,
+          1.337350566866461,
+          1.3849060692790813,
+          1.4014621091753616,
+          1.4014621091753758,
+          1.5164094879970982,
+          1.5164094879971166,
+          1.5412960473781006,
+          1.644804885902582,
+          1.6448048859025886,
+          1.7544480889153462,
+          1.7781411193660734,
+          1.7781411193660737,
+          1.8294298193748042,
+          1.8294298193748073,
+          1.855250331405892,
+          1.855250331405917,
+          1.8662818240035723,
+          1.8662818240035852,
+          1.9064804814067715,
+          1.9064804814067766,
+          1.9717434291157403,
+          2.014472388640447,
+          2.0144723886404567,
+          2.027840433470739,
+          2.027840433470748,
+          2.051033609853439,
+          2.051033609853448,
+          2.0763680931413475,
+          2.3436891754681524,
+          2.3436891754681777,
+          2.4339559777647466,
+          2.613352996973898,
+          2.924867047870745,
+          2.9248670478707597,
+          2.9373051890726343,
+          2.9373051890726587,
+          3.4943006826943375,
+          3.604510691909419,
+          3.6045106919094887,
+          3.775232867973479,
+          5.440509380289191,
+          5.440509380289197,
+          5.458145156948667,
+          5.458145156948688,
+          5.491142481285771,
+          5.491142481285778,
+          5.541666087517444,
+          5.541666087517471,
+          5.626584169826419,
+          5.6265841698264305,
+          5.6450421994200894,
+          5.9113760227748395,
+          5.911376022774845,
+          5.944648318742323,
+          5.944648318742344,
+          5.94837658143998,
+          6.01022927884795,
+          6.0102292788479525,
+          6.02562448405029,
+          6.146757054055972,
+          6.146757054055983,
+          6.286487227950639,
+          6.286487227950644,
+          6.577108107133127,
+          6.57710810713318,
+          6.7040287898037185,
+          6.868489955289428,
+          6.86848995528943,
+          7.608029061398832,
+          7.60802906139884,
+          7.761507533782542,
+          8.165440336340637,
+          8.290250509872232,
+          8.290250509872246,
+          8.585754835256708,
+          8.585754835256736,
+          8.906890526740948,
+          8.906890526741048,
+          9.620235102866642,
+          10.808509461254243,
+          21.32379828718899
+        ],
+        "orbital_gradient_norm": 2.5067603337386554e-11,
+        "overlap_min_eigenvalue": 0.00011049974655726817,
+        "electron_trace": 6.000000000000017,
+        "metric": {
+          "auxiliary_count": 218,
+          "relative_threshold": 1e-10,
+          "retained_rank": 218,
+          "minimum_relative_eigenvalue": 2.2257848804549988e-07
+        }
+      }
+    }
+  ],
+  "oracle_component_energies": [
+    -38.02549981560868,
+    -37.992144504441114,
+    -37.89339629849333,
+    -38.01277976787371,
+    -37.895009622914145
+  ]
+}

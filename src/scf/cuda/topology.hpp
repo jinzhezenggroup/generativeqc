@@ -74,9 +74,10 @@ bool make_direct_force_resident_bra_schedule(
     std::size_t byte_budget = std::numeric_limits<std::size_t>::max(), bool include_tasks = true);
 
 /** DF values consume Cartesian basis metadata only, not SCF/task state.
- * The explicit mode permits g metadata without extending any SCF kernel domain.
+ * The one-electron Cartesian exporter also retains shell-pair schedules, but
+ * admits orbital g without extending Direct-HF's ERI or public expansion ABI.
  */
-enum class HostBasisPacking { Scf, DfValues };
+enum class HostBasisPacking { Scf, DfValues, OneElectronValues };
 
 /** Pack topology and warm densities. Matrix-only exporters omit quartet-only
  * transforms and resident tasks; public AO expansion remains intact. The

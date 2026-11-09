@@ -20,8 +20,10 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+@pytest.mark.parametrize("maximum_angular", [3, 4])
 def test_arbitrary_nonsymmetric_weights_raw_fused_and_bounded_schedules(
     representation: typing.Any,
+    maximum_angular: int,
 ) -> None:
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     inputs = {
@@ -39,12 +41,17 @@ def test_arbitrary_nonsymmetric_weights_raw_fused_and_bounded_schedules(
                     [1.8 + 0.1 * angular_momentum, -0.13],
                 ],
             }
-            for angular_momentum in (0, 1, 2, 3)
+            for angular_momentum in range(maximum_angular + 1)
         ]
         + [{"atom_index": 1, "angular_momentum": 0, "primitives": [[1.2, 1.0]]}],
     }
     calculator = Calculator(
         device="cuda",
+        method="mp2" if maximum_angular == 4 else "rhf",
+        density_fitting="full_cuda" if maximum_angular == 4 else "none",
+        auxiliary_basis=[Shell(0, 0, (Primitive(0.8, 1.0),))]
+        if maximum_angular == 4
+        else None,
         basis_representation=representation,
         basis=[
             Shell(
