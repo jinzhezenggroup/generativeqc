@@ -108,3 +108,15 @@ must not be used to infer heavy-atom 5Z support.
 - `docs/user/ccsdt_cbs.md` for current public behavior and the staged 5Z plan.
 - `tests/python/test_full_df_cbs_native.py` for allocated independent endpoints.
 - `docs/maintainer/performance_engineering.md` for complete endpoint evidence.
+
+## Paired stationary staging reservation
+
+The shared one-electron gradient packer retains six expansion slots even for
+lower-angular shells. The Python stationary planner must reserve its native
+91-byte per-AO host metadata allowance, not the legacy Direct-HF three-slot
+58-byte allowance. Two host copies make the previous under-reservation 66 bytes
+per AO, potentially allowing optional grid storage to consume bytes needed by
+the paired integral provider. Keep all caller host/device caps unchanged.
+The host-compiled parity probe now includes the real basis header instead of
+copying only the obsolete three-slot constant. Boundary admission tests retain
+exact-fit success and one-byte-short refusal at the corrected actual usage.
