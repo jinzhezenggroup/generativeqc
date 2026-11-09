@@ -48,10 +48,61 @@ AUXILIARY = (
 )
 
 
+def _native_library_mappings(
+    library_path: Path, *, maps: Path = Path("/proc/self/maps")
+) -> list[dict] | None:
+    """Reject mixed native owners, including libraries hidden by ELF preemption.
+
+    A requested CDLL's hash does not identify its transitive symbol providers.
+    On Linux, compare mapped device/inode identities rather than path spellings:
+    repeated ELF segments and hard-link aliases are one owner, while a deleted
+    or older library remains a second owner even if its path cannot be opened.
+    Other platforms retain the existing selected-library identity contract.
+    """
+    if platform.system() != "Linux":
+        return None
+    selected = library_path.stat()
+    selected_key = (
+        os.major(selected.st_dev),
+        os.minor(selected.st_dev),
+        selected.st_ino,
+    )
+    try:
+        contents = maps.read_text()
+    except OSError as error:
+        raise RuntimeError("Cannot verify native library process mappings") from error
+    owners: dict[tuple[int, int, int], set[str]] = {}
+    for line in contents.splitlines():
+        fields = line.split(maxsplit=5)
+        if len(fields) != 6 or not fields[5].startswith("/"):
+            continue
+        major, minor = fields[3].split(":")
+        key = (int(major, 16), int(minor, 16), int(fields[4]))
+        name = Path(fields[5].removesuffix(" (deleted)")).name
+        if (
+            key == selected_key
+            or name == "libgenerativeqc.so"
+            or name.startswith("libgenerativeqc.so.")
+        ):
+            owners.setdefault(key, set()).add(fields[5])
+    if len(owners) > 1:
+        paths = sorted(path for aliases in owners.values() for path in aliases)
+        raise RuntimeError(f"Multiple distinct native libraries are mapped: {paths}")
+    if selected_key not in owners:
+        raise RuntimeError(
+            "Selected native library is not mapped at its current identity"
+        )
+    return [
+        {"device": f"{major:x}:{minor:x}", "inode": inode, "paths": sorted(paths)}
+        for (major, minor, inode), paths in sorted(owners.items())
+    ]
+
+
 def binary_identity(calculator: Calculator) -> dict:
-    """Hash the actual loaded library without probing a GPU for CPU results."""
+    """Identify the selected native binary and reject mixed Linux library owners."""
     library = calculator._library
     path = Path(library._name).resolve()
+    mappings = _native_library_mappings(path)
     with path.open("rb") as stream:
         digest = hashlib.file_digest(stream, "sha256").hexdigest()
     library.generativeqc_get_source_identity.argtypes = []
@@ -60,6 +111,7 @@ def binary_identity(calculator: Calculator) -> dict:
         "library_sha256": digest,
         "library_path": str(path),
         "source_identity": library.generativeqc_get_source_identity().decode(),
+        "native_library_mappings": mappings,
     }
 
 
