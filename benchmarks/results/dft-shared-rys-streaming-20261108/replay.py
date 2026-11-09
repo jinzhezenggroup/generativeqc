@@ -3,11 +3,49 @@
 from __future__ import annotations
 
 import json
+import math
+import re
+from itertools import product
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
 from benchmarks._exact_fp64_evidence import load, require
 from benchmarks.dft_streaming_qualification import qualify_native
+
+
+def raw_k_predicates(text: str) -> int:
+    """Require one independent result for every retained fixture combination."""
+    expected = set(
+        product(
+            ("dppp", "pppp", "dpds", "ddps", "dpdp", "ddpp"),
+            ("cartesian", "coincident", "reversed_pairs"),
+            ("private", "shared"),
+            ("0", "1"),
+            ("0", "1"),
+        )
+    )
+    observed = []
+    for line in text.splitlines():
+        if not line.startswith("PASS "):
+            continue
+        match = re.fullmatch(
+            r"PASS ([a-z]+)_(cartesian|coincident|reversed_pairs)_(private|shared)"
+            r" graph=([01]) replay=([01]) max_abs=(\S+)",
+            line,
+        )
+        require(match is not None, "Malformed raw-K oracle predicate")
+        require(
+            math.isfinite(float(match[6])) and float(match[6]) >= 0,
+            "Nonfinite or negative raw-K oracle error",
+        )
+        observed.append(match.groups()[:5])
+    require(
+        len(observed) == len(expected)
+        and set(observed) == expected
+        and "ALL SYNTHETIC GATES PASS" in text,
+        "Incomplete raw-K oracle gate",
+    )
+    return len(observed)
 
 
 def replay(directory: Path = Path(__file__).parent) -> dict:
@@ -36,15 +74,27 @@ def replay(directory: Path = Path(__file__).parent) -> dict:
                 require(result["paired_warm_gate"], "Paired warm regression")
                 limit = 0.98 if card == "a100" else 1.03
                 require(result["cold_ratio"] <= limit, "Cold qualification failed")
+    require(
+        cohort["raw_k_logs"]
+        == {
+            "a100": "weighted-pilot-a100/raw-k-numerics.log",
+            "5090": "raw-k-science/fixture-5090-16846/numerics.log",
+        },
+        "Changed raw-K device provenance",
+    )
+    sanitizers = cohort["sanitizer_logs"]
+    require(
+        len(sanitizers) == 3
+        and set(sanitizers)
+        == {
+            f"raw-k-science/fixture-5090-16846/{kind}.log"
+            for kind in ("memcheck", "racecheck", "synccheck")
+        },
+        "Changed raw-K sanitizer provenance",
+    )
     fixture_checks = {}
     for card, name in cohort["raw_k_logs"].items():
-        text = files[name]
-        count = sum(line.startswith("PASS ") for line in text.splitlines())
-        require(
-            count == 144 and "ALL SYNTHETIC GATES PASS" in text,
-            "Incomplete raw-K oracle gate",
-        )
-        fixture_checks[card] = count
+        fixture_checks[card] = raw_k_predicates(files[name])
     for name in cohort["sanitizer_logs"]:
         text = files[name]
         marker = (
@@ -52,7 +102,13 @@ def replay(directory: Path = Path(__file__).parent) -> dict:
             if name.endswith("racecheck.log")
             else "ERROR SUMMARY: 0 errors"
         )
-        require(marker in text, "Raw-K sanitizer failed")
+        summaries = re.findall(
+            r"(?:ERROR|RACECHECK) SUMMARY: (\d+) (?:errors|hazards)", text
+        )
+        require(
+            marker in text and summaries and all(int(n) == 0 for n in summaries),
+            "Raw-K sanitizer failed",
+        )
     transfer = json.loads(files["reproducer/fixture-source-transfer.json"])
     require(transfer["nonarray_executable_identical"], "Unqualified fixture executable")
     require(

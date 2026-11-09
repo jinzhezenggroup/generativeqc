@@ -37,8 +37,12 @@ SharedRysXyRequest parse_shared_rys_xy_request(const char* value) noexcept {
 }
 
 SharedRysXyRequest shared_rys_xy_requested() noexcept {
-  return parse_shared_rys_xy_request(std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY"),
-                                     std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z"));
+  const char* xy = std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY");
+  const auto request =
+      parse_shared_rys_xy_request(xy, std::getenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z"));
+  return request == SharedRysXyRequest::Off && (xy == nullptr || *xy == '\0')
+             ? SharedRysXyRequest::Auto
+             : request;
 }
 
 SharedRysXyRequest parse_shared_rys_xy_request(const char* xy, const char* weighted_z) noexcept {
@@ -51,16 +55,27 @@ SharedRysXyRequest parse_shared_rys_xy_request(const char* xy, const char* weigh
 }
 
 SharedRysXyPolicy resolve_shared_rys_xy_policy(SharedRysXyRequest request,
-                                               const SharedRysXyContext& c) noexcept {
+                                               const SharedRysXyContext& c,
+                                               const runtime::CudaTargetInfo& target) noexcept {
   using A = SharedRysXyAdmission;
   A admission = A::Off;
-  if (request == SharedRysXyRequest::On || request == SharedRysXyRequest::WeightedZOn) {
+  // Shared scalar-FP64 recurrence storage is a throughput-class choice, not
+  // an ISA identity. Unknown or reduced-rate FP64 retains the incumbent;
+  // explicit trials may bypass profitability, never capability or legality.
+  const bool full_rate_fp64 = target.fp32_fp64_ratio > 0 && target.fp32_fp64_ratio <= 2;
+  if (request == SharedRysXyRequest::On || request == SharedRysXyRequest::WeightedZOn ||
+      (request == SharedRysXyRequest::Auto && full_rate_fp64)) {
     if (c.unrestricted)
       admission = A::Unrestricted;
     else if (c.mixed_precision)
       admission = A::MixedPrecision;
-    else if (!c.sm90 || c.capability_mask == 0)
+    else if (c.capability_mask == 0)
       admission = A::UnsupportedProfile;
+    // The generated capability owns per-kernel resource qualification. This
+    // fixed family additionally requires 32-lane warps and its largest block.
+    else if (target.warp_size != 32 || target.maximum_threads_per_block < 192 ||
+             target.maximum_threads_per_sm < 192 || target.maximum_blocks_per_sm == 0)
+      admission = A::UnsupportedResources;
     else if (c.persistent_eri)
       admission = A::PersistentEri;
     else if (!c.quartet_direct)
@@ -91,6 +106,8 @@ const char* shared_rys_xy_admission_name(SharedRysXyAdmission admission) noexcep
       return "mixed_precision";
     case SharedRysXyAdmission::UnsupportedProfile:
       return "unsupported_profile";
+    case SharedRysXyAdmission::UnsupportedResources:
+      return "unsupported_resources";
     case SharedRysXyAdmission::NonPaged:
       return "non_paged";
     case SharedRysXyAdmission::IncrementalJk:

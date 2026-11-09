@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "hf-screened-handoff-rejections-20261108",
+  "owner": "HF shared-Rys qualification and rejected handoff evidence, PR 3048",
+  "reason": "Existing exact-FP64 v3 storage reconstructs all 459 original UTF-8 texts across five separately authenticated populations, including complete compiler stdout, independent references and every failed force diagnostic. No observation, source identity, scientific gate or storage budget changes; this is storage acceptance only, not new endpoint qualification.",
+  "review_document": "benchmarks/results/hf-screened-handoff-rejections-20261108/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/hf-screened-handoff-rejections-20261108/fp64.xz",
+      "family": "hf-screened-handoff-rejections-20261108",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact numerical words for complete original endpoints and independent references, including rejected observations.",
+      "bytes": 167228,
+      "sha256": "a80fb197c035619c8a92735357f298c4db293275513fd9051137bb45f85287d6"
+    },
+    {
+      "path": "benchmarks/results/hf-screened-handoff-rejections-20261108/receipts.json.xz",
+      "family": "hf-screened-handoff-rejections-20261108",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete text and original integrity manifests, including compiler output, failed tooling and source/scheduler provenance.",
+      "bytes": 166044,
+      "sha256": "de6e3a3bdef7350e10c05f77cdac9793c5f77b7123b3b3c7bfee7c2db9bd0dce"
+    }
+  ]
+}

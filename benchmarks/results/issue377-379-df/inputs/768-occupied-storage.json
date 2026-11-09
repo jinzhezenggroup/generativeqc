@@ -1,0 +1,17 @@
+{
+  "scope": "Lossless container storage only; all original NPY bytes, arrays and scientific input metadata unchanged.",
+  "source_revision": "61f653b2126a885d71fe62decfda9ebedf193480",
+  "path": "benchmarks/results/issue377-379-df/inputs/768-occupied-coefficients.npz",
+  "codec": "stdlib zipfile.ZIP_LZMA; existing NumPy loader and ZIP member names unchanged",
+  "previous_bytes": 944957,
+  "previous_sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2",
+  "bytes": 758556,
+  "sha256": "e165812519cc7fa9cfb26ff8a198ae73a71081d59f168f4d0ef725d473846b33",
+  "saved_bytes": 186401,
+  "members": {
+    "coefficients.npy": {
+      "bytes": 983168,
+      "sha256": "d4a21c1242e4db6e28a271dc37430d56bd2760640da23caad80324e8dd9e2bc8"
+    }
+  }
+}
