@@ -13,6 +13,43 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_full_range_force_and_reference_consumers_keep_strict_ks_stationarity(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Loose public controls cannot admit the energy-only physical ceiling."""
+    source = tmp_path / "force_stationarity.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include "dft/ks_stopping_policy.hpp"
+#include "scf/convergence_limits.hpp"
+int main() {
+  using namespace generativeqc;
+  for (bool standard : {false, true})
+    for (bool nonlocal : {false, true})
+      for (bool forces : {false, true})
+        for (bool reference : {false, true}) {
+          const bool admitted = dft::standard_ks_stationarity_allowance(
+              standard, nonlocal, forces, reference);
+          assert(admitted == (standard && (nonlocal || (!forces && !reference))));
+          const double tolerance = admitted
+              ? scf::scf_stationarity_tolerance(1e-9, 1e-5, 1e-9) : 1e-9;
+          if (standard && !nonlocal && (forces || reference)) assert(tolerance == 1e-9);
+        }
+  assert(dft::standard_ks_stationarity_allowance(true, false, false, false));
+  assert(!dft::standard_ks_stationarity_allowance(true, false, true, false));
+  assert(dft::standard_ks_stationarity_allowance(true, false, false, false));
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [source],
+        tmp_path / "force_stationarity",
+        compile_args=["-std=c++20", f"-I{ROOT / 'src'}"],
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
 def test_early_final_default_requires_the_complete_qualified_model(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:

@@ -1,0 +1,61 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Scoped UKS controls pass unchanged gates, but original-grid water96 and original independent RSH force acceptance remain incomplete. No issue closure or production/performance promotion.",
+    "scope": "numerical",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 2413,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "a68634ffc8a4a26fb19b9e5769d6353909388a457052acb127c9f111ca6eacb6"
+    },
+    {
+      "bytes": 9660,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "f47cb3dd10211a486e395f7bbf072d38de47ec9cb60031ca61d86ce55cd4a03f"
+    },
+    {
+      "bytes": 7242,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "bcb0d39b1aa2783dd261fc71a35a6ce9653eded845c2a8d91489ac4862b4686f"
+    },
+    {
+      "bytes": 7116,
+      "path": "native-source.patch",
+      "role": "source-patch",
+      "sha256": "ba67db626589e1c9aa52fc845c6634917eb8ae77231ca01f754964affc72ad83"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--nodelist=node1",
+      "--time=00:10:00",
+      "env",
+      "GENERATIVEQC_LIBRARY=build/ks-state/libgenerativeqc.so",
+      "GENERATIVEQC_KS_STATE_CUDA_TEST=1",
+      "PYTHONPATH=python:.:tests/python",
+      "OPENBLAS_NUM_THREADS=1",
+      "OMP_NUM_THREADS=2",
+      "python",
+      "-m",
+      "pytest",
+      "-xq",
+      "tests/python/test_ks_scientific_gates_cuda.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "24a22da0e0684ad8d195e0d401312e5a278da2d0"
+  }
+}

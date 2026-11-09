@@ -466,6 +466,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::array<double, 3> warm_xc_totals{};
   bool warm_incumbent_deferred{};
   std::size_t following_force_device_bytes{};
+  bool following_force_requested{};
   unsigned pending_iterations{};
   std::array<std::uint64_t, kCudaKsChunkCapacity> pending_generations{};
   runtime::SolverRegionCudaExecutor solver_region_executor;
@@ -926,8 +927,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
                         [](const auto& atom) { return atom.ecp_core != 0; });
   }
 
+  bool standard_stationarity_allowance_active() const noexcept {
+    return standard_ks_stationarity_allowance(
+        standard_convergence_active(), standard_nonlocal_model,
+        options.compute_forces || following_force_requested, options.export_physical_reference);
+  }
+
   double physical_stationarity_tolerance() const noexcept {
-    if (standard_convergence_active())
+    if (standard_stationarity_allowance_active())
       return scf::scf_stationarity_tolerance(options.energy_tolerance, options.density_tolerance,
                                              1e-9);
     return std::min(budget_stationarity ? 1e-4 : 1e-9, options.density_tolerance);
@@ -4520,7 +4527,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Direct UKS needs the same proof as RI-K: do not replace an already
     // canonical physical density by a destabilizing unextrapolated update.
     const bool canonical_final_probe =
-        !occupied_stage && (fitted_exchange || (spins == 2 && has_exchange)) && !budget_fock &&
+        !occupied_stage && (fitted_exchange || spins == 2) && !budget_fock &&
         !has_range_correction && !nonlocal_correlation &&
         !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
         provider.system().ecp_terms.empty() &&
@@ -4926,7 +4933,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Explicit callers already check the strict physical AO maximum. This
     // optional override also tightens canonical density reconstruction, so
     // preserve the original separate 1e-8 canonical-density contract.
-    if (standard_convergence_active() || automatic_program)
+    if (standard_stationarity_allowance_active() || automatic_program)
       limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;
     limits.maximum_corrections = 0;
@@ -5049,7 +5056,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       prepare_final_frame();
       scf::solver::FinalStateLimits limits;
       limits.density_tolerance = options.density_tolerance;
-      if (budget_stationarity || standard_convergence_active())
+      if (budget_stationarity || standard_stationarity_allowance_active())
         limits.stationarity_tolerance = physical_stationarity_tolerance();
       limits.energy_tolerance = options.energy_tolerance;
       limits.maximum_corrections = 0;
@@ -5231,7 +5238,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
     scf::solver::FinalStateLimits limits;
     limits.density_tolerance = options.density_tolerance;
-    if (budget_stationarity || standard_convergence_active())
+    if (budget_stationarity || standard_stationarity_allowance_active())
       limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;
     limits.maximum_corrections = 0;
@@ -6028,7 +6035,9 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
 }
 
 const CudaKsResources& CudaKsPlan::resources() const noexcept { return impl_->resource; }
-void CudaKsPlan::set_following_force_memory(std::size_t additional_device_bytes) noexcept {
+void CudaKsPlan::set_following_force_request(bool compute_forces,
+                                             std::size_t additional_device_bytes) noexcept {
+  impl_->following_force_requested = compute_forces;
   impl_->following_force_device_bytes = additional_device_bytes;
 }
 const tensor::PanelProductDiagnostic* CudaKsPlan::density_provider_diagnostic() const noexcept {

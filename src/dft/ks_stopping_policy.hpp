@@ -7,6 +7,14 @@
 
 namespace generativeqc::dft {
 
+/** Full-range force/reference consumers retain the strict physical ceiling.
+ * Public energy/density controls do not bound force error. The separately
+ * qualified nonlocal orbital-gradient contract keeps its own admission. */
+constexpr bool standard_ks_stationarity_allowance(bool standard_owner, bool nonlocal_owner,
+                                                  bool forces, bool physical_reference) noexcept {
+  return standard_owner && (nonlocal_owner || (!forces && !physical_reference));
+}
+
 /** Complete compositions with independent default-grid early-stop evidence.
  * A point family alone is insufficient: custom mixing coefficients and generated
  * split hybrids retain the incumbent policy. In particular, the known M06-2X

@@ -1,0 +1,129 @@
+diff --git a/src/dft/cuda_ks.cpp b/src/dft/cuda_ks.cpp
+index 297b92f2e..51b0d5224 100644
+--- a/src/dft/cuda_ks.cpp
++++ b/src/dft/cuda_ks.cpp
+@@ -466,6 +466,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
+   std::array<double, 3> warm_xc_totals{};
+   bool warm_incumbent_deferred{};
+   std::size_t following_force_device_bytes{};
++  bool following_force_requested{};
+   unsigned pending_iterations{};
+   std::array<std::uint64_t, kCudaKsChunkCapacity> pending_generations{};
+   runtime::SolverRegionCudaExecutor solver_region_executor;
+@@ -926,8 +927,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
+                         [](const auto& atom) { return atom.ecp_core != 0; });
+   }
+ 
++  bool standard_stationarity_allowance_active() const noexcept {
++    return standard_ks_stationarity_allowance(
++        standard_convergence_active(), standard_nonlocal_model,
++        options.compute_forces || following_force_requested, options.export_physical_reference);
++  }
++
+   double physical_stationarity_tolerance() const noexcept {
+-    if (standard_convergence_active())
++    if (standard_stationarity_allowance_active())
+       return scf::scf_stationarity_tolerance(options.energy_tolerance, options.density_tolerance,
+                                              1e-9);
+     return std::min(budget_stationarity ? 1e-4 : 1e-9, options.density_tolerance);
+@@ -4520,7 +4527,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
+     // Direct UKS needs the same proof as RI-K: do not replace an already
+     // canonical physical density by a destabilizing unextrapolated update.
+     const bool canonical_final_probe =
+-        !occupied_stage && (fitted_exchange || (spins == 2 && has_exchange)) && !budget_fock &&
++        !occupied_stage && (fitted_exchange || spins == 2) && !budget_fock &&
+         !has_range_correction && !nonlocal_correlation &&
+         !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
+         provider.system().ecp_terms.empty() &&
+@@ -4926,7 +4933,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
+     // Explicit callers already check the strict physical AO maximum. This
+     // optional override also tightens canonical density reconstruction, so
+     // preserve the original separate 1e-8 canonical-density contract.
+-    if (standard_convergence_active() || automatic_program)
++    if (standard_stationarity_allowance_active() || automatic_program)
+       limits.stationarity_tolerance = physical_stationarity_tolerance();
+     limits.energy_tolerance = options.energy_tolerance;
+     limits.maximum_corrections = 0;
+@@ -5049,7 +5056,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
+       prepare_final_frame();
+       scf::solver::FinalStateLimits limits;
+       limits.density_tolerance = options.density_tolerance;
+-      if (budget_stationarity || standard_convergence_active())
++      if (budget_stationarity || standard_stationarity_allowance_active())
+         limits.stationarity_tolerance = physical_stationarity_tolerance();
+       limits.energy_tolerance = options.energy_tolerance;
+       limits.maximum_corrections = 0;
+@@ -5231,7 +5238,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
+ 
+     scf::solver::FinalStateLimits limits;
+     limits.density_tolerance = options.density_tolerance;
+-    if (budget_stationarity || standard_convergence_active())
++    if (budget_stationarity || standard_stationarity_allowance_active())
+       limits.stationarity_tolerance = physical_stationarity_tolerance();
+     limits.energy_tolerance = options.energy_tolerance;
+     limits.maximum_corrections = 0;
+@@ -6028,7 +6035,9 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
+ }
+ 
+ const CudaKsResources& CudaKsPlan::resources() const noexcept { return impl_->resource; }
+-void CudaKsPlan::set_following_force_memory(std::size_t additional_device_bytes) noexcept {
++void CudaKsPlan::set_following_force_request(bool compute_forces,
++                                             std::size_t additional_device_bytes) noexcept {
++  impl_->following_force_requested = compute_forces;
+   impl_->following_force_device_bytes = additional_device_bytes;
+ }
+ const tensor::PanelProductDiagnostic* CudaKsPlan::density_provider_diagnostic() const noexcept {
+diff --git a/src/dft/cuda_ks.hpp b/src/dft/cuda_ks.hpp
+index 84d5f76b1..a77c32c0b 100644
+--- a/src/dft/cuda_ks.hpp
++++ b/src/dft/cuda_ks.hpp
+@@ -406,11 +406,12 @@ class CudaKsPlan {
+                                            std::array<std::uint64_t, 4>& receipt,
+                                            std::string& detail);
+ 
+-  /** Describe the imminent force consumer before submitting this solve. The
+-   * prepared method supplies its existing additional-allocation envelope,
+-   * subtracting retained force storage. This is a hint for warm-anchor work
+-   * placement, never a reservation or permission to exceed a force budget. */
+-  void set_following_force_memory(std::size_t additional_device_bytes) noexcept;
++  /** Bind the imminent consumer before SCF, including zero-allocation forces.
++   * The force flag selects the physical stopping contract independently of
++   * retained storage. Additional bytes only guide warm-anchor placement;
++   * they never reserve memory or authorize exceeding the force budget. */
++  void set_following_force_request(bool compute_forces,
++                                   std::size_t additional_device_bytes) noexcept;
+ 
+   const CudaKsResources& resources() const noexcept;
+   /** Optional prepared-operation provenance; null means that the owner did
+diff --git a/src/dft/ks_stopping_policy.hpp b/src/dft/ks_stopping_policy.hpp
+index 1e0adaf12..65cec1957 100644
+--- a/src/dft/ks_stopping_policy.hpp
++++ b/src/dft/ks_stopping_policy.hpp
+@@ -7,6 +7,14 @@
+ 
+ namespace generativeqc::dft {
+ 
++/** Full-range force/reference consumers retain the strict physical ceiling.
++ * Public energy/density controls do not bound force error. The separately
++ * qualified nonlocal orbital-gradient contract keeps its own admission. */
++constexpr bool standard_ks_stationarity_allowance(bool standard_owner, bool nonlocal_owner,
++                                                  bool forces, bool physical_reference) noexcept {
++  return standard_owner && (nonlocal_owner || (!forces && !physical_reference));
++}
++
+ /** Complete compositions with independent default-grid early-stop evidence.
+  * A point family alone is insufficient: custom mixing coefficients and generated
+  * split hybrids retain the incumbent policy. In particular, the known M06-2X
+diff --git a/src/methods/dft_method.cpp b/src/methods/dft_method.cpp
+index 35e352704..c9560f9ab 100644
+--- a/src/methods/dft_method.cpp
++++ b/src/methods/dft_method.cpp
+@@ -2547,7 +2547,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
+           stationary_controller_ ? stationary_controller_->resources().device_upper_bytes : 0;
+       additional = envelope > retained ? envelope - retained : 0;
+     }
+-    cuda_->set_following_force_memory(additional);
++    cuda_->set_following_force_request(compute_forces, additional);
+ #else
+     (void)compute_forces;
+ #endif

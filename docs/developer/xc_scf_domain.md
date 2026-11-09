@@ -49,6 +49,36 @@ contraction used by the independent XC integrator. Each quadrature weight
 is applied once. LDA requests only AO values; PBE requests values and three
 first spatial derivatives. Neither computes tau or higher jets.
 
+## Physical final-state admission
+
+CUDA full-range KS force and physical-reference consumers retain the strict
+physical residual ceiling, `min(1e-9, density_tolerance)`, even when the public
+energy/density controls select Standard convergence. Energy-only owners may use
+their separately admitted Standard allowance. The nonlocal orbital-gradient and
+budget-Fock contracts retain their independently qualified policies.
+
+The prepared method binds whether forces are requested before SCF starts. This
+fact is independent of additional force-allocation bytes: an already resident
+force workspace does not turn a force request into an energy-only request.
+Iteration, resident force weights and detached export use the same physical
+allowance. Strict callers retain the independent `1e-8` canonical-density gate;
+the physical residual ceiling is not silently reused as a tighter density gate.
+
+Full-range, all-electron, strict-FP64, single-slot CUDA UKS owners test the actual
+unshifted physical/canonical state before a corrective closure, including pure
+semilocal models without exact exchange. A rejected proof resumes the owned
+DIIS proposal within the existing iteration budget and cannot publish a final
+token or warm seed. A successful proof avoids an unnecessary unextrapolated
+update of an already valid physical state. Other precision, resource, ECP and
+range/nonlocal domains retain their bounded incumbent paths.
+
+The original-input GPU controls are in
+`tests/python/test_ks_scientific_gates_cuda.py` and the original-grid water96
+controls in `tests/python/test_ks_seed_admission_cuda.py`. They require
+`GENERATIVEQC_KS_STATE_CUDA_TEST=1` and a finite Slurm allocation; the water
+module also requires `GENERATIVEQC_GRID_CUDA_TEST=1`. The UKS mask controls
+require a test-hook native build with native PBE stationary-force artifacts.
+
 ## Stable positive-density algebra
 
 The evaluator does not clip rho or sigma and has no positive density floor.
