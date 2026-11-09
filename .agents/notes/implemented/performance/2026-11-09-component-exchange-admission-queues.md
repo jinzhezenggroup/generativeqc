@@ -109,6 +109,31 @@ and native-input identities change; summary/stages/capability identities remain
 identical, stale stays true, qualified products remain zero. Do not relabel old
 native measurements or rerun successful endpoint cohorts for these CI repairs.
 
+## Concurrent repair and later master synchronization
+
+The first push is rejected because another writer already published remote
+faee0a0dc's equivalent CI repair. Merge it without force-pushing or discarding
+its history. Resolve the duplicate guard/import inventory as one contract and
+retain the additional unrelated-cwd replay and authenticated resource tests;
+the resolved tree is exactly the already-validated503fbf86f tree.
+
+Master then advances to51d887ff9's source-bound Libxc acceptance. Preserve that
+new checker, fresh historical campaign and upstream scientific demotions. Its
+accepted snapshot is already stale with zero current E/F endpoints. The checker
+correctly refuses a fingerprint refresh against the older qualified previous
+summary. Advance `previous` to the exact accepted51d stale summary through the
+official serializer, and regenerate through the official checker. The new
+summary is identical; there is no new transition or acknowledgement to hide.
+The former66 demotion acknowledgements and original previous summary remain
+in accepted51d Git history and exact ignored local copies. `--require-current`
+must still fail; this metadata repair does not manufacture fresh native E/F.
+
+Retain the unsuccessful all-files mutating-compaction hook attempt: its
+whole-batch resource ceiling refuses before mutation. Use the repository CI's
+existing explicit skip of that local mutator, while retaining the separate
+all-files read-only compaction and evidence checks. No cap, guard, successful
+GPU population or independent numerical tolerance is changed by this repair.
+
 ## References
 
 - `benchmarks/results/dft-component-queue-20261109/README.md` and offline replay.

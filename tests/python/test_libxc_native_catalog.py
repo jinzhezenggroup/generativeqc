@@ -149,6 +149,78 @@ def test_live_receipts_allow_truthful_source_demotion(bundle: dict) -> None:
         assert live["summary"]["qualified_counts"]["forces"] == 11
 
 
+def test_current_acceptance_uses_representative_admitted_contexts(report: dict) -> None:
+    from tools.check_libxc_native_catalog import require_current_acceptance
+
+    selected = {"LDA_C_VWN_4", "GGA_X_APBE", "MGGA_X_GVT4"}
+    current = deepcopy(report)
+    current["endpoints"] = [
+        row for row in current["endpoints"] if row["name"] in selected
+    ]
+    assert not current["summary"]["qualified_counts"]["public-method"]
+    require_current_acceptance(current)
+
+
+def test_current_acceptance_rejects_stale_receipts(report: dict) -> None:
+    from tools.check_libxc_native_catalog import require_current_acceptance
+
+    stale = {**report, "stale": True}
+    with pytest.raises(ValueError, match="requires fresh native evidence"):
+        require_current_acceptance(stale)
+
+
+def test_current_acceptance_requires_shared_registration_across_backends(
+    report: dict,
+) -> None:
+    from tools.check_libxc_native_catalog import require_current_acceptance
+
+    selected = {
+        "cpu": {"LDA_C_VWN_4", "GGA_X_APBE", "MGGA_X_GVT4"},
+        "cuda": {"LDA_C_CHACHIYO", "GGA_X_PBE_SOL", "MGGA_X_LTA"},
+    }
+    current = deepcopy(report)
+    current["endpoints"] = [
+        row for row in current["endpoints"] if row["name"] in selected[row["backend"]]
+    ]
+    with pytest.raises(ValueError, match="requires a common registration"):
+        require_current_acceptance(current)
+
+
+@pytest.mark.parametrize("missing", ["family", "backend", "spin", "product", "all"])
+def test_current_acceptance_rejects_missing_admitted_coverage(
+    report: dict, missing: str
+) -> None:
+    from tools.check_libxc_native_catalog import require_current_acceptance
+
+    field, value = {
+        "family": ("family", "mgga"),
+        "backend": ("backend", "cuda"),
+        "spin": ("spin", "polarized"),
+        "product": ("product", "forces"),
+        "all": ("precision", "fp64"),
+    }[missing]
+    current = deepcopy(report)
+    current["endpoints"] = [row for row in current["endpoints"] if row[field] != value]
+    with pytest.raises(ValueError, match="missing paired admitted energy/forces"):
+        require_current_acceptance(current)
+
+
+@pytest.mark.parametrize(
+    "field", ["receipt_identity", "name", "coordinates", "library"]
+)
+def test_current_acceptance_does_not_pair_different_contexts(
+    report: dict, field: str
+) -> None:
+    from tools.check_libxc_native_catalog import require_current_acceptance
+
+    current = deepcopy(report)
+    for row in current["endpoints"]:
+        if row["product"] == "forces":
+            row[field] = "different-context"
+    with pytest.raises(ValueError, match="missing paired admitted energy/forces"):
+        require_current_acceptance(current)
+
+
 def test_boundary_coordinates_replay_recorded_inputs(bundle: dict) -> None:
     from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 

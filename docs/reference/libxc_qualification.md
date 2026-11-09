@@ -1,11 +1,11 @@
 # Native automatic Libxc qualification
 
-Measured source revision: `36085eec7d745ad0e25514468ddfa42aea2c9f86`.
-Retained measured source inputs: `ec311fd6a9bc3a7105ab42ff9f7e154400119a91d79b3b6987e62c3e09cfc0b3`.
+Measured source revision: `fbf57c111c7c885efbc0cd1457e6a7732c9e3d95`.
+Retained measured source inputs: `ba63873931ccffae7d9b2cea01831028f9bcf04a9903b818da76bd1539f64d64`.
 Current checked source inputs: `2941e70ebefe56777983465dece1107925801c63e9d25f5bd8e3ee760aab444d`.
 Current checked native input identity: `a305bde4a845e554e5f04ca4ab593b26166b7e31902635dcd5a900194532aea3`.
 Retained evidence stale for checked inputs: `True`.
-Retained executed native library SHA-256: `d16bf758445db7fc0b1b043847979e7a12ef851ee98254be2e9a7f47dace0efa`.
+Retained executed native library SHA-256: `c2d1b725fb754e72d35ca5829ba9a067974703c6a98bc4e4cefb44ea6abc256c`.
 Independent oracle: PySCF 2.14.0 / Libxc 7.0.0.
 Structurally selectable non-curated automatic registrations: 198; registrations without a retained native campaign: 211.
 
@@ -15,6 +15,9 @@ Counts apply only to the exact retained native contexts; no response, Hessian,
 HVP, higher-l, mixed/Fast, ECP or DF scope is inferred.
 The `public-method` row counts the optional stronger admission receipt,
 not available public selectors. Its absence does not disable a method.
+A successful default check establishes archival consistency only. Use
+`python tools/check_libxc_native_catalog.py --require-current` for representative
+source-matched paired energy/force acceptance across families, backends and spins.
 
 ```text
 Libxc capability summary (222 functionals)
@@ -36,7 +39,7 @@ explicit blockers: 66 across 11 functionals
 | Family | Backend | Spin | Product | Qualified registrations |
 | --- | --- | --- | --- | ---: |
 
-Current-source admitted backend/spin lifecycle records: 0.
+Current-source observed backend/spin lifecycle records: 0.
 Historical measurements remain in the retained campaign; stale receipts are not
 counted as current-source admitted contexts. Admitted records retain exact
 geometry, grid, precision, binary and derivative scope.
