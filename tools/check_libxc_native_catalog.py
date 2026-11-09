@@ -57,6 +57,9 @@ def render(report: dict, previous: dict) -> str:
         "HVP, higher-l, mixed/Fast, ECP or DF scope is inferred.",
         "The `public-method` row counts the optional stronger admission receipt,",
         "not available public selectors. Its absence does not disable a method.",
+        "A successful default check establishes archival consistency only. Use",
+        "`python tools/check_libxc_native_catalog.py --require-current` for representative",
+        "source-matched paired energy/force acceptance across families, backends and spins.",
         "",
         "```text",
         render_capability_summary(report["summary"]),
@@ -71,7 +74,7 @@ def render(report: dict, previous: dict) -> str:
         )
     lines += [
         "",
-        f"Current-source admitted backend/spin lifecycle records: {len(report['observed_endpoints'])}.",
+        f"Current-source observed backend/spin lifecycle records: {len(report['observed_endpoints'])}.",
         "Historical measurements remain in the retained campaign; stale receipts are not",
         "counted as current-source admitted contexts. Admitted records retain exact",
         "geometry, grid, precision, binary and derivative scope.",
@@ -120,7 +123,72 @@ def render(report: dict, previous: dict) -> str:
     return "\n".join(lines)
 
 
-def check(manifest_path: Path, *, write: bool = False) -> dict:
+def require_current_acceptance(report: dict) -> None:
+    """Require representative current E/F contexts, not a registration allow-list.
+
+    Archival consistency permits stale or missing measurements. End-to-end
+    acceptance additionally needs a source-matched energy and force receipt in
+    each ordinary semilocal family, backend and spin layout. Pair products only
+    within the same exact admitted context; observed but blocked results do not
+    qualify. This does not grant unmeasured domains or public-method receipts.
+    """
+    require(
+        not report["stale"], "current-source acceptance requires fresh native evidence"
+    )
+    contexts = {}
+    for row in report["endpoints"]:
+        context = {
+            key: value
+            for key, value in row.items()
+            if key not in ("product", "resolution")
+        }
+        identity = canonical_hash(context)
+        entry = contexts.setdefault(identity, (context, set()))
+        entry[1].add(row["product"])
+    covered = {
+        (context["family"], context["backend"], context["spin"])
+        for context, products in contexts.values()
+        if {"energy", "forces"} <= products
+    }
+    missing = [
+        f"{family}/{backend}/{spin}"
+        for family in ("lda", "gga", "mgga")
+        for backend in ("cpu", "cuda")
+        for spin in ("unpolarized", "polarized")
+        if (family, backend, spin) not in covered
+    ]
+    require(
+        not missing,
+        "current-source acceptance missing paired admitted energy/forces contexts: "
+        + ", ".join(missing),
+    )
+    registrations = {}
+    for context, products in contexts.values():
+        if {"energy", "forces"} <= products:
+            registrations.setdefault((context["family"], context["name"]), set()).add(
+                (context["backend"], context["spin"])
+            )
+    matrix = {
+        (backend, spin)
+        for backend in ("cpu", "cuda")
+        for spin in ("unpolarized", "polarized")
+    }
+    shared_families = {
+        family
+        for (family, _name), measured in registrations.items()
+        if matrix <= measured
+    }
+    require(
+        {"lda", "gga", "mgga"} <= shared_families,
+        "current-source acceptance requires a common registration across backends/spins "
+        "for each family; missing: "
+        + ", ".join(sorted({"lda", "gga", "mgga"} - shared_families)),
+    )
+
+
+def check(
+    manifest_path: Path, *, write: bool = False, require_current: bool = False
+) -> dict:
     """Validate bytes, live inputs, exact report coverage and regression policy."""
     manifest = load_json(manifest_path)
     require(
@@ -172,6 +240,8 @@ def check(manifest_path: Path, *, write: bool = False) -> dict:
     require_acknowledged_capability_regressions(
         previous, report["summary"], acknowledged=acknowledgements
     )
+    if require_current:
+        require_current_acceptance(report)
     rendered = render(report, previous)
     if write:
         write_json(ROOT / manifest["snapshot"], report)
@@ -192,6 +262,8 @@ def check(manifest_path: Path, *, write: bool = False) -> dict:
     print(
         f"native observed contexts: {len(report['observed_endpoints'])}; qualified products: {len(report['endpoints'])}; stale: {report['stale']}"
     )
+    if require_current:
+        print("current-source representative energy/force acceptance: passed")
     return report
 
 
@@ -203,8 +275,13 @@ def main() -> int:
         action="store_true",
         help="regenerate after reviewing exact regression acknowledgements",
     )
+    parser.add_argument(
+        "--require-current",
+        action="store_true",
+        help="require source-matched paired energy/forces contexts for LDA/GGA/tau-MGGA, CPU/CUDA and RKS/UKS",
+    )
     args = parser.parse_args()
-    check(args.manifest, write=args.write)
+    check(args.manifest, write=args.write, require_current=args.require_current)
     return 0
 
 

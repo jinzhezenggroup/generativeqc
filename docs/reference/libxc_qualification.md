@@ -1,11 +1,11 @@
 # Native automatic Libxc qualification
 
-Measured source revision: `36085eec7d745ad0e25514468ddfa42aea2c9f86`.
-Retained measured source inputs: `ec311fd6a9bc3a7105ab42ff9f7e154400119a91d79b3b6987e62c3e09cfc0b3`.
+Measured source revision: `fbf57c111c7c885efbc0cd1457e6a7732c9e3d95`.
+Retained measured source inputs: `ba63873931ccffae7d9b2cea01831028f9bcf04a9903b818da76bd1539f64d64`.
 Current checked source inputs: `52cf415e8b715839e3f445ca0a962269982c922349cdee90b8b8b3dcf25c00db`.
 Current checked native input identity: `6d8e39629573102aadd20b7015ff0ff6fc694fd86687ae9a56733b57f56f87b0`.
 Retained evidence stale for checked inputs: `True`.
-Retained executed native library SHA-256: `d16bf758445db7fc0b1b043847979e7a12ef851ee98254be2e9a7f47dace0efa`.
+Retained executed native library SHA-256: `c2d1b725fb754e72d35ca5829ba9a067974703c6a98bc4e4cefb44ea6abc256c`.
 Independent oracle: PySCF 2.14.0 / Libxc 7.0.0.
 Structurally selectable non-curated automatic registrations: 198; registrations without a retained native campaign: 211.
 
@@ -15,6 +15,9 @@ Counts apply only to the exact retained native contexts; no response, Hessian,
 HVP, higher-l, mixed/Fast, ECP or DF scope is inferred.
 The `public-method` row counts the optional stronger admission receipt,
 not available public selectors. Its absence does not disable a method.
+A successful default check establishes archival consistency only. Use
+`python tools/check_libxc_native_catalog.py --require-current` for representative
+source-matched paired energy/force acceptance across families, backends and spins.
 
 ```text
 Libxc capability summary (222 functionals)
@@ -36,7 +39,7 @@ explicit blockers: 66 across 11 functionals
 | Family | Backend | Spin | Product | Qualified registrations |
 | --- | --- | --- | --- | ---: |
 
-Current-source admitted backend/spin lifecycle records: 0.
+Current-source observed backend/spin lifecycle records: 0.
 Historical measurements remain in the retained campaign; stale receipts are not
 counted as current-source admitted contexts. Admitted records retain exact
 geometry, grid, precision, binary and derivative scope.
@@ -81,5 +84,11 @@ added functionals: none
 removed functionals: none
 identity changes: none
 promotions: none
-demotions: none
+demotions:
+  compiled-cpu: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
+  compiled-cuda: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
+  production-domain: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
+  gpu-runtime: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
+  molecular-scf: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
+  forces: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
 ```

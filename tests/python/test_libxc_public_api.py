@@ -94,26 +94,44 @@ def test_shared_boundary_classes_are_public_without_name_blacklist(name: str) ->
     assert calculator.ks_options.scf_domain == AUTOMATIC_SCF_DOMAIN
 
 
-def test_automatic_libxc_cuda_resolves_semantically_without_granting_forces() -> None:
+@pytest.mark.parametrize("packaged_force", (False, True))
+def test_automatic_libxc_cuda_uses_packaged_force_capability(
+    packaged_force: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Public output discovery follows the selected automatic native package."""
+    monkeypatch.setattr(
+        "generativeqc.resources_ks.native_cuda_stationary_model_available",
+        lambda *arguments, **keywords: packaged_force,
+    )
     calculator = Calculator(method="libxc:GGA_X_APBE", basis="sto-3g", device="cuda")
     assert calculator._automatic_libxc_name == "GGA_X_APBE"
     assert calculator.ks_options.coefficients == (1.0, 1.0, 0.0)
-    assert calculator.capabilities.supported_properties == frozenset(("energy",))
+    assert calculator.capabilities.supported_properties == frozenset(
+        ("energy", "forces") if packaged_force else ("energy",)
+    )
     assert calculator._default_properties() == frozenset(("energy",))
 
 
 @pytest.mark.parametrize("name", ("LDA_C_CHACHIYO", "GGA_X_APBE", "MGGA_X_LTA"))
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
-def test_explicit_automatic_method_ir_does_not_inherit_curated_cuda_forces(
-    name: str, spin: str
+@pytest.mark.parametrize("packaged_force", (False, True))
+def test_explicit_automatic_method_ir_uses_packaged_force_capability(
+    name: str, spin: str, packaged_force: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A curated carrier cannot manufacture an absent automatic force model."""
     from generativeqc_compiler.method import resolve_bulk_ks
 
+    monkeypatch.setattr(
+        "generativeqc.resources_ks.native_cuda_stationary_model_available",
+        lambda *arguments, **keywords: packaged_force,
+    )
     method = resolve_bulk_ks(name, spin=spin, backend="cuda").method
     calculator = Calculator(method=method, basis="sto-3g", device="cuda")
     assert calculator._automatic_libxc_name == name
     assert calculator.method_ir.identity == method.identity
-    assert calculator.capabilities.supported_properties == frozenset(("energy",))
+    assert calculator.capabilities.supported_properties == frozenset(
+        ("energy", "forces") if packaged_force else ("energy",)
+    )
     assert calculator._default_properties() == frozenset(("energy",))
 
 
