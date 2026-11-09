@@ -12,13 +12,13 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 
+if not __debug__ or sys.flags.optimize:
+    raise RuntimeError("Evidence validation requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE")
+
 from benchmarks._exact_fp64_evidence import load, require
 
 FAMILY = Path(__file__).resolve().parent
 ROOT = FAMILY.parents[2]
-
-if not __debug__ or sys.flags.optimize:
-    raise RuntimeError("Evidence validation requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE")
 
 
 def materialize(destination: Path, family: Path = FAMILY) -> dict:

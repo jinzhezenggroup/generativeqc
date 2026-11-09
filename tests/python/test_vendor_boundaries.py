@@ -54,6 +54,24 @@ def test_repository_inventory_is_complete() -> None:
     assert audit_vendor_boundaries()["errors"] == []
 
 
+def test_hf_profile_identity_does_not_admit_method_local_gemm(tmp_path: Path) -> None:
+    """A metadata symbol address must not authorize a numerical vendor call."""
+    path = "src/scf/cuda_rhf.cpp"
+    source = (ROOT / path).read_text()
+    file = _fixture(tmp_path, source, path=path, category="diagnostic")
+    manifest = json.loads((ROOT / MANIFEST).read_text())
+    (tmp_path / MANIFEST).write_text(
+        json.dumps({"schema": 1, "files": {path: manifest["files"][path]}})
+    )
+    contract = tmp_path / manifest["files"][path]["contract"]
+    contract.parent.mkdir(parents=True, exist_ok=True)
+    contract.write_text("// Provenance contract fixture.\n")
+    assert audit_vendor_boundaries(tmp_path)["errors"] == []
+    file.write_text(source + "\nvoid accidental_product() { cublasDgemm(handle); }\n")
+    errors = audit_vendor_boundaries(tmp_path)["errors"]
+    assert len(errors) == 1 and "cublasDgemm count 2 != classified 1" in errors[0]
+
+
 def test_df_metric_and_density_science_use_provider_boundary() -> None:
     """Retired method-local GEMMs cannot silently return in later refactors."""
     inventory = audit_vendor_boundaries()["inventory"]

@@ -29,6 +29,23 @@ struct CudaTargetInfo {
   unsigned clock_rate_khz{};
   unsigned memory_clock_rate_khz{};
   unsigned memory_bus_width_bits{};
+  bool operator==(const CudaTargetInfo& other) const noexcept {
+    return compute_capability_major == other.compute_capability_major &&
+           compute_capability_minor == other.compute_capability_minor &&
+           warp_size == other.warp_size &&
+           maximum_threads_per_block == other.maximum_threads_per_block &&
+           maximum_threads_per_sm == other.maximum_threads_per_sm &&
+           maximum_blocks_per_sm == other.maximum_blocks_per_sm &&
+           registers_per_sm == other.registers_per_sm &&
+           shared_memory_per_block == other.shared_memory_per_block &&
+           shared_memory_per_block_optin == other.shared_memory_per_block_optin &&
+           shared_memory_per_sm == other.shared_memory_per_sm &&
+           multiprocessor_count == other.multiprocessor_count &&
+           total_global_memory == other.total_global_memory &&
+           fp32_fp64_ratio == other.fp32_fp64_ratio && clock_rate_khz == other.clock_rate_khz &&
+           memory_clock_rate_khz == other.memory_clock_rate_khz &&
+           memory_bus_width_bits == other.memory_bus_width_bits;
+  }
 };
 
 template <class DeviceProperties>

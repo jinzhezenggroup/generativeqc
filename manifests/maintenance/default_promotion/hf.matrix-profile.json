@@ -1,0 +1,23 @@
+{
+  "id": "hf.matrix-profile",
+  "classification": "needs-qualification",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_HF_MATRIX_PROFILE"
+  ],
+  "owner_issues": [
+    597
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/hf_matrix_profile.cpp",
+    "src/scf/cuda/topology.cpp"
+  ],
+  "rationale": "Exact-stack bounded matrix calibration is explicitly opt-in. Compatibility checks and synthetic ordering profiles validate admission and routing, not measured production profitability; no calibrated winner is shipped. Resource and restart identities preserve profile-path selection without reading the file during dry runs, while native preparation owns content compatibility and capture invalidation.",
+  "revisit_condition": "Promote only after independently qualified RHF/UHF energy/force endpoints, matched cold/warm/moved-warm complete timings, semantic work counts and complete peak storage establish a measured source/stack/target/workload winner with bounded native fallback.",
+  "evidence": [
+    "issue:#597",
+    "docs:docs/maintainer/performance_engineering.md",
+    "tests/python/test_hf_matrix_profile.py",
+    "tests/native/test_hf_matrix_profile_cuda.cpp"
+  ]
+}

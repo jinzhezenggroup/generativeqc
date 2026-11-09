@@ -16,6 +16,7 @@ PRODUCTION_MODULES = {
     "production_cost",
     "production_emission",
     "production_exchange_queue",
+    "production_component_queue",
     "production_profile",
     "production_k_block",
     "production_registry",
@@ -35,6 +36,7 @@ EMISSION_IMPORTS = {
     "ir",
     "production_cost",
     "production_exchange_queue",
+    "production_component_queue",
     "production_profile",
     "production_registry",
     "production_selection",
@@ -152,6 +154,7 @@ def test_bundle_owner_does_not_import_cuda_emitters() -> None:
     [
         ("production_emission", EMISSION_IMPORTS),
         ("production_exchange_queue", EXCHANGE_QUEUE_IMPORTS),
+        ("production_component_queue", {"__future__"}),
         ("production_shared_rys_xy", SHARED_RYS_XY_IMPORTS),
     ],
 )

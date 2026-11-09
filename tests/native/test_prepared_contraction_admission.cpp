@@ -53,6 +53,20 @@ int main() {
   const auto calibrated = CudaMatrixProductAdmission::resolve(target, 8, 1, profile);
   assert(calibrated.calibrated() && calibrated.requires_provider_context() &&
          calibrated.provider_nanoseconds() < calibrated.native_nanoseconds());
+  profile.provider_setup_nanoseconds = 1e6;
+  const auto cold = CudaMatrixProductAdmission::resolve(target, 8, 1, profile);
+  assert(cold.calibrated() && !cold.requires_provider_context());
+  profile.provider_setup_nanoseconds = std::numeric_limits<double>::infinity();
+  const auto invalid_setup = CudaMatrixProductAdmission::resolve(target, 32, 1, profile);
+  assert(!invalid_setup.calibrated() && invalid_setup.requires_provider_context());
+  profile.provider_setup_nanoseconds = 0;
+  const auto empty_batch = CudaMatrixProductAdmission::resolve(target, 32, 0, profile);
+  assert(!empty_batch.requires_provider_context() && empty_batch.estimate().flops == 0);
+  profile.calibration.native_fp64_flops_per_nanosecond = std::numeric_limits<double>::denorm_min();
+  const auto overflowed = CudaMatrixProductAdmission::resolve(target, 32, 1, profile);
+  assert(!overflowed.calibrated() && overflowed.requires_provider_context() &&
+         overflowed.native_nanoseconds() == 0 && overflowed.provider_nanoseconds() == 0);
+  profile.calibration.native_fp64_flops_per_nanosecond = 1;
   profile.calibration.cublas_launch_nanoseconds = std::numeric_limits<double>::quiet_NaN();
   assert(!CudaMatrixProductAdmission::resolve(target, 8, 1, profile).requires_provider_context());
   const auto huge = CudaMatrixProductAdmission::resolve(

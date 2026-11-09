@@ -323,6 +323,7 @@ def test_retired_df_math_control_does_not_change_cuda_resource_identity(
             "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION",
             ("cooperative", "ordered"),
         ),
+        ("GENERATIVEQC_HF_MATRIX_PROFILE", ("/profile/native", "/profile/cublas")),
     ],
 )
 def test_direct_execution_selection_changes_resource_identity(
@@ -341,6 +342,46 @@ def test_direct_execution_selection_changes_resource_identity(
     monkeypatch.setenv(variable, choices[1])
     resident = estimate_hf_resources([H2], backend="cuda", library=library)
     assert len({automatic.identity, reference.identity, resident.identity}) == 3
+
+
+def test_matrix_profile_resource_identity_does_not_read_calibration(
+    tmp_path: typing.Any, monkeypatch: typing.Any
+) -> None:
+    """Dry runs track selection, leaving file validation to native preparation."""
+    import builtins
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    profile = tmp_path / "unreadable-profile"
+    profile.write_bytes(b"\xffinvalid calibration")
+    original_open = builtins.open
+    original_path_open = Path.open
+
+    def check_profile(path: typing.Any) -> None:
+        if isinstance(path, (str, Path)) and Path(path) == profile:
+            pytest.fail("resource dry-run read the matrix calibration file")
+
+    def guarded_open(
+        path: typing.Any, *args: typing.Any, **kwargs: typing.Any
+    ) -> typing.Any:
+        check_profile(path)
+        return original_open(path, *args, **kwargs)
+
+    def guarded_path_open(
+        path: typing.Any, *args: typing.Any, **kwargs: typing.Any
+    ) -> typing.Any:
+        check_profile(path)
+        return original_path_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", guarded_open)
+    monkeypatch.setattr(Path, "open", guarded_path_open)
+    variable = "GENERATIVEQC_HF_MATRIX_PROFILE"
+    monkeypatch.delenv(variable, raising=False)
+    baseline = estimate_hf_resources([H2], backend="cuda", library=SimpleNamespace())
+    monkeypatch.setenv(variable, str(profile))
+    selected = estimate_hf_resources([H2], backend="cuda", library=SimpleNamespace())
+    assert selected.identity != baseline.identity
+    assert selected.status == baseline.status == "unsupported"
 
 
 def test_df_coulomb_response_selection_changes_resource_identity(
