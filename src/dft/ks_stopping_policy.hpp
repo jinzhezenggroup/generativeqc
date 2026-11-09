@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -57,6 +58,17 @@ constexpr bool ordinary_ks_converged(const KsStoppingState& state) noexcept {
          state.density_change < state.density_tolerance &&
          state.residual < state.stationarity_tolerance &&
          state.maximum_residual < state.stationarity_tolerance;
+}
+
+/** An early canonical proof must not reopen the energy-only AO-maximum
+ * allowance for an imminent force/reference consumer. Its canonical-density
+ * tolerance remains a separate final-state contract. */
+constexpr bool early_ks_final_probe_stationary(const KsStoppingState& state,
+                                               bool force_or_reference) noexcept {
+  const double maximum_tolerance =
+      std::min(force_or_reference ? state.stationarity_tolerance : 1e-8, state.density_tolerance);
+  return state.residual < state.stationarity_tolerance &&
+         state.maximum_residual < maximum_tolerance;
 }
 
 /** Physical MO stationarity shared by convergence and density confirmation.

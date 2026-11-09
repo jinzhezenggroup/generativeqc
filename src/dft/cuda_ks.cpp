@@ -4548,8 +4548,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } else if (!converged && early_final_probe_eligible && has_energy_history &&
                full_energy_history && output.energy_change < options.energy_tolerance &&
                physical.density_change < options.density_tolerance &&
-               physical.residual < physical_stationarity_tolerance() &&
-               physical.maximum_residual < std::min(1e-8, options.density_tolerance)) {
+               early_ks_final_probe_stationary(stopping, options.compute_forces ||
+                                                             following_force_requested ||
+                                                             options.export_physical_reference)) {
       early_final_probe_ran = true;
       converged = probe_current_final_state();
     }

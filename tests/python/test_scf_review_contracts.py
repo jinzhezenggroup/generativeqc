@@ -50,6 +50,49 @@ int main() {
     subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
 
 
+def test_early_final_probe_cannot_reopen_force_stationarity_allowance(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """A small RMS cannot hide a force-relevant AO maximum in an early proof."""
+    source = tmp_path / "early_force_stationarity.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <limits>
+#include "dft/ks_stopping_policy.hpp"
+int main() {
+  using namespace generativeqc::dft;
+  KsStoppingState state{2,false,true,true,1e-12,1e-10,1e-10,5e-9,1e-9,1e-5,1e-9};
+  assert(!ordinary_ks_converged(state));
+  assert(early_ks_final_probe_stationary(state, false));
+  assert(!early_ks_final_probe_stationary(state, true));
+  state.maximum_residual = 5e-10;
+  assert(early_ks_final_probe_stationary(state, true));
+  state.maximum_residual = state.stationarity_tolerance;
+  assert(!early_ks_final_probe_stationary(state, true));
+  state.density_tolerance = 1e-10;
+  state.maximum_residual = 2e-10;
+  for (bool force_or_reference : {false, true})
+    assert(!early_ks_final_probe_stationary(state, force_or_reference));
+  state.density_tolerance = 1e-5;
+  state.maximum_residual = 0;
+  state.residual = state.stationarity_tolerance;
+  assert(!early_ks_final_probe_stationary(state, true));
+  state.residual = 0;
+  state.maximum_residual = std::numeric_limits<double>::quiet_NaN();
+  for (bool force_or_reference : {false, true})
+    assert(!early_ks_final_probe_stationary(state, force_or_reference));
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [source],
+        tmp_path / "early_force_stationarity",
+        compile_args=["-std=c++20", f"-I{ROOT / 'src'}"],
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
 def test_early_final_default_requires_the_complete_qualified_model(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:

@@ -108,3 +108,20 @@ is inconclusive; it does not close either issue.
 Revisit the guards only with source-matched complete endpoints for the proposed
 new precision, ECP, nonlocal or resource domain. Preserve every independent
 publication gate and bounded rejection path.
+
+## Review correction: early-probe AO maximum
+
+The restricted early-probe path still admitted an AO maximum below `1e-8`
+after force/reference consumers stopped passing a blanket stationarity override
+to the final validator. Thus RMS `1e-10` and AO maximum `5e-9` could bypass the
+new force ceiling even though ordinary convergence rejected them. The early
+physical admission now uses the same force/reference ceiling, while leaving
+the separate canonical-density tolerance and the energy-only early path intact.
+An executable host policy regression covers that counterexample, the exact
+boundary, tighter density controls and nonfinite residuals.
+
+The retained RTX 5090 measurements above precede this narrow admission fix;
+no new GPU, original-grid water96 or independent RSH force qualification is
+claimed. The retained Libxc catalog is refreshed only to report the live source
+identities; all historical measurements, existing stale status and zero current
+energy/force qualification remain unchanged.

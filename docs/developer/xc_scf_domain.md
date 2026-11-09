@@ -60,9 +60,11 @@ budget-Fock contracts retain their independently qualified policies.
 The prepared method binds whether forces are requested before SCF starts. This
 fact is independent of additional force-allocation bytes: an already resident
 force workspace does not turn a force request into an energy-only request.
-Iteration, resident force weights and detached export use the same physical
-allowance. Strict callers retain the independent `1e-8` canonical-density gate;
-the physical residual ceiling is not silently reused as a tighter density gate.
+Iteration, early canonical probes, resident force weights and detached export
+retain that physical contract. In particular, an early force/reference proof
+cannot use the energy-only `1e-8` AO-maximum allowance. Strict callers retain
+the independent `1e-8` canonical-density gate; the physical residual ceiling
+is not silently reused as a tighter density gate.
 
 Full-range, all-electron, strict-FP64, single-slot CUDA UKS owners test the actual
 unshifted physical/canonical state before a corrective closure, including pure
