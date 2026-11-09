@@ -18,14 +18,29 @@ struct CudaMatrixProductCalibration {
       native_bytes_per_nanosecond{};
   double cublas_launch_nanoseconds{}, cublas_fp64_flops_per_nanosecond{},
       cublas_bytes_per_nanosecond{};
+  bool operator==(const CudaMatrixProductCalibration& other) const noexcept {
+    return native_launch_nanoseconds == other.native_launch_nanoseconds &&
+           native_fp64_flops_per_nanosecond == other.native_fp64_flops_per_nanosecond &&
+           native_bytes_per_nanosecond == other.native_bytes_per_nanosecond &&
+           cublas_launch_nanoseconds == other.cublas_launch_nanoseconds &&
+           cublas_fp64_flops_per_nanosecond == other.cublas_fp64_flops_per_nanosecond &&
+           cublas_bytes_per_nanosecond == other.cublas_bytes_per_nanosecond;
+  }
 };
 struct CudaMatrixProductProfile {
   std::size_t fallback_dimension_threshold{17};
   CudaMatrixProductCalibration calibration;
+  /** Charge the complete measured first-use cost, without guessing SCF reuse. */
+  double provider_setup_nanoseconds{};
 };
 struct CudaMatrixProductEstimate {
   std::uint64_t flops{}, native_semantic_bytes{}, provider_semantic_bytes{}, native_blocks{},
       native_waves{};
+  bool operator==(const CudaMatrixProductEstimate& other) const noexcept {
+    return flops == other.flops && native_semantic_bytes == other.native_semantic_bytes &&
+           provider_semantic_bytes == other.provider_semantic_bytes &&
+           native_blocks == other.native_blocks && native_waves == other.native_waves;
+  }
 };
 
 namespace matrix_admission_detail {
@@ -65,13 +80,18 @@ class CudaMatrixProductAdmission {
   bool calibrated() const noexcept { return calibrated_; }
   double native_nanoseconds() const noexcept { return native_ns_; }
   double provider_nanoseconds() const noexcept { return provider_ns_; }
+  bool operator==(const CudaMatrixProductAdmission& other) const noexcept {
+    return estimate_ == other.estimate_ && context_ == other.context_ &&
+           calibrated_ == other.calibrated_ && native_ns_ == other.native_ns_ &&
+           provider_ns_ == other.provider_ns_;
+  }
 
   static CudaMatrixProductAdmission resolve(const runtime::CudaTargetInfo& target,
                                             std::size_t dimension, std::size_t matrices,
                                             CudaMatrixProductProfile profile = {}) noexcept {
     using namespace matrix_admission_detail;
     CudaMatrixProductAdmission admission;
-    if (!dimension) return admission;
+    if (!dimension || !matrices) return admission;
     const auto square = multiply(dimension, dimension);
     const auto cube = multiply(square, dimension);
     const auto outputs = multiply(matrices, square);
@@ -97,7 +117,9 @@ class CudaMatrixProductAdmission {
                             positive(rates.native_bytes_per_nanosecond) &&
                             positive(rates.cublas_launch_nanoseconds) &&
                             positive(rates.cublas_fp64_flops_per_nanosecond) &&
-                            positive(rates.cublas_bytes_per_nanosecond);
+                            positive(rates.cublas_bytes_per_nanosecond) &&
+                            std::isfinite(profile.provider_setup_nanoseconds) &&
+                            profile.provider_setup_nanoseconds >= 0;
     if (!admission.calibrated_) {
       admission.context_ = dimension >= profile.fallback_dimension_threshold;
       return admission;
@@ -106,8 +128,17 @@ class CudaMatrixProductAdmission {
         roofline(rates.native_launch_nanoseconds, work.flops, work.native_semantic_bytes,
                  rates.native_fp64_flops_per_nanosecond, rates.native_bytes_per_nanosecond);
     admission.provider_ns_ =
+        profile.provider_setup_nanoseconds +
         roofline(rates.cublas_launch_nanoseconds, work.flops, work.provider_semantic_bytes,
                  rates.cublas_fp64_flops_per_nanosecond, rates.cublas_bytes_per_nanosecond);
+    // Finite inputs can still overflow their estimates. An unrankable pair
+    // must retain the incumbent rather than accidentally promote a candidate.
+    if (!std::isfinite(admission.native_ns_) || !std::isfinite(admission.provider_ns_)) {
+      admission.calibrated_ = false;
+      admission.native_ns_ = admission.provider_ns_ = 0;
+      admission.context_ = dimension >= profile.fallback_dimension_threshold;
+      return admission;
+    }
     admission.context_ = admission.provider_ns_ < admission.native_ns_;
     return admission;
   }

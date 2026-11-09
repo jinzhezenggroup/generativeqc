@@ -130,3 +130,29 @@ SCF residual convergence alone is not a ground-state or root-identity guarantee.
 
 Heavy-atom orbital h/auxiliary i and Q/5 remain explicitly unsupported; see the
 separately staged extension in `docs/user/ccsdt_cbs.md`.
+
+## Exact offline storage and replay
+
+All 36 original files, including this original README, are retained in the
+existing `generativeqc.exact-fp64-evidence.v3` container. No receipt was dropped.
+`sha256.txt` authenticates both compressed streams; every reconstructed file
+has its original decompressed UTF-8 SHA256 inside the container. The 6,090
+FP64 values retain their exact bits and original JSON formatting. All 49,399
+native progress JSONL records retain their raw C++ numeric spelling as text.
+Failed development runs, exact basis decimals, implementation patch and source
+manifest remain recoverable. This representation does not upgrade historical
+CUDA evidence to current-source or release-performance qualification.
+
+From the repository root, authenticate, restore and replay all four independent
+E/F gates with:
+
+```sh
+python benchmarks/results/full-df-aug-qz-3055-20261109/replay.py
+```
+
+To restore every original file for inspection, pass `--output` with a new empty
+directory. Names omit the former `.xz` suffix because recovered bytes are the
+original decompressed texts. The recovered original `summarize.py` replays the
+unchanged scientific thresholds. Run it with assertions enabled. Original
+compressed storage was 1,118,571 bytes; the three authenticated streams total
+549,209 bytes, before this readable guide and replay helper.

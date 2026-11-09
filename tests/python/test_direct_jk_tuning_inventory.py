@@ -61,6 +61,9 @@ def _write_fixture(root: Path, payload: dict[str, object]) -> None:
         encoding="utf-8",
     )
 
+    profile = root / "src/scf/cuda/hf_matrix_profile.hpp"
+    profile.write_text("HfMatrixProfile\nadmit_hf_matrix_profile\n", encoding="utf-8")
+
     matrix = root / "src/tensor/cuda_matrix_product_admission.hpp"
     matrix.parent.mkdir(parents=True, exist_ok=True)
     matrix.write_text(

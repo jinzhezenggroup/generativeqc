@@ -7,12 +7,15 @@ import importlib.util
 import json
 import lzma
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from benchmarks._exact_fp64_evidence import load
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -66,11 +69,13 @@ def test_corrupt_population_is_rejected(
     replay: ModuleType, tmp_path: Path, corruption: str
 ) -> None:
     manifest = json.loads((replay.ROOT / "receipt-populations.json").read_text())
-    packed = (replay.ROOT / manifest["bundle"]).read_bytes()
-    members = json.loads(lzma.decompress(packed))
+    folder = tmp_path / manifest["storage_directory"]
+    shutil.copytree(replay.ROOT / manifest["storage_directory"], folder)
+    _, files = load(folder)
+    members = json.loads(files["original-container.json"])
     name = next(iter(members))
     if corruption == "bundle":
-        packed = b"broken"
+        (folder / "receipts.json.xz").write_bytes(b"broken")
     else:
         if corruption == "missing":
             del members[name]
@@ -80,9 +85,35 @@ def test_corrupt_population_is_rejected(
             members[name] += " "
         else:
             manifest["members"][name]["bytes"] += 1
-        packed = lzma.compress(json.dumps(members).encode())
-        manifest["bundle_sha256"] = hashlib.sha256(packed).hexdigest()
-    (tmp_path / manifest["bundle"]).write_bytes(packed)
+        container = json.dumps(members)
+        manifest["original_decoded_sha256"] = hashlib.sha256(
+            container.encode()
+        ).hexdigest()
+        texts = dict(members, **{"original-container.json": container})
+        bundle = {
+            "schema": "generativeqc.exact-fp64-evidence.v3",
+            "float_count": 0,
+            "files": [
+                {
+                    "path": key,
+                    "text": text,
+                    "sha256": hashlib.sha256(text.encode()).hexdigest(),
+                }
+                for key, text in texts.items()
+            ],
+        }
+        streams = {
+            "receipts.json.xz": lzma.compress(json.dumps(bundle).encode()),
+            "fp64.xz": lzma.compress(b""),
+        }
+        for key, payload in streams.items():
+            (folder / key).write_bytes(payload)
+        (folder / "sha256.txt").write_text(
+            "".join(
+                hashlib.sha256(payload).hexdigest() + "  " + key + "\n"
+                for key, payload in streams.items()
+            )
+        )
     (tmp_path / "receipt-populations.json").write_text(json.dumps(manifest))
     replay.ROOT = tmp_path
     with pytest.raises(ValueError, match="mismatch"):

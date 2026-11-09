@@ -20,6 +20,7 @@ from .cuda_emitter import emit_shell_class_fused_cuda
 from .cuda_schedule import ScheduleIR, ScheduleKind
 from .fused_schedule import build_fused_shell_plan
 from .ir import KernelConsumer
+from .production_component_queue import component_exchange_admission_loop
 from .production_cost import _STABLE_AOT_SHARD_MAP_VERSION, shell_class_index
 from .production_exchange_queue import exchange_streaming_worker
 from .production_profile import _profile_identifier
@@ -685,6 +686,21 @@ __device__ __forceinline__ void {prefix}_stream_populate_task(
 }}
 """
 
+    component_admission = (
+        component_exchange_admission_loop(
+            prefix=prefix,
+            high_pair_class=high_pair_class,
+            low_pair_class=low_pair_class,
+            system_density_bound=system_density_bound,
+            fock_task=fock_task,
+            record_precision=record_precision("stream_state"),
+        )
+        if shared_rys_xy
+        and not supports_mixed_fock
+        and schedule.kind == ScheduleKind.COMPONENT_LANES
+        and schedule.block_threads >= 32
+        else ""
+    )
     if schedule.kind in (ScheduleKind.PACKED_TASKS, ScheduleKind.SUBGROUP_TASKS):
         packed = schedule.kind == ScheduleKind.PACKED_TASKS
         make_worker = partial(
@@ -730,6 +746,7 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
   if (topology.generated_overflow != nullptr &&
       topology.generated_overflow[{shell_class}U] == 0U) return;
   const std::size_t stride = static_cast<std::size_t>(topology.batch_size) + 1U;
+  {component_admission}
   while (true) {{
     if (threadIdx.x == 0U) {{
       candidate_ordinal = atomicAdd(task_head, 1U);
@@ -832,6 +849,7 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
       {high_pair_class}U * stride];
   const std::uint32_t bra_end = topology.pair_class_offsets[
       {high_pair_class}U * stride + topology.batch_size];
+  {component_admission}
   while (true) {{
     if (threadIdx.x == 0U) bra_ordinal = atomicAdd(bra_head, 1U);
     __syncthreads();

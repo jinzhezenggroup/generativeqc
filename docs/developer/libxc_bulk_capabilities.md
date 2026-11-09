@@ -421,6 +421,16 @@ All numerical, compiled-object, independent-oracle and control receipts retain
 their original identities. Boundary E/vxc success does not qualify response or
 physical empty-spin particle birth.
 
+The selected registrations need automatic CUDA point AOT and matching native
+stationary profiles: configure `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON`
+and `GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON`. The latter must be set
+explicitly when disabling Python-consumer `GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT`,
+because its initial default follows that option. A source-identity match alone
+does not prove that the binary contains the requested force providers. Bound
+`GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS` and, optionally,
+`GENERATIVEQC_STATIONARY_AOT_PROFILES` to the measured package; omitted providers
+remain unavailable rather than inheriting a curated carrier's force capability.
+
 For a fresh qualified native build, run the following in a finite Slurm GPU
 allocation, preserving the assigned device visibility:
 
@@ -458,3 +468,20 @@ run `tools/check_libxc_native_catalog.py --write` and the normal checker. Duplic
 unknown and stale acknowledgements fail. An acknowledgement documents a lost
 claim; it cannot restore one or manufacture public/response capability. Retain
 only compressed acceptance receipts; build objects and full logs remain local.
+
+An ordinary checker success establishes archival consistency, not current-source
+scientific acceptance. For an end-to-end acceptance gate, run:
+
+```console
+python tools/check_libxc_native_catalog.py --require-current
+```
+
+This additionally rejects stale source/native identities and requires paired
+admitted energy/force products in the same exact context for each LDA/GGA/tau-MGGA
+family, CPU/CUDA backend and RKS/UKS spin layout. Representative registrations
+suffice, with at least one common registration per family across both backends
+and spin layouts; it does not require every imported registration to run every
+molecule, count merely observed or blocked measurements, or require the optional
+stronger `public-method` receipt. Missing and unsupported domains remain explicit in the
+generated report. The default archival check deliberately continues to permit
+truthfully recorded stale campaigns without relabeling them as current evidence.
