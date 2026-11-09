@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import lzma
+import os
 import runpy
 import shutil
 import subprocess
@@ -11,9 +14,47 @@ from pathlib import Path
 
 import pytest
 
+from tools import validate_direct_jk_aot_resources as resource_validator
+
 ROOT = Path(__file__).resolve().parents[2]
 FAMILY = ROOT / "benchmarks/results/dft-component-queue-20261109"
 REPLAY = runpy.run_path(str(FAMILY / "replay.py"))
+
+
+@pytest.mark.parametrize("corrupt_resource", (False, True))
+def test_component_aot_requalification_preserves_all_resources(
+    corrupt_resource: bool,
+) -> None:
+    """Replay the actual failed report; identity refresh cannot mask REG drift."""
+    folder = FAMILY / "resources"
+    receipt = json.loads((folder / "receipt.json").read_text())
+    records = {}
+    for name, hashes in receipt["files"].items():
+        packed = (folder / name).read_bytes()
+        assert hashlib.sha256(packed).hexdigest() == hashes["compressed_sha256"]
+        raw = lzma.decompress(packed)
+        assert hashlib.sha256(raw).hexdigest() == hashes["raw_sha256"]
+        records[name] = json.loads(raw)
+    previous = records["previous.json.xz"]
+    report = records["failed-ci-report.json.xz"]
+    measurement = report["measurement"]
+    assert report["status"] == "fail"
+    assert resource_validator.compare(previous, measurement) == report["failures"]
+    updated = resource_validator.measured_ledger(measurement)
+    assert set(previous) == set(updated)
+    assert {key for key in previous if previous[key] != updated[key]} == set(
+        receipt["changed_identity_fields"]
+    )
+    assert len(updated["kernels"]) == receipt["kernel_count"]
+    assert previous["kernels"] == updated["kernels"]
+    if corrupt_resource:
+        measurement["kernels"][next(iter(measurement["kernels"]))]["REG"] += 1
+        assert any(
+            "kernel resource drift" in failure
+            for failure in resource_validator.compare(previous, measurement)
+        )
+    else:
+        assert not resource_validator.compare(updated, measurement)
 
 
 def test_normal_component_admission_qualifies_both_card_guards(tmp_path: Path) -> None:
@@ -84,13 +125,25 @@ def test_changed_physics_work_identity_or_timing_cannot_qualify(
         REPLAY["qualify_materialized"](tmp_path)
 
 
-def test_component_evidence_refuses_optimized_python() -> None:
+@pytest.mark.parametrize("optimized", (False, True))
+def test_component_evidence_standalone_without_pythonpath(
+    tmp_path: Path, optimized: bool
+) -> None:
+    """Standalone replay must find its repo; -O must reject before imports."""
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment.pop("PYTHONOPTIMIZE", None)
     result = subprocess.run(
-        [sys.executable, "-O", str(FAMILY / "replay.py")],
-        cwd=ROOT,
+        [sys.executable, *(["-O"] if optimized else []), str(FAMILY / "replay.py")],
+        cwd=tmp_path,
+        env=environment,
         capture_output=True,
         text=True,
         check=False,
     )
-    assert result.returncode != 0
-    assert "Evidence validation requires assertions" in result.stderr
+    if optimized:
+        assert result.returncode != 0
+        assert "Evidence validation requires assertions" in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout)["default_promotion_qualified"]

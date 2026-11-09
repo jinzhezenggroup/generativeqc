@@ -83,6 +83,32 @@ Revisit on changed consumer contracts, schedule/block geometry, screening order,
 resource constraints or independently demonstrated whole-endpoint regressions.
 Do not infer H100 gains, HF/DF qualification or all non-CBS README leadership.
 
+## CI integration after the endpoint cohort
+
+PR3056's first hosted CI correctly rejects three integration omissions: the
+module-boundary inventory lacks the new pure compiler queue owner, standalone
+replay imports the repo package before locating its root/refusing optimized
+Python, and live source fingerprints differ from retained Libxc/static-AOT
+metadata. Add the queue to the cycle/purity checks, with only `__future__` as
+an allowed dependency, and test standalone replay from an unrelated directory
+without PYTHONPATH, both ordinary and optimized Python.
+
+Fetched/merged masterc6967d7a8 contains HF PR3053, not additional DFT generation
+changes. Actual failed hosted resource artifact13649452613/run42559608354 is
+authenticated by ZIP SHA256
+`73bacd5012427288d0309c9dc2835d8a760435cd94d3a7287a21d3df01ea3f00`.
+All102 kernels' REG/STACK/SHARED/LOCAL, manifest, headers, flags and toolchain
+match the old ledger exactly. Retain the original failing report and old ledger
+under the endpoint family's `resources/`, and deliberately update only source
+and preprocessed hashes using the unchanged official validator. The replay also
+rejects injected register drift; no guard or resource limit is loosened. This
+is actual static compile evidence, not a fresh physical GPU or endpoint run.
+
+Regenerate the Libxc snapshot through its official checker. Only checked source
+and native-input identities change; summary/stages/capability identities remain
+identical, stale stays true, qualified products remain zero. Do not relabel old
+native measurements or rerun successful endpoint cohorts for these CI repairs.
+
 ## References
 
 - `benchmarks/results/dft-component-queue-20261109/README.md` and offline replay.

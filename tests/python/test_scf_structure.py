@@ -15,6 +15,28 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
 
 
 @pytest.mark.parametrize(
+    "dependency",
+    [
+        "runtime/loaded_provider_identity.hpp",
+        "scf/cuda/rhf_bucket_internal.hpp",
+        "scf/cuda/direct_jk_kernels.hpp",
+    ],
+)
+def test_hf_matrix_profile_remains_host_only_policy(
+    tmp_path: Path, dependency: str
+) -> None:
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    target = tmp_path / "src" / dependency
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("\n")
+    (source / "hf_matrix_profile.cpp").write_text(f'#include "{dependency}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_hf_matrix_profile dependency" in errors[0]
+
+
+@pytest.mark.parametrize(
     "unrelated",
     (
         "convergence_limits_impl.hpp",

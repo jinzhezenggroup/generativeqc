@@ -6,19 +6,21 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
+from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
-
-from benchmarks._exact_fp64_evidence import load, require
 
 FAMILY = Path(__file__).resolve().parent
 ROOT = FAMILY.parents[2]
 
 if not __debug__ or sys.flags.optimize:
     raise RuntimeError("Evidence validation requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE")
+
+sys.path.insert(0, str(ROOT))
+
+from benchmarks._exact_fp64_evidence import load, require
 
 
 def materialize(destination: Path, family: Path = FAMILY) -> dict:

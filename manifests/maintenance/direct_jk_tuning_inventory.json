@@ -15,11 +15,20 @@
     }
   ],
   "pending_qualification": [
-    "Canonical target/provider/version-compatible calibrated-profile admission and production activation remain pending; the AO crossover is still a no-calibration fallback, not a screened-work/reuse profitability model.",
+    "FP64 matrix calibration has canonical exact-stack admission and a real prepared production consumer, but no measured production profile is shipped. Persistent-ERI selection remains a resource-bounded AO fallback, not a screened-work/reuse profitability model.",
     "Persistent queue-domain profiles are compiler-owned build inputs, not a runtime target/workload autotune winner; defaults retain force=7 and Fock=6.",
     "Matched RTX 5090 cold/warm/moved-warm RHF/UHF energy/force endpoint qualification and independent scientific oracle gates remain required before claiming #597 complete."
   ],
   "migrated_settings": [
+    {
+      "name": "calibrated-hf-matrix-profile-admission",
+      "source": "src/scf/cuda/hf_matrix_profile.hpp",
+      "owner": "HfMatrixProfile / prepared HostBatch matrix admission and tensor binding",
+      "required_tokens": [
+        "HfMatrixProfile",
+        "admit_hf_matrix_profile"
+      ]
+    },
     {
       "name": "persistent-eri-topology-admission",
       "source": "src/scf/cuda/rhf_policy.hpp",
