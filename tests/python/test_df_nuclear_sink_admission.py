@@ -266,7 +266,7 @@ def sink_admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     basis = (ROOT / "src/runtime/cuda_gaussian_products.cuh").read_text()
     view = extract(basis, "struct BasisView {", "/** One real factor")
     view += "using DfDerivativeBasisView = BasisView;\n"
-    failure = extract(source, "struct CudaFailure {", "/** Prepare shell envelopes")
+    failure = extract(source, "bool high_df_domain(", "/** Prepare shell envelopes")
     guard = extract(
         source, "void check(cudaError_t status)", "/** Diagnostic staging only"
     )

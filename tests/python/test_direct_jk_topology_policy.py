@@ -39,6 +39,17 @@ int main() {
   system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
   std::string detail;
   assert(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS);
+  // Metadata acceptance does not grant a Direct-HF execution route for g.
+  for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+    auto orbital_g = system;
+    orbital_g.basis_representation = representation;
+    orbital_g.shells = {{0, 4, {{0.8, 1.}}}};
+    assert(molecule::validate_and_normalize(orbital_g, detail) == GENERATIVEQC_STATUS_SUCCESS);
+    for (bool unrestricted : {false, true}) {
+      HostBatch rejected;
+      assert(!pack_host_batch({orbital_g}, {nullptr}, rejected, unrestricted, false));
+    }
+  }
   const std::uint64_t eri_bytes = 7U * 7U * 7U * 7U * sizeof(double);
   runtime::CudaTargetInfo ample;
   ample.total_global_memory = std::size_t{32} << 30;
