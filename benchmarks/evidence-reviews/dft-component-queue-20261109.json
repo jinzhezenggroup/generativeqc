@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "dft-component-queue-20261109",
+  "owner": "Generic component-lane exchange admission complete-cold DFT qualification",
+  "reason": "Retain every unrounded normal native/reference endpoint E/F/settings/work sample, all predeclared guard populations, actual cold dispatch, raw-K/sanitizer observations, build/cache/restore receipts and explicit deployment failures. Existing v3 exact-text storage; no changed scientific or storage gates.",
+  "review_document": "benchmarks/results/dft-component-queue-20261109/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/dft-component-queue-20261109/fp64.xz",
+      "bytes": 147192,
+      "sha256": "6b1d3baf928fba7c17a115d5cf47f18f780bd0c86dfcd838ddcf9ad5a00c5d46",
+      "family": "dft-component-queue-20261109",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact original FP64 and receipt bytes; independent endpoint and semantic-work replay"
+    }
+  ]
+}

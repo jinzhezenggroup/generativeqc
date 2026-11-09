@@ -140,10 +140,12 @@ aggregate evidence limit remains unchanged.
 
 ### Lossless population storage and replay integrity
 
-The six stationary/moved/matrix population files share one XZ container,
-`receipt-populations.json.xz`, retaining each original UTF-8 JSON text verbatim.
-`receipt-populations.json` pins the container and every original decoded size and
-SHA-256 (and records the original compressed hashes for Git-history recovery).
+The six stationary/moved/matrix population files share the existing exact FP64
+v3 storage under `receipt-populations/`, retaining every original UTF-8 JSON byte,
+including the original outer container. `receipt-populations.json` pins its
+decoded identity and every original member size and SHA-256; historical compressed
+hashes remain provenance, not bindings to the new physical storage. The shared
+reader verifies both current compressed streams before restoring original text.
 `reproduce.restored_population(name)` returns the exact original bytes; `read`
 uses the same authenticated path. No observations, failures, precision or timing
 populations are removed or combined statistically. Replay refuses Python
