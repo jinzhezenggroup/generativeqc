@@ -62,11 +62,10 @@ the Hessian or its oracle.
 
 The initial three-point stencil at 0.003 Bohr failed the unchanged `1e-5`
 full-column gate with error `4.806239251320399e-5`; its original failure is
-retained in `three-point-reference-failure.log.xz`. The five-point fourth-order
+retained in `failed-three-point-reference.json`. The five-point fourth-order
 stencil uses the same steps and physical gates, reducing reference truncation
 instead of relaxing native acceptance. Intermediate reference tests are
-explicitly labelled; final installed tests and their XML receipt are retained
-separately.
+explicitly labelled in `qualification-summary.json`.
 
 The final installed D3-composition and semilocal-public regression run passes
 25 tests in 286.20 s, including all 13 new composition tests. Its full-matrix
@@ -78,7 +77,14 @@ force-sign negative controls, output/workspace failures, and recovery after a
 public correction failure. An earlier installed regression passes 41 tests;
 it is retained separately rather than labelled as the final source snapshot.
 
+Raw logs and the exact JUnit receipt remain ignored locally and recoverable
+from existing Git commit `b1d20f9f6ade91f08f27c024177df3209aa10936`, under the same
+result directory. For example, recover the original failed trial with
+`git show b1d20f9f6:benchmarks/results/d3-public-curvature-20261109/three-point-reference-failure.log.xz`.
+The compact failed record binds its archive digest. Current reviewed storage
+contains compact scientific receipts rather than transient build/test archives;
+the aggregate evidence budget is unchanged.
+
 Compiler-cache observations are from a shared sccache 0.16.0 server. Other
 compilations may contribute to their counters; no per-task cache-hit rate is
-inferred. The actual native build commands use the verified launcher. Compressed
-build, test and documentation logs preserve the bounded qualification work.
+inferred. The actual native build commands use the verified launcher.

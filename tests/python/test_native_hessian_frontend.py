@@ -82,6 +82,7 @@ def frontend() -> tuple[Calculator, list[str]]:
 
     calculator = object.__new__(Calculator)
     calculator._composite_rks_second_order = True
+    calculator._d3_second_order_spec = None
     calculator._device_name = "cuda"
     calculator._checked_rks_second_order_atoms = lambda atoms, **_: tuple(atoms)
     calculator.prepare_batch = prepare

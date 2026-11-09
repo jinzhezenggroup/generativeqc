@@ -68,10 +68,17 @@ acceptance, preserving the existing numerical, state and resource guards.
 
 ## Retained evidence
 
+Refreshing the native Libxc catalog updates only its checked source and native
+input identities after the public Calculator change. The retained measurement
+remains stale, its capability summary is byte-for-byte unchanged, and no native
+energy/force product is promoted or newly qualified by this metadata refresh.
+
 `benchmarks/results/d3-public-curvature-20261109/` retains the installed receipt,
-original failed oracle trial, independent-reference tests, regression logs,
-compiler-cache observations and warnings-as-errors documentation build. The
-installed producer runs without source-path imports or an external electronic
+compact failed-trial and test records, source identity and compiler-cache
+observations. Original raw archives are ignored locally and recoverable from
+Git commit `b1d20f9f6ade91f08f27c024177df3209aa10936`; no evidence-budget increase
+or external publication is needed. The installed producer runs without
+source-path imports or an external electronic
 engine; its Python/fixture digests match the checkout. JIT-artifact replay and
 fresh SCF are explicitly distinguished, and memory high-water marks are not
 misrepresented as simultaneous process-tree totals.

@@ -459,6 +459,7 @@ case "${GENERATIVEQC_CI_SHARD}" in
       [tests/python/test_quadrature_ad.py]=1
       [tests/python/test_scalar_graph_ad.py]=2
       [tests/python/test_composite_integral_weights.py]=2
+      [tests/python/test_d3_public_second_order.py]=0
       [tests/python/test_eri_symmetry.py]=0
       [tests/python/test_factorized_host.py]=1
       [tests/python/test_global_hybrid_grid_second_order.py]=0
