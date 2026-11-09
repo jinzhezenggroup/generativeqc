@@ -1,0 +1,21 @@
+{
+  "schema": "generativeqc.dft-component-queue-static-resource-review.v1",
+  "run_id": 42559608354,
+  "artifact_id": 13649452613,
+  "artifact_name": "direct-jk-aot-resources",
+  "head_sha": "cf5be776c102d99bea7c02c0500bc7ebf3354515",
+  "original_zip_sha256": "73bacd5012427288d0309c9dc2835d8a760435cd94d3a7287a21d3df01ea3f00",
+  "changed_identity_fields": ["preprocessed_sha256", "shard_source_sha256"],
+  "kernel_count": 102,
+  "files": {
+    "previous.json.xz": {
+      "compressed_sha256": "080f53cfd721ca7f46666655ede8c8801f6a47efc387bde847bd1c3e04451632",
+      "raw_sha256": "f20abb21ab0a0b6b21adcb0f8a4a44974d75ce44afd62a668db18bd844710bed"
+    },
+    "failed-ci-report.json.xz": {
+      "compressed_sha256": "43edbd3c207f897298e947321e7613624de74706a81dad3051c2205687c62663",
+      "raw_sha256": "10125da27e335473e6d26b826ca9716b77ea907228b3dd4d749434ec8bbbcb9d"
+    }
+  },
+  "scope": "Actual failed CI measurement retained unchanged; deliberate source/preprocessed binding update only. Every kernel resource, header, flag, toolchain and manifest entry is unchanged. No GPU runtime or new endpoint qualification."
+}

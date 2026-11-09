@@ -1,7 +1,12 @@
 {
-  "schema": "generativeqc.raw-j-populations.v1",
-  "bundle": "receipt-populations.json.xz",
-  "bundle_sha256": "38d4f3bbaae7329014792746e6494e666a61c3c8f3f18dd7bc50de001214c407",
+  "schema": "generativeqc.raw-j-populations.v2",
+  "storage_directory": "receipt-populations",
+  "original_bundle": {
+    "path": "receipt-populations.json.xz",
+    "bytes": 478368,
+    "sha256": "38d4f3bbaae7329014792746e6494e666a61c3c8f3f18dd7bc50de001214c407"
+  },
+  "original_decoded_sha256": "8a6b0314dccedc7de898d43f8d665b6992bc0b722f03a56f5fc52e191e90f94d",
   "members": {
     "stage2-moved.json": {
       "bytes": 2695125,

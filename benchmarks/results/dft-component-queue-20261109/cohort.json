@@ -1,0 +1,48 @@
+{
+  "schema": "generativeqc.component-exchange-admission-qualification.v1",
+  "scope": "Generic strict component-lane K admission; A100/physical5090 Direct96/48 B3LYP/PBE0 ABBA plus M06-2X/omega-B97M-V single-pair guards, complete cold and three own-density warms",
+  "member_count": 191,
+  "source_base_commit": "76bb87c76d8ddd7da369684480796fe456ca7ef4",
+  "native_images": {
+    "control": {
+      "source_identity": "da106c87ec50df9bfb93f6a81a87358fb272288520c47349b43ac13bf1f96636",
+      "library_sha256": "523e5dc54a5b7559014f33e7d6fd6ea67c9e03fea37783faf58389fb01e63344"
+    },
+    "candidate": {
+      "source_identity": "b11d2832418dea2de6ef19aebd8bcaad2c3321c0c7759d241504dff13e8c0495",
+      "library_sha256": "a0da0cdb209d26582283f2cd67bf38dfea504864d08b13a9d96b3c53e03d7e2d"
+    }
+  },
+  "jobs": {
+    "normal_build": 16924,
+    "normal_fixture_build": 16925,
+    "package": 16926,
+    "a100": 230562,
+    "5090": 16931
+  },
+  "prototype_archives": {
+    "stream-5090-16921.tar.gz": "ed9fe1e9e084e70546411f3e2a7eb164749a85c2f39b166c4503597dc5470a6e",
+    "sanitizers-5090-16923.tar.gz": "6b1b98fcf4d54b4422a0c146dc5f42310ef828d84476868f1aa93955216a64f8"
+  },
+  "returned_archives": {
+    "a100": "0b413432bcb68980e5596394b8e667beb791c90d597466d6d4bb1558eedf56a2",
+    "5090": "787cdbe8c56684b49735760d8dbc9ba601ecbf30b71de8c84d45b0f33c9b7c4e"
+  },
+  "whole_endpoint_quartet_counters_available": false,
+  "normal_raw_k_coverage": "Both complete normal images on A100; physical5090 actual queue fatbin only, not normal ELF, because normal SM80 ABI contains no SM120 image and never dispatches by default there.",
+  "independent_raw_k_producer": "Retained prepare-stream-fixture.py uses pinned repository f_shell_numerics inputs and normalized Libcint full int2e/dense masked Einstein K. The new generated binary fixtures remain ignored; manifests, complete gate logs and source are retained. Existing independent raw-K arrays in dft-shared-rys-streaming-20261108 remain unchanged offline references, not relabeled new normal execution.",
+  "negative_deployments": [
+    {
+      "job": 16927,
+      "stage": "control raw-K unsupported normal cubin before any timing",
+      "exit_code": 1
+    },
+    {
+      "job": 230553,
+      "stage": "Python filesystem-codec startup before reconstruction or any GPU launch",
+      "exit_code": 1,
+      "archive_sha256": "9e4ee3fac486b3781db8c7f775e165a5d8a9a8f63ceae43a67ea6a648087178e"
+    }
+  ],
+  "remaining_scope": "omega-B97M-V cold is guarded, not materially accelerated; no HF/DF or full non-CBS README leadership claim."
+}

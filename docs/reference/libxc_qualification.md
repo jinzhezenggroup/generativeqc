@@ -2,8 +2,8 @@
 
 Measured source revision: `fbf57c111c7c885efbc0cd1457e6a7732c9e3d95`.
 Retained measured source inputs: `ba63873931ccffae7d9b2cea01831028f9bcf04a9903b818da76bd1539f64d64`.
-Current checked source inputs: `52cf415e8b715839e3f445ca0a962269982c922349cdee90b8b8b3dcf25c00db`.
-Current checked native input identity: `6d8e39629573102aadd20b7015ff0ff6fc694fd86687ae9a56733b57f56f87b0`.
+Current checked source inputs: `2941e70ebefe56777983465dece1107925801c63e9d25f5bd8e3ee760aab444d`.
+Current checked native input identity: `a305bde4a845e554e5f04ca4ab593b26166b7e31902635dcd5a900194532aea3`.
 Retained evidence stale for checked inputs: `True`.
 Retained executed native library SHA-256: `c2d1b725fb754e72d35ca5829ba9a067974703c6a98bc4e4cefb44ea6abc256c`.
 Independent oracle: PySCF 2.14.0 / Libxc 7.0.0.
@@ -84,11 +84,5 @@ added functionals: none
 removed functionals: none
 identity changes: none
 promotions: none
-demotions:
-  compiled-cpu: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
-  compiled-cuda: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
-  production-domain: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
-  gpu-runtime: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
-  molecular-scf: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
-  forces: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
+demotions: none
 ```

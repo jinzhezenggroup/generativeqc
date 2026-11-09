@@ -18,6 +18,7 @@ from statistics import median
 if not __debug__ or sys.flags.optimize:
     raise RuntimeError("Evidence validation requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE")
 
+from benchmarks._exact_fp64_evidence import load as load_population_evidence
 from benchmarks._source_census_evidence import read_json_bytes
 from benchmarks.readme_defaults_qualification import _comparison, qualify
 from benchmarks.readme_defaults_report import load_records
@@ -29,14 +30,24 @@ REFERENCE = ROOT.parent / "readme-final-20261022"
 def restored_population(name: str) -> bytes:
     """Authenticate and recover the exact original UTF-8 receipt bytes."""
     manifest = json.loads((ROOT / "receipt-populations.json").read_text())
-    packed = (ROOT / manifest["bundle"]).read_bytes()
-    if hashlib.sha256(packed).hexdigest() != manifest["bundle_sha256"]:
-        raise ValueError("Receipt population bundle hash mismatch")
-    decoded = json.loads(lzma.decompress(packed))
+    try:
+        _, files = load_population_evidence(ROOT / manifest["storage_directory"])
+    except (ValueError, OSError, EOFError, lzma.LZMAError) as error:
+        raise ValueError("Receipt population storage mismatch") from error
+    if "original-container.json" not in files:
+        raise ValueError("Receipt population original-container missing/mismatch")
+    raw_container = files["original-container.json"].encode()
+    if hashlib.sha256(raw_container).hexdigest() != manifest["original_decoded_sha256"]:
+        raise ValueError("Receipt population original-container mismatch")
+    decoded = json.loads(raw_container)
     if set(decoded) != set(manifest["members"]):
         raise ValueError("Receipt population member set mismatch")
+    if set(files) != set(decoded) | {"original-container.json"}:
+        raise ValueError("Receipt population storage member set mismatch")
     key = name + ".json"
     raw = decoded[key].encode("utf-8")
+    if files[key] != decoded[key]:
+        raise ValueError("Receipt population nested text mismatch")
     expected = manifest["members"][key]
     if len(raw) != expected["bytes"] or hashlib.sha256(raw).hexdigest() != expected["sha256"]:
         raise ValueError("Restored receipt population integrity mismatch")

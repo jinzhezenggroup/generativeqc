@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 INTEGRAL = ROOT / "python" / "generativeqc_compiler" / "integral"
 PRODUCTION_MODULES = {
     "production_bundle",
+    "production_component_queue",
     "production_cost",
     "production_emission",
     "production_exchange_queue",
@@ -33,6 +34,7 @@ EMISSION_IMPORTS = {
     "fused_schedule",
     "functools",
     "ir",
+    "production_component_queue",
     "production_cost",
     "production_exchange_queue",
     "production_profile",
@@ -46,6 +48,7 @@ EMISSION_IMPORTS = {
     "generativeqc_compiler.common.cuda_target",
 }
 EXCHANGE_QUEUE_IMPORTS = {"__future__", "collections.abc", "typing"}
+COMPONENT_QUEUE_IMPORTS = {"__future__"}
 SHARED_RYS_XY_IMPORTS = {
     "__future__",
     "capabilities",
@@ -151,6 +154,7 @@ def test_bundle_owner_does_not_import_cuda_emitters() -> None:
     ("module", "allowed_imports"),
     [
         ("production_emission", EMISSION_IMPORTS),
+        ("production_component_queue", COMPONENT_QUEUE_IMPORTS),
         ("production_exchange_queue", EXCHANGE_QUEUE_IMPORTS),
         ("production_shared_rys_xy", SHARED_RYS_XY_IMPORTS),
     ],
