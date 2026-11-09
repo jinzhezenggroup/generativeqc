@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "generated_direct_resident_psss_schedule.cuh"
 #include "runtime/bounded_workspace.hpp"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_metadata.hpp"
@@ -10,6 +11,9 @@
 #include "scf/diis_work.hpp"
 
 namespace generativeqc::scf::cuda_execution {
+
+static_assert(kPersistentFockAngularOrderCount <= detail::kDirectQuartetAngularOrderCount);
+static_assert(kPersistentForceAngularOrderCount <= detail::kDirectQuartetAngularOrderCount);
 
 bool make_layout(
     std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf, std::size_t atoms,

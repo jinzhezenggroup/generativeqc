@@ -18,6 +18,16 @@ FAMILY = ROOT / "benchmarks/results/dft-shared-rys-streaming-20261108"
 MASTER = ROOT / "benchmarks/results/dft-streaming-master-20261109"
 
 
+@pytest.fixture
+def native_a100(tmp_path: Path) -> Path:
+    """Materialize authenticated receipts for isolated semantic mutations."""
+    _, files = load(FAMILY)
+    for name, text in files.items():
+        if name.startswith("native-a100/"):
+            (tmp_path / name.removeprefix("native-a100/")).write_text(text)
+    return tmp_path
+
+
 def test_native_default_qualification_is_scoped_and_preserves_raw_k_oracles() -> None:
     replay = runpy.run_path(str(FAMILY / "replay.py"))["replay"]
     result = replay()
@@ -143,3 +153,219 @@ def test_small_population_must_be_complete(
             "a100",
             images=json.loads((family / "cohort.json").read_text())["native_images"],
         )
+
+
+@pytest.mark.parametrize("arm,ordinal", (("control", 1), ("candidate", 2)))
+@pytest.mark.parametrize("atoms", (48, 96))
+@pytest.mark.parametrize("field", ("source_identity", "library_sha256", "missing"))
+def test_endpoint_requires_its_own_native_identity(
+    native_a100: Path, arm: str, ordinal: int, atoms: int, field: str
+) -> None:
+    """A valid sidecar cannot qualify an endpoint from a different image."""
+    tag = "48" if atoms == 48 else str(ordinal)
+    path = native_a100 / f"pbe0-{tag}-{arm}.json"
+    record = json.loads(path.read_text())
+    if field == "missing":
+        record.pop("native_build")
+    else:
+        record["native_build"][field] = "0" * 64
+    path.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="endpoint native build"):
+        qualify_native(
+            native_a100,
+            "a100",
+            images=json.loads((FAMILY / "cohort.json").read_text())["native_images"],
+        )
+
+
+def test_small_workload_cannot_be_replaced_by_passing_96_atoms(
+    native_a100: Path,
+) -> None:
+    """Paired Direct96 receipts must not become an independent Direct48 pass."""
+    for arm, ordinal in (("control", 1), ("candidate", 2)):
+        (native_a100 / f"pbe0-48-{arm}.json").write_text(
+            (native_a100 / f"pbe0-{ordinal}-{arm}.json").read_text()
+        )
+    with pytest.raises(ValueError, match="48-atom workload"):
+        qualify_native(
+            native_a100,
+            "a100",
+            images=json.loads((FAMILY / "cohort.json").read_text())["native_images"],
+        )
+
+
+@pytest.mark.parametrize("field,value", (("method", "b3lyp"), ("mode", "df")))
+def test_small_workload_requires_pbe0_direct(
+    native_a100: Path, field: str, value: str
+) -> None:
+    """The small endpoint's method and mode belong to its declared contract."""
+    path = native_a100 / "pbe0-48-candidate.json"
+    record = json.loads(path.read_text())
+    record[field] = value
+    path.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="48-atom workload"):
+        qualify_native(
+            native_a100,
+            "a100",
+            images=json.loads((FAMILY / "cohort.json").read_text())["native_images"],
+        )
+
+
+@pytest.mark.parametrize("corruption", ("duplicate", "unexpected", "count"))
+def test_census_requires_each_expected_class_once(
+    native_a100: Path, corruption: str
+) -> None:
+    """Six rows do not prove six classes when a symbol is duplicated."""
+    path = native_a100 / "default-cold-kernels.tsv"
+    rows = path.read_text().splitlines()
+    indices = [i for i, row in enumerate(rows) if "shared_rys_xy_streaming" in row]
+    if corruption == "duplicate":
+        rows[indices[1]] = rows[indices[0]]
+    elif corruption == "unexpected":
+        rows[indices[0]] = rows[indices[0]].replace("_ddpp_", "_ssss_")
+    else:
+        rows[indices[0]] = "8\t" + rows[indices[0]].split("\t", 1)[1]
+    path.write_text("\n".join(rows) + "\n")
+    with pytest.raises(ValueError, match="shared-XY execution"):
+        qualify_native(
+            native_a100,
+            "a100",
+            images=json.loads((FAMILY / "cohort.json").read_text())["native_images"],
+        )
+
+
+@pytest.mark.parametrize("corruption", ("duplicate", "unexpected", "missing"))
+def test_raw_k_requires_each_predicate_once(corruption: str) -> None:
+    """Authenticated log bytes still need a complete scientific predicate set."""
+    _, files = load(FAMILY)
+    cohort = json.loads((FAMILY / "cohort.json").read_text())
+    lines = files[cohort["raw_k_logs"]["a100"]].splitlines()
+    indices = [i for i, line in enumerate(lines) if line.startswith("PASS ")]
+    if corruption == "duplicate":
+        lines[indices[1]] = lines[indices[0]]
+    elif corruption == "unexpected":
+        lines[indices[0]] = lines[indices[0]].replace("dppp_", "ssss_")
+    else:
+        lines.pop(indices[0])
+    reader = runpy.run_path(str(FAMILY / "replay.py"))
+    with pytest.raises(ValueError, match="raw-K oracle"):
+        reader["raw_k_predicates"]("\n".join(lines))
+
+
+def test_replay_rejects_duplicate_raw_k_predicate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replay rejects a malformed original log after the storage layer loads."""
+    bundle, files = load(FAMILY)
+    cohort = json.loads((FAMILY / "cohort.json").read_text())
+    name = cohort["raw_k_logs"]["a100"]
+    lines = files[name].splitlines()
+    indices = [i for i, line in enumerate(lines) if line.startswith("PASS ")]
+    lines[indices[1]] = lines[indices[0]]
+    files[name] = "\n".join(lines)
+    replay = runpy.run_path(str(FAMILY / "replay.py"))["replay"]
+    monkeypatch.setitem(replay.__globals__, "load", lambda _: (bundle, files))
+    with pytest.raises(ValueError, match="raw-K oracle"):
+        replay()
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    (
+        ("method", "b3lyp"),
+        ("mode", "df"),
+        ("atoms", 48),
+        ("arm", "reference"),
+        ("gpu", "NVIDIA GeForce RTX 5090"),
+        ("settings", 1e-12),
+        ("interposer", True),
+    ),
+)
+def test_abba_requires_qualified_workload_and_defaults(
+    native_a100: Path, field: str, value: object
+) -> None:
+    names = ["pbe0-1-control.json"]
+    if field == "settings":
+        names = [
+            f"pbe0-{i}-{arm}.json"
+            for i, arm in enumerate(("control", "candidate", "candidate", "control"), 1)
+        ]
+    for name in names:
+        path = native_a100 / name
+        record = json.loads(path.read_text())
+        if field == "gpu":
+            record["accelerator"]["name"] = value
+        elif field == "settings":
+            for sample in record["samples"]:
+                sample["settings"]["energy_tolerance"] = value
+        elif field == "interposer":
+            record["streaming_trial"] = value
+        else:
+            record[field] = value
+        path.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="workload|GPU|default settings|Interposer"):
+        qualify_native(
+            native_a100,
+            "a100",
+            images=json.loads((FAMILY / "cohort.json").read_text())["native_images"],
+        )
+
+
+def test_small_interposer_is_not_native_qualification(native_a100: Path) -> None:
+    path = native_a100 / "pbe0-48-candidate.json"
+    record = json.loads(path.read_text())
+    record["streaming_trial"] = {}
+    path.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="Interposer"):
+        qualify_native(
+            native_a100,
+            "a100",
+            images=json.loads((FAMILY / "cohort.json").read_text())["native_images"],
+        )
+
+
+@pytest.mark.parametrize("value", ("nan", "inf", "-inf", "-1"))
+def test_raw_k_rejects_nonfinite_or_negative_errors(value: str) -> None:
+    _, files = load(FAMILY)
+    cohort = json.loads((FAMILY / "cohort.json").read_text())
+    text = files[cohort["raw_k_logs"]["a100"]]
+    import re
+
+    text = re.sub(r"max_abs=\S+", "max_abs=" + value, text, count=1)
+    with pytest.raises(ValueError, match="raw-K oracle"):
+        runpy.run_path(str(FAMILY / "replay.py"))["raw_k_predicates"](text)
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    ("device", "swapped-devices", "sanitizer", "sanitizer-job", "nonzero", "mixed"),
+)
+def test_replay_requires_complete_clean_sanitizers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, corruption: str
+) -> None:
+    bundle, files = load(FAMILY)
+    cohort = json.loads((FAMILY / "cohort.json").read_text())
+    if corruption == "device":
+        del cohort["raw_k_logs"]["5090"]
+    elif corruption == "swapped-devices":
+        logs = cohort["raw_k_logs"]
+        logs["a100"], logs["5090"] = logs["5090"], logs["a100"]
+    elif corruption == "sanitizer-job":
+        name = cohort["sanitizer_logs"][0]
+        other = name.replace("16846", "99999")
+        files[other] = files.pop(name)
+        cohort["sanitizer_logs"][0] = other
+    elif corruption == "sanitizer":
+        cohort["sanitizer_logs"].pop()
+    else:
+        name = cohort["sanitizer_logs"][0]
+        bad = "\n========= ERROR SUMMARY: 1 errors\n"
+        files[name] = files[name] + bad if corruption == "mixed" else bad
+    (tmp_path / "cohort.json").write_text(json.dumps(cohort))
+    replay = runpy.run_path(str(FAMILY / "replay.py"))["replay"]
+    monkeypatch.setitem(replay.__globals__, "load", lambda _: (bundle, files))
+    monkeypatch.setitem(
+        replay.__globals__, "qualify_native", lambda *a, **k: {"methods": {}}
+    )
+    with pytest.raises(ValueError, match="raw-K|Raw-K"):
+        replay(tmp_path)

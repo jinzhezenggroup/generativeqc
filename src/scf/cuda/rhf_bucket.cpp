@@ -54,13 +54,14 @@ bool small_hf_cuda_resource_layout(std::size_t nbf, std::size_t direct_nbf, std:
                                    std::size_t shells, std::size_t primitives,
                                    std::size_t diis_history, std::size_t spins,
                                    std::size_t& arena_bytes, std::size_t& plan_object_bytes) {
+  if (cuda_policy::hf_matrix_profile_requested()) return false;
   // This contract intentionally covers the provider with no cuBLAS/cuSOLVER
   // workspace or exact-quartet descriptor table. Other routes need their own
   // compact provider-workspace query before they can advertise a global bound.
   const cuda_policy::SmallHfWorkload small_hf_workload{nbf, spins, 1U, spins};
   const auto small_hf_profitability =
       cuda_policy::resolve_small_hf_profitability(runtime::CudaTargetInfo{}, small_hf_workload);
-  if (nbf == 0 || nbf > kPersistentEriAoLimit || nbf > kSmallEigensolverLimit ||
+  if (nbf == 0 || !small_hf_profitability.persistent_eri || nbf > kSmallEigensolverLimit ||
       small_hf_profitability.matrix.requires_provider_context() || direct_nbf < nbf ||
       direct_nbf > 2 * nbf || atoms == 0 || shells == 0 || shells > nbf || primitives == 0 ||
       diis_history > 64 || (spins != 1 && spins != 2))
@@ -94,11 +95,11 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
                                       int precision_mode, double energy_tolerance,
                                       double screening_tolerance, std::size_t& arena_bytes,
                                       std::size_t& plan_object_bytes) {
+  if (cuda_policy::hf_matrix_profile_requested()) return false;
   using namespace cuda_execution;
   if (shell_angular_values == nullptr || shell_primitive_counts == nullptr || nbf == 0 ||
-      nbf > kPersistentEriAoLimit || nbf > kSmallEigensolverLimit || direct_nbf < nbf ||
-      direct_nbf > 2 * nbf || atoms == 0 || shells == 0 || shells > nbf || diis_history > 64 ||
-      (spins != 1 && spins != 2) ||
+      nbf > kSmallEigensolverLimit || direct_nbf < nbf || direct_nbf > 2 * nbf || atoms == 0 ||
+      shells == 0 || shells > nbf || diis_history > 64 || (spins != 1 && spins != 2) ||
       (precision_mode != GENERATIVEQC_PRECISION_FP64 &&
        precision_mode != GENERATIVEQC_PRECISION_AUTO) ||
       !std::isfinite(energy_tolerance) || energy_tolerance <= 0.0 ||
@@ -119,7 +120,9 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
   const cuda_policy::SmallHfWorkload small_hf_workload{nbf, spins, 1U, spins};
   const auto small_hf_profitability =
       cuda_policy::resolve_small_hf_profitability(runtime::CudaTargetInfo{}, small_hf_workload);
-  if (small_hf_profitability.matrix.requires_provider_context()) return false;
+  if (!small_hf_profitability.persistent_eri ||
+      small_hf_profitability.matrix.requires_provider_context())
+    return false;
 
   bool incremental_diis_gram = false;
   try {
@@ -466,6 +469,17 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     return outputs;
   }
   HostBatch candidate;
+  preflight_reference_provider_initialization(options.reference_provider_initialization,
+                                              options.export_physical_reference);
+  runtime::CudaTargetInfo topology_target{};
+  cuda_policy::HfMatrixProfileAdmission topology_profile;
+  const auto topology_target_status = query_hf_cuda_target(
+      device_id, topology_target, options.export_physical_reference ? nullptr : &topology_profile);
+  if (topology_target_status != GENERATIVEQC_STATUS_SUCCESS) {
+    std::vector<RhfBucketItem> outputs(systems.size());
+    fill_global_failure(outputs, topology_target_status);
+    return outputs;
+  }
   unsigned reference_max_angular = 0;
   if (!systems.empty())
     for (const auto& shell : systems.front().shells)
@@ -478,7 +492,8 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
   // export is a physical-state contract, not a matrix-direct packing request.
   if (!pack_host_batch(systems, initial_densities, candidate, unrestricted,
                        options.export_physical_reference && !reference_quartets,
-                       options.compute_forces || reference_quartets)) {
+                       options.compute_forces || reference_quartets, ResidentPsssPolicy::Build,
+                       HostBasisPacking::Scf, topology_target, {}, topology_profile)) {
     std::vector<RhfBucketItem> outputs(systems.size());
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
@@ -574,9 +589,10 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
   }
   const auto execute_driver = [&] {
     try {
-      return execute_hf_cuda_bucket_driver(
-          **plan, candidate, systems, options, device_id, unrestricted, shell_class_profiling,
-          inactive_eigensolver_profiling, options.preliminary_guess ? &seed_diagnostics : nullptr);
+      return execute_hf_cuda_bucket_driver(**plan, candidate, systems, options, device_id,
+                                           unrestricted, shell_class_profiling,
+                                           inactive_eigensolver_profiling, topology_target,
+                                           options.preliminary_guess ? &seed_diagnostics : nullptr);
     } catch (...) {
       // Publication/allocation failures can leave a partially written arena.
       // Release it before propagating; never certify or reuse that generation.

@@ -80,6 +80,12 @@ int main() {
     else unsetenv("GENERATIVEQC_HF_COLD_SCREENING");
     const auto admitted = resolve_cold_hf_screening(cold, 1e-12);
     assert(admitted.maximum_iterations == 8 && admitted.tolerance == 8e-8);
+    for (std::size_t size : {383U, 384U, 511U, 512U}) {
+      auto trial = cold;
+      trial.nbf = size;
+      const bool expected = size >= 512;
+      assert((resolve_cold_hf_screening(trial, 1e-12).maximum_iterations != 0) == expected);
+    }
     for (auto member : {&ColdHfScreeningDomain::warm_seed,
                         &ColdHfScreeningDomain::unrestricted,
                         &ColdHfScreeningDomain::physical_reference,
@@ -295,6 +301,25 @@ int main() {
   assert(5e-6 < hf_stationarity_tolerance(1e-9,1e-5,true));
   assert(hf_stationarity_tolerance(1e-12,1e-5,true)==1e-8);
   assert(hf_stationarity_tolerance(1e-9,1e-12,false)==1e-12);
+  const HfStationarityContext energy_only{true,true,true,false,false};
+  assert(standard_hf_stationarity_owner(energy_only));
+  assert(hf_stationarity_tolerance(1e-9,1e-5,
+      standard_hf_stationarity_owner(energy_only))==1e-5);
+  for (unsigned condition=0;condition<5;++condition) {
+    auto refused=energy_only;
+    switch(condition) {
+      case 0:refused.restricted=false;break;
+      case 1:refused.strict_fp64=false;break;
+      case 2:refused.all_electron=false;break;
+      case 3:refused.compute_forces=true;break;
+      case 4:refused.physical_reference=true;break;
+    }
+    assert(!standard_hf_stationarity_owner(refused));
+    assert(hf_stationarity_tolerance(1e-9,1e-5,
+        standard_hf_stationarity_owner(refused))==1e-8);
+    assert(hf_stationarity_tolerance(1e-9,1e-12,
+        standard_hf_stationarity_owner(refused))==1e-12);
+  }
   assert(scf_stationarity_tolerance(1e-9,1e-5,1e-9)==1e-5);
   assert(scf_stationarity_tolerance(1e-3,1e-2,1e-9)==1e-5);
   assert(scf_stationarity_tolerance(1e-10,1e-5,1e-9)==1e-9);

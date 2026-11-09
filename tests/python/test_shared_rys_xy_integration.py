@@ -1,4 +1,4 @@
-"""Executable host admission/dispatch contracts for the opt-in HF companion."""
+"""Executable host admission/dispatch contracts for target-scoped HF companions."""
 
 from __future__ import annotations
 
@@ -43,15 +43,19 @@ def profile(architecture: str = "sm_90") -> ResolvedProductionProfile:
     return resolve_production_profile(MANIFEST, architecture)
 
 
-def test_companion_architecture_capability_and_qualified_mapping() -> None:
-    selected = profile()
+@pytest.mark.parametrize("architecture", ("sm_80", "sm_90"))
+def test_companion_architecture_capability_and_qualified_mapping(
+    architecture: str,
+) -> None:
+    selected = profile(architecture)
     companions = shared_rys_xy_companions(selected)
     assert {c.incumbent.spec.name: c.plan.block_threads for c in companions} == {
         "dppp": 192,
         "pppp": 96,
     }
-    for architecture in ("sm_80", "sm_89", "sm_100", "sm_120"):
-        assert shared_rys_xy_companions(profile(architecture)) == ()
+    assert shared_rys_xy_companions(profile("sm_120")) == ()
+    if architecture == "sm_80":
+        assert shared_rys_xy_companions(selected, weighted_z=True) == ()
     assert not shared_rys_xy_companions(
         replace(
             selected,
@@ -94,6 +98,25 @@ def test_packaging_preserves_qualified_arithmetic(name: str) -> None:
     assert "fock_rhf_persistent_kernel<<<" in wrapper
 
 
+@pytest.mark.parametrize("architecture", ("sm_89", "sm_100", "sm_120"))
+def test_unweighted_companion_follows_declared_capability(
+    architecture: str,
+) -> None:
+    """An explicitly supplied capability is not vetoed by an ISA-name list.
+
+    This synthetic inventory checks compiler legality, not performance authority
+    for these targets. Capability and performance qualification remain separate.
+    """
+    selected = replace(profile(architecture), selections=profile().selections)
+    assert {
+        item.incumbent.spec.name for item in shared_rys_xy_companions(selected)
+    } == {
+        "dppp",
+        "pppp",
+    }
+    assert not shared_rys_xy_companions(selected, weighted_z=True)
+
+
 def test_policy_strict_parse_refusal_and_frozen_identity(
     tmp_path: Path,
     required_native_cxx: NativeCxx,
@@ -126,22 +149,80 @@ int main() {
   for (const char* v : {"true", "false", "01", " 1", "1 ", "-1", "2"})
     assert(parse_shared_rys_xy_request(v) == SharedRysXyRequest::Invalid);
   SharedRysXyContext c{};
-  c.sm90 = c.quartet_direct = true; c.capability_mask = 3;
-  auto on = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c);
-  auto off = resolve_shared_rys_xy_policy(SharedRysXyRequest::Off, c);
+  c.quartet_direct = true; c.capability_mask = 3;
+  generativeqc::runtime::CudaTargetInfo target{};
+  target.warp_size = 32;
+  target.maximum_threads_per_block = 1024;
+  target.maximum_threads_per_sm = 2048;
+  target.maximum_blocks_per_sm = 32;
+  unsetenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY");
+  unsetenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z");
+  assert(shared_rys_xy_requested() == SharedRysXyRequest::Auto);
+  setenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY", "", 1);
+  assert(shared_rys_xy_requested() == SharedRysXyRequest::Auto);
+  setenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z", "0", 1);
+  assert(shared_rys_xy_requested() == SharedRysXyRequest::Auto);
+  setenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_XY", "0", 1);
+  assert(shared_rys_xy_requested() == SharedRysXyRequest::Off);
+  setenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z", "1", 1);
+  assert(shared_rys_xy_requested() == SharedRysXyRequest::Invalid);
+  unsetenv("GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z");
+  const auto automatic = SharedRysXyRequest::Auto;
+  assert(!resolve_shared_rys_xy_policy(automatic, c, target).active());
+  target.fp32_fp64_ratio = 2;
+  const auto default_on = resolve_shared_rys_xy_policy(automatic, c, target);
+  assert(default_on.active() && default_on.class_mask == 3 && !default_on.weighted_z());
+  auto on = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c, target);
+  auto off = resolve_shared_rys_xy_policy(SharedRysXyRequest::Off, c, target);
   assert(on.active() && on.class_mask == 3 && !off.active() && on != off);
-  assert(on == resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c));
+  assert(on == resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c, target));
   assert(on.selects(0) && on.selects(1) && !on.selects(2) && !on.selects(64));
   assert(!off.selects(0));
   using A = SharedRysXyAdmission;
+  // Throughput and compiled availability are independent of ISA identity.
+  for (int major : {7, 8, 9, 10, 12, 20}) {
+    for (int minor : {0, 1, 6}) {
+      auto other = target;
+      other.compute_capability_major = major;
+      other.compute_capability_minor = minor;
+      for (int ratio : {-1, 0, 1, 2, 3, 32, 64}) {
+        other.fp32_fp64_ratio = ratio;
+        assert(resolve_shared_rys_xy_policy(automatic, c, other).active() ==
+               (ratio > 0 && ratio <= 2));
+        assert(resolve_shared_rys_xy_policy(SharedRysXyRequest::On, c, other).active());
+        assert(!resolve_shared_rys_xy_policy(SharedRysXyRequest::Off, c, other).active());
+      }
+    }
+  }
+  auto refuse_resources = [&](const generativeqc::runtime::CudaTargetInfo& other) {
+    for (auto request : {automatic, SharedRysXyRequest::On, SharedRysXyRequest::WeightedZOn}) {
+      const auto policy = resolve_shared_rys_xy_policy(request, c, other);
+      assert(!policy.active() && policy.class_mask == 0 &&
+             policy.admission == A::UnsupportedResources);
+    }
+  };
+  auto insufficient = target;
+  insufficient.warp_size = 64; refuse_resources(insufficient);
+  insufficient = target; insufficient.maximum_threads_per_block = 191;
+  refuse_resources(insufficient);
+  insufficient = target; insufficient.maximum_threads_per_sm = 191;
+  refuse_resources(insufficient);
+  insufficient = target; insufficient.maximum_blocks_per_sm = 0;
+  refuse_resources(insufficient);
+  auto minimum = target;
+  minimum.maximum_threads_per_block = minimum.maximum_threads_per_sm = 192;
+  minimum.maximum_blocks_per_sm = 1;
+  assert(resolve_shared_rys_xy_policy(automatic, c, minimum).active());
   auto refuse = [&](SharedRysXyContext bad, A why) {
-    auto p = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, bad);
+    auto p = resolve_shared_rys_xy_policy(SharedRysXyRequest::On, bad, target);
     assert(!p.active() && p.class_mask == 0 && p.admission == why && p != on);
+    const auto automatic_refusal = resolve_shared_rys_xy_policy(automatic, bad, target);
+    assert(!automatic_refusal.active() && automatic_refusal.class_mask == 0 &&
+           automatic_refusal.admission == why);
     std::puts(shared_rys_xy_admission_name(p.admission));
   };
   auto bad = c; bad.unrestricted = true; refuse(bad, A::Unrestricted);
   bad = c; bad.mixed_precision = true; refuse(bad, A::MixedPrecision);
-  bad = c; bad.sm90 = false; refuse(bad, A::UnsupportedProfile);
   bad = c; bad.capability_mask = 0; refuse(bad, A::UnsupportedProfile);
   bad = c; bad.quartet_direct = false; refuse(bad, A::NonPaged);
   bad = c; bad.incremental_jk = true; refuse(bad, A::IncrementalJk);
@@ -168,7 +249,7 @@ int main() {
     result = subprocess.run(
         [exe], check=True, capture_output=True, text=True, timeout=20
     )
-    assert len(result.stdout.splitlines()) == 10
+    assert len(result.stdout.splitlines()) == 9
 
 
 def _compile_registry(
@@ -322,3 +403,123 @@ def test_cuda_only_exact_prepared_identity(monkeypatch: pytest.MonkeyPatch) -> N
         assert identity("cpu") == cpu
         seen.append(current)
     assert len({x.schedule for x in seen}) == 5
+
+
+@pytest.mark.parametrize("weighted", (False, True))
+def test_prepared_dispatch_fixture_compiles_against_native_contract(
+    tmp_path: Path, required_native_cxx: NativeCxx, weighted: bool
+) -> None:
+    """Compile complete generated drivers without a GPU or new oracle work.
+
+    Synthetic arrays exercise only driver/API integration. They are never run
+    or presented as numerical evidence. CUDA declarations are a host double;
+    all policy, registry, task and output contracts come from current headers.
+    """
+    import hashlib
+
+    from tools.generativeqc_validation import (
+        shared_rys_weighted_z_dispatch_fixture,
+        shared_rys_xy_dispatch_fixture,
+    )
+
+    frozen = tmp_path / "frozen"
+    frozen.mkdir()
+    cases = [
+        {
+            "name": name,
+            "variant": variant,
+            "n": 1,
+            "pair_count": 2,
+            "pair_split": 1,
+            "reversed_mask": 0,
+        }
+        for name in ("dppp", "pppp")
+        for variant in ("ordinary", "reversed", "displaced")
+    ]
+    arrays = "".join(
+        f"static const {ctype} {case['name']}_{case['variant']}_{field}[16]={{}};\n"
+        for case in cases
+        for field, ctype in (
+            ("pairs", "double"),
+            ("coefficients", "double"),
+            ("positions", "double"),
+            ("bounds", "double"),
+            ("density", "double"),
+            ("expected", "double"),
+            ("ao_offsets", "std::uint64_t"),
+            ("atoms", "std::uint32_t"),
+            ("primitive_counts", "std::uint64_t"),
+        )
+    )
+    (frozen / "shared_rys_xy_fixture.cu").write_text(arrays)
+    (frozen / "receipt.json").write_text(
+        json.dumps(
+            {
+                "source_sha256": hashlib.sha256(arrays.encode()).hexdigest(),
+                "cases": cases,
+                "masks": ["full", "partial", "one", "two", "zero"],
+                "task_mask_sequence": [0, 4, 1, 2, 3, 0, 4],
+                "fock_tolerances": {"atol": 2e-11, "rtol": 2e-10},
+            }
+        )
+    )
+    driver = (
+        shared_rys_weighted_z_dispatch_fixture
+        if weighted
+        else shared_rys_xy_dispatch_fixture
+    )
+    output = tmp_path / "prepared"
+    driver.prepare_dispatch_fixture(frozen, output)
+    cuda = tmp_path / "cuda_runtime_api.h"
+    cuda.write_text(r"""
+#pragma once
+#include <cstddef>
+using cudaError_t=int;
+using cudaStream_t=void*;
+using cudaGraph_t=void*;
+using cudaGraphExec_t=void*;
+constexpr int cudaSuccess=0, cudaMemcpyHostToDevice=1, cudaMemcpyDeviceToHost=2;
+constexpr int cudaStreamCaptureModeThreadLocal=0;
+constexpr int cudaDevAttrComputeCapabilityMajor=0, cudaDevAttrComputeCapabilityMinor=1;
+struct cudaFuncAttributes {
+  int numRegs{},maxThreadsPerBlock{};
+  std::size_t localSizeBytes{},sharedSizeBytes{};
+};
+const char* cudaGetErrorString(cudaError_t);
+template<class T> cudaError_t cudaMalloc(T**,std::size_t);
+cudaError_t cudaMemcpy(void*,const void*,std::size_t,int);
+cudaError_t cudaMemsetAsync(void*,int,std::size_t,cudaStream_t);
+cudaError_t cudaPeekAtLastError();
+cudaError_t cudaStreamBeginCapture(cudaStream_t,int);
+cudaError_t cudaStreamEndCapture(cudaStream_t,cudaGraph_t*);
+cudaError_t cudaGraphInstantiate(cudaGraphExec_t*,cudaGraph_t,void*,void*,unsigned long long);
+cudaError_t cudaGraphLaunch(cudaGraphExec_t,cudaStream_t);
+cudaError_t cudaStreamSynchronize(cudaStream_t);
+cudaError_t cudaGraphExecDestroy(cudaGraphExec_t);
+cudaError_t cudaGraphDestroy(cudaGraph_t);
+cudaError_t cudaStreamCreate(cudaStream_t*);
+cudaError_t cudaStreamDestroy(cudaStream_t);
+cudaError_t cudaFree(void*);
+cudaError_t cudaGetDevice(int*);
+cudaError_t cudaDeviceGetAttribute(int*,int,int);
+template<class T> cudaError_t cudaFuncGetAttributes(cudaFuncAttributes*,T);
+template<class T> cudaError_t cudaOccupancyMaxActiveBlocksPerMultiprocessor(int*,T,int,std::size_t);
+""")
+    (tmp_path / "cuda_runtime.h").write_text('#include "cuda_runtime_api.h"\n')
+    source = next(output.glob("*.cu"))
+    required_native_cxx.compile_object(
+        source,
+        tmp_path / "driver.o",
+        args=(
+            "-std=c++20",
+            "-x",
+            "c++",
+            "-UNDEBUG",
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(ROOT / "src"),
+            "-I",
+            str(ROOT / "include"),
+        ),
+    )

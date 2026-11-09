@@ -394,6 +394,9 @@ def layouts(
     tmp_path_factory: pytest.TempPathFactory, required_native_cxx: NativeCxx
 ) -> ctypes.CDLL:
     folder = tmp_path_factory.mktemp("matrix-mask-layout")
+    from _direct_schedule_test_support import write_direct_policy_headers
+
+    write_direct_policy_headers(folder)
     fixture = ROOT / "tests/native/fixtures/matrix_mask"
     ks = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     unit = folder / "layout.cpp"
@@ -474,6 +477,7 @@ extern "C" void hf_layout(int batch, int n, int spins, int history, std::size_t*
             "-Wextra",
             "-Werror",
             f"-I{fixture}",
+            f"-I{folder}",
             f"-I{ROOT / 'src'}",
             f"-I{ROOT / 'include'}",
         ),

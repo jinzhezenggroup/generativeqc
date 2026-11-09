@@ -4,6 +4,8 @@
 #include <vector>
 
 #include "scf/cuda/direct_metadata.hpp"
+#include "scf/cuda/hf_matrix_profile.hpp"
+#include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_batch.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -17,6 +19,11 @@ struct HostBatch {
   std::size_t nbf{};
   std::size_t direct_nbf{};
   std::size_t spin_count{1};
+  /** Resolved resident-ERI admission; participates in immutable topology identity. */
+  bool persistent_eri{};
+  /** One prepared product decision feeds arena, optional context and binding. */
+  tensor::CudaMatrixProductAdmission matrix_admission;
+  std::optional<cuda_policy::HfMatrixProfile> matrix_profile;
   std::vector<std::int64_t> atom_offsets;
   std::vector<std::int32_t> atom_systems;
   std::vector<std::int32_t> atomic_numbers;
@@ -77,13 +84,19 @@ enum class HostBasisPacking { Scf, DfValues };
 
 /** Pack topology and warm densities. Matrix-only exporters omit quartet-only
  * transforms and resident tasks; public AO expansion remains intact. The
- * default preserves Direct-HF's resident scheduling metadata. */
+ * default preserves Direct-HF's resident scheduling metadata. Target/profile
+ * admission selects persistent ERIs before transform construction. Unknown
+ * targets use the conservative no-device resource fallback. Changing the
+ * resolved route invalidates same_topology, even if AO dimensions agree. */
 bool pack_host_batch(const std::vector<core::System>& systems,
                      const std::vector<const std::vector<double>*>& initial_densities,
                      HostBatch& host, bool unrestricted = false, bool matrix_direct = false,
                      bool require_direct_transform = false,
                      ResidentPsssPolicy resident_psss = ResidentPsssPolicy::Build,
-                     HostBasisPacking packing = HostBasisPacking::Scf);
+                     HostBasisPacking packing = HostBasisPacking::Scf,
+                     const runtime::CudaTargetInfo& target = {},
+                     cuda_policy::SmallHfProfitabilityProfile profile = {},
+                     const cuda_policy::HfMatrixProfileAdmission& matrix_profile = {});
 
 /** Compare immutable topology; coordinates and warm state are checked separately by replay. */
 bool same_topology(const HostBatch& first, const HostBatch& second);

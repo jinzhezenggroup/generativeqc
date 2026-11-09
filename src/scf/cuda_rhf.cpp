@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "build_identity.hpp"
 #include "generated_direct_resident_psss_schedule.cuh"
 #include "integrals/ecp_cuda.hpp"
 #include "molecule/basis.hpp"
@@ -31,11 +32,13 @@
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_device_facts.hpp"
 #include "runtime/df_progress_trace.hpp"
+#include "runtime/loaded_provider_identity.hpp"
 #include "runtime/residency_cuda.cuh"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
 #include "scf/aot_shell_registry.hpp"
 #include "scf/application_precision.hpp"
+#include "scf/convergence_limits.hpp"
 #include "scf/cuda/arena.hpp"
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/direct_angular_fock.hpp"
@@ -467,10 +470,8 @@ namespace {
 std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     CudaRhfBucketPlan& plan, const HostBatch& host, const std::vector<core::System>& systems,
     const ScfOptions& options, int device_id, bool unrestricted, bool shell_class_profiling,
-    bool inactive_eigensolver_profiling,
+    bool inactive_eigensolver_profiling, const runtime::CudaTargetInfo& direct_target,
     std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics) {
-  preflight_reference_provider_initialization(options.reference_provider_initialization,
-                                              options.export_physical_reference);
   const auto pending_resident_selection =
       options.reference_provider_initialization_owner
           ? reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"))
@@ -514,20 +515,21 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
+  // Generated capability registries read CUDA's current device. Re-select
+  // before admission on every execution, including interleaved cached owners.
+  cudaError_t cuda_error = options.reference_provider_initialization_owner &&
+                                   options.reference_provider_initialization_owner->identity_bound()
+                               ? cudaSuccess
+                               : cudaSetDevice(device_id);
+  if (cuda_error != cudaSuccess) {
+    fill_global_failure(outputs, cuda_status(cuda_error));
+    return outputs;
+  }
   plan.last_shell_class_profile.reset();
   plan.last_ppps_queue_profile.reset();
   plan.last_inactive_eigensolver_profile.reset();
 
-  // Reuse the visibility-safe facts owner and its complete provider fallback.
-  // Unbatched HF does not need the unrelated full-property grid limits.
-  runtime::CudaTargetInfo direct_target{};
-  char direct_device_name[256]{};
-  const cudaError_t direct_target_error =
-      runtime::cuda_device_facts(device_id, direct_target, direct_device_name);
-  if (direct_target_error != cudaSuccess) {
-    fill_global_failure(outputs, cuda_status(direct_target_error));
-    return outputs;
-  }
+  // Admission, topology packing and execution share one visibility-safe probe.
   const auto direct_profile =
       cuda_policy::resolve_hf_direct_tuning_profile(options.export_physical_reference);
   const cuda_policy::DirectJkSchedulePolicy direct_schedule =
@@ -597,12 +599,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
-  const cuda_policy::SmallHfWorkload small_hf_workload{nbf, spin_batch_size, batch_size,
-                                                       spin_batch_size};
-  const cuda_policy::SmallHfProfitabilityPolicy small_hf_profitability =
-      cuda_policy::resolve_small_hf_profitability(direct_target, small_hf_workload);
-  const auto matrix_admission =
-      small_hf_profitability.matrix.available_if(plan.matrix_context_enabled);
+  const auto matrix_admission = host.matrix_admission.available_if(plan.matrix_context_enabled);
   const std::size_t total_atoms = host.atomic_numbers.size();
   const std::size_t total_shells = host.shell_atoms.size();
   const std::size_t total_shell_pairs = host.shell_pair_first.size();
@@ -635,7 +632,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // small HF systems. Persistent ERIs remain an energy-only profitability path;
   // keeping their handwritten force consumer would duplicate generated science.
   const bool requested_persistent_eri =
-      !options.compute_forces && !options.export_physical_reference && nbf <= kPersistentEriAoLimit;
+      !options.compute_forces && !options.export_physical_reference && host.persistent_eri;
   const bool reference_quartets =
       options.export_physical_reference &&
       reference_quartet_direct(
@@ -785,13 +782,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       shared_rys_xy_request == cuda_policy::SharedRysXyRequest::WeightedZOn
           ? generated::enabled_shared_rys_weighted_z_fock_shell_class_mask()
           : generated::enabled_shared_rys_xy_fock_shell_class_mask();
+  // Availability comes from the selected generated inventory. Profitability
+  // uses runtime FP64 throughput and launch resources, never an SM whitelist.
   const auto requested_shared_rys_xy = cuda_policy::resolve_shared_rys_xy_policy(
       shared_rys_xy_request,
-      {unrestricted, requested_mixed_precision_fock,
-       direct_target.compute_capability_major == 9 && direct_target.compute_capability_minor == 0,
-       requested_quartet_direct, requested_incremental_direct_jk, separate_fock_jk,
+      {unrestricted, requested_mixed_precision_fock, requested_quartet_direct,
+       requested_incremental_direct_jk, separate_fock_jk,
        (requested_primary_streaming_fock_mask & shared_rys_xy_capabilities) != 0U,
-       requested_persistent_eri, options.export_physical_reference, shared_rys_xy_capabilities});
+       requested_persistent_eri, options.export_physical_reference, shared_rys_xy_capabilities},
+      direct_target);
   // A mixed item is promoted to exact FP64 by the target refinement before any
   // consumer runs, so the matrix it retains is target precision. The convergence
   // kernel keeps P_n paired with the F(P_n) that was just evaluated when an item
@@ -1271,14 +1270,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         reference_base_bytes, runtime::vector_bytes(plan.diis_work_readback),
         options.reference_memory_budget_bytes);
     resources.reference_peak_bytes_ = reference_base_bytes;
-  }
-  cudaError_t cuda_error = options.reference_provider_initialization_owner &&
-                                   options.reference_provider_initialization_owner->identity_bound()
-                               ? cudaSuccess
-                               : cudaSetDevice(device_id);
-  if (cuda_error != cudaSuccess) {
-    fill_global_failure(outputs, cuda_status(cuda_error));
-    return outputs;
   }
   if (quartet_direct || options.export_physical_reference) {
     // The default 1 KiB stack is insufficient for high-order recurrences.
@@ -3697,13 +3688,18 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // FP64 direct and DF share the physical pre-DIIS residual gate for both
   // energy and force endpoints. Coarse mixed stages still defer to refinement.
   const double* force_convergence_residual = residual;
-  const bool qualified_standard_owner =
-      !unrestricted && !mixed_precision_fock && !options.export_physical_reference &&
-      std::all_of(systems.begin(), systems.end(), [](const auto& system) {
-        return system.ecp_terms.empty() &&
-               std::none_of(system.atoms.begin(), system.atoms.end(),
-                            [](const auto& atom) { return atom.ecp_core != 0; });
-      });
+  const bool qualified_standard_owner = standard_hf_stationarity_owner({
+      !unrestricted,
+      !mixed_precision_fock,
+      std::all_of(systems.begin(), systems.end(),
+                  [](const auto& system) {
+                    return system.ecp_terms.empty() &&
+                           std::none_of(system.atoms.begin(), system.atoms.end(),
+                                        [](const auto& atom) { return atom.ecp_core != 0; });
+                  }),
+      options.compute_forces,
+      options.export_physical_reference,
+  });
   // Deltas retire per item after physical stationarity. Full-only energy
   // closure stays within the iteration budget and retains a usable current
   // full-density baseline, including warm solves that never needed a delta.
@@ -6041,14 +6037,75 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
 
 }  // namespace
 
+generativeqc_status query_hf_cuda_target(int device_id, runtime::CudaTargetInfo& target,
+                                         cuda_policy::HfMatrixProfileAdmission* matrix_profile) {
+  char device_name[256]{};
+  const auto status =
+      cuda_execution::cuda_status(runtime::cuda_device_facts(device_id, target, device_name));
+  if (matrix_profile) *matrix_profile = {};
+  if (status != GENERATIVEQC_STATUS_SUCCESS || !matrix_profile ||
+      !cuda_policy::hf_matrix_profile_requested())
+    return status;
+  *matrix_profile = cuda_policy::load_hf_matrix_profile(
+      std::getenv("GENERATIVEQC_HF_MATRIX_PROFILE"), query_hf_cuda_matrix_profile_context(target));
+  return status;
+}
+
+cuda_policy::HfMatrixProfileContext query_hf_cuda_matrix_profile_context(
+    const runtime::CudaTargetInfo& target) {
+  // This query never creates a cuBLAS handle. Unsupported/missing stack
+  // identity fails closed to the same bounded no-calibration preparation.
+  cuda_policy::HfMatrixProfileContext context;
+  context.target = target;
+  context.provider = runtime::active_cuda_provider().kind;
+  context.release_build = GENERATIVEQC_TUNING_RELEASE_BUILD;
+  context.fast_compile = GENERATIVEQC_CUDA_FAST_COMPILE;
+  const std::string_view source = kGenerativeQCSourceIdentity;
+  if (source.size() == context.source_identity.size() - 1)
+    std::copy(source.begin(), source.end(), context.source_identity.begin());
+#if defined(CUDART_VERSION)
+  context.toolkit_version = CUDART_VERSION;
+#endif
+#if !GENERATIVEQC_CUDA_PROVIDER_CUMETAL
+  if (context.provider == runtime::CudaProviderKind::Nvidia &&
+      cudaRuntimeGetVersion(&context.runtime_version) == cudaSuccess &&
+      cudaDriverGetVersion(&context.driver_version) == cudaSuccess &&
+      cublasGetProperty(MAJOR_VERSION, &context.cublas_version[0]) == CUBLAS_STATUS_SUCCESS &&
+      cublasGetProperty(MINOR_VERSION, &context.cublas_version[1]) == CUBLAS_STATUS_SUCCESS &&
+      cublasGetProperty(PATCH_LEVEL, &context.cublas_version[2]) == CUBLAS_STATUS_SUCCESS) {
+    const auto runtime_identity =
+        runtime::loaded_provider_identity("libcudart.so.12", "cudaRuntimeGetVersion",
+                                          reinterpret_cast<const void*>(&cudaRuntimeGetVersion));
+    const auto driver_identity =
+        runtime::loaded_provider_identity("libcuda.so.1", "cuDriverGetVersion");
+    const auto native_identity = runtime::loaded_provider_identity(
+        "libgenerativeqc.so.0", "generativeqc_get_source_identity",
+        reinterpret_cast<const void*>(&generativeqc_get_source_identity));
+    const auto retain_id = [](const runtime::LoadedBuildIdentity& identity, auto& destination) {
+      if (identity.status == runtime::LoadedIdentityStatus::available &&
+          identity.build_id.size() < destination.size())
+        std::copy(identity.build_id.begin(), identity.build_id.end(), destination.begin());
+    };
+    retain_id(runtime_identity, context.runtime_build_id);
+    retain_id(driver_identity, context.driver_build_id);
+    retain_id(native_identity, context.native_build_id);
+    const auto identity = runtime::loaded_provider_identity(
+        "libcublas.so.12", "cublasDgemm_v2", reinterpret_cast<const void*>(&cublasDgemm));
+    retain_id(identity, context.cublas_build_id);
+  }
+#endif
+  return context;
+}
+
 std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(
     CudaRhfBucketPlan& plan, const cuda_execution::HostBatch& host,
     const std::vector<core::System>& systems, const ScfOptions& options, int device_id,
     bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling,
+    const runtime::CudaTargetInfo& direct_target,
     std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics) {
   return execute_hf_cuda_bucket(plan, host, systems, options, device_id, unrestricted,
                                 shell_class_profiling, inactive_eigensolver_profiling,
-                                seed_diagnostics);
+                                direct_target, seed_diagnostics);
 }
 
 generativeqc_status contract_cuda_weighted_eri_primitives(

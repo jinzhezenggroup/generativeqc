@@ -119,6 +119,12 @@ assigned visibility. Profiling receipts and diagnostic ablations are separate.
 
 ## Remaining work
 
+The receipts and independent oracles now use the repository's exact-FP64 v3
+storage: `receipts.json.xz`, `fp64.xz` and `sha256.txt`. The reproducer recovers
+the complete original JSON text bytes before parsing. All old observations,
+failed cases and historical source identities remain unchanged and replay is
+offline; this storage change is not new numerical or performance qualification.
+
 48-atom HF now beats the measured GPU4 cold endpoint in both Direct and DF.
 96-atom Direct HF and DF-HF still lag. The 96-atom DF profile attributes about
 6.49 s to source preparation (4.54 s metric projection, 1.94 s raw generation),

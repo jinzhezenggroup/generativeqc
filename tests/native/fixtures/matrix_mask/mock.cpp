@@ -103,6 +103,12 @@ cublasStatus_t cublasDsyrk(cublasHandle_t handle, cublasFillMode_t, cublasOperat
 // Implemented by the test-generated host execution of the unchanged production
 // copy_selected_matrices_kernel body. CUDA block scheduling is not modeled.
 void host_selected_copy(dim3, dim3, int, int, int, const std::uint8_t*, const double*, double*);
+#if defined(GENERATIVEQC_TEST_HOST_MATRIX_NUMERICS)
+void host_matrix_product(dim3, dim3, int, int, const double*, bool, const double*,
+                         const std::uint8_t*, double*, double, bool, int);
+void host_spin_matrix_product(dim3, dim3, int, int, int, const double*, bool, bool, const double*,
+                              bool, const std::uint8_t*, double*);
+#endif
 
 namespace generativeqc::scf::cuda_execution {
 generativeqc_status cuda_status(cudaError_t s) { return s ? GENERATIVEQC_STATUS_CUDA_ERROR : 0; }
@@ -118,20 +124,59 @@ void launch_copy_selected_matrices_kernel(dim3 grid, dim3 block, std::size_t sha
     queue.emplace_back(
         [=] { host_selected_copy(grid, block, batch, spins, n, active, source, output); });
 }
-void launch_matrix_product_kernel(dim3, dim3, std::size_t, cudaStream_t stream, std::int32_t,
-                                  std::int32_t, const double*, bool, const double*,
-                                  const std::uint8_t*, double*, double, bool transpose_right,
+void launch_matrix_product_kernel(dim3 grid, dim3 block, std::size_t, cudaStream_t stream,
+                                  std::int32_t batch, std::int32_t dimension, const double* left,
+                                  bool transpose, const double* right, const std::uint8_t* active,
+                                  double* output, double scale, bool transpose_right,
                                   std::int32_t reduction_rank) {
   assert(stream == expected_stream);
   // Ordinary matrix-owner fallbacks keep the incumbent full square product.
   assert(!transpose_right && reduction_rank == -1);
   ++natives;
+#if defined(GENERATIVEQC_TEST_HOST_MATRIX_NUMERICS)
+  queue.emplace_back([=] {
+    host_matrix_product(grid, block, batch, dimension, left, transpose, right, active, output,
+                        scale, transpose_right, reduction_rank);
+  });
+#else
+  (void)grid;
+  (void)block;
+  (void)batch;
+  (void)dimension;
+  (void)left;
+  (void)transpose;
+  (void)right;
+  (void)active;
+  (void)output;
+  (void)scale;
+#endif
 }
-void launch_spin_matrix_product_kernel(dim3, dim3, std::size_t, cudaStream_t stream, std::int32_t,
-                                       std::int32_t, std::int32_t, const double*, bool, bool,
-                                       const double*, bool, const std::uint8_t*, double*) {
+void launch_spin_matrix_product_kernel(dim3 grid, dim3 block, std::size_t, cudaStream_t stream,
+                                       std::int32_t batch, std::int32_t spins,
+                                       std::int32_t dimension, const double* left, bool left_spin,
+                                       bool transpose, const double* right, bool right_spin,
+                                       const std::uint8_t* active, double* output) {
   assert(stream == expected_stream);
   ++natives;
+#if defined(GENERATIVEQC_TEST_HOST_MATRIX_NUMERICS)
+  queue.emplace_back([=] {
+    host_spin_matrix_product(grid, block, batch, spins, dimension, left, left_spin, transpose,
+                             right, right_spin, active, output);
+  });
+#else
+  (void)grid;
+  (void)block;
+  (void)batch;
+  (void)spins;
+  (void)dimension;
+  (void)left;
+  (void)left_spin;
+  (void)transpose;
+  (void)right;
+  (void)right_spin;
+  (void)active;
+  (void)output;
+#endif
 }
 }  // namespace generativeqc::scf::cuda_execution
 

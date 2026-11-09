@@ -86,8 +86,10 @@ def prepare_dispatch_fixture(frozen: Path, output: Path) -> dict:
 #include "scf/shared_rys_weighted_z.hpp"
 #include "scf/generated_shell_task.hpp"
 #include "scf/cuda/rhf_policy.hpp"
+#include "runtime/cuda_device_facts.hpp"
 #include <cuda_runtime.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -153,7 +155,10 @@ struct PreparedDispatch {
     for metadata in old["cases"]:
         name = metadata["name"]
         cls = 12 if name == "dppp" else 5
-        case = _case_runner(metadata)
+        case = _case_runner(metadata).replace(
+            "cudaStream_t stream,bool graph) {",
+            "cudaStream_t stream,bool graph,const generativeqc::runtime::CudaTargetInfo& target) {",
+        )
         case = case.replace(
             "  const unsigned masks[]=",
             "  PreparedDispatch prepared;\n  const unsigned masks[]=",
@@ -170,10 +175,10 @@ struct PreparedDispatch {
                 positions,0.5,bounds,density,output,count,head));"""
             case = case[:start] + launch + case[end:]
             context = f'''  generativeqc::scf::cuda_policy::SharedRysXyContext {mode}_context{{}};
-  {mode}_context.sm90={mode}_context.quartet_direct=true;
+  {mode}_context.quartet_direct=true;
   {mode}_context.capability_mask=generativeqc::scf::generated::enabled_shared_rys_{"weighted_z" if weighted else "xy"}_fock_shell_class_mask();
   const auto {mode}_policy=generativeqc::scf::cuda_policy::resolve_shared_rys_xy_policy(
-      generativeqc::scf::cuda_policy::parse_shared_rys_xy_request("1","{int(weighted)}"),{mode}_context);
+      generativeqc::scf::cuda_policy::parse_shared_rys_xy_request("1","{int(weighted)}"),{mode}_context,target);
   assert({mode}_policy.active() && {mode}_policy.selects({cls}) && {mode}_policy.weighted_z()=={str(weighted).lower()});
 '''
             marker = f"  const auto {mode}_output="
@@ -212,6 +217,8 @@ struct PreparedDispatch {
 int main(int argc,char** argv) {
   assert(argc==18); // core path plus4x(RVA,size,executable PT_LOAD begin/end)
   int device=0,major=0,minor=0;CUDA(cudaGetDevice(&device));
+  generativeqc::runtime::CudaTargetInfo target{};char name[256]{};
+  CUDA(generativeqc::runtime::cuda_device_facts(device,target,name));
   CUDA(cudaDeviceGetAttribute(&major,cudaDevAttrComputeCapabilityMajor,device));
   CUDA(cudaDeviceGetAttribute(&minor,cudaDevAttrComputeCapabilityMinor,device));
   assert(major==9 && minor==0);
@@ -223,7 +230,8 @@ int main(int argc,char** argv) {
   for(bool graph:{false,true}) {
 """)
     source += [
-        f"    run_{c['name']}_{c['variant']}(stream,graph);\n" for c in old["cases"]
+        f"    run_{c['name']}_{c['variant']}(stream,graph,target);\n"
+        for c in old["cases"]
     ]
     source.append(
         '  }\nCUDA(cudaStreamDestroy(stream));std::puts("WEIGHTED PRODUCTION DISPATCH RESOURCE+ORDINARY+GRAPH+MODE-ROUNDTRIP GATES PASS");\n}\n'

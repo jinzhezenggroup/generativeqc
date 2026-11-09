@@ -14,6 +14,55 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        "runtime/loaded_provider_identity.hpp",
+        "scf/cuda/rhf_bucket_internal.hpp",
+        "scf/cuda/direct_jk_kernels.hpp",
+    ],
+)
+def test_hf_matrix_profile_remains_host_only_policy(
+    tmp_path: Path, dependency: str
+) -> None:
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    target = tmp_path / "src" / dependency
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("\n")
+    (source / "hf_matrix_profile.cpp").write_text(f'#include "{dependency}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_hf_matrix_profile dependency" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "unrelated",
+    (
+        "convergence_limits_impl.hpp",
+        "convergence_limits.hpp_impl.hpp",
+        "solver/final_state.hpp",
+    ),
+)
+def test_hf_driver_borrows_only_scalar_convergence_policy(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """Shared stopping facts do not admit solver state or adjacent implementations."""
+    source = tmp_path / "src/scf"
+    source.mkdir(parents=True)
+    (source / "convergence_limits.hpp").write_text("\n")
+    forbidden = source / unrelated
+    forbidden.parent.mkdir(parents=True, exist_ok=True)
+    forbidden.write_text("\n")
+    owner = source / "cuda_rhf.cpp"
+    owner.write_text('#include "scf/convergence_limits.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "scf/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert f"forbidden cuda_hf_driver dependency on scf/{unrelated}" in errors[0]
+
+
 @pytest.mark.parametrize("unrelated", ("rhf_graph.hpp", "direct_jk_kernels.hpp"))
 def test_hf_page_policy_cannot_acquire_execution_dependencies(
     tmp_path: Path, unrelated: str

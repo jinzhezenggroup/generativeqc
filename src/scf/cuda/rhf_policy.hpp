@@ -12,14 +12,15 @@
 
 namespace generativeqc::scf::cuda_policy {
 
-/** Strict default-off control, resolved before graph admission. */
-enum class SharedRysXyRequest { Off, On, Invalid, WeightedZOn };
+/** Strict explicit controls, with an internal capability-bound default request. */
+enum class SharedRysXyRequest { Off, On, Invalid, WeightedZOn, Auto };
 enum class SharedRysXyAdmission {
   Off,
   Active,
   Unrestricted,
   MixedPrecision,
   UnsupportedProfile,
+  UnsupportedResources,
   NonPaged,
   IncrementalJk,
   SeparateJk,
@@ -28,7 +29,7 @@ enum class SharedRysXyAdmission {
   CompensatedOutput
 };
 struct SharedRysXyContext {
-  bool unrestricted{}, mixed_precision{}, sm90{}, quartet_direct{};
+  bool unrestricted{}, mixed_precision{}, quartet_direct{};
   bool incremental_jk{}, separate_jk{}, streaming{}, persistent_eri{}, compensated_output{};
   std::uint64_t capability_mask{};
 };
@@ -47,7 +48,8 @@ SharedRysXyRequest parse_shared_rys_xy_request(const char* value) noexcept;
 SharedRysXyRequest parse_shared_rys_xy_request(const char* xy, const char* weighted_z) noexcept;
 SharedRysXyRequest shared_rys_xy_requested() noexcept;
 SharedRysXyPolicy resolve_shared_rys_xy_policy(SharedRysXyRequest request,
-                                               const SharedRysXyContext& context) noexcept;
+                                               const SharedRysXyContext& context,
+                                               const runtime::CudaTargetInfo& target) noexcept;
 const char* shared_rys_xy_admission_name(SharedRysXyAdmission admission) noexcept;
 
 /**
@@ -68,6 +70,8 @@ struct SmallHfProfitabilityProfile {
   // Compatibility evidence used only when no complete device calibration is
   // available. These values are not CUDA semantics.
   std::size_t fallback_persistent_eri_ao_limit{16};
+  /** Resident ERIs share the conservative fixed-topology target-memory budget. */
+  std::size_t maximum_persistent_eri_bytes{std::size_t{1} << 30};
   tensor::CudaMatrixProductProfile matrix{};
 };
 

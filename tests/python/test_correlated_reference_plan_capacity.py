@@ -49,14 +49,9 @@ def capacity_probe(
         "#pragma once\nusing cublasHandle_t=void*;\nusing cublasStatus_t=int;\n"
     )
     eigen_units = empty_eigen_owner_units(directory)
-    # The actual topology packer consumes this compiler-owned schedule.
-    from generativeqc_compiler.integral.direct_resident_schedule import (
-        emit_direct_resident_psss_schedule_header,
-    )
+    from _direct_schedule_test_support import write_direct_policy_headers
 
-    (directory / "generated_direct_resident_psss_schedule.cuh").write_text(
-        emit_direct_resident_psss_schedule_header()
-    )
+    write_direct_policy_headers(directory)
     driver = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
     reference = (ROOT / "src/scf/cuda/reference_export.cuh").read_text()
     diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
@@ -128,6 +123,7 @@ def capacity_probe(
         source,
         ROOT / "src/scf/cuda/rhf_bucket.cpp",
         ROOT / "src/scf/cuda/topology.cpp",
+        ROOT / "src/scf/cuda/arena.cpp",
         ROOT / "src/molecule/basis.cpp",
         *eigen_units,
     ):
@@ -209,6 +205,18 @@ def test_diis_mode_and_history_recreate_capacity_owner(capacity_probe: Path) -> 
     )
 
 
+def test_profile_resource_preflight_is_device_and_file_inert(
+    capacity_probe: Path,
+) -> None:
+    subprocess.run(
+        [str(capacity_probe), "profile-resource"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+
 def test_non_cuda_query_has_matching_noexcept_stub() -> None:
     source = (ROOT / "src/scf/rhf.cpp").read_text()
     assert (
@@ -241,6 +249,10 @@ CudaResources::~CudaResources() { if(arena_) ++destroyed; }
 RhfIterationGraphs::~RhfIterationGraphs() = default;
 }
 namespace generativeqc::scf::cuda_policy {
+SmallHfProfitabilityPolicy resolve_small_hf_profitability(
+    const runtime::CudaTargetInfo&, const SmallHfWorkload&, SmallHfProfitabilityProfile) noexcept {
+  std::terminate();
+}
 bool reuse_converged_fock_requested() noexcept { return false; }
 bool graph_native_eigensolver_override_requested() noexcept { return false; }
 bool bounded_direct_streaming_override_requested() noexcept { return false; }
@@ -254,8 +266,16 @@ bool resolve_rhf_block_convergence(RhfBlockConvergenceRequest,bool,bool,bool,boo
 }
 MixedPrecisionFockPolicy resolve_mixed_precision_fock_policy(
     std::optional<generativeqc_precision_mode>,double,double,double) noexcept { return {}; }
+DirectTileValidationPolicy resolve_direct_tile_validation_policy() noexcept {
+  std::terminate();
+}
 }
 namespace generativeqc::scf {
+generativeqc_status query_hf_cuda_target(int, runtime::CudaTargetInfo& target,
+                                       cuda_policy::HfMatrixProfileAdmission* profile) {
+  if (profile) *profile = {};
+  target = {}; return GENERATIVEQC_STATUS_SUCCESS;
+}
 using namespace cuda_execution;
 using namespace cuda_policy;
 FockBuildSpec make_hf_fock_spec(FockSpin spin,FockApproximation) {
@@ -497,6 +517,18 @@ void overflow() {
 int main(int argc,char** argv) {
   try {
     require(argc==2,"test mode"); const std::string mode=argv[1];
+    if (mode=="profile-resource") {
+      // The policy/device stand-ins terminate if queried. Neither ABI may
+      // read this path or advertise a native-only bound for an opt-in route.
+      setenv("GENERATIVEQC_HF_MATRIX_PROFILE","/not-a-profile",1);
+      std::size_t arena=17, plan=19;
+      const std::uint8_t angular[]{0,0}; const std::size_t primitives[]{3,3};
+      require(!small_hf_cuda_resource_layout(2,2,2,2,6,8,1,arena,plan),"v1 admitted profile");
+      require(!small_hf_cuda_resource_layout_v2(2,2,2,angular,primitives,2,8,1,
+          GENERATIVEQC_PRECISION_FP64,1e-10,1e-12,arena,plan),"v2 admitted profile");
+      require(arena==17 && plan==19,"refusal published a capacity");
+      return 0;
+    }
     if(mode=="accounting") accounting(); else if(mode=="warm") warm();
     else if(mode=="short") short_budget(); else if(mode=="scientific") scientific();
     else if(mode=="growth") growth(); else if(mode=="freeze") freeze();

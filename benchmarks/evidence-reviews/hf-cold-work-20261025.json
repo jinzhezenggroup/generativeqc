@@ -6,12 +6,12 @@
   "review_document": "benchmarks/results/hf-cold-work-20261025/README.md",
   "files": [
     {
-      "path": "benchmarks/results/hf-cold-work-20261025/receipts.json.xz",
+      "path": "benchmarks/results/hf-cold-work-20261025/fp64.xz",
       "family": "hf-cold-work-20261025",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete E/F samples, work counts and execution identities; accuracy failures retained separately",
-      "bytes": 219828,
-      "sha256": "68c52e1fd3274226a72e5b0cb29504d43eca83e64a2bcd3a72aa52c5982ef388"
+      "bytes": 136184,
+      "sha256": "96791917b78646c9b3ede15348bdb4e9161b3ad2a910ea7f9b260fd8e36f94f8"
     }
   ]
 }

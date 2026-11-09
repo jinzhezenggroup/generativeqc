@@ -209,6 +209,9 @@ int main() {
 def test_reducer_is_owned_by_plan_and_invalidates_hf_replay(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
+    from _direct_schedule_test_support import write_direct_policy_headers
+
+    write_direct_policy_headers(tmp_path)
     bucket = (ROOT / "src/scf/cuda/rhf_bucket.cpp").read_text()
     driver = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
     retire = _block(bucket, "if (*plan != nullptr && (*plan)->initialized &&")
@@ -349,6 +352,7 @@ int main() {
         executable,
         compile_args=(
             "-std=c++20",
+            "-I" + str(tmp_path),
             "-I" + str(ROOT / "include"),
             "-I" + str(ROOT / "src"),
         ),

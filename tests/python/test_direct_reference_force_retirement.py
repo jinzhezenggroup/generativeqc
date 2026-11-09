@@ -12,7 +12,7 @@ def test_small_hf_force_requests_skip_persistent_eri_force_consumers() -> None:
     source = (ROOT / "src/scf/cuda_rhf.cpp").read_text(encoding="utf-8")
     assert (
         "!options.compute_forces && !options.export_physical_reference && "
-        "nbf <= kPersistentEriAoLimit"
+        "host.persistent_eri"
     ) in source
     force_dispatch = source[
         source.index("if (!options.compute_forces)") : source.index(

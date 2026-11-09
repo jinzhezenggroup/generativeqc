@@ -1,5 +1,5 @@
 {
-  "benchmark_results_max_bytes": 89325568,
+  "benchmark_results_max_bytes": 89391104,
   "change_review_max_bytes": 2097152,
   "exceptions": {
     "benchmarks/results/array-api-rhf-slurm-20261011/build/configure.log": {
@@ -657,6 +657,16 @@
       "owner": "H100 frozen DB36 final fixed30 delivery",
       "reason": "Exact original180-process/720-full-EF archive parts or lossless actual result audit and manifest. Fixed30 original gates,9nonwins and all raw vectors retained; no later-source or storage-limit transfer.",
       "sha256": "54e2b44155c4fb030d36bae14d298c9dfacfc3a239898438cf4fdeed7ba4b779"
+    },
+    "benchmarks/results/hf-matrix-profile-20261109/diagnostic.log.xz": {
+      "owner": "hf-matrix-profile-20261109",
+      "reason": "Exact 1896-byte losslessly compressed Slurm 2028 diagnostic receipt for the source-bound Direct-HF matrix-profile fixtures. Preserves actual routing, independent energy/force gate outcomes, cold/warm/moved-warm work counts, loaded build IDs and copied-artifact verification. FAST_COMPILE and synthetic profile rates establish diagnostic correctness only, not release performance or a measured winner.",
+      "sha256": "7a54f49d12c0c7d9904fe49347b762536548001474f676387732575455a58526"
+    },
+    "benchmarks/results/hf-matrix-profile-20261109/diagnostic-memcheck.log.xz": {
+      "owner": "hf-matrix-profile-20261109",
+      "reason": "Exact 1712-byte losslessly compressed Slurm 2029 Compute Sanitizer receipt for the source-bound Direct-HF matrix-profile fixture. Preserves all executed profile endpoints, build IDs and the original zero-error/zero-leak summary. This admits only these frozen diagnostic bytes, not future logs or optimized performance qualification.",
+      "sha256": "6d7669f7e985288c78b67554cbce0771e1b9792a38bc871532b471b0c497d8df"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

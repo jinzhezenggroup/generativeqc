@@ -248,11 +248,23 @@ inline bool compatible_hf_bucket_options(const CudaRhfBucketPlan& plan,
          peak <= options.reference_memory_budget_bytes;
 }
 
+/** Probe through the numerical owner without adding provider dependencies to lifecycle code.
+ * One result feeds topology/resource admission and the corresponding execution. */
+generativeqc_status query_hf_cuda_target(
+    int device_id, runtime::CudaTargetInfo& target,
+    cuda_policy::HfMatrixProfileAdmission* matrix_profile = nullptr);
+
+/** Exact-stack evidence for an already queried target; creates no BLAS handle.
+ * Unknown/unsupported identity remains incomplete and cannot admit a profile. */
+cuda_policy::HfMatrixProfileContext query_hf_cuda_matrix_profile_context(
+    const runtime::CudaTargetInfo& target);
+
 /** Internal direct-HF numerical driver consumed by the bucket lifecycle owner. */
 std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(
     CudaRhfBucketPlan& plan, const cuda_execution::HostBatch& host,
     const std::vector<core::System>& systems, const ScfOptions& options, int device_id,
     bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling,
+    const runtime::CudaTargetInfo& direct_target,
     std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics = nullptr);
 
 }  // namespace generativeqc::scf

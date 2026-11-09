@@ -133,7 +133,10 @@ append the row-major `coefficients` array from the **Git-tracked**
 to `inputs/768.txt` (for example with `numpy.savetxt`, using `%.17g`)
 before invoking `vibeqc_df_occupied_probe INPUT 5 0 0 arrays.bin`. The NPZ
 is available in a clean checkout and has SHA-256
-`9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2`.
+`e165812519cc7fa9cfb26ff8a198ae73a71081d59f168f4d0ef725d473846b33`.
+The ZIP-LZMA storage-only repack preserves every original NPY byte and array;
+`inputs/768-occupied-storage.json` binds the prior container hash and all members.
+The independent checkpoint and fixed-K numerical metadata are unchanged.
 The retained input metadata identifies the independent converged checkpoint
 and exact orthogonality check. Large raw tensors and **output** density/K
 arrays, logs, binaries and detailed traces

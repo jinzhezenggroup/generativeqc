@@ -2,7 +2,8 @@
 
 `campaign.json.xz` retains the independently measured, full-precision inputs for
 11 registrations, 44 admitted CPU/CUDA spin/domain contexts and 88 paired energy
-and force products. The offline acceptance gate passes with `stale=False`:
+and force products on measured source `fbf57c111`. The following stronger gate
+passed with `stale=False` at PR source head `2a8f137e3`:
 
 ```console
 python tools/check_libxc_native_catalog.py --require-current
@@ -14,6 +15,22 @@ the campaign and preserves the preceding campaign as historical evidence. The
 capability counts, exact contexts, missing measurements and blocker reasons.
 Optional stronger `public-method` receipts remain zero; structural default-allow
 selection is unchanged and does not depend on those receipts.
+
+## Integration with later source
+
+Master `c6967d7a8` includes the subsequent Direct J/K topology, strict HF
+stationarity and exact-stack matrix-profile changes. Integrating it changes the checked native/compiler input
+identities. The generated catalog therefore reports `stale=True`, zero
+current-source observed contexts and zero admitted energy/force products. Its
+66 exact stage-demotion acknowledgements compare against the qualified
+`2a8f137e3` summary; no measured rows, source identity, binary identity or
+numerical gates are rewritten.
+
+The ordinary `python tools/check_libxc_native_catalog.py` check verifies archival
+consistency on the integrated tree. `--require-current` intentionally fails until
+a fresh source-bound native campaign qualifies that later tree. Historical CPU
+and GPU successes below are not new measurements of this integration, and do not
+establish broader domain or performance qualification.
 
 ## Measured identity and scope
 

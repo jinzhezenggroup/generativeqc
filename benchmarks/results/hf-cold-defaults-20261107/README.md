@@ -14,7 +14,7 @@ PYTHONPATH=python:. pytest -q tests/python/test_hf_cold_default_evidence.py
 
 `cohort.json` binds three distinct normal Release source/ELF images, actual
 scheduler allocations, compilation/cache/restoration receipts, and checksums of
-separate compressed per-card populations. `summary.json` is a derived reduction,
+separate compressed per-card populations. `summary.json.xz` is a derived reduction,
 not a replacement for raw measurements. Production-source fingerprints are not
 required-CI spelling checks; these identities describe immutable historical
 executable measurements.

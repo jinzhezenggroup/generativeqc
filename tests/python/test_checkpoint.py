@@ -636,6 +636,7 @@ def test_checkpoint_respects_a_feasible_current_resource_plan(
         ("GENERATIVEQC_CANONICAL_RSH_VALUES", "1"),
         ("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "1"),
         ("GENERATIVEQC_DF_COULOMB_RESPONSE", "slices"),
+        ("GENERATIVEQC_HF_MATRIX_PROFILE", "/unread/matrix-profile"),
     ],
 )
 def test_runtime_numerical_policy_changes_require_explicit_warm_restart(

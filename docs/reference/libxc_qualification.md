@@ -2,9 +2,9 @@
 
 Measured source revision: `fbf57c111c7c885efbc0cd1457e6a7732c9e3d95`.
 Retained measured source inputs: `ba63873931ccffae7d9b2cea01831028f9bcf04a9903b818da76bd1539f64d64`.
-Current checked source inputs: `ba63873931ccffae7d9b2cea01831028f9bcf04a9903b818da76bd1539f64d64`.
-Current checked native input identity: `8b1b284f5198dda7bb167f8c3980db36dda5164462f3774a745a5d62553eab93`.
-Retained evidence stale for checked inputs: `False`.
+Current checked source inputs: `52cf415e8b715839e3f445ca0a962269982c922349cdee90b8b8b3dcf25c00db`.
+Current checked native input identity: `6d8e39629573102aadd20b7015ff0ff6fc694fd86687ae9a56733b57f56f87b0`.
+Retained evidence stale for checked inputs: `True`.
 Retained executed native library SHA-256: `c2d1b725fb754e72d35ca5829ba9a067974703c6a98bc4e4cefb44ea6abc256c`.
 Independent oracle: PySCF 2.14.0 / Libxc 7.0.0.
 Structurally selectable non-curated automatic registrations: 198; registrations without a retained native campaign: 211.
@@ -24,46 +24,22 @@ Libxc capability summary (222 functionals)
 stage                qualified  ready  blocked
 graph-imported             222      0        0
 pointwise-validated        222      0        0
-compiled-cpu                11    211        0
-compiled-cuda               11    211        0
-production-domain           11    203        0
-gpu-runtime                 11      0        0
-molecular-scf               11      0        0
-forces                      11      0        0
-response                     0     11        0
-public-method                0     11        0
+compiled-cpu                 0    222       11
+compiled-cuda                0    222       11
+production-domain            0    214       11
+gpu-runtime                  0      0       11
+molecular-scf                0      0       11
+forces                       0      0       11
+response                     0      0        0
+public-method                0      0        0
 public DFT: 0/222
-explicit blockers: 0 across 0 functionals
+explicit blockers: 66 across 11 functionals
 ```
 
 | Family | Backend | Spin | Product | Qualified registrations |
 | --- | --- | --- | --- | ---: |
-| gga | cpu | polarized | energy | 5 |
-| gga | cpu | polarized | forces | 5 |
-| gga | cpu | unpolarized | energy | 5 |
-| gga | cpu | unpolarized | forces | 5 |
-| gga | cuda | polarized | energy | 5 |
-| gga | cuda | polarized | forces | 5 |
-| gga | cuda | unpolarized | energy | 5 |
-| gga | cuda | unpolarized | forces | 5 |
-| lda | cpu | polarized | energy | 3 |
-| lda | cpu | polarized | forces | 3 |
-| lda | cpu | unpolarized | energy | 3 |
-| lda | cpu | unpolarized | forces | 3 |
-| lda | cuda | polarized | energy | 3 |
-| lda | cuda | polarized | forces | 3 |
-| lda | cuda | unpolarized | energy | 3 |
-| lda | cuda | unpolarized | forces | 3 |
-| mgga | cpu | polarized | energy | 3 |
-| mgga | cpu | polarized | forces | 3 |
-| mgga | cpu | unpolarized | energy | 3 |
-| mgga | cpu | unpolarized | forces | 3 |
-| mgga | cuda | polarized | energy | 3 |
-| mgga | cuda | polarized | forces | 3 |
-| mgga | cuda | unpolarized | energy | 3 |
-| mgga | cuda | unpolarized | forces | 3 |
 
-Current-source observed backend/spin lifecycle records: 44.
+Current-source observed backend/spin lifecycle records: 0.
 Historical measurements remain in the retained campaign; stale receipts are not
 counted as current-source admitted contexts. Admitted records retain exact
 geometry, grid, precision, binary and derivative scope.
@@ -74,50 +50,6 @@ compressed machine-readable snapshot and independent numerical receipts.
 
 | Registration | Backend | Product | Qualified spin layouts |
 | --- | --- | --- | --- |
-| `GGA_C_APBE` | cpu | energy | polarized, unpolarized |
-| `GGA_C_APBE` | cpu | forces | polarized, unpolarized |
-| `GGA_C_APBE` | cuda | energy | polarized, unpolarized |
-| `GGA_C_APBE` | cuda | forces | polarized, unpolarized |
-| `GGA_X_APBE` | cpu | energy | polarized, unpolarized |
-| `GGA_X_APBE` | cpu | forces | polarized, unpolarized |
-| `GGA_X_APBE` | cuda | energy | polarized, unpolarized |
-| `GGA_X_APBE` | cuda | forces | polarized, unpolarized |
-| `GGA_X_B86` | cpu | energy | polarized, unpolarized |
-| `GGA_X_B86` | cpu | forces | polarized, unpolarized |
-| `GGA_X_B86` | cuda | energy | polarized, unpolarized |
-| `GGA_X_B86` | cuda | forces | polarized, unpolarized |
-| `GGA_X_PBE_SOL` | cpu | energy | polarized, unpolarized |
-| `GGA_X_PBE_SOL` | cpu | forces | polarized, unpolarized |
-| `GGA_X_PBE_SOL` | cuda | energy | polarized, unpolarized |
-| `GGA_X_PBE_SOL` | cuda | forces | polarized, unpolarized |
-| `GGA_X_RPBE` | cpu | energy | polarized, unpolarized |
-| `GGA_X_RPBE` | cpu | forces | polarized, unpolarized |
-| `GGA_X_RPBE` | cuda | energy | polarized, unpolarized |
-| `GGA_X_RPBE` | cuda | forces | polarized, unpolarized |
-| `LDA_C_CHACHIYO` | cpu | energy | polarized, unpolarized |
-| `LDA_C_CHACHIYO` | cpu | forces | polarized, unpolarized |
-| `LDA_C_CHACHIYO` | cuda | energy | polarized, unpolarized |
-| `LDA_C_CHACHIYO` | cuda | forces | polarized, unpolarized |
-| `LDA_C_PZ_MOD` | cpu | energy | polarized, unpolarized |
-| `LDA_C_PZ_MOD` | cpu | forces | polarized, unpolarized |
-| `LDA_C_PZ_MOD` | cuda | energy | polarized, unpolarized |
-| `LDA_C_PZ_MOD` | cuda | forces | polarized, unpolarized |
-| `LDA_C_VWN_4` | cpu | energy | polarized, unpolarized |
-| `LDA_C_VWN_4` | cpu | forces | polarized, unpolarized |
-| `LDA_C_VWN_4` | cuda | energy | polarized, unpolarized |
-| `LDA_C_VWN_4` | cuda | forces | polarized, unpolarized |
-| `MGGA_C_TPSS` | cpu | energy | polarized, unpolarized |
-| `MGGA_C_TPSS` | cpu | forces | polarized, unpolarized |
-| `MGGA_C_TPSS` | cuda | energy | polarized, unpolarized |
-| `MGGA_C_TPSS` | cuda | forces | polarized, unpolarized |
-| `MGGA_X_GVT4` | cpu | energy | polarized, unpolarized |
-| `MGGA_X_GVT4` | cpu | forces | polarized, unpolarized |
-| `MGGA_X_GVT4` | cuda | energy | polarized, unpolarized |
-| `MGGA_X_GVT4` | cuda | forces | polarized, unpolarized |
-| `MGGA_X_LTA` | cpu | energy | polarized, unpolarized |
-| `MGGA_X_LTA` | cpu | forces | polarized, unpolarized |
-| `MGGA_X_LTA` | cuda | energy | polarized, unpolarized |
-| `MGGA_X_LTA` | cuda | forces | polarized, unpolarized |
 
 ## Explicit blockers
 
@@ -129,6 +61,17 @@ compressed machine-readable snapshot and independent numerical receipts.
 - `MGGA_X_JK`: unsupported-ingredients:laplacian
 - `MGGA_X_MK00`: unsupported-ingredients:laplacian
 - `MGGA_X_RLDA`: unsupported-ingredients:laplacian
+- `GGA_C_APBE`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
+- `GGA_X_APBE`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
+- `GGA_X_B86`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
+- `GGA_X_PBE_SOL`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
+- `GGA_X_RPBE`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
+- `LDA_C_CHACHIYO`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
+- `LDA_C_PZ_MOD`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
+- `LDA_C_VWN_4`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
+- `MGGA_C_TPSS`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
+- `MGGA_X_GVT4`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
+- `MGGA_X_LTA`: stale native/compiler/Graph/domain/ABI inputs; rerun qualification
 
 Physical empty-spin particle-birth continuation remains excluded;
 a successful molecular force measurement does not qualify that domain.
@@ -140,12 +83,12 @@ Libxc capability changes
 added functionals: none
 removed functionals: none
 identity changes: none
-promotions:
+promotions: none
+demotions:
   compiled-cpu: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
   compiled-cuda: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
   production-domain: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
   gpu-runtime: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
   molecular-scf: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
   forces: GGA_C_APBE, GGA_X_APBE, GGA_X_B86, GGA_X_PBE_SOL, GGA_X_RPBE, LDA_C_CHACHIYO, LDA_C_PZ_MOD, LDA_C_VWN_4, MGGA_C_TPSS, MGGA_X_GVT4, MGGA_X_LTA
-demotions: none
 ```

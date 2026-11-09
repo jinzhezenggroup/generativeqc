@@ -4,6 +4,119 @@ GenerativeQC performance work must optimize scientific work and data movement, n
 only kernel throughput or peak scratch size. This document records cross-cutting
 rules for CUDA, generated integrals, response, DFT, and post-HF execution.
 
+## Direct J/K policy ownership
+
+The [tuning inventory](../../manifests/maintenance/direct_jk_tuning_inventory.json)
+distinguishes retained bounds, migrated policy owners and pending qualification.
+Persistent-ERI admission belongs to `SmallHfProfitabilityProfile`: the no-calibration
+AO crossover remains 16, and resident ERI bytes are capped by the profile ceiling
+and 1/32 of known target memory (at most 256 MiB for an unknown target).
+This is resource admission, not a screened-quartet/reuse profitability model.
+The bucket lifecycle queries target facts once and passes them to both packing
+and execution. Packing records the resolved admission in immutable topology
+identity and prepares Cartesian transforms when resident storage is rejected.
+Resource-only small-HF queries remain device-inert and use the unknown-target
+fallback; their admitted route agrees with their arena's resident-ERI storage.
+They refuse their native-only bound when `GENERATIVEQC_HF_MATRIX_PROFILE` names
+a profile, without reading that file or querying a device/provider.
+Python resource and restart identities preserve the selected profile path without
+reading it during dry runs; native preparation validates the contents and retains
+the admitted record in capture identity. Historical checkpoints missing this
+control remain eligible for explicit warm import, not an exact restart.
+
+`DirectPersistentScheduleProfile` owns the persistent force/Fock angular-order
+domains emitted with the compiler's resident schedule header. Allocation, queue
+reset and kernel dispatch consume that same generated definition. The default
+domains remain seven force orders and six Fock orders. Smaller compiler profiles
+retain fixed-grid workers for the remaining orders; they are testable build
+inputs, not shipped runtime autotune winners. The 1024-task-per-shell-pair staging
+bound remains an explicit retained bounded-schedule choice.
+
+These ownership and resource contracts do not establish a new schedule winner or
+close device qualification. Persistent-ERI profitability still needs actual
+screened-work/reuse inputs and complete endpoint storage/setup accounting;
+angular queue-domain profiles remain compiler inputs. Any promotion must
+retain independent energy/force gates and matched cold/warm/moved-warm RHF/UHF
+endpoint timings with semantic work counts. Synthetic-target host tests prove
+legality and cache behavior, not GPU performance.
+
+### Opt-in FP64 matrix calibration
+
+`GENERATIVEQC_HF_MATRIX_PROFILE` selects a trusted local calibration file for
+ordinary CUDA Direct-HF preparation. No measured winner is shipped or enabled
+automatically. `HfMatrixProfile` is the canonical native record: admission
+requires an exact source identity, NVIDIA provider, driver/runtime/toolkit and
+cuBLAS versions, release/fast-compile mode, loaded runtime/driver/cuBLAS ELF
+build IDs (including the native library, binding compiler/linker options), and
+the complete target resource record. No GPU name, molecule,
+benchmark identity or inferred peak throughput selects a recipe. Unsupported
+identity observers (including unauthenticated import trampolines) retain the
+incumbent. Matrix-only/physical-reference exporters retain their separate
+provider-initialization and capacity contracts and do not consume this profile.
+
+The strict whitespace-separated v1 record has the following ordered fields:
+
+```text
+generativeqc-hf-matrix-profile-v1
+source_identity <64 lowercase hexadecimal characters>
+provider nvidia
+versions <driver> <runtime> <toolkit> <cuBLAS major> <minor> <patch>
+build_mode <release 0|1> <fast-compile 0|1>
+native_build_id <loaded GenerativeQC ELF build ID>
+runtime_build_id <loaded ELF build ID>
+driver_build_id <loaded ELF build ID>
+cublas_build_id <loaded ELF build ID>
+target <major> <minor> <warp> <threads/block> <threads/SM> <blocks/SM> <registers/SM> <shared/block> <opt-in shared/block> <shared/SM> <SMs> <global bytes> <FP32:FP64 ratio> <clock kHz> <memory clock kHz> <bus bits>
+bounds <minimum dimension> <maximum dimension> <minimum matrices> <maximum matrices>
+evidence_sha256 <64 lowercase hexadecimal characters>
+native <launch ns> <effective FP64 FLOPs/ns> <effective bytes/ns>
+cublas <launch ns> <effective FP64 FLOPs/ns> <effective bytes/ns>
+provider_setup_nanoseconds <complete first-use setup ns>
+end
+```
+
+The native qualification test uses
+`query_hf_cuda_matrix_profile_context` to obtain execution-owned stack facts
+without constructing a BLAS handle. Bounds must cover the actual AO dimension
+and both physical-system count and physical-system count times spin count;
+they must not extrapolate measured
+rates beyond their qualified workload domain. Six primitive rates must be
+positive and finite; setup must be finite and nonnegative. The existing
+`launch + max(FLOPs/rate, bytes/rate)` model conservatively charges the **entire**
+provider setup cost rather than guessing an amortization from the maximum SCF
+iteration count. Nonfinite estimates retain the no-profile threshold.
+
+Admission validates structure and compatibility, not the truth of a measurement:
+the evidence digest identifies the retained external qualification artifact,
+not an authentication signature or an automatically verified speed claim.
+Missing, oversized (>8192 bytes), incomplete, invalid or incompatible files
+fail closed. Files are reread before every preparation/replay; accepted profile
+contents and provenance participate in immutable topology identity. Packing
+resolves the matrix admission once; arena planning, optional context creation
+and the immutable execution binding consume that same decision. Context/resource
+failure retains the existing explicit native retry. Without an admitted profile,
+the native/cuBLAS dimension crossover remains 17.
+
+The opt-in Slurm-only `generativeqc_hf_matrix_profile_cuda_tests` target checks
+real preparation, native/cuBLAS bindings, plan invalidation, RHF/UHF batches,
+energy-only and energy/force cold/warm/moved-warm endpoints against independent
+PySCF fixtures. It uses **synthetic ordering inputs**, not measured tuning
+winners; its diagnostics report endpoint wall time, actual iterations/Fock
+builds and owned device bytes, not a complete memory-peak or speedup claim.
+Run it through the same finite Slurm allocation as the queue test below.
+
+The native `generativeqc_direct_persistent_queue_cuda_tests` target checks actual
+device queue resets, optional FP32 buffers and guard words against the emitted
+profile. Run it only inside a compatible Slurm allocation with a finite time
+limit, for example:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:03:00 build/generativeqc_direct_persistent_queue_cuda_tests
+```
+
+This storage test does not replace the complete-endpoint qualification above.
+
 ## README production comparisons
 
 The README can report **default-grid endpoint latency** when that is the

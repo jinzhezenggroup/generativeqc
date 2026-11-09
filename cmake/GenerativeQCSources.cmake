@@ -159,6 +159,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/explicit_integral_backend.cpp
     src/scf/rhf.cpp
     src/scf/cuda/df_source_domain.cpp
+    src/scf/cuda/hf_matrix_profile.cpp
     src/scf/cuda/rhf_policy.cpp)
 
   if(GENERATIVEQC_ENABLE_CUDA)

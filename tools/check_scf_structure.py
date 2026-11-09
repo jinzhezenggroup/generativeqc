@@ -42,6 +42,9 @@ SOURCE_EXACT_ALLOWED = {
     "scf/cuda_rhf.cpp": (
         "scf/shared_rys_weighted_z.hpp",
         "scf/rhf_block_convergence_policy.hpp",
+        # Resolve immutable owner facts before sharing admission with both
+        # convergence consumers; this leaf exposes no solver/provider state.
+        "scf/convergence_limits.hpp",
     ),
     # Optional DIIS counters share CUDA-free size/enablement/readback metadata.
     # This header has no solver, provider or mutable device-owner dependency.
@@ -121,6 +124,7 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
         "scf/cuda/eigensolver_types.",
         "scf/cuda/launch_geometry.",
         "scf/cuda/rhf_policy.hpp",
+        "scf/cuda/hf_matrix_profile.hpp",
         "scf/cuda_batch.hpp",
         "scf/direct_task_layout.hpp",
         "scf/generated_shell_task.hpp",
@@ -706,6 +710,15 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
 )
 CUDA_MODULES["cuda_hf_bounded_page_policy"] = ("hf_bounded_page_policy",)
 CUDA_ALLOWED["cuda_hf_bounded_page_policy"] = ("scf/cuda/rhf_policy.hpp",)
+# Calibration parsing and compatibility are host-only policy. Runtime stack
+# observation stays in the numerical owner, not this leaf or the host packer.
+CUDA_MODULES["cuda_hf_matrix_profile"] = ("hf_matrix_profile",)
+CUDA_ALLOWED["cuda_hf_matrix_profile"] = (
+    "scf/cuda/hf_matrix_profile.",
+    "runtime/cuda_provider.hpp",
+    "runtime/cuda_target_info.hpp",
+    "tensor/cuda_matrix_product_admission.hpp",
+)
 CUDA_MODULES["cuda_hf_graph"] = ("rhf_graph",)
 CUDA_ALLOWED["cuda_hf_graph"] = (
     "scf/provider_initialization_teardown.hpp",
@@ -767,6 +780,9 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "runtime/df_progress_trace.hpp",
     "runtime/cuda_component_trace.hpp",
     "runtime/cuda_device_facts.hpp",
+    # Exact loaded-object metadata is observed before preparing an opt-in
+    # calibration. Lifecycle/planning owners may consume only its value record.
+    "runtime/loaded_provider_identity.hpp",
     "runtime/resource_cuda.cuh",
     "runtime/residency_cuda.cuh",
     "runtime/resource_usage.hpp",

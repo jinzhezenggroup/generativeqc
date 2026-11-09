@@ -10,6 +10,7 @@ from statistics import median
 
 import numpy as np
 
+from benchmarks._exact_fp64_evidence import load
 from benchmarks._retention import raw_output_path
 from benchmarks.readme_defaults_accuracy import errors
 
@@ -20,6 +21,9 @@ CANDIDATE = "fba34e9192edf0ea0d5baf6e3cd1f0b9ab14dc5d"
 
 def read(name: str) -> object:
     """Decode full receipts without rewriting their original identities."""
+    if name in ("endpoints.json.xz", "moved.json.xz"):
+        _, files = load(ROOT)
+        return json.loads(files[name.removesuffix(".xz")])
     return json.loads(lzma.decompress((ROOT / name).read_bytes()))
 
 

@@ -125,10 +125,12 @@
     "src/scf/cuda_rhf.cpp": {
       "classification": "diagnostic",
       "contract": "src/scf/provider_initialization.hpp",
-      "reason": "The two create-symbol addresses authenticate the actually loaded BLAS/solver objects for explicit provider-initialization provenance only. They execute no vendor call. Matrix context setup belongs to CudaResources; provider admission belongs to shared Tensor policy and solver context need follows the selected eigensystem capability.",
+      "reason": "Provider provenance observation only: create-symbol addresses authenticate the loaded BLAS/solver objects for explicit initialization, three cuBLAS property queries read the version, and one GEMM symbol address authenticates the implementation identity for opt-in HfMatrixProfile admission. No numerical vendor operation is submitted here. Exact reference counts remain frozen; matrix context setup belongs to CudaResources, provider admission to shared Tensor policy and eigensystem capability.",
       "references": {
         "cublasCreate": 1,
-        "cusolverDnCreate": 1
+        "cusolverDnCreate": 1,
+        "cublasGetProperty": 3,
+        "cublasDgemm": 1
       }
     },
     "src/solver/cuda/cusolver_compat.hpp": {

@@ -63,6 +63,7 @@ int main() {
         if (std::strcmp(name, full.name) ||
             std::memcmp(expected_values, actual_values, sizeof(expected_values)))
           throw std::runtime_error("device facts differ from complete CUDA property query");
+        std::printf("device=%d name=%s fp32_fp64_ratio=%d\n", device, name, actual.fp32_fp64_ratio);
       }
     }
     CudaTargetInfo invalid{};
