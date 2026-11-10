@@ -244,6 +244,10 @@ capability authorities, serialization, and status handling.
 - [generativeqc_calculation_execute_density_v1](#native-c-generativeqc-calculation-execute-density-v1)
 - [generativeqc_ks_batch_copy_density_v1](#native-c-generativeqc-ks-batch-copy-density-v1)
 - [generativeqc_system_position_integrals_cpu_v1](#native-c-generativeqc-system-position-integrals-cpu-v1)
+- [generativeqc_saddle_evaluator_v1](#native-c-generativeqc-saddle-evaluator-v1)
+- [generativeqc_saddle_progress_v1](#native-c-generativeqc-saddle-progress-v1)
+- [generativeqc_saddle_cancellation_v1](#native-c-generativeqc-saddle-cancellation-v1)
+- [generativeqc_saddle_correct_v1](#native-c-generativeqc-saddle-correct-v1)
 
 (native-c-generativeqc-ks-options-version)=
 ## generativeqc_ks_options_version
@@ -6540,3 +6544,126 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_position_integrals_cpu_
 **Execution.** Explicit synchronous CPU FP64 Gaussian analysis; no SCF or ERIs.
 
 **Units.** Bohr; public Cartesian or real-spherical AO ordering and normalization.
+
+(native-c-generativeqc-saddle-evaluator-v1)=
+## generativeqc_saddle_evaluator_v1
+
+Source: [saddle.h](../../include/generativeqc/saddle.h)
+
+```cpp
+typedef int ( * generativeqc_saddle_evaluator_v1 ) ( void * user , uint32_t stage , const double * coordinates , size_t count , double * energy , double * gradient , double * hessian ) ;
+```
+
+**Behavior.** Supply one requested derivative stage of a fixed model.
+
+**Inputs.** user is the caller's borrowed context; coordinates has count finite Bohr
+values. stage=0 requests energy/gradient and stage=1 requests a raw Hessian.
+
+**Outputs.** Only the requested output pointers are nonnull. Write one energy and
+count gradient values for stage=0, or count*count row-major Hessian values for
+stage=1. Return zero only when the requested work is complete and valid.
+
+**Lifetime.** All buffers are borrowed until callback return; retain none of them.
+
+**Errors.** Nonzero terminates with an explicit derivative-stage failure receipt.
+Never throw through a C callback or consume an unconverged electronic state.
+
+**Execution.** Synchronous CPU callback; model/state and callback memory are owned
+by the caller and excluded from the optimizer's numerical capacity bound.
+
+**Units.** Hartree, Bohr, Hartree/Bohr and Hartree/Bohr^2; gradients are not forces.
+
+(native-c-generativeqc-saddle-progress-v1)=
+## generativeqc_saddle_progress_v1
+
+Source: [saddle.h](../../include/generativeqc/saddle.h)
+
+```cpp
+typedef int ( * generativeqc_saddle_progress_v1 ) ( void * user , const generativeqc_saddle_receipt_v1 * receipt , const double * coordinates , size_t count ) ;
+```
+
+**Behavior.** Observe initial, accepted/rejected and fresh-final states.
+
+**Inputs.** user is the caller's context; receipt and count coordinates describe
+the last fully accepted state, not an unaccepted trial geometry.
+
+**Outputs.** Return zero to continue or nonzero to request cancellation.
+
+**Lifetime.** Borrowed immutable observation, valid only until callback return.
+
+**Errors.** Do not throw. Nonzero cancels before further derivative work and clears
+stationary verification, including when observing the final state.
+
+**Execution.** Synchronous on the calling thread; observations do not themselves
+consume an optimizer attempt or a derivative evaluation.
+
+**Units.** Coordinates Bohr; receipt units match generativeqc_saddle_correct_v1.
+
+(native-c-generativeqc-saddle-cancellation-v1)=
+## generativeqc_saddle_cancellation_v1
+
+Source: [saddle.h](../../include/generativeqc/saddle.h)
+
+```cpp
+typedef int ( * generativeqc_saddle_cancellation_v1 ) ( void * user ) ;
+```
+
+**Behavior.** Check whether the caller requests cancellation.
+
+**Inputs.** user is the caller's borrowed opaque context, which may be NULL.
+
+**Outputs.** Return nonzero to cancel or zero to continue.
+
+**Lifetime.** No context is retained after the synchronous optimizer call.
+
+**Errors.** Do not throw; cancellation is not successful convergence.
+
+**Execution.** Checked before derivative work and after progress observations.
+
+**Units.** No physical units.
+
+(native-c-generativeqc-saddle-correct-v1)=
+## generativeqc_saddle_correct_v1
+
+Source: [saddle.h](../../include/generativeqc/saddle.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_saddle_correct_v1 ( const generativeqc_saddle_options_v1 * options , const double * initial_coordinates , size_t coordinate_count , const double * initial_mode , generativeqc_saddle_evaluator_v1 evaluator , generativeqc_saddle_progress_v1 progress , generativeqc_saddle_cancellation_v1 cancelled , void * user , generativeqc_saddle_receipt_v1 * receipt , double * coordinates , double * gradient , double * hessian , double * mode , double * curvatures , char * detail , size_t detail_capacity ) ;
+```
+
+**Behavior.** Execute the native local first-order-saddle corrector with exact initial,
+accepted-step and final Hessians. Every accepted/rejected trial consumes one attempt
+from max_attempts<=100; initial preparation and final verification are separate calls.
+A nonstationary input requires an already negative target mode, not minimum escape.
+
+**Inputs.** Initialize options and receipt with sizeof(type) and GENERATIVEQC_ABI_VERSION.
+All controls are explicit, finite and positive; coordinate triples are finite Bohr.
+project_rigid_motions is zero or one. The optional initial_mode has count values.
+All numerical output pointers and detail are required and must not overlap inputs
+or one another. coordinate_count<=max_coordinates<=300. detail_capacity>=1.
+evaluator is required; progress and cancelled may be NULL. Callbacks bind one fixed
+physical model/state policy; this mathematical owner does not establish their chemistry.
+
+**Outputs.** Receipt distinguishes all termination reasons and first-order index, preserving
+the last fully accepted geometry, gradient and raw Hessian on algorithm failure. Modes
+and curvatures refer to the explicitly projected vibrational space when requested;
+no small vibrational eigenvalue is deleted. Only active_modes curvatures are written.
+A successful C call does not itself mean optimizer convergence; inspect receipt.status
+and stationary_verified. detail is NUL terminated. Initial failure has no valid state.
+
+**Lifetime.** All input/output and callback buffers are borrowed for this synchronous call.
+No pointer is retained. Callbacks must not retain temporary coordinates or receipts.
+
+**Errors.** Invalid controls, dimensions or ABI reject before derivative callbacks and
+preserve numerical outputs/receipt. Capacity refusal returns RESOURCE_LIMIT. Algorithm
+failures return SUCCESS with an explicit failure receipt and last-valid-state outputs.
+
+**Execution.** Synchronous CPU-only native optimization and shared symmetric eigensolver.
+No SCF, oracle, finite differences, external optimizer or implicit lower-level stage is
+launched. maximum_numeric_bytes bounds this owner, excluding callback/provider memory.
+RMS denominators are 3N, with no implicit rigid alignment. Cancellation has no success
+semantics. Serialize calls sharing callback resources.
+
+**Units.** Energy Hartree, coordinates/trust radii Bohr, gradients Hartree/Bohr, raw Hessians
+Hartree/Bohr^2; displacement convergence controls and receipts are Angstrom. Curvatures
+are unweighted Cartesian vibrational curvatures, not mass-weighted frequencies.

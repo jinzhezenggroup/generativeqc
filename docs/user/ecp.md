@@ -85,6 +85,11 @@ finite absolute-error acceptance predicate. Generated host/device checks reject
 nonfinite inputs and accept equality at the unchanged value/derivative limits.
 The HF resource inventory reads the same refined-grid dimensions. Raw exports
 still use caller-selected grids; only complete-method execution applies this gate.
+CPU raw diagnostics accept 16–1536 radial and 8–192 polar points. CUDA raw
+diagnostics retain 16–512 radial and 8–96 polar points. These larger CPU
+diagnostic limits do not change complete-method SCF/force quadrature, its
+acceptance tolerances, or Hessian admission. A denser raw matrix is not a
+replacement for the Hamiltonian used by a converged electronic state.
 
 The CUDA adapter retains allocation, launches, indexing, symmetry/physical-atom
 scatter, shared basis expansion metadata and failure handling. It is classified

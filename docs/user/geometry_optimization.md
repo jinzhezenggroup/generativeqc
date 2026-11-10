@@ -79,3 +79,48 @@ Conventional CCSD(T) forces retain their [qualified AO / closed-shell domain]
 [CUDA/FP64 response model](../developer/df_ccsdt_gradient.md).
 Unrestricted CCSD(T) energy availability does *not* imply unrestricted
 analytic nuclear forces.
+
+## Native saddle callback API
+
+The installed C SDK separately exports `generativeqc_saddle_correct_v1` from
+`generativeqc/saddle.h`. This bounded local eigenvector-following owner accepts
+caller-supplied energy/gradient and raw-Hessian callbacks; it does not provide
+a molecular TS task or extend the method domains of `generativeqc optimize`.
+The caller must bind one qualified physical model, basis, grid and electronic
+state policy across all geometries. No external optimizer, reference engine,
+lower-level preliminary method or displaced production derivative is launched
+by the corrector.
+
+Initialize both descriptors with `sizeof(type)` and `GENERATIVEQC_ABI_VERSION`.
+All options are explicit. The reference convergence controls are energy
+change `1e-6` Hartree, gradient component RMS `3e-4` and maximum `4.5e-4`
+Hartree/Bohr, displacement component RMS `1.2e-3` and maximum `1.8e-3`
+Angstrom. Both RMS denominators are `3N`; displacements use unaligned Cartesian
+coordinates. Coordinates and trust radii are Bohr. Every accepted or rejected
+trial consumes one of at most 100 attempts. Initial preparation and fresh
+final energy/gradient/Hessian verification count separately as derivative work.
+
+Set `project_rigid_motions=1` to remove geometry-derived translations and
+rotations before curvature analysis and stepping. Linear molecules have five
+rigid modes, nonlinear molecules six; a rank change fails explicitly.
+No small vibrational eigenvalue is discarded. The returned curvatures are
+unweighted Cartesian values, not harmonic frequencies; the raw final Hessian
+remains unprojected. Near-zero active curvatures block first-order classification.
+
+Inspect both the C status and the optimizer receipt. A successful C call can
+report failed optimization, another stationary index, or ambiguous curvature.
+Only `GENERATIVEQC_SADDLE_FIRST_ORDER` with `stationary_verified=1` reports a
+verified mathematical first-order saddle. The receipt and caller-owned outputs
+preserve the last fully accepted state on derivative, tracking, trust-radius
+or attempt failure. Failed initial preparation has no valid state. The optional
+progress callback observes accepted-state geometry even after a rejected trial;
+returning nonzero requests cancellation before more derivatives. Cancellation
+clears stationary verification, including at the final observation.
+
+`maximum_numeric_bytes` bounds the native optimizer's numerical storage, not
+callback/provider memory or process RSS. Budget, dimension, ABI and control
+rejections occur before derivative callbacks and preserve output buffers.
+See the {ref}`native contract reference <native-c-generativeqc-saddle-correct-v1>`
+for callback lifetimes, output capacities and failure semantics. This callback
+API is algorithm infrastructure, not independent molecular or Ni/ECP TS
+qualification.

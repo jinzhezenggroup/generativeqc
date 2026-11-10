@@ -22,13 +22,112 @@ static std::vector<double> polynomial_hessian(std::span<const double> coordinate
   return {-2 + 3 * coordinates[0] * coordinates[0], 0, 0, 0, 2, 0, 0, 0, 4};
 }
 
+static void molecular_rigid_projection() {
+  const std::vector<double> geometry{-1, 0, 0, 0, 0, 0, 1, 0, 0};
+  std::vector<double> hessian(81);
+  const double reaction[] = {-1, 2, -1}, stretch[] = {-1, 0, 1};
+  for (std::size_t first = 0; first < 3; ++first)
+    for (std::size_t second = 0; second < 3; ++second)
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        hessian[(3 * first + axis) * 9 + 3 * second + axis] =
+            axis == 0 ? stretch[first] * stretch[second] - reaction[first] * reaction[second]
+                      : reaction[first] * reaction[second];
+  saddle::Options controls;
+  controls.project_rigid_motions = true;
+  const auto stationary = [](std::span<const double> coordinates) {
+    return saddle::Evaluation{0, std::vector<double>(coordinates.size())};
+  };
+  auto result = saddle::correct(geometry, controls, stationary, [&](auto) { return hessian; });
+  require(result.status == saddle::Status::first_order_saddle && result.rigid_modes == 5 &&
+              result.curvatures.size() == 4 && result.near_zero_curvatures == 0,
+          "linear molecular saddle lost its physical rigid-motion count");
+  const double expected[] = {-6, 2, 6, 6};
+  for (std::size_t mode = 0; mode < 4; ++mode)
+    require(std::abs(result.curvatures[mode] - expected[mode]) < 1e-12,
+            "rigid projection changed an independent vibrational curvature");
+  const double angle = 0.713, cosine = std::cos(angle), sine = std::sin(angle);
+  const double axis[] = {1 / std::sqrt(14.0), 2 / std::sqrt(14.0), 3 / std::sqrt(14.0)};
+  double rotation[3][3];
+  for (std::size_t row = 0; row < 3; ++row)
+    for (std::size_t column = 0; column < 3; ++column) {
+      rotation[row][column] =
+          (row == column ? cosine : 0) + (1 - cosine) * axis[row] * axis[column];
+      if (row != column)
+        rotation[row][column] += ((column + 1) % 3 == row ? 1 : -1) * sine * axis[3 - row - column];
+    }
+  std::vector<double> rotated(9), rotated_hessian(81);
+  for (std::size_t atom = 0; atom < 3; ++atom)
+    for (std::size_t row = 0; row < 3; ++row) {
+      rotated[3 * atom + row] = 7.0 + static_cast<double>(row);
+      for (std::size_t inner = 0; inner < 3; ++inner)
+        rotated[3 * atom + row] += rotation[row][inner] * geometry[3 * atom + inner];
+    }
+  for (std::size_t first = 0; first < 3; ++first)
+    for (std::size_t second = 0; second < 3; ++second)
+      for (std::size_t row = 0; row < 3; ++row)
+        for (std::size_t column = 0; column < 3; ++column)
+          for (std::size_t inner = 0; inner < 3; ++inner)
+            for (std::size_t other = 0; other < 3; ++other)
+              rotated_hessian[(3 * first + row) * 9 + 3 * second + column] +=
+                  rotation[row][inner] * hessian[(3 * first + inner) * 9 + 3 * second + other] *
+                  rotation[column][other];
+  result = saddle::correct(rotated, controls, stationary, [&](auto) { return rotated_hessian; });
+  require(result.status == saddle::Status::first_order_saddle && result.rigid_modes == 5,
+          "finite rotation/translation changed molecular saddle classification");
+  for (std::size_t mode = 0; mode < 4; ++mode)
+    require(std::abs(result.curvatures[mode] - expected[mode]) < 1e-12,
+            "vibrational spectrum depends on the Cartesian frame");
+  for (std::size_t first = 0; first < 3; ++first)
+    for (std::size_t second = 0; second < 3; ++second)
+      hessian[(3 * first) * 9 + 3 * second] += 2 * reaction[first] * reaction[second];
+  result = saddle::correct(geometry, controls, stationary, [&](auto) { return hessian; });
+  require(result.status == saddle::Status::stationary_other_index && result.rigid_modes == 5 &&
+              result.negative_curvatures == 0,
+          "rigid projection manufactured a negative molecular curvature");
+}
+
 int main() {
+  molecular_rigid_projection();
   saddle::Options controls;
   const std::vector<double> initial{0.4, -0.3, 0.2};
   auto result = saddle::correct(initial, controls, polynomial, polynomial_hessian);
   require(result.status == saddle::Status::first_order_saddle, "known saddle did not converge");
   require(result.stationary_verified && result.negative_curvatures == 1,
           "missing saddle classification");
+  require(result.hessian == polynomial_hessian(result.coordinates),
+          "raw final Hessian was not retained at the final geometry");
+  bool cancel_from_progress = false;
+  auto interrupted = saddle::correct(
+      initial, controls, polynomial, polynomial_hessian, [&] { return cancel_from_progress; },
+      [&](const saddle::Result& current) {
+        require(
+            current.has_valid_state && current.hessian == polynomial_hessian(current.coordinates),
+            "progress observation did not retain a coherent accepted state");
+        cancel_from_progress = true;
+      });
+  require(interrupted.status == saddle::Status::cancelled && !interrupted.stationary_verified &&
+              interrupted.has_valid_state && interrupted.coordinates == initial &&
+              interrupted.energy_gradient_calls == 1 && interrupted.hessian_calls == 1,
+          "progress cancellation consumed additional derivative work");
+  interrupted =
+      saddle::correct(initial, controls, polynomial, polynomial_hessian, {},
+                      [](const saddle::Result&) { throw std::runtime_error("observer failure"); });
+  require(interrupted.status == saddle::Status::cancelled && interrupted.has_valid_state &&
+              interrupted.failure == "observer failure" && !interrupted.stationary_verified,
+          "progress exception lost the last state or reported success");
+  interrupted = saddle::correct(initial, controls, polynomial, polynomial_hessian, {},
+                                [](const saddle::Result&) { throw 42; });
+  require(interrupted.status == saddle::Status::cancelled && interrupted.has_valid_state &&
+              !interrupted.stationary_verified,
+          "nonstandard observer exception escaped without a failure state");
+  interrupted = saddle::correct(std::vector<double>{0, 0, 0}, controls, polynomial,
+                                polynomial_hessian, {}, [](const saddle::Result& current) {
+                                  if (current.stationary_verified)
+                                    throw std::runtime_error("final observer failure");
+                                });
+  require(interrupted.status == saddle::Status::cancelled && !interrupted.stationary_verified &&
+              interrupted.has_valid_state,
+          "final observer failure retained success semantics");
   require(
       result.gradient_rms <= controls.gradient_rms && result.gradient_max <= controls.gradient_max,
       "gradient criteria failed");

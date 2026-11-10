@@ -109,6 +109,7 @@ macro(generativeqc_add_native_tests)
                              "${CMAKE_CURRENT_SOURCE_DIR}/include")
   generativeqc_native_test(generativeqc_saddle_optimizer_tests
                        tests/native/test_saddle_optimizer.cpp NO_GENERATIVEQC)
+  generativeqc_native_test(generativeqc_saddle_api_tests tests/native/test_saddle_api.cpp)
   generativeqc_native_test(generativeqc_ks_mixed_warmup_tests
                        tests/native/test_ks_mixed_warmup.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_cuda_value_work_tests

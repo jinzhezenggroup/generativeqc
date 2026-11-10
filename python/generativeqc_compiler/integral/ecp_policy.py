@@ -12,6 +12,8 @@ REFINED_RADIAL_POINTS = 224
 REFINED_POLAR_POINTS = 44
 MATRIX_ABS_TOLERANCE = 2e-9
 DERIVATIVE_ABS_TOLERANCE = 2e-8
+MAX_CPU_RADIAL_POINTS = 1536
+MAX_CPU_POLAR_POINTS = 192
 
 
 def emit_ecp_policy_cpp() -> typing.Any:
@@ -28,6 +30,8 @@ def emit_ecp_policy_cpp() -> typing.Any:
         ("coarse_polar_points", COARSE_POLAR_POINTS),
         ("refined_radial_points", REFINED_RADIAL_POINTS),
         ("refined_polar_points", REFINED_POLAR_POINTS),
+        ("cpu_max_radial_points", MAX_CPU_RADIAL_POINTS),
+        ("cpu_max_polar_points", MAX_CPU_POLAR_POINTS),
     )
     return [
         *(

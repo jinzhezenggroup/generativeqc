@@ -34,8 +34,10 @@ void ecp_quadrature(unsigned radial, unsigned angular, std::vector<EcpRadialPoin
 
 EcpData ecp_integrals(const core::System& system, unsigned radial, unsigned angular,
                       bool derivatives) {
-  if (radial < 16 || radial > 512 || angular < 8 || angular > 96)
-    throw std::invalid_argument("ECP quadrature requires 16..512 radial and 8..96 polar points");
+  if (radial < 16 || radial > generated::ecp_cpu_max_radial_points || angular < 8 ||
+      angular > generated::ecp_cpu_max_polar_points)
+    throw std::invalid_argument(
+        "CPU ECP quadrature requires 16..1536 radial and 8..192 polar points");
   const auto n = molecule::ao_count(system);
   const auto size = runtime::size_mul(n, n);
   const auto ncoord = derivatives ? runtime::size_mul(3, system.atoms.size()) : 0;
