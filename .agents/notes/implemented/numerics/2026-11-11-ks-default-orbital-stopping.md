@@ -99,6 +99,18 @@ reference-engine imports. Full-vector and scalar replay agree in normal and
 optimized Python. The source-matched receipts live under ignored
 `.artifacts/readme-rtx5090-aligned-20261111/` and the matching node1 tree.
 
+The publication branch subsequently preserves the reviewed #3065 head
+`bd92afd1062b9a6f5d5333b231c493bfa2a7ca32`, including master
+`978efb34df24460082871b6b3426d4680b47f43c` (#3064), through the concurrent
+`e1b2eba3efde80599963b9842655c14a0af939f9` integration. Its additional
+documentation, inventory and test changes leave the measured native input
+identity unchanged; the measurement source above is not relabelled as that
+later merge. The integrated offline benchmark/inventory/retention suite passes
+425 tests. The official native Libxc catalog is regenerated only to update its
+two live source fingerprints: retained measurements remain stale and qualify
+zero current-source products, exactly as before; no Libxc requalification is
+claimed.
+
 ## Rejected alternatives
 
 Do not substitute unrelated solver/kernel tuning for the stopping-policy fix.
