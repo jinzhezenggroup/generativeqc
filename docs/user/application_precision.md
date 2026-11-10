@@ -477,12 +477,13 @@ GFN2-xTB is an SCC method with no GPU4PySCF counterpart and retains its own
 The energy default matches GPU4PySCF's `conv_tol=1e-9`. GPU4PySCF's ordinary SCF
 test additionally requires an MO-gradient norm below `sqrt(conv_tol)` (about
 `3.1623e-5` at the default); its density change is diagnostic, not a stopping
-threshold. GenerativeQC's density control and physical final-state gates are
-additional native conditions, not a relabeling of that MO-gradient norm. These
+threshold. Qualified restricted CUDA owners use that same SCF candidate test;
+their physical final-state gates remain separate native conditions, not a
+relabeling of that MO-gradient norm. Other owners retain density-based stopping. These
 shared settings do not imply identical SCF trajectories or iteration counts.
 Neither FP64 arithmetic nor solver thresholds bound observable energy/force error.
 
-With the AO-commutator policy, eligible energy-only CUDA RHF and qualified KS
+With the AO-commutator policy, eligible energy-only CUDA RHF
 owners cap the physical AO
 commutator at `1e-5`. Direct CUDA RHF's explicit strict analytic-force policy
 uses the `1e-8` ceiling, capped by the requested density tolerance; its default
@@ -528,7 +529,8 @@ energies/forces with independent references and disclose the selected numerical
 policy. GPU4PySCF needs no convergence or other default-setting changes. Equal
 norm thresholds do not imply equal iterations, algorithms or force errors.
 
-Canonical restricted CUDA WB97M-V instead uses the molecular GPU4PySCF-style
+Qualified all-electron FP64 restricted CUDA PBE/PBE0/B3LYP/r2SCAN/M06-2X,
+including the electronic component of r2SCAN-3c, and canonical WB97M-V use the molecular GPU4PySCF-style
 **energy AND orbital-gradient** SCF candidate test: `|delta E| < 1e-9` and
 `||2 C_vir^T F[D] C_occ||_F < sqrt(1e-9)`. Density change remains diagnostic,
 not an extra SCF candidate gate. The native owner evaluates this norm from
@@ -539,7 +541,18 @@ token checks still apply; frozen/provisional VV10 operators cannot publish.
 The final proof retains the Standard `1e-5` density/stationarity ceilings, so
 matching SCF candidate thresholds does not imply identical algorithms or cycle
 counts. Either explicit tighter energy/density request restores the historical
-strict WB97M-V gates and strict VV10 inner tolerances. CPU, UKS, custom models
+strict KS gates (including strict VV10 inner tolerances for WB97M-V).
+The default candidate test is the same for energy-only and energy+force calls;
+requesting forces does not silently tighten SCF. Full-range physical-reference
+exports retain their stricter contract. Set
+`GENERATIVEQC_CUDA_KS_CONVERGENCE=strict` before preparing an owner to keep the
+historical AO/density stopping policy even with the public default E/D controls.
+Unset or empty selects the qualified default; other values fail closed. This
+control participates in CUDA resource and checkpoint identity. It is independent
+of `GENERATIVEQC_CUDA_RHF_CONVERGENCE` and does not change GPU4PySCF settings.
+Neither the default nor matched SCF thresholds promise `1e-7` force repeatability;
+use an explicit stringent request and independent validation for that task.
+CPU, UKS, custom models
 or grids, mixed arithmetic, chunked owners and missing validation resources
 retain the bounded conservative path.
 

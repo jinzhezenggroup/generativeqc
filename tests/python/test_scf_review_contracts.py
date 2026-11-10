@@ -69,32 +69,50 @@ int main() {
     subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
 
 
-def test_full_range_force_and_reference_consumers_keep_strict_ks_stationarity(
+def test_default_ks_force_and_energy_share_orbital_stopping_but_reference_is_strict(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """Loose public controls cannot admit the energy-only physical ceiling."""
+    """Forces do not add an AO gate; strict controls/reference remain explicit."""
     source = tmp_path / "force_stationarity.cpp"
     source.write_text(
         r"""
 #include <cassert>
+#include <utility>
 #include "dft/ks_stopping_policy.hpp"
 #include "scf/convergence_limits.hpp"
 int main() {
   using namespace generativeqc;
+  assert(!dft::strict_ks_convergence_requested(nullptr));
+  assert(!dft::strict_ks_convergence_requested(""));
+  assert(dft::strict_ks_convergence_requested("strict"));
+  bool rejected = false;
+  try { dft::strict_ks_convergence_requested("loose"); }
+  catch (const std::invalid_argument&) { rejected = true; }
+  assert(rejected);
   for (bool standard : {false, true})
     for (bool nonlocal : {false, true})
-      for (bool forces : {false, true})
-        for (bool reference : {false, true}) {
+      for (bool reference : {false, true}) {
           const bool admitted = dft::standard_ks_stationarity_allowance(
-              standard, nonlocal, forces, reference);
-          assert(admitted == (standard && (nonlocal || (!forces && !reference))));
+              standard, nonlocal, reference);
+          assert(admitted == (standard && (nonlocal || !reference)));
           const double tolerance = admitted
               ? scf::scf_stationarity_tolerance(1e-9, 1e-5, 1e-9) : 1e-9;
-          if (standard && !nonlocal && (forces || reference)) assert(tolerance == 1e-9);
+          if (standard && !nonlocal && reference) assert(tolerance == 1e-9);
         }
-  assert(dft::standard_ks_stationarity_allowance(true, false, false, false));
-  assert(!dft::standard_ks_stationarity_allowance(true, false, true, false));
-  assert(dft::standard_ks_stationarity_allowance(true, false, false, false));
+  assert(dft::standard_ks_stationarity_allowance(true, false, false));
+  assert(!dft::standard_ks_stationarity_allowance(true, false, true));
+  for (auto controls : {std::pair{1e-10,1e-5}, std::pair{1e-9,1e-8}}) {
+    const bool standard = scf::standard_scf_convergence_requested(controls.first, controls.second);
+    assert(!standard);
+    assert(!dft::standard_ks_stationarity_allowance(standard, false, false));
+  }
+  dft::KsStoppingState state{2,false,true,true,1e-10,1e-3,1e-6,1e-6,1e-9,1e-5,1e-9};
+  assert(!dft::ordinary_ks_converged(state));
+  assert(dft::orbital_ks_converged(state, 2e-5));
+  assert(!dft::orbital_ks_converged(state, std::sqrt(state.energy_tolerance)));
+  assert(!dft::orbital_ks_converged(state, std::numeric_limits<double>::quiet_NaN()));
+  state.full_energy_history = false;
+  assert(!dft::orbital_ks_converged(state, 1e-10));
 }
 """
     )

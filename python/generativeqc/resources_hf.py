@@ -38,6 +38,7 @@ from .resources_planning import plan_resources
 # that an older build implemented today's automatic execution policy.
 _CUDA_SCHEDULE_EXTENSION_VARIABLES = (
     "GENERATIVEQC_CUDA_RHF_CONVERGENCE",
+    "GENERATIVEQC_CUDA_KS_CONVERGENCE",
     "GENERATIVEQC_HF_MATRIX_PROFILE",
     "GENERATIVEQC_CUDA_HF_SHARED_RYS_XY",
     "GENERATIVEQC_CUDA_HF_SHARED_RYS_WEIGHTED_Z",

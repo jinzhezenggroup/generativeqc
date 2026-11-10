@@ -161,3 +161,15 @@ def test_default_complete_endpoint_against_tight_same_model(
                 (output / f"{method}-{mode}-{system}.json").write_text(
                     json.dumps(receipt, indent=2) + "\n"
                 )
+
+
+@pytest.mark.parametrize("method", ("pbe", "b3lyp"))
+@pytest.mark.parametrize("mode", ("direct", "df"))
+def test_explicit_strict_ks_policy_keeps_default_controls_and_independent_force_gates(
+    method: str, mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The historical stopping opt-out is distinct from tightening public E/D."""
+    monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CONVERGENCE", "strict")
+    test_default_complete_endpoint_against_tight_same_model(
+        method, mode, "water", tmp_path
+    )

@@ -638,6 +638,7 @@ def test_checkpoint_respects_a_feasible_current_resource_plan(
         ("GENERATIVEQC_DF_COULOMB_RESPONSE", "slices"),
         ("GENERATIVEQC_HF_MATRIX_PROFILE", "/unread/matrix-profile"),
         ("GENERATIVEQC_CUDA_RHF_CONVERGENCE", "orbital-gradient"),
+        ("GENERATIVEQC_CUDA_KS_CONVERGENCE", "strict"),
     ],
 )
 def test_runtime_numerical_policy_changes_require_explicit_warm_restart(
