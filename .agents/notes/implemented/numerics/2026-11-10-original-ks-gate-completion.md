@@ -90,7 +90,11 @@ force oracle uses PySCF's independent second-order orbital solver with at most
 one inner orbital update per macro cycle and the same 200-cycle cap. Geometry,
 quadrature, Hamiltonian, native controls, basin seed, and all E/D/Fock/force and
 physical-state comparisons remain unchanged. Solver identity and declared
-bounds accompany every new independent-force observation.
+bounds accompany every new independent-force observation. PySCF adapts its
+effective inner-cycle count near convergence even when `max_cycle_inner=1`;
+therefore `ah_max_cycle=1` also bounds each macro cycle to one augmented-Hessian
+step. The initial Newton attempt without that second bound is retained as an
+intermediate protocol, not evidence of the stricter one-step bound.
 
 ## References
 

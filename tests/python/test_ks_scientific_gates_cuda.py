@@ -251,4 +251,5 @@ def _independent_force(
             "gradient_tolerance": 1e-9,
             "maximum_macro_cycles": 200,
             "maximum_inner_updates": 1,
+            "maximum_augmented_hessian_cycles": 1,
         }

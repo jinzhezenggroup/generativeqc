@@ -847,6 +847,7 @@ def independent_global_hybrid_gradient(
         # Keep at most one orbital update per macro iteration, under the same
         # 200-iteration cap and unchanged energy/gradient acceptance below.
         mf.max_cycle_inner = 1
+        mf.ah_max_cycle = 1
     elif scf_solver != "diis":
         raise ValueError("independent SCF solver must be diis or newton")
     mf.conv_tol, mf.conv_tol_grad, mf.max_cycle = 1e-13, scf_gradient_tolerance, 200
