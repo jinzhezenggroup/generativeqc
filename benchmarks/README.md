@@ -13,6 +13,17 @@ Write each run to a new directory under `.artifacts/benchmarks/`; output into
 | Prepared execution and cache behavior | `prepared_lifecycle.py`, `runtime_cache_state.py` |
 | Qualification and publication | `readme_defaults_qualification.py`, `../tools/evidence.py` |
 
+The [2026-11-11 RTX 5090 README cohort](results/readme-rtx5090-20261111/README.md)
+retains every endpoint timing and recorded oracle error. Replay its compact
+summary and figures with `python -m benchmarks.readme_defaults_summary --help`.
+
+For the convergence-matched Direct HF default and explicit strict override, see the
+[native MO-gradient setting](../docs/user/application_precision.md).
+It changes only the native owner; leave GPU4PySCF's settings unchanged.
+Historical opt-in measurements remain a separate source-matched cohort.
+Retain the complete population and unchanged independent observable gates;
+do not replace selected slow points in the existing strict cohort.
+
 Read the selected runner's `--help` and its protocol before measuring. Use finite
 Slurm allocations for all real GPU work and preserve scheduler device visibility.
 An old source-matched timing is not evidence for a new checkout.

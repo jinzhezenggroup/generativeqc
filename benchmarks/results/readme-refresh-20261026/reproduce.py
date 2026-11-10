@@ -244,7 +244,9 @@ def main() -> None:
         for name in ("qualification", "summary"):
             assert read(args.output / f"{name}.json") == read(ROOT / f"{name}.json.xz")
         for name in ("timings.md", "work.md"):
-            assert (args.output / name).read_bytes() == (ROOT / name).read_bytes()
+            assert (args.output / name).read_bytes() == lzma.decompress(
+                (ROOT / name.replace(".md", "-table.md.xz")).read_bytes()
+            )
         figures = read(ROOT / "figures.json")
         for mode in ("direct", "df"):
             assert (
