@@ -90,12 +90,23 @@ range parameter. Graph, spin, basis, budget and provider admission remain
 independent checks; the absence of nonlocal correlation does not imply a
 VV10 grid or feature lease.
 
+The ordinary compiled geometry layout supports orbital s/p/d shells, so
+range-only force requests with f or higher shells are rejected before SCF
+preparation. This does not narrow the separate range/VV10 owner's through-f
+domain. Native integral coverage alone does not extend the geometry layout.
+
 The compiled CUDA geometry consumer retains the exact plan's SR/LR source
 slots. The native mixed integral bridge supplies one-electron, overlap/Pulay,
 fitted Coulomb, short-range and long-range rows; complete reduction includes
 each row once. Missing or incompatible native integral sources fail closed,
 without substituting exact full-range integrals or a CPU derivative oracle.
 Range/VV10 plans retain their distinct resident composite consumer.
+
+Dry resource planning reserves the native lazy LR derivative capacity in
+addition to the fitted one-electron envelope. Execution validates and reports
+the mixed bridge's complete additional-device peak, including that LR owner,
+even on reuse. Independent DF response scratch remains explicitly outside
+this stationary-consumer bound.
 
 `tests/python/test_ks_original_rsh_admission_cuda.py` pins the original H2/H3
 DF-primary/Direct-LR fixture, both spin/layout variants and cold/warm/moved

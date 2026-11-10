@@ -3026,7 +3026,10 @@ def _plan_stationary_cuda_tile(
                 0, available - sum(value.peak_bytes for value in tensor_plans.values())
             ),
             state._source.stationary_integral_device_reserve(
-                atoms=na, aos=n, primitives=basis.nprimitive
+                atoms=na,
+                aos=n,
+                primitives=basis.nprimitive,
+                **({"range_exchange": True} if plan.range_exchange_sources else {}),
             ),
         )
         if not ecp
@@ -3810,10 +3813,19 @@ def _complete_rks_cuda_gradient_diagnostic(
                 "Direct derivative fallback would change the Hamiltonian"
             )
         native_complete_integrals = native_integral_components is not None
+        # The mixed decoder includes the lazy LR owner, not just H'/S'
+        # staging. Validate and publish the same concurrent-consumer peak.
+        native_integral_device_peak = int(
+            native_integral_resources.get(
+                "mixed_rsh_additional_device_peak_bytes"
+                if range_only
+                else "one_electron_device_peak_bytes",
+                0,
+            )
+        )
         if (
             use_fitted_integrals
-            and int(native_integral_resources.get("one_electron_device_peak_bytes", 0))
-            > layout.native_geometry_reserve
+            and native_integral_device_peak > layout.native_geometry_reserve
         ):
             raise RuntimeError(
                 "fitted stationary device staging exceeds admitted reserve"
@@ -4355,7 +4367,7 @@ def _complete_rks_cuda_gradient_diagnostic(
             in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}
             else 0
         )
-        + int(native_integral_resources.get("one_electron_device_peak_bytes", 0)),
+        + native_integral_device_peak,
         scf_force_memory=force_memory if prepared is None else prepared.force_memory,
         additional_device_budget=max_device_bytes,
         device_ordinal=device,
@@ -4474,7 +4486,9 @@ def _complete_rks_cuda_gradient_diagnostic(
             )
         )
         work["native_integral_resource_scope"] = (
-            "compact-publication-and-resident-cuda-one-electron"
+            "compact-publication-one-electron-and-lazy-lr-derivative-owner"
+            if range_only
+            else "compact-publication-and-resident-cuda-one-electron"
             if resident_df_one_electron
             else "compact-publication-and-host-one-electron-fallback"
         )

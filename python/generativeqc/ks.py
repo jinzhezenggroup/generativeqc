@@ -650,6 +650,21 @@ def cuda_nonlocal_force_basis_eligible(basis: typing.Any) -> bool:
     )
 
 
+def cuda_range_only_force_basis_eligible(basis: typing.Any) -> bool:
+    """Admit only the ordinary CUDA geometry owner's s/p/d basis domain.
+
+    Native mixed integral sources do not extend the compiled geometry layout
+    to f shells. The separate nonlocal owner has a larger through-f domain.
+    """
+    if isinstance(basis, str):
+        return basis in ("sto-3g", "def2-svp")
+    return all(
+        shell.angular_momentum <= 2
+        for element in basis.elements
+        for shell in element.shells
+    )
+
+
 def cuda_global_hybrid_force_eligible(method_ir: MethodIR) -> bool:
     """Check derivative source coverage for an already admitted CUDA KS graph.
 
