@@ -28,13 +28,12 @@ def spatial_policy_probe(
 #include "dft/ks_tile_policy.hpp"
 
 int main(int count, char** arguments) {
-  if (count != 11) return 2;
+  if (count != 9) return 2;
   std::cout << generativeqc::dft::automatic_ks_spatial_bisection(
       std::atoi(arguments[1]) != 0, std::atoi(arguments[2]) != 0,
-      std::atoi(arguments[3]) != 0, std::atoi(arguments[4]) != 0,
+      std::atoi(arguments[3]) != 0, std::strtoull(arguments[4], nullptr, 10),
       std::strtoull(arguments[5], nullptr, 10), std::strtoull(arguments[6], nullptr, 10),
-      std::strtoull(arguments[7], nullptr, 10), std::strtoull(arguments[8], nullptr, 10),
-      std::atoi(arguments[9]), std::atoi(arguments[10]));
+      std::atoi(arguments[7]), std::atoi(arguments[8]));
 }
 """
     )
@@ -48,10 +47,8 @@ int main(int count, char** arguments) {
     (
         "restricted_fp64",
         "unconstrained",
-        "has_exchange",
         "range_separated",
         "ao_jets",
-        "work_jets",
         "aos",
         "points",
         "major",
@@ -59,39 +56,32 @@ int main(int count, char** arguments) {
         "expected",
     ),
     [
-        (True, True, False, False, 4, 4, 1088, 1078336, 12, 64, True),
-        (True, True, False, False, 4, 4, 544, 539168, 12, 64, True),
-        (True, True, False, False, 4, 4, 768, 1078336, 8, 64, True),
-        (True, True, False, False, 4, 1, 768, 1078336, 12, 64, True),
-        (True, True, True, False, 4, 4, 768, 1078336, 12, 64, True),
-        (True, True, True, False, 4, 1, 768, 1078336, 12, 64, False),
-        (True, True, True, False, 4, 3, 768, 1078336, 12, 64, False),
-        (True, True, False, True, 4, 4, 768, 1078336, 12, 64, False),
-        (True, True, True, True, 4, 4, 768, 1078336, 12, 64, False),
-        (True, True, False, False, 1, 1, 768, 1078336, 12, 64, False),
-        (True, True, False, False, 3, 4, 768, 1078336, 12, 64, False),
-        (True, True, False, False, 4, 1, 384, 539168, 12, 64, False),
-        (True, True, False, False, 4, 1, 96, 134792, 12, 64, False),
-        (True, True, False, False, 4, 4, 512, 524288, 12, 64, True),
-        (True, True, False, False, 4, 4, 511, 524288, 12, 64, False),
-        (True, True, False, False, 4, 4, 512, 524287, 12, 64, False),
-        (False, True, False, False, 4, 4, 1088, 1078336, 12, 64, False),
-        (True, False, False, False, 4, 4, 1088, 1078336, 12, 64, False),
-        (True, True, False, False, 4, 4, 1088, 1078336, 8, 2, False),
-        (True, True, False, False, 4, 4, 1088, 1078336, 9, 2, False),
-        (True, True, False, False, 4, 4, 1088, 1078336, 7, 64, False),
-        (True, True, False, False, 4, 4, 1088, 1078336, 12, 0, False),
-        (True, True, False, False, 4, 4, 1088, 1078336, 0, 0, False),
+        (True, True, False, 4, 1088, 1078336, 12, 64, True),
+        (True, True, False, 4, 544, 539168, 12, 64, True),
+        (True, True, False, 4, 768, 1078336, 8, 64, True),
+        (True, True, True, 4, 768, 1078336, 12, 64, False),
+        (True, True, False, 1, 768, 1078336, 12, 64, False),
+        (True, True, False, 3, 768, 1078336, 12, 64, False),
+        (True, True, False, 4, 384, 539168, 12, 64, False),
+        (True, True, False, 4, 96, 134792, 12, 64, False),
+        (True, True, False, 4, 512, 524288, 12, 64, True),
+        (True, True, False, 4, 511, 524288, 12, 64, False),
+        (True, True, False, 4, 512, 524287, 12, 64, False),
+        (False, True, False, 4, 1088, 1078336, 12, 64, False),
+        (True, False, False, 4, 1088, 1078336, 12, 64, False),
+        (True, True, False, 4, 1088, 1078336, 8, 2, False),
+        (True, True, False, 4, 1088, 1078336, 9, 2, False),
+        (True, True, False, 4, 1088, 1078336, 7, 64, False),
+        (True, True, False, 4, 1088, 1078336, 12, 0, False),
+        (True, True, False, 4, 1088, 1078336, 0, 0, False),
     ],
 )
 def test_automatic_spatial_domain(
     spatial_policy_probe: Path,
     restricted_fp64: bool,
     unconstrained: bool,
-    has_exchange: bool,
     range_separated: bool,
     ao_jets: int,
-    work_jets: int,
     aos: int,
     points: int,
     major: int,
@@ -104,10 +94,8 @@ def test_automatic_spatial_domain(
             str(spatial_policy_probe),
             str(int(restricted_fp64)),
             str(int(unconstrained)),
-            str(int(has_exchange)),
             str(int(range_separated)),
             str(ao_jets),
-            str(work_jets),
             str(aos),
             str(points),
             str(major),

@@ -2352,9 +2352,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
                         spins == 1 && strict_anchor_fp64,
                         !runtime::active_device_resource_ledger &&
                             !options.reference_memory_budget_bytes,
-                        has_exchange, has_range_correction, xc_layout.jets, xc_layout.work_jets,
-                        xc_layout.nao, xc_layout.npoint, spatial_hardware.major,
-                        spatial_hardware.singleToDoublePrecisionPerfRatio);
+                        has_range_correction, xc_layout.jets, xc_layout.nao, xc_layout.npoint,
+                        spatial_hardware.major, spatial_hardware.singleToDoublePrecisionPerfRatio);
           const auto spatial_bytes = product(xc_layout.npoint, 4 * sizeof(double));
           const auto host_bytes =
               sum(spatial_bytes, product(sum(product(2, xc_layout.npoint), product(4, basis.natom)),

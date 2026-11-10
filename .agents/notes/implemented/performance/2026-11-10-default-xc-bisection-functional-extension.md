@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-11-10
 
+The work-jet/exchange distinction below is superseded by the
+[uniform global-hybrid policy](2026-11-10-uniform-global-hybrid-xc-bisection.md).
+The measurements and source identities here describe the earlier policy only.
+
 ## Decision and rationale
 
 The initial [four-work-jet pure-semilocal qualification](2026-11-10-default-large-semilocal-xc-bisection.md)

@@ -323,10 +323,10 @@ defaults to a private spatial permutation. Large strict-FP64 restricted
 owners with semilocal XC, at least four AO jets, 512 AOs and 524,288 points
 automatically use tile-aligned spatial bisection on compute-capability 8+
 devices with a reported FP32/FP64 throughput ratio greater than two. This includes
-pure GGA density products with only one work jet as well as meta-GGA products,
-including global hybrids with at least four work jets. Mixed precision,
-range-separated or fewer-work-jet hybrids, unrestricted, smaller and full-rate-FP64
-owners retain center grouping. `GENERATIVEQC_CUDA_XC_SPATIAL_ORDER=1` explicitly restores
+pure and global-hybrid GGA/meta-GGA products, regardless of their work-jet count
+or exact-exchange fraction. Mixed precision, range-separated, unrestricted,
+smaller and full-rate-FP64 owners retain center grouping.
+`GENERATIVEQC_CUDA_XC_SPATIAL_ORDER=1` explicitly restores
 center grouping; `2` explicitly requests bisection within the existing spatial
 storage admission; `0` restores canonical atom/radial/angular execution order.
 An explicit reference-memory budget also keeps automatic selection on center

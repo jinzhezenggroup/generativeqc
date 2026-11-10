@@ -8,19 +8,17 @@ namespace generativeqc::dft {
 
 /** Tile-aligned bisection reduces active-AO unions for large semilocal grids.
  * Qualify the strict restricted, gradient-bearing, low-FP64-throughput domain
- * independently of a functional or molecule name. Full-rate FP64 providers,
- * mixed precision, public resource promises and smaller grids keep center
- * grouping until their complete endpoints are separately qualified. Spatial
+ * independently of functional identity, exact-exchange fraction or work jets.
+ * Full-rate FP64 providers, mixed precision, public resource promises and
+ * smaller grids keep center grouping until their endpoints are qualified. Spatial
  * storage admission and canonical force-view ownership remain with the caller.
  */
 constexpr bool automatic_ks_spatial_bisection(bool qualified_rks_fp64, bool unconstrained,
-                                              bool has_exchange, bool range_separated,
-                                              std::size_t ao_jets, std::size_t work_jets,
+                                              bool range_separated, std::size_t ao_jets,
                                               std::size_t nao, std::size_t points,
                                               int compute_major, int fp32_fp64_ratio) noexcept {
-  return qualified_rks_fp64 && unconstrained && !range_separated && ao_jets >= 4 &&
-         (!has_exchange || work_jets >= 4) && nao >= 512 && points >= (1U << 19) &&
-         compute_major >= 8 && fp32_fp64_ratio > 2;
+  return qualified_rks_fp64 && unconstrained && !range_separated && ao_jets >= 4 && nao >= 512 &&
+         points >= (1U << 19) && compute_major >= 8 && fp32_fp64_ratio > 2;
 }
 
 /** Resolve the public automatic CUDA SCF tile without changing an explicit request.

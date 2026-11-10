@@ -13,13 +13,14 @@
     "src/dft/cuda_xc.cpp",
     "src/dft/grid_spatial_order.hpp"
   ],
-  "rationale": "Eligible resident semilocal XC with admitted local AO maps defaults to an exact spatial permutation. Large strict-FP64 RKS owners with at least four AO jets, 512 AOs and 524288 points automatically use tile-aligned bisection on compute-capability 8+ low-FP64-throughput devices. Pure GGA and meta-GGA qualify; global hybrids require at least four work jets. Final-source selector-unset RTX5090 complete E/F cohorts qualify DF r2SCAN-3c, PBE and M06-2X with repeated cold/three-warm calls, independent default-grid and resource/graph/moved-geometry/memcheck checks. Unqualified domains retain center grouping. Explicit 1 restores center grouping, 2 requests bounded bisection and 0 retains canonical execution. Canonical force ownership and optional capacity/OOM fallbacks remain unchanged; full-rate FP64, mixed precision, fewer-work-jet or range-separated hybrids, UKS, nonlocal and explicit reference/public resource promises are not newly promoted.",
+  "rationale": "Eligible resident semilocal XC with admitted local AO maps defaults to an exact spatial permutation. Large strict-FP64 RKS owners with at least four AO jets, 512 AOs and 524288 points automatically use tile-aligned bisection on compute-capability 8+ low-FP64-throughput devices. Pure and global-hybrid GGA/meta-GGA share this policy regardless of work jets or exchange fraction; small endpoint gains do not justify functional-specific scheduling. Selector-unset RTX5090 complete E/F qualification includes independent default-grid and resource/graph/moved-geometry/memcheck checks. Unqualified domains retain center grouping. Explicit 1 restores center grouping, 2 requests bounded bisection and 0 retains canonical execution. Canonical force ownership and optional capacity/OOM fallbacks remain unchanged; full-rate FP64, mixed precision, range separation, UKS, nonlocal and explicit reference/public resource promises are not newly promoted.",
   "revisit_condition": "Require renewed complete-endpoint, independent observable, canonical force identity and resource/lifetime qualification before broadening the bisection domain or changing quadrature, AO thresholds or precision. Preserve the explicit center/canonical rollback and bounded optional-storage refusal.",
   "evidence": [
     "docs/developer/dft_grid.md",
     "tests/native/test_dft_cuda.cu",
     "tests/python/test_ks_spatial_policy.py",
     "benchmarks/results/xc-spatial-default-20261110/summary.json",
+    "note:.agents/notes/implemented/performance/2026-11-10-uniform-global-hybrid-xc-bisection.md",
     "note:.agents/notes/implemented/performance/2026-11-10-default-xc-bisection-functional-extension.md",
     "note:.agents/notes/implemented/performance/2026-11-10-default-large-semilocal-xc-bisection.md",
     "note:.agents/notes/implemented/performance/2026-10-19-xc-spatial-grid-order.md",
