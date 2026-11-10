@@ -464,6 +464,10 @@ supports them. An insufficient force budget fails before scientific execution;
 energy-only replay remains available after failure. Explicit force plans and
 successfully promoted plans retain their derivative reservation across later
 energy-only replays.
+Conservative s/p/d ECP capacity depends on the active systems' shells, so unused
+higher-angular catalog entries cannot suppress the force reservation. The
+retained ECP catalog identity also preserves this allowance for all-electron
+fragments.
 
 Complete through-f public checks use compact Na/H fixtures with f orbitals on
 both centers, independently converged states, moving-grid analytic gradients

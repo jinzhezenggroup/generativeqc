@@ -26,7 +26,7 @@ from generativeqc_compiler.common.resources import (
     checked_bytes,
 )
 
-from ._cpu_force_resources import CPU_FORCE_HOST_CAP, qualified_basis
+from ._cpu_force_resources import CPU_FORCE_HOST_CAP
 from ._cuda_force_resources import ordinary_cuda_force_limits
 from ._snapshot_grid_cache import SNAPSHOT_GRID_CACHE_BYTES
 from .basis import BasisSet
@@ -1028,7 +1028,6 @@ def ks_resource_request(
             screening_tolerance=screening_tolerance,
         )
     selected = _snapshot_basis(basis, basis_representation)
-    cpu_forces = backend == "cpu" and (qualified_basis(selected) or include_forces)
     # Imported CPU tau uses the same four AO jets and dense potential matrices
     # as GGA; tau and its point differential are fixed-size stack values.
     requires_first_ao_derivatives = bool(model.ao_order)
@@ -1083,6 +1082,18 @@ def ks_resource_request(
                 "grid_points": model.grid.point_count(a.atomic_number for a in atoms),
             }
         )
+    # Preserve conservative s/p/d ECP force capacity, including all-electron
+    # fragments of an ECP catalog. Only active shells determine this capacity:
+    # an unused higher-angular element must not erase the force reservation.
+    # This is not the narrower compatibility consumer's admission predicate.
+    cpu_forces = backend == "cpu" and (
+        include_forces
+        or (
+            isinstance(selected, BasisSet)
+            and any(element.ecp_core_electrons for element in selected.elements)
+            and all(item["orbital"]["maximum_angular"] <= 2 for item in items)
+        )
+    )
     controls = {
         "diis_history": diis_history,
         "max_iterations": max_iterations,

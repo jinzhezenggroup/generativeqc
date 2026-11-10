@@ -3,6 +3,7 @@
 import ctypes
 import json
 import typing
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -274,6 +275,67 @@ def basis() -> BasisSet:
         ),
         BasisProvenance("Synthetic test data", "1", "test-only", "0" * 64),
     )
+
+
+@pytest.mark.parametrize("method", ("pbe-rks", "b3lyp-rks"))
+@pytest.mark.parametrize("active_f_shell", (False, True))
+@pytest.mark.parametrize("fragment", (False, True))
+def test_cpu_ecp_force_capacity_uses_active_shells_and_retains_fragments(
+    basis: BasisSet,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    active_f_shell: bool,
+    fragment: bool,
+) -> None:
+    """Unused catalog f shells cannot erase an s/p/d endpoint's force budget."""
+    f_shell = BasisShell(3, ("0.7",), (("1",),))
+    elements = tuple(
+        replace(element, shells=(*element.shells, f_shell))
+        if active_f_shell and element.atomic_number == (1 if fragment else 11)
+        else element
+        for element in basis.elements
+    )
+    # A canonical multi-element catalog can retain higher-angular records for
+    # elements absent from this system, including an all-electron ECP fragment.
+    catalog = replace(basis, elements=(*elements, ElementBasis(2, (f_shell,))))
+    systems = [
+        [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
+        if fragment
+        else [("Na", (0, 0, 0)), ("H", (0, 0, 3))]
+    ]
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("capacity planning attempted native capability discovery")
+
+    monkeypatch.setattr(_native, "load_library", forbidden)
+    options = {"basis": catalog, "method": method}
+    default = estimate_ks_resources(systems, **options).require_feasible()
+    force = estimate_ks_resources(
+        systems, include_forces=True, **options
+    ).require_feasible()
+    if active_f_shell:
+        # Newly admitted native f-shell forces still require an explicit plan
+        # upgrade; capacity metadata never widens the compatibility consumer.
+        assert default.requests[0].identity.observables == ("energy",)
+        assert force.peak_bytes["host"] > default.peak_bytes["host"]
+    else:
+        assert default.requests == force.requests
+        assert default.peak_bytes == force.peak_bytes
+        assert default.requests[0].identity.observables == ("energy", "forces")
+        without_unused = estimate_ks_resources(
+            systems, basis=basis, method=method
+        ).require_feasible()
+        assert default.peak_bytes == without_unused.peak_bytes
+    exact = ResourceBudget(host_bytes=force.peak_bytes["host"])
+    estimate_ks_resources(
+        systems, include_forces=True, budget=exact, **options
+    ).require_feasible()
+    below = ResourceBudget(host_bytes=force.peak_bytes["host"] - 1)
+    rejected = estimate_ks_resources(
+        systems, include_forces=True, budget=below, **options
+    )
+    with pytest.raises(MemoryError):
+        rejected.require_feasible()
 
 
 @pytest.mark.parametrize("method", ("rhf", "pbe-rks"))
