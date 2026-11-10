@@ -1,0 +1,7 @@
+{
+  "measured_checkout_revision": "926c778cb47c99b250378727832924dcea72d943",
+  "build_checkout_revision": "110f626b71b10ba6548f671b3c797195f5486c1a",
+  "source_identity": "baf0bc3589f99d2caa332ba48e36a6a90425cf8f209ecf2422dfa3896876a563",
+  "matched_inputs": 2127,
+  "method": "Byte-identical complete native source-identity inventory against the immutable 926 git archive; only tests/notes differ in the build checkout"
+}

@@ -1,0 +1,100 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Identified original scientific controls pass; A100 is explicitly user-excluded and unqualified. Required CI and production/performance promotion remain separate.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 2848,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "0f482ca728c99d3b2a0e9e8f700eb3253e4e67348690d6bbba85369b0ac0fc3e"
+    },
+    {
+      "bytes": 558640,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "e2429224864582911f285fadf4f4686bbe9260fc81140e4af5a4d0e9a106d857"
+    },
+    {
+      "bytes": 1388,
+      "path": "summary.json.xz",
+      "role": "samples",
+      "sha256": "404476541edba2e688f0018da96b86f3dd98b4b0d8fb3d5cdacf3dedcbc406a8"
+    },
+    {
+      "bytes": 1545,
+      "path": "experimental-source.patch",
+      "role": "source-patch",
+      "sha256": "660c5a4836aa9caede45f182efa5d58f5c9f0ad7b621e14b29e0298a8425165c"
+    },
+    {
+      "bytes": 3021,
+      "path": "run-orthogonal-production.sh",
+      "role": "reproduction",
+      "sha256": "fccb4b750acd9de4b11fdedfdc12a49a465feb5128400bd9b2d2a92dbac86f06"
+    },
+    {
+      "bytes": 2147,
+      "path": "run-orthogonal-final.sh",
+      "role": "reproduction",
+      "sha256": "cef37f05a39abb92916225c60db0e779380a13983419c4d4019e753aa59684ce"
+    },
+    {
+      "bytes": 1472,
+      "path": "production-build-summary.json.xz",
+      "role": "summary",
+      "sha256": "75593881f900f0956adbf684f1746d9464374467917aa0b9822dca269e50d96f"
+    },
+    {
+      "bytes": 424,
+      "path": "production-source-input-match.json",
+      "role": "input",
+      "sha256": "55e4304b38fdc3b7302d459542595b68f7d215df345ec16cc99495d996e6251d"
+    },
+    {
+      "bytes": 2211,
+      "path": "production-cache-observation.md",
+      "role": "summary",
+      "sha256": "a751019f27ca48837df4aa9cd880b6a47978372c5c1c5bdf11e77e093dd71a5e"
+    },
+    {
+      "bytes": 1096,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "a3ee62537a9c217bc52188f22ac39f1f79ccb2b15623dbc9d5458838c3a3e788"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=04:00:00",
+      "env",
+      "GENERATIVEQC_KS_STATE_CUDA_TEST=1",
+      "GENERATIVEQC_GRID_CUDA_TEST=1",
+      "PYTHONPATH=python:.:tests/python",
+      "OPENBLAS_NUM_THREADS=1",
+      "OMP_NUM_THREADS=1",
+      "python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/python/test_ks_scientific_gates_cuda.py",
+      "tests/python/test_ks_original_rsh_admission_cuda.py",
+      "tests/python/test_ks_seed_admission_cuda.py",
+      "-k",
+      "original"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "926c778cb47c99b250378727832924dcea72d943"
+  }
+}
