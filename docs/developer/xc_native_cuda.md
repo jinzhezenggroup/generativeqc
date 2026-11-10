@@ -1128,8 +1128,9 @@ inherit the source owner's deferred anchor. Performance validation must inspect 
 warm call and the whole lifecycle separately from a pooled warm median.
 
 `GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE=1` is a default-off Direct RSH force
-experiment. A token-authenticated host snapshot may reuse only the two-electron
-response when every density bit agrees within the same immutable prepared owner.
+experiment in the host-snapshot integral-response consumer. A token-authenticated
+host snapshot may reuse only the two-electron response when every density bit
+agrees within the same immutable prepared owner.
 It adds no host density export. The one-electron and Pulay responses still run
 with the current resident D/W. Optional key/result storage is capped at 64 MiB
 and one quarter of the caller allowance; budget refusal, allocation failure and
@@ -1138,8 +1139,8 @@ qualified for default selection.
 
 `GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE=1` separately enables exact-density
 retention of completed semilocal/nonlocal and nuclear geometry components in
-the composite prepared owner. Current native integral and Pulay sources still
-execute. Geometry/operator/grid changes, failures and explicit disable retire
+the Python composite prepared owner. Current native integral and Pulay sources
+still execute. Geometry/operator/grid changes, failures and explicit disable retire
 the key; active-AO experiments and explicit stationary execution controls bypass
 retention. FP32 semilocal geometry requests also bypass retention so Fast
 precision receipts describe fresh work. Capability fallback and numerical retry
@@ -1148,6 +1149,18 @@ Its host allowance includes
 comparison scratch, is capped at 64 MiB and one quarter of the host budget, and
 uses only remaining admitted capacity. Hits report zero executed geometry and
 pair work. This control is also default-off pending endpoint qualification.
+
+Neither selector controls the native prepared stationary-force endpoint. Public
+force routing queries each prepared item's native capability and uses that owner
+when available; the Python compatibility consumer remains for linked libraries
+or contexts without native force capability. Native stationary profiles are built
+by default with stationary force AOT, and the standalone CLI preset explicitly
+enables them. Qualify the actual selected owner before attributing endpoint gains
+to either selector. `tests/python/test_response_reuse_routing_cuda.py` compares
+unset/off/on and composed controls against independent current-domain energies,
+forces and reconverged energy differences on both routes. The isolated cache tests
+explicitly select compatibility execution; those hits are not native-default
+performance evidence.
 
 The native stationary and standalone VV10 force owners retain exact force seeds
 within their immutable geometry, quadrature and parameter lifetime. Before

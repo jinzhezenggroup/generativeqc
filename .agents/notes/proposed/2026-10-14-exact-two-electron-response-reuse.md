@@ -44,3 +44,7 @@ changed; retain that failure and require a frozen authenticated snapshot for
 its exact-repeat test. All samples, failures and identities are preserved in
 `benchmarks/results/exact-integral-response-20261014/`. No 96-atom completion or
 default-promotion claim follows from the smaller populations.
+
+Current-master promotion additionally requires the
+[current-domain requalification](2026-11-10-exact-response-current-domain-qualification.md):
+the historical VV10 density domain above is not the later default domain.
