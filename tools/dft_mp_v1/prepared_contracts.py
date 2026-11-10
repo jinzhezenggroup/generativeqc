@@ -33,7 +33,7 @@ def check_prepared_selection(module: ModuleType) -> None:
             identity="basis", topology="topology", natom=2, nao=4, nprimitive=4
         ),
         "contract": ns(family="dft", spin="rks"),
-        "plan": ns(identity="plan", spin_blocks=1),
+        "plan": ns(identity="plan", spin_blocks=1, range_exchange_sources=()),
         "tensor_plans": {},
         "target": target,
         "aot_directory": Path("/packaged"),
@@ -121,7 +121,7 @@ def check_prepared_selection(module: ModuleType) -> None:
     module._prepare_force_memory = lambda *a: {}
     module._layout = lambda *a: (None, None, (), None)
     module._component_mode = lambda *a: False
-    module.stationary_runtime_sources = lambda *a: ()
+    module.stationary_runtime_sources = lambda *args, **kwargs: ()
     module.CudaGrid = lambda *a, **k: nullcontext(ns(artifact=artifact))
     module._CudaSources = sources
     call = arguments | {

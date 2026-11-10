@@ -1,0 +1,58 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All three original #2840 gates and original-grid #2915 default/tighter controls pass on the identified RTX 5090 binary. This does not establish #2910 historical causality or qualify unmeasured devices/performance.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 2220,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "60b6f57e5b69bf90b239fe3240faec3b565f589ca976600dac4b157da2762547"
+    },
+    {
+      "bytes": 51900,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "b32542ff9a19a04309ce5b6f69c069fb7437ff4316b65f136b7b4df1684945e1"
+    },
+    {
+      "bytes": 4078,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "3ea7b8c46867d14f9cd087bd27010ac6161e1c658f762a58b13e0615c02d5b27"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=04:00:00",
+      "env",
+      "GENERATIVEQC_KS_STATE_CUDA_TEST=1",
+      "GENERATIVEQC_GRID_CUDA_TEST=1",
+      "PYTHONPATH=python:.:tests/python",
+      "OPENBLAS_NUM_THREADS=1",
+      "OMP_NUM_THREADS=1",
+      "python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/python/test_ks_scientific_gates_cuda.py",
+      "tests/python/test_ks_original_rsh_admission_cuda.py",
+      "tests/python/test_ks_seed_admission_cuda.py",
+      "-k",
+      "original"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "d3f8a62df6aa371ad75449406053d7ab3333c97a"
+  }
+}
