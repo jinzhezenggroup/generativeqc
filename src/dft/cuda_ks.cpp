@@ -28,6 +28,7 @@
 #include "dft/global_hybrid_fock.hpp"
 #include "dft/ks_incremental_policy.hpp"
 #include "dft/ks_stopping_policy.hpp"
+#include "dft/ks_tile_policy.hpp"
 #include "dft/mixed_precision_warmup.hpp"
 #include "dft/xc.hpp"
 #include "generated_libxc_semilocal_cuda_registry.hpp"
@@ -2336,11 +2337,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // The optional semilocal execution copy changes only point order.
         // Its allocation cannot consume any fleet member's mandatory credit.
         const auto* spatial_choice = std::getenv("GENERATIVEQC_CUDA_XC_SPATIAL_ORDER");
-        // Unset/1 keeps qualified center grouping; 2 is the explicit tile-aligned
-        // bisection candidate. Explicit 0 keeps canonical execution order.
-        const bool bisected = spatial_choice && std::string_view(spatial_choice) == "2";
-        if ((!spatial_choice || std::string_view(spatial_choice) == "1" || bisected) && admit_ao &&
-            borrow_resident_grid && !nonlocal_correlation && optional_xc_admitted) {
+        // Unset selects the qualified automatic schedule. Explicit 1 rolls
+        // back to center grouping, 2 requests bisection, and 0 stays canonical.
+        const bool spatial_requested = !spatial_choice || std::string_view(spatial_choice) == "1" ||
+                                       std::string_view(spatial_choice) == "2";
+        if (spatial_requested && admit_ao && borrow_resident_grid && !nonlocal_correlation &&
+            optional_xc_admitted) {
+          cudaDeviceProp spatial_hardware{};
+          if (!spatial_choice) check(cudaGetDeviceProperties(&spatial_hardware, device));
+          const bool bisected =
+              spatial_choice
+                  ? std::string_view(spatial_choice) == "2"
+                  : automatic_ks_spatial_bisection(
+                        spins == 1 && strict_anchor_fp64,
+                        !runtime::active_device_resource_ledger &&
+                            !options.reference_memory_budget_bytes,
+                        has_exchange, has_range_correction, xc_layout.jets, xc_layout.work_jets,
+                        xc_layout.nao, xc_layout.npoint, spatial_hardware.major,
+                        spatial_hardware.singleToDoublePrecisionPerfRatio);
           const auto spatial_bytes = product(xc_layout.npoint, 4 * sizeof(double));
           const auto host_bytes =
               sum(spatial_bytes, product(sum(product(2, xc_layout.npoint), product(4, basis.natom)),
