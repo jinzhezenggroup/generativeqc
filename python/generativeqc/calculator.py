@@ -1276,6 +1276,16 @@ class Calculator:
                 )
             )
         )
+        self._d3_second_order_spec = None
+        if (
+            self._dispersion_method_ir is not None
+            and self._device_name == "cpu"
+            and self._ks_options is not None
+            and full_range_stationary_second_order_eligible(self._ks_options.method_ir)
+        ):
+            from .d3_hessian import second_order_spec
+
+            self._d3_second_order_spec = second_order_spec(self._dispersion_method_ir)
         public_rks_second_order = (
             (self._device_name == "cpu" or self._composite_rks_second_order)
             and (not basis_has_ecp or self._composite_rks_second_order)
@@ -1289,7 +1299,10 @@ class Calculator:
                 or self._composite_rks_second_order
             )
             and self._automatic_libxc_name is None
-            and self._dispersion_method_ir is None
+            and (
+                self._dispersion_method_ir is None
+                or self._d3_second_order_spec is not None
+            )
             and second_order_basis
             and self._ks_options is not None
             and (
@@ -1472,11 +1485,28 @@ class Calculator:
             unsupported == {"forces"}
             and self._capabilities.family == "density_functional"
         ):
-            raise ValueError(
-                "method does not support properties: "
-                + ", ".join(sorted(requested - self._capabilities.supported_properties))
-            )
+            raise ValueError(self._unsupported_properties_message(unsupported))
         return requested
+
+    def _unsupported_properties_message(self, properties: Iterable[str]) -> str:
+        """Identify physical MethodIR rather than mistaking its carrier for chemistry.
+
+        Prepared owners can reject a narrower derivative domain than the method
+        registry. Include the execution context without claiming a particular
+        missing source or granting force support from conservative metadata.
+        """
+        graph = self.method_ir
+        method = self._method_name if graph is None else graph.identifier
+        context = ""
+        if graph is not None:
+            context = (
+                f" (MethodIR {graph.manifest_identity}; "
+                f"carrier {self._native_method_name!r}; "
+                f"{self._device_name}/{self._representation_name} derivative domain)"
+            )
+        return f"method {method!r}{context} does not support properties: " + ", ".join(
+            sorted(properties)
+        )
 
     @property
     def initial_guess(self) -> InitialGuessSpec | None:
@@ -2868,12 +2898,15 @@ class Calculator:
                 "independent XC/VV10 grids do not yet support Hessians or HVPs"
             )
         if endpoint not in self._capabilities.supported_second_order:
+            graph = self.method_ir
+            method = self._method_name if graph is None else graph.identifier
             raise NotImplementedError(
-                f"method {self._method_name!r} does not expose public {endpoint}; "
+                f"method {method!r} does not expose public {endpoint}; "
                 "qualified domains are CPU direct all-electron Cartesian FP64 "
                 "closed-shell LDA/PBE; CPU direct all-electron FP64 "
                 "Cartesian/spherical restricted PBE0/B3LYP compositions with "
-                "full-range exchange in (0, 1]; or canonical FP64 WB97M-V RKS/UKS with "
+                "full-range exchange in (0, 1], optionally with uncut two-body "
+                "D3(BJ); or canonical FP64 WB97M-V RKS/UKS with "
                 "CPU/CUDA, Cartesian/spherical, full-rank DF and scalar ECPs"
             )
         if multiplicity != 1 and not (
@@ -2896,6 +2929,8 @@ class Calculator:
         charge: int,
         multiplicity: int,
         operation: typing.Callable[[typing.Any], typing.Any],
+        cache: typing.Any = ".artifacts",
+        output_budget_bytes: int | None = None,
         grid_budget_bytes: int = 128 << 20,
         max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
@@ -2940,6 +2975,42 @@ class Calculator:
                 factory(batch, basis, **options) as operator,
             ):
                 result = operation(operator)
+                result = replace(
+                    result,
+                    _diagnostics=MappingProxyType(
+                        {
+                            **result.diagnostics,
+                            "geometry_identity": operator.state.identity.geometry_identity,
+                            "electronic_method_identity": self._ks_options.method_ir.identity,
+                            "total_method_identity": self.method_ir.identity,
+                            "total_method_manifest_identity": self.method_ir.manifest_identity,
+                        }
+                    ),
+                )
+        del operator, basis, batch
+        primal_diagnostics = {
+            "scf_energy": primal.energy
+            - (0 if primal.dispersion is None else primal.dispersion.energy),
+            "total_energy": primal.energy,
+            "dispersion_energy": 0
+            if primal.dispersion is None
+            else primal.dispersion.energy,
+            "scf_iterations": primal.iterations,
+            "scf_fock_builds": primal.fock_builds,
+            "scf_executed_backend": primal.executed_backend,
+        }
+        del primal
+        if self._d3_second_order_spec is not None:
+            from .d3_hessian import compose_second_order
+
+            result = compose_second_order(
+                result,
+                self._dispersion_method_ir,
+                atoms,
+                cache=cache,
+                max_workspace_bytes=self._dispersion_memory_budget_bytes,
+                output_budget_bytes=output_budget_bytes,
+            )
         if self._composite_rks_second_order:
             result = replace(
                 result,
@@ -2947,10 +3018,7 @@ class Calculator:
                     {
                         **result.diagnostics,
                         "public_calculator_endpoint": True,
-                        "scf_energy": primal.energy,
-                        "scf_iterations": primal.iterations,
-                        "scf_fock_builds": primal.fock_builds,
-                        "scf_executed_backend": primal.executed_backend,
+                        **primal_diagnostics,
                         "endpoint_seconds": time.perf_counter() - started,
                     }
                 ),
@@ -2975,6 +3043,9 @@ class Calculator:
         LDA/PBE require CPU direct all-electron Cartesian closed-shell FP64.
         Qualified PBE0/B3LYP compositions also admit spherical AOs on CPU with
         direct all-electron restricted FP64 and full-range exchange in (0, 1].
+        Their uncut two-body D3(BJ) correction is added exactly once, without
+        another electronic response solve. Its simultaneous workspace uses
+        ``dispersion_memory_budget_bytes`` from construction.
         Canonical WB97M-V also admits UKS, CUDA, spherical AOs, full-rank DF
         and scalar semilocal ECPs. CUDA Hessian numerics, including grid/DF/ECP
         AD and coupled response, remain in linked native C++/CUDA code. A
@@ -3017,6 +3088,7 @@ class Calculator:
                 native_atoms,
                 charge=charge,
                 multiplicity=multiplicity,
+                cache=cache,
                 grid_budget_bytes=grid_budget_bytes,
                 max_nonlocal_pairs=max_nonlocal_pairs,
                 operation=lambda operator: composite_rks_hvp(
@@ -3066,6 +3138,10 @@ class Calculator:
 
         PBE0/B3LYP compositions require CPU direct all-electron restricted FP64;
         Cartesian/spherical AOs and full-range exchange in (0, 1] are admitted.
+        Uncut two-body D3(BJ) is an additive source with no extra CPKS solve.
+        Corrected output budgets must hold three dense matrices (the detached
+        electronic matrix, private sum and immutable publication); simultaneous
+        correction workspace uses ``dispersion_memory_budget_bytes``.
 
         WB97M-V uses compiler automatic differentiation and implicit CPKS, not
         displaced SCFs. Its RKS/UKS owner assembles scalar columns
@@ -3089,7 +3165,10 @@ class Calculator:
             raise ValueError("output_budget_bytes must be a positive int64 byte count")
         coordinates = 3 * len(native_atoms)
         output_peak_bound = (
-            2 * coordinates * coordinates * np.dtype(np.float64).itemsize
+            (3 if self._d3_second_order_spec is not None else 2)
+            * coordinates
+            * coordinates
+            * np.dtype(np.float64).itemsize
         )
         if output_peak_bound > output_budget_bytes:
             raise ValueError(
@@ -3135,6 +3214,8 @@ class Calculator:
                 native_atoms,
                 charge=charge,
                 multiplicity=multiplicity,
+                cache=cache,
+                output_budget_bytes=output_budget_bytes,
                 grid_budget_bytes=grid_budget_bytes,
                 max_nonlocal_pairs=max_nonlocal_pairs,
                 operation=lambda operator: composite_rks_hessian(
@@ -3357,9 +3438,10 @@ class Calculator:
             requested_properties - {"energy", "forces"} - PROPERTY_NAMES
         )
         if unknown_properties:
-            names = ", ".join(sorted(repr(name) for name in unknown_properties))
             raise ValueError(
-                f"method {self._method_name!r} does not support properties: {names}"
+                self._unsupported_properties_message(
+                    repr(name) for name in unknown_properties
+                )
             )
         unsupported_properties = (
             requested_properties - supported_properties - PROPERTY_NAMES
@@ -3370,9 +3452,8 @@ class Calculator:
             unsupported_properties == {"forces"}
             and self._capabilities.family == "density_functional"
         ):
-            names = ", ".join(sorted(unsupported_properties))
             raise ValueError(
-                f"method {self._method_name!r} does not support properties: {names}"
+                self._unsupported_properties_message(unsupported_properties)
             )
         compute_forces = "forces" in requested_properties
         native_atoms = tuple(Atom.from_value(atom) for atom in atoms)
