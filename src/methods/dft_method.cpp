@@ -2547,7 +2547,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
           stationary_controller_ ? stationary_controller_->resources().device_upper_bytes : 0;
       additional = envelope > retained ? envelope - retained : 0;
     }
-    cuda_->set_following_force_memory(additional);
+    cuda_->set_following_force_request(compute_forces, additional);
 #else
     (void)compute_forces;
 #endif

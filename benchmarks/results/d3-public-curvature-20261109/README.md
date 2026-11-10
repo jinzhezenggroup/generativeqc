@@ -10,10 +10,14 @@ close the complete acceptance contracts of #2844–#2848.
 
 `tools/qualify_d3_second_order.py` runs from outside the checkout, with
 `PYTHONPATH` and `GENERATIVEQC_LIBRARY` unset, against an installed CPU wheel.
-`installed-receipt.json` binds the actual installed Python files, native
+`installed-receipt.json.xz` binds the actual installed Python files, native
 library, parameter/source identities and fixture bytes. Its Python and fixture
 digests match the committed checkout. The producer imports no PySCF,
 simple-dftd3 or geomeTRIC; the receipt verifies those modules remain unloaded.
+
+The XZ storage is lossless: decompression yields the exact original receipt
+bytes from merge commit `d35ca77a4c7142f8d6d3f0cbc1e8e96718d9af30`.
+Read it with `json.load(lzma.open(path, 'rt'))`; no measured value changes.
 
 The locally built, unaudited CPU wheel uses the existing LP64 OpenBLAS provider
 from `scipy_openblas32`, explicitly exposed through `LD_LIBRARY_PATH`. That

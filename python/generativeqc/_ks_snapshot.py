@@ -691,12 +691,14 @@ class NativeKsSnapshot:
         return immutable(output)
 
     def stationary_integral_device_reserve(
-        self, *, atoms: int, aos: int, primitives: int
+        self, *, atoms: int, aos: int, primitives: int, range_exchange: bool = False
     ) -> int:
         """Expose the known DF provider's concurrent-consumer byte envelope.
 
         This is not its DF response allowance: the prepared DF owner accounts
-        that separately. Unknown/custom providers keep the legacy full reserve.
+        that separately. Mixed range exchange additionally owns the lazy LR
+        derivative capacity, queried under the same live native token before
+        geometry lanes can consume that space.
         """
         from generativeqc_compiler.method.stationary_resources import (
             stationary_fitted_integral_reserve,
@@ -705,9 +707,12 @@ class NativeKsSnapshot:
         self.check_current()
         if not self.density_fitted:
             raise ValueError("bounded integral reserve requires a fitted snapshot")
-        return stationary_fitted_integral_reserve(
+        reserve = stationary_fitted_integral_reserve(
             atoms=atoms, aos=aos, primitives=primitives
         )
+        if range_exchange:
+            reserve += self.cuda_integral_gradient_additional_device_bytes()
+        return reserve
 
     def cuda_prepare_force_memory(self, additional_device_bytes: int) -> dict[str, int]:
         """Release optional SCF caches under pressure, preserving this exact token.

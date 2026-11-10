@@ -7,6 +7,7 @@ these tests do not claim numerical force or resource-allocation qualification.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from fractions import Fraction
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -18,8 +19,9 @@ if TYPE_CHECKING:
 import numpy as np
 import pytest
 from generativeqc import _stationary_cuda as runtime
+from generativeqc._ks_snapshot import _integral_source_resources
 from generativeqc_compiler.common.cuda_target import cuda_target_info
-from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method import MethodSpec, resolve_method
 
 
 def endpoint(
@@ -30,22 +32,45 @@ def endpoint(
     combined: bool,
     method: str = "PBE0",
     pair_delta: int = 0,
+    range_only: bool = False,
+    native_device_peak: int = 32,
+    df_one_electron_resident: bool = False,
 ) -> tuple[Any, dict[str, Any]]:
     target = cuda_target_info("sm_120")
     events: list[str] = []
     pages: list[tuple[str, tuple[int, ...]]] = []
     native_calls: list[dict[str, Any]] = []
     identity = SimpleNamespace(basis_identity="basis", geometry_identity="geometry")
-    model = resolve_method(method)
+    model = resolve_method(
+        MethodSpec(
+            "PBE-range-resource-control",
+            (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
+            short_range_exchange=Fraction(1, 5),
+            long_range_exchange=Fraction(13, 20),
+            range_omega=Fraction(33, 100),
+        )
+        if range_only
+        else method
+    )
     source_names = runtime.stationary_runtime_sources(
         runtime.StationaryGradientPlan(
             model, runtime.StationaryMeanField(runtime.SCF_POINT_MODEL)
-        )
+        ),
+        include_external=range_only,
     )
     integral_names = {"one_electron", "overlap_pulay", "coulomb", "exact_exchange"}
+    if range_only:
+        integral_names.update(("exchange_short_range", "exchange_long_range"))
     values = {name: np.full((2, 3), i + 1.0) for i, name in enumerate(source_names)}
     native_values = np.stack(
-        [np.full((2, 3), v) for v in (3.0, 5.0, 7.0, 11.0 if method == "PBE0" else 0.0)]
+        [
+            np.full((2, 3), value)
+            for value in (
+                (3.0, 5.0, 7.0, 11.0, 13.0)
+                if range_only
+                else (3.0, 5.0, 7.0, 11.0 if method == "PBE0" else 0.0)
+            )
+        ]
     )
 
     class Compiler:
@@ -96,18 +121,35 @@ def endpoint(
         atoms: int, budget: int, **kwargs: Any
     ) -> tuple[np.ndarray, dict[str, int]]:
         assert atoms == 2 and budget == 160
-        if provider == "fitted":
+        if range_only:
+            assert kwargs == {"range_exchange": True}
+        elif provider == "fitted":
             assert not kwargs
         else:
             assert kwargs.get("range_exchange") is False
             assert kwargs.get("combined_two_electron", False) is combined
         native_calls.append(kwargs)
+        resources = dict(
+            _integral_source_resources(
+                (0, 24, native_device_peak, 24, 0, 0, 0, 0, 0),
+                mixed_rsh_df=range_only,
+            )
+        )
+        if provider == "fitted" and not range_only:
+            resources["density_fitted_one_electron_resident_cuda"] = int(
+                df_one_electron_resident
+            )
         return (
             native_values[:3] if combined and provider == "direct" else native_values,
-            {"one_electron_host_peak_bytes": 24, "one_electron_device_peak_bytes": 32},
+            resources,
         )
 
-    if provider == "fitted":
+    if range_only:
+        source.cuda_integral_derivatives = native
+        source.density_fitted_integral_derivatives = lambda *a, **k: pytest.fail(
+            "range-separated state used the full-range-only derivative source"
+        )
+    elif provider == "fitted":
         source.density_fitted_integral_derivatives = native
         source.cuda_integral_derivatives = lambda *a, **k: pytest.fail(
             "DF used Direct derivative source"
@@ -368,3 +410,68 @@ def test_complete_stationary_endpoint_rejects_missing_or_extra_pair_work(
         endpoint(
             monkeypatch, tmp_path, provider="direct", combined=True, pair_delta=delta
         )
+
+
+@pytest.mark.parametrize("native_device_peak", [31, 64, 65])
+def test_range_only_peak_matches_the_native_mixed_resource_wire(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, native_device_peak: int
+) -> None:
+    """Charge lazy LR storage and reject a publication exceeding its reserve."""
+    if native_device_peak > 64:
+        with pytest.raises(RuntimeError, match="device staging exceeds"):
+            endpoint(
+                monkeypatch,
+                tmp_path,
+                provider="fitted",
+                combined=False,
+                range_only=True,
+                native_device_peak=native_device_peak,
+            )
+        return
+    result, observed = endpoint(
+        monkeypatch,
+        tmp_path,
+        provider="fitted",
+        combined=False,
+        range_only=True,
+        native_device_peak=native_device_peak,
+    )
+    np.testing.assert_array_equal(result.gradient, observed["expected"])
+    assert result.work["additional_device_peak_bound"] == 96 + native_device_peak
+    assert result.work["density_fitted_response_resources_included"] is False
+    assert "lazy-lr" in result.work["native_integral_resource_scope"]
+    assert observed["events"][-3:] == ["sources-close", "grid-close", "validate"]
+
+
+@pytest.mark.parametrize(
+    "range_only,resident", [(False, False), (False, True), (True, False)]
+)
+def test_cuda_outward_record_discloses_unmeasured_df_transfers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    range_only: bool,
+    resident: bool,
+) -> None:
+    """Exercise complete publication, including resident and lazy-LR boundaries."""
+    result, _ = endpoint(
+        monkeypatch,
+        tmp_path,
+        provider="fitted",
+        combined=False,
+        range_only=range_only,
+        df_one_electron_resident=resident,
+    )
+    work = result.work
+    assert work["density_fitted_response_resources_included"] is False
+    assert work["transfer_work"]["density_fitted_response_included"] is False
+    assert "excludes DF-provider" in work["additional_device_peak_bound_scope"]
+    expected_scope = (
+        "one-electron-and-lazy-lr-derivative-owner"
+        if range_only
+        else "resident-cuda-one-electron"
+        if resident
+        else "host-one-electron-fallback"
+    )
+    assert work["native_integral_resource_scope"].endswith(expected_scope)
+    assert "H'/S'" in work["host_scope"]
+    assert ("final D/W remain resident" in work["host_scope"]) is resident
