@@ -35,3 +35,7 @@ from 7.43 / 7.57 to 4.36 / 4.39 seconds, while cold/moved remained comparable.
 Actual cache hits performed zero geometry pair sweeps and AO/partition visits.
 Independent molecular/displaced-energy, RKS/UKS, failure and sanitizer gates pass.
 This does not qualify a default promotion or the outstanding 96-atom endpoint.
+
+Current-master promotion additionally requires the
+[current-domain requalification](2026-11-10-exact-response-current-domain-qualification.md):
+the historical VV10 density domain above is not the later default domain.

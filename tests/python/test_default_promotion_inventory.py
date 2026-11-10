@@ -85,6 +85,21 @@ def test_occupied_xc_inventory_tracks_automatic_admission() -> None:
     assert "tests/python/test_ks_occupied_xc_policy.py" in entry["evidence"]
 
 
+def test_deferred_range_anchor_inventory_tracks_guarded_default() -> None:
+    """Fitted and Direct default evidence must not remain an opt-in proposal."""
+    entry = next(
+        entry
+        for entry in _payload()["entries"]
+        if entry["id"] == "scf.deferred-range-warm-anchor"
+    )
+    assert entry["classification"] == "already-default"
+    assert {
+        "tests/python/test_lazy_range_warm_anchor_cuda.py",
+        "tests/python/test_direct_range_warm_anchor_cuda.py",
+        "tests/python/test_lazy_range_force_headroom.py",
+    } <= set(entry["evidence"])
+
+
 @pytest.mark.parametrize(
     "control",
     [

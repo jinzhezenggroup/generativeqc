@@ -8,14 +8,20 @@
     2426
   ],
   "sources": [
+    "python/generativeqc/batch.py",
     "python/generativeqc/_stationary_composite_cuda.py",
     "python/generativeqc/_geometry_response_cache.py"
   ],
-  "rationale": "Default-off exact-density reuse of completed geometry-only semilocal/nonlocal and nuclear responses within an immutable prepared owner. Native one-electron/Pulay response always runs; optional bounded host storage can be refused without changing the endpoint.",
-  "revisit_condition": "Require independent E/F and displaced-energy gates, actual hits, geometry/one-ULP/resource/failure invalidation and complete original-protocol endpoints before default promotion.",
+  "rationale": "Default-off exact-density reuse of completed geometry-only semilocal/nonlocal and nuclear responses within the immutable Python composite compatibility owner. Native one-electron/Pulay response always runs; optional bounded host storage can be refused without changing the endpoint. Public prepared items with native stationary-force capability bypass this owner and do not consume this selector. Their existing native VV10 component reuse and shared-grid defaults are separate policies.",
+  "revisit_condition": "First identify actual endpoint ownership; forced compatibility hits cannot qualify a native-default speedup. Require independent E/F and displaced-energy gates, actual hits, geometry/one-ULP/resource/failure invalidation and source-bound complete 48/96-atom cold/warm/moved populations before promoting this consumer. The October 14 qualification used the historical VV10 rho>=1e-8 v1 domain, not the current rho>=1e-10 v2 domain; do not relabel those observables as current-domain references. Qualify geometry reuse both alone and with integral-response reuse rather than adding their historical gains.",
   "evidence": [
     "tests/python/test_geometry_response_cache.py",
+    "tests/python/test_geometry_response_reuse_cuda.py",
+    "tests/python/test_response_reuse_routing_cuda.py",
+    "docs/developer/xc_native_cuda.md",
     ".agents/notes/proposed/2026-10-14-exact-geometry-response-reuse.md",
+    ".agents/notes/proposed/2026-11-10-exact-response-current-domain-qualification.md",
+    "benchmarks/results/exact-geometry-response-20261014/README.md",
     "issue:#2426"
   ]
 }

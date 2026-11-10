@@ -1,7 +1,8 @@
-"""Complete Direct RSH endpoints with actual reuse and geometry/disable misses.
+"""Compatibility Direct RSH endpoints with geometry/disable misses and real hits.
 
-Independent molecular and reconverged energy-difference gates are supplied by
-``test_wb97mv_complete_cuda.py``; this same-source comparison isolates retention.
+Native prepared-force capability bypasses this snapshot consumer. Independent
+oracles for both routes live in ``test_response_reuse_routing_cuda.py``; this
+same-source comparison explicitly isolates compatibility retention.
 """
 
 from __future__ import annotations
@@ -26,6 +27,11 @@ def test_exact_two_electron_response_reuse(
     assert os.environ.get("SLURM_JOB_ID")
     from generativeqc import Calculator, GridSpec, KsOptions
     from generativeqc._ks_snapshot import NativeKsSnapshot
+    from generativeqc.batch import PreparedBatch
+
+    # Model a linked library without native prepared-force capability. This
+    # exercises the supported compatibility consumer, not default native work.
+    monkeypatch.setattr(PreparedBatch, "_native_dft_force_eligible", lambda *_: False)
 
     atoms = [("O", (0.02, -0.03, 0.04)), ("H", (0.1, 1.43, 1.1))]
     if not unrestricted:
@@ -33,14 +39,19 @@ def test_exact_two_electron_response_reuse(
     coordinates = np.array([[xyz for _, xyz in atoms]])
     moved = coordinates.copy()
     moved[0, -1, 0] += 0.001
+    monkeypatch.setenv("GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE", "0")
     outputs = []
-    for enabled in (False, True):
+    for reuse_policy in (None, "0", "1"):
+        enabled = reuse_policy == "1"
         monkeypatch.delenv(
             "GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK", raising=False
         )
-        journal = tmp_path / f"response-{unrestricted}-{enabled}.jsonl"
+        journal = tmp_path / f"response-{unrestricted}-{reuse_policy}.jsonl"
         monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(journal))
-        monkeypatch.setenv("GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE", str(int(enabled)))
+        if reuse_policy is None:
+            monkeypatch.delenv("GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE", raising=False)
+        else:
+            monkeypatch.setenv("GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE", reuse_policy)
         calculator = Calculator(
             method="wb97m-v-uks" if unrestricted else "wb97m-v",
             basis="def2-svp",
@@ -120,6 +131,9 @@ def test_exact_two_electron_response_reuse(
                 assert work[2] == work[5] == 0
         else:
             assert work == [1] * 8
-    for original, reused in zip(*outputs, strict=True):
-        assert abs(original.energy - reused.energy) <= 1e-8
-        np.testing.assert_allclose(original.forces, reused.forces, rtol=0, atol=1e-7)
+    for candidates in outputs[1:]:
+        for original, candidate in zip(outputs[0], candidates, strict=True):
+            assert abs(original.energy - candidate.energy) <= 1e-8
+            np.testing.assert_allclose(
+                original.forces, candidate.forces, rtol=0, atol=1e-7
+            )
