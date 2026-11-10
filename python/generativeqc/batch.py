@@ -1382,8 +1382,7 @@ class PreparedBatch:
             unsupported == {"forces"} and public_dft_forces and all(native_dft_forces)
         ):
             raise ValueError(
-                f"method {self._calculator._method_name!r} does not support properties: "
-                + ", ".join(sorted(unsupported))
+                self._calculator._unsupported_properties_message(unsupported)
             )
         compatibility_forces = tuple(
             public_dft_forces and not native for native in native_dft_forces

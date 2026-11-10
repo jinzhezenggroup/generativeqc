@@ -316,6 +316,34 @@ PyTorch/CUDA versions, GPU, GenerativeQC commit/library, cutoff, workload, and t
 samples. Do not compare published H100 numbers directly with a local RTX 5090 run;
 run both implementations on the same allocated device.
 
+## Native second-order composition
+
+`NativeD3SecondOrder` differentiates the existing GeometryIR/TensorIR two-body
+BJ energy, retaining all distance, coordination-number/C6 and mixed responses.
+Its independently qualified domain is uncut BJ with ATM off. Correction-only
+HVP/full-matrix requests have separate work, generation, workspace and output
+admission. Finite cutoffs, zero damping, ATM and D4 do not inherit that domain.
+
+The installed `Calculator` composes this source with already-qualified CPU
+direct all-electron full-range PBE0/B3LYP RKS curvature. Electronic response
+owners are closed before correction execution; detached electronic outputs,
+private totals and immutable publication still count against simultaneous
+correction storage. Full matrices stream D3 actions into a private electronic
+copy. The total is never symmetrized, projected or published after a correction
+failure. No extra CPKS solve is performed, and a duplicate source is rejected.
+
+First-order MethodIR serialization and scientific parameter identities are
+unchanged. Executable second-order admission is a narrower intersection of
+the qualified electronic domain and the D3 compiler specification, not an
+expansion of generic first-order primitive metadata. The public contract and
+diagnostics are documented in [Hessians](../user/hessians.md).
+
+Independent acceptance gates and the exact small molecular fixture are frozen
+in `tests/data/d3_second_order/manifest.json`. The public tests compare all raw
+total-method columns against multistep independently reconverged PySCF moving-grid
+gradients plus simple-dftd3 gradients, with the Gaussian/VWN-RPA definition
+supplied explicitly. These tests do not qualify UKS, ECP or native TS tasks.
+
 ## Parameter catalog availability
 
 The generated parameter catalog retains all 157 pinned upstream D3(BJ) records,

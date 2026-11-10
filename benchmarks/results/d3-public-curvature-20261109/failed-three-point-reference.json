@@ -1,0 +1,14 @@
+{
+  "schema": "generativeqc.d3-curvature-failed-reference/v1",
+  "status": "failed",
+  "stage": "independent full raw Hessian comparison",
+  "reference_stencil": "symmetric-three-point-second-order",
+  "step_bohr": 0.003,
+  "observed_max_abs_error": 4.806239251320399e-5,
+  "unchanged_acceptance_gate": 1e-5,
+  "native_threshold_relaxed": false,
+  "resolution": "Use a symmetric five-point fourth-order independent-gradient stencil at the same three steps; retain the native matrix and physical gate.",
+  "original_archive_revision": "b1d20f9f6ade91f08f27c024177df3209aa10936",
+  "original_archive_path": "benchmarks/results/d3-public-curvature-20261109/three-point-reference-failure.log.xz",
+  "original_archive_sha256": "2bdf607c39ebbae9ca768114c24a22fa1ac88b8b5f44cca14b897132163ce537"
+}

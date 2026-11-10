@@ -1304,6 +1304,7 @@ def composite_rks_hessian(
         raise ValueError("full Hessian publication exceeds output_budget_bytes")
     matrix = np.empty((coordinates, coordinates))
     residuals = []
+    iterations = []
     for coordinate in range(coordinates):
         direction = np.zeros((natom, 3))
         direction.reshape(-1)[coordinate] = 1
@@ -1316,6 +1317,7 @@ def composite_rks_hessian(
         )
         matrix[:, coordinate] = result.value.reshape(-1)
         residuals.append(result.diagnostics["response_residual_norm"])
+        iterations.append(result.diagnostics["response_iterations"])
     diagnostics = {
         "derivative_method": "compiler-automatic-differentiation",
         "public_calculator_endpoint": False,
@@ -1339,6 +1341,8 @@ def composite_rks_hessian(
         "displaced_scf_evaluations": 0,
         "raw_symmetry_error": float(np.max(abs(matrix - matrix.T))),
         "response_residual_norms": tuple(residuals),
+        "response_iterations": sum(iterations),
+        "response_iterations_per_coordinate": tuple(iterations),
         "source_names": operator.plan.source_names,
         "pair_evaluations": operator.xc_kernel.statistics["pair_evaluations"],
         "assembly_seconds": time.perf_counter() - started,

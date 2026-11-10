@@ -52,8 +52,13 @@ restricted calculations admit Cartesian or real-spherical AOs through f.
 The resolved semilocal composition must equal PBE0 or Gaussian-definition
 B3LYP (VWN-RPA); its one full-range exchange coefficient may be in `(0, 1]`.
 A changed MethodIR identifier does not change admission or the physical method.
-Unrestricted, density-fitted, ECP, dispersion-corrected and CUDA variants do
-not inherit this support. Imported canonical basis records retain their actual
+An optional **uncut two-body D3(BJ), ATM off** correction is added once to the
+qualified electronic result, including coordination-number/C6 response. It uses
+the supplied canonical `D3Spec`, not a second functional-specific Hessian solver.
+Unrestricted, density-fitted, ECP and CUDA variants do not inherit this support.
+D4, zero damping, ATM and finite-cutoff corrections remain unsupported for
+second order, even when their energy and first gradient are available.
+Imported canonical basis records retain their actual
 spherical AO dimension; no Cartesian replacement is used.
 
 **Canonical WB97M-V RKS/UKS.** Both spins, Cartesian or spherical
@@ -78,6 +83,23 @@ exposing one global cap:
 | `grid_budget_bytes` | full-range hybrids and WB97M-V: numeric AO/grid/AD workspace |
 | `max_nonlocal_pairs` | WB97M-V only: ordered VV10 pairs per response action |
 | `output_budget_bytes` | (`hessian` only) the dense matrix plus immutable publication |
+
+For corrected full-range RKS, `output_budget_bytes` holds three dense matrices:
+the detached electronic result, the private total, and immutable publication.
+The constructor's `dispersion_memory_budget_bytes` additionally bounds the
+simultaneously retained electronic arrays, total publication and D3 workspace.
+Correction columns are streamed; no separate dense D3 matrix is retained.
+An insufficient correction budget raises without returning an electronic-only
+result under the corrected method's identity.
+
+Corrected results retain the electronic response diagnostics and add one
+`d3_bj_two_body` source. HVP `components` includes that positive gradient
+derivative, not a force derivative. `diagnostics["dispersion"]` reports the
+parameter/source identities, actual correction actions/scalar work, workspace
+and correction preparation/assembly time. No additional electronic response
+solve or displaced SCF is introduced. `endpoint_seconds` includes the native
+SCF, electronic curvature and correction, while `scf_energy`, `dispersion_energy`
+and `total_energy` distinguish the energy components.
 
 The LDA/PBE endpoints do not consume `grid_budget_bytes` or
 `max_nonlocal_pairs`; do not use these arguments as a grid-memory cap for those
