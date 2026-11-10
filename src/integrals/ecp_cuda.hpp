@@ -5,6 +5,16 @@
 #include "integrals/ecp.hpp"
 
 namespace generativeqc::integrals {
+// Raw CUDA grids retain their independently qualified domain. Checked production
+// calls select fixed grids internally and do not consume raw grid arguments.
+inline generativeqc_status validate_ecp_cuda_grid(unsigned radial, unsigned polar,
+                                                  std::string& detail) {
+  if (radial < 16 || radial > 512 || polar < 8 || polar > 96) {
+    detail = "CUDA ECP quadrature requires 16..512 radial and 8..96 polar points";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
 // Host export for independent validation and existing host-visible consumers.
 generativeqc_status ecp_integrals_cuda(int device, const core::System& system, unsigned radial,
                                        unsigned polar, bool derivatives, EcpData& output,

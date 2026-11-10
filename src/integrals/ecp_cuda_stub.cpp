@@ -19,8 +19,12 @@ generativeqc_status unavailable(std::string& detail, std::string_view operation)
 }
 }  // namespace
 
-generativeqc_status ecp_integrals_cuda(int, const core::System&, unsigned, unsigned, bool, EcpData&,
-                                       std::string& detail, bool) {
+generativeqc_status ecp_integrals_cuda(int, const core::System&, unsigned radial, unsigned polar,
+                                       bool, EcpData&, std::string& detail, bool convergence) {
+  if (!convergence) {
+    const auto status = validate_ecp_cuda_grid(radial, polar, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  }
   return unavailable(detail, "ECP integral evaluation");
 }
 generativeqc_status add_ecp_cuda(int, const core::System&, void*, double*, const double*, double*,

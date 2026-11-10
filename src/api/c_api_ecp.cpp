@@ -83,6 +83,11 @@ generativeqc_status generativeqc_system_ecp_integrals(generativeqc_context* cont
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
   try {
+    if (context->state.executed_backend == GENERATIVEQC_BACKEND_CUDA) {
+      const auto status = generativeqc::integrals::validate_ecp_cuda_grid(
+          radial_points, polar_points, context->last_detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    }
     const auto n = generativeqc::molecule::ao_count(system->data);
     const auto count = 2 * n * n * (1 + (derivatives ? 3 * system->data.atoms.size() : 0));
     if (output_count != count) throw std::invalid_argument("ECP output buffer size mismatch");
