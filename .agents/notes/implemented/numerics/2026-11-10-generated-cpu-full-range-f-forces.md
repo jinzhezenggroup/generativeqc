@@ -167,3 +167,25 @@ warnings-as-errors also pass. The compiler/catalog/API Python checks pass 112
 tests and 25 subtests. Builds use verified sccache 0.16.0 with retained pre/post
 statistics; unrelated shared-cache activity prevents attributing global hit
 counts to this patch. These are CPU-only checks, not real-device GPU evidence.
+
+## CI static-type follow-up
+
+CI's separately pinned `ty==0.0.82` sees `CoulombKernel.family` as enum-or-string,
+even though the frozen dataclass normalizes it in `__post_init__`. Normalize
+explicitly with `CoulombKernelFamily(...)` at the private full/SR/LR dispatch,
+as the existing payload serializer already does. Do not narrow the constructor's
+accepted inputs or suppress the diagnostic.
+
+A one-off before/after comparison confirms byte-identical emitted full-range,
+short-range and long-range C++; it is not a permanent generated-source
+fingerprint test. The exact pinned type check and all-file pre-commit pass.
+The official Libxc writer/checker retains an identical capability summary and
+stale historical measurements. A rebuilt/reinstalled wheel repeats the 40
+lightweight primitive/force checks, and all 141 existing native tests pass.
+The expensive Ni receipt above retains its original binary identity rather
+than being relabeled as a new run after this non-numerical typing correction.
+
+Keep the installed-wheel OpenBLAS `LD_LIBRARY_PATH` override out of the in-tree
+CTest run: it caused the unrelated GFN2 private-provider verification to fail.
+The same test passes using the build's configured RPATH without that override;
+no provider verification or production code is weakened to make it pass.

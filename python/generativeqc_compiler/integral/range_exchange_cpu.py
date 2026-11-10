@@ -10,7 +10,7 @@ def _emit_primitive_program(radial: CoulombKernel) -> str:
         CoulombKernelFamily.FULL_RANGE: "Full",
         CoulombKernelFamily.LONG_RANGE: "Long",
         CoulombKernelFamily.SHORT_RANGE: "Short",
-    }[radial.family]
+    }[CoulombKernelFamily(radial.family)]
     dispatch = "\n".join(
         f"    case {order}: return evaluate_order<{order}>(exponents, centers, angular, mask);"
         for order in range(13)
