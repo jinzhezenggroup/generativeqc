@@ -73,9 +73,20 @@ Prepared host fixtures must describe the complete source inventory. Empty
 range sources on semilocal mocks preserve, rather than bypass, their artifact,
 lifecycle and resource tests.
 
+The follow-up resource review found that the ordinary owner decoded the mixed
+bridge's lazy LR peak but read only the full-range one-electron field during
+reserve validation and publication. The corrected route queries the native
+lazy capacity before geometry planning and charges the mixed peak consistently.
+DF response scratch remains explicitly excluded. Range-only public force
+admission is through d, matching the ordinary compiled geometry layout; the
+separate nonlocal owner retains its through-f domain. Native integral support
+alone does not qualify a geometry layout that rejects the requested basis.
+
 ## References
 
-- `benchmarks/results/ks-original-complete-20261110/`.
+- `benchmarks/results/ks-original-state-gates-20261110/` is the current compact
+  publication. Its authenticated Git recovery record retains the complete
+  vectors at `de57dc9c3118d47bc3eb2692a7b51320fad311db` without an external archive.
 - `2026-11-09-ks-physical-force-and-canonical-proof.md`.
 - `2026-11-10-range-only-cuda-stationary-sources.md`.
 - Issues #2915 and #2840; PR #3060.
