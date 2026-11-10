@@ -82,6 +82,16 @@ admission is through d, matching the ordinary compiled geometry layout; the
 separate nonlocal owner retains its through-f domain. Native integral support
 alone does not qualify a geometry layout that rejects the requested basis.
 
+Two latest-source UKS attempts encountered independent PySCF DIIS nonconvergence
+at the original 1e-13 energy / 1e-9 orbital-gradient gates and 200-cycle cap,
+in different Cartesian force controls. Those failed reference observations
+remain failures, not native passes or permission to relax a gate. The targeted
+force oracle uses PySCF's independent second-order orbital solver with at most
+one inner orbital update per macro cycle and the same 200-cycle cap. Geometry,
+quadrature, Hamiltonian, native controls, basin seed, and all E/D/Fock/force and
+physical-state comparisons remain unchanged. Solver identity and declared
+bounds accompany every new independent-force observation.
+
 ## References
 
 - `benchmarks/results/ks-original-state-gates-20261110/` is the current compact

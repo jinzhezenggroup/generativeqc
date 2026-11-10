@@ -94,7 +94,7 @@ def test_original_large_spd_uks_final_state(
         "mask": mask,
         "forces_requested": forces,
     }
-    force_references: dict[bool, np.ndarray] = {}
+    force_references: dict[bool, tuple[np.ndarray, dict[str, Any]]] = {}
     try:
         with calculator.prepare_batch(
             [atoms], charges=[spec["charge"]], multiplicities=[spec["multiplicity"]]
@@ -155,7 +155,8 @@ def test_original_large_spd_uks_final_state(
                             force_references[phase >= 3] = _independent_force(
                                 batch, basis, current
                             )
-                        reference_forces = force_references[phase >= 3]
+                        reference_forces, oracle = force_references[phase >= 3]
+                        row["force_reference_solver"] = oracle
                         row["reference_forces"] = reference_forces.tolist()
                         np.testing.assert_allclose(
                             item.forces, reference_forces, atol=3e-5, rtol=0
@@ -187,7 +188,7 @@ def test_original_large_spd_uks_final_state(
 
 def _independent_force(
     batch: PreparedBatch, basis: Any, spec: dict[str, Any]
-) -> np.ndarray:
+) -> tuple[np.ndarray, dict[str, Any]]:
     """Reconverge independent PBE and full moving-grid response at the native root.
 
     A native seed selects the same stationary basin; no native Fock, energy,
@@ -225,6 +226,7 @@ def _independent_force(
             xc="PBE",
             initial_density=initial_density,
             scf_gradient_tolerance=1e-9,
+            scf_solver="newton",
             return_mean_field=True,
         )
         assert energy == pytest.approx(state._source.energy(), abs=1e-8)
@@ -241,4 +243,12 @@ def _independent_force(
                 - state.overlap @ state.density[spin] @ physical
             )
             assert np.max(np.abs(commutator)) < 1e-9
-        return -np.asarray(derivative)
+        return -np.asarray(derivative), {
+            "solver": "independent-PySCF-second-order-UKS",
+            "converged": bool(reference.converged),
+            "completed_macro_cycles": getattr(reference, "cycles", None),
+            "energy_tolerance": 1e-13,
+            "gradient_tolerance": 1e-9,
+            "maximum_macro_cycles": 200,
+            "maximum_inner_updates": 1,
+        }

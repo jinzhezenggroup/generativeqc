@@ -766,6 +766,7 @@ def independent_global_hybrid_gradient(
     return_mean_field: bool = False,
     initial_density: typing.Any = None,
     scf_gradient_tolerance: float = 1e-10,
+    scf_solver: str = "diis",
 ) -> typing.Any:
     """Independent hybrid SCF/moving-grid gradient in the endpoint's AO space.
 
@@ -841,6 +842,13 @@ def independent_global_hybrid_gradient(
     }
     mf.grids.gen_atomic_grids = lambda *args, **kwargs: tab
     mf.small_rho_cutoff = 0
+    if scf_solver == "newton":
+        mf = mf.newton()
+        # Keep at most one orbital update per macro iteration, under the same
+        # 200-iteration cap and unchanged energy/gradient acceptance below.
+        mf.max_cycle_inner = 1
+    elif scf_solver != "diis":
+        raise ValueError("independent SCF solver must be diis or newton")
     mf.conv_tol, mf.conv_tol_grad, mf.max_cycle = 1e-13, scf_gradient_tolerance, 200
     energy = mf.kernel(dm0=initial_density)
     assert mf.converged
