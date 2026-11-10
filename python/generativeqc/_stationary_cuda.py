@@ -2566,6 +2566,7 @@ class PreparedStationaryCudaExecution:
                 if component_mode
                 else None,
                 cache_generated_sources=_stationary_source_cache_enabled(),
+                include_external=bool(plan.range_exchange_sources),
             )
             if aot_directory is None or ecp
             else load_stationary_aot_artifact(
@@ -2589,7 +2590,9 @@ class PreparedStationaryCudaExecution:
         }
         stack = ExitStack()
         try:
-            source_names = stationary_runtime_sources(plan)
+            source_names = stationary_runtime_sources(
+                plan, include_external=bool(plan.range_exchange_sources)
+            )
             needs_first = _stationary_density_jet_count(functional) > 1
             # Register the borrowed grid owner first so ExitStack closes the
             # stationary consumer before destroying the CUDA stream it borrows.
@@ -3396,7 +3399,16 @@ def _complete_rks_cuda_gradient_diagnostic(
             hamiltonian="scalar-semilocal-ecp" if ecp else "all-electron",
         ),
     )
-    source_names = stationary_runtime_sources(plan)
+    range_only = bool(plan.range_exchange_sources)
+    if range_only and (
+        ecp
+        or any(name.startswith("nonlocal_") for name in plan.source_names)
+        or not bool(getattr(state._source, "density_fitted", False))
+    ):
+        raise NotImplementedError(
+            "range-only CUDA forces require a fitted all-electron plan without NLC"
+        )
+    source_names = stationary_runtime_sources(plan, include_external=range_only)
     density = state.density if contract.spin == "polarized" else state.density[0]
     if (
         tuple(s for s in plan.source_names if s not in ("ecp_local", "ecp_nonlocal"))
@@ -3579,6 +3591,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                     if component_mode
                     else None,
                     cache_generated_sources=_stationary_source_cache_enabled(),
+                    include_external=range_only,
                 )
                 if aot_directory is None or ecp
                 else load_stationary_aot_artifact(
@@ -3748,7 +3761,9 @@ def _complete_rks_cuda_gradient_diagnostic(
             == "combined"
         )
         integral_provider = (
-            fitted_integral_provider
+            direct_integral_provider
+            if range_only
+            else fitted_integral_provider
             if use_fitted_integrals
             else direct_integral_provider
         )
@@ -3757,11 +3772,11 @@ def _complete_rks_cuda_gradient_diagnostic(
             with timeline.phase("prepared_stationary_integral_derivatives"):
                 native_integral = (
                     integral_provider(na, native_integral_budget)
-                    if use_fitted_integrals
+                    if use_fitted_integrals and not range_only
                     else integral_provider(
                         na,
                         native_integral_budget,
-                        range_exchange=False,
+                        range_exchange=range_only,
                         **(
                             {"combined_two_electron": True}
                             if combined_requested
@@ -3782,14 +3797,14 @@ def _complete_rks_cuda_gradient_diagnostic(
                 native_integral_components = np.asarray(native_integral_components)
                 if (
                     native_integral_components.shape
-                    != (3 if combined_requested else 4, na, 3)
+                    != (3 if combined_requested else 5 if range_only else 4, na, 3)
                     or not np.isfinite(native_integral_components).all()
                 ):
                     raise RuntimeError(
                         "prepared stationary integral source returned invalid output"
                     )
                 native_combined_integrals = combined_requested
-        if use_fitted_integrals and native_integral_components is None:
+        if (use_fitted_integrals or range_only) and native_integral_components is None:
             raise NotImplementedError(
                 "density-fitted stationary derivative provider is unavailable; "
                 "Direct derivative fallback would change the Hamiltonian"
@@ -4067,7 +4082,15 @@ def _complete_rks_cuda_gradient_diagnostic(
                 components["coulomb"] = np.ascontiguousarray(
                     native_integral_components[2]
                 )
-            if has_exchange and not native_combined_integrals:
+            if range_only:
+                # Native rows already contain the primary full-range exchange
+                # and its exact LR correction in the plan's SR/LR convention.
+                # Never replace either row with an exact full-range derivative.
+                for index, source in enumerate(plan.range_exchange_sources, start=3):
+                    components[source.name] = np.ascontiguousarray(
+                        native_integral_components[index]
+                    )
+            elif has_exchange and not native_combined_integrals:
                 components["exact_exchange"] = np.ascontiguousarray(
                     native_integral_components[3]
                 )
@@ -4141,6 +4164,9 @@ def _complete_rks_cuda_gradient_diagnostic(
                     )
                     if has_exchange and not native_combined_integrals:
                         gradient = gradient + components["exact_exchange"]
+                    if range_only:
+                        for source in plan.range_exchange_sources:
+                            gradient = gradient + components[source.name]
                 elif native_shell_full_range:
                     gradient = gradient + components["coulomb"]
                     if has_exchange:
@@ -4262,8 +4288,10 @@ def _complete_rks_cuda_gradient_diagnostic(
         native_integrals_required=requires_native_integrals,
         primitive_integral_roots_retained=primitive_demand.integral_derivatives,
         ordered_pairs=n * n,
-        ordered_quartets=(1 + int(has_exchange)) * n**4,
-        exchange_ordered_quartets=n**4 if has_exchange else 0,
+        ordered_quartets=(1 + int(has_exchange) + len(plan.range_exchange_sources))
+        * n**4,
+        exchange_ordered_quartets=(int(has_exchange) + len(plan.range_exchange_sources))
+        * n**4,
         full_range_derivative_route=(
             "prepared-native-stationary"
             if native_complete_integrals
@@ -4304,11 +4332,20 @@ def _complete_rks_cuda_gradient_diagnostic(
                     if has_exchange and not native_combined_integrals
                     else ()
                 ),
+                *(source.name for source in plan.range_exchange_sources),
             )
             if native_complete_integrals
             else ()
         ),
         native_integral_resources=dict(native_integral_resources),
+        native_range_exchange_sources=tuple(
+            source.name for source in plan.range_exchange_sources
+        ),
+        native_range_work_scope=(
+            "independent mixed radial providers; executed quartet counts unavailable"
+            if range_only
+            else "not requested"
+        ),
         native_integral_host_reserve=native_integral_host_reserve,
         additional_device_peak_bound=peak
         + (

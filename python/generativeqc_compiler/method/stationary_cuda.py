@@ -1983,6 +1983,7 @@ def compile_stationary_cuda(
     cache: typing.Any,
     primitive_shard_width: int | None = None,
     cache_generated_sources: bool = True,
+    include_external: bool = False,
 ) -> typing.Any:
     """Reuse semantic lowering, then compile/link with unchanged binary witnesses.
 
@@ -1990,6 +1991,8 @@ def compile_stationary_cuda(
     its semantic cache bypasses emission without introducing method-to-integral
     dependencies. Explicit-source callers retain their exact source identity.
     Wrapper hits bypass Becke IR/AD. Neither cache overrides binary identities.
+    External source slots retain the complete plan order when a separate
+    authenticated native integral owner supplies range-exchange derivatives.
     """
 
     if not isinstance(compiler, CudaCompilerAdapter):
@@ -2001,6 +2004,8 @@ def compile_stationary_cuda(
         raise TypeError("stationary CUDA requires StationaryGradientPlan")
     if type(cache_generated_sources) is not bool:
         raise TypeError("stationary source cache selection must be boolean")
+    if type(include_external) is not bool:
+        raise TypeError("stationary external source selection must be boolean")
     cache = Path(cache)
     source_cache = cache if cache_generated_sources else None
     primitive_work = None
@@ -2025,6 +2030,7 @@ def compile_stationary_cuda(
         iterations=iterations,
         primitive_shards=len(primitive_sources) if sharded else None,
         primitive_shard_width=primitive_shard_width,
+        include_external=include_external,
     )
     recipe_seconds = wrapper_work["recipe_seconds"]
     binary_started = perf_counter()

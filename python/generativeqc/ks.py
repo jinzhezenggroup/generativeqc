@@ -571,6 +571,7 @@ def mixed_density_fitted_force_eligible(method_ir: MethodIR, *, backend: str) ->
     """
     from generativeqc_compiler.method.stationary_gradient import (
         COMPOSITE_STATIONARY_EXTERNAL_SOURCES,
+        SCF_POINT_MODEL,
         StationaryGradientPlan,
         StationaryMeanField,
     )
@@ -589,6 +590,23 @@ def mixed_density_fitted_force_eligible(method_ir: MethodIR, *, backend: str) ->
     if parameters is None:
         return False
     short, long, omega = parameters
+    if execution.nonlocal_correlation is None:
+        # Range-only forces use the ordinary compiled CUDA geometry owner and
+        # the native five-row mixed integral bridge. A VV10 feature lease is
+        # neither needed nor meaningful for this independent source inventory.
+        return (
+            backend == "cuda"
+            and record["cuda_ks"]
+            and record["native_range_exchange"]
+            and record["scf_domain"] == SCF_POINT_MODEL
+            and execution.semilocal.functional.range_omega == 0
+            and execution.semilocal.functional.ingredients == ("rho", "sigma")
+            and len(execution.exchange) == 2
+            and omega > 0
+            and short != long
+            and gradient.external_source_names
+            == ("exchange_short_range", "exchange_long_range")
+        )
     return (
         all(
             record[capability]

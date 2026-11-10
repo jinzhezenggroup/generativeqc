@@ -30,6 +30,7 @@ from generativeqc_compiler.method import (
     original_nonlocal_correlation,
     resolve_method,
 )
+from generativeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
 from generativeqc_compiler.method.stationary_cuda import (
     COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES,
     stationary_external_provider_sources,
@@ -40,6 +41,35 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryMeanField,
 )
 from generativeqc_compiler.tensor import execute
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_range_only_df_force_admission_requires_the_native_source_inventory(
+    spin: str,
+) -> None:
+    """A range correction does not imply a nonlocal-correlation feature lease."""
+    pure = resolve_method("PBE", spin=spin)
+    ranges = tuple(
+        primitive
+        for primitive in resolve_method("CAM-B3LYP", spin=spin).primitives
+        if isinstance(primitive, RangeSeparatedExchangePrimitive)
+    )
+    method = replace(
+        pure,
+        identifier="independent-range-only-label",
+        primitives=(*pure.primitives, *ranges),
+    )
+    assert mixed_density_fitted_force_eligible(method, backend="cuda")
+    assert not mixed_density_fitted_force_eligible(method, backend="cpu")
+    assert not mixed_density_fitted_force_eligible(method, backend="unsupported")
+    equal = replace(
+        method,
+        primitives=(
+            *pure.primitives,
+            *(replace(primitive, coefficient=Fraction(1, 5)) for primitive in ranges),
+        ),
+    )
+    assert not mixed_density_fitted_force_eligible(equal, backend="cuda")
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))

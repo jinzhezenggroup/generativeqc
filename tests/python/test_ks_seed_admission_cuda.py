@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+from collections.abc import Callable
 from dataclasses import asdict
 from importlib.resources import files
 from pathlib import Path
@@ -198,16 +199,9 @@ def test_original_grid_water96_moved_fresh_force_gate(
     original seed rejection/replay/move sequence and 1e-7 force gate.
     """
     observations: list[dict[str, Any]] = []
-    try:
-        _large_idle_seed_rejection_preserves_final_state(
-            96,
-            512,
-            options=KsOptions(force_tile_points=1024),
-            energy_tolerance=1e-12 if tight_scf_only else 1e-9,
-            density_tolerance=1e-10 if tight_scf_only else 1e-5,
-            observations=observations,
-        )
-    finally:
+
+    def checkpoint() -> None:
+        """Keep completed observations even if a later scheduled phase times out."""
         record_property("observations", json.dumps(observations))
         directory = os.environ.get("GENERATIVEQC_KS_STATE_EVIDENCE_DIR")
         if directory:
@@ -216,6 +210,19 @@ def test_original_grid_water96_moved_fresh_force_gate(
             (output / f"water96-original-grid-tight-{tight_scf_only}.json").write_text(
                 json.dumps(observations, indent=2, allow_nan=False)
             )
+
+    try:
+        _large_idle_seed_rejection_preserves_final_state(
+            96,
+            512,
+            options=KsOptions(grid=GridSpec.treutler(3), force_tile_points=1024),
+            energy_tolerance=1e-12 if tight_scf_only else 1e-9,
+            density_tolerance=1e-10 if tight_scf_only else 1e-5,
+            observations=observations,
+            checkpoint=checkpoint,
+        )
+    finally:
+        checkpoint()
 
 
 def _large_idle_seed_rejection_preserves_final_state(
@@ -226,6 +233,7 @@ def _large_idle_seed_rejection_preserves_final_state(
     energy_tolerance: float,
     density_tolerance: float,
     observations: list[dict[str, Any]] | None = None,
+    checkpoint: Callable[[], None] | None = None,
 ) -> None:
     """An independent negative occupation must not corrupt a large live owner.
 
@@ -281,6 +289,8 @@ def _large_idle_seed_rejection_preserves_final_state(
                 },
             }
         )
+        if checkpoint is not None:
+            checkpoint()
     molecule = gto.M(atom=atoms, unit="Bohr", basis=oracle_basis("def2-svp"), verbose=0)
     overlap = molecule.intor("int1e_ovlp")
     values, vectors = np.linalg.eigh(overlap)
@@ -302,6 +312,8 @@ def _large_idle_seed_rejection_preserves_final_state(
             observations.extend(
                 _force_observation("cold", item) for item in before.items
             )
+            if checkpoint is not None:
+                checkpoint()
         saved = [warm_snapshot(batch, i) for i in range(2)]
         snapshot = NativeKsSnapshot(batch, 0)
         try:
@@ -325,6 +337,8 @@ def _large_idle_seed_rejection_preserves_final_state(
             observations.extend(
                 _force_observation("replay", item) for item in after.items
             )
+            if checkpoint is not None:
+                checkpoint()
         for original, replay in zip(before.items, after.items, strict=True):
             assert replay.warm_start_used and not replay.warm_start_fallback
             assert replay.energy == pytest.approx(original.energy, abs=1e-8)
@@ -338,6 +352,10 @@ def _large_idle_seed_rejection_preserves_final_state(
             strict=True,
             properties=("energy", "forces"),
         ).items[0]
+        if observations is not None:
+            observations.append(_force_observation("moved", changed))
+            if checkpoint is not None:
+                checkpoint()
         fresh = calc.singlepoint(
             [
                 (symbol, tuple(xyz))
@@ -346,12 +364,9 @@ def _large_idle_seed_rejection_preserves_final_state(
             properties=("energy", "forces"),
         )
         if observations is not None:
-            observations.extend(
-                (
-                    _force_observation("moved", changed),
-                    _force_observation("fresh", fresh),
-                )
-            )
+            observations.append(_force_observation("fresh", fresh))
+            if checkpoint is not None:
+                checkpoint()
         assert changed.energy == pytest.approx(fresh.energy, abs=1e-8)
         np.testing.assert_allclose(changed.forces, fresh.forces, atol=1e-7, rtol=0)
 

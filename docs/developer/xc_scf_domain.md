@@ -81,6 +81,30 @@ controls in `tests/python/test_ks_seed_admission_cuda.py`. They require
 module also requires `GENERATIVEQC_GRID_CUDA_TEST=1`. The UKS mask controls
 require a test-hook native build with native PBE stationary-force artifacts.
 
+### Range-only fitted-primary forces
+
+Strict FP64 CUDA GGA range-only compositions can combine fitted full-range
+J/K with their separately prepared exact long-range K correction. Their
+semilocal point program must have the qualified SCF domain and no intrinsic
+range parameter. Graph, spin, basis, budget and provider admission remain
+independent checks; the absence of nonlocal correlation does not imply a
+VV10 grid or feature lease.
+
+The compiled CUDA geometry consumer retains the exact plan's SR/LR source
+slots. The native mixed integral bridge supplies one-electron, overlap/Pulay,
+fitted Coulomb, short-range and long-range rows; complete reduction includes
+each row once. Missing or incompatible native integral sources fail closed,
+without substituting exact full-range integrals or a CPU derivative oracle.
+Range/VV10 plans retain their distinct resident composite consumer.
+
+`tests/python/test_ks_original_rsh_admission_cuda.py` pins the original H2/H3
+DF-primary/Direct-LR fixture, both spin/layout variants and cold/warm/moved
+consumers. It compares E/D/Fock with independently reconverged mixed PySCF
+and the complete native analytic forces with five-point derivatives of that
+independent moving-grid energy. Runtime JIT requires a verified compiler
+cache and an explicitly scheduled CUDA device; emitted artifacts retain the
+complete source layout and scientific identity.
+
 ## Stable positive-density algebra
 
 The evaluator does not clip rho or sigma and has no positive density floor.
