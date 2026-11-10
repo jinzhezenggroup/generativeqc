@@ -319,14 +319,25 @@ Python compiler/JIT API still defaults to the scalar schedule; its explicit
 ## Default spatial XC execution order
 
 Device-fused semilocal KS with resident quadrature and admitted local AO maps
-defaults to a private spatial permutation. `GENERATIVEQC_CUDA_XC_SPATIAL_ORDER=1`
-explicitly selects the same schedule; `0` restores canonical atom/radial/angular
-execution order. Nonlocal and
-public resource-ledger owners retain their existing order; their additional
+defaults to a private spatial permutation. Large strict-FP64 restricted
+owners with semilocal XC, at least four AO jets, 512 AOs and 524,288 points
+automatically use tile-aligned spatial bisection on compute-capability 8+
+devices with a reported FP32/FP64 throughput ratio greater than two. This includes
+pure and global-hybrid GGA/meta-GGA products, regardless of their work-jet count
+or exact-exchange fraction. Mixed precision, range-separated, unrestricted,
+smaller and full-rate-FP64 owners retain center grouping.
+`GENERATIVEQC_CUDA_XC_SPATIAL_ORDER=1` explicitly restores
+center grouping; `2` explicitly requests bisection within the existing spatial
+storage admission; `0` restores canonical atom/radial/angular execution order.
+An explicit reference-memory budget also keeps automatic selection on center
+grouping. Nonlocal and public resource-ledger owners retain their existing
+order; their additional
 consumer/reservation contracts are not qualified by this option.
 
-The execution copy groups points by nearest center along a deterministic
-neighbor walk. It permutes the exact generated coordinates and weights together,
+The center-group execution copy groups points by nearest center along a
+deterministic neighbor walk. Bisection instead makes balanced longest-axis
+cuts aligned to execution tiles, with original-index ordering inside leaves.
+Both permute the exact generated coordinates and weights together,
 before discovering AO maps; the quadrature, AO threshold and FP64 policy do not
 change. The original resident grid remains alive. Moving-grid force bindings
 authenticate that canonical view, including its atomic measures and point-owner
