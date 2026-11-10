@@ -73,6 +73,53 @@ unchanged state gates. Its worker cap is twelve, each point has a finite
 900-second limit, and failed points remain explicit. Successful independent
 columns do not supply a native Hessian or justify capability promotion.
 
+## Completed independent matrix and negative endpoint follow-up
+
+The original cold matrix protocol accepted 67/72 states. Native SCF failed
+at indices 1, 39 and 61; independent SCF failed at 22 and 70. Keep those
+receipts and the separate failed Newton retry for 22 unchanged. A new cold
+protocol, `/tmp/gqc-ni-hessian-cold-retries/manifest.json`, uses native DIIS
+history 16 and a 1,200-cycle bound, independent minao initialization/DIIS
+space 16 and a 1,200-cycle bound. It does not seed either engine from the
+other, alter the method/grid/state gates or relabel a false convergence flag.
+All five retries pass their original state gates.
+
+The separate collector `/tmp/gqc-ni-collect-independent-matrices.py` selects
+67 original and five retry receipts, retaining hashes and source revisions
+per point. All 72 pass the pre-frozen occupied cross-geometry overlap gate
+of 0.99; the minimum singular value is 0.999871675434569. The three complete
+independent raw matrices have maximum step spread 1.7779318757e-6 Eh/Bohr².
+Their raw symmetry errors are 6.6138872e-7, 1.6878232e-7 and 8.8070292e-8;
+these are finite-difference oracle errors, not native raw-symmetry admission.
+Matrix-direction products match the independently displaced directional
+gradients within 1.2422625e-7 Eh/Bohr. Complete receipts and matrices are in
+`/tmp/gqc-ni-independent-complete-matrices/`. They remain independent
+validation assets, not a returned native HVP or molecular Hessian.
+
+The scalar-direction/shared-spin trial without gap conditioning reaches its
+3,600-second limit without an HVP, with peak RSS 2,070,304 KiB. Its last
+scientific receipt is `native-hvp-start`; no response residual or iteration
+count follows from the last first-source progress marker. Source provenance
+is parent `b734dc887d` plus the recorded dirty numerical sources, not a
+clean-parent execution or a later restamped commit.
+
+The spin-gap trial also reaches its 3,600-second limit without returning an
+HVP, at reported peak RSS 2,081,064 KiB. Its explicit response-complete
+marker records 46 actions and 635.076322 seconds, but supplies no returned
+HVP diagnostic or numerical residual. The frozen compiler-only point-panel
+trial separately records 46 response actions in 442.130459 seconds, then
+also times out at 3,600 seconds without an HVP, at peak RSS 2,258,664 KiB.
+Its final timeout receipt is retained beside its frozen source provenance.
+These are response-phase observations from
+different overlapping experiments, not paired complete-endpoint speedups.
+
+Spin-gap and compiler-only point-Jacobian reuse have separately entered the
+production adapter; see
+`../implemented/performance/2026-11-11-fixed-state-semilocal-response-reuse.md`.
+The directional/shared-spin integral lowering in this proposal remains an
+experiment. Production integration and complete Ni raw-Hessian acceptance
+are still required.
+
 ## Production requirements before adoption
 
 - Express the active jet outputs explicitly in the compiler, not by rewriting

@@ -10,7 +10,7 @@ import numpy as np
 from generativeqc_compiler.common.arrays import immutable
 
 from .profiles import canonical_hash
-from .response_solver import GMRESOptions, solve
+from .response_solver import DiagonalPreconditioner, GMRESOptions, solve
 from .rks_response import _basis_hash, _geometry_hash
 from .stationary_nuclear import StationaryNuclearResponse
 
@@ -168,7 +168,12 @@ class SpinCPKSOperator:
         return self.apply(vector)
 
     def solve_nuclear(
-        self, frozen: np.ndarray, overlap: np.ndarray, options: GMRESOptions
+        self,
+        frozen: np.ndarray,
+        overlap: np.ndarray,
+        options: GMRESOptions,
+        *,
+        preconditioner: DiagonalPreconditioner | None = None,
     ) -> StationaryNuclearResponse:
         """Solve once with metric density, then reconstruct both Pulay densities."""
         coefficients, energies = self.state.coefficients, self.state.orbital_energies
@@ -202,7 +207,7 @@ class SpinCPKSOperator:
                 ).T
             )
         rhs = self.layout.pack(rhs)
-        result = solve(self, rhs, options=options)
+        result = solve(self, rhs, options=options, preconditioner=preconditioner)
         result.require_converged()
         rotations = self.layout.split(result.solution)
         orbital_motion = np.zeros_like(coefficients)

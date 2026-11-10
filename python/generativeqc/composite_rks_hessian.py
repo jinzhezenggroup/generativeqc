@@ -465,6 +465,7 @@ class _CompositeGrid:
         )
         if self.feature_budget_bytes < 1:
             raise MemoryError("retained grid partials exceed grid_budget_bytes")
+        self._point_kernel: np.ndarray | None = None
         # The native tile must consume the admitted reserve, not its unrelated
         # default cap; keep that reserve excluded from the scalar-grid budget.
         self.jets = basis.evaluate(self.grid.points, 3, budget_bytes=ao_bytes)
@@ -484,6 +485,11 @@ class _CompositeGrid:
             "seconds": 0.0,
             "peak_bytes": 0,
             "pair_evaluations": 0,
+            "point_kernel_bytes": 0,
+            "point_kernel_reserved_bytes": 0,
+            "point_kernel_builds": 0,
+            "point_kernel_reuses": 0,
+            "point_kernel_fallbacks": 0,
         }
         self.reference = self.evaluate(np.zeros_like(self.fields))
 
@@ -493,20 +499,26 @@ class _CompositeGrid:
         """Evaluate each physical spin density with the same AO TensorIR program."""
         if delta_density is not None and delta_density.ndim == 2:
             delta_density = delta_density[None]
-        return np.concatenate(
-            [
-                features(
-                    self.jets,
-                    density,
-                    delta_density=None
-                    if delta_density is None
-                    else delta_density[spin],
-                    max_bytes=self.feature_budget_bytes,
-                    **options,
-                )
-                for spin, density in enumerate(self.state.density)
-            ]
-        )
+        try:
+            return np.concatenate(
+                [
+                    features(
+                        self.jets,
+                        density,
+                        delta_density=None
+                        if delta_density is None
+                        else delta_density[spin],
+                        max_bytes=self.feature_budget_bytes,
+                        **options,
+                    )
+                    for spin, density in enumerate(self.state.density)
+                ]
+            )
+        except MemoryError:
+            if self._point_kernel is None:
+                raise
+            self._release_point_kernel()
+        return self.feature_fields(delta_density=delta_density, **options)
 
     def public_fock(self, values: np.ndarray) -> np.ndarray:
         """Retain a spin axis only for a genuinely unrestricted reference."""
@@ -522,22 +534,114 @@ class _CompositeGrid:
             raise ValueError("composite grid/reference identity mismatch")
 
     def evaluate(self, direction: np.ndarray) -> typing.Any:
+        try:
+            result = self.model.evaluate(self.fields, direction)
+        except MemoryError:
+            if self._point_kernel is None:
+                raise
+            self._release_point_kernel()
+        else:
+            self.statistics["pair_evaluations"] += result.pair_evaluations
+            return result
         result = self.model.evaluate(self.fields, direction)
         self.statistics["pair_evaluations"] += result.pair_evaluations
         return result
 
-    def apply(self, delta_density: np.ndarray) -> np.ndarray:
+    def _release_point_kernel(self) -> None:
+        """Give required feature/geometry work priority over optional storage."""
+        self._point_kernel = None
+        reserve = self.statistics["point_kernel_reserved_bytes"]
+        self.feature_budget_bytes += reserve
+        self.model.budget_bytes += reserve
+        self.statistics["point_kernel_bytes"] = 0
+        self.statistics["point_kernel_reserved_bytes"] = 0
+        self.statistics["point_kernel_fallbacks"] += 1
+
+    def _fixed_state_point_kernel(self) -> np.ndarray | None:
+        """Reuse compiler-AD feature partials only within this fixed-state owner.
+
+        Semilocal point derivatives are diagonal in the grid-point index, but
+        retain all same/cross-spin feature coupling. VV10 is not point-local.
+        Native point providers do not promise arbitrary unit-feature tangents
+        in density tails, so they keep their original physical-direction path.
+        Geometry/moving-weight derivatives also continue to use ``evaluate``.
+        """
+        if (
+            self.model.nonlocal_primitive is not None
+            or self.model.point_provider is not None
+        ):
+            return None
+        if self._point_kernel is not None:
+            return self._point_kernel
+        count, points = self.model.feature_count, len(self.grid.points)
+        cache_bytes = count * count * points * 8
+        reserve = 2 * cache_bytes
+        if reserve >= self.feature_budget_bytes:
+            self.statistics["point_kernel_fallbacks"] += 1
+            return None
+        # Charge retained/candidate overlap against both independent consumers:
+        # AO feature TensorIR and the scalar AD tile must see the same lease.
+        self.feature_budget_bytes -= reserve
+        self.model.budget_bytes -= reserve
         started = time.perf_counter()
-        direction = np.zeros_like(self.fields)
-        direction[: self.model.feature_count] = self.feature_fields(
+        try:
+            candidate = np.empty((count, count, points))
+            direction = np.zeros_like(self.fields)
+            for column in range(count):
+                direction[column] = 1
+                result = self.evaluate(direction)
+                candidate[:, column] = result.directional_coefficients[:count]
+                direction[column] = 0
+            if not np.isfinite(candidate).all():
+                raise ValueError("fixed-state grid point kernel must be finite")
+            candidate.setflags(write=False)
+        except BaseException:
+            self.feature_budget_bytes += reserve
+            self.model.budget_bytes += reserve
+            raise
+        self._point_kernel = candidate
+        self.statistics.update(
+            point_kernel_bytes=cache_bytes,
+            point_kernel_reserved_bytes=reserve,
+            point_kernel_builds=self.statistics["point_kernel_builds"] + 1,
+            point_kernel_build_seconds=time.perf_counter() - started,
+        )
+        return candidate
+
+    def apply(self, delta_density: np.ndarray) -> np.ndarray:
+        """Apply the fixed-state XC response with bounded optional point reuse."""
+        started = time.perf_counter()
+        try:
+            self._fixed_state_point_kernel()
+        except MemoryError:
+            # A smaller scalar-AD tile can fail after cache admission. Its
+            # candidate is gone and both leases are restored before fallback.
+            self.statistics["point_kernel_fallbacks"] += 1
+        # Do not borrow the panel before feature construction: that consumer
+        # can evict it to recover its independently required minimum workspace.
+        moving = self.feature_fields(
             left=self.zero_jets,
             delta_density=delta_density,
         )
-        result = self.evaluate(direction)
+        kernel = self._point_kernel
+        if kernel is None:
+            direction = np.zeros_like(self.fields)
+            direction[: self.model.feature_count] = moving
+            coefficients = self.evaluate(direction).directional_coefficients
+        else:
+            if not np.isfinite(moving).all():
+                raise ValueError("grid fields/directions must be finite")
+            coefficients = np.zeros_like(self.fields)
+            coefficients[: self.model.feature_count] = np.einsum(
+                "ijp,jp->ip", kernel, moving
+            )
+            if not np.isfinite(coefficients).all():
+                raise FloatingPointError("nonfinite fixed-state grid response")
+            self.statistics["point_kernel_reuses"] += 1
         response = self.public_fock(
             assemble_coefficients(
                 self.jets[:4],
-                _ao_coefficients(result.directional_coefficients),
+                _ao_coefficients(coefficients),
                 np.ones(len(self.grid.points)),
             )
         )
@@ -1031,7 +1135,8 @@ def composite_rks_hvp(
     _checked_integral_budget(
         SimpleNamespace(_source=operator.topology), integral_budget_bytes
     )
-    initial_pairs = operator.xc_kernel.statistics["pair_evaluations"]
+    initial_grid_statistics = dict(operator.xc_kernel.statistics)
+    initial_pairs = initial_grid_statistics["pair_evaluations"]
     if operator.backend.fitted and operator.df is None:
         fitting = DFSecondOrder(
             operator.state,
@@ -1120,8 +1225,18 @@ def composite_rks_hvp(
     def response_driver(values: tuple) -> typing.Any:
         nonlocal response_preconditioner
         if isinstance(operator, CompositeUKSResponse):
+            preconditioner = DiagonalPreconditioner.from_spin_orbital_gaps(
+                operator.state.orbital_energies, operator.layout.occupied
+            )
+            response_preconditioner = (
+                "spin-orbital-gap"
+                if preconditioner is not None
+                else "none-singular-spin-orbital-gap"
+            )
             return operator.solve_nuclear(
-                *values, GMRESOptions() if solver_options is None else solver_options
+                *values,
+                GMRESOptions() if solver_options is None else solver_options,
+                preconditioner=preconditioner,
             )
         preconditioner = DiagonalPreconditioner.from_orbital_gaps(
             operator.problem.reference.orbital_energies, operator.problem.layout
@@ -1261,6 +1376,20 @@ def composite_rks_hvp(
         "displaced_scf_evaluations": 0,
         "response_residual_norm": response.solve_result.residual_norm,
         "response_iterations": response.solve_result.iterations,
+        **{
+            "grid_" + name: operator.xc_kernel.statistics[name]
+            - initial_grid_statistics[name]
+            for name in (
+                "actions",
+                "point_kernel_builds",
+                "point_kernel_reuses",
+                "point_kernel_fallbacks",
+            )
+        },
+        "grid_point_kernel_bytes": operator.xc_kernel.statistics["point_kernel_bytes"],
+        "grid_point_kernel_reserved_bytes": operator.xc_kernel.statistics[
+            "point_kernel_reserved_bytes"
+        ],
         "source_names": operator.plan.source_names,
         "pair_evaluations": operator.xc_kernel.statistics["pair_evaluations"]
         - initial_pairs,
@@ -1305,6 +1434,7 @@ def composite_rks_hessian(
     matrix = np.empty((coordinates, coordinates))
     residuals = []
     iterations = []
+    initial_grid_statistics = dict(operator.xc_kernel.statistics)
     for coordinate in range(coordinates):
         direction = np.zeros((natom, 3))
         direction.reshape(-1)[coordinate] = 1
@@ -1343,6 +1473,20 @@ def composite_rks_hessian(
         "response_residual_norms": tuple(residuals),
         "response_iterations": sum(iterations),
         "response_iterations_per_coordinate": tuple(iterations),
+        **{
+            "grid_" + name: operator.xc_kernel.statistics[name]
+            - initial_grid_statistics[name]
+            for name in (
+                "actions",
+                "point_kernel_builds",
+                "point_kernel_reuses",
+                "point_kernel_fallbacks",
+            )
+        },
+        "grid_point_kernel_bytes": operator.xc_kernel.statistics["point_kernel_bytes"],
+        "grid_point_kernel_reserved_bytes": operator.xc_kernel.statistics[
+            "point_kernel_reserved_bytes"
+        ],
         "source_names": operator.plan.source_names,
         "pair_evaluations": operator.xc_kernel.statistics["pair_evaluations"],
         "assembly_seconds": time.perf_counter() - started,

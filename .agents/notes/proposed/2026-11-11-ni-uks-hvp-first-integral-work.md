@@ -92,6 +92,43 @@ run as their endpoint measurement.
 
 ## Local evidence
 
+### Post-response lazy compilation remains visible
+
+The frozen compiler-only point-panel experiment subsequently terminates at its
+3,600-second limit with exit status 124 and peak RSS 2,258,664 KiB. Its explicit
+response marker records 46 actions in 442.130459 seconds, but no native HVP,
+returned response residual or full Hessian follows. The separate timeout receipt
+is `/tmp/gqc-ni-hvp-fxc-frozen-probe/timeout-receipt.json`; source provenance
+remains the frozen `bfd1bb6cc8` checkout plus its recorded experiment scripts.
+
+Read-only process inspection on 2026-11-11 also observes both the spin-gap
+and frozen point-kernel trials compiling component/coordinate-specific
+second-order sources after their explicit response-complete markers. The
+compiler command uses the verified per-invocation sccache owner and the
+existing `second-cache-cpu/native/.native-runtime-*` slots; this is not a
+hidden reference-engine operation. One live generated primitive validates two
+exponents, nine center coordinates and eight weights, and its emitted C++ is
+approximately 488 kB. Do not assume the generic four-center ERI owner removes
+the expanded lowering of every other integral family.
+
+The read-only cache snapshot `/tmp/gqc-ni-second-jit-inventory.json` finds
+271 completed second-order artifact records and matches every recorded source
+SHA256 to retained generated source bytes. It separates original-worktree and
+frozen-snapshot include roots. This is a shared directory containing multiple
+protocols and earlier attempts: summed compiler durations are overlapping
+historical work, not one endpoint's wall time, and the count is not an exact
+per-HVP attribution. The snapshot therefore demonstrates ongoing expanded
+compilation, not a unique causal explanation for the entire timeout.
+
+Before another long endpoint trial, instrument source/contribution boundaries
+and audit component/coordinate specialization in non-ERI second-order
+consumers as well as the first RHS. Reuse canonical compiler algebra and keep
+the existing bounded fallback; do not replace derivatives with finite
+differences, disable source identities, alter include roots merely for cache
+hits, or attribute response-only timing to a complete HVP. A `py-spy` attach
+was denied by host permissions; do not repeat it expecting a Python stack
+receipt from this environment.
+
 `/tmp/gqc-continue-ni-hvp-gdb.log`, its adjacent `*-time.txt`,
 `/tmp/gqc-continue-ni-hvp-profile-gdb.log`,
 `/tmp/gqc-continue-ni-independent-hvp/` and
