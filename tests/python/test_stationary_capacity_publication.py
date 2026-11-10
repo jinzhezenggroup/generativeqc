@@ -34,6 +34,7 @@ def endpoint(
     pair_delta: int = 0,
     range_only: bool = False,
     native_device_peak: int = 32,
+    df_one_electron_resident: bool = False,
 ) -> tuple[Any, dict[str, Any]]:
     target = cuda_target_info("sm_120")
     events: list[str] = []
@@ -128,12 +129,19 @@ def endpoint(
             assert kwargs.get("range_exchange") is False
             assert kwargs.get("combined_two_electron", False) is combined
         native_calls.append(kwargs)
-        return (
-            native_values[:3] if combined and provider == "direct" else native_values,
+        resources = dict(
             _integral_source_resources(
                 (0, 24, native_device_peak, 24, 0, 0, 0, 0, 0),
                 mixed_rsh_df=range_only,
-            ),
+            )
+        )
+        if provider == "fitted" and not range_only:
+            resources["density_fitted_one_electron_resident_cuda"] = int(
+                df_one_electron_resident
+            )
+        return (
+            native_values[:3] if combined and provider == "direct" else native_values,
+            resources,
         )
 
     if range_only:
@@ -433,3 +441,37 @@ def test_range_only_peak_matches_the_native_mixed_resource_wire(
     assert result.work["density_fitted_response_resources_included"] is False
     assert "lazy-lr" in result.work["native_integral_resource_scope"]
     assert observed["events"][-3:] == ["sources-close", "grid-close", "validate"]
+
+
+@pytest.mark.parametrize(
+    "range_only,resident", [(False, False), (False, True), (True, False)]
+)
+def test_cuda_outward_record_discloses_unmeasured_df_transfers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    range_only: bool,
+    resident: bool,
+) -> None:
+    """Exercise complete publication, including resident and lazy-LR boundaries."""
+    result, _ = endpoint(
+        monkeypatch,
+        tmp_path,
+        provider="fitted",
+        combined=False,
+        range_only=range_only,
+        df_one_electron_resident=resident,
+    )
+    work = result.work
+    assert work["density_fitted_response_resources_included"] is False
+    assert work["transfer_work"]["density_fitted_response_included"] is False
+    assert "excludes DF-provider" in work["additional_device_peak_bound_scope"]
+    expected_scope = (
+        "one-electron-and-lazy-lr-derivative-owner"
+        if range_only
+        else "resident-cuda-one-electron"
+        if resident
+        else "host-one-electron-fallback"
+    )
+    assert work["native_integral_resource_scope"].endswith(expected_scope)
+    assert "H'/S'" in work["host_scope"]
+    assert ("final D/W remain resident" in work["host_scope"]) is resident
