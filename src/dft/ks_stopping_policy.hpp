@@ -1,11 +1,20 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
 #include "dft/semilocal_family.hpp"
 
 namespace generativeqc::dft {
+
+/** Full-range force/reference consumers retain the strict physical ceiling.
+ * Public energy/density controls do not bound force error. The separately
+ * qualified nonlocal orbital-gradient contract keeps its own admission. */
+constexpr bool standard_ks_stationarity_allowance(bool standard_owner, bool nonlocal_owner,
+                                                  bool forces, bool physical_reference) noexcept {
+  return standard_owner && (nonlocal_owner || (!forces && !physical_reference));
+}
 
 /** Complete compositions with independent default-grid early-stop evidence.
  * A point family alone is insufficient: custom mixing coefficients and generated
@@ -49,6 +58,17 @@ constexpr bool ordinary_ks_converged(const KsStoppingState& state) noexcept {
          state.density_change < state.density_tolerance &&
          state.residual < state.stationarity_tolerance &&
          state.maximum_residual < state.stationarity_tolerance;
+}
+
+/** An early canonical proof must not reopen the energy-only AO-maximum
+ * allowance for an imminent force/reference consumer. Its canonical-density
+ * tolerance remains a separate final-state contract. */
+constexpr bool early_ks_final_probe_stationary(const KsStoppingState& state,
+                                               bool force_or_reference) noexcept {
+  const double maximum_tolerance =
+      std::min(force_or_reference ? state.stationarity_tolerance : 1e-8, state.density_tolerance);
+  return state.residual < state.stationarity_tolerance &&
+         state.maximum_residual < maximum_tolerance;
 }
 
 /** Physical MO stationarity shared by convergence and density confirmation.

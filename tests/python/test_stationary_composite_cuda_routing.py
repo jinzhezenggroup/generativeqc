@@ -1,5 +1,6 @@
 """Structural guards for compiler-driven composite stationary CUDA routing."""
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ from generativeqc._stationary_composite_cuda import (
 )
 from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_POLICY
 from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
 from generativeqc_compiler.method.stationary_cuda import (
     stationary_external_provider_sources,
 )
@@ -146,3 +148,29 @@ def test_runtime_route_fails_closed_on_unqualified_external_sources() -> None:
         )
         is True
     )
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("fitted", (False, True))
+def test_range_only_route_requires_the_fitted_native_owner(
+    spin: str, fitted: bool
+) -> None:
+    """Only the admitted mixed Hamiltonian bypasses the VV10 controller."""
+    state = _fake_state("PBE")
+    pure = resolve_method("PBE", spin=spin)
+    ranges = tuple(
+        primitive
+        for primitive in resolve_method("CAM-B3LYP", spin=spin).primitives
+        if isinstance(primitive, RangeSeparatedExchangePrimitive)
+    )
+    state._source.method_ir = replace(
+        pure,
+        identifier="range-only-routing-control",
+        primitives=(*pure.primitives, *ranges),
+    )
+    state._source.density_fitted = fitted
+    if fitted:
+        assert requires_composite_stationary_cuda(state) is False
+    else:
+        with pytest.raises(NotImplementedError, match="exchange_short_range"):
+            requires_composite_stationary_cuda(state)

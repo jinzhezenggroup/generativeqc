@@ -120,7 +120,7 @@ def test_prepared_jit_emits_only_admitted_roots(
             state=SimpleNamespace(_source=SimpleNamespace()),
             basis=SimpleNamespace(natom=48, nao=384, nprimitive=352),
             contract=None,
-            plan=None,
+            plan=SimpleNamespace(range_exchange_sources=()),
             tensor_plans={},
             compiler=SimpleNamespace(target=None),
             cache="unused",

@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-fixed30-d35ca77a-20261110",
+  "owner": "H100 original fixed30 d35ca77a4 evidence",
+  "reason": "Retain all 583 original receipt members and 577 distinct blobs in one lossless hash-bound XZ stream. Raw complete endpoints, original scientific gates, nonwins, plans and build/reference/source provenance remain unchanged; no default promotion or cross-device attribution.",
+  "review_document": "benchmarks/results/h100-fixed30-d35ca77a-20261110/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-fixed30-d35ca77a-20261110/records/receipts.json.xz",
+      "bytes": 1007996,
+      "sha256": "9260c27bf43d4b6df6970748fac8ce7ab1c1a64630721084fad4e1cc8fca0ade",
+      "family": "h100-fixed30-d35ca77a-20261110",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact concatenation of the original nine XZ parts; authenticates the entire decoded receipt container and preserves all original member bytes for independent offline requalification."
+    }
+  ]
+}
