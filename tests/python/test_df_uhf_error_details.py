@@ -108,7 +108,13 @@ def uhf_error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     end = source.index("\n#endif  // GENERATIVEQC_HAS_CUDA", begin)
     directory = tmp_path_factory.mktemp("uhf_error_details")
     probe = directory / "probe.cpp"
-    probe.write_text(_SHIM + _UHF_SHIM + source[begin:end] + _UHF_MAIN)
+    probe.write_text(
+        '#include "scf/cuda/df_spin_domain.hpp"\n'
+        + _SHIM
+        + _UHF_SHIM
+        + source[begin:end]
+        + _UHF_MAIN
+    )
     binary = directory / "probe"
     compile_owner(compiler, directory, [probe], binary)
     return binary
