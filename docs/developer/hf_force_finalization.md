@@ -91,6 +91,13 @@ no-persistent-ERI and ordinary-output admission gates still apply. The plan
 freezes the request, admission and class mask; unsupported requests use the
 bounded incumbent before enqueue, never a retry after a candidate error.
 
+Automatic runtime admission is not completed independent default qualification.
+The [shared-Rys XY inventory](../../manifests/maintenance/default_promotion/hf.shared-rys-xy.json)
+retains the unresolved default HF48 independent force diagnostic and the revised
+policy's source-bound endpoint requirements. Its `guarded-promotion-candidate`
+classification must not be interpreted as a default-off selector or as proof
+that the independent force gate passes.
+
 Eligible large cold restricted owners automatically use a bounded screened FP64
 proposal when `GENERATIVEQC_HF_COLD_SCREENING` is unset. Exact `1` also admits
 the proposal; `0`, `none`, empty and invalid explicit values preserve the ordinary

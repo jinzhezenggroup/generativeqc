@@ -365,6 +365,28 @@ def test_partial_reference_checks_only_its_completed_geometry() -> None:
     assert reference_baselines(None, scientific, allow_missing=True) == {}
 
 
+@pytest.mark.parametrize("allow_missing", [False, True])
+def test_wb97mv_rejects_historical_vv10_domain_even_when_optional(
+    allow_missing: bool,
+) -> None:
+    """A historical exact-reuse speedup is not a current-domain force oracle."""
+    scientific = protocol(
+        3, load_r2scan3c_basis(), GridSpec(), 5, benchmark=specification("wb97m-v")
+    )
+    historical = {
+        **scientific,
+        "nonlocal_density_policy": "vv10-molecular-rho-ge-1e-8-v1",
+        "nonlocal_density_threshold": 1e-8,
+    }
+    oracle = {
+        "protocol": historical,
+        "status": "measured",
+        "records": [completed_sample(), completed_sample("moved", 1)],
+    }
+    with pytest.raises(ValueError, match="protocol differs"):
+        reference_baselines(oracle, scientific, allow_missing=allow_missing)
+
+
 @pytest.mark.parametrize(
     "failure", ["forces", "convergence", "status", "timing", "energy"]
 )
