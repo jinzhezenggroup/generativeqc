@@ -51,20 +51,39 @@ first spatial derivatives. Neither computes tau or higher jets.
 
 ## Physical final-state admission
 
-CUDA full-range KS force and physical-reference consumers retain the strict
-physical residual ceiling, `min(1e-9, density_tolerance)`, even when the public
-energy/density controls select Standard convergence. Energy-only owners may use
-their separately admitted Standard allowance. The nonlocal orbital-gradient and
-budget-Fock contracts retain their independently qualified policies.
+**Draft policy (requires RTX 5090 numerical qualification before promotion):**
+recognized default-grid PBE/PBE0/B3LYP/r2SCAN full-range, all-electron,
+single-slot strict-FP64 CUDA RKS now tests the physical restricted MO orbital
+gradient norm, `||2 C_vir^T F[D] C_occ||_F < sqrt(energy_tolerance)`, alongside
+the unchanged full-target energy change. This is the stopping norm used by
+GPU4PySCF v1.9.0, independently of whether the caller asks for energy only or
+energy plus analytic forces. It is **not** a force-error guarantee and does not
+claim matching DIIS trajectories, Fock counts or final-state acceptance.
 
-The prepared method binds whether forces are requested before SCF starts. This
-fact is independent of additional force-allocation bytes: an already resident
-force workspace does not turn a force request into an energy-only request.
-Iteration, early canonical probes, resident force weights and detached export
-retain that physical contract. In particular, an early force/reference proof
-cannot use the energy-only `1e-8` AO-maximum allowance. Strict callers retain
-the independent `1e-8` canonical-density gate; the physical residual ceiling
-is not silently reused as a tighter density gate.
+The new mode uses the existing device transform of the *physical* F[D]
+commutator, not the DIIS/extrapolated Fock and not the AO maximum as a proxy.
+The old AO-based shortcut cannot publish a state without passing the orbital
+test. In the subsequent canonical physical-state proof, the resident and
+detached validators use the caller's density tolerance rather than silently
+reintroducing the old `1e-8` AO residual limit. Electron trace, idempotency,
+actual F[D], eigenframe/canonical checks and force-token identity remain
+required, so final acceptance is still not bit-for-bit GPU4PySCF behavior.
+The relaxed canonical-density allowance may change force observables and
+must be checked independently rather than inferred from successful SCF.
+
+The policy is limited to the already recognized default-grid standard models.
+Custom mixtures, M06-2X, UKS, ECP, mixed precision, partial/nonlocal owners,
+incremental J/K and physical-reference exports retain their incumbent
+conditions. Either tighter public energy or density control selects strict
+AO stopping. The pre-existing qualified VV10 orbital-gradient policy and
+budget-Fock policy are unaffected.
+
+The prepared method still binds actual force intent before SCF independently
+of extra allocation bytes; this retains the #3060 force-consumer provenance.
+Do not treat this draft as resolving the original water96 PBE moved/fresh
+`1e-7 Eh/Bohr` gate, or as an RTX 5090 cold-win claim, until a source-matched
+same-GPU comparison, the original water96 lifecycle, and independent dense
+force references pass.
 
 Full-range, all-electron, strict-FP64, single-slot CUDA UKS owners test the actual
 unshifted physical/canonical state before a corrective closure, including pure
