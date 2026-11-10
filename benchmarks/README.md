@@ -13,9 +13,11 @@ Write each run to a new directory under `.artifacts/benchmarks/`; output into
 | Prepared execution and cache behavior | `prepared_lifecycle.py`, `runtime_cache_state.py` |
 | Qualification and publication | `readme_defaults_qualification.py`, `../tools/evidence.py` |
 
-The [2026-11-11 RTX 5090 README cohort](results/readme-rtx5090-20261111/README.md)
+The [combined #3064/#3065 RTX 5090 cohort](results/readme-rtx5090-composed-20261111/README.md)
 retains every endpoint timing and recorded oracle error. Replay its compact
 summary and figures with `python -m benchmarks.readme_defaults_summary --help`.
+The [preceding RHF-only cohort](results/readme-rtx5090-20261111/README.md)
+remains separately source-matched; its timings do not enter the new figures.
 
 For the convergence-matched Direct HF default and explicit strict override, see the
 [native MO-gradient setting](../docs/user/application_precision.md).

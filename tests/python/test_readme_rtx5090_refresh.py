@@ -17,9 +17,7 @@ from benchmarks.readme_defaults import COMMON_GATES, METHODS, SIZES
 if TYPE_CHECKING:
     from types import ModuleType
 
-DIRECTORY = (
-    Path(__file__).resolve().parents[2] / "benchmarks/results/readme-rtx5090-20261111"
-)
+RESULTS = Path(__file__).resolve().parents[2] / "benchmarks/results"
 
 
 @pytest.fixture(scope="module")
@@ -117,14 +115,26 @@ def test_reject_incomplete_or_mismatched_evidence(
         replay.audit(populations)
 
 
-def test_retained_samples_recompute_the_published_summary(replay: ModuleType) -> None:
+@pytest.mark.parametrize(
+    "campaign",
+    ["readme-rtx5090-20261111", "readme-rtx5090-composed-20261111"],
+)
+def test_retained_samples_recompute_the_published_summary(
+    replay: ModuleType, campaign: str
+) -> None:
     """Exercise every real timing/error sample without GPU execution or winner pinning."""
-    manifest = json.loads((DIRECTORY / "manifest.json").read_text())
-    payload = (DIRECTORY / "samples.json.xz").read_bytes()
+    directory = RESULTS / campaign
+    manifest = json.loads((directory / "manifest.json").read_text())
+    payload = (directory / "samples.json.xz").read_bytes()
     assert hashlib.sha256(payload).hexdigest() == manifest["samples_sha256"]
     data = json.loads(lzma.decompress(payload))
     assert replay.audit(data) == manifest["summary"]
     assert all(len(row["raw_receipt_sha256"]) == 64 for row in data["populations"])
+    for name, checksum in data["references"].items():
+        assert (
+            hashlib.sha256((RESULTS.parents[1] / name).read_bytes()).hexdigest()
+            == checksum
+        )
 
 
 def test_superseded_attempts_are_retained_but_not_selected_for_speed(
