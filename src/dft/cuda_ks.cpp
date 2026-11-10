@@ -448,7 +448,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // Eligible strict solves may replace the conservative AO-maximum margin
   // only with a successful complete canonical final-state proof.
   bool early_final_probe_requested{}, standard_convergence_model{}, standard_nonlocal_model{},
-       standard_fullrange_orbital_model{};
+      standard_fullrange_orbital_model{};
   mutable std::optional<CudaKsFinalStateToken> cached_final_token;
   KsFinalStateDiagnostic final_validation_diagnostic;
   cuda_ks_detail::Scalars last_physical;
@@ -933,8 +933,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * keep their existing strict physical AO stopping contract. */
   bool fullrange_orbital_convergence_active() const noexcept {
     return default_fullrange_ks_orbital_mode(
-        standard_convergence_active(), standard_fullrange_orbital_model,
-        standard_nonlocal_model, incremental_direct_jk, options.export_physical_reference);
+        standard_convergence_active(), standard_fullrange_orbital_model, standard_nonlocal_model,
+        incremental_direct_jk, options.export_physical_reference);
   }
 
   bool orbital_convergence_active() const noexcept {
@@ -4230,8 +4230,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       launch_subtract_matrix_batches_kernel(blocks, 128, 0, stream, 1, spins, n, tmp2, enabled,
                                             residual);
       check(cudaGetLastError());
-      const bool physical_orbital_check = orbital_convergence_active() &&
-                                          !pending_nonlocal_seed && !pending_nonlocal_frozen;
+      const bool physical_orbital_check =
+          orbital_convergence_active() && !pending_nonlocal_seed && !pending_nonlocal_frozen;
       if (physical_orbital_check) {
         // X^T S X=I and D=2 C_occ C_occ^T. Hence the transformed physical
         // commutator norm is sqrt(2)*||2 C_vir^T F C_occ||_F. Neither AO RMS
@@ -4564,8 +4564,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // On a soft orbital manifold the extrapolated density can move much more
     // than the actual unshifted canonical density. Audit the latter directly:
     // its AO-maximum density bound is stricter than the proposal RMS gate.
-    if (canonical_final_probe && (!orbital_policy ||
-                                  orbital_ks_stationary(stopping, physical.orbital_gradient)) &&
+    if (canonical_final_probe &&
+        (!orbital_policy || orbital_ks_stationary(stopping, physical.orbital_gradient)) &&
         has_energy_history && full_energy_history &&
         output.energy_change < options.energy_tolerance &&
         physical.residual < physical_stationarity_tolerance() &&
@@ -4575,8 +4575,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } else if (converged && (standard_convergence_active() || automatic_program)) {
       early_final_probe_ran = true;
       converged = probe_current_final_state();
-    } else if (!converged && !orbital_policy && early_final_probe_eligible &&
-               has_energy_history &&
+    } else if (!converged && !orbital_policy && early_final_probe_eligible && has_energy_history &&
                full_energy_history && output.energy_change < options.energy_tolerance &&
                physical.density_change < options.density_tolerance &&
                early_ks_final_probe_stationary(stopping, options.compute_forces ||

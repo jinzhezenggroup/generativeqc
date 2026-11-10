@@ -24,8 +24,7 @@ constexpr bool standard_ks_stationarity_allowance(bool standard_owner, bool nonl
 constexpr bool default_fullrange_ks_orbital_mode(bool standard_owner, bool default_model,
                                                  bool nonlocal_owner, bool incremental,
                                                  bool physical_reference) noexcept {
-  return standard_owner && default_model && !nonlocal_owner && !incremental &&
-         !physical_reference;
+  return standard_owner && default_model && !nonlocal_owner && !incremental && !physical_reference;
 }
 
 /** Complete compositions with independent default-grid early-stop evidence.
