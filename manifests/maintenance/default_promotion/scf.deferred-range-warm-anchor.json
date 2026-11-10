@@ -1,10 +1,20 @@
 {
   "id": "scf.deferred-range-warm-anchor",
-  "classification": "needs-qualification",
+  "classification": "already-default",
   "controls": ["ks-runtime:GENERATIVEQC_KS_RANGE_LAZY_WARM_ENERGY"],
   "owner_issues": [2426],
   "sources": ["src/dft/cuda_ks.cpp", "src/methods/dft_method.cpp"],
-  "rationale": "Opt-in strict fitted range replay defers its unused incumbent warm-energy baseline until source invalidation, provided the imminent force envelope fits available memory. It binds accepted XC scalars to the frozen warm density, restores the matching occupied-factor primary schedule and charges fallback work in the preparation phase. Unset retains eager behavior. The first prototype moved cold work into the first 5090 warm call and is not a promotion result.",
-  "revisit_condition": "Promote only after independent complete E/F, frozen warm, changed geometry, policy/factor changes, deterministic eviction, failure/snapshot and A100/Blackwell endpoint gates. Check first-warm and complete lifecycle costs separately; a pooled warm median can hide deferred preparation. Larger constrained-memory timeouts remain incomplete evidence.",
-  "evidence": [".agents/notes/proposed/2026-11-01-deferred-range-warm-anchor.md", "tests/python/test_lazy_range_warm_anchor_cuda.py", "tests/python/test_lazy_range_warm_snapshot_cuda.py", "tests/python/test_lazy_range_force_headroom.py", "tests/python/test_range_resident_ks_cuda.py"]
+  "rationale": "Unset and exact 1 defer the unused incumbent warm-energy anchor for strict FP64 RKS with device-fused XC and an audited replayable range source, using either fully fitted J/K with an exact warm AO factor or full Direct with its accepted dense density. The imminent additional force envelope must fit available device memory; partial fitting, unsupported owners, explicit 0 and other explicit values retain eager preparation. Source loss reconstructs the matching frozen-density anchor as counted preparation work. The first unguarded prototype shifted cold work into the first 5090 warm call and remains negative evidence, not qualification of this guarded default.",
+  "revisit_condition": "Requalify independent complete E/F, frozen warm, moved geometry, policy/factor changes, deterministic eviction and failure/snapshot behavior before widening owners or resource admission. Inspect first-warm and complete lifecycle work and timing separately; a pooled warm median can hide deferred preparation. Retain source/binary identities for the fitted and Direct default qualifications rather than relabeling historical opt-in observations as current-master measurements. Larger constrained-memory timeouts remain incomplete evidence.",
+  "evidence": [
+    ".agents/notes/proposed/2026-11-01-deferred-range-warm-anchor.md",
+    ".agents/notes/implemented/performance/2026-11-01-default-range-warm-anchor.md",
+    ".agents/notes/implemented/performance/2026-11-05-default-direct-range-warm-anchor.md",
+    "benchmarks/results/direct-range-default-20261105/README.md",
+    "tests/python/test_lazy_range_warm_anchor_cuda.py",
+    "tests/python/test_direct_range_warm_anchor_cuda.py",
+    "tests/python/test_lazy_range_warm_snapshot_cuda.py",
+    "tests/python/test_lazy_range_force_headroom.py",
+    "tests/python/test_range_resident_ks_cuda.py"
+  ]
 }
