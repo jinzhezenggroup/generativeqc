@@ -13,6 +13,62 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_orthogonal_uks_pulay_metric_preserves_qualified_domain_and_stopping(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """A proposal metric cannot promote other providers or weaken final proof."""
+    source = tmp_path / "uks_diis_metric.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include "dft/cuda_ks_diis_policy.hpp"
+#include "dft/ks_stopping_policy.hpp"
+int main() {
+  using namespace generativeqc::dft;
+  const CudaKsDiisMetricDomain qualified{
+      2, semilocal_family_code(SemilocalFamily::Pbe), true, true, true, true};
+  assert(cuda_ks_orthogonal_diis_requested(qualified));
+  for (unsigned spins : {0U, 1U, 3U}) {
+    auto rejected = qualified;
+    rejected.spins = spins;
+    assert(!cuda_ks_orthogonal_diis_requested(rejected));
+  }
+  for (auto family : {SemilocalFamily::Lda, SemilocalFamily::B3lyp,
+                     SemilocalFamily::R2scan, SemilocalFamily::Wb97mv}) {
+    auto rejected = qualified;
+    rejected.functional = semilocal_family_code(family);
+    assert(!cuda_ks_orthogonal_diis_requested(rejected));
+  }
+  for (auto member : {&CudaKsDiisMetricDomain::exact_primary,
+                      &CudaKsDiisMetricDomain::semilocal_only,
+                      &CudaKsDiisMetricDomain::strict_fp64,
+                      &CudaKsDiisMetricDomain::all_electron}) {
+    auto rejected = qualified;
+    rejected.*member = false;
+    assert(!cuda_ks_orthogonal_diis_requested(rejected));
+  }
+  KsStoppingState state{2, false, true, true, 1e-12, 1e-10, 1e-10,
+                        5e-9, 1e-9, 1e-5, 1e-9};
+  assert(!ordinary_ks_converged(state));
+  assert(!early_ks_final_probe_stationary(state, true));
+  state.maximum_residual = 1e-10;
+  assert(ordinary_ks_converged(state));
+  assert(early_ks_final_probe_stationary(state, true));
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [source],
+        tmp_path / "uks_diis_metric",
+        compile_args=[
+            "-std=c++20",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ],
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
 def test_full_range_force_and_reference_consumers_keep_strict_ks_stationarity(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:

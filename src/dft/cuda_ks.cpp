@@ -459,7 +459,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   double warm_energy{std::numeric_limits<double>::infinity()};
   double warm_energy_correction{};
   bool warm_energy_baseline{};
-  bool cold_fock_startup{};
+  bool cold_fock_startup{}, pure_uks_orthogonal_diis{};
   // These three scalars belong to the immutable warm density, which can be
   // older than the latest final state when warm_updates is false. Never use
   // xc->view(generation) to reconstruct that frozen seed's energy later.
@@ -1924,6 +1924,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (spins != 1 && (mixed_warmup.switch_residual > 0.0 || mixed_warmup.max_iterations))
         throw std::invalid_argument("bounded mixed-precision warmup requires restricted CUDA KS");
     }
+    pure_uks_orthogonal_diis = cuda_ks_orthogonal_diis_requested(
+        {spins, functional, !fitted_coulomb && !fitted_exchange,
+         !has_exchange && !has_range_correction && !nonlocal_correlation,
+         options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
+                 GENERATIVEQC_PRECISION_FP64 &&
+             !budget_fock && !budget_stationarity && !precision_schedule.any_lower_precision(),
+         provider.system().ecp_terms.empty() &&
+             std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                          [](const auto& atom) { return atom.ecp_core != 0; })});
     early_final_probe_requested = early_final_probe_default_model(
         functional, options.semilocal_exchange_scale, options.semilocal_correlation_scale,
         exchange_coefficient, grid_spec == default_grid_spec());
@@ -4218,10 +4227,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         runtime::cuda_trace::trace_counter("physical_orbital_gradient_checks", 1);
       }
       const double* history_residual = residual;
-      if (cold_fock_startup && output.iterations >= kColdFockStartupIterations && !final_closure) {
+      if (!final_closure &&
+          (pure_uks_orthogonal_diis ||
+           (cold_fock_startup && output.iterations >= kColdFockStartupIterations))) {
         // Pulay's norm must not let compact heavy-atom AOs dominate valence
-        // rotations. Fit X^T(FDS-SDF)X while retaining the unmodified AO
-        // commutator for every physical stopping and final-state check.
+        // rotations. The same coordinate dependence can trap pure UKS in a
+        // nonstationary cold-start cycle. Fit X^T(FDS-SDF)X while retaining the
+        // unmodified AO commutator for all physical and final-state checks.
         if (!physical_orbital_check) {
           multiply(residual, true, false, x, false, tmp1);
           multiply(x, false, true, tmp1, true, tmp2);

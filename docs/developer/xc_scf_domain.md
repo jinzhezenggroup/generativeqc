@@ -74,6 +74,14 @@ token or warm seed. A successful proof avoids an unnecessary unextrapolated
 update of an already valid physical state. Other precision, resource, ECP and
 range/nonlocal domains retain their bounded incumbent paths.
 
+All-electron, strict-FP64, exact-primary pure PBE UKS fits its Pulay proposals
+with the orthonormal residual `X.T @ (F @ D @ S - S @ D @ F) @ X`, where
+`X.T @ S @ X = I`. This prevents AO scaling from dominating the proposal
+metric. The untransformed physical residual, original energy/density controls,
+iteration cap and independent canonical-density proof still decide acceptance.
+The transformation uses existing resident scratch and adds no matrix readback.
+Other method, provider, precision and ECP domains retain their incumbent metric.
+
 The original-input GPU controls are in
 `tests/python/test_ks_scientific_gates_cuda.py` and the original-grid water96
 controls in `tests/python/test_ks_seed_admission_cuda.py`. They require
