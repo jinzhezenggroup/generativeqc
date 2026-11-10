@@ -168,8 +168,16 @@ def test_default_complete_endpoint_against_tight_same_model(
 def test_explicit_strict_ks_policy_keeps_default_controls_and_independent_force_gates(
     method: str, mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The historical stopping opt-out is distinct from tightening public E/D."""
+    """Keep historical stopping and its receipts separate from default E/D.
+
+    Both policies exercise the same scientific gates; a strict observation
+    must not overwrite the default observation for the same method and geometry.
+    """
     monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CONVERGENCE", "strict")
+    if destination := os.environ.get("GENERATIVEQC_SCF_ORACLE_RECEIPTS"):
+        monkeypatch.setenv(
+            "GENERATIVEQC_SCF_ORACLE_RECEIPTS", str(Path(destination) / "strict")
+        )
     test_default_complete_endpoint_against_tight_same_model(
         method, mode, "water", tmp_path
     )

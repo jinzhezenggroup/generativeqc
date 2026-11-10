@@ -75,6 +75,43 @@ Receipts: ignored `.artifacts/ks-tail-20261111/stock-repeatability-*` and matchi
 - README claims require a fresh complete endpoint cohort with actual Fock work;
   the earlier combined cohort is not evidence for the changed default.
 
+## Final-source evidence
+
+Measured native source `886556ce5504dffa10679e624c963e795eb12e64` has input
+identity `01e5b8baaa5bdb377a60689f184f5b16eaab0e1ba93a3f3a058e51db9900eba8`
+and ELF SHA256 `ff0c1473889c8781bd005af0f7b3e6a06571cfc9c1a9af1e9ed980fe86f61555`.
+The final production image passes 149 host/resource/checkpoint guards (17
+explicitly skipped optional cases), 26 independent complete E/F tests, and both
+original-grid water96 strict-policy arms. The latter retain their original
+`1e-9 / 1e-5` and `1e-12 / 1e-10` public controls; moved/fresh maximum force
+differences are `3.3991831571711373e-10` and `1.404210081545898e-11` Eh/Bohr,
+respectively, below the unchanged `1e-7` gate. All rejection/replay/move checks
+remain active. Eight additional default/strict observations validate separate
+receipt destinations, preventing strict controls from overwriting default
+evidence; this changes no scientific gate or benchmark sample.
+
+The complete fresh README cohort has 128 processes / 512 endpoints, no retries,
+63/64 cold wins and 64/64 warm wins. Both engines still independently qualify
+58/64 pairs under unchanged observable gates; all 58 qualified pairs are faster
+in both phases. The one cold DF HF96 loss and all six independent fitting/grid
+failures remain plotted and disclosed. Native-only timing processes reject
+reference-engine imports. Full-vector and scalar replay agree in normal and
+optimized Python. The source-matched receipts live under ignored
+`.artifacts/readme-rtx5090-aligned-20261111/` and the matching node1 tree.
+
+## Rejected alternatives
+
+Do not substitute unrelated solver/kernel tuning for the stopping-policy fix.
+An exploratory extension of the UKS orthogonal Pulay metric to full-range RKS
+saved one B3LYP96 iteration but added an iteration for PBE0 and r2SCAN-3c.
+Two-sided DIIS Gram equilibration passed host algebra probes but did not improve
+complete endpoints; intrusive captures showed the incumbent retained all eight
+histories, disproving the suspected history-retirement cause. Larger DIIS
+histories and smaller XC tiles gave isolated modest gains, not a resolution of
+the unequal force contract. None is promoted. A separate low-FP64 GEMM admission
+idea was canceled before its build and has no performance evidence. Receipts
+remain under ignored `.artifacts/ks-tail-20261111/` and its matching node1 tree.
+
 ## Revisit when
 
 New spin/grid/model domains have independent endpoint qualification, or a

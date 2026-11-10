@@ -126,10 +126,10 @@ print(first.energies)
 
 **HF/DFT energy + analytic forces — RTX 5090 (2026-11-11)**
 
-Fresh measurements of `6eb5fceda` (master `3c2c6a376` plus the combined
-large-XC scheduling and RHF-convergence defaults) with unchanged GPU4PySCF
-settings show GenerativeQC faster in **56/64 cold** and **64/64 warm** cases.
-For 96-atom Direct ωB97M-V, the measured warm speedup is **9.38×**.
+Fresh measurements of `886556ce5` (master `3c2c6a376` plus the combined
+large-XC scheduling and RHF/RKS orbital-convergence defaults) with unchanged
+GPU4PySCF settings show GenerativeQC faster in **63/64 cold** and **64/64 warm** cases.
+For 96-atom Direct ωB97M-V, the measured warm speedup is **9.35×**.
 
 ![Direct cold and warm endpoint timings on RTX 5090, measured 2026-11-11](assets/readme-direct-defaults.svg)
 
@@ -139,11 +139,11 @@ The source-matched Release build uses default XC/VV10 grids, native SCF policies
 and full grid-response forces. Cold includes setup; warm is the median of three
 frozen-density calls, with min–max bars. These are single-process observations,
 not statistical rankings. Independent accuracy gates qualify **58/64 pairs**:
-**51/58 cold** and **58/58 warm** are faster. The six failing pairs remain plotted
+**58/58 cold** and **58/58 warm** are faster. The six failing pairs remain plotted
 (DF HF at all sizes; Direct/DF M06-2X at 3 atoms).
 See [measurements, accuracy and conditions](benchmarks/results/readme-rtx5090-composed-20261111/README.md)
-for all 512 endpoints, the additional cold SCF work on current master and
-reproducible timing/error summaries. All eight cold slow points remain visible.
+for all 512 endpoints, the default convergence contract and reproducible
+timing/error summaries. The cold DF HF96 slow point remains visible.
 
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 

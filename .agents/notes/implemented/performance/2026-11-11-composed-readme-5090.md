@@ -164,3 +164,42 @@ Optimize the now-observed full cold force endpoint while preserving physical
 stationarity and independent force gates. Use a same-source controlled
 ablation if causal per-policy savings are required; renew qualification before
 changing stopping, grids, fitting, precision, or the retained bounded fallbacks.
+
+## Superseding default-policy measurement
+
+At the user's request, the default-policy decision is superseded by
+[restricted KS orbital stopping](../numerics/2026-11-11-ks-default-orbital-stopping.md).
+The preceding results remain historical evidence for `6eb5fceda`; they do not
+justify silently imposing a more stringent force contract than the reference
+engine's default. The original `1e-7` force-repeatability gate is retained under
+an explicit strict request, not weakened or relabeled as a default guarantee.
+
+A fresh complete cohort measures `886556ce5504dffa10679e624c963e795eb12e64`,
+native source identity
+`01e5b8baaa5bdb377a60689f184f5b16eaab0e1ba93a3f3a058e51db9900eba8`, ELF SHA256
+`ff0c1473889c8781bd005af0f7b3e6a06571cfc9c1a9af1e9ed980fe86f61555`.
+Jobs 17152/17153/17154/17155 acquire all 128 processes / 512 complete calls,
+without retries or successful-point replacement. All three native selectors
+are unset and the GPU4PySCF default settings compare exactly with the retained
+baseline. Cold Direct wins 32/32, DF 31/32; warm wins remain 64/64. Both engines
+still independently qualify 58/64 pairs, with all 58 qualified pairs faster in
+both phases. All 1024 paired vector comparisons pass the unchanged gates.
+
+The sole cold loss, DF HF96, remains visible at 18.182064924389124 versus
+17.741809528321028 seconds; its compact DF HF owner was not changed. Default
+DF96 physical Focks are now PBE0/B3LYP 9, PBE/r2SCAN 10, r2SCAN-3c 11 and
+M06-2X 10. The strict-only early proof cannot bypass the global MO-gradient
+gate; restoring the old work counts by skipping that gate would not be a valid
+alignment. Direct WB97M-V96 warm speedup is 9.345219795538252. CBS is byte-identical.
+These are complete endpoint observations, not a same-allocation single-factor
+latency ablation or a universal ranking.
+
+The current compact publication replaces only this figure pair's preceding
+cohort; the exact earlier publication remains recoverable at `28ac57e819`.
+No historical sample supplies a new timing. Full-vector/source/build receipts
+are retained in ignored `.artifacts/readme-rtx5090-aligned-20261111/` and the
+matching `n1:/data/jzzeng/readme-rtx5090-aligned-20261111`. The scalar capsule
+stores full build-receipt digests instead of duplicating verbose compiler logs;
+it does not claim a fresh vector subtraction. The fixed aggregate retention
+cap is unchanged, and the concurrent receipt-integrity repair `6b3f98eae` is
+preserved rather than overwritten.
