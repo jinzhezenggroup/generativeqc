@@ -1,6 +1,6 @@
 """Offline readback of the H100 fixed30 cohort on upstream master d35ca77a4.
 
-Authenticates every stored receipt part and member, reconstructs the original
+Authenticates the stored receipt stream and every member, reconstructs the original
 task layout in a temporary directory, materializes the pinned benchmark helpers
 from local Git objects of the measured revision, reruns the independent
 qualification/timing reduction and checks it against the sealed reduction and

@@ -3,49 +3,9 @@
   "records": {
     "parts": [
       {
-        "path": "records/receipts.json.xz.part00",
-        "bytes": 122880,
-        "sha256": "031a16e2fabf35bafe02c99faede5b32b938d3e0fa8ae3077afce77528845ddd"
-      },
-      {
-        "path": "records/receipts.json.xz.part01",
-        "bytes": 122880,
-        "sha256": "8baaa88f69323287e310d19ceac15d9b966b2ed4c3c94d07eb2e1553f429f36d"
-      },
-      {
-        "path": "records/receipts.json.xz.part02",
-        "bytes": 122880,
-        "sha256": "14a32e977fccb015277e931e15e1be3f3b0b4cd25a06a22c5d9fd6fb3e0533ec"
-      },
-      {
-        "path": "records/receipts.json.xz.part03",
-        "bytes": 122880,
-        "sha256": "e5fe16836c8361f1588de5f8faf5e925d06e20c07a08ab5667dbc955dcf6c1e2"
-      },
-      {
-        "path": "records/receipts.json.xz.part04",
-        "bytes": 122880,
-        "sha256": "b9dc1ddf72855f787de274ad40c5fa5bc2f26f4e65d5448697820c02584e97fd"
-      },
-      {
-        "path": "records/receipts.json.xz.part05",
-        "bytes": 122880,
-        "sha256": "b687db005fafc7a774c8d7c5797a73ebcbbc39890d6d2ff89dd94d69e66c08f1"
-      },
-      {
-        "path": "records/receipts.json.xz.part06",
-        "bytes": 122880,
-        "sha256": "9592e9daf15d20a3f07f0ff43dfb109d31371e48c85356df2d76a286daf53ef2"
-      },
-      {
-        "path": "records/receipts.json.xz.part07",
-        "bytes": 122880,
-        "sha256": "aa0c93ee4d3b15d32cb22afcdf224de29e3387395284fb0d4a2f81c855e96fa9"
-      },
-      {
-        "path": "records/receipts.json.xz.part08",
-        "bytes": 24956,
-        "sha256": "6bfbd9e44b26bfcea95c4f2b3fadf865307f2f8d699088de0041b0b1886e19db"
+        "path": "records/receipts.json.xz",
+        "bytes": 1007996,
+        "sha256": "9260c27bf43d4b6df6970748fac8ce7ab1c1a64630721084fad4e1cc8fca0ade"
       }
     ],
     "xz_sha256": "9260c27bf43d4b6df6970748fac8ce7ab1c1a64630721084fad4e1cc8fca0ade",

@@ -103,6 +103,26 @@ These are the remaining nonwins.
 Full ratios, per-pair native and reference medians, cold SCF work counters and
 qualification status are in `summary.json`.
 
+## Reviewed lossless storage
+
+All 583 original members (577 distinct blobs) are retained in one 1,007,996-byte
+XZ file, below the 1 MiB per-file cap. It is the byte-for-byte concatenation of
+the original nine parts, not a recompression or scientific-data transformation.
+Its SHA-256 is
+`9260c27bf43d4b6df6970748fac8ce7ab1c1a64630721084fad4e1cc8fca0ade`.
+The decoded container remains 34,252,915 bytes with SHA-256
+`26aa60170a6b8e713b2852fe8770d7f28c889d1a008f17f5104d01a828570e7c`.
+The experiment-owned review in
+`benchmarks/evidence-reviews/h100-fixed30-d35ca77a-20261110.json` binds the
+whole retained artifact above the 128 KiB review threshold. All raw endpoint
+vectors, plans, qualifications, failures/nonwins and provenance are preserved;
+storage review does not promote a default or change numerical acceptance.
+
+This experiment's approved aggregate allowance is 1,088 KiB (1,114,112 bytes)
+above the 89,391,104-byte base cap, giving 90,505,216 bytes. Other experiments'
+separately approved allowances must be reconciled once when integrating their
+evidence; this experiment does not grant an additional allowance for them.
+
 ## Offline replay
 
 Use a Git clone that contains d35ca77a4, with unoptimized Python 3.12+ and
@@ -113,7 +133,7 @@ uv run --offline --no-env-file --no-project --python 3.12 --with numpy==2.2.6 \
   python benchmarks/results/h100-fixed30-d35ca77a-20261110/replay.py
 ```
 
-`replay.py` authenticates all nine `records/` parts and the joined XZ stream
+`replay.py` authenticates the single `records/receipts.json.xz` stream
 against `cohort.json`. It also authenticates all 583 original members: plans,
 raw endpoint records, qualifications, the campaign, the build and AOT receipts,
 the protocols, the frozen inputs, the oracles and the producers. It restores
