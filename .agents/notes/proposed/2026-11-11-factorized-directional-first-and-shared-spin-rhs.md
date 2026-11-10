@@ -139,3 +139,12 @@ are still required.
 The exploratory RHS implementation does not establish public UKS, ECP or TS
 completion for #2844--#2848. It also does not justify pruning integral records,
 weakening thresholds or moving a failed molecular fixture.
+
+## Subsequent complete experimental action
+
+After combining the committed one-electron second-integral reuse with these
+scratch lowerings, the canonical NiH3 action returns and passes all three
+pre-frozen independent matrix-action comparisons. The exact source provenance,
+timing/work counts and explicit remaining production/full-matrix boundaries
+are recorded in `2026-11-11-ni-complete-experimental-hvp-acceptance.md`.
+This does not convert the source-rewriting experiment into production code.

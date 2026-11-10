@@ -86,6 +86,12 @@ adds only an explicit non-null spherical transform assertion and is replayed
 separately; do not restamp the original test-source hash. Configured compiler
 type checking, compiler ownership checks and warnings-as-errors Sphinx pass.
 
+A subsequent complete experimental Ni action combines this committed reuse
+with still-scratch first-only/directional/shared-spin lowering and passes the
+unchanged independent action gates. Its exact scope, receipts and still-open
+production/full-matrix gates are recorded in
+`../../proposed/2026-11-11-ni-complete-experimental-hvp-acceptance.md`.
+
 ## Rejected alternatives
 
 - Increasing component tiles without a liveness/compiler-cost qualification can

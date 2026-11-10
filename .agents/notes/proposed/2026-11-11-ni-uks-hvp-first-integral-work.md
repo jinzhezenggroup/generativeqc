@@ -135,3 +135,13 @@ receipt from this environment.
 `/tmp/gqc-continue-ni-reference-newton/` preserve the unabridged diagnostics.
 The frozen gate-file SHA256 is
 `8f15ecb93a8095c07861ad85e24498e670323306a8f5578ae3201d88a96cda95`.
+
+## Subsequent complete experimental action
+
+The committed one-electron source reuse plus still-scratch directional/first-only/
+shared-spin lowering now returns one complete NiH3 HVP within its finite limit
+and passes every pre-frozen independent action comparison. See
+`2026-11-11-ni-complete-experimental-hvp-acceptance.md` for the sealed provenance,
+all three errors, work and process timings. Production integration, native full
+raw matrices and installed qualification remain open; earlier failures are
+retained, not relabeled as successful runs.
