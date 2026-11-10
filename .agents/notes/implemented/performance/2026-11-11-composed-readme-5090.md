@@ -146,6 +146,18 @@ Publication metadata whitespace is compacted too. Historical exact replay
 uses its isolated Matplotlib 3.11.2; new full and scalar replay use 3.10.9.
 No unrelated evidence or scientific input is removed and the cap is not raised.
 
+The same reference containers are also consumed by the retained GGA indexed-GEMM
+and A100 README capsules. Their original `legacy_sha256` links initially still
+named the pre-compaction bytes, which made their independent replay fail before
+reaching any scientific checks. Rebind only those two container digests in each
+capsule after independently comparing every JSON string/number token and its
+order against the pinned master above. All 333 GGA and 388 A100 original receipt
+texts and both FP64 streams remain byte-identical. The storage receipts pin the
+original reference revision and changed fields; the capsule metadata and outer
+manifests authenticate the current containers. No checksum, numerical gate or
+failed result is removed; this is a storage-link repair, not renewed numerical
+qualification.
+
 ## Revisit when
 
 Optimize the now-observed full cold force endpoint while preserving physical
