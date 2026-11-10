@@ -1,0 +1,22 @@
+{
+  "schema": "generativeqc.d3-second-order-acceptance/v1",
+  "method": "Gaussian/VWN-RPA B3LYP plus uncut two-body D3(BJ), ATM off",
+  "independent_oracles": ["PySCF 2.14.0", "simple-dftd3 1.4.0"],
+  "basis": "native STO-3G records supplied unchanged to independent SCF",
+  "representation": "real-spherical",
+  "grid": {"radial_points": 12, "angular_polar": 4, "angular_azimuth": 8},
+  "charge": 0,
+  "multiplicity": 1,
+  "atoms_bohr": [["O", [0.1, -0.1, 0.2]], ["H", [1.5, 0.3, 0.4]], ["H", [-0.5, 1.4, 0.1]]],
+  "difference_steps_bohr": [0.003, 0.001, 0.0003],
+  "difference_stencil": "symmetric-five-point-fourth-order",
+  "gates": {
+    "energy_abs_hartree": 2e-9,
+    "gradient_abs_hartree_per_bohr": 2e-7,
+    "total_hessian_abs_hartree_per_bohr2": 1e-5,
+    "total_hvp_abs_hartree_per_bohr2": 2e-6,
+    "raw_invariants_abs": 2e-7,
+    "additive_source_abs": 2e-11
+  },
+  "scope": "Public CPU direct all-electron RKS composition only; not UKS, ECP or TS qualification."
+}

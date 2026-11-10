@@ -1,11 +1,11 @@
-"""Low-level native CPU D3(BJ) curvature; no electronic capability promotion."""
+"""Native CPU D3(BJ) curvature and additive, fail-closed molecular composition."""
 
 from __future__ import annotations
 
 import os
 import time
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
 
@@ -13,9 +13,57 @@ import numpy as np
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.common.provenance import canonical_hash
-from generativeqc_compiler.geometry.d3 import D3_REFERENCE_SLOTS, compile_d3_bj
+from generativeqc_compiler.geometry.d3 import (
+    D3_REFERENCE_SLOTS,
+    D3CompilerSpec,
+    compile_d3_bj,
+)
+from generativeqc_compiler.method.dispersion import (
+    D3Spec,
+    DispersionCorrectionPrimitive,
+)
 from generativeqc_compiler.tensor.cpu import NativeTensorProgram
 from generativeqc_compiler.tensor.types import checked_size
+
+if typing.TYPE_CHECKING:
+    from generativeqc_compiler.method import MethodIR
+
+
+def second_order_spec(method: typing.Any) -> D3Spec | None:
+    """Recognize one qualified uncut BJ correction without promoting its electrons.
+
+    First-order MethodIR identities remain unchanged: executable second-order
+    admission is narrower than the mathematical dispersion request. In
+    particular, ATM, zero damping, D4, gCP and finite cutoffs do not inherit the
+    independently qualified uncut two-body source.
+    """
+    corrections = tuple(
+        primitive
+        for primitive in method.primitives
+        if isinstance(primitive, DispersionCorrectionPrimitive)
+    )
+    if len(corrections) != 1 or any(
+        primitive.kind
+        not in {
+            "semilocal_xc",
+            "exact_exchange",
+            "range_separated_exchange",
+            "nonlocal_correlation",
+            "dispersion_correction",
+        }
+        for primitive in method.primitives
+    ):
+        return None
+    spec = corrections[0].specification
+    if not isinstance(spec, D3Spec):
+        return None
+    try:
+        compiled = D3CompilerSpec.from_spec(spec)
+    except (TypeError, ValueError):
+        return None
+    if compiled.cn_cutoff is not None or compiled.pair_cutoff is not None:
+        return None
+    return spec
 
 
 @dataclass(frozen=True)
@@ -197,3 +245,179 @@ class NativeD3SecondOrder:
             canonical_hash({"source": self.identity, "kind": "raw-hessian"}),
             MappingProxyType(diagnostics),
         )
+
+
+def compose_second_order(
+    electronic: typing.Any,
+    method: MethodIR,
+    atoms: typing.Sequence[typing.Any],
+    *,
+    cache: Path,
+    max_workspace_bytes: int,
+    output_budget_bytes: int | None = None,
+) -> typing.Any:
+    """Add one complete geometry-only source after electronic owners are closed.
+
+    The requested graph must project to the authenticated electronic method
+    and geometry. A Hessian streams correction actions into a private matrix rather than
+    retaining another dense correction matrix. Budgets include the detached
+    electronic arrays, the sum and immutable publication while the generated
+    D3 program is live. Publication is transactional: a failed correction never
+    returns the otherwise successful electronic-only result. Electronic CPKS
+    work is retained verbatim and no electronic response is repeated.
+    """
+    started = time.perf_counter()
+    checked_size(max_workspace_bytes, "composed D3 workspace budget")
+    if len(atoms) == 0:
+        raise ValueError("D3 composition requires at least one atom")
+    spec = second_order_spec(method)
+    if spec is None:
+        raise NotImplementedError(
+            "D3 second order requires one uncut two-body BJ source"
+        )
+    source = "d3_bj_two_body"
+    diagnostics = electronic.diagnostics
+    sources = tuple(diagnostics["source_names"])
+    if source in sources or source in getattr(electronic, "components", {}):
+        raise ValueError("D3 second-order source is already present")
+    projection = replace(
+        method,
+        primitives=tuple(
+            primitive
+            for primitive in method.primitives
+            if not isinstance(primitive, DispersionCorrectionPrimitive)
+        ),
+    )
+    if diagnostics.get("electronic_method_identity") != projection.identity:
+        raise ValueError("D3 composition requires the same electronic MethodIR")
+    geometry_identity = canonical_hash(
+        {
+            "schema": "generativeqc.stationary-geometry/v1",
+            "atoms": [
+                [atom.atomic_number, *map(float, atom.position)] for atom in atoms
+            ],
+            "units": "Bohr",
+        }
+    )
+    if diagnostics.get("geometry_identity") != geometry_identity:
+        raise ValueError("D3 composition requires the same electronic geometry")
+    positions = np.asarray([atom.position for atom in atoms], dtype=np.float64)
+    matrix_result = output_budget_bytes is not None
+    if matrix_result:
+        checked_size(output_budget_bytes, "composed Hessian output budget")
+        output_bytes = electronic.matrix.nbytes
+        if electronic.matrix.shape != (positions.size, positions.size):
+            raise ValueError("electronic Hessian shape does not match D3 geometry")
+        retained = output_bytes
+        publication = 2 * output_bytes
+        if retained + publication > output_budget_bytes:
+            raise ValueError("composed Hessian exceeds output_budget_bytes")
+    else:
+        if (
+            electronic.direction.shape != positions.shape
+            or electronic.value.shape != positions.shape
+            or set(electronic.components) != set(sources)
+        ):
+            raise ValueError("incomplete electronic HVP shape or source inventory")
+        retained = sum(
+            array.nbytes
+            for array in (
+                electronic.direction,
+                electronic.value,
+                *electronic.components.values(),
+            )
+        )
+        publication = 2 * positions.nbytes
+    reserve = retained + publication + 4 * positions.nbytes
+    available = max_workspace_bytes - reserve
+    if available <= 0:
+        raise MemoryError("simultaneous electronic/D3 publication exceeds budget")
+    correction = NativeD3SecondOrder(
+        spec,
+        [atom.atomic_number for atom in atoms],
+        positions,
+        cache=Path(cache),
+        max_generation_bytes=available,
+        max_workspace_bytes=available,
+    )
+    if matrix_result:
+        total = np.array(electronic.matrix, copy=True)
+        direction = np.zeros_like(positions)
+        for column in range(positions.size):
+            direction.reshape(-1)[column] = 1
+            action = correction.hvp(direction)
+            total[:, column] += action.value.reshape(-1)
+            direction.reshape(-1)[column] = 0
+        correction_diagnostics = dict(action.diagnostics)
+        correction_diagnostics["native_hvp_evaluations"] = positions.size
+        changes = {"matrix": immutable(total)}
+    else:
+        action = correction.hvp(electronic.direction)
+        correction_diagnostics = dict(action.diagnostics)
+        changes = {
+            "value": immutable(electronic.value + action.value),
+            "components": MappingProxyType(
+                {**electronic.components, source: action.value}
+            ),
+        }
+    correction_diagnostics.update(
+        {
+            "assembly_seconds": time.perf_counter()
+            - started
+            - correction.preparation_seconds,
+            "simultaneous_bytes": reserve + correction_diagnostics["workspace_bytes"],
+            "total_scalar_work": correction_diagnostics["scalar_work_per_hvp"]
+            * correction_diagnostics["native_hvp_evaluations"],
+        }
+    )
+    diagnostics.update(
+        {
+            "source_names": (*sources, source),
+            "source_order": (*sources, source),
+            "electronic_source_names": sources,
+            "complete_source_coverage": True,
+            "electronic_identity": electronic.identity,
+            "total_method_identity": method.identity,
+            "total_method_manifest_identity": method.manifest_identity,
+            "electronic_plan_identity": diagnostics.get("plan_identity"),
+            "plan_identity": canonical_hash(
+                {
+                    "kind": "additive-nuclear-second-order-plan/v1",
+                    "method": method.identity,
+                    "sources": (*sources, source),
+                }
+            ),
+            "dispersion": correction_diagnostics,
+            "composition": "electronic-plus-d3-bj-two-body",
+        }
+    )
+    if "contributors" in diagnostics:
+        diagnostics["contributors"] = (
+            *diagnostics["contributors"],
+            (source, correction.identity),
+        )
+    if "executor_identity" in diagnostics:
+        diagnostics["electronic_executor_identity"] = diagnostics["executor_identity"]
+        diagnostics["executor_identity"] = canonical_hash(
+            {
+                "electronic": electronic.identity,
+                "correction": correction.identity,
+            }
+        )
+    if matrix_result:
+        diagnostics["raw_symmetry_error"] = max(
+            float(np.max(abs(total[:, column] - total[column, :])))
+            for column in range(positions.size)
+        )
+    return replace(
+        electronic,
+        **changes,
+        identity=canonical_hash(
+            {
+                "composition": diagnostics["composition"],
+                "electronic": electronic.identity,
+                "correction": correction.identity,
+            }
+        ),
+        _diagnostics=MappingProxyType(diagnostics),
+    )

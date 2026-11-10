@@ -1,0 +1,18 @@
+{
+  "schema": "generativeqc.d3-curvature-qualification-summary/v1",
+  "runtime_source_manifest": "checkout-source.sha256",
+  "installed_receipt": "installed-receipt.json",
+  "final_installed_tests": {"passed": 25, "seconds": 286.20, "new_composition_tests": 13},
+  "independent_total_hessian_errors": {"0.003": 1.560507528752808e-9, "0.001": 8.556061692477357e-10, "0.0003": 1.753150358219102e-8},
+  "unchanged_total_hessian_gate": 1e-5,
+  "earlier_installed_regression": {"passed": 41, "seconds": 589.22, "scope": "intermediate snapshot, not final source qualification"},
+  "baseline_d3_public_hybrid_tests": {"passed": 23},
+  "calculator_batch_composition_docs_regression": {"passed": 96, "skipped": 29, "subtests_passed": 57},
+  "retention_and_source_boundary_tests": {"passed": 91},
+  "post_publication_ci_regressions": {"passed": 98, "scope": "Host-only native frontend admission/dispatch and CI selection; not real-GPU evidence."},
+  "checks": {"sphinx_warnings_as_errors": "pass", "ruff_lint": "pass", "ruff_format": "pass", "git_diff_check": "pass"},
+  "raw_archive_revision": "b1d20f9f6ade91f08f27c024177df3209aa10936",
+  "raw_archive_directory": "benchmarks/results/d3-public-curvature-20261109",
+  "raw_archive_policy": "Recover original logs and JUnit from existing Git history; retain compact reviewed records in the current tree, not transient archives.",
+  "scope": "CPU all-electron RKS explicit-grid composition only; no UKS, ECP, Ni/default-grid or molecular TS acceptance."
+}
