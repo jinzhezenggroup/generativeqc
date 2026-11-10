@@ -1,7 +1,10 @@
 """Independent ensemble gates and atomic restore with the idle CUDA provider."""
 
+import hashlib
 import json
 import os
+from collections.abc import Callable
+from dataclasses import asdict
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -171,6 +174,67 @@ def test_idle_gpu_admission_preserves_ensemble_gates_and_atomicity(
 def test_large_idle_seed_rejection_preserves_final_state(
     atom_count: int, df_budget_mib: int
 ) -> None:
+    """Keep the small-grid ownership control separate from original-grid accuracy."""
+    _large_idle_seed_rejection_preserves_final_state(
+        atom_count,
+        df_budget_mib,
+        options=KsOptions(grid=GridSpec(16, 8, 16), force_tile_points=1024),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+    )
+
+
+@pytest.mark.parametrize("tight_scf_only", (False, True))
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_KS_STATE_CUDA_TEST") != "1",
+    reason="requires separately scheduled original-default water96 qualification",
+)
+def test_original_grid_water96_moved_fresh_force_gate(
+    tight_scf_only: bool, record_property: Any
+) -> None:
+    """Pin #2915's original grid and a separate tighter-SCF-only control.
+
+    Explicit original controls prevent later public-default changes from
+    silently changing this regression's numerical task. Both arms keep the
+    original seed rejection/replay/move sequence and 1e-7 force gate.
+    """
+    observations: list[dict[str, Any]] = []
+
+    def checkpoint() -> None:
+        """Keep completed observations even if a later scheduled phase times out."""
+        record_property("observations", json.dumps(observations))
+        directory = os.environ.get("GENERATIVEQC_KS_STATE_EVIDENCE_DIR")
+        if directory:
+            output = Path(directory)
+            output.mkdir(parents=True, exist_ok=True)
+            (output / f"water96-original-grid-tight-{tight_scf_only}.json").write_text(
+                json.dumps(observations, indent=2, allow_nan=False)
+            )
+
+    try:
+        _large_idle_seed_rejection_preserves_final_state(
+            96,
+            512,
+            options=KsOptions(grid=GridSpec.treutler(3), force_tile_points=1024),
+            energy_tolerance=1e-12 if tight_scf_only else 1e-9,
+            density_tolerance=1e-10 if tight_scf_only else 1e-5,
+            observations=observations,
+            checkpoint=checkpoint,
+        )
+    finally:
+        checkpoint()
+
+
+def _large_idle_seed_rejection_preserves_final_state(
+    atom_count: int,
+    df_budget_mib: int,
+    *,
+    options: KsOptions,
+    energy_tolerance: float,
+    density_tolerance: float,
+    observations: list[dict[str, Any]] | None = None,
+    checkpoint: Callable[[], None] | None = None,
+) -> None:
     """An independent negative occupation must not corrupt a large live owner.
 
     These 768/960-AO cases reach the borrowed product provider. PySCF supplies only
@@ -200,13 +264,33 @@ def test_large_idle_seed_rejection_preserves_final_state(
         # metric/provider scratch. Smaller 64/512-MiB caps, respectively,
         # reject these shapes before any seed-validation operation can run.
         density_fitting_memory_budget_bytes=df_budget_mib << 20,
-        # This checks state ownership, rather than default-grid accuracy.
-        # Tighten SCF so the cold/moved force comparison is not dominated by
-        # the Standard policy's independently allowed convergence error.
-        ks_options=KsOptions(grid=GridSpec(16, 8, 16), force_tile_points=1024),
-        energy_tolerance=1e-12,
-        density_tolerance=1e-10,
+        ks_options=options,
+        energy_tolerance=energy_tolerance,
+        density_tolerance=density_tolerance,
     )
+    if observations is not None:
+        observations.append(
+            {
+                "phase": "configuration",
+                "source_identity": calc._library.generativeqc_get_source_identity().decode(),
+                "library_sha256": hashlib.sha256(
+                    Path(calc._library._name).read_bytes()
+                ).hexdigest(),
+                "grid": asdict(calc.ks_options.grid),
+                "energy_tolerance": energy_tolerance,
+                "density_tolerance": density_tolerance,
+                "scheduler": {
+                    name: os.environ.get(name)
+                    for name in (
+                        "SLURM_JOB_ID",
+                        "SLURM_STEP_ID",
+                        "CUDA_VISIBLE_DEVICES",
+                    )
+                },
+            }
+        )
+        if checkpoint is not None:
+            checkpoint()
     molecule = gto.M(atom=atoms, unit="Bohr", basis=oracle_basis("def2-svp"), verbose=0)
     overlap = molecule.intor("int1e_ovlp")
     values, vectors = np.linalg.eigh(overlap)
@@ -224,6 +308,12 @@ def test_large_idle_seed_rejection_preserves_final_state(
         )
     with calc.prepare_batch([atoms, atoms], warm_start=True) as batch:
         before = batch.execute(strict=True, properties=("energy", "forces"))
+        if observations is not None:
+            observations.extend(
+                _force_observation("cold", item) for item in before.items
+            )
+            if checkpoint is not None:
+                checkpoint()
         saved = [warm_snapshot(batch, i) for i in range(2)]
         snapshot = NativeKsSnapshot(batch, 0)
         try:
@@ -243,6 +333,12 @@ def test_large_idle_seed_rejection_preserves_final_state(
         finally:
             snapshot.close()
         after = batch.execute(strict=True, properties=("energy", "forces"))
+        if observations is not None:
+            observations.extend(
+                _force_observation("replay", item) for item in after.items
+            )
+            if checkpoint is not None:
+                checkpoint()
         for original, replay in zip(before.items, after.items, strict=True):
             assert replay.warm_start_used and not replay.warm_start_fallback
             assert replay.energy == pytest.approx(original.energy, abs=1e-8)
@@ -256,6 +352,10 @@ def test_large_idle_seed_rejection_preserves_final_state(
             strict=True,
             properties=("energy", "forces"),
         ).items[0]
+        if observations is not None:
+            observations.append(_force_observation("moved", changed))
+            if checkpoint is not None:
+                checkpoint()
         fresh = calc.singlepoint(
             [
                 (symbol, tuple(xyz))
@@ -263,6 +363,10 @@ def test_large_idle_seed_rejection_preserves_final_state(
             ],
             properties=("energy", "forces"),
         )
+        if observations is not None:
+            observations.append(_force_observation("fresh", fresh))
+            if checkpoint is not None:
+                checkpoint()
         assert changed.energy == pytest.approx(fresh.energy, abs=1e-8)
         np.testing.assert_allclose(changed.forces, fresh.forces, atol=1e-7, rtol=0)
 
@@ -278,3 +382,16 @@ def test_large_idle_seed_rejection_preserves_final_state(
         np.testing.assert_array_equal(retained[0], neighbor[0])
         np.testing.assert_array_equal(retained[1], neighbor[1])
         assert retained[2] == neighbor[2]
+
+
+def _force_observation(phase: str, item: Any) -> dict[str, Any]:
+    """Retain full forces and physical SCF histories, including failed assertions."""
+    return {
+        "phase": phase,
+        "energy": item.energy,
+        "forces": np.asarray(item.forces).tolist(),
+        "iterations": item.iterations,
+        "diagnostic": None
+        if item.ks_diagnostic is None
+        else item.ks_diagnostic.to_payload(),
+    }

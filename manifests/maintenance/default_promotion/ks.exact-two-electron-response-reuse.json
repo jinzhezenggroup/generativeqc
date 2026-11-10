@@ -8,14 +8,19 @@
     2426
   ],
   "sources": [
+    "python/generativeqc/batch.py",
     "src/methods/dft_method.cpp",
     "src/methods/exact_density_response_cache.hpp"
   ],
-  "rationale": "Default-off experiment retaining only the Direct RSH two-electron response inside an immutable prepared owner after exact comparison of the already authenticated host snapshot density. W-dependent Pulay and one-electron response always run; bounded optional storage refusal preserves computation.",
-  "revisit_condition": "Require independent complete E/F, geometry/one-ULP/failure/resource invalidation and original-protocol endpoint populations before any default promotion.",
+  "rationale": "Default-off experiment in the host-snapshot Direct RSH integral-response consumer, retaining only the two-electron response inside an immutable prepared owner after exact comparison of the authenticated density. W-dependent Pulay and one-electron response always run; bounded optional storage refusal preserves computation. Public prepared items with native stationary-force capability bypass this consumer, so enabling this selector does not promote or accelerate their native endpoint. The native VV10 component reuse default is a separate policy.",
+  "revisit_condition": "First identify actual endpoint ownership; do not qualify compatibility-route gains as native-default gains. Require independent complete E/F, geometry/one-ULP/failure/resource invalidation and source-bound complete 48/96-atom cold/warm/moved populations before promoting this consumer. The October 14 qualification used the historical VV10 rho>=1e-8 v1 domain; it cannot qualify the current rho>=1e-10 v2 domain or serve as its independent oracle. Retain exact protocol checks, unchanged energy/force gates and separate controls for geometry-response reuse.",
   "evidence": [
     "tests/python/test_exact_density_response_cache.py",
+    "tests/python/test_integral_response_reuse_cuda.py",
+    "tests/python/test_response_reuse_routing_cuda.py",
+    "docs/developer/xc_native_cuda.md",
     ".agents/notes/proposed/2026-10-14-exact-two-electron-response-reuse.md",
+    ".agents/notes/proposed/2026-11-10-exact-response-current-domain-qualification.md",
     "issue:#2426",
     "benchmarks/results/exact-integral-response-20261014/README.md"
   ]

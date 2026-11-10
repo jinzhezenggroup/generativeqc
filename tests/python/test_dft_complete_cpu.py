@@ -768,6 +768,7 @@ def independent_global_hybrid_gradient(
     initial_guess: str = "minao",
     scf_gradient_tolerance: float = 1e-10,
     scf_max_cycles: int = 200,
+    scf_trace: list[dict[str, typing.Any]] | None = None,
 ) -> typing.Any:
     """Independent hybrid SCF/moving-grid gradient in the endpoint's AO space.
 
@@ -846,6 +847,18 @@ def independent_global_hybrid_gradient(
     }
     mf.grids.gen_atomic_grids = lambda *args, **kwargs: tab
     mf.small_rho_cutoff = 0
+    if scf_trace is not None:
+
+        def observe(environment: dict[str, typing.Any]) -> None:
+            scf_trace.append(
+                {
+                    name: float(environment[name])
+                    for name in ("cycle", "e_tot", "last_hf_e", "norm_gorb", "norm_ddm")
+                    if name in environment
+                }
+            )
+
+        mf.callback = observe
     mf.init_guess = initial_guess
     mf.conv_tol, mf.conv_tol_grad, mf.max_cycle = (
         1e-13,
@@ -856,7 +869,7 @@ def independent_global_hybrid_gradient(
     assert mf.converged, (
         f"independent hybrid SCF did not converge: energy={energy:.16g}, "
         f"orbital_gradient={np.linalg.norm(mf.get_grad(mf.mo_coeff, mf.mo_occ)):.9g}, "
-        f"maximum_cycles={scf_max_cycles}"
+        f"maximum_cycles={scf_max_cycles}, independent_scf_history={scf_trace}"
     )
     np.testing.assert_array_equal(mf.grids.coords, state.grid.points)
     np.testing.assert_array_equal(mf.grids.weights, state.grid.weights)

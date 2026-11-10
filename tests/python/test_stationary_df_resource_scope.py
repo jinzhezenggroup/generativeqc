@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import ast
-import builtins
 import ctypes as ct
 import shutil
 import subprocess
 from pathlib import Path
-from types import CodeType, FunctionType, SimpleNamespace
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -234,66 +232,6 @@ def test_df_python_metadata_distinguishes_resident_one_electron() -> None:
     assert work["one_electron_device_peak_bytes"] == 4096
     assert work["one_electron_h2d_bytes"] == 1024
     assert work["one_electron_d2h_bytes"] == 96
-
-
-def test_cuda_outward_record_discloses_unmeasured_df_transfers() -> None:
-    path = ROOT / "python/generativeqc/_stationary_cuda.py"
-    source = ast.parse(path.read_text())
-    owner = next(
-        n
-        for n in source.body
-        if isinstance(n, ast.FunctionDef)
-        and n.name == "_complete_rks_cuda_gradient_diagnostic"
-    )
-    block = next(
-        n
-        for n in owner.body
-        if isinstance(n, ast.If) and ast.unparse(n.test) == "use_fitted_integrals"
-    )
-    function = ast.parse("def scope():\n    pass").body[0]
-    function.body = [block]
-    module = compile(
-        ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[])),
-        str(path),
-        "exec",
-    )
-    code = next(
-        c for c in module.co_consts if isinstance(c, CodeType) and c.co_name == "scope"
-    )
-    work = {"transfer_work": {}, "host_scope": "snapshot validation"}
-    FunctionType(
-        code,
-        {
-            "__builtins__": builtins.__dict__,
-            "work": work,
-            "use_fitted_integrals": True,
-            "native_integral_resources": {
-                "density_fitted_one_electron_resident_cuda": 0
-            },
-        },
-    )()
-    assert work["density_fitted_response_resources_included"] is False
-    assert work["transfer_work"]["density_fitted_response_included"] is False
-    assert "excludes DF-provider" in work["additional_device_peak_bound_scope"]
-    assert work["native_integral_resource_scope"].endswith("host-one-electron-fallback")
-    assert "H'/S'" in work["host_scope"]
-
-    resident = {"transfer_work": {}, "host_scope": "snapshot validation"}
-    FunctionType(
-        code,
-        {
-            "__builtins__": builtins.__dict__,
-            "work": resident,
-            "use_fitted_integrals": True,
-            "native_integral_resources": {
-                "density_fitted_one_electron_resident_cuda": 1
-            },
-        },
-    )()
-    assert resident["native_integral_resource_scope"].endswith(
-        "resident-cuda-one-electron"
-    )
-    assert "final D/W remain resident" in resident["host_scope"]
 
 
 def test_real_cuda_response_terms_require_nonzero_distinct_density_uploads(

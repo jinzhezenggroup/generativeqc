@@ -105,6 +105,16 @@ def requires_composite_stationary_cuda(state: typing.Any) -> bool:
     external_sources = stationary_external_provider_sources(plan)
     if not external_sources:
         return False
+    from .ks import mixed_density_fitted_force_eligible
+
+    if (
+        external_sources == ("exchange_short_range", "exchange_long_range")
+        and bool(getattr(state._source, "density_fitted", False))
+        and mixed_density_fitted_force_eligible(plan.method, backend="cuda")
+    ):
+        # The ordinary CUDA owner consumes the same native integral bridge
+        # without constructing nonexistent nonlocal grids/features.
+        return False
     if external_sources != _COMPOSITE_EXTERNAL_SOURCES:
         raise NotImplementedError(
             "stationary CUDA external-provider source inventory is not qualified: "

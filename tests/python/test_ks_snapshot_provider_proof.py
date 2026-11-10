@@ -169,6 +169,36 @@ def test_direct_snapshot_cannot_offer_a_fitted_integral_reserve() -> None:
         )
 
 
+@pytest.mark.parametrize("lazy_bytes", (0, 5000))
+def test_mixed_integral_reserve_adds_the_dry_native_lr_capacity(
+    lazy_bytes: int,
+) -> None:
+    """A reused derivative owner remains additional to the SCF allocation."""
+    from generativeqc_compiler.method.stationary_resources import (
+        stationary_fitted_integral_reserve,
+    )
+
+    checks = []
+
+    def query() -> int:
+        checks.append("query")
+        return lazy_bytes
+
+    snapshot = SimpleNamespace(
+        density_fitted=True,
+        check_current=lambda: checks.append("current"),
+        cuda_integral_gradient_additional_device_bytes=query,
+    )
+    assert (
+        NativeKsSnapshot.stationary_integral_device_reserve(
+            snapshot, atoms=3, aos=24, primitives=22, range_exchange=True
+        )
+        == stationary_fitted_integral_reserve(atoms=3, aos=24, primitives=22)
+        + lazy_bytes
+    )
+    assert checks == ["current", "query"]
+
+
 def test_missing_native_proof_never_guesses_a_fitted_provider() -> None:
     snapshot, _ = _snapshot()
     snapshot._library = SimpleNamespace()

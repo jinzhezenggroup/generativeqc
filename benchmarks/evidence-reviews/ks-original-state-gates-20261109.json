@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "ks-original-state-gates-20261109",
+  "owner": "Original-input KS physical-state and force qualification",
+  "reason": "Retain source-bound UKS baseline dispositions, all candidate final-state histories and independent force vectors, and compact provenance for incomplete original-grid water96 attempts. Storage review does not promote the diagnostic build or resolve the pending water96 and original RSH-force gates.",
+  "review_document": "benchmarks/results/ks-original-state-gates-20261109/README.md",
+  "files": []
+}
