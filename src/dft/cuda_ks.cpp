@@ -447,7 +447,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
   // Eligible strict solves may replace the conservative AO-maximum margin
   // only with a successful complete canonical final-state proof.
-  bool early_final_probe_requested{}, standard_convergence_model{}, standard_nonlocal_model{};
+  bool early_final_probe_requested{}, standard_convergence_model{}, standard_nonlocal_model{},
+       standard_fullrange_orbital_model{};
   mutable std::optional<CudaKsFinalStateToken> cached_final_token;
   KsFinalStateDiagnostic final_validation_diagnostic;
   cuda_ks_detail::Scalars last_physical;
@@ -925,6 +926,20 @@ struct CudaKsPlan::Impl : KsStateStorage {
            provider.system().ecp_terms.empty() &&
            std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                         [](const auto& atom) { return atom.ecp_core != 0; });
+  }
+
+  /** Match GPU4PySCF's restricted physical MO-gradient norm only for the
+   * default-grid, standard full-range model. Custom/tighter/non-FP64 owners
+   * keep their existing strict physical AO stopping contract. */
+  bool fullrange_orbital_convergence_active() const noexcept {
+    return default_fullrange_ks_orbital_mode(
+        standard_convergence_active(), standard_fullrange_orbital_model,
+        standard_nonlocal_model, incremental_direct_jk, options.export_physical_reference);
+  }
+
+  bool orbital_convergence_active() const noexcept {
+    return (standard_nonlocal_model && standard_convergence_active()) ||
+           fullrange_orbital_convergence_active();
   }
 
   bool standard_stationarity_allowance_active() const noexcept {
@@ -1936,6 +1951,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     early_final_probe_requested = early_final_probe_default_model(
         functional, options.semilocal_exchange_scale, options.semilocal_correlation_scale,
         exchange_coefficient, grid_spec == default_grid_spec());
+    // The test-only early-probe selector must not change the default SCF norm.
+    standard_fullrange_orbital_model = early_final_probe_requested;
     // Primitive 450 is the complete M06-2X functional. Its solver error is
     // qualified separately from the retained default-grid error; exact mixing
     // and the complete final-state proof remain required.
@@ -4213,9 +4230,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       launch_subtract_matrix_batches_kernel(blocks, 128, 0, stream, 1, spins, n, tmp2, enabled,
                                             residual);
       check(cudaGetLastError());
-      const bool physical_orbital_check = standard_nonlocal_model &&
-                                          standard_convergence_active() && !pending_nonlocal_seed &&
-                                          !pending_nonlocal_frozen;
+      const bool physical_orbital_check = orbital_convergence_active() &&
+                                          !pending_nonlocal_seed && !pending_nonlocal_frozen;
       if (physical_orbital_check) {
         // X^T S X=I and D=2 C_occ C_occ^T. Hence the transformed physical
         // commutator norm is sqrt(2)*||2 C_vir^T F C_occ||_F. Neither AO RMS
@@ -4499,7 +4515,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         options.energy_tolerance,
         options.density_tolerance,
         physical_stationarity_tolerance()};
-    const bool orbital_policy = standard_nonlocal_model && standard_convergence_active();
+    const bool orbital_policy = orbital_convergence_active();
     bool converged = orbital_policy ? orbital_ks_converged(stopping, physical.orbital_gradient)
                                     : ordinary_ks_converged(stopping);
     bool early_final_probe_ran = false;
@@ -4548,7 +4564,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // On a soft orbital manifold the extrapolated density can move much more
     // than the actual unshifted canonical density. Audit the latter directly:
     // its AO-maximum density bound is stricter than the proposal RMS gate.
-    if (canonical_final_probe && has_energy_history && full_energy_history &&
+    if (canonical_final_probe && (!orbital_policy ||
+                                  orbital_ks_stationary(stopping, physical.orbital_gradient)) &&
+        has_energy_history && full_energy_history &&
         output.energy_change < options.energy_tolerance &&
         physical.residual < physical_stationarity_tolerance() &&
         physical.maximum_residual < physical_stationarity_tolerance()) {
@@ -4557,7 +4575,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } else if (converged && (standard_convergence_active() || automatic_program)) {
       early_final_probe_ran = true;
       converged = probe_current_final_state();
-    } else if (!converged && early_final_probe_eligible && has_energy_history &&
+    } else if (!converged && !orbital_policy && early_final_probe_eligible &&
+               has_energy_history &&
                full_energy_history && output.energy_change < options.energy_tolerance &&
                physical.density_change < options.density_tolerance &&
                early_ks_final_probe_stationary(stopping, options.compute_forces ||
@@ -4946,7 +4965,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Explicit callers already check the strict physical AO maximum. This
     // optional override also tightens canonical density reconstruction, so
     // preserve the original separate 1e-8 canonical-density contract.
-    if (standard_stationarity_allowance_active() || automatic_program)
+    // GPU4PySCF's orbital criterion is tested on the physical F[D] above.
+    // Do not silently re-impose the old 1e-8 AO gate in the independent
+    // canonical proof; retain the caller's density/trace/idempotency checks.
+    if (fullrange_orbital_convergence_active())
+      limits.stationarity_tolerance = options.density_tolerance;
+    else if (standard_stationarity_allowance_active() || automatic_program)
       limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;
     limits.maximum_corrections = 0;
@@ -5069,7 +5093,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       prepare_final_frame();
       scf::solver::FinalStateLimits limits;
       limits.density_tolerance = options.density_tolerance;
-      if (budget_stationarity || standard_stationarity_allowance_active())
+      if (fullrange_orbital_convergence_active())
+        limits.stationarity_tolerance = options.density_tolerance;
+      else if (budget_stationarity || standard_stationarity_allowance_active())
         limits.stationarity_tolerance = physical_stationarity_tolerance();
       limits.energy_tolerance = options.energy_tolerance;
       limits.maximum_corrections = 0;
@@ -5251,7 +5277,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
     scf::solver::FinalStateLimits limits;
     limits.density_tolerance = options.density_tolerance;
-    if (budget_stationarity || standard_stationarity_allowance_active())
+    if (fullrange_orbital_convergence_active())
+      limits.stationarity_tolerance = options.density_tolerance;
+    else if (budget_stationarity || standard_stationarity_allowance_active())
       limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;
     limits.maximum_corrections = 0;
