@@ -426,6 +426,10 @@ f/f/g Hermite storage and shell-specialized response schedules are not assumed
 to cover g orbitals or h auxiliaries. Their resource/domain refusal retains
 the complete generic source and weighted nuclear sink.
 
+Native unrestricted CUDA DF Fock plans and resident single/bucket UHF execution
+reject orbital g before one-electron or fitting-source preparation. This consumer
+gate does not narrow the shared integral source used by qualified restricted full DF.
+
 This does **not** admit conventional four-center orbital-g CUDA HF/correlation,
 DFT orbital g, or higher derivatives. Heavy-atom aug-cc-pV5Z additionally needs
 orbital h and auxiliary i (`l=6`), which remain explicit errors. QZ support is

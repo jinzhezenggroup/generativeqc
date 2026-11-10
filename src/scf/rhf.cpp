@@ -26,6 +26,7 @@
 #include "runtime/resource_ledger.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/convergence_limits.hpp"
+#include "scf/cuda/df_spin_domain.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
@@ -2282,6 +2283,7 @@ ScfResult run_uhf_density_fitting_cuda_impl(const core::System& system,
                                             const std::vector<double>* initial_density,
                                             initial_guess::OverlapOrthogonalizer* overlap_cache) {
   host_trace::Region endpoint_trace("run_uhf_density_fitting_cuda_impl");
+  cuda_execution::require_cuda_df_spin_domain(system, FockSpin::Unrestricted);
   reject_cuda_df_preliminary_guess(options);
   if (options.hooks || options.strict_initial_density)
     throw std::invalid_argument("SCF proposal callbacks require the CPU reference backend");
@@ -2999,6 +3001,8 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_impl(
     std::vector<std::optional<DensityFittingScfData>>* prepared_cache,
     const std::vector<initial_guess::OverlapOrthogonalizer*>* overlap_caches) {
   host_trace::Region endpoint_trace("run_uhf_density_fitting_cuda_bucket_impl");
+  for (const auto& system : systems)
+    cuda_execution::require_cuda_df_spin_domain(system, FockSpin::Unrestricted);
   reject_cuda_df_preliminary_guess(options);
   if (overlap_caches && (overlap_caches->size() != systems.size() ||
                          std::any_of(overlap_caches->begin(), overlap_caches->end(),
