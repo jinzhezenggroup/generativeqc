@@ -449,12 +449,29 @@ records the work contract and the prerequisites addressed by the public wrapper.
 
 Python `Calculator` and `PreparedBatch` expose LDA/PBE RKS/UKS first forces
 for Cartesian and real-spherical s/p/d scalar-ECP basis records, including
-all-electron fragments of those records. Default calls include forces;
-`properties=("energy",)` skips all derivative work. Standalone all-electron
-CPU records and ECP records containing f or higher shells retain their existing capability.
-The native C method registry is unchanged. A C++ compiler (`CXX` or `c++`) is
-required for the shared generated consumers; `GENERATIVEQC_STATIONARY_CACHE` selects
-their cache.
+all-electron fragments of those records. The packaged native Direct provider
+also admits through-f LDA/PBE and B3LYP RKS/UKS force contexts in both layouts.
+The actual prepared provider, not conservative method-level metadata, selects
+default force outputs. `properties=("energy",)` skips all derivative work.
+An older library without that native capability retains energy-only defaults
+for f-shell ECP records and rejects explicit force requests; it cannot enter
+the narrower Python compatibility consumer. Standalone all-electron CPU
+defaults are unchanged. The native C method registry is unchanged.
+
+Native force promotion also revalidates derivative resource capacity. An
+energy-only plan cannot cover forces merely because the prepared provider
+supports them. An insufficient force budget fails before scientific execution;
+energy-only replay remains available after failure. Explicit force plans and
+successfully promoted plans retain their derivative reservation across later
+energy-only replays.
+
+Complete through-f public checks use compact Na/H fixtures with f orbitals on
+both centers, independently converged states, moving-grid analytic gradients
+and multistep energy differences. This does not qualify canonical mixed
+Ni/I/Cs def2-ECP force domains or ECP second-order endpoints.
+
+A C++ compiler (`CXX` or `c++`) is required for the retained generated
+compatibility consumers; `GENERATIVEQC_STATIONARY_CACHE` selects their cache.
 
 For bases containing d shells, the compiler canonicalizes exact ERI center
 symmetries and global Cartesian-axis permutations. Complete s/p/d coverage uses

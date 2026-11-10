@@ -1444,7 +1444,9 @@ class Calculator:
         canonical = resolve_method("R2SCAN-3c", spin=graph.spin)
         return graph.manifest_identity == canonical.manifest_identity
 
-    def _default_properties(self, *, batch: bool = False) -> frozenset[str]:
+    def _default_properties(
+        self, *, batch: bool = False, native_forces: bool = False
+    ) -> frozenset[str]:
         """New bounded CPU forces are opt-in; retain established defaults."""
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
@@ -1465,7 +1467,18 @@ class Calculator:
             or self._automatic_libxc_name is not None
         ):
             return frozenset({"energy"})
-        return self._capabilities.supported_properties
+        supported = self._capabilities.supported_properties
+        if (
+            native_forces
+            and self._capabilities.family == "density_functional"
+            and isinstance(self._basis, BasisSet)
+            and any(element.ecp_core_electrons for element in self._basis.elements)
+        ):
+            # ECP method metadata also covers the narrower compatibility owner.
+            # Only the actual prepared provider can extend its default outputs;
+            # this must not widen that Python consumer's angular/resource domain.
+            return supported | {"forces"}
+        return supported
 
     def _resource_properties(self, properties: typing.Any) -> frozenset[str]:
         """Validate an output request before building its capacity contract."""
@@ -2528,7 +2541,7 @@ class Calculator:
             planned = (
                 requested
                 if qualified_direct_semilocal_context(self)
-                else self._capabilities.supported_properties
+                else self._capabilities.supported_properties | requested
             )
             return ks_resource_request(
                 systems,
@@ -3414,7 +3427,8 @@ class Calculator:
             from ._provider_initialization_lifetime import require_no_pending_owner
 
             require_no_pending_owner()
-        if properties is None:
+        default_properties = properties is None
+        if default_properties:
             properties = self._default_properties()
         if isinstance(properties, (str, bytes)):
             raise TypeError("properties must be an iterable of property names")
@@ -3492,8 +3506,16 @@ class Calculator:
                 warm_start=False,
                 resource_plan=resource_plan,
             ) as batch:
+                execution_properties = requested_properties - PROPERTY_NAMES
+                if (
+                    default_properties
+                    and self._capabilities.family == "density_functional"
+                ):
+                    execution_properties = self._default_properties(
+                        native_forces=batch._native_dft_force_eligible()
+                    )
                 item = batch.execute(
-                    strict=True, properties=requested_properties - PROPERTY_NAMES
+                    strict=True, properties=execution_properties
                 ).items[0]
                 electronic_outputs = (
                     density_capture.from_batch(batch)
