@@ -1151,6 +1151,7 @@ class Calculator:
             cuda_global_hybrid_force_eligible,
             cuda_mixed_density_fitted_force_eligible,
             cuda_nonlocal_force_basis_eligible,
+            cuda_range_only_force_basis_eligible,
             mixed_density_fitted_force_eligible,
             split_hybrid_df_force_admitted,
         )
@@ -1199,6 +1200,13 @@ class Calculator:
                     self._device_name == "cuda"
                     and self._ks_options.xc_schedule == "device_fused"
                     and cuda_nonlocal_force_basis_eligible(self._basis)
+                    and (
+                        self._ks_options.execution_plan.nonlocal_correlation is not None
+                        or (
+                            self._precision_mode == _native.PRECISION_FP64
+                            and cuda_range_only_force_basis_eligible(self._basis)
+                        )
+                    )
                     and cuda_mixed_density_fitted_force_eligible(
                         self._ks_options.method_ir
                     )

@@ -372,9 +372,6 @@ STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
 STATIONARY_DEVICE_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "2ae396067d6e7610a2f0591c3a9eb61bd001d13a60377194b85823074ace5e65"
 )
-STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
-    "d9683ad506e608bd7043bea3480079379f7a180cdedcd6425d0dab5622063b8f"
-)
 PHASED_BECKE_POLICY_CONTRACT_SHA256 = (
     "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
 )
@@ -394,9 +391,6 @@ STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 # Strict pairing of the three export counters changes source identity only.
 # The fitted reserve is valid only for a current, known native DF snapshot.
-NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
-    "1e2eb25ca455dd5505a535a3917a148fbf8cfd59dc6839eeb770aa7c38219f64"
-)
 SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
 )
@@ -734,9 +728,7 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
     expected = {
         "__init__": None,
         "decode": None,
-        "stationary_integral_device_reserve": (
-            NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256
-        ),
+        "stationary_integral_device_reserve": None,
     }
     for name, expected_digest in expected.items():
         candidates = [
@@ -753,6 +745,15 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
             raise RuntimeError("native KS snapshot functional contract changed")
         key = "init_sha256" if name == "__init__" else f"{name}_sha256"
         methods[key] = digest
+        if name == "stationary_integral_device_reserve":
+            from tools.dft_mp_v1.prepared_contracts import check_snapshot_reserve
+
+            try:
+                check_snapshot_reserve(candidates[0])
+            except Exception as error:
+                raise RuntimeError(
+                    "native KS snapshot functional contract changed"
+                ) from error
     # Decode now delegates exact grid reuse. Bind the delegated content proof
     # and retention cap as well as the caller; a caller hash alone is insufficient.
     cache_source = repository / "python/generativeqc/_snapshot_grid_cache.py"
@@ -785,56 +786,31 @@ def _require_ast_fragments(
 def _fitted_geometry_policy_contract(
     resource_owner: ast.FunctionDef, endpoint: ast.FunctionDef
 ) -> None:
-    """Bind the fitted-only reserve and preference without changing Direct rows.
+    """Execute reserve, preference and staging guards with inert native owners.
 
-    The frozen census estimates Direct providers. Its existing resource equations
-    and explicit tile size remain valid only while the new bounded reserve and
-    cap-gated tile preference stay guarded by the fitted-provider contract.
-    Keep these semantic checks in addition to the complete owner fingerprints.
+    Source identity remains provenance, not a required spelling of the resource
+    expression. Equivalent refactors must retain the same bounded behavior.
     """
-    _require_ast_fragments(
-        resource_owner,
-        (
-            (
-                "native_geometry_reserve = ("
-                "min(max(0, available - sum(value.peak_bytes for value in tensor_plans.values())), "
-                "state._source.stationary_integral_device_reserve(atoms=na, aos=n, primitives=basis.nprimitive)) "
-                "if not ecp and bool(getattr(state._source, 'density_fitted', False)) "
-                "and callable(getattr(state._source, 'stationary_integral_device_reserve', None)) "
-                "else max(0, available - sum(value.peak_bytes for value in tensor_plans.values())) "
-                "if not ecp and bool(getattr(state._source, 'density_fitted', False)) "
-                "else min(max(0, available - sum(value.peak_bytes for value in tensor_plans.values())), "
-                "stationary_native_pair_reserve(atoms=na, aos=n, primitives=basis.nprimitive)) "
-                "if not ecp and callable(getattr(state._source, 'cuda_integral_derivatives', None)) "
-                "else 0)"
-            ),
+    from generativeqc import _stationary_cuda as runtime
+
+    from tools.dft_mp_v1.prepared_contracts import check_fitted_geometry
+
+    module = ModuleType("generativeqc._capacity_fitted_geometry")
+    module.__dict__.update(vars(runtime))
+    exec(  # noqa: S102 - inspected current owners, no native/compiler execution
+        compile(
+            ast.Module(body=[resource_owner, endpoint], type_ignores=[]),
+            "<fitted geometry contract>",
+            "exec",
         ),
-        label="stationary CUDA fitted geometry reserve",
+        module.__dict__,
     )
-    _require_ast_fragments(
-        endpoint,
-        (
-            (
-                "large_fitted = (na >= _AUTO_PHASED_BECKE_MIN_ATOMS "
-                "and bool(getattr(state._source, 'density_fitted', False)) "
-                "and callable(getattr(state._source, 'stationary_integral_device_reserve', None)))"
-            ),
-            "from ._cuda_force_resources import DF_FORCE_DEVICE_CAP, DF_FORCE_HOST_CAP",
-            "preferred_tile_points = 512",
-            (
-                "if large_fitted:\n"
-                "    preferred_tile_points = (1024 if max_device_bytes >= DF_FORCE_DEVICE_CAP "
-                "and max_host_bytes >= DF_FORCE_HOST_CAP else 256)"
-            ),
-            (
-                "if (use_fitted_integrals and "
-                "int(native_integral_resources.get('one_electron_device_peak_bytes', 0)) "
-                "> layout.native_geometry_reserve):\n"
-                "    raise RuntimeError('fitted stationary device staging exceeds admitted reserve')"
-            ),
-        ),
-        label="stationary CUDA fitted geometry policy",
-    )
+    try:
+        check_fitted_geometry(module)
+    except Exception as error:
+        raise RuntimeError(
+            f"fitted geometry behavioral contract changed: {error}"
+        ) from error
 
 
 def _resident_ao_policy_contract(tree: ast.Module) -> None:
@@ -1572,7 +1548,6 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if len(resource_owners) != 1 or len(tile_callbacks) != 1:
         raise RuntimeError("stationary CUDA tile admission owners are ambiguous")
     resource_owner, tile_callback = resource_owners[0], tile_callbacks[0]
-    _fitted_geometry_policy_contract(resource_owner, owner)
     layout_node = classes.get("_StationaryCudaTileLayout")
     if (
         layout_node is None
@@ -2067,8 +2042,6 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "stationary CUDA native host-reserve admission order changed"
         )
     resource_owner_digest = _source_node_sha256(source, resource_owner)
-    if resource_owner_digest != STATIONARY_TILE_RESOURCE_CONTRACT_SHA256:
-        raise RuntimeError("stationary CUDA ordinary tile-resource contract changed")
     page_contract["ordinary_tile_resources_sha256"] = resource_owner_digest
     signature = inspect.signature(complete_rks_cuda_gradient_diagnostic)
     if signature.parameters["resident_ao_cutoff"].default is not None:
@@ -2122,6 +2095,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     endpoint_owner_digest = _source_node_sha256(source, owner)
     page_contract["endpoint_owner_sha256"] = endpoint_owner_digest
     _resident_ao_policy_contract(tree)
+    _fitted_geometry_policy_contract(resource_owner, owner)
 
     return {
         "owner": STATIONARY_OWNER,

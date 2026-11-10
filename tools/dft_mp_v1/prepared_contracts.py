@@ -15,6 +15,283 @@ from types import ModuleType, SimpleNamespace
 from typing import Any
 
 
+def check_snapshot_reserve(owner: ast.FunctionDef) -> None:
+    """Validate live-token and lazy-owner reserve behavior, not a source digest."""
+    from generativeqc import _ks_snapshot as runtime
+    from generativeqc_compiler.method.stationary_resources import (
+        stationary_fitted_integral_reserve,
+    )
+
+    namespace = dict(vars(runtime))
+    exec(  # noqa: S102 - inspected dry helper, inert token/capacity boundaries
+        compile(
+            ast.Module(body=[owner], type_ignores=[]), "<snapshot reserve>", "exec"
+        ),
+        namespace,
+    )
+    reserve = namespace[owner.name]
+    for fitted, ranged, stale in (
+        (True, False, False),
+        (True, True, False),
+        (False, False, False),
+        (True, True, True),
+    ):
+        checked = []
+
+        def current(stale: bool = stale, checked: list[bool] = checked) -> None:
+            checked.append(True)
+            if stale:
+                raise LookupError("revoked native token")
+
+        snapshot = SimpleNamespace(
+            density_fitted=fitted,
+            check_current=current,
+            cuda_integral_gradient_additional_device_bytes=lambda: 5000,
+        )
+        try:
+            actual = reserve(
+                snapshot, atoms=3, aos=24, primitives=22, range_exchange=ranged
+            )
+        except LookupError:
+            assert stale
+        except ValueError:
+            assert not fitted and not stale
+        else:
+            assert fitted and not stale
+            assert actual == stationary_fitted_integral_reserve(
+                atoms=3, aos=24, primitives=22
+            ) + (5000 if ranged else 0)
+        assert checked
+
+
+def check_fitted_geometry(module: ModuleType) -> None:
+    """Exercise real planning and provider admission without CUDA allocation.
+
+    Independent scalar bounds cover known fitted, unknown fitted and Direct
+    reserves. The complete endpoint then runs against inert grid/source owners
+    until the first reset, after real native staging validation has completed.
+    """
+    import numpy as np
+    from generativeqc._ks_snapshot import _integral_source_resources
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.method.stationary_resources import (
+        stationary_cuda_allocation_bytes,
+        stationary_native_pair_reserve,
+    )
+
+    ns = SimpleNamespace
+    target = cuda_target_info("sm_120")
+    basis = ns(
+        natom=3,
+        nao=24,
+        nprimitive=22,
+        numeric_bytes=2608 * 3,
+        packed=ns(size=3 * 3 + 44 + 128 * 3),
+    )
+    expected = 12 << 20
+    for fitted, known, allowance in (
+        (False, True, 512 << 20),
+        (True, False, 512 << 20),
+        (True, True, 512 << 20),
+        (True, True, 104 << 20),
+    ):
+
+        def reserve(*, atoms: int, aos: int, primitives: int) -> int:
+            assert (atoms, aos, primitives) == (3, 24, 22)
+            return expected
+
+        source = ns(density_fitted=fitted, cuda_integral_derivatives=lambda: None)
+        source.stationary_integral_device_reserve = reserve if known else None
+        layout = module._plan_stationary_cuda_tile(
+            ns(_source=source),
+            basis,
+            plan=ns(spin_blocks=1, range_exchange_sources=()),
+            target=target,
+            needs_first=True,
+            tile_points=16,
+            primitive_tile=32,
+            integral_terms=4,
+            source_names=tuple(range(8)),
+            ecp=False,
+            max_device_bytes=allowance,
+            max_host_bytes=256 << 20,
+            max_ecp_pair_samples=100_000_000,
+        )
+        minimum = stationary_cuda_allocation_bytes(
+            atoms=3,
+            aos=24,
+            primitives=22,
+            points=16,
+            tasks=32,
+            spins=1,
+            sources=8,
+            geometry_lanes=16,
+        )
+        available = max(0, allowance - layout.grid_plan.peak_bytes - minimum)
+        required = (
+            min(available, expected)
+            if fitted and known
+            else available
+            if fitted
+            else min(
+                available,
+                stationary_native_pair_reserve(atoms=3, aos=24, primitives=22),
+            )
+        )
+        assert layout.native_geometry_reserve == required
+        assert (
+            layout.source_resources.allocation_bytes
+            + layout.grid_plan.peak_bytes
+            + required
+            <= allowance
+        )
+
+    class Admitted(Exception):
+        pass
+
+    class Owner:
+        def __enter__(self) -> Any:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            pass
+
+        def configure_grid(self, *args: Any) -> None:
+            pass
+
+        def reset_geometry(self, *args: Any) -> None:
+            raise Admitted
+
+    class Compiler:
+        def __init__(self) -> None:
+            self.target = target
+
+    module.CudaCompilerAdapter = Compiler
+    module.os = ns(environ={"GENERATIVEQC_DIRECT_FORCE_REDUCTION": "separate"})
+
+    class Contract(module.StationaryDerivativeContract):
+        def __new__(cls, *args: Any, **kwargs: Any) -> Any:
+            return ns(family="gga", spin="unpolarized", validate=lambda state: state)
+
+    module.StationaryDerivativeContract = Contract
+    module.native_ao_geometry_identity = lambda basis: "geometry"
+    module._layout = lambda basis: (
+        np.array([[1.0, 1.0]]),
+        np.array([[0, 0, 1]]),
+        ((("", 1.0),),),
+        module.qualified_sp_requests(),
+    )
+    layout = ns(
+        grid_plan=ns(
+            peak_bytes=16, tile_points=1, active_ao_capacity=None, features_only=True
+        ),
+        tensor_plans={},
+        host_bound=16,
+        native_integral_host_reserve=32,
+        native_geometry_reserve=32,
+        ecp_workspace=0,
+        ecp_pair_samples=0,
+        source_resources=ns(allocation_bytes=16),
+    )
+    module._plan_stationary_cuda_tile = lambda *args, **kwargs: layout
+    module._prepare_force_memory = lambda *args: {}
+    module.compile_stationary_cuda = lambda *args, **kwargs: object()
+    module._native_grid_artifact = lambda *args, **kwargs: object()
+    module.CudaGrid = module._CudaSources = lambda *args, **kwargs: Owner()
+
+    for atoms, fitted, known, large_device, large_host, actual in (
+        (2, True, True, False, False, 32),
+        (2, True, True, False, False, 33),
+        (2, False, True, False, False, 33),
+        (96, False, True, False, False, 32),
+        (96, True, True, False, False, 32),
+        (96, True, True, True, True, 32),
+        (96, True, True, True, False, 32),
+        (96, True, True, False, True, 32),
+        (96, True, False, False, False, 32),
+        (2, True, True, True, True, 32),
+    ):
+        source = ns(
+            backend="cuda",
+            density_fitted=fitted,
+            method_ir=resolve_method("PBE"),
+            hamiltonian="all-electron",
+            ecp_cores=(0,) * atoms,
+            ecp_terms=(),
+            ecp_derivatives=lambda: None,
+            metadata=(3, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0),
+            grid_spec=ns(partition_iterations=3, coincident_tolerance=1e-12),
+            functional=ns(ingredients=("rho", "sigma")),
+        )
+        if known:
+            source.stationary_integral_device_reserve = lambda **kwargs: 32
+
+        def provider(
+            *args: Any, atoms: int = atoms, actual: int = actual, **kwargs: Any
+        ) -> Any:
+            return np.zeros((4, atoms, 3)), _integral_source_resources(
+                (0, 0, actual, 0, 0, 0, 0, 0, 0)
+            )
+
+        source.cuda_integral_derivatives = (
+            source.density_fitted_integral_derivatives
+        ) = provider
+        basis = ns(
+            identity="basis",
+            natom=atoms,
+            nao=1,
+            nprimitive=1,
+            charge=0,
+            atoms=tuple(ns(atomic_number=1) for _ in range(atoms)),
+        )
+        state = ns(
+            _source=source,
+            identity=ns(basis_identity="basis", geometry_identity="geometry"),
+            occupations=np.array([float(atoms)]),
+            density=np.zeros((1, 1, 1)),
+            weighted_density=np.zeros((1, 1, 1)),
+            grid=ns(points=np.zeros((1, 3))),
+        )
+        preferences = []
+
+        def schedule(preferences: list[int] = preferences, **kwargs: Any) -> Any:
+            preferences.append(kwargs["preferred_tile_points"])
+            admitted, work = kwargs["admit"](1, False)
+            return admitted, work, None
+
+        module._plan_stationary_optional_ao_schedule = schedule
+        rejected = False
+        try:
+            module._complete_rks_cuda_gradient_diagnostic(
+                state,
+                basis,
+                compiler=Compiler(),
+                target=target,
+                cache=Path("/inert-cache"),
+                native_grid_library=Path("/inert-grid.so"),
+                tile_points=1,
+                max_device_bytes=(1 << 30) if large_device else 64,
+                max_host_bytes=(1 << 30) if large_host else 256 << 20,
+            )
+        except Admitted:
+            pass
+        except RuntimeError as error:
+            assert "device staging exceeds" in str(error)
+            rejected = True
+        else:
+            raise AssertionError("provider probe executed beyond admission")
+        assert rejected == (fitted and actual > 32)
+        expected_preference = (
+            1024
+            if atoms == 96 and large_device and large_host
+            else 256
+            if atoms == 96 and fitted and known
+            else 512
+        )
+        assert preferences == [expected_preference]
+
+
 def check_prepared_selection(module: ModuleType) -> None:
     """Check request identity, artifact routing, precision and early budgets."""
     ns = SimpleNamespace
@@ -33,7 +310,7 @@ def check_prepared_selection(module: ModuleType) -> None:
             identity="basis", topology="topology", natom=2, nao=4, nprimitive=4
         ),
         "contract": ns(family="dft", spin="rks"),
-        "plan": ns(identity="plan", spin_blocks=1),
+        "plan": ns(identity="plan", spin_blocks=1, range_exchange_sources=()),
         "tensor_plans": {},
         "target": target,
         "aot_directory": Path("/packaged"),
@@ -121,7 +398,7 @@ def check_prepared_selection(module: ModuleType) -> None:
     module._prepare_force_memory = lambda *a: {}
     module._layout = lambda *a: (None, None, (), None)
     module._component_mode = lambda *a: False
-    module.stationary_runtime_sources = lambda *a: ()
+    module.stationary_runtime_sources = lambda *args, **kwargs: ()
     module.CudaGrid = lambda *a, **k: nullcontext(ns(artifact=artifact))
     module._CudaSources = sources
     call = arguments | {

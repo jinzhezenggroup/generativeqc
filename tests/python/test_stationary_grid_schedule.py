@@ -277,15 +277,23 @@ def test_optional_csr_cannot_consume_the_entire_remaining_device_budget() -> Non
     assert runtime._stationary_device_ao_map_reserve(layout, 64 << 20, 512 << 20) == 0
 
 
-def test_known_fitted_provider_admits_concurrent_geometry() -> None:
+@pytest.mark.parametrize("range_exchange", (False, True))
+def test_known_fitted_provider_admits_concurrent_geometry(range_exchange: bool) -> None:
     """The independent DF scratch contract must not serialize grid geometry."""
     from generativeqc_compiler.method.stationary_resources import (
         stationary_fitted_integral_reserve,
     )
 
+    lazy_lr_bytes = 8 << 20
+
+    def reserve(*, range_exchange: bool = False, **shape: int) -> int:
+        return stationary_fitted_integral_reserve(**shape) + (
+            lazy_lr_bytes if range_exchange else 0
+        )
+
     source = SimpleNamespace(
         density_fitted=True,
-        stationary_integral_device_reserve=stationary_fitted_integral_reserve,
+        stationary_integral_device_reserve=reserve,
     )
     basis = SimpleNamespace(
         natom=96,
@@ -297,7 +305,10 @@ def test_known_fitted_provider_admits_concurrent_geometry() -> None:
     layout = runtime._plan_stationary_cuda_tile(
         SimpleNamespace(_source=source),
         basis,
-        plan=SimpleNamespace(spin_blocks=1),
+        plan=SimpleNamespace(
+            spin_blocks=1,
+            range_exchange_sources=("short", "long") if range_exchange else (),
+        ),
         target=cuda_target_info("sm_120"),
         needs_first=True,
         tile_points=256,
@@ -311,7 +322,7 @@ def test_known_fitted_provider_admits_concurrent_geometry() -> None:
     )
     assert layout.native_geometry_reserve == stationary_fitted_integral_reserve(
         atoms=96, aos=768, primitives=704
-    )
+    ) + (lazy_lr_bytes if range_exchange else 0)
     assert layout.source_resources.geometry_lanes == 256
     assert layout.source_resources.phased_becke_bytes > 0
     assert (

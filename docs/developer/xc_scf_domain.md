@@ -49,6 +49,81 @@ contraction used by the independent XC integrator. Each quadrature weight
 is applied once. LDA requests only AO values; PBE requests values and three
 first spatial derivatives. Neither computes tau or higher jets.
 
+## Physical final-state admission
+
+CUDA full-range KS force and physical-reference consumers retain the strict
+physical residual ceiling, `min(1e-9, density_tolerance)`, even when the public
+energy/density controls select Standard convergence. Energy-only owners may use
+their separately admitted Standard allowance. The nonlocal orbital-gradient and
+budget-Fock contracts retain their independently qualified policies.
+
+The prepared method binds whether forces are requested before SCF starts. This
+fact is independent of additional force-allocation bytes: an already resident
+force workspace does not turn a force request into an energy-only request.
+Iteration, early canonical probes, resident force weights and detached export
+retain that physical contract. In particular, an early force/reference proof
+cannot use the energy-only `1e-8` AO-maximum allowance. Strict callers retain
+the independent `1e-8` canonical-density gate; the physical residual ceiling
+is not silently reused as a tighter density gate.
+
+Full-range, all-electron, strict-FP64, single-slot CUDA UKS owners test the actual
+unshifted physical/canonical state before a corrective closure, including pure
+semilocal models without exact exchange. A rejected proof resumes the owned
+DIIS proposal within the existing iteration budget and cannot publish a final
+token or warm seed. A successful proof avoids an unnecessary unextrapolated
+update of an already valid physical state. Other precision, resource, ECP and
+range/nonlocal domains retain their bounded incumbent paths.
+
+All-electron, strict-FP64, exact-primary pure PBE UKS fits its Pulay proposals
+with the orthonormal residual `X.T @ (F @ D @ S - S @ D @ F) @ X`, where
+`X.T @ S @ X = I`. This prevents AO scaling from dominating the proposal
+metric. The untransformed physical residual, original energy/density controls,
+iteration cap and independent canonical-density proof still decide acceptance.
+The transformation uses existing resident scratch and adds no matrix readback.
+Other method, provider, precision and ECP domains retain their incumbent metric.
+
+The original-input GPU controls are in
+`tests/python/test_ks_scientific_gates_cuda.py` and the original-grid water96
+controls in `tests/python/test_ks_seed_admission_cuda.py`. They require
+`GENERATIVEQC_KS_STATE_CUDA_TEST=1` and a finite Slurm allocation; the water
+module also requires `GENERATIVEQC_GRID_CUDA_TEST=1`. The UKS mask controls
+require a test-hook native build with native PBE stationary-force artifacts.
+
+### Range-only fitted-primary forces
+
+Strict FP64 CUDA GGA range-only compositions can combine fitted full-range
+J/K with their separately prepared exact long-range K correction. Their
+semilocal point program must have the qualified SCF domain and no intrinsic
+range parameter. Graph, spin, basis, budget and provider admission remain
+independent checks; the absence of nonlocal correlation does not imply a
+VV10 grid or feature lease.
+
+The ordinary compiled geometry layout supports orbital s/p/d shells, so
+range-only force requests with f or higher shells are rejected before SCF
+preparation. This does not narrow the separate range/VV10 owner's through-f
+domain. Native integral coverage alone does not extend the geometry layout.
+
+The compiled CUDA geometry consumer retains the exact plan's SR/LR source
+slots. The native mixed integral bridge supplies one-electron, overlap/Pulay,
+fitted Coulomb, short-range and long-range rows; complete reduction includes
+each row once. Missing or incompatible native integral sources fail closed,
+without substituting exact full-range integrals or a CPU derivative oracle.
+Range/VV10 plans retain their distinct resident composite consumer.
+
+Dry resource planning reserves the native lazy LR derivative capacity in
+addition to the fitted one-electron envelope. Execution validates and reports
+the mixed bridge's complete additional-device peak, including that LR owner,
+even on reuse. Independent DF response scratch remains explicitly outside
+this stationary-consumer bound.
+
+`tests/python/test_ks_original_rsh_admission_cuda.py` pins the original H2/H3
+DF-primary/Direct-LR fixture, both spin/layout variants and cold/warm/moved
+consumers. It compares E/D/Fock with independently reconverged mixed PySCF
+and the complete native analytic forces with five-point derivatives of that
+independent moving-grid energy. Runtime JIT requires a verified compiler
+cache and an explicitly scheduled CUDA device; emitted artifacts retain the
+complete source layout and scientific identity.
+
 ## Stable positive-density algebra
 
 The evaluator does not clip rho or sigma and has no positive density floor.

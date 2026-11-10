@@ -1,5 +1,5 @@
 {
-  "benchmark_results_max_bytes": 89980928,
+  "benchmark_results_max_bytes": 91095040,
   "change_review_max_bytes": 2097152,
   "exceptions": {
     "benchmarks/results/array-api-rhf-slurm-20261011/build/configure.log": {
@@ -151,271 +151,6 @@
       "owner": "df-cbs-qm7-20261012",
       "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
       "sha256": "dc43b83c39e799a1f26885eda13553e3b9283d210e8292691923dba679fe5173"
-    },
-    "benchmarks/results/direct-complete-pair-20261106/5090/independent.xml.xz": {
-      "owner": "direct-complete-pair-20261106",
-      "reason": "Lossless original six-case real-Slurm Libcint oracle XML for the measured seven-class image. Replay requires every case without skip or failure; this does not relabel later selector-policy edits as a fresh GPU run.",
-      "sha256": "eef0069a715d8d47038f4fbe217919687a8369e6a1d2fa78c9e303f994db02e0"
-    },
-    "benchmarks/results/direct-complete-pair-20261106/default-policy.xml.xz": {
-      "owner": "direct-complete-pair-20261106",
-      "reason": "Exact focused host policy/allocation/resource-identity/tile XML after default promotion: 1165 passing cases. This is host policy qualification, not a rebuilt final-head CUDA endpoint.",
-      "sha256": "f405e77ee8911663cbc18b4eae4925fd55f1503e5742e8906b1e16392483ccc8"
-    },
-    "benchmarks/results/direct-complete-pair-20261106/host.xml.xz": {
-      "owner": "direct-complete-pair-20261106",
-      "reason": "Exact 585-pass independent host numerical/admission/fallback qualification XML, preserving all 164 physically invalid symmetry-signature skips rather than hiding them behind a success count.",
-      "sha256": "95c0019d9364f59b83882c16862727b6cc978d9300099e1dfc51e64bf5134dc5"
-    },
-    "benchmarks/results/direct-complete-pair-20261106/initial-local-resource-failures.xml.xz": {
-      "owner": "direct-complete-pair-20261106",
-      "reason": "Exact initial wider local suite XML retaining eleven missing-native-library discovery failures and 1174 passes. The later focused passing cohort does not erase these environment-limited cases or turn them into successes.",
-      "sha256": "69a60cfa6562f56bbb1f70dc87b3c0a851a24960c2282d8b3216a32d2c6dc000"
-    },
-    "benchmarks/results/direct-complete-pair-20261106/safety/memcheck.log.gz": {
-      "owner": "direct-complete-pair-20261106",
-      "reason": "Exact tiny original seven-class GPU memcheck receipt, zero errors and one passing oracle case. The separate racecheck timed out and the combined safety runner failed; this is not a blanket sanitizer pass.",
-      "sha256": "09cb16c9cd78f04e332bf0bae080a6e78a91d37c14ee0a6e4fd4fb73abf4afc0"
-    },
-    "benchmarks/results/direct-complete-pair-20261106/safety/memcheck.xml.xz": {
-      "owner": "direct-complete-pair-20261106",
-      "reason": "Exact original one-case seven-class Libcint XML under actual scheduled memcheck. Retained with real zero process exit and original zero-error diagnostic; racecheck remains explicitly inconclusive.",
-      "sha256": "d5a36ed80141715ed9cf5ef98175e417688b69aa63c58a0bf9a87d474d613400"
-    },
-    "benchmarks/results/direct-complete-pair-20261106/safety/racecheck.log.gz": {
-      "owner": "direct-complete-pair-20261106",
-      "reason": "Exact 28-byte original racecheck startup-only output. The 180-second cap exits124 without a diagnostic and the combined safety runner exits1; preserving this negative boundary prevents an unsupported sanitizer-success claim.",
-      "sha256": "20fa0f0dc5a6fe45d210c1d675a89f45843690d40212ce6f9108038ae971b3c8"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/5090/baseline.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact bounded native baseline endpoint stdout for the completed 5090 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
-      "sha256": "5deab9a1683484703e6ac8f0ac990b00bf3ed2b635086230f12dc8ee011343b1"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/5090/candidate.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact bounded native candidate endpoint stdout for the completed 5090 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
-      "sha256": "281f743e5d55f5ca493f0ef89dbacf3540d6bbdd0adb1dba323f5a052d504418"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/5090/driver.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact empty driver-output receipt for completed Slurm job 16004. Acceptance instead requires terminal scheduler status, per-arm process exit codes and complete populations; empty stdout is never treated as proof of success.",
-      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/5090/independent.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact bounded pytest process-completion receipt for the independent 24-case Slurm-5090 Libcint run, cross-checked against the lossless XML and retained zero process exit code; not a new qualification for later sources.",
-      "sha256": "06c25bb5ce55ee3a1a34433ef4900fdd93fa1f191c74846b23b0e0d1748470ab"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/5090/independent.xml.xz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Lossless original pytest XML for 24 real-Slurm-5090 Libcint J/K derivative oracle cases. Offline replay requires every case to complete without skip, failure or error; retaining the exact original output prevents a compact success count from concealing omitted cases.",
-      "sha256": "eb837960dbb6e57fe2d9cd7c5c6f9cf1071c565c01f7c9124cb6d86d83065cd7"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/5090/reference.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact bounded GPU4PySCF reference endpoint stdout from completed Slurm job 16004. Retains reference process diagnostics alongside the full population and documented CPU D4/gCP corrections; reference CPU work is not a native production dependency.",
-      "sha256": "70a5078dfaf37af81de8a570e155bf3495a00edb48398eb59b5932e2eb3bcb08"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/a100/baseline.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact bounded native baseline endpoint stdout for the completed a100 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
-      "sha256": "a0c7a798da0b27fdd5b12d8848d167de46b4566f4b3f219279e903fcd0b4788a"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/a100/candidate.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact bounded native candidate endpoint stdout for the completed a100 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
-      "sha256": "70279d1b3c93b4a927fe8e8020b8814f02db554e4b563c08b6b1169382d5f800"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/a100/driver.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact bounded LSF driver-output receipt for job 225682, retained to bind the completed A100 native populations to the executed finite job and uploaded source identities; no A100 reference timing claim is inferred.",
-      "sha256": "163b280c9edecc340a2129afa8d2d9425d411f274f56b309f01b421f8f4f91ee"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/build/candidate-build-resume.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact compressed successful incremental compiler continuation receipt for the measured Release SM80+SM120 candidate ELF. Retains warnings, completed actions and cache reuse after the first finite attempt timed out; the same authenticated ELF was qualified on both GPUs.",
-      "sha256": "bd07c505f7edda3f54e4bcd3e59b2cd14d8640bdd0367fbda6d28ac1bd0a065b"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/build/candidate-build.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact compressed compiler receipt for the initial finite 1800-second Release SM80+SM120 candidate build, which timed out at exit 124 before GPU execution. Retains the failed attempt and cache/toolchain provenance alongside its successful bounded continuation; no binaries or objects are admitted.",
-      "sha256": "0a5fc8b63c865cce22b1e82d58f595f74bd95816649bf185ed94552fbf91bb6a"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/build/compiler-structure-final-sync.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact 50-byte original compiler dependency-audit completion receipt after synchronization to master 051a157c6; distinguishes the final host structural check from the older measured CUDA images.",
-      "sha256": "75cfd3d79aa64b438d0f4143781ea8c86923ec6f902e252a38b817404902fecc"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/build/compiler-structure-final.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact 50-byte original compiler dependency-audit completion receipt after the first master synchronization; historical source scope is retained separately and is not relabelled as fresh execution after later master changes.",
-      "sha256": "75cfd3d79aa64b438d0f4143781ea8c86923ec6f902e252a38b817404902fecc"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/build/final-sync-host-tests.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact small completion receipt for the 66 focused host tests after synchronization to master 051a157c6. Source chronology remains separate from the older measured GPU images.",
-      "sha256": "7f6e8aff3e6902e0e6af7a605b534ea58853e3066236825e9d067638d9c20bb4"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/build/host-tests-complete.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact small completion receipt for the 66 focused host tests before master synchronization, retaining the actual count and process output without generating a new GPU claim.",
-      "sha256": "869643ce28cd14c34538618038d8d27ea4ec168fedbbd4b54855bde427b84c3e"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/build/md-host-tests-complete.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact bounded completion and skip-reason receipt for 1378 MD scientific/emission host tests and 73 unexecuted cases. Skips are retained explicitly and are never counted as independent scientific acceptance.",
-      "sha256": "39b30b9c425e26a334fe2fca15e8abaa1899aa9bf01bb14ab3c64bc07810b438"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/build/post-sync-host-tests.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact small completion receipt for the 66 focused host tests after the first master synchronization. Preserves successive source-qualified host checks rather than silently replacing an earlier result.",
-      "sha256": "e7e535ed9626f1ec64a9d592ecacb80d294a3135f85f4bae35c363246247f650"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/build/type-check.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact empty stdout receipt from the targeted successful type-check command. This is an execution-provenance record, not independent scientific or GPU acceptance evidence.",
-      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/diagnostic-a100/bootstrap-225596.tar.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact 2839-byte bounded archive from failed bootstrap LSF job 225596. Preserves the Bash empty-array/nounset failure before any endpoint, preventing failed-attempt omission; it contains no passing population or reference performance evidence.",
-      "sha256": "d06c6e9c173841a94643c21065100d9b8c78dda7f04afc4e23381407c7a4b9a1"
-    },
-    "benchmarks/results/direct-cooperative-md-20261105/diagnostic-a100/driver.log.gz": {
-      "owner": "direct-cooperative-md-20261105",
-      "reason": "Exact bounded intrusive diagnostic-driver receipt for LSF job 225599. Preserves the incomplete reference exit 137 after the finite time cap; zero reference samples are retained and explicitly excluded from A100 speed comparisons.",
-      "sha256": "8448e6fc74504a46adf88cecceffb3efd5d39d4cd5a98cda16a6b90de6afa25f"
-    },
-    "benchmarks/results/full-df-aug-qz-3055-20261109/fp64.xz": {
-      "owner": "full-df-aug-qz-3055-20261109",
-      "reason": "User-approved lossless task evidence compaction; retains all 36 original decompressed texts, failed runs, exact basis decimals and FP64 bits, raw native progress spelling and independent replay. No source-current or release-performance promotion.",
-      "sha256": "fba140dcdf2391b67524d17ff081b47c1095803364dd7e40615fd8b13399696d"
-    },
-    "benchmarks/results/full-df-aug-qz-3055-20261109/receipts.json.xz": {
-      "owner": "full-df-aug-qz-3055-20261109",
-      "reason": "User-approved lossless task evidence compaction; retains all 36 original decompressed texts, failed runs, exact basis decimals and FP64 bits, raw native progress spelling and independent replay. No source-current or release-performance promotion.",
-      "sha256": "3fb509ec69b96f58166f5242b499c08932dbe12cd08b8758e61653bb47bc91d1"
-    },
-    "benchmarks/results/h100-sm90-db36-final-20261103/actual-result-audit.tar.xz": {
-      "owner": "H100 frozen DB36 final fixed30 delivery",
-      "reason": "Exact original180-process/720-full-EF archive parts or lossless actual result audit and manifest. Fixed30 original gates,9nonwins and all raw vectors retained; no later-source or storage-limit transfer.",
-      "sha256": "54e2b44155c4fb030d36bae14d298c9dfacfc3a239898438cf4fdeed7ba4b779"
-    },
-    "benchmarks/results/h100-sm90-db36-final-20261103/final-pairs-v1-download-manifest.json.xz": {
-      "owner": "H100 frozen DB36 final fixed30 delivery",
-      "reason": "Exact original180-process/720-full-EF archive parts or lossless actual result audit and manifest. Fixed30 original gates,9nonwins and all raw vectors retained; no later-source or storage-limit transfer.",
-      "sha256": "218ef169df2b0566c2d4edb2a3c42b719d603a2e46cd0bcbc119b7a7db37be8c"
-    },
-    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/df-molecular-v1-completed.tar.xz": {
-      "owner": "H100 DB36 profile and retained-source baseline delivery",
-      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
-      "sha256": "69483f766a0247bfb28b486e9f3c1d3564283e71ce5d973131887fa8a11ec02e"
-    },
-    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/df-molecular-v1-download-manifest.json.xz": {
-      "owner": "H100 DB36 profile and retained-source baseline delivery",
-      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
-      "sha256": "7e37076e017602c764d2ae009df8c2bebcf9727f9b094e5ef8a0eb7ff7c87629"
-    },
-    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/nsys-v1-analysis-download.json.xz": {
-      "owner": "H100 DB36 profile and retained-source baseline delivery",
-      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
-      "sha256": "d65df5c7f96070ed650c069bd21804ad9060a0a3424a8314c217756d9dea09ee"
-    },
-    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/nsys-v1-analysis.tar.xz": {
-      "owner": "H100 DB36 profile and retained-source baseline delivery",
-      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
-      "sha256": "9f7c5ba3a8a6fd10cea9e15d34772d346d12b514d9870208e04b1e48f6b5bba1"
-    },
-    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/screening-v1-completed.tar.xz": {
-      "owner": "H100 DB36 profile and retained-source baseline delivery",
-      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
-      "sha256": "ad379382ee761ea3a28b62640b07c0ba72ade613ac82a86d4cfa84e55ae3e121"
-    },
-    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/screening-v1-download-manifest.json.xz": {
-      "owner": "H100 DB36 profile and retained-source baseline delivery",
-      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
-      "sha256": "c0901d3adb3534c7c77436f19b058ea944e60600007e2f03aba9775f68c5f213"
-    },
-    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/source-applicability-7013-ledger.json.xz": {
-      "owner": "H100 DB36 profile and retained-source baseline delivery",
-      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
-      "sha256": "62f1c74c66ccb8898c12bfd9eb332c6584eccc08880da12d220d77b27b87a9dd"
-    },
-    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/source-applicability-db36-ledger.json.xz": {
-      "owner": "H100 DB36 profile and retained-source baseline delivery",
-      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
-      "sha256": "6da5ad85878568b2de63739ca3ff95515f72a91942fb6aa70356ed51492d3f53"
-    },
-    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/source-applicability-review.json.xz": {
-      "owner": "H100 DB36 profile and retained-source baseline delivery",
-      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
-      "sha256": "334bad59067eee5ef1a1336b0b346a0f8d8e55032abd8c87d4981f90b4f82871"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/actual-integration-audit.json.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "774a31d38216c436be4e0cb5244072ed83e8302b39fa012d7c75767fa3db2ce6"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/native-qualification-v1-completed.tar.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "f7b1bb851757198d5fee203c61950cc58eec1e55706603237528701f4e0074c3"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/native-qualification-v1-download-manifest.json.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "44d1beaa4437e17d7e2c45ee43d83da87ee738d08c6f036d2335a8cf35be48b4"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-download-manifest.json.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "2ae9b66290b8fe10a8583b649041563d1962237b806069a6eb72aead4cef2686"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-metadata.tar.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "03f63b636e01219168f0826849a6cf1e341335a13df1cc2ceeb8752f3764b8d2"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/public-direct-v1-completed.tar.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "ac7718ef6db5cb84c27e2bf84cd9207fbb47b51602a929ec3a69efc7007b9a85"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/public-direct-v1-download-manifest.json.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "26543af9872a1424d4f1dd28dd7bc8631918261d6bb5b4acbeac3a6a6ea542e5"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/spatial-racecheck-v2-completed.tar.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "392f9847ec551f5c6a9d676b4f32970188cc7f00b06fdf39eb764ce3db400974"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/spatial-racecheck-v2-download-manifest.json.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "9c3245f69eb06b018b7d9b61cf82a14c6dc26e73df0995a28cdbeef53bc3b9d5"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/spatial-v1-completed.tar.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "e08d2879457e43185700a39419b4aeb3465a9182de80d1b8c965110708dd2e4f"
-    },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/spatial-v1-download-manifest.json.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "8b44ef5608eb37fadc0c09e36deafb1236bf5c3ba376f5c997ee8cec9f926d32"
-    },
-    "benchmarks/results/hf-matrix-profile-20261109/diagnostic-memcheck.log.xz": {
-      "owner": "hf-matrix-profile-20261109",
-      "reason": "Exact 1712-byte losslessly compressed Slurm 2029 Compute Sanitizer receipt for the source-bound Direct-HF matrix-profile fixture. Preserves all executed profile endpoints, build IDs and the original zero-error/zero-leak summary. This admits only these frozen diagnostic bytes, not future logs or optimized performance qualification.",
-      "sha256": "6d7669f7e985288c78b67554cbce0771e1b9792a38bc871532b471b0c497d8df"
-    },
-    "benchmarks/results/hf-matrix-profile-20261109/diagnostic.log.xz": {
-      "owner": "hf-matrix-profile-20261109",
-      "reason": "Exact 1896-byte losslessly compressed Slurm 2028 diagnostic receipt for the source-bound Direct-HF matrix-profile fixtures. Preserves actual routing, independent energy/force gate outcomes, cold/warm/moved-warm work counts, loaded build IDs and copied-artifact verification. FAST_COMPILE and synthetic profile rates establish diagnostic correctness only, not release performance or a measured winner.",
-      "sha256": "7a54f49d12c0c7d9904fe49347b762536548001474f676387732575455a58526"
     },
     "benchmarks/results/issue206-direct-force-state/integration-e4f2f67/00-configure.log.gz": {
       "owner": "issue206-direct-force-state/integration-e4f2f67",
@@ -630,8 +365,8 @@
     "benchmarks/results/readme-defaults-20261020/fp64.xz": {
       "owner": "README default-grid baseline and replacement comparison",
       "reason": "Exact FP64 stream of the original 256-population historical baseline, whose complete container is reconstructed byte for byte by the authenticated loader. Carry the pre-existing historical change-review exception to its lossless numerical representation; no new experiment, erased failure, or per-file/aggregate limit change.",
-      "review_change": true,
-      "sha256": "16c59f8b372ff6729f26d9826cdb1d280e7507d4763eb98867853193f6bd337b"
+      "sha256": "16c59f8b372ff6729f26d9826cdb1d280e7507d4763eb98867853193f6bd337b",
+      "review_change": true
     },
     "benchmarks/results/shared-force-parameter-integration-20261028/final/build-before-cosx-fix/build.log.xz": {
       "owner": "shared-force-parameter-integration-20261028",
@@ -677,6 +412,261 @@
       "owner": "shared-force-parameter-integration-20261028",
       "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
       "sha256": "f01d46eae43399c45c32e34e3e14c7cec1e455fe1b961a56b18d09cdc74b2941"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-metadata.tar.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "03f63b636e01219168f0826849a6cf1e341335a13df1cc2ceeb8752f3764b8d2"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-download-manifest.json.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "2ae9b66290b8fe10a8583b649041563d1962237b806069a6eb72aead4cef2686"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/native-qualification-v1-completed.tar.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "f7b1bb851757198d5fee203c61950cc58eec1e55706603237528701f4e0074c3"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/native-qualification-v1-download-manifest.json.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "44d1beaa4437e17d7e2c45ee43d83da87ee738d08c6f036d2335a8cf35be48b4"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/public-direct-v1-completed.tar.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "ac7718ef6db5cb84c27e2bf84cd9207fbb47b51602a929ec3a69efc7007b9a85"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/public-direct-v1-download-manifest.json.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "26543af9872a1424d4f1dd28dd7bc8631918261d6bb5b4acbeac3a6a6ea542e5"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/spatial-v1-completed.tar.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "e08d2879457e43185700a39419b4aeb3465a9182de80d1b8c965110708dd2e4f"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/spatial-v1-download-manifest.json.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "8b44ef5608eb37fadc0c09e36deafb1236bf5c3ba376f5c997ee8cec9f926d32"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/spatial-racecheck-v2-completed.tar.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "392f9847ec551f5c6a9d676b4f32970188cc7f00b06fdf39eb764ce3db400974"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/spatial-racecheck-v2-download-manifest.json.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "9c3245f69eb06b018b7d9b61cf82a14c6dc26e73df0995a28cdbeef53bc3b9d5"
+    },
+    "benchmarks/results/h100-sm90-db36-safety-20261103/actual-integration-audit.json.xz": {
+      "owner": "H100 frozen DB36 safety delivery",
+      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
+      "sha256": "774a31d38216c436be4e0cb5244072ed83e8302b39fa012d7c75767fa3db2ce6"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/nsys-v1-analysis.tar.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "9f7c5ba3a8a6fd10cea9e15d34772d346d12b514d9870208e04b1e48f6b5bba1"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/nsys-v1-analysis-download.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "d65df5c7f96070ed650c069bd21804ad9060a0a3424a8314c217756d9dea09ee"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/df-molecular-v1-completed.tar.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "69483f766a0247bfb28b486e9f3c1d3564283e71ce5d973131887fa8a11ec02e"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/df-molecular-v1-download-manifest.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "7e37076e017602c764d2ae009df8c2bebcf9727f9b094e5ef8a0eb7ff7c87629"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/screening-v1-completed.tar.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "ad379382ee761ea3a28b62640b07c0ba72ade613ac82a86d4cfa84e55ae3e121"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/screening-v1-download-manifest.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "c0901d3adb3534c7c77436f19b058ea944e60600007e2f03aba9775f68c5f213"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/source-applicability-db36-ledger.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "6da5ad85878568b2de63739ca3ff95515f72a91942fb6aa70356ed51492d3f53"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/source-applicability-7013-ledger.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "62f1c74c66ccb8898c12bfd9eb332c6584eccc08880da12d220d77b27b87a9dd"
+    },
+    "benchmarks/results/h100-sm90-db36-profile-baseline-20261103/source-applicability-review.json.xz": {
+      "owner": "H100 DB36 profile and retained-source baseline delivery",
+      "reason": "Exact original profile/SQLite or source7013 DF44/screen66 observations and lossless original manifests/source-applicability review. Prior source labels, all failed/unfavorable controls and independent full vectors retained; profile/baseline supply zero final timing votes.",
+      "sha256": "334bad59067eee5ef1a1336b0b346a0f8d8e55032abd8c87d4981f90b4f82871"
+    },
+    "benchmarks/results/h100-sm90-db36-final-20261103/final-pairs-v1-download-manifest.json.xz": {
+      "owner": "H100 frozen DB36 final fixed30 delivery",
+      "reason": "Exact original180-process/720-full-EF archive parts or lossless actual result audit and manifest. Fixed30 original gates,9nonwins and all raw vectors retained; no later-source or storage-limit transfer.",
+      "sha256": "218ef169df2b0566c2d4edb2a3c42b719d603a2e46cd0bcbc119b7a7db37be8c"
+    },
+    "benchmarks/results/direct-complete-pair-20261106/5090/independent.xml.xz": {
+      "owner": "direct-complete-pair-20261106",
+      "reason": "Lossless original six-case real-Slurm Libcint oracle XML for the measured seven-class image. Replay requires every case without skip or failure; this does not relabel later selector-policy edits as a fresh GPU run.",
+      "sha256": "eef0069a715d8d47038f4fbe217919687a8369e6a1d2fa78c9e303f994db02e0"
+    },
+    "benchmarks/results/direct-complete-pair-20261106/default-policy.xml.xz": {
+      "owner": "direct-complete-pair-20261106",
+      "reason": "Exact focused host policy/allocation/resource-identity/tile XML after default promotion: 1165 passing cases. This is host policy qualification, not a rebuilt final-head CUDA endpoint.",
+      "sha256": "f405e77ee8911663cbc18b4eae4925fd55f1503e5742e8906b1e16392483ccc8"
+    },
+    "benchmarks/results/direct-complete-pair-20261106/host.xml.xz": {
+      "owner": "direct-complete-pair-20261106",
+      "reason": "Exact 585-pass independent host numerical/admission/fallback qualification XML, preserving all 164 physically invalid symmetry-signature skips rather than hiding them behind a success count.",
+      "sha256": "95c0019d9364f59b83882c16862727b6cc978d9300099e1dfc51e64bf5134dc5"
+    },
+    "benchmarks/results/direct-complete-pair-20261106/initial-local-resource-failures.xml.xz": {
+      "owner": "direct-complete-pair-20261106",
+      "reason": "Exact initial wider local suite XML retaining eleven missing-native-library discovery failures and 1174 passes. The later focused passing cohort does not erase these environment-limited cases or turn them into successes.",
+      "sha256": "69a60cfa6562f56bbb1f70dc87b3c0a851a24960c2282d8b3216a32d2c6dc000"
+    },
+    "benchmarks/results/direct-complete-pair-20261106/safety/memcheck.log.gz": {
+      "owner": "direct-complete-pair-20261106",
+      "reason": "Exact tiny original seven-class GPU memcheck receipt, zero errors and one passing oracle case. The separate racecheck timed out and the combined safety runner failed; this is not a blanket sanitizer pass.",
+      "sha256": "09cb16c9cd78f04e332bf0bae080a6e78a91d37c14ee0a6e4fd4fb73abf4afc0"
+    },
+    "benchmarks/results/direct-complete-pair-20261106/safety/memcheck.xml.xz": {
+      "owner": "direct-complete-pair-20261106",
+      "reason": "Exact original one-case seven-class Libcint XML under actual scheduled memcheck. Retained with real zero process exit and original zero-error diagnostic; racecheck remains explicitly inconclusive.",
+      "sha256": "d5a36ed80141715ed9cf5ef98175e417688b69aa63c58a0bf9a87d474d613400"
+    },
+    "benchmarks/results/direct-complete-pair-20261106/safety/racecheck.log.gz": {
+      "owner": "direct-complete-pair-20261106",
+      "reason": "Exact 28-byte original racecheck startup-only output. The 180-second cap exits124 without a diagnostic and the combined safety runner exits1; preserving this negative boundary prevents an unsupported sanitizer-success claim.",
+      "sha256": "20fa0f0dc5a6fe45d210c1d675a89f45843690d40212ce6f9108038ae971b3c8"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/baseline.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded native baseline endpoint stdout for the completed 5090 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
+      "sha256": "5deab9a1683484703e6ac8f0ac990b00bf3ed2b635086230f12dc8ee011343b1"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/candidate.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded native candidate endpoint stdout for the completed 5090 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
+      "sha256": "281f743e5d55f5ca493f0ef89dbacf3540d6bbdd0adb1dba323f5a052d504418"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/driver.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact empty driver-output receipt for completed Slurm job 16004. Acceptance instead requires terminal scheduler status, per-arm process exit codes and complete populations; empty stdout is never treated as proof of success.",
+      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/independent.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded pytest process-completion receipt for the independent 24-case Slurm-5090 Libcint run, cross-checked against the lossless XML and retained zero process exit code; not a new qualification for later sources.",
+      "sha256": "06c25bb5ce55ee3a1a34433ef4900fdd93fa1f191c74846b23b0e0d1748470ab"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/independent.xml.xz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Lossless original pytest XML for 24 real-Slurm-5090 Libcint J/K derivative oracle cases. Offline replay requires every case to complete without skip, failure or error; retaining the exact original output prevents a compact success count from concealing omitted cases.",
+      "sha256": "eb837960dbb6e57fe2d9cd7c5c6f9cf1071c565c01f7c9124cb6d86d83065cd7"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/5090/reference.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded GPU4PySCF reference endpoint stdout from completed Slurm job 16004. Retains reference process diagnostics alongside the full population and documented CPU D4/gCP corrections; reference CPU work is not a native production dependency.",
+      "sha256": "70a5078dfaf37af81de8a570e155bf3495a00edb48398eb59b5932e2eb3bcb08"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/a100/baseline.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded native baseline endpoint stdout for the completed a100 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
+      "sha256": "a0c7a798da0b27fdd5b12d8848d167de46b4566f4b3f219279e903fcd0b4788a"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/a100/candidate.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded native candidate endpoint stdout for the completed a100 population. Retains constructor/process completion diagnostics alongside full cold plus three-warm observables, source/ELF identities and scheduler receipts; no trace or microbenchmark is promoted to endpoint timing.",
+      "sha256": "70279d1b3c93b4a927fe8e8020b8814f02db554e4b563c08b6b1169382d5f800"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/a100/driver.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded LSF driver-output receipt for job 225682, retained to bind the completed A100 native populations to the executed finite job and uploaded source identities; no A100 reference timing claim is inferred.",
+      "sha256": "163b280c9edecc340a2129afa8d2d9425d411f274f56b309f01b421f8f4f91ee"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/candidate-build-resume.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact compressed successful incremental compiler continuation receipt for the measured Release SM80+SM120 candidate ELF. Retains warnings, completed actions and cache reuse after the first finite attempt timed out; the same authenticated ELF was qualified on both GPUs.",
+      "sha256": "bd07c505f7edda3f54e4bcd3e59b2cd14d8640bdd0367fbda6d28ac1bd0a065b"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/candidate-build.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact compressed compiler receipt for the initial finite 1800-second Release SM80+SM120 candidate build, which timed out at exit 124 before GPU execution. Retains the failed attempt and cache/toolchain provenance alongside its successful bounded continuation; no binaries or objects are admitted.",
+      "sha256": "0a5fc8b63c865cce22b1e82d58f595f74bd95816649bf185ed94552fbf91bb6a"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/compiler-structure-final-sync.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact 50-byte original compiler dependency-audit completion receipt after synchronization to master 051a157c6; distinguishes the final host structural check from the older measured CUDA images.",
+      "sha256": "75cfd3d79aa64b438d0f4143781ea8c86923ec6f902e252a38b817404902fecc"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/compiler-structure-final.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact 50-byte original compiler dependency-audit completion receipt after the first master synchronization; historical source scope is retained separately and is not relabelled as fresh execution after later master changes.",
+      "sha256": "75cfd3d79aa64b438d0f4143781ea8c86923ec6f902e252a38b817404902fecc"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/final-sync-host-tests.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact small completion receipt for the 66 focused host tests after synchronization to master 051a157c6. Source chronology remains separate from the older measured GPU images.",
+      "sha256": "7f6e8aff3e6902e0e6af7a605b534ea58853e3066236825e9d067638d9c20bb4"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/host-tests-complete.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact small completion receipt for the 66 focused host tests before master synchronization, retaining the actual count and process output without generating a new GPU claim.",
+      "sha256": "869643ce28cd14c34538618038d8d27ea4ec168fedbbd4b54855bde427b84c3e"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/md-host-tests-complete.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded completion and skip-reason receipt for 1378 MD scientific/emission host tests and 73 unexecuted cases. Skips are retained explicitly and are never counted as independent scientific acceptance.",
+      "sha256": "39b30b9c425e26a334fe2fca15e8abaa1899aa9bf01bb14ab3c64bc07810b438"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/post-sync-host-tests.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact small completion receipt for the 66 focused host tests after the first master synchronization. Preserves successive source-qualified host checks rather than silently replacing an earlier result.",
+      "sha256": "e7e535ed9626f1ec64a9d592ecacb80d294a3135f85f4bae35c363246247f650"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/build/type-check.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact empty stdout receipt from the targeted successful type-check command. This is an execution-provenance record, not independent scientific or GPU acceptance evidence.",
+      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/diagnostic-a100/bootstrap-225596.tar.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact 2839-byte bounded archive from failed bootstrap LSF job 225596. Preserves the Bash empty-array/nounset failure before any endpoint, preventing failed-attempt omission; it contains no passing population or reference performance evidence.",
+      "sha256": "d06c6e9c173841a94643c21065100d9b8c78dda7f04afc4e23381407c7a4b9a1"
+    },
+    "benchmarks/results/direct-cooperative-md-20261105/diagnostic-a100/driver.log.gz": {
+      "owner": "direct-cooperative-md-20261105",
+      "reason": "Exact bounded intrusive diagnostic-driver receipt for LSF job 225599. Preserves the incomplete reference exit 137 after the finite time cap; zero reference samples are retained and explicitly excluded from A100 speed comparisons.",
+      "sha256": "8448e6fc74504a46adf88cecceffb3efd5d39d4cd5a98cda16a6b90de6afa25f"
+    },
+    "benchmarks/results/h100-sm90-db36-final-20261103/actual-result-audit.tar.xz": {
+      "owner": "H100 frozen DB36 final fixed30 delivery",
+      "reason": "Exact original180-process/720-full-EF archive parts or lossless actual result audit and manifest. Fixed30 original gates,9nonwins and all raw vectors retained; no later-source or storage-limit transfer.",
+      "sha256": "54e2b44155c4fb030d36bae14d298c9dfacfc3a239898438cf4fdeed7ba4b779"
+    },
+    "benchmarks/results/hf-matrix-profile-20261109/diagnostic.log.xz": {
+      "owner": "hf-matrix-profile-20261109",
+      "reason": "Exact 1896-byte losslessly compressed Slurm 2028 diagnostic receipt for the source-bound Direct-HF matrix-profile fixtures. Preserves actual routing, independent energy/force gate outcomes, cold/warm/moved-warm work counts, loaded build IDs and copied-artifact verification. FAST_COMPILE and synthetic profile rates establish diagnostic correctness only, not release performance or a measured winner.",
+      "sha256": "7a54f49d12c0c7d9904fe49347b762536548001474f676387732575455a58526"
+    },
+    "benchmarks/results/hf-matrix-profile-20261109/diagnostic-memcheck.log.xz": {
+      "owner": "hf-matrix-profile-20261109",
+      "reason": "Exact 1712-byte losslessly compressed Slurm 2029 Compute Sanitizer receipt for the source-bound Direct-HF matrix-profile fixture. Preserves all executed profile endpoints, build IDs and the original zero-error/zero-leak summary. This admits only these frozen diagnostic bytes, not future logs or optimized performance qualification.",
+      "sha256": "6d7669f7e985288c78b67554cbce0771e1b9792a38bc871532b471b0c497d8df"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

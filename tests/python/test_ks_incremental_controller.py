@@ -69,6 +69,7 @@ struct Consumer {
   // canonicality and molecular accuracy are qualified by independent endpoints.
   bool standard_proof_owner=false;
   bool standard_convergence_active() const noexcept { return standard_proof_owner; }
+  bool standard_stationarity_allowance_active() const noexcept { return standard_proof_owner; }
   bool fast_anchor_active=false, early_final_probe_requested=true;
   bool budget_stationarity=false, warm_energy_baseline=false;
   bool pending_nonlocal_seed=false, pending_nonlocal_frozen=false;

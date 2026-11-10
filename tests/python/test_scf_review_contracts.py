@@ -13,6 +13,142 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_orthogonal_uks_pulay_metric_preserves_qualified_domain_and_stopping(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """A proposal metric cannot promote other providers or weaken final proof."""
+    source = tmp_path / "uks_diis_metric.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include "dft/cuda_ks_diis_policy.hpp"
+#include "dft/ks_stopping_policy.hpp"
+int main() {
+  using namespace generativeqc::dft;
+  const CudaKsDiisMetricDomain qualified{
+      2, semilocal_family_code(SemilocalFamily::Pbe), true, true, true, true};
+  assert(cuda_ks_orthogonal_diis_requested(qualified));
+  for (unsigned spins : {0U, 1U, 3U}) {
+    auto rejected = qualified;
+    rejected.spins = spins;
+    assert(!cuda_ks_orthogonal_diis_requested(rejected));
+  }
+  for (auto family : {SemilocalFamily::Lda, SemilocalFamily::B3lyp,
+                     SemilocalFamily::R2scan, SemilocalFamily::Wb97mv}) {
+    auto rejected = qualified;
+    rejected.functional = semilocal_family_code(family);
+    assert(!cuda_ks_orthogonal_diis_requested(rejected));
+  }
+  for (auto member : {&CudaKsDiisMetricDomain::exact_primary,
+                      &CudaKsDiisMetricDomain::semilocal_only,
+                      &CudaKsDiisMetricDomain::strict_fp64,
+                      &CudaKsDiisMetricDomain::all_electron}) {
+    auto rejected = qualified;
+    rejected.*member = false;
+    assert(!cuda_ks_orthogonal_diis_requested(rejected));
+  }
+  KsStoppingState state{2, false, true, true, 1e-12, 1e-10, 1e-10,
+                        5e-9, 1e-9, 1e-5, 1e-9};
+  assert(!ordinary_ks_converged(state));
+  assert(!early_ks_final_probe_stationary(state, true));
+  state.maximum_residual = 1e-10;
+  assert(ordinary_ks_converged(state));
+  assert(early_ks_final_probe_stationary(state, true));
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [source],
+        tmp_path / "uks_diis_metric",
+        compile_args=[
+            "-std=c++20",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ],
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_full_range_force_and_reference_consumers_keep_strict_ks_stationarity(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Loose public controls cannot admit the energy-only physical ceiling."""
+    source = tmp_path / "force_stationarity.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include "dft/ks_stopping_policy.hpp"
+#include "scf/convergence_limits.hpp"
+int main() {
+  using namespace generativeqc;
+  for (bool standard : {false, true})
+    for (bool nonlocal : {false, true})
+      for (bool forces : {false, true})
+        for (bool reference : {false, true}) {
+          const bool admitted = dft::standard_ks_stationarity_allowance(
+              standard, nonlocal, forces, reference);
+          assert(admitted == (standard && (nonlocal || (!forces && !reference))));
+          const double tolerance = admitted
+              ? scf::scf_stationarity_tolerance(1e-9, 1e-5, 1e-9) : 1e-9;
+          if (standard && !nonlocal && (forces || reference)) assert(tolerance == 1e-9);
+        }
+  assert(dft::standard_ks_stationarity_allowance(true, false, false, false));
+  assert(!dft::standard_ks_stationarity_allowance(true, false, true, false));
+  assert(dft::standard_ks_stationarity_allowance(true, false, false, false));
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [source],
+        tmp_path / "force_stationarity",
+        compile_args=["-std=c++20", f"-I{ROOT / 'src'}"],
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_early_final_probe_cannot_reopen_force_stationarity_allowance(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """A small RMS cannot hide a force-relevant AO maximum in an early proof."""
+    source = tmp_path / "early_force_stationarity.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <limits>
+#include "dft/ks_stopping_policy.hpp"
+int main() {
+  using namespace generativeqc::dft;
+  KsStoppingState state{2,false,true,true,1e-12,1e-10,1e-10,5e-9,1e-9,1e-5,1e-9};
+  assert(!ordinary_ks_converged(state));
+  assert(early_ks_final_probe_stationary(state, false));
+  assert(!early_ks_final_probe_stationary(state, true));
+  state.maximum_residual = 5e-10;
+  assert(early_ks_final_probe_stationary(state, true));
+  state.maximum_residual = state.stationarity_tolerance;
+  assert(!early_ks_final_probe_stationary(state, true));
+  state.density_tolerance = 1e-10;
+  state.maximum_residual = 2e-10;
+  for (bool force_or_reference : {false, true})
+    assert(!early_ks_final_probe_stationary(state, force_or_reference));
+  state.density_tolerance = 1e-5;
+  state.maximum_residual = 0;
+  state.residual = state.stationarity_tolerance;
+  assert(!early_ks_final_probe_stationary(state, true));
+  state.residual = 0;
+  state.maximum_residual = std::numeric_limits<double>::quiet_NaN();
+  for (bool force_or_reference : {false, true})
+    assert(!early_ks_final_probe_stationary(state, force_or_reference));
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [source],
+        tmp_path / "early_force_stationarity",
+        compile_args=["-std=c++20", f"-I{ROOT / 'src'}"],
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
 def test_early_final_default_requires_the_complete_qualified_model(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
