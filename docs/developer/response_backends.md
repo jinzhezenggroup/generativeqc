@@ -31,6 +31,23 @@ HVP and full-matrix diagnostics report grid actions, point-kernel builds,
 reuses/fallbacks, retained panel bytes and reserved bytes. These work counts
 are not complete-endpoint timing or broader method/domain qualification.
 
+CPU fixed-weight one-electron second-integral HVPs use one canonical orientation
+per distinct Gaussian shell pair. The cotangent combines both ordered shell
+blocks by transposition; diagonal shell blocks are neither doubled nor averaged.
+Angular-momentum ordering permits reuse of the same generated program across
+unlike shell orientations. Nuclear attraction is linear in the fixed nuclear
+charge, so the admitted schedule contracts a unit-charge kernel with
+charge-scaled weights instead of compiling a program for each element. This does
+not differentiate the charge or introduce an ECP contribution.
+
+The temporary folded/charge-scaled weight workspace has explicit host admission;
+insufficient capacity retains both ordered shell blocks and the original
+charge-specialized kernels. CUDA retains its original ordered schedule. Source
+diagnostics report ordered one-electron weight blocks, symmetry-reduced shell
+pairs and unit-charge nuclear shell pairs. The counts cover each invoked source
+family separately, not SCF iterations, complete molecular evaluations or an
+end-to-end performance qualification.
+
 ## Native CUDA CPKS
 
 The same `from_native` entry points select CUDA J/XC actions when the borrowed

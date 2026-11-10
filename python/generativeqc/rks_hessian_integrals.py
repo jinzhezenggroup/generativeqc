@@ -11,7 +11,7 @@ from __future__ import annotations
 import shutil
 import typing
 from dataclasses import dataclass
-from itertools import product
+from itertools import combinations_with_replacement, product
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1127,6 +1127,9 @@ def _second_data(
         "peak_symmetry_weight_bytes": 0,
         "ordered_eri_shell_weight_blocks": 0,
         "symmetry_reduced_eri_shell_quartets": 0,
+        "ordered_one_electron_shell_weight_blocks": 0,
+        "symmetry_reduced_one_electron_shell_pairs": 0,
+        "unit_charge_nuclear_shell_pairs": 0,
     }
 
 
@@ -1175,6 +1178,13 @@ def _second_diagnostics(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
         "symmetry_reduced_eri_shell_quartets": data[
             "symmetry_reduced_eri_shell_quartets"
         ],
+        "ordered_one_electron_shell_weight_blocks": data[
+            "ordered_one_electron_shell_weight_blocks"
+        ],
+        "symmetry_reduced_one_electron_shell_pairs": data[
+            "symmetry_reduced_one_electron_shell_pairs"
+        ],
+        "unit_charge_nuclear_shell_pairs": data["unit_charge_nuclear_shell_pairs"],
         "peak_device_bytes": max(
             (item["resources"]["peak_bytes"].get("device", 0) for item in executions),
             default=0,
@@ -1183,6 +1193,54 @@ def _second_diagnostics(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
         else 0,
         "device_timing_ms": timing if cuda else None,
     }
+
+
+def _one_electron_pair_blocks(
+    data: dict[str, typing.Any], weight: np.ndarray
+) -> typing.Iterator[tuple[int, int, np.ndarray, bool]]:
+    """Fold distinct shell orientations without assuming a symmetric cotangent.
+
+    S/T/V are symmetric in the two complete Gaussian slots, including their
+    nuclear derivatives. Ordering by angular momentum also shares compiled
+    programs between unlike shells. A diagonal shell block is not doubled or
+    symmetrized. CUDA and insufficient host leases retain the ordered schedule.
+    The lease covers a folded block, charge-scaled block and staging copy;
+    primitive execution retains its independently bounded workspace.
+    """
+    shells, state = data["shells"], data["state"]
+    cpu = data["backend"] == "cpu"
+    order = sorted(
+        range(len(shells)), key=lambda slot: (shells[slot].angular_momentum, slot)
+    )
+    pairs = (
+        combinations_with_replacement(order, 2)
+        if cpu
+        else product(range(len(shells)), repeat=2)
+    )
+    for first, second in pairs:
+        first_slice = slice(state.offsets[first], state.offsets[first + 1])
+        second_slice = slice(state.offsets[second], state.offsets[second + 1])
+        block = weight[first_slice, second_slice]
+        fold_bytes = data["output_accumulator_bytes"] + 3 * block.size * 8
+        reuse = cpu and fold_bytes <= data["budget_bytes"]
+        if reuse:
+            data["peak_symmetry_weight_bytes"] = max(
+                data["peak_symmetry_weight_bytes"], fold_bytes
+            )
+            if first != second:
+                with np.errstate(over="raise", invalid="raise"):
+                    block = block + weight[second_slice, first_slice].T
+            data["ordered_one_electron_shell_weight_blocks"] += (
+                1 if first == second else 2
+            )
+            data["symmetry_reduced_one_electron_shell_pairs"] += 1
+            yield first, second, block, True
+        else:
+            data["ordered_one_electron_shell_weight_blocks"] += 1
+            yield first, second, block, False
+            if cpu and first != second:
+                data["ordered_one_electron_shell_weight_blocks"] += 1
+                yield second, first, weight[second_slice, first_slice], False
 
 
 def _run_one_electron_hvp(
@@ -1194,17 +1252,24 @@ def _run_one_electron_hvp(
     state = data["state"]
     shells = data["shells"]
     total = np.zeros((state.nat, 3))
-    for a, b in product(range(len(shells)), repeat=2):
+    for a, b, wa, reuse in _one_electron_pair_blocks(data, weight):
         la, lb = shells[a].angular_momentum, shells[b].angular_momentum
         na, nb = len(cartesian_components(la)), len(cartesian_components(lb))
-        wa = weight[
-            state.offsets[a] : state.offsets[a] + na,
-            state.offsets[b] : state.offsets[b] + nb,
-        ].reshape(na, nb)
         primitives = (data["primitives"][a], data["primitives"][b])
         atom_a, atom_b = shells[a].atom_index, shells[b].atom_index
         if family == "nuclear_attraction":
+            if reuse:
+                data["unit_charge_nuclear_shell_pairs"] += 1
             for nucleus in range(state.nat):
+                charge = float(state.Z[nucleus])
+                if reuse:
+                    # V is linear in a fixed nuclear charge. Keep charge in the
+                    # cotangent, not in a separate generated program per element.
+                    with np.errstate(over="raise", invalid="raise"):
+                        nuclear_weights = charge * wa.ravel()
+                    charge = 1.0
+                else:
+                    nuclear_weights = wa.ravel()
                 centers = np.asarray(
                     [
                         state.coords[atom_a],
@@ -1214,21 +1279,22 @@ def _run_one_electron_hvp(
                 )
                 total += _run_kernel_hvp(
                     data,
-                    (family, la, lb, float(state.Z[nucleus])),
+                    (family, la, lb, charge),
                     build_one_electron_second_ir,
                     {
                         "family": family,
                         "angular": (la, lb),
-                        "charge": float(state.Z[nucleus]),
+                        "charge": charge,
                         "output": "weighted_hvp",
                         "_center_atoms": (atom_a, atom_b, nucleus),
                     },
                     primitives,
                     centers,
-                    wa.ravel(),
+                    nuclear_weights,
                     na * nb,
                     direction,
                 )
+                del nuclear_weights
         else:
             centers = np.asarray([state.coords[atom_a], state.coords[atom_b]])
             total += _run_kernel_hvp(
@@ -1247,6 +1313,7 @@ def _run_one_electron_hvp(
                 na * nb,
                 direction,
             )
+        del wa
     return total
 
 
