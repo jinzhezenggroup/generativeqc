@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.h100-fixed30-publication.v1",
+  "records": {
+    "parts": [
+      {
+        "path": "records/receipts.json.xz",
+        "bytes": 1007996,
+        "sha256": "9260c27bf43d4b6df6970748fac8ce7ab1c1a64630721084fad4e1cc8fca0ade"
+      }
+    ],
+    "xz_sha256": "9260c27bf43d4b6df6970748fac8ce7ab1c1a64630721084fad4e1cc8fca0ade",
+    "decoded_bytes": 34252915,
+    "decoded_sha256": "26aa60170a6b8e713b2852fe8770d7f28c889d1a008f17f5104d01a828570e7c",
+    "files": 583,
+    "distinct_blobs": 577
+  }
+}

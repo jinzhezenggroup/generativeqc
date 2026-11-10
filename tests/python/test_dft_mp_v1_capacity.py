@@ -213,8 +213,8 @@ def test_optional_ao_schedule_contract_executes_capacity_and_failure_policy(
         ),
         (
             "_plan_stationary_cuda_tile",
-            "state._source.stationary_integral_device_reserve(\n                atoms=na, aos=n, primitives=basis.nprimitive",
-            "state._source.stationary_integral_device_reserve(\n                atoms=na, aos=1, primitives=basis.nprimitive",
+            "                aos=n,\n                primitives=basis.nprimitive,",
+            "                aos=1,\n                primitives=basis.nprimitive,",
         ),
         (
             "_complete_rks_cuda_gradient_diagnostic",
@@ -260,8 +260,8 @@ def test_optional_ao_schedule_contract_executes_capacity_and_failure_policy(
         ),
         (
             "_complete_rks_cuda_gradient_diagnostic",
-            'native_integral_resources.get("one_electron_device_peak_bytes", 0)',
-            'native_integral_resources.get("one_electron_host_peak_bytes", 0)',
+            'else "one_electron_device_peak_bytes",',
+            'else "one_electron_host_peak_bytes",',
         ),
     ],
 )
@@ -639,7 +639,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "8bf8189b68d9da2c421efe0ec13abfb3296d5106ae2f3df73b7106edf3a0f01e"
         ),
         "ordinary_tile_resources_sha256": (
-            "d9683ad506e608bd7043bea3480079379f7a180cdedcd6425d0dab5622063b8f"
+            current_python_owner_identity(
+                "python/generativeqc/_stationary_cuda.py", "_plan_stationary_cuda_tile"
+            )
         ),
         "initializer_sha256": (
             "d79b0f5c255b78f1f56f017ca4363aeadb99d978de87279395edb4acd53cf183"
@@ -789,7 +791,11 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     )
     assert result["admission_limits"]["snapshot_functional_contract_sha256"] == {
         "stationary_integral_device_reserve_sha256": (
-            "1e2eb25ca455dd5505a535a3917a148fbf8cfd59dc6839eeb770aa7c38219f64"
+            current_python_owner_identity(
+                "python/generativeqc/_ks_snapshot.py",
+                "stationary_integral_device_reserve",
+                owner="NativeKsSnapshot",
+            )
         ),
         "init_sha256": current_python_owner_identity(
             "python/generativeqc/_ks_snapshot.py", "__init__", owner="NativeKsSnapshot"

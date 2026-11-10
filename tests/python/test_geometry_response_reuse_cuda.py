@@ -1,4 +1,8 @@
-"""Complete force parity, actual geometry hits and bounded failure recovery."""
+"""Compatibility geometry reuse, isolated and composed with integral reuse.
+
+The native prepared-force owner does not consume these selectors; independent
+coverage of both routes lives in ``test_response_reuse_routing_cuda.py``.
+"""
 
 from __future__ import annotations
 
@@ -10,15 +14,23 @@ import pytest
 
 
 @pytest.mark.parametrize("unrestricted", [False, True])
+@pytest.mark.parametrize("integral_response_reuse", ["0", "1"])
 def test_exact_geometry_response_reuse(
-    monkeypatch: pytest.MonkeyPatch, unrestricted: bool
+    monkeypatch: pytest.MonkeyPatch,
+    unrestricted: bool,
+    integral_response_reuse: str,
 ) -> None:
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
         pytest.skip("requires an explicitly scheduled GPU")
     assert os.environ.get("SLURM_JOB_ID")
     from generativeqc import Calculator, GridSpec, KsOptions
     from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc.batch import PreparedBatch
     from generativeqc_compiler.dft import NativeAO
+
+    # Preserve coverage for libraries without linked native force capability;
+    # forcing this route cannot qualify a production-default speedup.
+    monkeypatch.setattr(PreparedBatch, "_native_dft_force_eligible", lambda *_: False)
 
     atoms = [("O", (0.02, -0.03, 0.04)), ("H", (0.1, 1.43, 1.1))]
     if not unrestricted:
@@ -28,9 +40,16 @@ def test_exact_geometry_response_reuse(
     moved_atoms = [
         (symbol, tuple(xyz)) for (symbol, _), xyz in zip(atoms, moved[0], strict=True)
     ]
+    monkeypatch.setenv(
+        "GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE", integral_response_reuse
+    )
     arms = []
-    for enabled in (False, True):
-        monkeypatch.setenv("GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE", str(int(enabled)))
+    for reuse_policy in (None, "0", "1"):
+        enabled = reuse_policy == "1"
+        if reuse_policy is None:
+            monkeypatch.delenv("GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE", raising=False)
+        else:
+            monkeypatch.setenv("GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE", reuse_policy)
         calc = Calculator(
             method="wb97m-v-uks" if unrestricted else "wb97m-v",
             basis="def2-svp",
@@ -117,6 +136,9 @@ def test_exact_geometry_response_reuse(
                     finally:
                         state._source.close()
         arms.append(results)
-    for baseline, candidate in zip(*arms, strict=True):
-        assert abs(baseline.energy - candidate.energy) <= 1e-8
-        np.testing.assert_allclose(baseline.forces, candidate.forces, rtol=0, atol=1e-7)
+    for candidates in arms[1:]:
+        for baseline, candidate in zip(arms[0], candidates, strict=True):
+            assert abs(baseline.energy - candidate.energy) <= 1e-8
+            np.testing.assert_allclose(
+                baseline.forces, candidate.forces, rtol=0, atol=1e-7
+            )

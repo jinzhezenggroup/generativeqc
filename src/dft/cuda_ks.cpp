@@ -459,13 +459,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
   double warm_energy{std::numeric_limits<double>::infinity()};
   double warm_energy_correction{};
   bool warm_energy_baseline{};
-  bool cold_fock_startup{};
+  bool cold_fock_startup{}, pure_uks_orthogonal_diis{};
   // These three scalars belong to the immutable warm density, which can be
   // older than the latest final state when warm_updates is false. Never use
   // xc->view(generation) to reconstruct that frozen seed's energy later.
   std::array<double, 3> warm_xc_totals{};
   bool warm_incumbent_deferred{};
   std::size_t following_force_device_bytes{};
+  bool following_force_requested{};
   unsigned pending_iterations{};
   std::array<std::uint64_t, kCudaKsChunkCapacity> pending_generations{};
   runtime::SolverRegionCudaExecutor solver_region_executor;
@@ -926,8 +927,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
                         [](const auto& atom) { return atom.ecp_core != 0; });
   }
 
+  bool standard_stationarity_allowance_active() const noexcept {
+    return standard_ks_stationarity_allowance(
+        standard_convergence_active(), standard_nonlocal_model,
+        options.compute_forces || following_force_requested, options.export_physical_reference);
+  }
+
   double physical_stationarity_tolerance() const noexcept {
-    if (standard_convergence_active())
+    if (standard_stationarity_allowance_active())
       return scf::scf_stationarity_tolerance(options.energy_tolerance, options.density_tolerance,
                                              1e-9);
     return std::min(budget_stationarity ? 1e-4 : 1e-9, options.density_tolerance);
@@ -1917,6 +1924,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (spins != 1 && (mixed_warmup.switch_residual > 0.0 || mixed_warmup.max_iterations))
         throw std::invalid_argument("bounded mixed-precision warmup requires restricted CUDA KS");
     }
+    pure_uks_orthogonal_diis = cuda_ks_orthogonal_diis_requested(
+        {spins, functional, !fitted_coulomb && !fitted_exchange,
+         !has_exchange && !has_range_correction && !nonlocal_correlation,
+         options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
+                 GENERATIVEQC_PRECISION_FP64 &&
+             !budget_fock && !budget_stationarity && !precision_schedule.any_lower_precision(),
+         provider.system().ecp_terms.empty() &&
+             std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                          [](const auto& atom) { return atom.ecp_core != 0; })});
     early_final_probe_requested = early_final_probe_default_model(
         functional, options.semilocal_exchange_scale, options.semilocal_correlation_scale,
         exchange_coefficient, grid_spec == default_grid_spec());
@@ -4211,10 +4227,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         runtime::cuda_trace::trace_counter("physical_orbital_gradient_checks", 1);
       }
       const double* history_residual = residual;
-      if (cold_fock_startup && output.iterations >= kColdFockStartupIterations && !final_closure) {
+      if (!final_closure &&
+          (pure_uks_orthogonal_diis ||
+           (cold_fock_startup && output.iterations >= kColdFockStartupIterations))) {
         // Pulay's norm must not let compact heavy-atom AOs dominate valence
-        // rotations. Fit X^T(FDS-SDF)X while retaining the unmodified AO
-        // commutator for every physical stopping and final-state check.
+        // rotations. The same coordinate dependence can trap pure UKS in a
+        // nonstationary cold-start cycle. Fit X^T(FDS-SDF)X while retaining the
+        // unmodified AO commutator for all physical and final-state checks.
         if (!physical_orbital_check) {
           multiply(residual, true, false, x, false, tmp1);
           multiply(x, false, true, tmp1, true, tmp2);
@@ -4520,7 +4539,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Direct UKS needs the same proof as RI-K: do not replace an already
     // canonical physical density by a destabilizing unextrapolated update.
     const bool canonical_final_probe =
-        !occupied_stage && (fitted_exchange || (spins == 2 && has_exchange)) && !budget_fock &&
+        !occupied_stage && (fitted_exchange || spins == 2) && !budget_fock &&
         !has_range_correction && !nonlocal_correlation &&
         !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
         provider.system().ecp_terms.empty() &&
@@ -4541,8 +4560,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } else if (!converged && early_final_probe_eligible && has_energy_history &&
                full_energy_history && output.energy_change < options.energy_tolerance &&
                physical.density_change < options.density_tolerance &&
-               physical.residual < physical_stationarity_tolerance() &&
-               physical.maximum_residual < std::min(1e-8, options.density_tolerance)) {
+               early_ks_final_probe_stationary(stopping, options.compute_forces ||
+                                                             following_force_requested ||
+                                                             options.export_physical_reference)) {
       early_final_probe_ran = true;
       converged = probe_current_final_state();
     }
@@ -4926,7 +4946,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Explicit callers already check the strict physical AO maximum. This
     // optional override also tightens canonical density reconstruction, so
     // preserve the original separate 1e-8 canonical-density contract.
-    if (standard_convergence_active() || automatic_program)
+    if (standard_stationarity_allowance_active() || automatic_program)
       limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;
     limits.maximum_corrections = 0;
@@ -5049,7 +5069,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       prepare_final_frame();
       scf::solver::FinalStateLimits limits;
       limits.density_tolerance = options.density_tolerance;
-      if (budget_stationarity || standard_convergence_active())
+      if (budget_stationarity || standard_stationarity_allowance_active())
         limits.stationarity_tolerance = physical_stationarity_tolerance();
       limits.energy_tolerance = options.energy_tolerance;
       limits.maximum_corrections = 0;
@@ -5231,7 +5251,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
     scf::solver::FinalStateLimits limits;
     limits.density_tolerance = options.density_tolerance;
-    if (budget_stationarity || standard_convergence_active())
+    if (budget_stationarity || standard_stationarity_allowance_active())
       limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;
     limits.maximum_corrections = 0;
@@ -6028,7 +6048,9 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
 }
 
 const CudaKsResources& CudaKsPlan::resources() const noexcept { return impl_->resource; }
-void CudaKsPlan::set_following_force_memory(std::size_t additional_device_bytes) noexcept {
+void CudaKsPlan::set_following_force_request(bool compute_forces,
+                                             std::size_t additional_device_bytes) noexcept {
+  impl_->following_force_requested = compute_forces;
   impl_->following_force_device_bytes = additional_device_bytes;
 }
 const tensor::PanelProductDiagnostic* CudaKsPlan::density_provider_diagnostic() const noexcept {
