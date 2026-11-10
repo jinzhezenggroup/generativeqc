@@ -406,11 +406,12 @@ class CudaKsPlan {
                                            std::array<std::uint64_t, 4>& receipt,
                                            std::string& detail);
 
-  /** Describe the imminent force consumer before submitting this solve. The
-   * prepared method supplies its existing additional-allocation envelope,
-   * subtracting retained force storage. This is a hint for warm-anchor work
-   * placement, never a reservation or permission to exceed a force budget. */
-  void set_following_force_memory(std::size_t additional_device_bytes) noexcept;
+  /** Bind the imminent consumer before SCF, including zero-allocation forces.
+   * The force flag selects the physical stopping contract independently of
+   * retained storage. Additional bytes only guide warm-anchor placement;
+   * they never reserve memory or authorize exceeding the force budget. */
+  void set_following_force_request(bool compute_forces,
+                                   std::size_t additional_device_bytes) noexcept;
 
   const CudaKsResources& resources() const noexcept;
   /** Optional prepared-operation provenance; null means that the owner did

@@ -37,7 +37,9 @@ def test_prepared_artifact_resources_close_when_publication_fails(
     monkeypatch.setattr(owner, "_request", lambda **_kwargs: object())
     monkeypatch.setattr(runtime, "_layout", lambda _basis: (None, None, (), None))
     monkeypatch.setattr(runtime, "_component_mode", lambda _expansions: False)
-    monkeypatch.setattr(runtime, "stationary_runtime_sources", lambda _plan: ())
+    monkeypatch.setattr(
+        runtime, "stationary_runtime_sources", lambda _plan, **_kwargs: ()
+    )
     stationary = SimpleNamespace(metadata={"key": "a" * 64, "binary_sha256": "b" * 64})
     grid = SimpleNamespace(
         metadata={
@@ -99,7 +101,7 @@ def test_prepared_artifact_resources_close_when_publication_fails(
             ),
             basis=SimpleNamespace(identity="geometry", natom=1, nao=1),
             contract=SimpleNamespace(),
-            plan=SimpleNamespace(spin_blocks=1),
+            plan=SimpleNamespace(spin_blocks=1, range_exchange_sources=()),
             tensor_plans={},
             compiler=SimpleNamespace(target=SimpleNamespace()),
             cache="unused",

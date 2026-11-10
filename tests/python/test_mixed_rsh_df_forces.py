@@ -20,6 +20,7 @@ import pytest
 from generativeqc import Atom, Calculator, KsOptions
 from generativeqc.ks import (
     cuda_mixed_density_fitted_force_eligible,
+    cuda_range_only_force_basis_eligible,
     mixed_density_fitted_force_eligible,
     split_hybrid_df_force_admitted,
 )
@@ -30,6 +31,7 @@ from generativeqc_compiler.method import (
     original_nonlocal_correlation,
     resolve_method,
 )
+from generativeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
 from generativeqc_compiler.method.stationary_cuda import (
     COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES,
     stationary_external_provider_sources,
@@ -40,6 +42,35 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryMeanField,
 )
 from generativeqc_compiler.tensor import execute
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_range_only_df_force_admission_requires_the_native_source_inventory(
+    spin: str,
+) -> None:
+    """A range correction does not imply a nonlocal-correlation feature lease."""
+    pure = resolve_method("PBE", spin=spin)
+    ranges = tuple(
+        primitive
+        for primitive in resolve_method("CAM-B3LYP", spin=spin).primitives
+        if isinstance(primitive, RangeSeparatedExchangePrimitive)
+    )
+    method = replace(
+        pure,
+        identifier="independent-range-only-label",
+        primitives=(*pure.primitives, *ranges),
+    )
+    assert mixed_density_fitted_force_eligible(method, backend="cuda")
+    assert not mixed_density_fitted_force_eligible(method, backend="cpu")
+    assert not mixed_density_fitted_force_eligible(method, backend="unsupported")
+    equal = replace(
+        method,
+        primitives=(
+            *pure.primitives,
+            *(replace(primitive, coefficient=Fraction(1, 5)) for primitive in ranges),
+        ),
+    )
+    assert not mixed_density_fitted_force_eligible(equal, backend="cuda")
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
@@ -99,12 +130,19 @@ def test_mixed_df_requires_every_generated_provider_capability(
 def test_public_mixed_df_gate_preserves_owner_boundaries(
     override: dict[str, Any], expected: bool
 ) -> None:
+    _assert_public_mixed_df_gate(
+        resolve_method("WB97M-V", spin="unpolarized"), override, expected
+    )
+
+
+def _assert_public_mixed_df_gate(
+    method: Any, override: dict[str, Any], expected: bool
+) -> None:
     """Execute the actual public predicate without loading a CUDA library."""
     from generativeqc import _native
     from generativeqc._df_precision import fitted_scf_budget_admitted
     from generativeqc.ks import cuda_nonlocal_force_basis_eligible
 
-    method = resolve_method("WB97M-V", spin="unpolarized")
     owner = SimpleNamespace(
         _device_name="cuda",
         _precision_mode=_native.PRECISION_FP64,
@@ -148,6 +186,7 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
             else _native.DENSITY_FITTING_NONE
         ),
         "cuda_nonlocal_force_basis_eligible": cuda_nonlocal_force_basis_eligible,
+        "cuda_range_only_force_basis_eligible": cuda_range_only_force_basis_eligible,
         "cuda_mixed_density_fitted_force_eligible": cuda_mixed_density_fitted_force_eligible,
         "mixed_density_fitted_force_eligible": mixed_density_fitted_force_eligible,
         "split_hybrid_df_force_admitted": split_hybrid_df_force_admitted,
@@ -157,6 +196,50 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
         namespace,
     )
     assert namespace["density_fitted_force"] is expected
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("angular_momentum", (0, 1, 2, 3, 4))
+def test_public_range_only_gate_matches_the_ordinary_geometry_domain(
+    spin: str, angular_momentum: int
+) -> None:
+    """Reject f shells before preparation; do not narrow the separate NLC owner."""
+    basis = SimpleNamespace(
+        elements=(
+            SimpleNamespace(
+                shells=(SimpleNamespace(angular_momentum=angular_momentum),)
+            ),
+        )
+    )
+    method = resolve_method(
+        MethodSpec(
+            "PBE-range-basis-control",
+            (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
+            short_range_exchange=Fraction(1, 5),
+            long_range_exchange=Fraction(13, 20),
+            range_omega=Fraction(33, 100),
+        ),
+        spin=spin,
+    )
+    pure = resolve_method("PBE", spin=spin)
+    method = replace(
+        pure,
+        identifier=method.identifier,
+        primitives=(
+            *pure.primitives,
+            *(
+                primitive
+                for primitive in method.primitives
+                if isinstance(primitive, RangeSeparatedExchangePrimitive)
+            ),
+        ),
+    )
+    _assert_public_mixed_df_gate(method, {"_basis": basis}, angular_momentum <= 2)
+    _assert_public_mixed_df_gate(
+        resolve_method("WB97M-V", spin=spin),
+        {"_basis": basis},
+        angular_momentum <= 3,
+    )
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))

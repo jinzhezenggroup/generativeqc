@@ -1,0 +1,58 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Identified original scientific controls pass; A100 is explicitly user-excluded and unqualified. Required CI and production/performance promotion remain separate.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 2848,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "0f482ca728c99d3b2a0e9e8f700eb3253e4e67348690d6bbba85369b0ac0fc3e"
+    },
+    {
+      "bytes": 3852,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "76deafd6695d25f3617cf6b11e350d0d832e5bab0675ddeae45c574f448e68fa"
+    },
+    {
+      "bytes": 2234,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "e364ca26b8d3b9c2f021d57daab331df1a7de260f4d11291a39512d35cdcebe4"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=04:00:00",
+      "env",
+      "GENERATIVEQC_KS_STATE_CUDA_TEST=1",
+      "GENERATIVEQC_GRID_CUDA_TEST=1",
+      "PYTHONPATH=python:.:tests/python",
+      "OPENBLAS_NUM_THREADS=1",
+      "OMP_NUM_THREADS=1",
+      "python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/python/test_ks_scientific_gates_cuda.py",
+      "tests/python/test_ks_original_rsh_admission_cuda.py",
+      "tests/python/test_ks_seed_admission_cuda.py",
+      "-k",
+      "original"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "926c778cb47c99b250378727832924dcea72d943"
+  }
+}
