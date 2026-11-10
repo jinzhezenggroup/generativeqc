@@ -50,7 +50,7 @@ def test_streamed_first_and_weighted_hvp_match_independent_libcint(
         for exponent in EXPONENTS
     )
     size = math.prod((order + 1) * (order + 2) // 2 for order in angular)
-    components = tuple(sorted({0, min(1, size - 1), size // 3, size // 2, size - 1}))
+    components = tuple(np.linspace(0, size - 1, min(size, 64), dtype=int).tolist())
     weights = np.linspace(-0.4, 0.6, len(components))
     expected_first = np.zeros((len(components), 13))
     expected_hvp = np.zeros((4, 3))

@@ -43,10 +43,18 @@ def _source() -> str:
 #include "integrals/factorized_host_runtime.hpp"
 namespace {
 struct Program {
+  using Prepared = generativeqc::scf::factorized_second::Geometry;
+  static bool prepare(const unsigned* angular, const double* record, Prepared& geometry) {
+    unsigned maximum_order=2;
+    for (unsigned slot=0; slot<4; ++slot) maximum_order+=angular[slot];
+    return generativeqc::integrals::make_eri_geometry<Prepared,14>(
+        record, record+4, maximum_order, generativeqc::integrals::CoulombRange::Full, 0, geometry);
+  }
   static bool evaluate(const unsigned* angular, unsigned component,
-                       const double* record, const double* direction, double* output) {
+                       const double* record, const double* direction,
+                       const Prepared& geometry, double* output) {
     return generativeqc::scf::factorized_second::primitive(
-        0, 0, angular, component, record, direction, output);
+        0, 0, angular, component, record, direction, output, &geometry);
   }
 };
 }
@@ -114,6 +122,8 @@ class FactorizedERIHost:
     counts record pages, Python/native publication tiles, directions, weights
     and component metadata. Generated scalar/jet stack temporaries, compiler
     processes, library mappings and Python object overhead are excluded.
+    Each primitive record owns one transient geometry/moment binding shared
+    across its component page; no binding is cached across records or calls.
     """
 
     @staticmethod
@@ -313,6 +323,7 @@ class FactorizedERIHost:
             ),
             "native_artifact": self.artifact.metadata["key"],
             "records": primitive_records,
+            "geometry_evaluations": primitive_records,
             "component_evaluations": component_evaluations,
             "chunks": batches,
             "resources": {"peak_bytes": {"host": self.numeric_bytes}},

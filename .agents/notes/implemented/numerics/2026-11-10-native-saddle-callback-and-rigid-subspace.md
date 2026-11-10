@@ -62,3 +62,31 @@ correction, not a scientific fallback.
 Independent molecular saddle/minimum controls and a fixed-request installed
 molecular TS API/CLI still require complete qualified derivative endpoints.
 Neither the callback receipt nor these mathematical tests closes issue #2848.
+
+## Bounded molecular callback pilot (2026-11-11)
+
+A separate scratch pilot binds the actual native C corrector to one prepared
+RKS B3LYP state per geometry. Energy/forces and raw Hessian callbacks borrow
+the same prepared SCF owner, with no reference engine, finite differences or
+external optimizer in the callback. It uses real-spherical STO-3G and the
+native default grid on near-planar ammonia, not the requested def2-SVP/D3/Ni
+domain. The five requested convergence controls and 100-attempt cap are fixed
+before the run; rigid projection removes six geometric rigid modes.
+
+The initial native SCF takes eight iterations. Its complete raw Hessian takes
+the pipeline to 832.53 seconds, has maximum asymmetry `8.33501242e-13`, and
+has one negative projected curvature, `-0.1285902654 Eh/Bohr^2`. The gradient
+maximum is still `0.0176231067 Eh/Bohr`, so this is not a converged saddle.
+The corrector requests a trial geometry and a fresh SCF/Hessian. The entire
+process reaches its external 1,200-second time limit during the second Hessian,
+after two complete energy/gradient calls, one complete Hessian, two attempted
+Hessians and sixteen completed SCF iterations; peak RSS is 972,324 KiB.
+
+The last coherent native progress observation retains the initial accepted
+geometry with zero accepted steps and `stationary_verified=0`. The process
+timeout is not a returned optimizer failure receipt and does not prove the
+public task's failure-publication contract. No final Hessian, frequency result
+or positive molecular-TS acceptance is inferred. Evidence is retained in
+`/tmp/gqc-ammonia-native-saddle-pilot/`, its adjacent log/time files, and the
+frozen script manifest. The negative pilot motivates endpoint work reuse;
+it does not turn the callback ABI into an installed molecular TS API/CLI.

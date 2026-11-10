@@ -274,6 +274,9 @@ def emit_factorized_second(*, backend: str = "cpu") -> str:
     gradient-JVP. Record scaling and ordered radial contraction remain outside
     this primitive. Family codes are ERI=0, three-center=1 and metric=2; radial
     codes are full=0, long=1 and short=2 (fixed WB97M-V omega 0.3).
+    CPU callers may borrow a full-range four-center geometry bound from the
+    same immutable record for one component page. Omitting that binding retains
+    the original canonical binder; CUDA emission has no borrowed-geometry API.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("factorized second-order backend must be cpu or cuda")
@@ -295,7 +298,9 @@ def emit_factorized_second(*, backend: str = "cpu") -> str:
         + _pair_source()
         + _coulomb_source()
         + _prefactor_source()
-        + "\nGQC_FACTOR_FUNCTION bool primitive(unsigned family, unsigned radial, const unsigned* angular, unsigned component, const double* record, const double* direction, double* output) {\n"
+        + "\nGQC_FACTOR_FUNCTION bool primitive(unsigned family, unsigned radial, const unsigned* angular, unsigned component, const double* record, const double* direction, double* output"
+        + (", const Geometry* prepared_geometry=nullptr" if backend == "cpu" else "")
+        + ") {\n"
         + "  constexpr unsigned powers[5][15][3]={"
         + ",".join(components)
         + "};\n"
@@ -337,10 +342,23 @@ def emit_factorized_second(*, backend: str = "cpu") -> str:
   const auto range=radial==0 ? generativeqc::integrals::CoulombRange::Full : radial==1 ? generativeqc::integrals::CoulombRange::Long : generativeqc::integrals::CoulombRange::Short;
   const double omega=radial==0 ? 0 : 0.3;
   bool valid=false;
-  if (family==0) valid=generativeqc::integrals::make_eri_geometry<Geometry,14>(exponents,coordinates,maximum_order,range,omega,geometry);
+"""
+        + (
+            """  if (prepared_geometry) {
+    if (family!=0 || radial!=0) return false;
+    geometry=*prepared_geometry;
+    valid=true;
+  } else {
+"""
+            if backend == "cpu"
+            else ""
+        )
+        + r"""  if (family==0) valid=generativeqc::integrals::make_eri_geometry<Geometry,14>(exponents,coordinates,maximum_order,range,omega,geometry);
   if (family==1) valid=generativeqc::integrals::make_eri_geometry<Geometry,14,8>(exponents,coordinates,maximum_order,range,omega,geometry);
   if (family==2) valid=generativeqc::integrals::make_eri_geometry<Geometry,14,10>(exponents,coordinates,maximum_order,range,omega,geometry);
-  if (!valid) return false;
+"""
+        + ("  }\n" if backend == "cpu" else "")
+        + r"""  if (!valid) return false;
   Jet<4> coefficients[3][13]{};
   unsigned axis_orders[3]{};
   for (unsigned axis=0; axis<3; ++axis) {

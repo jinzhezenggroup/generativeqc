@@ -78,6 +78,18 @@ the failed protocols or reinterpret an independent oracle as production work.
 Raw HVP/full Hessian, total D3 curvature, mixed Ni/I/Cs ECP forces and second
 order, and a fixed-method molecular TS task remain separate open qualifications.
 
+## Geometry-only schedule follow-up
+
+The record-local geometry change is independently validated and documented in
+`../implemented/performance/2026-11-11-factorized-host-record-geometry-reuse.md`.
+Its complete Ni trial nevertheless reaches a 3,600-second limit without an HVP
+and peaks at 2,034,812 KiB RSS. This negative result does not establish a GMRES
+failure or a unique remaining hotspot. Scalar-direction lowering and shared-spin
+RHS experiments are separately tracked in
+`2026-11-11-factorized-directional-first-and-shared-spin-rhs.md`; retain their
+distinct source identities and gates rather than restamping the geometry-only
+run as their endpoint measurement.
+
 ## Local evidence
 
 `/tmp/gqc-continue-ni-hvp-gdb.log`, its adjacent `*-time.txt`,

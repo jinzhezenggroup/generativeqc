@@ -49,9 +49,14 @@ int factorized_eri_records(unsigned operation, const unsigned* angular, const un
     const auto* input = records + stride * record;
     for (std::size_t field = 0; field < stride; ++field)
       if (!std::isfinite(input[field]) || (field < 4 && input[field] <= 0)) return 1;
+    // Geometry and radial moments are invariant across this record's component
+    // page. Keep the generated binding local so another record cannot reuse it.
+    typename Program::Prepared geometry{};
+    if (!Program::prepare(angular, input, geometry)) return 5;
     for (std::size_t component = 0; component < component_count; ++component) {
       std::array<double, 25> jet{};
-      if (!Program::evaluate(angular, components[component], input, motion.data(), jet.data()))
+      if (!Program::evaluate(angular, components[component], input, motion.data(), geometry,
+                             jet.data()))
         return 5;
       const double scale = input[16] * (operation == 2 ? weights[component] : 1.0);
       if (!std::isfinite(scale)) return 5;
