@@ -765,6 +765,7 @@ def independent_global_hybrid_gradient(
     auxiliary_shells: typing.Any = None,
     return_mean_field: bool = False,
     initial_density: typing.Any = None,
+    initial_guess: str = "minao",
     scf_gradient_tolerance: float = 1e-10,
 ) -> typing.Any:
     """Independent hybrid SCF/moving-grid gradient in the endpoint's AO space.
@@ -777,6 +778,7 @@ def independent_global_hybrid_gradient(
     normalization and ordering. Explicit oracle gradient controls permit
     replaying published reference protocols; endpoint error gates remain with
     the caller, independently of the SCF program's convergence flag.
+    The initial guess selects an independent oracle guess, not a native density.
     """
     from pyscf import dft, gto, lib
     from pyscf.data.elements import ELEMENTS
@@ -841,6 +843,7 @@ def independent_global_hybrid_gradient(
     }
     mf.grids.gen_atomic_grids = lambda *args, **kwargs: tab
     mf.small_rho_cutoff = 0
+    mf.init_guess = initial_guess
     mf.conv_tol, mf.conv_tol_grad, mf.max_cycle = 1e-13, scf_gradient_tolerance, 200
     energy = mf.kernel(dm0=initial_density)
     assert mf.converged

@@ -25,7 +25,7 @@ bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool 
     if (!tile_points) return false;
     std::size_t primitive_sum = 0;
     for (const auto& shell : system.shells) {
-      if (shell.angular_momentum > 2) return false;
+      if (shell.angular_momentum > 3) return false;
       for (const auto& expansion :
            molecule::ao_expansions(shell.angular_momentum, system.basis_representation))
         primitive_sum = runtime::size_add(
@@ -168,6 +168,13 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
       for (std::size_t third = 0; third < system.shells.size(); ++third)
         for (std::size_t fourth = 0; fourth < system.shells.size(); ++fourth) {
           const std::array<std::size_t, 4> shells{first, second, third, fourth};
+          // Moving every slot together is a translation, even for distinct
+          // shells on one center. Keep independent-slot jets in the integral
+          // provider; only this physical nuclear contraction may elide them.
+          const auto atom = system.shells[first].atom_index;
+          if (system.shells[second].atom_index == atom && system.shells[third].atom_index == atom &&
+              system.shells[fourth].atom_index == atom)
+            continue;
           coulomb_weights.clear();
           exchange_weights.clear();
           for (std::size_t ao_first = offsets[first]; ao_first < offsets[first + 1]; ++ao_first)

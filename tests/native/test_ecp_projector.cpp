@@ -30,7 +30,7 @@ void check_grid() {
   using namespace generativeqc::generated;
   // Polynomial moments and standard-library Legendre polynomials are an
   // independent oracle for both odd and even orders, including the limits.
-  for (unsigned n : {8, 9, 16, 17, 32, 44, 96, 160, 224, 512}) {
+  for (unsigned n : {8, 9, 16, 17, 32, 44, 96, 160, 192, 224, 512, 1536}) {
     const auto nodes = ecp_legendre(n);
     for (unsigned i = 0; i < n; ++i) {
       const auto [z, weight] = nodes[i];
@@ -46,8 +46,14 @@ void check_grid() {
         throw std::runtime_error("generated quadrature polynomial moment failed");
     }
   }
-  for (const auto orders :
-       {std::array<unsigned, 2>{16, 8}, {17, 9}, {160, 32}, {224, 44}, {512, 96}}) {
+  for (const auto orders : {std::array<unsigned, 2>{16, 8},
+                            {17, 9},
+                            {160, 32},
+                            {224, 44},
+                            {512, 96},
+                            {513, 8},
+                            {16, 97},
+                            {1536, 192}}) {
     std::vector<Radial> radii;
     std::vector<Point> sphere;
     ecp_make_grid(orders[0], orders[1], radii, sphere);
@@ -113,7 +119,7 @@ void check_grid() {
             throw std::runtime_error("generated AO normalization failed");
         }
       }
-  for (const auto orders : {std::array<unsigned, 2>{15, 8}, {513, 8}, {16, 7}, {16, 97}}) {
+  for (const auto orders : {std::array<unsigned, 2>{15, 8}, {1537, 8}, {16, 7}, {16, 193}}) {
     std::vector<Radial> r;
     std::vector<Point> s;
     bool rejected = false;

@@ -794,7 +794,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
     if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
         (!integrals::has_packaged_cpu_eri_shell_derivatives() ||
          std::any_of(system_.shells.begin(), system_.shells.end(),
-                     [](const auto& shell) { return shell.angular_momentum > 2; })))
+                     [](const auto& shell) { return shell.angular_momentum > 3; })))
       return false;
     const auto& spec = fock_.strategy().spec;
     if (execution_plan_.spin_channels != (spec.spin == scf::FockSpin::Restricted ? 1u : 2u))

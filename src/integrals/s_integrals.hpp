@@ -133,7 +133,7 @@ std::array<double, 12> contract_weighted_eri_shell_derivative(
 
 enum class WeightedEriDerivativeExecution { Reference, PackagedCpu };
 
-/** Build-time capability only. Packaged execution is restricted to s/p/d and
+/** Build-time capability only. Packaged execution covers s/p/d/f and
  * never initiates JIT or falls back silently to the reference recurrence. */
 bool has_packaged_cpu_eri_shell_derivatives() noexcept;
 
@@ -149,10 +149,12 @@ bool supports_packaged_cpu_eri_shell_derivatives(
  * Results retain input-channel and independent shell-slot ordering. Reuses the
  * default reference recurrence's single-channel accumulation order without molecular AO-rank-four
  * or coordinate derivative storage. Empty channels are rejected. All-zero AO
- * tuples skip recurrence work. The optional actual primitive evaluation count
+ * tuples skip recurrence work. The optional actual primitive recurrence count
  * is published only on success, including zero for all-zero channels. Explicit
  * packaged execution uses the shared generated primitive kernels, with restored
  * shell/axis slots and the same public-AO normalization and channel order.
+ * The generic f-shell owner counts its three directional recurrence passes,
+ * independently of the number of contracted weight channels.
  */
 std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
     const core::System& system, const std::array<std::size_t, 4>& shell_indices,
