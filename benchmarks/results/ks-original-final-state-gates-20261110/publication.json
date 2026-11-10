@@ -1,28 +1,28 @@
 {
   "archives": [],
   "decision": {
-    "reason": "All three original #2840 gates and original-grid #2915 default/tighter controls pass on the identified RTX 5090 binary. This does not establish #2910 historical causality or qualify unmeasured devices/performance.",
+    "reason": "Identified original scientific controls pass; A100 is explicitly user-excluded and unqualified. Required CI and production/performance promotion remain separate.",
     "scope": "numerical",
     "status": "accepted"
   },
   "files": [
     {
-      "bytes": 2220,
+      "bytes": 2848,
       "path": "evidence.json.xz",
       "role": "evidence",
-      "sha256": "60b6f57e5b69bf90b239fe3240faec3b565f589ca976600dac4b157da2762547"
+      "sha256": "0f482ca728c99d3b2a0e9e8f700eb3253e4e67348690d6bbba85369b0ac0fc3e"
     },
     {
-      "bytes": 2796,
+      "bytes": 3852,
       "path": "samples.json.xz",
       "role": "samples",
-      "sha256": "febcdb075c815b382d5b7979226f38ba0e92df3409dfec74fcb249af8b0c5e4a"
+      "sha256": "76deafd6695d25f3617cf6b11e350d0d832e5bab0675ddeae45c574f448e68fa"
     },
     {
-      "bytes": 2092,
+      "bytes": 2234,
       "path": "README.md",
       "role": "summary",
-      "sha256": "acc6e6d0d6b4a3f7389ce59965dde203019e75d4ded6662a7538b5dc38572f98"
+      "sha256": "e364ca26b8d3b9c2f021d57daab331df1a7de260f4d11291a39512d35cdcebe4"
     }
   ],
   "reproduction": {
@@ -53,6 +53,6 @@
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {
     "dirty": false,
-    "revision": "d3f8a62df6aa371ad75449406053d7ab3333c97a"
+    "revision": "926c778cb47c99b250378727832924dcea72d943"
   }
 }

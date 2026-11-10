@@ -1,5 +1,10 @@
 # Decision: complete the original KS scientific tasks
 
+Later investigation and the guarded pure-UKS proposal-metric repair are recorded
+in [the orthonormal Pulay metric note](2026-11-10-pure-uks-orthogonal-pulay-metric.md).
+The measurements below retain their original source/library identities; they
+are not qualification of subsequent rebuilt binaries.
+
 Status: implemented
 Date: 2026-11-10
 
@@ -93,11 +98,44 @@ trace on failure. Geometry, quadrature, Hamiltonian, native controls, basin
 seed, and all E/D/Fock/force and physical-state comparisons remain unchanged.
 The failed alternative is not substituted for the original acceptance task.
 
+## Final guarded production-configuration controls
+
+On 2026-11-11, the separately identified non-fast-compile Release/sm120 library
+`9a50430e953fc7322edde32eaf63ec414a22a7b072b17eb2c9e0ba99325d56e8`
+completes all four original-grid water96 controls. The runtime device descriptor
+reports release_build=1 and fast_compile=0 in every finite Slurm allocation.
+Complete seven-row receipts retain configuration/cold/cold/replay/replay/moved/
+fresh, full vectors, SCF histories and source/library identities.
+
+| Device/control | Moved/fresh max force difference | Energy difference | Failed components |
+| --- | ---: | ---: | ---: |
+| RTX5090 default, Slurm17117 | 3.397726544562829e-10 | 2.7284841053187847e-12 | 0 |
+| RTX5090 tighter-only, Slurm17116 | 5.917044632042234e-12 | 4.547473508864641e-13 | 0 |
+| PRO6000 default, Slurm4247 | 3.397326864273964e-10 | 2.7284841053187847e-12 | 0 |
+| PRO6000 tighter-only, Slurm4248 | 6.0254023992456496e-12 | 4.547473508864641e-13 | 0 |
+
+All original inputs, E/D controls, E/F gates and bounded resource settings remain
+unchanged. Native source identity is
+`baf0bc3589f99d2caa332ba48e36a6a90425cf8f209ecf2422dfa3896876a563`;
+all 2127 inputs match the clean source926 archive despite the test/notes-only
+successor build checkout110. The same binary also completes the original #2840
+UKS/RSH controls, detailed in the orthonormal Pulay metric note.
+
+The user explicitly excludes A100 from completion requirements. It remains
+unmeasured and unqualified, not a completion blocker. These numerical controls
+do not establish actual Graph launches, performance, resource-peak accounting
+or universal device support, and do not waive required final-head CI.
+
 ## References
 
-- `benchmarks/results/ks-original-state-gates-20261110/` is the current compact
-  publication. Its authenticated Git recovery record retains the complete
-  vectors at `de57dc9c3118d47bc3eb2692a7b51320fad311db` without an external archive.
+- `benchmarks/results/ks-original-final-state-gates-20261110/` is the current
+  compact publication. Complete final receipts remain authenticated in Git at
+  `be5c9a904c2fe31070d473689299e1e5aa2ae334`, including successful/failed native
+  histories, full force/reference vectors, independent-oracle failures, source
+  and device identities, compiler commands and structured build provenance.
+  Earlier vectors at `de57dc9c3118d47bc3eb2692a7b51320fad311db` and the older
+  `ks-original-state-gates-20261110/` publication retain their historical status.
+  Neither recovery depends on an external archive or changes the evidence cap.
 - `2026-11-09-ks-physical-force-and-canonical-proof.md`.
 - `2026-11-10-range-only-cuda-stationary-sources.md`.
 - Issues #2915 and #2840; PR #3060.
