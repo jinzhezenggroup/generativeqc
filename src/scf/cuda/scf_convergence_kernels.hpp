@@ -44,7 +44,9 @@ void launch_compute_uhf_energy_kernel(dim3 grid, dim3 block, std::size_t shared_
  * Incremental HF may supply its controller/census to enter sticky full-only
  * energy refinement while approaching stationarity, without relaxing acceptance
  * or retaining a reconstructed energy baseline. A current full evaluation can
- * establish the first usable baseline. Other callers pass nulls. */
+ * establish the first usable baseline. Other callers pass nulls.
+ * Orbital mode requires X^T(FDS-SDF)X, not the raw AO residual, and uses its
+ * Frobenius norm / sqrt(2). The density RMS remains an additional native gate. */
 void launch_update_convergence_kernel(
     bool retain_converged_density, dim3 grid, dim3 block, std::size_t shared_bytes,
     cudaStream_t stream, std::int32_t batch_size, std::int32_t nbf, double energy_tolerance,
@@ -55,7 +57,7 @@ void launch_update_convergence_kernel(
     const std::uint32_t* approximate_item_census = nullptr, bool qualified_owner = false,
     std::uint32_t* incremental_delta_updates = nullptr,
     const unsigned long long* incremental_delta_build_count = nullptr,
-    ReferenceStartup reference_startup = {});
+    ReferenceStartup reference_startup = {}, bool orbital_gradient = false);
 
 /** UHF counterpart; the physical maximum covers both spin channels. */
 void launch_update_uhf_convergence_kernel(
@@ -76,7 +78,7 @@ void launch_validate_force_residual_kernel(
     cudaStream_t stream, std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
     double density_tolerance, const double* physical_residual, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* tested_count, std::uint8_t* tested_items,
-    double energy_tolerance = 1e-10, bool qualified_owner = false);
+    double energy_tolerance = 1e-10, bool qualified_owner = false, bool orbital_gradient = false);
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_tail_rhf_loop_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <limits>
 
 #if defined(__CUDACC__)
@@ -55,11 +56,26 @@ GENERATIVEQC_CONVERGENCE_HD constexpr double scf_stationarity_tolerance(
   return density_tolerance < ceiling ? density_tolerance : ceiling;
 }
 
-/** HF admission is an owner property, not a consequence of loose controls. */
+/** HF admission is an owner property, not a consequence of loose controls.
+ * Explicit orbital-gradient owners instead compare the orthonormal restricted
+ * physical norm with sqrt(energy_tolerance), never with an AO maximum ceiling.
+ */
 GENERATIVEQC_CONVERGENCE_HD constexpr double hf_stationarity_tolerance(
-    double energy_tolerance, double density_tolerance, bool qualified_owner) noexcept {
+    double energy_tolerance, double density_tolerance, bool qualified_owner,
+    bool orbital_gradient = false) noexcept {
+  if (orbital_gradient) return std::sqrt(energy_tolerance);
   return qualified_owner ? scf_stationarity_tolerance(energy_tolerance, density_tolerance, 1e-8)
                          : (density_tolerance < 1e-8 ? density_tolerance : 1e-8);
+}
+
+/** Iteration and rebuilt force determinants must use the same norm comparison. */
+GENERATIVEQC_CONVERGENCE_HD constexpr bool hf_physical_stationarity_met(
+    double physical_norm, double energy_tolerance, double density_tolerance, bool qualified_owner,
+    bool orbital_gradient = false) noexcept {
+  const double tolerance = hf_stationarity_tolerance(energy_tolerance, density_tolerance,
+                                                     qualified_owner, orbital_gradient);
+  return physical_norm >= 0.0 &&
+         (orbital_gradient ? physical_norm < tolerance : physical_norm <= tolerance);
 }
 
 }  // namespace generativeqc::scf

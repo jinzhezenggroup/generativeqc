@@ -239,7 +239,7 @@ def grid_settings(grid: Any) -> dict | None:
 
 
 def native_settings(calculator: Any, result: Any) -> dict:
-    """Retain resolved controls and work without altering the timed calculation."""
+    """Retain controls, convergence request and work without changing the calculation."""
     ks = calculator.ks_options
     return {
         "energy_tolerance": calculator._energy_tolerance,
@@ -247,6 +247,8 @@ def native_settings(calculator: Any, result: Any) -> dict:
         "screening_tolerance": calculator._screening_tolerance,
         "max_iterations": calculator._max_iterations,
         "diis_history": calculator._diis_history,
+        "cuda_rhf_convergence": os.environ.get("GENERATIVEQC_CUDA_RHF_CONVERGENCE")
+        or "default",
         "initial_guess": str(calculator.initial_guess),
         "xc_grid": dataclasses.asdict(ks.grid) if ks is not None else None,
         "xc_grid_points": getattr(result.ks_diagnostic, "grid_points", None),
