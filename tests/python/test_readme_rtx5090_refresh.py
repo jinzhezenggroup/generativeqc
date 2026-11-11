@@ -117,7 +117,11 @@ def test_reject_incomplete_or_mismatched_evidence(
 
 @pytest.mark.parametrize(
     "campaign",
-    ["readme-rtx5090-20261111", "readme-rtx5090-composed-20261111"],
+    [
+        "readme-rtx5090-20261111",
+        "readme-rtx5090-composed-20261111",
+        "readme-h100-20261111",
+    ],
 )
 def test_retained_samples_recompute_the_published_summary(
     replay: ModuleType, campaign: str
