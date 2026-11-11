@@ -3,6 +3,11 @@
 Status: proposed
 Date: 2026-11-11
 
+Production integration is recorded separately in
+`../implemented/performance/2026-11-11-first-source-and-grid-hvp-work.md`.
+The earlier observations and isolated timings below remain historical evidence,
+not a paired endpoint measurement of the integrated code.
+
 ## Observation
 
 The live complete Ni action experiment

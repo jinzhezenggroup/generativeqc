@@ -134,6 +134,31 @@ def test_nested_tensor_jvp_contains_density_and_both_ao_legs() -> None:
         np.testing.assert_allclose(actual, finite, atol=2e-10, rtol=2e-10)
 
 
+def test_fixed_density_left_leg_keeps_projector_and_zero_feature_contracts() -> None:
+    """The pruned rho consumer retains a nonzero right-density cross term."""
+    from generativeqc_compiler.method.stationary_grid_second import density_mixed
+
+    generator = np.random.default_rng(2848)
+    jets, left, right, mixed = (generator.normal(size=(4, 5, 3)) for _ in range(4))
+    density, delta = (generator.normal(size=(3, 3)) for _ in range(2))
+    expected = features(
+        jets, density, left=left, right=right, mixed=mixed, delta_density=delta
+    )[0]
+    actual = density_mixed(
+        jets[0], density, left[0], right[0], mixed[0], delta, max_bytes=1 << 20
+    )
+    np.testing.assert_allclose(actual, expected, atol=2e-13, rtol=2e-13)
+    zero = np.zeros_like(left)
+    np.testing.assert_array_equal(
+        features(
+            jets, density, left=zero, right=right, mixed=zero, delta_density=delta
+        ),
+        0,
+    )
+    with pytest.raises(ValueError, match="budget"):
+        density_mixed(jets[0], density, left[0], right[0], mixed[0], delta, max_bytes=1)
+
+
 def test_vv10_both_leg_mask_and_resource_work_caps() -> None:
     values = _fields()
     # Below the explicit molecular rho >= 1e-10 domain on both pair legs.

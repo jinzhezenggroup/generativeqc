@@ -1,6 +1,6 @@
 """Bounded CPU execution of the existing full-range factorized ERI jets.
 
-One identity-checked artifact accepts runtime angular/component selections.
+Identity-checked artifacts accept explicit output and angular/component selections.
 The compiler's existing Hermite/Boys factor algebra owns all derivatives;
 this adapter owns only finite primitive pages and explicit external weights.
 """
@@ -36,9 +36,9 @@ _LOCK = threading.RLock()
 
 
 @cache
-def _source() -> str:
+def _source(output: str = "full") -> str:
     return (
-        emit_factorized_second(backend="cpu")
+        emit_factorized_second(backend="cpu", output=output)
         + r"""
 #include "integrals/factorized_host_runtime.hpp"
 namespace {
@@ -63,6 +63,13 @@ extern "C" int generativeqc_factorized_eri_host_v1(
     std::size_t component_count, const double* records, std::size_t count,
     std::size_t stride, const double* weights, const double* direction,
     double* output, std::size_t output_size, std::uint64_t* visits) {
+"""
+        + {
+            "full": "  if (operation != 1 && operation != 2) return 1;\n",
+            "first": "  if (operation != 1) return 1;\n",
+            "directional": "  if (operation != 3) return 1;\n",
+        }[output]
+        + r"""
   return generativeqc::integrals::factorized_eri_records<Program>(
       operation, angular, components, component_count, records, count, stride,
       weights, direction, output, output_size, visits);
@@ -71,14 +78,14 @@ extern "C" int generativeqc_factorized_eri_host_v1(
     )
 
 
-def _artifact(compiler: CppCompilerAdapter, cache_directory: Path) -> Any:
+def _artifact(compiler: CppCompilerAdapter, cache_directory: Path, output: str) -> Any:
     headers = tuple(asset_path(name) for name in _HEADERS)
     header_identity = tuple(file_hash(path) for path in headers)
-    key = (compiler, cache_directory.resolve(), header_identity)
+    key = (compiler, cache_directory.resolve(), header_identity, output)
     with _LOCK:
         artifact = _ARTIFACTS.get(key)
         if artifact is None or not artifact.library.is_file():
-            source = _source()
+            source = _source(output)
             directory = cache_directory / "generated-sources"
             directory.mkdir(parents=True, exist_ok=True)
             path = directory / (canonical_hash({"source": source}) + ".cpp")
@@ -152,10 +159,30 @@ class FactorizedERIHost:
         self.numeric_bytes = self.required_bytes(record_capacity)
         if self.numeric_bytes > budget_bytes:
             raise MemoryError("factorized ERI host numeric budget exceeded")
-        self.artifact = _artifact(compiler, Path(cache_directory))
-        self.library = ct.CDLL(str(self.artifact.library))
-        self.run = self.library.generativeqc_factorized_eri_host_v1
-        self.run.argtypes = (
+        self.compiler = compiler
+        self.cache_directory = Path(cache_directory)
+        self._bindings: dict[str, tuple[Any, Any, Any]] = {}
+        self.record_capacity = record_capacity
+        self._closed = False
+        self.statistics = {
+            "raw_first_calls": 0,
+            "directional_calls": 0,
+            "weighted_hvp_calls": 0,
+            "records": 0,
+            "geometry_evaluations": 0,
+            "component_evaluations": 0,
+        }
+
+    def _binding(self, output: str) -> tuple[Any, Any, Any]:
+        """Compile only an admitted consumer's output, retaining typed geometry."""
+        if self._closed:
+            raise RuntimeError("factorized ERI host owner is closed")
+        if output in self._bindings:
+            return self._bindings[output]
+        artifact = _artifact(self.compiler, self.cache_directory, output)
+        library = ct.CDLL(str(artifact.library))
+        run = library.generativeqc_factorized_eri_host_v1
+        run.argtypes = (
             ct.c_uint,
             ct.c_void_p,
             ct.c_void_p,
@@ -169,9 +196,19 @@ class FactorizedERIHost:
             ct.c_size_t,
             ct.c_void_p,
         )
-        self.run.restype = ct.c_int
-        self.record_capacity = record_capacity
-        self._closed = False
+        run.restype = ct.c_int
+        self._bindings[output] = artifact, library, run
+        return self._bindings[output]
+
+    @property
+    def artifact(self) -> Any:
+        """Return the full-jet artifact used by the raw native ABI."""
+        return self._binding("full")[0]
+
+    @property
+    def run(self) -> Any:
+        """Expose the full raw-first/weighted-HVP ABI for native consumers."""
+        return self._binding("full")[2]
 
     def raw_first(
         self, angular: Any, components: Any, primitives: Any, centers: Any
@@ -195,6 +232,21 @@ class FactorizedERIHost:
             )
         return self._contract(
             2, angular, components, primitives, centers, weights, direction
+        )
+
+    def first_direction(
+        self,
+        angular: Any,
+        components: Any,
+        primitives: Any,
+        centers: Any,
+        direction: Any,
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Return value/scalar first-direction rows without a raw gradient tile."""
+        if direction is None:
+            raise ValueError("factorized ERI first direction requires a direction")
+        return self._contract(
+            3, angular, components, primitives, centers, direction=direction
         )
 
     def _contract(
@@ -266,7 +318,11 @@ class FactorizedERIHost:
         cotangent = np.ascontiguousarray(cotangent, dtype=np.float64)
         orders = np.array(angular, dtype=np.uint32)
         selection = np.array(components, dtype=np.uint32)
-        shape = (len(components), 13) if operation == 1 else (4, 3)
+        shape = (
+            (4, 3) if operation == 2 else (len(components), 2 if operation == 3 else 13)
+        )
+        output = {1: "first", 2: "full", 3: "directional"}[operation]
+        artifact, _library, run = self._binding(output)
         result = np.zeros(shape)
         chunk = np.empty(shape)
         records = np.empty((self.record_capacity, 17))
@@ -275,7 +331,7 @@ class FactorizedERIHost:
 
         def flush(count: int) -> None:
             nonlocal batches, primitive_records, component_evaluations
-            status = self.run(
+            status = run(
                 operation,
                 orders.ctypes.data,
                 selection.ctypes.data,
@@ -312,22 +368,31 @@ class FactorizedERIHost:
                 count = 0
         if count:
             flush(count)
-        return result, {
+        diagnostics: dict[str, Any] = {
             "program_identity": canonical_hash(
                 {
                     "schema": "generativeqc.factorized-eri-host/v1",
                     "operation": operation,
+                    "output": output,
                     "angular": angular,
                     "components": components,
                 }
             ),
-            "native_artifact": self.artifact.metadata["key"],
+            "native_artifact": artifact.metadata["key"],
             "records": primitive_records,
             "geometry_evaluations": primitive_records,
             "component_evaluations": component_evaluations,
             "chunks": batches,
             "resources": {"peak_bytes": {"host": self.numeric_bytes}},
         }
+        self.statistics[
+            {1: "raw_first_calls", 2: "weighted_hvp_calls", 3: "directional_calls"}[
+                operation
+            ]
+        ] += 1
+        for name in ("records", "geometry_evaluations", "component_evaluations"):
+            self.statistics[name] += diagnostics[name]
+        return result, diagnostics
 
     def close(self) -> None:
         """Expire this synchronous owner; no native allocation is retained."""

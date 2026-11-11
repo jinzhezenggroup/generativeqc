@@ -67,6 +67,78 @@ def _direct(grid: _CompositeGrid, density: np.ndarray) -> np.ndarray:
 
 
 @pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("nonlocal_correlation", (False, True))
+def test_grid_weight_hvp_retains_both_explicit_partition_partials(
+    spins: int, nonlocal_correlation: bool
+) -> None:
+    """Weight-only left motion has zero features, not zero explicit geometry."""
+    from generativeqc import GridSpec
+    from generativeqc_compiler.xc.grid_response import (
+        partition_mixed_response,
+        partition_response,
+    )
+
+    grid = _grid(spins, nonlocal_correlation=nonlocal_correlation)
+    generator = np.random.default_rng(2846)
+    grid.jets = np.concatenate((grid.jets, generator.normal(size=(16, 7, 3)) * 0.1))
+    grid.ao_atoms = np.array((0, 1, 0))
+    grid.owners = np.array((0, 1, 0, 1, 0, 1, 0))
+    grid.centers = np.array(((0.0, 0.0, -0.7), (0.1, 0.2, 0.6)))
+    grid.grid_spec = GridSpec()
+    grid.partition_radii = None
+    grid.atomic_weights = np.linspace(0.1, 0.4, 7)
+    partition = partition_response(
+        grid.grid.points,
+        grid.centers,
+        point_motion=np.zeros_like(grid.grid.points),
+        center_motion=np.zeros_like(grid.centers),
+        iterations=grid.grid_spec.partition_iterations,
+        coincident_tolerance=grid.grid_spec.coincident_tolerance,
+    )
+    selected = (np.arange(len(grid.owners)), grid.owners)
+    grid.grid.weights = grid.atomic_weights * partition.weights[selected]
+    grid.fields = np.vstack(
+        (grid.feature_fields(), grid.grid.weights, grid.grid.points.T)
+    )
+    vector = generator.normal(size=grid.centers.shape) * 0.03
+    delta = generator.normal(size=grid.state.density.shape) * 0.02
+    delta += delta.swapaxes(1, 2)
+    direction, _, _ = grid.direction(vector, delta)
+    partials = grid.evaluate(direction)
+    actual = grid.hvp(vector, delta)
+    for prefix, coefficients in (
+        ("xc", partials.semilocal),
+        ("nonlocal", partials.nonlocal_correlation),
+    ):
+        base, moving = coefficients
+        expected = np.zeros_like(vector)
+        for coordinate in range(vector.size):
+            left = np.zeros_like(vector)
+            left.ravel()[coordinate] = 1
+            mixed = partition_mixed_response(
+                grid.grid.points,
+                grid.centers,
+                left_point_motion=left[grid.owners],
+                left_center_motion=left,
+                right_point_motion=vector[grid.owners],
+                right_center_motion=vector,
+                iterations=grid.grid_spec.partition_iterations,
+                coincident_tolerance=grid.grid_spec.coincident_tolerance,
+            )
+            expected.ravel()[coordinate] = np.sum(
+                grid.atomic_weights
+                * (
+                    moving[grid.model.feature_count] * mixed.left[selected]
+                    + base[grid.model.feature_count] * mixed.mixed[selected]
+                )
+            )
+        np.testing.assert_allclose(
+            actual[prefix + "_weight"], expected, atol=2e-13, rtol=0
+        )
+    assert np.max(abs(actual["xc_weight"])) > 1e-10
+
+
+@pytest.mark.parametrize("spins", (1, 2))
 def test_cached_actions_match_raw_point_ad_and_multistep_primal_differences(
     spins: int,
 ) -> None:

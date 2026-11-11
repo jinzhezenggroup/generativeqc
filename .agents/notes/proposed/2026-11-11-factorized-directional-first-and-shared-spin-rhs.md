@@ -3,6 +3,11 @@
 Status: proposed
 Date: 2026-11-11
 
+Production integration is recorded separately in
+`../implemented/performance/2026-11-11-first-source-and-grid-hvp-work.md`.
+The experimental receipts below retain their original source provenance and
+do not qualify the later production implementation.
+
 ## Observed work amplification
 
 The source investigation in

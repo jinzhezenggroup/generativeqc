@@ -20,8 +20,29 @@ from .shell_class import _pair_expansion, build_coulomb_derivative_algebra
 from .shell_spec import cartesian_components
 
 
-def _jet_function(graph: Graph, roots: tuple, variables: dict, targets: tuple) -> str:
+def _jet_function(
+    graph: Graph,
+    roots: tuple,
+    variables: dict,
+    targets: tuple,
+    *,
+    output: str = "full",
+    fields: tuple[str, ...] = (),
+) -> str:
     """Share scalar CSE without teaching the native template derivative rules."""
+    if fields:
+        selected = {
+            "full": ("value", "directional", "gradient", "jvp"),
+            "first": ("value", "gradient"),
+            "directional": ("value", "directional"),
+        }[output]
+        pairs = tuple(
+            (root, target)
+            for root, target, field in zip(roots, targets, fields, strict=True)
+            if field in selected
+        )
+        roots = tuple(root for root, _ in pairs)
+        targets = tuple(target for _, target in pairs)
     emitter = CudaEmitter(graph, variables)
     emitter.emit(roots)
     return "\n".join(
@@ -35,7 +56,7 @@ def _jet_function(graph: Graph, roots: tuple, variables: dict, targets: tuple) -
     )
 
 
-def _product_source() -> str:
+def _product_source(output: str) -> str:
     graph = Graph()
     left, right = graph.variable("left"), graph.variable("right")
     value = left * right
@@ -67,13 +88,20 @@ def _product_source() -> str:
         "right_jvp": "right.jvp[index]",
     }
     head = _jet_function(
-        graph, (value, directional), variables, ("result.value", "result.directional")
+        graph,
+        (value, directional),
+        variables,
+        ("result.value", "result.directional"),
+        output=output,
+        fields=("value", "directional"),
     )
     body = _jet_function(
         graph,
         (gradient, jvp),
         variables,
         ("result.gradient[index]", "result.jvp[index]"),
+        output=output,
+        fields=("gradient", "jvp"),
     )
     return f"""
 template<unsigned Dimension> GQC_FACTOR_FUNCTION Jet<Dimension> multiply(
@@ -86,7 +114,7 @@ template<unsigned Dimension> GQC_FACTOR_FUNCTION Jet<Dimension> multiply(
 """
 
 
-def _pair_source() -> str:
+def _pair_source(output: str) -> str:
     graph = Graph()
     differentiate = _eri_differentiate(graph, 0)
     variables = {
@@ -139,7 +167,15 @@ def _pair_source() -> str:
             )
         cases.append(
             f"case {5 * left_power + right_power}: {{\n"
-            + _jet_function(graph, tuple(roots), variables, tuple(targets))
+            + _jet_function(
+                graph,
+                tuple(roots),
+                variables,
+                tuple(targets),
+                output=output,
+                fields=("value", "directional", "gradient", "gradient", "jvp", "jvp")
+                * (left_power + right_power + 1),
+            )
             + "\nreturn true; }"
         )
     return (
@@ -155,7 +191,7 @@ GQC_FACTOR_FUNCTION bool pair_coefficients(unsigned left_power, unsigned right_p
     )
 
 
-def _coulomb_source() -> str:
+def _coulomb_source(output: str) -> str:
     algebra = build_coulomb_derivative_algebra(12)
     graph = algebra.graph
     differentiate = _eri_differentiate(graph, 14)
@@ -197,7 +233,14 @@ def _coulomb_source() -> str:
         name = "coulomb_" + "_".join(map(str, orders))
         functions.append(
             f"GQC_FACTOR_FUNCTION Jet<3> {name}(const Geometry& geometry, const double* direction) {{\nJet<3> result{{}};\n"
-            + _jet_function(graph, roots, variables, targets)
+            + _jet_function(
+                graph,
+                roots,
+                variables,
+                targets,
+                output=output,
+                fields=("value", "directional", *("gradient",) * 3, *("jvp",) * 3),
+            )
             + "\nreturn result; }\n"
         )
         cases.append(f"case {code}: return {name}(geometry,direction);")
@@ -214,7 +257,7 @@ GQC_FACTOR_FUNCTION Jet<3> coulomb_state(unsigned first, unsigned second, unsign
     )
 
 
-def _prefactor_source() -> str:
+def _prefactor_source(output: str) -> str:
     graph = Graph()
     value = graph.variable("prefactor")
     differentiate = _eri_differentiate(graph, 0)
@@ -261,13 +304,20 @@ def _prefactor_source() -> str:
 GQC_FACTOR_FUNCTION Jet<12> gaussian_prefactor(const Geometry& geometry, const double* direction) {
   Jet<12> result{};
 """
-        + _jet_function(graph, roots, variables, targets)
+        + _jet_function(
+            graph,
+            roots,
+            variables,
+            targets,
+            output=output,
+            fields=("value", "directional", *("gradient",) * 12, *("jvp",) * 12),
+        )
         + "\nreturn result; }\n"
     )
 
 
 @cache
-def emit_factorized_second(*, backend: str = "cpu") -> str:
+def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str:
     """Emit one finite reusable f/g factor library, with no runtime compilation.
 
     ``primitive`` retains every physical center and returns value, gradient and
@@ -277,9 +327,14 @@ def emit_factorized_second(*, backend: str = "cpu") -> str:
     CPU callers may borrow a full-range four-center geometry bound from the
     same immutable record for one component page. Omitting that binding retains
     the original canonical binder; CUDA emission has no borrowed-geometry API.
+    ``output`` selects full value/gradient/gradient-JVP, value/gradient only,
+    or value/scalar-directional packing. Selection is independent of motion:
+    a zero direction does not change the requested operation or its ABI.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("factorized second-order backend must be cpu or cuda")
+    if output not in ("full", "first", "directional"):
+        raise ValueError("factorized output must be full, first or directional")
     qualifier = "static" if backend == "cpu" else "__device__ __noinline__"
     components = []
     for angular in range(5):
@@ -292,12 +347,15 @@ def emit_factorized_second(*, backend: str = "cpu") -> str:
         '#include "integrals/eri_geometry.hpp"\n#include <cmath>\n'
         f"#define GQC_FACTOR_FUNCTION {qualifier}\n"
         "namespace generativeqc::scf::factorized_second {\n"
+        f"constexpr bool emit_gradient={'true' if output != 'directional' else 'false'};\n"
+        f"constexpr bool emit_jvp={'true' if output == 'full' else 'false'};\n"
+        f"constexpr bool emit_directional={'true' if output != 'first' else 'false'};\n"
         "template<unsigned Dimension> struct Jet { double value{}, directional{}; double gradient[Dimension]{}, jvp[Dimension]{}; };\n"
         "struct Geometry { double inverse_two_p, inverse_two_q, rho; double difference[3], shifts[4][3], product_scales[4], decay[4][3]; double prefactor, boys[15]; };\n"
-        + _product_source()
-        + _pair_source()
-        + _coulomb_source()
-        + _prefactor_source()
+        + _product_source(output)
+        + _pair_source(output)
+        + _coulomb_source(output)
+        + _prefactor_source(output)
         + "\nGQC_FACTOR_FUNCTION bool primitive(unsigned family, unsigned radial, const unsigned* angular, unsigned component, const double* record, const double* direction, double* output"
         + (", const Geometry* prepared_geometry=nullptr" if backend == "cpu" else "")
         + ") {\n"
@@ -372,7 +430,7 @@ def emit_factorized_second(*, backend: str = "cpu") -> str:
         Jet<4> first_jet{}, second_jet{};
         first_jet.value=first[left].value; first_jet.directional=first[left].directional;
         second_jet.value=second[right].value; second_jet.directional=second[right].directional;
-        for (unsigned center=0; center<2; ++center) {
+        if constexpr (emit_gradient) for (unsigned center=0; center<2; ++center) {
           first_jet.gradient[center]=first[left].gradient[center]; first_jet.jvp[center]=first[left].jvp[center];
           second_jet.gradient[center+2]=second[right].gradient[center]; second_jet.jvp[center+2]=second[right].jvp[center];
         }
@@ -380,7 +438,7 @@ def emit_factorized_second(*, backend: str = "cpu") -> str:
         auto& target=coefficients[axis][left+right];
         const double sign=right%2 ? -1 : 1;
         target.value+=sign*term.value; target.directional+=sign*term.directional;
-        for (unsigned center=0; center<4; ++center) { target.gradient[center]+=sign*term.gradient[center]; target.jvp[center]+=sign*term.jvp[center]; }
+        if constexpr (emit_gradient) for (unsigned center=0; center<4; ++center) { target.gradient[center]+=sign*term.gradient[center]; target.jvp[center]+=sign*term.jvp[center]; }
       }
     }
   }
@@ -396,28 +454,31 @@ def emit_factorized_second(*, backend: str = "cpu") -> str:
         for (unsigned axis=0; axis<3; ++axis) {
           const auto& coefficient=coefficients[axis][selected[axis]];
           axes[axis].value=coefficient.value; axes[axis].directional=coefficient.directional;
-          for (unsigned center=0; center<4; ++center) { axes[axis].gradient[3*center+axis]=coefficient.gradient[center]; axes[axis].jvp[3*center+axis]=coefficient.jvp[center]; }
+          if constexpr (emit_gradient) for (unsigned center=0; center<4; ++center) { axes[axis].gradient[3*center+axis]=coefficient.gradient[center]; axes[axis].jvp[3*center+axis]=coefficient.jvp[center]; }
         }
         const auto state=coulomb_state(first,second,third,geometry,difference_direction);
         Jet<12> coulomb{}; coulomb.value=state.value; coulomb.directional=state.directional;
-        for (unsigned center=0; center<4; ++center)
+        if constexpr (emit_gradient) for (unsigned center=0; center<4; ++center)
           for (unsigned axis=0; axis<3; ++axis) {
             const double scale=(center<2 ? 1 : -1)*geometry.product_scales[center];
             coulomb.gradient[3*center+axis]=scale*state.gradient[axis]; coulomb.jvp[3*center+axis]=scale*state.jvp[axis];
           }
         const auto term=multiply(multiply(multiply(axes[0],axes[1]),axes[2]),coulomb);
         result.value+=term.value; result.directional+=term.directional;
-        for (unsigned index=0; index<12; ++index) { result.gradient[index]+=term.gradient[index]; result.jvp[index]+=term.jvp[index]; }
+        if constexpr (emit_gradient) for (unsigned index=0; index<12; ++index) { result.gradient[index]+=term.gradient[index]; result.jvp[index]+=term.jvp[index]; }
       }
   result=multiply(gaussian_prefactor(geometry,motion),result);
   output[0]=result.value;
-  for (unsigned index=0; index<6*centers; ++index) output[index+1]=0;
-  for (unsigned center=0; center<4; ++center)
+  constexpr unsigned derivative_blocks=emit_jvp ? 2 : 1;
+  const unsigned output_size=emit_gradient ? 1+3*centers*derivative_blocks : 2;
+  for (unsigned index=1; index<output_size; ++index) output[index]=0;
+  if constexpr (!emit_gradient) output[1]=result.directional;
+  if constexpr (emit_gradient) for (unsigned center=0; center<4; ++center)
     for (unsigned axis=0; axis<3; ++axis) {
       output[1+3*incidence[center]+axis]+=result.gradient[3*center+axis];
-      output[1+3*centers+3*incidence[center]+axis]+=result.jvp[3*center+axis];
+      if constexpr (emit_jvp) output[1+3*centers+3*incidence[center]+axis]+=result.jvp[3*center+axis];
     }
-  for (unsigned index=0; index<1+6*centers; ++index) if (!std::isfinite(output[index])) return false;
+  for (unsigned index=0; index<output_size; ++index) if (!std::isfinite(output[index])) return false;
   return true;
 }
 }  // namespace generativeqc::scf::factorized_second

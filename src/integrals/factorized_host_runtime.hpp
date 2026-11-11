@@ -11,6 +11,8 @@ namespace generativeqc::integrals {
  * Independent mathematical slots remain independent even at repeated centers.
  * Records contain four exponents, twelve coordinates and one radial scale.
  * No scientific recurrence, density policy or molecular tensor lives here.
+ * Operations select raw value/gradient (1), weighted gradient-JVP (2), or
+ * raw value/scalar-direction (3). A zero direction never changes the operation.
  * Invalid input and late arithmetic failure leave output and counters intact.
  */
 template <class Program>
@@ -20,11 +22,12 @@ int factorized_eri_records(unsigned operation, const unsigned* angular, const un
                            double* output, std::size_t output_size, std::uint64_t* visits) {
   constexpr std::size_t maximum_components = 64;
   constexpr std::size_t first_width = 13;
-  if ((operation != 1 && operation != 2) || !angular || !components || !output || !visits ||
-      !component_count || component_count > maximum_components || count > 128 ||
+  const std::size_t component_width = operation == 3 ? 2 : first_width;
+  if ((operation != 1 && operation != 2 && operation != 3) || !angular || !components || !output ||
+      !visits || !component_count || component_count > maximum_components || count > 128 ||
       (count && !records) || stride != 17 ||
-      output_size != (operation == 1 ? first_width * component_count : 12) ||
-      (operation == 2 && (!weights || !direction)))
+      output_size != (operation == 2 ? 12 : component_width * component_count) ||
+      (operation == 2 && !weights) || (operation != 1 && !direction))
     return 1;
   std::size_t total_components = 1;
   for (unsigned slot = 0; slot < 4; ++slot) {
@@ -39,7 +42,7 @@ int factorized_eri_records(unsigned operation, const unsigned* angular, const un
       if (components[previous] == components[component]) return 1;
   }
   std::array<double, 12> motion{};
-  if (operation == 2)
+  if (operation != 1)
     for (unsigned coordinate = 0; coordinate < motion.size(); ++coordinate) {
       if (!std::isfinite(direction[coordinate])) return 1;
       motion[coordinate] = direction[coordinate];
@@ -60,10 +63,10 @@ int factorized_eri_records(unsigned operation, const unsigned* angular, const un
         return 5;
       const double scale = input[16] * (operation == 2 ? weights[component] : 1.0);
       if (!std::isfinite(scale)) return 5;
-      const auto width = operation == 1 ? first_width : 12;
+      const auto width = operation == 2 ? 12 : component_width;
       for (std::size_t coordinate = 0; coordinate < width; ++coordinate) {
-        const auto target = operation == 1 ? first_width * component + coordinate : coordinate;
-        const double term = scale * jet[(operation == 1 ? 0 : 13) + coordinate];
+        const auto target = operation == 2 ? coordinate : component_width * component + coordinate;
+        const double term = scale * jet[(operation == 2 ? 13 : 0) + coordinate];
         candidate[target] += term;
         if (!std::isfinite(term) || !std::isfinite(candidate[target])) return 5;
       }

@@ -414,6 +414,7 @@
     "generativeqc.rks_hessian_integrals.checked_second_hvp_options": "generativeqc/rks_hessian_integrals.py:checked_second_hvp_options",
     "generativeqc.rks_hessian_integrals.generated_directional_semilocal_rks_integral_first_order": "generativeqc/rks_hessian_integrals.py:generated_directional_semilocal_rks_integral_first_order",
     "generativeqc.rks_hessian_integrals.generated_directional_semilocal_rks_integral_first_order_cuda": "generativeqc/rks_hessian_integrals.py:generated_directional_semilocal_rks_integral_first_order_cuda",
+    "generativeqc.rks_hessian_integrals.generated_directional_spin_integral_first_order": "generativeqc/rks_hessian_integrals.py:generated_directional_spin_integral_first_order",
     "generativeqc.rks_hessian_integrals.generated_weighted_first_integral_gradient": "generativeqc/rks_hessian_integrals.py:generated_weighted_first_integral_gradient",
     "generativeqc.rks_hessian_integrals.generated_weighted_first_integral_gradient_cuda": "generativeqc/rks_hessian_integrals.py:generated_weighted_first_integral_gradient_cuda",
     "generativeqc.rks_hessian_integrals.generated_weighted_second_integral_hvp": "generativeqc/rks_hessian_integrals.py:generated_weighted_second_integral_hvp",
@@ -6909,6 +6910,17 @@
       }
     },
     "generativeqc/rks_hessian_integrals.py:generated_directional_semilocal_rks_integral_first_order_cuda": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-integrals-backends",
+        "errors": "docs/reference/python_contracts.md#python-integrals-errors",
+        "ownership": "docs/reference/python_contracts.md#python-integrals-ownership",
+        "values": "docs/reference/python_contracts.md#python-integrals-values"
+      }
+    },
+    "generativeqc/rks_hessian_integrals.py:generated_directional_spin_integral_first_order": {
       "kind": "function",
       "profile": "execution",
       "facets": {

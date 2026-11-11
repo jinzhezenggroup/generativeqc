@@ -77,7 +77,7 @@ from .rks_hessian_directional import _validate_partition_provenance
 from .rks_hessian_integrals import (
     RKSIntegralTopology,
     checked_direction,
-    generated_directional_semilocal_rks_integral_first_order,
+    generated_directional_spin_integral_first_order,
     generated_weighted_first_integral_gradient,
     generated_weighted_second_integral_hvp,
 )
@@ -713,7 +713,7 @@ class _CompositeGrid:
         )
 
     def hvp(self, vector: np.ndarray, delta_density: np.ndarray) -> dict:
-        direction, _, branch = self.direction(vector, delta_density)
+        direction, right_jets, branch = self.direction(vector, delta_density)
         partials = self.evaluate(direction)
         zeros_points = np.zeros_like(self.grid.points)
         zeros_centers = np.zeros_like(vector)
@@ -745,33 +745,35 @@ class _CompositeGrid:
                 ("grid", zeros_centers, left_points),
                 ("weight", zeros_centers, zeros_points),
             ):
-                left_jets = self.motion(centers, points)
-                left_extended = directional_ao_jets(
-                    self.jets,
-                    2,
-                    ao_atoms=self.ao_atoms,
-                    point_motion=points,
-                    center_motion=centers,
-                )
-                mixed_jets = directional_ao_jets(
-                    left_extended,
-                    1,
-                    ao_atoms=self.ao_atoms,
-                    point_motion=vector[self.owners],
-                    center_motion=vector,
-                )
-                right_jets = self.motion(vector, vector[self.owners])
                 left_fields = np.zeros_like(self.fields)
                 mixed_fields = np.zeros_like(self.fields)
-                left_fields[: self.model.feature_count] = self.feature_fields(
-                    left=left_jets,
-                )
-                mixed_fields[: self.model.feature_count] = self.feature_fields(
-                    left=left_jets,
-                    right=right_jets,
-                    mixed=mixed_jets,
-                    delta_density=delta_density,
-                )
+                # Weight-only motion has no left or mixed AO leg. Its feature
+                # partials are structurally zero, even with a right density JVP.
+                if kind != "weight":
+                    left_jets = self.motion(centers, points)
+                    left_extended = directional_ao_jets(
+                        self.jets,
+                        2,
+                        ao_atoms=self.ao_atoms,
+                        point_motion=points,
+                        center_motion=centers,
+                    )
+                    mixed_jets = directional_ao_jets(
+                        left_extended,
+                        1,
+                        ao_atoms=self.ao_atoms,
+                        point_motion=vector[self.owners],
+                        center_motion=vector,
+                    )
+                    left_fields[: self.model.feature_count] = self.feature_fields(
+                        left=left_jets,
+                    )
+                    mixed_fields[: self.model.feature_count] = self.feature_fields(
+                        left=left_jets,
+                        right=right_jets,
+                        mixed=mixed_jets,
+                        delta_density=delta_density,
+                    )
                 left_fields[self.model.feature_count + 1 :] = points.T
                 if kind == "weight":
                     left_fields[self.model.feature_count] = (
@@ -1198,20 +1200,21 @@ def composite_rks_hvp(
         )
         exchange_sources["exchange_short_range"] = long_operator
 
+    first_source_work: dict[str, int] = {}
+
     def perturbation(vector: np.ndarray) -> tuple:
         densities = operator.integral_basis.density(operator.state.density)
-        frozen_blocks = []
-        for density in densities:
-            frozen, overlap = generated_directional_semilocal_rks_integral_first_order(
-                operator.topology,
-                densities.sum(axis=0),
-                vector,
-                cache=cache,
-                exchange_operators=exchange,
-                exchange_density=(2 if len(densities) == 2 else 1) * density,
-                include_coulomb=operator.df is None,
-            )
-            frozen_blocks.append(operator.integral_basis.matrix(frozen))
+        frozen, overlap, work = generated_directional_spin_integral_first_order(
+            operator.topology,
+            densities,
+            vector,
+            cache=cache,
+            exchange_operators=exchange,
+            include_coulomb=operator.df is None,
+        )
+        for name, count in work.items():
+            first_source_work[name] = first_source_work.get(name, 0) + count
+        frozen_blocks = operator.integral_basis.matrix(frozen)
         return (
             operator.xc_kernel.public_fock(np.asarray(frozen_blocks))
             + operator.xc_kernel.frozen_fock(vector)
@@ -1360,6 +1363,7 @@ def composite_rks_hvp(
         "spin": operator.state.identity.spin,
         "representation": operator.basis.representation,
         "first_integral_backend": "cpu",
+        **{"first_source_" + name: count for name, count in first_source_work.items()},
         "second_integral_backend": operator.backend.device,
         "grid_ad_backend": "cpu",
         "ecp_ad_backend": "cpu" if operator.ecp is not None else None,
@@ -1434,6 +1438,7 @@ def composite_rks_hessian(
     matrix = np.empty((coordinates, coordinates))
     residuals = []
     iterations = []
+    first_source_work: dict[str, int] = {}
     initial_grid_statistics = dict(operator.xc_kernel.statistics)
     for coordinate in range(coordinates):
         direction = np.zeros((natom, 3))
@@ -1448,6 +1453,9 @@ def composite_rks_hessian(
         matrix[:, coordinate] = result.value.reshape(-1)
         residuals.append(result.diagnostics["response_residual_norm"])
         iterations.append(result.diagnostics["response_iterations"])
+        for name, count in result.diagnostics.items():
+            if name.startswith("first_source_"):
+                first_source_work[name] = first_source_work.get(name, 0) + count
     diagnostics = {
         "derivative_method": "compiler-automatic-differentiation",
         "public_calculator_endpoint": False,
@@ -1455,6 +1463,7 @@ def composite_rks_hessian(
         "spin": operator.state.identity.spin,
         "representation": operator.basis.representation,
         "first_integral_backend": "cpu",
+        **first_source_work,
         "second_integral_backend": operator.backend.device,
         "grid_ad_backend": "cpu",
         "ecp_ad_backend": "cpu" if operator.ecp is not None else None,
