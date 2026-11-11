@@ -105,3 +105,60 @@ ignored `.artifacts/df-hf-aligned-20261111/` and the matching
 `n1:/data/jzzeng/df-hf-aligned-20261111/` tree. The complete README cohort is a
 separate predeclared acquisition; ablation observations never substitute for
 its timing points.
+
+## Final publication source freeze
+
+Concurrent pre-commit.ci commit `aa259d2dc113118e1c6b30c6f8a1ce101872fe10`
+formats two existing KS expressions. Preserve it rather than overwrite another
+writer. The pinned clang-format hook also formats the new HF code. Although
+these are non-functional edits, they change the native source identity, so the
+initial `0b74eb57f` cohort is retained as an unselected complete campaign and
+never relabelled as current-image data. The decision to reacquire is made for
+source identity, before reducing that cohort's timing rankings.
+
+The new publication source is
+`5a1ae34addac124423a22490d1d7dda0f90fc0f4`, native inputs
+`cf7b1e62f4502195b1983fc6124ca26d4aa7cdd7810c4b030d97e3827bff7986`, ELF
+SHA256 `783388d764cda2cd687b0d192b161f16f66176013b479a07fdc46fa0895a2adc`.
+The final image independently passes all 30 complete E/F cases in one run,
+276 host/resource/checkpoint/inventory cases (17 optional skips), the actual
+CUDA Direct/DF ordinary/graph reductions and all 47 DF physical final-state,
+projection, eigen and force-transition cases. The repaired N/C auxiliary
+fixtures are part of this frozen source. New receipts are under ignored
+`.artifacts/df-hf-aligned-final-20261111/` and the matching node1 tree.
+
+## Final-source complete README acquisition
+
+The final-source campaign completes all 128 processes / 512 complete E+force
+endpoints, with no failed processes or retries. Direct and DF each observe
+32/32 faster cold pairs and 32/32 faster warm pairs: 64/64 in either phase.
+Independent accuracy gates still qualify 58/64 pairs for each engine, and all
+58 qualified pairs are faster in both phases. All four DF HF dense-reference
+fitting failures and Direct/DF M06-2X3 grid failures remain plotted and excluded
+from qualified wins. All 1024 cross-engine full-vector comparisons pass, but
+do not replace independent qualification. Warm Direct WB97M-V96 speedup is
+9.368630765349003. These observations are not statistical rankings.
+
+Final-image DF HF96 cold takes 17.94930298998952 s at 11 target iterations /
+12 physical Focks, versus unchanged GPU4PySCF's 18.577793136239052 s at 10
+iterations / 11 effective-potential evaluations. Its three warm calls take
+3.743092503398657, 3.725467275828123 and 3.746906951069832 s, versus
+6.840868979692459, 6.801037695258856 and 6.859910197556019 s. The separate
+same-image ablation above found identical native strict/default work counts;
+neither the new aggregate wins nor reversal of the old single cold loss is
+causal evidence that the stopping-policy change reduced HF work.
+
+The final-image HF48/96 endpoints also pass comparison against the retained
+untimed tight same-fitted-model oracles after exact geometry, fitted-input,
+default auxiliary-table hash and force-contract checks. Across their eight
+cold/warm samples, E/atom error is at most 4.4858931384320994e-12 Eh, Fmax
+5.2886765189441576e-8 and Frms 2.5530113735054997e-8 Eh/Bohr. This checks
+ordinary stopping accuracy, not the separate dense-reference fitting gates.
+
+Normal and optimized Python independently replay the complete vector audit
+and scalar publication capsule; both scalar replays reproduce the tracked
+SVGs byte-for-byte. Visual inspection, 512 offline tests, Ruff, default-policy
+inventory, CUDA ownership and fixed-cap evidence checks pass. Native source
+identity remains `cf7b1e62f4502195b1983fc6124ca26d4aa7cdd7810c4b030d97e3827bff7986`;
+CBS bytes are unchanged. Libxc's historical evidence remains stale with zero
+current-source qualified products; passing catalog tests do not promote it.
