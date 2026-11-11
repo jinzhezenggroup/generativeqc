@@ -9,12 +9,17 @@
     "python/generativeqc/resources_hf.py",
     "src/scf/cuda/scf_convergence_policy.cuh",
     "src/scf/cuda/scf_convergence_kernels.cu",
-    "src/scf/cuda_rhf.cpp"
+    "src/scf/cuda_rhf.cpp",
+    "src/scf/rhf.cpp",
+    "src/scf/cuda/df_rhf_scf.cpp",
+    "src/scf/cuda/df_scf_kernels.cu"
   ],
-  "rationale": "User-authorized physical restricted MO-gradient convergence is the standard-control all-electron FP64 Direct CUDA RHF default, aligning the stopping norm with unchanged stock GPU4PySCF. Explicit strict and tighter energy or density controls retain AO-max convergence. Unsupported default owners retain strict behavior; explicit unsupported orbital requests fail closed. Resource, checkpoint and captured-plan identities bind the policy. DF HF and KS policies are unchanged. Common independent complete energy/force gates remain mandatory; this is not a 1e-7 maximum-force guarantee or a universal speedup claim.",
+  "rationale": "User-authorized physical restricted MO-gradient convergence is the standard-control all-electron FP64 Direct and compact DF CUDA RHF default, aligning the exact energy and orbital-gradient stopping test with unchanged stock GPU4PySCF. Density change is diagnostic under orbital policy. DF requires physical DIIS residual storage and transforms only the stopping copy after retaining the AO history. Explicit strict and tighter energy or density controls retain AO-max convergence. Unsupported default owners retain strict behavior; explicit unsupported orbital requests fail closed. Prepared resource/checkpoint identities bind the request and captured graphs bind the effective policy. KS has its independent convergence control. Common independent complete energy/force gates remain mandatory; this is not a 1e-7 maximum-force guarantee or a universal speedup claim.",
   "revisit_condition": "Requalify changes to the norm, thresholds or eligible owners against independent energy/force oracles and complete cold/warm endpoints. Preserve strict accuracy overrides, unsupported-owner fallback, raw DIIS history, source/image provenance and unchanged reference-engine settings. Do not substitute historical opt-in timings for qualification of a changed default image.",
   "evidence": [
     "note:.agents/notes/implemented/numerics/2026-11-10-default-hf-orbital-gradient.md",
+    "note:.agents/notes/implemented/numerics/2026-11-11-df-hf-orbital-stopping.md",
+    "tests:tests/python/test_standard_scf_convergence_cuda.py",
     "tests:tests/python/test_scf_convergence_defaults.py",
     "tests:tests/native/test_cuda_force_convergence.cpp",
     "benchmarks/results/readme-rtx5090-20261111/README.md",

@@ -210,13 +210,14 @@ __global__ void update_device_convergence_kernel(
     std::size_t batch_size, std::size_t nbf, double energy_tolerance, double density_tolerance,
     const double* energy, double* previous_energy, const double* next_density, double* density,
     std::uint8_t* active, std::uint8_t* converged, std::uint32_t* iterations, double* energy_change,
-    double* density_rms, const double* physical_residual, bool qualified_owner) {
+    double* density_rms, const double* physical_residual, bool qualified_owner,
+    bool orbital_gradient) {
   const std::size_t system = blockIdx.x;
   if (system >= batch_size || active[system] == 0) return;
   const std::size_t matrix_elements = nbf * nbf;
   const std::size_t offset = system * matrix_elements;
   const double physical_maximum = maximum_physical_residual(
-      physical_residual ? physical_residual + offset : nullptr, matrix_elements);
+      physical_residual ? physical_residual + offset : nullptr, matrix_elements, orbital_gradient);
   double square = 0.0;
   for (std::size_t element = threadIdx.x; element < matrix_elements; element += blockDim.x) {
     const double delta = next_density[offset + element] - density[offset + element];
@@ -235,7 +236,8 @@ __global__ void update_device_convergence_kernel(
     energy_change[system] = change;
     density_rms[system] = rms;
     if (hf_iteration_converged(energy[system], previous_energy[system], energy_tolerance,
-                               density_tolerance, rms, physical_maximum, true, qualified_owner)) {
+                               density_tolerance, rms, physical_maximum, true, qualified_owner,
+                               orbital_gradient)) {
       converged[system] = 1;
       active[system] = 0;
     } else {
@@ -362,11 +364,11 @@ void launch_update_device_convergence_kernel(
     std::size_t nbf, double energy_tolerance, double density_tolerance, const double* energy,
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual, bool qualified_owner) {
+    const double* physical_residual, bool qualified_owner, bool orbital_gradient) {
   update_device_convergence_kernel<<<grid, block, shared_bytes, stream>>>(
       batch_size, nbf, energy_tolerance, density_tolerance, energy, previous_energy, next_density,
       density, active, converged, iterations, energy_change, density_rms, physical_residual,
-      qualified_owner);
+      qualified_owner, orbital_gradient);
 }
 void launch_tail_cuda_density_fitting_scf_graph_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,

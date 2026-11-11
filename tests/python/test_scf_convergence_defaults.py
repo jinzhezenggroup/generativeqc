@@ -471,6 +471,7 @@ int main() {
             "GENERATIVEQC_CUDA_RHF_CONVERGENCE",
             (None, "strict", "orbital-gradient", "invalid"),
         ),
+        ("GENERATIVEQC_CUDA_KS_CONVERGENCE", (None, "strict", "invalid")),
     ],
 )
 def test_rhf_convergence_is_part_of_cuda_resource_identity(
@@ -501,7 +502,7 @@ def test_rhf_convergence_is_part_of_cuda_resource_identity(
         assert json.loads(current.schedule)["runtime_policy"][variable] == value
         assert identity("cpu") == cpu
         schedules.append(current.schedule)
-    assert len(set(schedules)) == 4
+    assert len(set(schedules)) == len(values)
 
 
 def test_nonlocal_confirmation_requires_active_stationarity_and_no_rejected_proof(

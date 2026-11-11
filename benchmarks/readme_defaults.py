@@ -221,6 +221,8 @@ def native_calculator(
         options.update(
             density_fitting="cuda", auxiliary_basis=inputs / f"{method}-auxiliary.json"
         )
+    if arm == "standard":
+        return PrecisionCalculator(**options)
     return PrecisionCalculator(policy=arm, **options)
 
 

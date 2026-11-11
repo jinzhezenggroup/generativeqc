@@ -190,14 +190,16 @@ def test_large_idle_seed_rejection_preserves_final_state(
     reason="requires separately scheduled original-default water96 qualification",
 )
 def test_original_grid_water96_moved_fresh_force_gate(
-    tight_scf_only: bool, record_property: Any
+    tight_scf_only: bool, record_property: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Pin #2915's original grid and a separate tighter-SCF-only control.
 
-    Explicit original controls prevent later public-default changes from
-    silently changing this regression's numerical task. Both arms keep the
+    Explicit original controls and the historical strict stopping policy
+    prevent later public-default changes from silently changing this
+    stringent repeatability task. Both arms keep the
     original seed rejection/replay/move sequence and 1e-7 force gate.
     """
+    monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CONVERGENCE", "strict")
     observations: list[dict[str, Any]] = []
 
     def checkpoint() -> None:
@@ -279,6 +281,9 @@ def _large_idle_seed_rejection_preserves_final_state(
                 "grid": asdict(calc.ks_options.grid),
                 "energy_tolerance": energy_tolerance,
                 "density_tolerance": density_tolerance,
+                "convergence_policy": os.environ.get(
+                    "GENERATIVEQC_CUDA_KS_CONVERGENCE"
+                ),
                 "scheduler": {
                     name: os.environ.get(name)
                     for name in (

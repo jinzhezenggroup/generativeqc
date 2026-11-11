@@ -1,5 +1,8 @@
 # Published GPU benchmark artifacts
 
+The [combined #3064/#3065 RTX 5090 refresh](readme-rtx5090-composed-20261111/README.md)
+retains all 512 fresh HF/DFT E+force calls, independent gates and cold slow points.
+
 The [final 2026-10-25 default-only refresh](readme-refresh-20261025/README.md)
 retains all 128 populations / 512 complete E+F calls under the #2786 framework,
 with one measured source, both engines, all independent accuracy failures shown,
