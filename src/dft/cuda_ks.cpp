@@ -449,6 +449,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // Eligible strict solves may replace the conservative AO-maximum margin
   // only with a successful complete canonical final-state proof.
   bool early_final_probe_requested{}, standard_convergence_model{}, standard_nonlocal_model{};
+  bool strict_convergence{};
   mutable std::optional<CudaKsFinalStateToken> cached_final_token;
   KsFinalStateDiagnostic final_validation_diagnostic;
   cuda_ks_detail::Scalars last_physical;
@@ -469,6 +470,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::size_t following_force_device_bytes{};
   bool following_force_requested{};
   unsigned pending_iterations{};
+  std::uint64_t pending_residual_matrix_products{};
   std::array<std::uint64_t, kCudaKsChunkCapacity> pending_generations{};
   runtime::SolverRegionCudaExecutor solver_region_executor;
   runtime::CompiledExecutionRegion device_chunk_region;
@@ -916,7 +918,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * energy history; reconstructed delta Focks cannot publish a final state.
    * Partial/nonlocal/mixed/ECP owners retain their independent policy. */
   bool standard_convergence_active() const noexcept {
-    return standard_convergence_model &&
+    return !strict_convergence && standard_convergence_model &&
            scf::standard_scf_convergence_requested(options.energy_tolerance,
                                                    options.density_tolerance) &&
            spins == 1 && !budget_fock &&
@@ -930,8 +932,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   bool standard_stationarity_allowance_active() const noexcept {
     return standard_ks_stationarity_allowance(
-        standard_convergence_active(), standard_nonlocal_model,
-        options.compute_forces || following_force_requested, options.export_physical_reference);
+        standard_convergence_active(), standard_nonlocal_model, options.export_physical_reference);
   }
 
   double physical_stationarity_tolerance() const noexcept {
@@ -1134,7 +1135,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
                                 scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
-      const std::uint64_t strict_matrix_products = stabilize_occupations ? 9U : 7U;
+      const std::uint64_t strict_matrix_products =
+          (stabilize_occupations ? 9U : 7U) + pending_residual_matrix_products;
       record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
                                 scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict,
                                 strict_matrix_products);
@@ -1996,6 +1998,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       }
     }
     standard_convergence_model = standard_convergence_model || standard_nonlocal_model;
+    strict_convergence =
+        strict_ks_convergence_requested(std::getenv("GENERATIVEQC_CUDA_KS_CONVERGENCE"));
     if (const char* setting = std::getenv("GENERATIVEQC_KS_EARLY_FINAL_PROBE")) {
       if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
         throw std::invalid_argument("GENERATIVEQC_KS_EARLY_FINAL_PROBE requires 0 or 1");
@@ -4226,15 +4230,18 @@ struct CudaKsPlan::Impl : KsStateStorage {
       launch_subtract_matrix_batches_kernel(blocks, 128, 0, stream, 1, spins, n, tmp2, enabled,
                                             residual);
       check(cudaGetLastError());
-      const bool physical_orbital_check = standard_nonlocal_model &&
-                                          standard_convergence_active() && !pending_nonlocal_seed &&
-                                          !pending_nonlocal_frozen;
+      // Count the shared transform only when executed, once per physical Fock.
+      // A subsequent strict/retry sweep must not inherit the previous count.
+      pending_residual_matrix_products = 0;
+      const bool physical_orbital_check = standard_stationarity_allowance_active() &&
+                                          !pending_nonlocal_seed && !pending_nonlocal_frozen;
       if (physical_orbital_check) {
         // X^T S X=I and D=2 C_occ C_occ^T. Hence the transformed physical
         // commutator norm is sqrt(2)*||2 C_vir^T F C_occ||_F. Neither AO RMS
         // nor its largest element can be compared to the MO threshold directly.
         multiply(residual, true, false, x, false, tmp1);
         multiply(x, false, true, tmp1, true, tmp2);
+        pending_residual_matrix_products += 2;
         cuda_ks_detail::orbital_gradient(stream, n, tmp2, enabled, scalar_records);
         check(cudaGetLastError());
         runtime::cuda_trace::trace_counter("physical_orbital_gradient_checks", 1);
@@ -4250,6 +4257,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         if (!physical_orbital_check) {
           multiply(residual, true, false, x, false, tmp1);
           multiply(x, false, true, tmp1, true, tmp2);
+          pending_residual_matrix_products += 2;
         }
         history_residual = tmp2;
         runtime::cuda_trace::trace_counter("orthogonal_diis_residuals", 1);
@@ -4512,7 +4520,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         options.energy_tolerance,
         options.density_tolerance,
         physical_stationarity_tolerance()};
-    const bool orbital_policy = standard_nonlocal_model && standard_convergence_active();
+    const bool orbital_policy = standard_stationarity_allowance_active();
     bool converged = orbital_policy ? orbital_ks_converged(stopping, physical.orbital_gradient)
                                     : ordinary_ks_converged(stopping);
     bool early_final_probe_ran = false;
@@ -4561,7 +4569,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // On a soft orbital manifold the extrapolated density can move much more
     // than the actual unshifted canonical density. Audit the latter directly:
     // its AO-maximum density bound is stricter than the proposal RMS gate.
-    if (canonical_final_probe && has_energy_history && full_energy_history &&
+    if (!orbital_policy && canonical_final_probe && has_energy_history && full_energy_history &&
         output.energy_change < options.energy_tolerance &&
         physical.residual < physical_stationarity_tolerance() &&
         physical.maximum_residual < physical_stationarity_tolerance()) {
@@ -4570,7 +4578,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } else if (converged && (standard_convergence_active() || automatic_program)) {
       early_final_probe_ran = true;
       converged = probe_current_final_state();
-    } else if (!converged && early_final_probe_eligible && has_energy_history &&
+    } else if (!orbital_policy && !converged && early_final_probe_eligible && has_energy_history &&
                full_energy_history && output.energy_change < options.energy_tolerance &&
                physical.density_change < options.density_tolerance &&
                early_ks_final_probe_stationary(stopping, options.compute_forces ||
@@ -4607,10 +4615,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !precision_schedule.any_lower_precision() && provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; }) &&
-        detail::stationary_density_needs_energy_confirmation(
-            has_energy_history, output.energy_change, physical.density_change, physical.residual,
-            physical.maximum_residual, options.energy_tolerance, options.density_tolerance,
-            physical_stationarity_tolerance());
+        direct_ks_density_confirmation(stopping, orbital_policy, physical.orbital_gradient);
     // Keep the existing RMS diagnostic, but do not publish an energy-only state
     // that the shared final-state validator will reject on the AO maximum norm.
     // Budget Fock already requires consecutive fresh FP64 physical Focks and

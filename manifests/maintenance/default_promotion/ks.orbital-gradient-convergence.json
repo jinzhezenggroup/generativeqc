@@ -1,0 +1,27 @@
+{
+  "id": "ks.orbital-gradient-convergence",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_CUDA_KS_CONVERGENCE",
+    "ks-runtime:GENERATIVEQC_CUDA_KS_CONVERGENCE"
+  ],
+  "owner_issues": [1598],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "python/generativeqc/resources_ks.py",
+    "src/dft/cuda_ks.cpp",
+    "src/dft/ks_stopping_policy.hpp"
+  ],
+  "rationale": "Qualified Standard all-electron FP64 restricted CUDA full-range KS defaults use energy AND physical global MO-gradient convergence, matching unchanged GPU4PySCF norms and thresholds. Energy-only and force requests share the candidate test. The separate canonical publication proof remains mandatory. Explicit strict, tighter E/D controls, full-range physical-reference exports and unsupported owners retain strict admission. The selector is snapshotted into the owner and tracked by CUDA resource/checkpoint identity; invalid values fail closed. The separately qualified canonical WB97M-V owner uses the same orbital norm. No default threshold promises 1e-7 force repeatability, eliminates quadrature/fitting error, or changes independent application E/F gates.",
+  "revisit_condition": "Requalify changed norms, thresholds or owner domains with independent E/F oracles and complete cold/frozen-warm endpoint work counts. Keep strict-only early probes from bypassing a failed orbital gate. Preserve the stringent original water96 regression under its explicit historical strict policy and never retune GPU4PySCF to improve comparisons.",
+  "evidence": [
+    ".agents/notes/implemented/numerics/2026-11-11-ks-default-orbital-stopping.md",
+    "docs/user/application_precision.md",
+    "tests/python/test_scf_review_contracts.py",
+    "tests/python/test_scf_convergence_defaults.py",
+    "tests/python/test_standard_scf_convergence_cuda.py",
+    "tests/python/test_ks_seed_admission_cuda.py",
+    "tests/python/test_ks_resources.py",
+    "tests/python/test_checkpoint.py"
+  ]
+}

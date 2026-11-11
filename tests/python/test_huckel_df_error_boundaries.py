@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from _cc_owner_test_support import compile_owner
+from _df_scf_test_support import df_convergence_owner
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -73,6 +74,7 @@ std::array<bool, 3> fail_source{true, true, false};
 unsigned live_arenas{}, host_fock_calls{}, reference_eigen_calls{};
 bool injection_enabled{true};
 bool in_seed{}, in_finalization{};
+bool expected_orbital_convergence{};
 
 std::size_t source_id(const core::System& system) {
   return static_cast<std::size_t>(system.atoms.at(0).atomic_number - 1);
@@ -185,11 +187,12 @@ struct CudaDensityFittingDeviceScfItem {
   bool converged{}; unsigned iterations{}; double energy{}, energy_change{}, density_rms{};
   std::uint64_t fock_builds{};
 };
-unsigned cuda_df_iteration_diis_history(const ScfOptions& options) { return options.diis_history; }
 generativeqc_status run_cuda_density_fitting_rhf_device_scf(CudaDensityFittingJkPlan* plan,
     const Matrix&, const Matrix&, const Matrix&, const std::vector<std::int32_t>&,
     const Matrix&, unsigned, double, double, Matrix& final_density,
-    std::vector<CudaDensityFittingDeviceScfItem>& records, std::string&, const Matrix&, unsigned, bool) {
+    std::vector<CudaDensityFittingDeviceScfItem>& records, std::string&, const Matrix&, unsigned,
+    bool qualified_owner, bool orbital_convergence) {
+  assert(qualified_owner && orbital_convergence == expected_orbital_convergence);
   if (boundary == Boundary::Compact && injection_enabled) return injected_status;
   if (boundary == Boundary::Iteration || boundary == Boundary::FinalHost)
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
@@ -257,7 +260,10 @@ generativeqc_status status_from_name(const std::string& name) {
 }
 
 int main(int argc, char** argv) {
-  assert(argc == 5);
+  assert(argc == 6);
+  setenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE", argv[5], 1);
+  unsetenv("GENERATIVEQC_DF_DISABLE_DEVICE_DIIS");
+  expected_orbital_convergence = std::string(argv[5]) != "strict";
   boundary = static_cast<Boundary>(std::stoi(argv[1]));
   injected_status = status_from_name(argv[2]);
   retry_status = status_from_name(argv[3]);
@@ -362,7 +368,8 @@ def _owner_probe(source: str) -> str:
         "\nResolvedFockBuild fock_strategy_for_execution(", guard_start
     )
     return (
-        _SHIM
+        df_convergence_owner()
+        + _SHIM
         + execution[guard_start:guard_stop]
         + section("EigenResult device_df_eigen(", "/** Native atomic preparation")
         + section(
@@ -401,6 +408,7 @@ def df_error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.mark.parametrize("cached", [False, True], ids=["owned-arena", "cached-arena"])
+@pytest.mark.parametrize("convergence", ["", "strict", "orbital-gradient"])
 @pytest.mark.parametrize(
     "failure", ["CUDA_ERROR", "OUT_OF_MEMORY", "NUMERICAL_FAILURE"]
 )
@@ -416,10 +424,17 @@ def df_error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     ],
 )
 def test_bucket_typed_failure_boundaries(
-    df_error_probe: Path, boundary: int, failure: str, cached: bool
+    df_error_probe: Path, boundary: int, failure: str, cached: bool, convergence: str
 ) -> None:
     subprocess.run(
-        [str(df_error_probe), str(boundary), failure, "SUCCESS", str(int(cached))],
+        [
+            str(df_error_probe),
+            str(boundary),
+            failure,
+            "SUCCESS",
+            str(int(cached)),
+            convergence,
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -431,14 +446,22 @@ def test_bucket_typed_failure_boundaries(
     "retry_failure",
     ["NUMERICAL_FAILURE", "CUDA_ERROR", "OUT_OF_MEMORY", "SCF_NOT_CONVERGED"],
 )
+@pytest.mark.parametrize("convergence", ["", "strict", "orbital-gradient"])
 @pytest.mark.parametrize(
     "boundary", [1, 3, 4], ids=["target-eigen", "compact-finalize", "host-finalize"]
 )
 def test_failed_core_retry_is_terminal(
-    df_error_probe: Path, boundary: int, retry_failure: str
+    df_error_probe: Path, boundary: int, retry_failure: str, convergence: str
 ) -> None:
     subprocess.run(
-        [str(df_error_probe), str(boundary), "NUMERICAL_FAILURE", retry_failure, "1"],
+        [
+            str(df_error_probe),
+            str(boundary),
+            "NUMERICAL_FAILURE",
+            retry_failure,
+            "1",
+            convergence,
+        ],
         check=True,
         capture_output=True,
         text=True,

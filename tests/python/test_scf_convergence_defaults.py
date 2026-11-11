@@ -301,6 +301,18 @@ int main() {
   assert(5e-6 < hf_stationarity_tolerance(1e-9,1e-5,true));
   assert(hf_stationarity_tolerance(1e-12,1e-5,true)==1e-8);
   assert(hf_stationarity_tolerance(1e-9,1e-12,false)==1e-12);
+  assert(std::abs(hf_stationarity_tolerance(1e-9,1e-5,false,true) -
+                  std::sqrt(1e-9)) < 1e-20);
+  assert(hf_stationarity_tolerance(1e-12,1e-5,false,true)==1e-6);
+  const double orbital_threshold = std::sqrt(1e-9);
+  assert(!hf_physical_stationarity_met(orbital_threshold,1e-9,1e-5,false,true));
+  assert(hf_physical_stationarity_met(orbital_threshold/2,1e-9,1e-5,false,true));
+  assert(hf_physical_stationarity_met(1e-8,1e-9,1e-5,false));
+  for (bool orbital : {false, true}) {
+    for (double invalid : {-1.0, std::numeric_limits<double>::infinity(),
+                            std::numeric_limits<double>::quiet_NaN()})
+      assert(!hf_physical_stationarity_met(invalid,1e-9,1e-5,false,orbital));
+  }
   const HfStationarityContext energy_only{true,true,true,false,false};
   assert(standard_hf_stationarity_owner(energy_only));
   assert(hf_stationarity_tolerance(1e-9,1e-5,
@@ -380,11 +392,39 @@ def test_rhf_block_convergence_strict_selection(
     source = tmp_path / "block_policy.cpp"
     source.write_text(r"""
 #include "scf/rhf_block_convergence_policy.hpp"
+#include "scf/cuda/rhf_policy.hpp"
 #include <cassert>
 #include <cstdlib>
 #include <initializer_list>
 int main() {
   using namespace generativeqc::scf::cuda_policy;
+  using Convergence = HfConvergenceRequest;
+  for (const char* value : {static_cast<const char*>(nullptr), ""})
+    assert(parse_hf_convergence_request(value) == Convergence::Default);
+  assert(parse_hf_convergence_request("strict") == Convergence::Strict);
+  assert(parse_hf_convergence_request("orbital-gradient") == Convergence::OrbitalGradient);
+  for (const char* value : {"1", "auto", "true", "orbital", " strict", "strict "})
+    assert(parse_hf_convergence_request(value) == Convergence::Invalid);
+  unsetenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE");
+  assert(hf_convergence_requested() == Convergence::Default);
+  setenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE", "strict", 1);
+  assert(hf_convergence_requested() == Convergence::Strict);
+  setenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE", "orbital-gradient", 1);
+  assert(hf_convergence_requested() == Convergence::OrbitalGradient);
+  for (bool eligible : {false, true}) {
+    assert(resolve_hf_convergence_request(Convergence::Strict, eligible, 1e-9, 1e-5) ==
+           Convergence::Strict);
+    assert(resolve_hf_convergence_request(Convergence::Default, eligible, 1e-9, 1e-5) ==
+           (eligible ? Convergence::OrbitalGradient : Convergence::Strict));
+    assert(resolve_hf_convergence_request(Convergence::OrbitalGradient, eligible, 1e-9, 1e-5) ==
+           (eligible ? Convergence::OrbitalGradient : Convergence::Invalid));
+    assert(resolve_hf_convergence_request(Convergence::Invalid, eligible, 1e-9, 1e-5) ==
+           Convergence::Invalid);
+  }
+  for (auto request : {Convergence::Default, Convergence::OrbitalGradient}) {
+    assert(resolve_hf_convergence_request(request, true, 1e-12, 1e-5) == Convergence::Strict);
+    assert(resolve_hf_convergence_request(request, true, 1e-9, 1e-10) == Convergence::Strict);
+  }
   using R = RhfBlockConvergenceRequest;
   assert(parse_rhf_block_convergence_request(nullptr) == R::Off);
   assert(parse_rhf_block_convergence_request("0") == R::Off);
@@ -423,8 +463,21 @@ int main() {
     subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
 
 
-def test_rhf_block_convergence_is_part_of_cuda_resource_identity(
+@pytest.mark.parametrize(
+    "variable,values",
+    [
+        ("GENERATIVEQC_HF_BLOCK_CONVERGENCE", (None, "0", "1", "invalid")),
+        (
+            "GENERATIVEQC_CUDA_RHF_CONVERGENCE",
+            (None, "strict", "orbital-gradient", "invalid"),
+        ),
+        ("GENERATIVEQC_CUDA_KS_CONVERGENCE", (None, "strict", "invalid")),
+    ],
+)
+def test_rhf_convergence_is_part_of_cuda_resource_identity(
     monkeypatch: pytest.MonkeyPatch,
+    variable: str,
+    values: tuple[str | None, ...],
 ) -> None:
     import json
 
@@ -440,21 +493,16 @@ def test_rhf_block_convergence_is_part_of_cuda_resource_identity(
 
     cpu = identity("cpu")
     schedules = []
-    for value in (None, "0", "1", "invalid"):
+    for value in values:
         if value is None:
-            monkeypatch.delenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE", raising=False)
+            monkeypatch.delenv(variable, raising=False)
         else:
-            monkeypatch.setenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE", value)
+            monkeypatch.setenv(variable, value)
         current = identity("cuda")
-        assert (
-            json.loads(current.schedule)["runtime_policy"][
-                "GENERATIVEQC_HF_BLOCK_CONVERGENCE"
-            ]
-            == value
-        )
+        assert json.loads(current.schedule)["runtime_policy"][variable] == value
         assert identity("cpu") == cpu
         schedules.append(current.schedule)
-    assert len(set(schedules)) == 4
+    assert len(set(schedules)) == len(values)
 
 
 def test_nonlocal_confirmation_requires_active_stationarity_and_no_rejected_proof(
@@ -503,6 +551,24 @@ int main() {
   assert(confirm(false, gradient));
   assert(!orbital_ks_converged(state, gradient));
   assert(!confirm(true, gradient));
+  // Direct confirmation must apply the same active MO gate, even though
+  // this physical idempotent example passes every AO/density bound.
+  state.energy_change = 2e-9;
+  assert(direct_ks_density_confirmation(state, false, gradient));
+  assert(!direct_ks_density_confirmation(state, true, gradient));
+  assert(direct_ks_density_confirmation(state, true, gradient * 0.5));
+  assert(!direct_ks_density_confirmation(state, true, std::sqrt(state.energy_tolerance)));
+  for (double invalid : {-1.0, std::numeric_limits<double>::infinity(),
+                         std::numeric_limits<double>::quiet_NaN()})
+    assert(!direct_ks_density_confirmation(state, true, invalid));
+  state.iterations = 1;
+  assert(!direct_ks_density_confirmation(state, false, gradient));
+  state.warm_energy_baseline = true;
+  assert(direct_ks_density_confirmation(state, true, gradient * 0.5));
+  state.iterations = 20;
+  state.warm_energy_baseline = false;
+  state.energy_change = 0;
+  assert(!direct_ks_density_confirmation(state, true, gradient * 0.5));
   const double stationary = gradient * 0.5;
   assert(confirm(true, stationary));
   assert(orbital_ks_converged(state, stationary));

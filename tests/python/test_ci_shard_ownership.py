@@ -1581,7 +1581,7 @@ def test_measured_file_priority_only_changes_routine_file_scheduling(
     event: str, shard: str
 ) -> None:
     distribution, selected, extra = _selection(event, shard)
-    prioritized = shard in {"posthf", "runtime-heavy"} and event in {
+    prioritized = shard in {"posthf", "runtime-heavy", "ecp-forces"} and event in {
         "pull_request",
         "push",
         "merge_group",
@@ -1589,7 +1589,14 @@ def test_measured_file_priority_only_changes_routine_file_scheduling(
     assert ("--no-loadscope-reorder" in extra) == prioritized
     if prioritized:
         assert distribution == "loadfile"
-        if shard == "runtime-heavy":
+        if shard == "ecp-forces":
+            assert selected[:4] == [
+                "tests/python/test_ecp_public_cpu.py",
+                "tests/python/test_ecp_spd_cartesian_cpu.py",
+                "tests/python/test_ecp_spd_spherical_cpu.py",
+                "tests/python/test_ecp_stuttgart_dft.py",
+            ]
+        elif shard == "runtime-heavy":
             assert selected[:4] == [
                 "tests/python/test_uccsd_triples_response.py",
                 "tests/python/test_native_stationary_phased_budget.py",
@@ -1645,7 +1652,7 @@ def test_posthf_order_preserves_unknown_missing_and_duplicate_targets(
         assert actual[:2] == ["tests/python/test_uccsd_lambda.py"] * 2
 
 
-@pytest.mark.parametrize("lane", ("posthf", "runtime"))
+@pytest.mark.parametrize("lane", ("posthf", "runtime", "ecp"))
 @pytest.mark.parametrize("parent_worker", (None, "gw0"))
 def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixtures(
     tmp_path: Path,
@@ -1675,22 +1682,30 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
         "            stream.write(json.dumps([report.nodeid, report.outcome]) + '\\n')\n",
         encoding="utf-8",
     )
-    priority = (
-        [
-            "test_treutler_endpoints.py",
-            "test_uccsd_lambda.py",
-            "test_uccsd_t_owner.py",
-            "test_uccsd_physical_response.py",
-        ]
-        if lane == "posthf"
-        else [
-            "test_uccsd_triples_response.py",
-            "test_native_stationary_phased_budget.py",
-            "test_correlation_convergence.py",
-            "test_bulk_aot_clangxx_closure.py",
-        ]
-    )
-    ordinary = [f"test_future_{index}.py" for index in range(4)]
+    if lane == "ecp":
+        distribution, selected, extra = _selection("pull_request", "ecp-forces")
+        assert distribution == "loadfile"
+        assert "--no-loadscope-reorder" in extra
+        # Exercise the real ECP selector, including the module-scoped source
+        # emission and Hessian owners. Only test costs are synthetic here.
+        priority = [Path(path).name for path in selected[:4]]
+        ordinary = [Path(path).name for path in selected[4:]]
+    else:
+        priority = {
+            "posthf": [
+                "test_treutler_endpoints.py",
+                "test_uccsd_lambda.py",
+                "test_uccsd_t_owner.py",
+                "test_uccsd_physical_response.py",
+            ],
+            "runtime": [
+                "test_uccsd_triples_response.py",
+                "test_native_stationary_phased_budget.py",
+                "test_correlation_convergence.py",
+                "test_bulk_aot_clangxx_closure.py",
+            ],
+        }[lane]
+        ordinary = [f"test_future_{index}.py" for index in range(4)]
     for name in [*priority, *ordinary]:
         count = 3 if name in priority else 8
         (directory / name).write_text(
@@ -1706,11 +1721,16 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
             "def test_skip(shared):\n    raise AssertionError('skipped')\n",
             encoding="utf-8",
         )
-    selected = [f"tests/python/{name}" for name in [*ordinary, *reversed(priority)]]
-    ordered = _prioritized_posthf_targets(selected, tmp_path, lane=lane)
+    if lane == "ecp":
+        ordered = selected
+    else:
+        selected = [f"tests/python/{name}" for name in [*ordinary, *reversed(priority)]]
+        ordered = _prioritized_posthf_targets(selected, tmp_path, lane=lane)
     adapted, collection_args = _split_collection(
         _collection_arguments(
-            "posthf" if lane == "posthf" else "runtime-heavy", ordered, tmp_path
+            {"posthf": "posthf", "runtime": "runtime-heavy", "ecp": "ecp-forces"}[lane],
+            ordered,
+            tmp_path,
         )
     )
     env = {**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTEST_ADDOPTS": ""}
@@ -1741,20 +1761,21 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
             timeout=90,
         )
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "44 passed, 8 skipped" in result.stdout
+        passed, skipped = 3 * len(priority) + 8 * len(ordinary), len(selected)
+        assert f"{passed} passed, {skipped} skipped" in result.stdout
         records = [
             [json.loads(line) for line in path.read_text().splitlines()]
             for path in sorted(tmp_path.glob("gw*.jsonl"))
         ]
         inventories.append(Counter(tuple(row) for rows in records for row in rows))
-        assert sum(inventories[-1].values()) == 52
+        assert sum(inventories[-1].values()) == passed + skipped
         assert (
             sum(
                 count
                 for (_, outcome), count in inventories[-1].items()
                 if outcome == "skipped"
             )
-            == 8
+            == skipped
         )
         first_files.append(
             {Path(rows[0][0].split("::", 1)[0]).name for rows in records}
@@ -1775,7 +1796,7 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
         for path in [*tmp_path.glob("gw*.jsonl"), *tmp_path.glob("fixtures-*.txt")]:
             path.unlink()
     assert inventories[0] == inventories[1]
-    assert first_files == [set(ordinary), set(priority)]
+    assert first_files == [set(ordinary[:4]), set(priority)]
 
 
 @pytest.mark.parametrize(

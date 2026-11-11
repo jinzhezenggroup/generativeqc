@@ -89,7 +89,8 @@ __global__ void update_convergence_kernel(
     std::uint32_t* iterations, double* energy_change, double* density_rms,
     const double* physical_residual, const std::uint32_t* approximate_item_census,
     bool qualified_owner, std::uint32_t* incremental_delta_updates,
-    const unsigned long long* incremental_delta_build_count, ReferenceStartup reference_startup) {
+    const unsigned long long* incremental_delta_build_count, ReferenceStartup reference_startup,
+    bool orbital_gradient) {
   // One block owns one system. Only the explicitly selected specialization
   // widens the matrix walk; lane zero retains the same scalar state policy.
   static_assert(ReductionThreads == 32 || ReductionThreads == 256);
@@ -104,7 +105,8 @@ __global__ void update_convergence_kernel(
   double square = 0.0;
   if constexpr (ReductionThreads == 32) {
     physical_maximum = maximum_physical_residual(
-        physical_residual && target_operator ? physical_residual + offset : nullptr, matrix_size);
+        physical_residual && target_operator ? physical_residual + offset : nullptr, matrix_size,
+        orbital_gradient);
     for (std::size_t element = threadIdx.x; element < matrix_size; element += blockDim.x) {
       const double delta = next_density[offset + element] - density[offset + element];
       square += delta * delta;
@@ -121,7 +123,9 @@ __global__ void update_convergence_kernel(
     for (std::size_t element = threadIdx.x; element < matrix_size; element += blockDim.x) {
       if (physical_residual && target_operator) {
         const double value = physical_residual[offset + element];
-        physical_maximum = isfinite(value) ? fmax(physical_maximum, fabs(value)) : CUDART_INF;
+        physical_maximum = !isfinite(value)   ? CUDART_INF
+                           : orbital_gradient ? physical_maximum + value * value
+                                              : fmax(physical_maximum, fabs(value));
       }
       const double delta = next_density[offset + element] - density[offset + element];
       square += delta * delta;
@@ -131,8 +135,8 @@ __global__ void update_convergence_kernel(
     }
     for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1) {
       square += __shfl_down_sync(0xffffffffU, square, delta);
-      physical_maximum =
-          fmax(physical_maximum, __shfl_down_sync(0xffffffffU, physical_maximum, delta));
+      const double peer = __shfl_down_sync(0xffffffffU, physical_maximum, delta);
+      physical_maximum = orbital_gradient ? physical_maximum + peer : fmax(physical_maximum, peer);
     }
     if (threadIdx.x % 32 == 0) {
       warp_squares[threadIdx.x / 32] = square;
@@ -144,9 +148,11 @@ __global__ void update_convergence_kernel(
       physical_maximum = threadIdx.x < warps ? warp_maxima[threadIdx.x] : 0.0;
       for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1) {
         square += __shfl_down_sync(0xffffffffU, square, delta);
+        const double peer = __shfl_down_sync(0xffffffffU, physical_maximum, delta);
         physical_maximum =
-            fmax(physical_maximum, __shfl_down_sync(0xffffffffU, physical_maximum, delta));
+            orbital_gradient ? physical_maximum + peer : fmax(physical_maximum, peer);
       }
+      if (orbital_gradient) physical_maximum = sqrt(0.5 * physical_maximum);
     }
   }
   int copy_next_density = 0;
@@ -163,12 +169,12 @@ __global__ void update_convergence_kernel(
     const auto energy_refinement = begin_hf_full_energy_refinement(
         system, energy[system], energy_tolerance, density_tolerance, rms, physical_maximum,
         target_operator && physical_residual != nullptr, qualified_owner, incremental_delta_updates,
-        incremental_delta_build_count);
+        incremental_delta_build_count, orbital_gradient);
     const bool did_converge =
         energy_refinement == HfEnergyRefinementTransition::none &&
         hf_iteration_converged(energy[system], previous_energy[system], energy_tolerance,
                                density_tolerance, rms, physical_maximum, guard_energy_roundoff,
-                               qualified_owner);
+                               qualified_owner, orbital_gradient);
     if (did_converge) {
       converged[system] = 1;
       active[system] = 0;
@@ -291,16 +297,17 @@ __global__ void validate_force_residual_kernel(std::int32_t batch_size, std::int
                                                const double* residual, std::uint8_t* active,
                                                std::uint8_t* converged, std::uint32_t* tested_count,
                                                std::uint8_t* tested_items, double energy_tolerance,
-                                               bool qualified_owner) {
+                                               bool qualified_owner, bool orbital_gradient) {
   const auto system = static_cast<std::int32_t>(blockIdx.x);
   if (system >= batch_size || active[system] == 0) return;
   const std::size_t size = static_cast<std::size_t>(spin_count) * nbf * nbf;
-  const double maximum = maximum_physical_residual(residual + system * size, size);
+  const double maximum =
+      maximum_physical_residual(residual + system * size, size, orbital_gradient);
   if (threadIdx.x == 0) {
     atomicAdd(tested_count, 1U);
     if (tested_items != nullptr) tested_items[system] = 1U;
-    if (maximum > hf_stationarity_tolerance(energy_tolerance, density_tolerance,
-                                            qualified_owner && spin_count == 1)) {
+    if (!hf_physical_stationarity_met(maximum, energy_tolerance, density_tolerance,
+                                      qualified_owner && spin_count == 1, orbital_gradient)) {
       // The canonical projection can change the physical residual. An accepted
       // iterative state alone never licenses forces from a worse final state.
       active[system] = 0;
@@ -419,20 +426,23 @@ void launch_update_convergence_kernel(
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
     const double* physical_residual, const std::uint32_t* approximate_item_census,
     bool qualified_owner, std::uint32_t* incremental_delta_updates,
-    const unsigned long long* incremental_delta_build_count, ReferenceStartup reference_startup) {
+    const unsigned long long* incremental_delta_build_count, ReferenceStartup reference_startup,
+    bool orbital_gradient) {
   if (retain_converged_density) {
     if (block.x == 256 && block.y == 1 && block.z == 1) {
       update_convergence_kernel<true, 256><<<grid, block, shared_bytes, stream>>>(
           batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
           previous_energy, next_density, density, active, converged, iterations, energy_change,
           density_rms, physical_residual, approximate_item_census, qualified_owner,
-          incremental_delta_updates, incremental_delta_build_count, reference_startup);
+          incremental_delta_updates, incremental_delta_build_count, reference_startup,
+          orbital_gradient);
     } else {
       update_convergence_kernel<true><<<grid, block, shared_bytes, stream>>>(
           batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
           previous_energy, next_density, density, active, converged, iterations, energy_change,
           density_rms, physical_residual, approximate_item_census, qualified_owner,
-          incremental_delta_updates, incremental_delta_build_count, reference_startup);
+          incremental_delta_updates, incremental_delta_build_count, reference_startup,
+          orbital_gradient);
     }
   } else {
     if (block.x == 256 && block.y == 1 && block.z == 1) {
@@ -440,13 +450,15 @@ void launch_update_convergence_kernel(
           batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
           previous_energy, next_density, density, active, converged, iterations, energy_change,
           density_rms, physical_residual, approximate_item_census, qualified_owner,
-          incremental_delta_updates, incremental_delta_build_count, reference_startup);
+          incremental_delta_updates, incremental_delta_build_count, reference_startup,
+          orbital_gradient);
     } else {
       update_convergence_kernel<false><<<grid, block, shared_bytes, stream>>>(
           batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
           previous_energy, next_density, density, active, converged, iterations, energy_change,
           density_rms, physical_residual, approximate_item_census, qualified_owner,
-          incremental_delta_updates, incremental_delta_build_count, reference_startup);
+          incremental_delta_updates, incremental_delta_build_count, reference_startup,
+          orbital_gradient);
     }
   }
 }
@@ -481,10 +493,10 @@ void launch_validate_force_residual_kernel(cudaStream_t stream, std::int32_t bat
                                            const double* physical_residual, std::uint8_t* active,
                                            std::uint8_t* converged, std::uint32_t* tested_count,
                                            std::uint8_t* tested_items, double energy_tolerance,
-                                           bool qualified_owner) {
+                                           bool qualified_owner, bool orbital_gradient) {
   validate_force_residual_kernel<<<batch_size, 32, 0, stream>>>(
       batch_size, spin_count, nbf, density_tolerance, physical_residual, active, converged,
-      tested_count, tested_items, energy_tolerance, qualified_owner);
+      tested_count, tested_items, energy_tolerance, qualified_owner, orbital_gradient);
 }
 
 void launch_tail_rhf_loop_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

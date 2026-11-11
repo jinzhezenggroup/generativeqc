@@ -8,8 +8,10 @@ snapshots. Export is explicit and may transfer the final CUDA matrices.
 import ctypes as ct
 import threading
 import typing
+from collections.abc import Sequence
 from dataclasses import dataclass
 from hashlib import sha256
+from numbers import Real
 from types import MappingProxyType
 
 import numpy as np
@@ -1690,14 +1692,47 @@ class NativeKsSnapshot:
         pointer = ct.POINTER(ct.c_double)
         weight_data = None
         if weights is not None:
-            weight_data = np.ascontiguousarray(weights, dtype=np.float64)
-            if (
-                weight_data.shape != (count, count)
-                or not np.isfinite(weight_data).all()
-            ):
-                raise ValueError(
-                    "Gaussian ECP weights require a finite ordered AO matrix"
-                )
+            error = "Gaussian ECP weights require a finite real ordered AO matrix"
+            if isinstance(weights, np.ndarray):
+                valid = weights.shape == (count, count) and weights.dtype.kind in "iuf"
+            else:
+                # Inspect sequence dimensions before materializing even a raw array.
+                # A malformed broadcast or nested input must not evade input_bytes.
+                valid = isinstance(weights, Sequence) and len(weights) == count
+                if valid:
+                    valid = all(
+                        (
+                            isinstance(row, np.ndarray)
+                            and row.shape == (count,)
+                            and row.dtype.kind in "iuf"
+                        )
+                        or (
+                            isinstance(row, Sequence)
+                            and len(row) == count
+                            and all(
+                                isinstance(value, Real)
+                                and not isinstance(value, (bool, np.bool_))
+                                for value in row
+                            )
+                        )
+                        for row in weights
+                    )
+            if not valid:
+                raise ValueError(error)
+            try:
+                with np.errstate(over="ignore", invalid="ignore"):
+                    weight_data = np.ascontiguousarray(weights, dtype=np.float64)
+            except (TypeError, ValueError, OverflowError) as cause:
+                raise ValueError(error) from cause
+            # Validate before allocating output, reusing its admitted byte envelope.
+            # A full boolean mask would exceed a tight budget after an FP64 copy.
+            flat_weights = weight_data.reshape(-1)
+            validation_block = min(32768, elements * 8)
+            for start in range(0, weight_data.size, validation_block):
+                if not np.isfinite(
+                    flat_weights[start : start + validation_block]
+                ).all():
+                    raise ValueError(error)
         output = np.empty(shape, dtype=np.float64)
         work = np.empty(8, dtype=np.uint64)
         evaluate = self._library.generativeqc_ks_snapshot_ecp_gaussian_v1

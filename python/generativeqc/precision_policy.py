@@ -151,13 +151,13 @@ class PrecisionPolicy:
     and its CBS-only Tight preset retains strict convergence. These are not
     measured per-call error certificates.
     Explicit ``target`` always requests a relaxed audit, including with Fast.
-    Standard (or legacy FP64) without ``target`` executes once in FP64; no observable error estimate
+    Standard is the default. Standard (or legacy FP64) without ``target`` executes once in FP64; no observable error estimate
     is invented. Supplying a target opts into the full audit, including its cost.
     Other presets are audit allowances, not measured error ranges. Only
     relaxed-target audits are admitted.
     """
 
-    profile: str = "balanced"
+    profile: str = "standard"
     target: TargetAccuracy | None = None
     budget: TargetErrorBudget | None = None
 
@@ -443,6 +443,8 @@ def _solve_record(
 class PrecisionCalculator:
     """Budget-selected arithmetic and explicit all-electron HF/KS precision audits.
 
+    ``policy`` defaults to Standard, the FP64 profile used by the README benchmark.
+    Explicit audit profiles or targets retain their complete comparison work.
     ``policy`` is a preset name or a PrecisionPolicy with an application budget.
     Other options have Calculator semantics except ``precision`` and
     ``target_accuracy``, which this facade owns. Standard (legacy alias: fp64)
@@ -474,7 +476,7 @@ class PrecisionCalculator:
         basis: typing.Any = None,
         device: str = "cpu",
         *,
-        policy: PrecisionPolicy | str = "balanced",
+        policy: PrecisionPolicy | str = "standard",
         **options: typing.Any,
     ) -> None:
         """Snapshot one native model and select its admitted candidate precision."""
