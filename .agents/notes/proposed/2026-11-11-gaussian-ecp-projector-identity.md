@@ -140,3 +140,46 @@ provider is accepted by this diagnosis. It motivates an independently stable
 localized reference as well as the still-unimplemented analytic provider;
 neither merely sampling a denser grid nor deleting the tight cases resolves
 the full qualification problem.
+
+## Follow-up: bounded FP64 Graph arithmetic experiment
+
+An additional scratch candidate generates selected normalized primitive values,
+six A/B first derivatives and 36 A/B second derivatives with the existing
+canonical `Graph`, Cartesian raising identity and external-leaf derivative
+contract. It does not add a second AD engine or import the public runtime or
+PySCF during generation. Near zero it evaluates the regular positive-series
+`F_l(y)`; above `x=sqrt(y)=50` it uses scaled spherical Bessels and the stable
+relative-radius Gaussian exponent. The scaled branch's leaf rule is
+`d[exp(-x)F_l(y)] = exp(-x)F_(l+1)(y) dy/2 - exp(-x)F_l(y) dx`.
+Zero-center arithmetic therefore never evaluates the singular large-argument
+radius derivatives. The experiment uses Python scalar lowering, not a compiled
+native provider. Its finite series and node guards are not endpoint work bounds.
+
+The original 12 ordinary s/p/d/f-component cases pass independent PySCF value
+and three-direction first/second derivative comparisons at the predeclared
+fourth-order steps `[0.003, 0.001, 0.0003]` Bohr. A separate 38-case edge run
+adds 18 zero-center cases, 12 resolved off-center scaled cases and eight
+`50 +/- 1e-8` branch-boundary cases. Both processes finish zero. The edge-run
+maximum errors are `2.6810335041344324e-14` for values,
+`2.6291721173713754e-10` for first derivatives and
+`2.9042099006851624e-6` for second derivatives. The frozen experimental gates
+are respectively `2e-10`, `2e-8` and `5e-6`; these are primitive/directional
+experiments, not a replacement or relaxation of any molecular production gate.
+The sampled largest generated graph has 339,793 nodes. Reuse/factorization and
+complete contracted-consumer work must be addressed before performance claims.
+
+For the four original extremely tight s-pair points, 70-decimal differentiation
+of the same closed identity also checks FP64 arithmetic. This is deliberately
+labelled **not an independent derivative oracle**. It neither repairs nor
+removes the original failed PySCF comparisons or certifies tight derivatives.
+All original failed receipts remain byte-identical. Full component coverage,
+contracted mixed Ni/I/Cs matrices, independent tight derivatives, native bounded
+execution and matching primal/force/Hessian integration remain unqualified.
+The proposal stays proposed; no production selector or numerical owner changes.
+
+Scripts, receipts, logs, canonical Graph source and original failed-reference
+evidence are member/hash-verified in the ignored local archive
+`build/qualification/ecp-fp64-graph-20261111/local-recovery.tar.gz`, 26 entries,
+SHA `63b916d65e52a4f33a4efe7d450e5e61557975a9f4a148bd878ca2d3ef759118`.
+No external asset is published. The still-running original Ni matrix's eleven
+frozen source/library identities are unchanged by these scratch experiments.
