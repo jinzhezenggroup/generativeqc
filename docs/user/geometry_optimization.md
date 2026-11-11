@@ -198,6 +198,10 @@ geometry, gradient and raw Hessian, never a failed trial as a success result.
 
 Harmonic-publication failure preserves the native result but makes molecular
 `converged` false, with `diagnostics['final_status']='harmonic_analysis_failed'`.
+Publication also fails if harmonic rigid-mode rank differs from the native
+optimizer, or if a verified native saddle's negative-mode count changes after
+mass weighting. The latter check includes soft negative modes, not only
+significant imaginary frequencies; no mode is deleted to obtain agreement.
 Completed SCF/response counts do not invent partially completed failed work;
 `work_counters_complete` and `work_counters_scope` make that limitation explicit.
 The attempt cap, a nonnegative target, lost tracking, ambiguous curvature and

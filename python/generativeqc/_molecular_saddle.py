@@ -6,6 +6,7 @@ import math
 import typing
 from contextlib import ExitStack
 from dataclasses import replace
+from numbers import Real
 from pathlib import Path
 from time import perf_counter
 from types import MappingProxyType
@@ -27,7 +28,21 @@ def run(
 ) -> MolecularSaddleResult:
     """Bind one SCF and response lifetime per derivative geometry, with no oracle."""
     started = perf_counter()
-    atoms = tuple(Atom.from_value(atom) for atom in atoms)
+    checked_atoms = []
+    for atom in atoms:
+        if isinstance(atom, Atom):
+            checked_atoms.append(atom)
+            continue
+        element, position = atom
+        position = tuple(position)
+        # Validate scalars before Atom or NumPy can coerce mixed input types.
+        if any(
+            isinstance(component, (bool, np.bool_)) or not isinstance(component, Real)
+            for component in position
+        ):
+            raise ValueError("atom coordinates must contain finite real numbers")
+        checked_atoms.append(Atom.from_value((element, position)))
+    atoms = tuple(checked_atoms)
     controls = request["options"]
     controls = (
         SaddleOptions(project_rigid_motions=True) if controls is None else controls
@@ -348,7 +363,7 @@ def run(
     harmonic_failure = None
     if result.receipt["stationary_verified"]:
         try:
-            harmonics = analyze_harmonic_modes(
+            analyzed = analyze_harmonic_modes(
                 result.hessian,
                 coordinates=result.coordinates,
                 masses=masses,
@@ -358,6 +373,19 @@ def run(
                 symmetrize=True,
                 raw_symmetry_tolerance=controls.raw_symmetry_tolerance,
             )
+            if analyzed.rigid_mode_count != result.receipt["rigid_modes"]:
+                raise ValueError(
+                    "harmonic rigid-mode rank differs from the native optimizer"
+                )
+            if (
+                result.converged
+                and analyzed.negative_mode_count
+                != result.receipt["negative_curvatures"]
+            ):
+                raise ValueError(
+                    "harmonic negative-mode count differs from the verified native saddle"
+                )
+            harmonics = analyzed
         except Exception as error:  # noqa: BLE001 - Retain the verified geometry if mode publication fails.
             harmonic_failure = (type(error).__name__, str(error))
     return MolecularSaddleResult(

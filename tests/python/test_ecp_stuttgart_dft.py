@@ -56,8 +56,14 @@ def select_fixture(
         spin: int = 0,
         representation: str = "spherical",
         d_shell: bool = False,
+        f_shell: bool = False,
+        f_on_h: bool = False,
+        compact_d_oracle: bool = False,
+        compact_f_oracle: bool = False,
     ) -> typing.Any:
-        assert not d_shell
+        assert not any(
+            (d_shell, f_shell, f_on_h, compact_d_oracle, compact_f_oracle)
+        ), "physical Stuttgart qualification uses the unchanged s/p fixture"
         atoms, basis, mol = stuttgart_fixture(symbol, spin=spin)
         assert all(
             s.angular_momentum <= 1
@@ -90,10 +96,11 @@ def test_stuttgart_complete_force_analytic_and_fd(
 ) -> None:
     gates = select_fixture(symbol, device, monkeypatch, record_property)
     gates.test_public_ecp_force_analytic_and_reconverged_fd(
-        method,
-        representation,
-        record_property,
-        tmp_path,
+        method=method,
+        representation=representation,
+        record_property=record_property,
+        tmp_path=tmp_path,
+        d_shell=False,
     )
 
 

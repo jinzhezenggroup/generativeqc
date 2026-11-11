@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from generativeqc import Calculator
+from generativeqc import Atom, Calculator
 from generativeqc.saddle import SaddleOptions, optimize_saddle
 from generativeqc_compiler.method import resolve_method
 
@@ -56,6 +56,55 @@ def test_fail_closed_before_scf(
     request = {"masses": MASSES, **changes}
     with pytest.raises((ValueError, TypeError, MemoryError, NotImplementedError)):
         optimize_saddle(calculator, ATOMS, **request)
+
+
+@pytest.mark.parametrize(
+    "coordinate",
+    [
+        1 + 2j,
+        np.complex64(1 + 2j),
+        np.complex128(1 + 2j),
+        True,
+        np.bool_(True),
+        "1.0",
+        np.str_("1.0"),
+        float("nan"),
+        float("inf"),
+    ],
+)
+def test_invalid_atom_coordinates_before_callbacks(
+    calculator: Calculator, coordinate: typing.Any
+) -> None:
+    def forbidden(*args: typing.Any) -> typing.NoReturn:
+        pytest.fail("invalid molecular coordinates reached a callback")
+
+    atoms = (ATOMS[0], ("H", [coordinate, 1.0, 0.0]), ATOMS[2])
+    with pytest.raises((TypeError, ValueError), match="coordinates"):
+        optimize_saddle(
+            calculator,
+            atoms,
+            masses=MASSES,
+            progress=forbidden,
+            evaluation_progress=forbidden,
+            cancelled=forbidden,
+        )
+
+
+@pytest.mark.parametrize(
+    "atoms",
+    [
+        ATOMS,
+        [[element, list(position)] for element, position in ATOMS],
+        [(element, np.asarray(position)) for element, position in ATOMS],
+        tuple(Atom.from_value(atom) for atom in ATOMS),
+    ],
+)
+def test_real_atom_input_forms(calculator: Calculator, atoms: typing.Any) -> None:
+    result = optimize_saddle(calculator, atoms, masses=MASSES, cancelled=lambda: True)
+    assert result.optimizer.receipt["status"] == "cancelled"
+    np.testing.assert_array_equal(
+        result.optimizer.coordinates, [atom[1] for atom in ATOMS]
+    )
 
 
 def test_unqualified_hessian_before_scf(
@@ -155,6 +204,102 @@ def test_harmonic_publication_failure_retains_native_geometry(
         "harmonic workspace",
     )
     np.testing.assert_array_equal(result.optimizer.coordinates, positions)
+
+
+@pytest.mark.parametrize(
+    "change", [None, "rigid_rank", "zero_negative", "two_negative", "soft"]
+)
+def test_harmonic_publication_requires_consistent_classification(
+    calculator: Calculator, monkeypatch: pytest.MonkeyPatch, change: str | None
+) -> None:
+    """Synthetic native derivatives test publication policy, not molecular accuracy."""
+    from dataclasses import replace
+
+    from generativeqc import _molecular_saddle
+    from generativeqc.saddle import correct_saddle
+    from generativeqc.vibrations import analyze_harmonic_modes
+
+    positions = np.array([atom[1] for atom in ATOMS])
+    centered = positions - positions.mean(axis=0)
+    rigid = np.column_stack(
+        (
+            np.tile(np.eye(3), (len(positions), 1)),
+            *(np.cross(axis, centered).ravel() for axis in np.eye(3)),
+        )
+    )
+    active = np.linalg.svd(rigid, full_matrices=True)[0][:, 6:]
+    matrix = (active * np.array([-1.0, 1.0, 2.0])) @ active.T
+    native = correct_saddle(
+        positions,
+        energy_gradient=lambda current: (0.0, np.zeros_like(current)),
+        hessian=lambda current: matrix,
+        options=SaddleOptions(project_rigid_motions=True),
+    )
+    assert native.converged and native.receipt["negative_curvatures"] == 1
+    actual = analyze_harmonic_modes(
+        matrix,
+        coordinates=positions,
+        masses=MASSES,
+        hessian_units="hartree/bohr^2",
+        coordinate_units="bohr",
+        mass_units="dalton",
+        symmetrize=True,
+    )
+    changes = {
+        None: {},
+        "rigid_rank": {"rigid_mode_count": 5},
+        "zero_negative": {"negative_mode_count": 0},
+        "two_negative": {"negative_mode_count": 2},
+        "soft": {"significant_imaginary_mode_count": 0},
+    }
+    published = replace(actual, **changes[change])
+    monkeypatch.setattr(
+        _molecular_saddle, "correct_saddle", lambda *args, **kwargs: native
+    )
+    monkeypatch.setattr(
+        "generativeqc.vibrations.analyze_harmonic_modes",
+        lambda *args, **kwargs: published,
+    )
+    result = optimize_saddle(calculator, ATOMS, masses=MASSES)
+    assert result.optimizer is native
+    np.testing.assert_array_equal(result.optimizer.hessian, matrix)
+    if change in (None, "soft"):
+        assert result.converged and result.harmonics is published
+        assert result.diagnostics["harmonic_failure"] is None
+    else:
+        assert not result.converged and result.harmonics is None
+        assert result.diagnostics["final_status"] == "harmonic_analysis_failed"
+        assert result.diagnostics["harmonic_failure"][0] == "ValueError"
+        assert "differs" in result.diagnostics["harmonic_failure"][1]
+
+
+def test_near_linear_native_harmonic_rank_mismatch_fails_closed(
+    calculator: Calculator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real native projection with a synthetic matrix; no chemistry qualification."""
+    from generativeqc import _molecular_saddle
+    from generativeqc.saddle import correct_saddle
+
+    positions = np.array([[-1.0, 0, 0], [0, 1.3e-8, 0], [1.0, 0, 0]])
+    rotation = np.cross([1.0, 0, 0], positions - positions.mean(axis=0)).ravel()
+    rotation /= np.linalg.norm(rotation)
+    matrix = np.eye(9) - 2 * np.outer(rotation, rotation)
+    native = correct_saddle(
+        positions,
+        energy_gradient=lambda current: (0.0, np.zeros_like(current)),
+        hessian=lambda current: matrix,
+        options=SaddleOptions(project_rigid_motions=True),
+    )
+    assert native.converged and native.receipt["rigid_modes"] == 5
+    monkeypatch.setattr(
+        _molecular_saddle, "correct_saddle", lambda *args, **kwargs: native
+    )
+    atoms = tuple(zip(("H", "O", "H"), positions, strict=True))
+    result = optimize_saddle(calculator, atoms, masses=(1.0, 16.0, 1.0))
+    assert result.optimizer is native
+    assert not result.converged and result.harmonics is None
+    assert result.diagnostics["final_status"] == "harmonic_analysis_failed"
+    assert "rigid-mode rank" in result.diagnostics["harmonic_failure"][1]
 
 
 def test_closed_owners_before_d3_publication(
