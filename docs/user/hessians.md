@@ -47,15 +47,17 @@ LDA and PBE, with no exact exchange, no density fitting, no dispersion
 correction, no nonlocal correlation and no ECP. Both `hvp` and `hessian` are
 advertised for this context.
 
-**CPU full-range PBE0/B3LYP RKS compositions.** Direct all-electron strict-FP64
-restricted calculations admit Cartesian or real-spherical AOs through f.
+**CPU full-range PBE0 RKS and B3LYP RKS/UKS compositions.** Direct all-electron
+strict-FP64 calculations admit Cartesian or real-spherical AOs through f.
+B3LYP UKS preserves the supplied charge/multiplicity and both physical spin
+densities, including coupled same-spin exchange and cross-spin XC response.
 The resolved semilocal composition must equal PBE0 or Gaussian-definition
 B3LYP (VWN-RPA); its one full-range exchange coefficient may be in `(0, 1]`.
 A changed MethodIR identifier does not change admission or the physical method.
 An optional **uncut two-body D3(BJ), ATM off** correction is added once to the
 qualified electronic result, including coordination-number/C6 response. It uses
 the supplied canonical `D3Spec`, not a second functional-specific Hessian solver.
-Unrestricted, density-fitted, ECP and CUDA variants do not inherit this support.
+PBE0 UKS, density-fitted, ECP and CUDA variants do not inherit this support.
 D4, zero damping, ATM and finite-cutoff corrections remain unsupported for
 second order, even when their energy and first gradient are available.
 Imported canonical basis records retain their actual
@@ -100,6 +102,21 @@ and correction preparation/assembly time. No additional electronic response
 solve or displaced SCF is introduced. `endpoint_seconds` includes the native
 SCF, electronic curvature and correction, while `scf_energy`, `dispersion_energy`
 and `total_energy` distinguish the energy components.
+
+Public curvature diagnostics also identify the actual central SCF state:
+`scf_density_sha256` hashes its little-endian float64, C-order spin-major density
+bytes, with shape in `scf_density_shape`. `scf_occupied_orbitals` counts occupied
+orbitals in each stored spin block (one doubly occupied block for RKS, separate
+alpha/beta blocks for UKS). `scf_physical_residual` and `scf_basis_identity`
+accompany that fingerprint. `scf_grid_identity` includes the native resource
+owner and need not match across calls. To compare actual quadratures, use
+`scf_grid_sha256`: SHA256 of the bytes `generativeqc.scf-grid-v1\0`, the ASCII
+point count followed by a null byte, then the C-order little-endian points
+(float64), weights (float64) and atom owners (int32), in that order.
+`scf_grid_point_count` reports the count explicitly. These detached scalar/tuple
+records retain no native owner. A fingerprint identifies exact contents; it
+does not replace independent numerical state/root matching or qualify a new
+method, geometry or artifact.
 
 The LDA/PBE endpoints do not consume `grid_budget_bytes` or
 `max_nonlocal_pairs`; do not use these arguments as a grid-memory cap for those

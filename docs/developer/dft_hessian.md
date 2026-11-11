@@ -80,11 +80,13 @@ not the native carrier selector, to the mixed J/K/XC response, frozen K nuclear
 RHS and compiler-owned `exact_exchange` second-order source. Cartesian and
 real-spherical AOs reuse `HessianBasis`; the SCF, density and response remain in
 the original public variational space. The public wrapper separately admits
-strict-FP64 CPU direct all-electron restricted PBE0/B3LYP semilocal compositions
+strict-FP64 CPU direct all-electron PBE0 RKS and B3LYP RKS/UKS semilocal compositions
 with one full-range coefficient in `(0, 1]`, Cartesian/spherical AOs through f,
-and no additional primitive. Admission compares resolved mathematics rather
-than a user-controlled identifier. UKS, ECP, DF, dispersion and CUDA full-range
-variants remain excluded. An installed spherical Ni/def2-SVP fixture does not
+and no additional electronic primitive. Admission compares resolved mathematics
+with the same physical spin rather than a user-controlled identifier. An uncut
+two-body D3(BJ), ATM-off correction is an independently qualified additive
+source; it does not repeat electronic response. PBE0 UKS, ECP, DF and CUDA full-range
+variants remain excluded. A spherical Ni/def2-SVP fixture does not
 establish production-scale support for 25–40-atom Ni systems.
 The low-level receipt always reports `public_calculator_endpoint=False`;
 only the actual Calculator wrapper marks the endpoint public and adds native
@@ -155,7 +157,8 @@ different WB97M-V feature floors. Primitive fractions remain part of the graph
 and scientific identity. WB97M-V retains its existing work policy and VV10
 admission. Neither this grid source nor a complete small-molecule low-level
 HVP independently grants public capability: the complete molecular and installed
-gates remain separate. Full-range UKS, ECP, DF, D3 and CUDA are not promoted.
+gates remain separate. These primitive providers do not independently promote
+full-range ECP, DF or CUDA variants.
 
 Native LDA/PBE grid partials use a separate identity-bound point-provider
 contract inside the same grid/weight and molecular orchestration. The runtime

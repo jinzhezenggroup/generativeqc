@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import os
 import typing
 from contextlib import nullcontext
@@ -46,6 +47,30 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from .spin_roots import SpinRootPolicy, SpinRootResult
+
+
+def _scf_grid_fingerprint(grid: typing.Any) -> str:
+    """Hash exact quadrature contents independently of its native owner lease.
+
+    Point/weight FP64 and owner i32 buffers use little-endian C order, framed by
+    the point count and a schema tag. Chunking bounds conversion scratch rather
+    than materializing another complete quadrature just for provenance.
+    """
+    digest = hashlib.sha256(b"generativeqc.scf-grid-v1\0")
+    digest.update(str(len(grid.points)).encode("ascii") + b"\0")
+    for values, dtype in (
+        (grid.points, "<f8"),
+        (grid.weights, "<f8"),
+        (grid.owners, "<i4"),
+    ):
+        for start in range(0, len(values), 32768):
+            digest.update(
+                np.asarray(values[start : start + 32768], dtype=dtype).tobytes(
+                    order="C"
+                )
+            )
+    return digest.hexdigest()
+
 
 _METHODS = _method_manifest.METHOD_NAME_TO_ID
 _COMPOSITE_METHOD_ALIASES = _method_manifest.COMPOSITE_METHOD_ALIASES
@@ -2921,7 +2946,7 @@ class Calculator:
                 f"method {method!r} does not expose public {endpoint}; "
                 "qualified domains are CPU direct all-electron Cartesian FP64 "
                 "closed-shell LDA/PBE; CPU direct all-electron FP64 "
-                "Cartesian/spherical restricted PBE0/B3LYP compositions with "
+                "Cartesian/spherical PBE0 RKS or B3LYP RKS/UKS compositions with "
                 "full-range exchange in (0, 1], optionally with uncut two-body "
                 "D3(BJ); or canonical FP64 WB97M-V RKS/UKS with "
                 "CPU/CUDA, Cartesian/spherical, full-rank DF and scalar ECPs"
@@ -2932,7 +2957,7 @@ class Calculator:
         ):
             raise NotImplementedError(
                 "RKS requires multiplicity=1; open-shell second order requires "
-                "the polarized WB97M-V graph"
+                "an admitted polarized graph"
             )
         native_atoms = tuple(Atom.from_value(atom) for atom in atoms)
         if not native_atoms:
@@ -3001,6 +3026,23 @@ class Calculator:
                             "electronic_method_identity": self._ks_options.method_ir.identity,
                             "total_method_identity": self.method_ir.identity,
                             "total_method_manifest_identity": self.method_ir.manifest_identity,
+                            "scf_density_sha256": hashlib.sha256(
+                                np.asarray(operator.state.density, dtype="<f8").tobytes(
+                                    order="C"
+                                )
+                            ).hexdigest(),
+                            "scf_density_shape": tuple(operator.state.density.shape),
+                            "scf_occupied_orbitals": tuple(
+                                int(np.count_nonzero(occupations))
+                                for occupations in operator.state.occupations
+                            ),
+                            "scf_physical_residual": operator.state.physical_residual,
+                            "scf_basis_identity": operator.state.identity.basis_identity,
+                            "scf_grid_identity": operator.state.identity.grid_identity,
+                            "scf_grid_sha256": _scf_grid_fingerprint(
+                                operator.state.grid
+                            ),
+                            "scf_grid_point_count": len(operator.state.grid.points),
                         }
                     ),
                 )
@@ -3058,8 +3100,8 @@ class Calculator:
         """Compute a bounded analytic Cartesian semilocal or hybrid HVP.
 
         LDA/PBE require CPU direct all-electron Cartesian closed-shell FP64.
-        Qualified PBE0/B3LYP compositions also admit spherical AOs on CPU with
-        direct all-electron restricted FP64 and full-range exchange in (0, 1].
+        Qualified PBE0 RKS and B3LYP RKS/UKS compositions also admit spherical
+        AOs on CPU with direct all-electron FP64 and full-range exchange in (0, 1].
         Their uncut two-body D3(BJ) correction is added exactly once, without
         another electronic response solve. Its simultaneous workspace uses
         ``dispersion_memory_budget_bytes`` from construction.
@@ -3153,7 +3195,7 @@ class Calculator:
         both the dense matrix and immutable publication; integral/response
         resources retain their independently checked contracts.
 
-        PBE0/B3LYP compositions require CPU direct all-electron restricted FP64;
+        PBE0 RKS and B3LYP RKS/UKS require CPU direct all-electron FP64;
         Cartesian/spherical AOs and full-range exchange in (0, 1] are admitted.
         Uncut two-body D3(BJ) is an additive source with no extra CPKS solve.
         Corrected output budgets must hold three dense matrices (the detached

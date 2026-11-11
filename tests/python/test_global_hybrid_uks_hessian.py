@@ -45,7 +45,7 @@ def full_range_uks(request: pytest.FixtureRequest) -> Iterator[tuple]:
         density_tolerance=1e-11,
         max_iterations=240,
     )
-    assert not calculator.capabilities.supported_second_order
+    assert calculator.capabilities.supported_second_order == {"hvp", "hessian"}
     try:
         yield calculator, method, representation
     finally:

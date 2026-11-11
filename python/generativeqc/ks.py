@@ -779,7 +779,7 @@ def composite_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
 
 
 def full_range_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
-    """Recognize qualified restricted full-range graphs, independently of names.
+    """Recognize qualified full-range RKS and B3LYP UKS graphs by mathematics.
 
     This is only the mathematical admission rule. The caller must also require
     CPU FP64, direct all-electron integrals and the qualified AO domain. Retain
@@ -788,7 +788,10 @@ def full_range_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
     Other semilocal scales, spin layouts and additional primitives need their
     own complete molecular qualification rather than inheriting this rule.
     """
-    if not isinstance(method_ir, MethodIR) or method_ir.spin != "unpolarized":
+    if not isinstance(method_ir, MethodIR) or method_ir.spin not in (
+        "unpolarized",
+        "polarized",
+    ):
         return False
     try:
         plan = compile_ks_execution_plan(method_ir)
@@ -803,12 +806,13 @@ def full_range_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
         or plan.post_scf
     ):
         return False
+    profiles = ("PBE0", "B3LYP") if method_ir.spin == "unpolarized" else ("B3LYP",)
     return any(
         plan.semilocal.semantic_payload()
         == compile_ks_execution_plan(
-            resolve_method(profile)
+            resolve_method(profile, spin=method_ir.spin)
         ).semilocal.semantic_payload()
-        for profile in ("PBE0", "B3LYP")
+        for profile in profiles
     )
 
 

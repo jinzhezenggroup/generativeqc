@@ -1,5 +1,6 @@
-"""Independent total UKS/D3 curvature without promoting public admission."""
+"""Independent total UKS/D3 curvature and matching public composition."""
 
+import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -104,7 +105,7 @@ def total_results(tmp_path_factory: pytest.TempPathFactory) -> tuple:
         density_tolerance=1e-11,
         max_iterations=240,
     )
-    assert not calculator.capabilities.supported_second_order
+    assert calculator.capabilities.supported_second_order == {"hvp", "hessian"}
     try:
         with (
             calculator.prepare_batch(
@@ -129,6 +130,19 @@ def total_results(tmp_path_factory: pytest.TempPathFactory) -> tuple:
                 identities = {
                     "geometry_identity": operator.state.identity.geometry_identity,
                     "electronic_method_identity": operator.state._source.method_ir.identity,
+                    "scf_density_sha256": hashlib.sha256(
+                        np.asarray(density, dtype="<f8").tobytes(order="C")
+                    ).hexdigest(),
+                    "scf_basis_identity": operator.state.identity.basis_identity,
+                    "scf_grid_identity": operator.state.identity.grid_identity,
+                    "scf_grid_sha256": hashlib.sha256(
+                        b"generativeqc.scf-grid-v1\0"
+                        + str(len(operator.state.grid.points)).encode("ascii")
+                        + b"\0"
+                        + np.asarray(operator.state.grid.points, dtype="<f8").tobytes()
+                        + np.asarray(operator.state.grid.weights, dtype="<f8").tobytes()
+                        + np.asarray(operator.state.grid.owners, dtype="<i4").tobytes()
+                    ).hexdigest(),
                 }
                 matrix, action = (
                     replace(
@@ -164,6 +178,43 @@ def total_results(tmp_path_factory: pytest.TempPathFactory) -> tuple:
             total_action,
             cache,
         )
+    finally:
+        calculator.clear_cache()
+
+
+def test_public_uks_d3_matches_independently_qualified_total(
+    total_results: tuple,
+) -> None:
+    """Dispatch the same coupled state and add the correction exactly once."""
+    total_matrix, total_action, cache = total_results[5:]
+    calculator = Calculator(
+        method=METHOD,
+        device="cpu",
+        basis_representation="spherical",
+        ks_options=KsOptions(grid=GRID),
+        energy_tolerance=1e-13,
+        density_tolerance=1e-11,
+        max_iterations=240,
+    )
+    try:
+        result = calculator.hessian(
+            ATOMS, multiplicity=2, cache=cache, solver_options=SOLVER
+        )
+        np.testing.assert_allclose(
+            result.matrix, total_matrix.matrix, atol=2e-8, rtol=0
+        )
+        np.testing.assert_allclose(
+            result.matrix @ DIRECTION.ravel(),
+            total_action.value.ravel(),
+            atol=2e-8,
+            rtol=0,
+        )
+        assert result.diagnostics["public_calculator_endpoint"]
+        assert result.diagnostics["spin"] == "polarized"
+        assert result.diagnostics["scf_fock_builds"] > 0
+        for key in ("scf_density_sha256", "scf_basis_identity", "scf_grid_sha256"):
+            assert result.diagnostics[key] == total_matrix.diagnostics[key], key
+        assert result.diagnostics["dispersion"]["electronic_response_solves"] == 0
     finally:
         calculator.clear_cache()
 
