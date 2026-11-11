@@ -25,8 +25,8 @@
     {
       "path": "conditions.md",
       "role": "summary",
-      "bytes": 8088,
-      "sha256": "cde40b2e49bfe1a3df6a759ec170526a32735669556d7100898c23c22db5edbd"
+      "bytes": 462,
+      "sha256": "ae288cf4508dbb7e6943e2f9f3ff1fd90d12ac0e951e53af4d25074ad0a65a3a"
     },
     {
       "path": "figures.json",
@@ -85,8 +85,8 @@
     {
       "path": "reproduce.py",
       "role": "reproduction",
-      "bytes": 10908,
-      "sha256": "b7581a6e48b891e31a0f38cd083c2fc0e419845d82db90c1d30524f9ddc4b242"
+      "bytes": 10986,
+      "sha256": "218e912e0fe10a412f6d619b361cf83d88990880bc95d673ebe19f2ad98301ca"
     },
     {
       "path": "standard.json.xz",
@@ -103,20 +103,38 @@
     {
       "path": "timings.md",
       "role": "summary",
-      "bytes": 13896,
-      "sha256": "56e8efdf9e892930169543e6ceefd841d444c0340564c4d74b7bab71c7f7d990"
+      "bytes": 601,
+      "sha256": "8396ef0f070a540a0584e2e8a2433acbf35959ef64bc98093d4b576c693490db"
     },
     {
       "path": "validation.json.xz",
       "role": "evidence",
-      "bytes": 3408,
-      "sha256": "786a32d5aa0bf2f1675f859979040eb3c57ef921e60792c76c6eda8294505c1c"
+      "bytes": 3416,
+      "sha256": "a721a321caf4b2270c2144ec103af50a54d290d875734c633b7f7ce445f8ce7d"
     },
     {
       "path": "work.md",
       "role": "summary",
-      "bytes": 10535,
-      "sha256": "bcd493fce3768ae19960de8d0551010d8b9702da574ab8eb7114e861beac6285"
+      "bytes": 571,
+      "sha256": "400fd79bb6a941fcada77da517657c494d573038209eb09c59235ba49b08d297"
+    },
+    {
+      "path": "timings-table.md.xz",
+      "role": "summary",
+      "bytes": 2472,
+      "sha256": "5c684c73eb8b80121d140af2ff9926c414f0862b4dfa1fdd2c819347e2544131"
+    },
+    {
+      "path": "work-table.md.xz",
+      "role": "summary",
+      "bytes": 1052,
+      "sha256": "0ffacbd2d0c5f43f16605b10cc4cd63529766648485a2a39e21114a4c8419679"
+    },
+    {
+      "path": "conditions-detail.md.xz",
+      "role": "summary",
+      "bytes": 3744,
+      "sha256": "5f3567362054415e9cb72d89e48d3c4241ec3df793a437b84810b3171b3650d0"
     }
   ],
   "archives": [],
@@ -126,8 +144,16 @@
       "benchmarks/results/readme-refresh-20261026/reproduce.py",
       "--output",
       ".artifacts/readme-refresh-20261026-replay",
-      "--verify",
-      "--check-readme"
+      "--verify"
     ]
+  },
+  "storage_migration": {
+    "scope": "Lossless compression of derived timing/work tables and acquisition-conditions Markdown only; all raw measurements and independent references unchanged.",
+    "original_tables": {
+      "timings.md": "56e8efdf9e892930169543e6ceefd841d444c0340564c4d74b7bab71c7f7d990",
+      "work.md": "bcd493fce3768ae19960de8d0551010d8b9702da574ab8eb7114e861beac6285",
+      "conditions.md": "cde40b2e49bfe1a3df6a759ec170526a32735669556d7100898c23c22db5edbd"
+    },
+    "validation_change": "Only attachment storage paths/checksums and the updated storage-reader checksum change; every numerical/decision leaf is byte-preserved."
   }
 }

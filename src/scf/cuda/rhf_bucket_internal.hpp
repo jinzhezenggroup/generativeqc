@@ -116,6 +116,7 @@ struct CudaRhfBucketPlan {
   bool reuse_converged_fock{};
   /** Frozen launch geometry, including for retained warm graph replay. */
   bool block_convergence{};
+  bool orbital_gradient_convergence{};
   bool mixed_precision_fock{};
   /** True only when #990's retained-anchor iteration route is allocated/captured. */
   bool incremental_direct_jk{};

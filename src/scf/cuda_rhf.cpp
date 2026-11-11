@@ -515,6 +515,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
+  const auto convergence_request = cuda_policy::hf_convergence_requested();
+  if (convergence_request == cuda_policy::HfConvergenceRequest::Invalid) {
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    return outputs;
+  }
   // Generated capability registries read CUDA's current device. Re-select
   // before admission on every execution, including interleaved cached owners.
   cudaError_t cuda_error = options.reference_provider_initialization_owner &&
@@ -771,6 +776,23 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const std::optional<double> requested_mixed_precision_fock_threshold =
       requested_precision_policy.threshold;
   const bool requested_mixed_precision_fock = requested_mixed_precision_fock_threshold.has_value();
+  const bool orbital_gradient_owner =
+      !unrestricted && !requested_mixed_precision_fock && !options.export_physical_reference &&
+      options.application_precision_budget == std::array<double, 3>{} &&
+      std::none_of(systems.begin(), systems.end(), [](const auto& system) {
+        return !system.ecp_terms.empty() ||
+               std::any_of(system.atoms.begin(), system.atoms.end(),
+                           [](const auto& atom) { return atom.ecp_core != 0; });
+      });
+  const auto effective_convergence = cuda_policy::resolve_hf_convergence_request(
+      convergence_request, orbital_gradient_owner, options.energy_tolerance,
+      options.density_tolerance);
+  if (effective_convergence == cuda_policy::HfConvergenceRequest::Invalid) {
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+    return outputs;
+  }
+  const bool orbital_gradient_convergence =
+      effective_convergence == cuda_policy::HfConvergenceRequest::OrbitalGradient;
   // #990 currently owns an exact FP64 retained anchor. Resolve its accepted-iterate
   // policy before lowering so CPU/CUDA share activation and refresh semantics.
   // The CUDA Direct lower advertises density-weighted screening; mixed iterative
@@ -852,6 +874,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
        plan.graph_native_eigensolver_override != requested_graph_native_eigensolver_override ||
        plan.reuse_converged_fock != requested_reuse_converged_fock ||
        plan.block_convergence != requested_block_convergence ||
+       plan.orbital_gradient_convergence != orbital_gradient_convergence ||
        plan.incremental_direct_jk != requested_incremental_direct_jk ||
        plan.incremental_diis_gram != requested_incremental_diis_gram ||
        plan.ordered_diis_gram != requested_ordered_diis_gram ||
@@ -1085,6 +1108,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     plan.graph_native_eigensolver_override = requested_graph_native_eigensolver_override;
     plan.reuse_converged_fock = requested_reuse_converged_fock;
     plan.block_convergence = requested_block_convergence;
+    plan.orbital_gradient_convergence = orbital_gradient_convergence;
     plan.mixed_precision_fock = requested_mixed_precision_fock;
     plan.incremental_direct_jk = requested_incremental_direct_jk;
     plan.mixed_precision_fock_threshold = requested_mixed_precision_fock_threshold.value_or(0.0);
@@ -2414,6 +2438,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         static_cast<std::int32_t>(nbf), temporary, active, residual);
     return cuda_status(cudaPeekAtLastError());
   };
+  // DIIS history and the orbital/density proposal have finished with this
+  // scratch. Transform only the stopping residual, never the retained history.
+  const auto transform_convergence_residual = [&]() -> generativeqc_status {
+    if (!orbital_gradient_convergence) return GENERATIVEQC_STATUS_SUCCESS;
+    auto transform_status = multiply_matrices(residual, false, orthogonalizer, temporary);
+    if (transform_status == GENERATIVEQC_STATUS_SUCCESS)
+      transform_status = multiply_matrices(orthogonalizer, true, temporary, residual);
+    return transform_status;
+  };
   const auto launch_direct_quartet_metadata = [&](const double* density_input,
                                                   bool allow_mixed_precision,
                                                   bool track_incremental_work) -> cudaError_t {
@@ -3713,6 +3746,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const auto launch_iteration_post_eigensolver =
       [&](bool append_device_tail, bool allow_mixed_precision) -> generativeqc_status {
     const bool screened_stage = screened_reference_iterations && allow_mixed_precision;
+    const bool orbital_gradient_iteration = orbital_gradient_convergence && !screened_stage;
     const double iteration_energy_tolerance =
         screened_stage ? std::max(options.energy_tolerance, 100.0 * iteration_screening)
                        : options.energy_tolerance;
@@ -3721,7 +3755,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                        : options.density_tolerance;
     // A proposal changes the trajectory: the standard owner's looser physical
     // ceiling did not preserve the stronger independent HF force diagnostic.
-    // Its target tail therefore uses the strict residual gate, without changing
+    // Its default target tail therefore uses the strict residual gate, without changing
     // public controls, ordinary solves, or the provisional stopping condition.
     const bool qualified_iteration_owner =
         qualified_standard_owner && (!cold_screened_iterations || screened_stage);
@@ -3766,6 +3800,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       if (iteration_status == GENERATIVEQC_STATUS_SUCCESS) {
         iteration_status = build_density(coefficients, next_density);
         if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
+        if (orbital_gradient_iteration) {
+          iteration_status = transform_convergence_residual();
+          if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
+        }
         if (reuse_converged_fock) {
           launch_update_convergence_kernel(
               true, static_cast<unsigned>(batch_size),
@@ -3775,7 +3813,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               previous_energy, next_density, density, active, converged, iterations, energy_change,
               density_rms, force_convergence_residual, approximate_census,
               qualified_iteration_owner, incremental_energy_refinement_updates,
-              incremental_energy_refinement_census, reference_startup);
+              incremental_energy_refinement_census, reference_startup, orbital_gradient_iteration);
         } else {
           launch_update_convergence_kernel(
               false, static_cast<unsigned>(batch_size),
@@ -3785,7 +3823,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               previous_energy, next_density, density, active, converged, iterations, energy_change,
               density_rms, force_convergence_residual, approximate_census,
               qualified_iteration_owner, incremental_energy_refinement_updates,
-              incremental_energy_refinement_census, reference_startup);
+              incremental_energy_refinement_census, reference_startup, orbital_gradient_iteration);
         }
       }
     }
@@ -4412,6 +4450,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       return outputs;
     }
     status = build_commutator_residual();
+    if (status == GENERATIVEQC_STATUS_SUCCESS) status = transform_convergence_residual();
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       trace.finish("residual_failed");
       fill_global_failure(outputs, status);
@@ -4433,7 +4472,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
           resources.stream_, static_cast<std::int32_t>(batch_size),
           static_cast<std::int32_t>(spin_count), static_cast<std::int32_t>(nbf),
           options.density_tolerance, residual, active, converged, final_fock_rebuild_count,
-          warm_mask, options.energy_tolerance, qualified_standard_owner);
+          warm_mask, options.energy_tolerance, qualified_standard_owner,
+          orbital_gradient_convergence);
       cuda_error = cudaGetLastError();
     }
     if (cuda_error != cudaSuccess) {
