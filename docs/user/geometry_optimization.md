@@ -134,6 +134,54 @@ existing `Calculator` without switching the method, basis or grid. These APIs do
 not change `generativeqc optimize`, which remains a Python-free minimum search;
 there is not yet a molecular TS CLI task.
 
+### Small all-electron control
+
+The following near-planar ammonia input is a deliberately small local-saddle
+control, **not** the requested Ni/ECP/D3 workflow. It uses the same physical
+method at every geometry. An arbitrary XYZ guess need not have a negative
+initial target mode or converge to the desired saddle.
+
+```python
+import math
+
+from generativeqc import Calculator
+from generativeqc.response_solver import GMRESOptions
+from generativeqc.saddle import SaddleOptions, optimize_saddle
+from generativeqc_compiler.method import resolve_method
+
+atoms = [
+    ("N", (0.0, 0.0, 0.02)),
+    ("H", (1.9, 0.0, 0.0)),
+    ("H", (-0.95, 1.9 * math.sqrt(3) / 2, 0.0)),
+    ("H", (-0.95, -1.9 * math.sqrt(3) / 2, 0.0)),
+]
+calculator = Calculator(
+    method=resolve_method("B3LYP"), device="cpu", basis="sto-3g",
+    basis_representation="spherical", energy_tolerance=1e-13,
+    density_tolerance=1e-11, max_iterations=240,
+)
+try:
+    result = optimize_saddle(
+        calculator, atoms,
+        masses=[14.00307400443, 1.00782503223, 1.00782503223, 1.00782503223],
+        options=SaddleOptions(project_rigid_motions=True, raw_symmetry_tolerance=2e-8),
+        grid_budget_bytes=2 << 30,
+        solver_options=GMRESOptions(atol=1e-12, rtol=1e-11),
+        progress=lambda state: print(dict(state.receipt)),
+    )
+    print(result.diagnostics["final_status"], result.optimizer.coordinates)
+    if result.converged:
+        print(result.harmonics.frequencies_cm1)
+    else:
+        print(result.optimizer.failures, result.diagnostics["harmonic_failure"])
+finally:
+    calculator.clear_cache()
+```
+
+The 100-attempt bound is not a bound on SCF or response work. Inspect the
+separate native evaluation counts and molecular diagnostics. The complete
+endpoint includes fresh final derivatives, not just the last accepted step.
+
 (python-saddle-backends)=
 ### Admission and execution
 
