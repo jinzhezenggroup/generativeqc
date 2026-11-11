@@ -23,6 +23,7 @@ def _step(name: str) -> str:
 
 
 def _fake_tools(tmp_path: Path, failure: str = "") -> dict[str, str]:
+    (tmp_path / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
     script = (
         "#!" + sys.executable + "\n"
         "import json, os, pathlib, sys\n"

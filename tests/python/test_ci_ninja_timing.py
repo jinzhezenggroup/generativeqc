@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
 
+from tools import ci_host_resources as resources
 from tools import report_ci_ninja_timing as timing
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -318,9 +322,16 @@ def test_actual_workflow_build_then_report_keeps_build_result(
                 for line in (tmp_path / "output").read_text().splitlines()
                 if line.startswith("fresh=")
             )
-        script = workflow_script(steps[name]).replace(
-            "python3 tools/report_ci_ninja_timing.py",
-            f"{shlex.quote(sys.executable)} {shlex.quote(str(HELPER))}",
+        script = (
+            workflow_script(steps[name])
+            .replace(
+                "python3 tools/report_ci_ninja_timing.py",
+                f"{shlex.quote(sys.executable)} {shlex.quote(str(HELPER))}",
+            )
+            .replace(
+                "python3 tools/ci_host_resources.py",
+                f"{shlex.quote(sys.executable)} {shlex.quote(str(RESOURCE_HELPER))}",
+            )
         )
         results[name] = subprocess.run(
             ["bash", "-e", "-o", "pipefail", "-c", script],
@@ -334,3 +345,309 @@ def test_actual_workflow_build_then_report_keeps_build_result(
     assert results[BOUNDARY].returncode == results[REPORT].returncode == 0
     assert results[BUILD].returncode == exit_code
     assert "CLI executable | 1 | 0.020" in (tmp_path / "summary").read_text()
+
+
+# Keep executable diagnostics coverage in the existing module so this repair
+# does not redistribute the modulo-sharded core suite by adding a test file.
+RESOURCE_HELPER = ROOT / "tools/ci_host_resources.py"
+
+
+def resource_command(code: str) -> list[str]:
+    return [
+        sys.executable,
+        str(RESOURCE_HELPER),
+        "--interval-seconds",
+        "0.05",
+        "--",
+        sys.executable,
+        "-c",
+        code,
+    ]
+
+
+@pytest.mark.parametrize("exit_code", [0, 23])
+def test_live_samples_are_flushed_and_preserve_command_io_and_status(
+    tmp_path: Path, exit_code: int
+) -> None:
+    output = tmp_path / "live.log"
+    with output.open("w") as stream:
+        child = subprocess.Popen(
+            resource_command(
+                "import os,sys,time; "
+                "assert sys.argv[1] == 'argument with spaces'; "
+                "assert os.environ['DIAGNOSTIC_TEST_VALUE'] == 'private-marker'; "
+                "print('build stdout', flush=True); "
+                "print('build stderr', file=sys.stderr, flush=True); "
+                f"time.sleep(0.6); sys.exit({exit_code})"
+            )
+            + ["argument with spaces"],
+            env={**os.environ, "DIAGNOSTIC_TEST_VALUE": "private-marker"},
+            stdout=stream,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while "CI_HOST_RESOURCES" not in output.read_text():
+                assert time.monotonic() < deadline
+                time.sleep(0.01)
+            assert child.poll() is None  # Not buffered until command completion.
+            _, stderr = child.communicate(timeout=5)
+        finally:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=5)
+    assert child.returncode == exit_code
+    content = output.read_text()
+    records = [
+        json.loads(line.removeprefix("CI_HOST_RESOURCES "))
+        for line in content.splitlines()
+        if line.startswith("CI_HOST_RESOURCES ")
+    ]
+    assert len(records) >= 2
+    assert "build stdout" in content and "build stderr" in stderr
+    assert "private-marker" not in content + stderr
+    assert "argument with spaces" not in content + stderr
+    assert "host_compiler_rss_bytes" in records[0]
+
+
+def test_resource_allowlist_and_missing_platform_metrics(tmp_path: Path) -> None:
+    proc = tmp_path / "proc"
+    proc.mkdir()
+    (proc / "meminfo").write_text(
+        "MemTotal: 100 kB\nMemAvailable: 40 kB\n"
+        "SwapTotal: 20 kB\nSwapFree: 10 kB\nPrivate: 123 kB\n"
+    )
+    pressure = proc / "pressure"
+    pressure.mkdir()
+    (pressure / "cpu").write_text(
+        "some avg10=1.50 avg60=2.00 avg300=0.01 total=100 secret=private-marker\n"
+    )
+    for pid, name in (("123", "cicc"), ("456", "private-marker")):
+        process = proc / pid
+        process.mkdir()
+        (process / "comm").write_text(name + "\n")
+        (process / "statm").write_text("20 5 0 0 0 0 0\n")
+        (process / "cmdline").write_text("private-marker")
+        (process / "environ").write_text("private-marker")
+    result = resources.snapshot(proc, tmp_path)
+    assert result["memory_kib"] == {
+        "MemTotal": 100,
+        "MemAvailable": 40,
+        "SwapTotal": 20,
+        "SwapFree": 10,
+    }
+    assert result["cpu_pressure"]["some"]["avg10"] == 1.5
+    assert result["memory_pressure"] is None
+    rss = result["host_compiler_rss_bytes"]
+    assert rss["count"] == 1
+    assert rss["sum"] == rss["max"] == 5 * os.sysconf("SC_PAGE_SIZE")
+    assert "private-marker" not in json.dumps(result)
+    assert "Private" not in json.dumps(result)
+    missing = resources.snapshot(tmp_path / "missing", tmp_path / "missing")
+    assert missing and all(value is None for value in missing.values())
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "sample",
+        "write",
+        "start",
+        "init",
+        "close",
+        "missing",
+        "blocked",
+    ],
+)
+@pytest.mark.parametrize("exit_code", [0, 19])
+def test_optional_sampler_failures_never_replace_build_result(
+    tmp_path: Path, failure: str, exit_code: int
+) -> None:
+    setup = {
+        "sample": "r.snapshot = lambda: 1 / 0",
+        "write": (
+            "def broken_write(*args): raise OSError('private-marker')\n"
+            "r.os.write = broken_write"
+        ),
+        "start": "r.threading.Thread.start = lambda self: 1 / 0",
+        "init": "r.Sampler.__init__ = lambda self, *args: 1 / 0",
+        "close": "r.Sampler.close = lambda self: 1 / 0",
+        "missing": f"r.snapshot = lambda: original(Path({str(tmp_path / 'absent')!r}), Path({str(tmp_path / 'absent')!r}))",
+        "blocked": "r.snapshot = lambda: time.sleep(60)",
+    }[failure]
+    code = (
+        "import sys,time; from pathlib import Path; "
+        "from tools import ci_host_resources as r; original=r.snapshot\n"
+        + setup
+        + "\nstatus = r.run([sys.executable, '-c', "
+        + repr(f"import time; time.sleep(0.2); raise SystemExit({exit_code})")
+        + "], 0.05)\n"
+        # Restore stdout before interpreter finalization so only sampler I/O fails.
+        + "sys.stdout = sys.__stdout__; raise SystemExit(status)"
+    )
+    started = time.monotonic()
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+    assert result.returncode == exit_code, result.stderr
+    assert time.monotonic() - started < 4
+    assert "private-marker" not in result.stdout + result.stderr
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX CI signal contract")
+@pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
+def test_signal_forwarding_reaps_only_owned_child_and_stops_sampling(
+    tmp_path: Path, signum: int
+) -> None:
+    ready = tmp_path / "ready"
+    # A separate long-lived process proves forwarding never hits the caller's
+    # process group or a shared compiler-cache server.
+    unrelated = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    child = subprocess.Popen(
+        resource_command(
+            "import os,pathlib,time; "
+            f"pathlib.Path({str(ready)!r}).write_text(str(os.getpid())); "
+            "time.sleep(30)"
+        ),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while not ready.exists():
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+        build_pid = int(ready.read_text())
+        child.send_signal(signum)
+        stdout, _ = child.communicate(timeout=5)
+        assert child.returncode == 128 + signum
+        with pytest.raises(ProcessLookupError):
+            os.kill(build_pid, 0)
+        assert unrelated.poll() is None
+        assert "CI_HOST_RESOURCES" in stdout
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.wait(timeout=5)
+        unrelated.terminate()
+        unrelated.wait(timeout=5)
+
+
+def test_sampler_budget_and_normal_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(resources, "MAX_SAMPLES", 3)
+    import threading
+
+    log_path = tmp_path / "samples.log"
+    before = set(threading.enumerate())
+    with log_path.open("w") as stream:
+        monkeypatch.setattr(resources.sys, "stdout", stream)
+        assert (
+            resources.run(
+                [sys.executable, "-c", "import time; time.sleep(0.2)"], interval=0.01
+            )
+            == 0
+        )
+    lines = log_path.read_text().splitlines(keepends=True)
+    assert len(lines) == 3
+    assert all(len(line.encode()) <= resources.MAX_RECORD_BYTES for line in lines)
+    assert set(threading.enumerate()) == before
+
+
+@pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
+def test_build_terminating_itself_preserves_signal_status(signum: int) -> None:
+    result = subprocess.run(
+        resource_command(f"import os; os.kill(os.getpid(), {int(signum)})"),
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+    assert result.returncode == 128 + signum
+
+
+def test_process_scan_is_bounded_and_marks_partial_measurement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for index in range(5):
+        process = tmp_path / str(index)
+        process.mkdir()
+        (process / "comm").write_text("cicc\n")
+        (process / "statm").write_text("20 5\n")
+    monkeypatch.setattr(resources, "MAX_PROCESSES", 2)
+    result = resources.snapshot(tmp_path, tmp_path)["host_compiler_rss_bytes"]
+    assert result["scan_truncated"] is True
+    assert result["count"] == 2
+
+
+@pytest.mark.parametrize("exit_code", [0, 23])
+def test_full_log_pipe_cannot_abort_interpreter_or_change_child_stdout(
+    exit_code: int,
+) -> None:
+    """A real stalled pipe must not leave a buffered-I/O lock held at shutdown."""
+    read_fd, write_fd = os.pipe()
+    process = None
+    try:
+        os.set_blocking(write_fd, False)
+        with pytest.raises(BlockingIOError):
+            while True:
+                os.write(write_fd, b"x" * 4096)
+        os.set_blocking(write_fd, True)
+        code = (
+            "import os,time; assert os.get_blocking(1); time.sleep(0.3); "
+            f"raise SystemExit({exit_code})"
+        )
+        started = time.monotonic()
+        process = subprocess.Popen(
+            resource_command(code),
+            stdout=write_fd,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        _, stderr = process.communicate(timeout=5)
+        assert process.returncode == exit_code, stderr
+        assert time.monotonic() - started < 4
+        assert os.get_blocking(write_fd)
+    finally:
+        if process is not None:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=5)
+        os.close(read_fd)
+        os.close(write_fd)
+
+
+def test_cancellation_during_sampler_setup_never_starts_build(tmp_path: Path) -> None:
+    marker = tmp_path / "must-not-start"
+    command = [
+        sys.executable,
+        "-c",
+        f"from pathlib import Path; Path({str(marker)!r}).touch()",
+    ]
+    code = (
+        "import signal,sys; from tools import ci_host_resources as r\n"
+        "original = r.Sampler.__init__\n"
+        "def cancel(self, *args):\n"
+        " original(self, *args)\n"
+        " signal.raise_signal(signal.SIGTERM)\n"
+        "r.Sampler.__init__ = cancel\n"
+        f"raise SystemExit(r.run({command!r}))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+    assert result.returncode == 143, result.stderr
+    assert not marker.exists()

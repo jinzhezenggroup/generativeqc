@@ -37,6 +37,7 @@ def _script(step: str) -> str:
 
 
 def _tools(tmp_path: Path, failure: str = "") -> dict[str, str]:
+    (tmp_path / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
     script = f"#!{sys.executable}\n" + textwrap.dedent(
         """\
         import json, os, pathlib, sys
