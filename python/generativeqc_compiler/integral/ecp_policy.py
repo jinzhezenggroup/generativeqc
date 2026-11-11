@@ -14,6 +14,8 @@ MATRIX_ABS_TOLERANCE = 2e-9
 DERIVATIVE_ABS_TOLERANCE = 2e-8
 MAX_CPU_RADIAL_POINTS = 1536
 MAX_CPU_POLAR_POINTS = 192
+# Bound generated temporary storage independently of the current DAG spelling.
+GAUSSIAN_MAX_SCRATCH_DOUBLES = 1 << 19
 
 
 def emit_ecp_policy_cpp() -> typing.Any:
@@ -32,6 +34,7 @@ def emit_ecp_policy_cpp() -> typing.Any:
         ("refined_polar_points", REFINED_POLAR_POINTS),
         ("cpu_max_radial_points", MAX_CPU_RADIAL_POINTS),
         ("cpu_max_polar_points", MAX_CPU_POLAR_POINTS),
+        ("gaussian_max_scratch_doubles", GAUSSIAN_MAX_SCRATCH_DOUBLES),
     )
     return [
         *(

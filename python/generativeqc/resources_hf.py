@@ -237,7 +237,7 @@ def _ecp_inventory_owner(library: typing.Any) -> str:
 def _ecp_workspace(
     item: typing.Any, *, cuda: typing.Any = False, library: typing.Any = None
 ) -> int:
-    """Use the native two-grid owner when already loaded, without probing a GPU.
+    """Use the native ECP owner when already loaded, without probing a GPU.
 
     Old/no-library dry runs retain the portable bound. A discovered query's
     rejection is authoritative, not permission to retry Python sizing. Public
@@ -269,12 +269,19 @@ def _ecp_workspace(
     output = ctypes.c_uint64()
     if query(*dimensions, int(bool(cuda)), ctypes.byref(output)):
         raise ValueError("native ECP workspace inventory rejected shape or capacity")
-    return checked_bytes(output.value, "ECP two-grid workspace")
+    return checked_bytes(output.value, "ECP workspace")
 
 
 def _portable_ecp_workspace(item: typing.Any, *, cuda: typing.Any = False) -> int:
-    """Compatibility-only two-grid bound for old or absent native libraries."""
+    """Metadata-only bound covering analytic CPU and checked-grid execution.
+
+    Shape metadata cannot identify the radial-power specialization. Reserve the
+    larger CPU lifetime: compensated outputs/publication, generated scratch,
+    shifted blocks, primitive jets and conservative shell/group metadata. CUDA
+    retains its existing checked-grid tile contract.
+    """
     from generativeqc_compiler.integral.ecp_policy import (
+        GAUSSIAN_MAX_SCRATCH_DOUBLES,
         REFINED_POLAR_POINTS,
         REFINED_RADIAL_POINTS,
     )
@@ -286,7 +293,7 @@ def _portable_ecp_workspace(item: typing.Any, *, cuda: typing.Any = False) -> in
     n, d = orbital["cartesian_nbf"], 3 * item["atoms"]
     points = 2 * REFINED_POLAR_POINTS * REFINED_POLAR_POINTS
     tile = cuda_radial_tile(orbital["nbf"], REFINED_POLAR_POINTS) if cuda else 1
-    return checked_bytes(
+    grid = (
         32 * n * n * (1 + d)
         + 32 * tile * n * (points + 16)
         + 256
@@ -297,9 +304,18 @@ def _portable_ecp_workspace(item: typing.Any, *, cuda: typing.Any = False) -> in
             + orbital["primitives"]
             + orbital["ecp_terms"]
         )
-        + 4096,
-        "ECP two-grid workspace",
+        + 4096
     )
+    analytic = (
+        48 * n * n * (1 + d)
+        + 8 * GAUSSIAN_MAX_SCRATCH_DOUBLES
+        + 144 * (32 + 225 * 8)
+        + 2 * 43 * 100 * 16
+        + 100 * 6 * 8
+        + 256 * orbital["ecp_terms"]
+        + 4096 * min(orbital["primitives"], n)
+    )
+    return checked_bytes(grid if cuda else max(grid, analytic), "ECP workspace")
 
 
 def _native_cpu_fleet_inventory(

@@ -204,4 +204,19 @@ generativeqc_status generativeqc_xc_uks_response_batch_v2(
 generativeqc_status generativeqc_ks_snapshot_ecp_derivatives_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);
+
+/** Private CPU Gaussian-ECP bridge, bound to the live snapshot's integral system.
+ * operation=0 exports [local,nonlocal][value,3N first derivatives][AO,AO] and
+ * requires NULL/zero weights. operation=1 contracts arbitrary ordered AO weights
+ * and exports [local,nonlocal][value,3N gradient,(3N)^2 Hessian]. No global
+ * coordinate-squared AO tensor is allocated. Other operators/backends fail closed.
+ * Eight work entries: shell pairs, primitive groups, radial frontiers, kernel
+ * blocks, Cartesian values, kernel bound, owned workspace bound, output elements.
+ * Workspace includes caller publication; current-owner geometry is only borrowed
+ * under the context lock. All caller buffers remain untouched on every failure. */
+generativeqc_status generativeqc_ks_snapshot_ecp_gaussian_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, std::uint32_t operation,
+    const double* weights, std::size_t weight_count, std::size_t maximum_bytes,
+    std::uint64_t maximum_kernel_blocks, double* values, std::size_t count, std::uint64_t* work,
+    std::size_t work_count);
 }

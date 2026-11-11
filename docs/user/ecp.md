@@ -62,7 +62,7 @@ AOs and 44 polar points; larger domains retain one layer. Each AO pair
 accumulates layers in ascending radial order. This matches the preceding
 production path's one-layer launches on the same stream; the old internal
 kernel's unused multi-layer thread mapping is not the ordering contract.
-The CPU adapter in `src/integrals/ecp.cpp` calls the same generated arithmetic.
+The checked-grid CPU adapter in `src/integrals/ecp.cpp` calls the same generated arithmetic.
 It prepares radial potentials once per center/layer, skips zero-potential layers,
 and reuses projected AO jets across triangular pairs. The original independent
 CPU algorithm is retained in `tests/native/ecp_reference.cpp`, linked only into
@@ -83,7 +83,10 @@ stopping policy, node order and append semantics are preserved.
 `integral/ecp_policy.py` owns the fixed coarse/refined grid orders and the
 finite absolute-error acceptance predicate. Generated host/device checks reject
 nonfinite inputs and accept equality at the unchanged value/derivative limits.
-The HF resource inventory reads the same refined-grid dimensions. Raw exports
+The HF/KS resource inventory reads the same refined-grid dimensions. Shape-only
+CPU admission reserves the larger of checked-grid storage and analytic Gaussian
+storage, including a compiler-enforced scratch cap, compensated derivative
+outputs and publication. CUDA retains its checked-grid tile bound. Raw exports
 still use caller-selected grids; only complete-method execution applies this gate.
 CPU raw diagnostics accept 16–1536 radial and 8–192 polar points. CUDA raw
 diagnostics retain 16–512 radial and 8–96 polar points. These larger CPU
@@ -144,8 +147,20 @@ methods, angular limits or resource inventories.
 
 ## Numerical and execution boundaries
 
-The baseline uses Gauss-Legendre radial nodes mapped by `r=t/(1-t)`, polar
-Gauss-Legendre nodes and uniform azimuth. Full direct RHF/UHF checks the
+CPU checked one-electron execution specializes residual operators whose terms
+all have radial power two, with local and s/p/d projector channels and s/p/d/f
+orbital shells. The compiler generates their analytic Gaussian integrals and
+center derivatives from one scalar Graph. Primal matrices and first derivatives
+therefore use the same operator, without a radial/angular discretization. The
+native executor groups common ECP centers/exponents, reuses primitive radial
+frontiers across channels, and checks explicit workspace and generated-block
+work bounds before execution. Cartesian and real-spherical conventions are
+unchanged. This CPU specialization does not admit new public Hessian methods or
+change CUDA execution.
+
+Other supported powers/projectors retain the checked-grid fallback. It uses
+Gauss-Legendre radial nodes mapped by `r=t/(1-t)`, polar Gauss-Legendre nodes
+and uniform azimuth. Full direct RHF/UHF checks the
 160/32/64 grid against 224/44/88, separately for local/nonlocal matrices
 (absolute 2e-9) and derivatives (2e-8), returning the refined result. Failure
 rejects the calculation. This is empirical convergence evidence, not a
@@ -153,7 +168,7 @@ rigorous error bound for arbitrary exponents/geometries. Raw exports expose
 their explicit grids so discretization and CPU/GPU floating-point errors
 can be inspected separately.
 
-CPU stages one radial layer of AO values and projections. CUDA stages at most
+The CPU grid fallback stages one radial layer of AO values and projections. CUDA stages at most
 four in the bounded small-domain schedule, independently of radial grid length.
 The final batch uses its actual remaining layers. OOM in optional four-layer
 staging retries the original single-layer schedule; other failures propagate.
@@ -498,11 +513,12 @@ copies. This changes execution orchestration, not the mathematical kernel count
 or the first-call compilation cost.
 
 The same nine-source stationary plan supplies force = -gradient. CPU ECP
-derivatives explicitly come from `checked_ecp_integrals`, the generated
-native CPU two-grid provider also used by CPU ECP energies. It checks
+derivatives explicitly come from `checked_ecp_integrals`, the same CPU provider
+used by ECP energies. Its analytic power-two specialization and retained checked
+grid domain follow the numerical boundaries described above. The fallback checks
 160/32 against 224/44 quadrature, preserving the energy/derivative convergence
-gates. The provider consumes the same compiler-owned mathematics as CUDA;
-the independent CPU algorithm is retained only as a test oracle.
+gates. Both numerical paths are compiler-owned; the independent CPU real-space
+algorithm is retained only as a test oracle.
 
 The KS planner reserves a 256 MiB additional host staging cap per serialized
 force consumer. A conservative inventory covers AO/snapshot copies, both ECP

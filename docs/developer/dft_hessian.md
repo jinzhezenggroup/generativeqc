@@ -180,10 +180,20 @@ The low-level CPU direct full-range candidate owner also admits scalar-ECP
 RKS, while retaining all-electron RKS/UKS admission. Scalar-ECP UKS is not
 included in this candidate extension. This does not promote public scalar-ECP
 B3LYP/PBE0 Hessian capabilities. The existing effective ionic charges and
-shared ECP first/second-order sources are retained. A finite coarse/fine HVP
-validation mismatch may use one bounded finer validation grid; the returned
-HVP remains on the original native grid. Nonfinite values, exhausted resources
-and unresolved quadrature error still reject. The retained CsH qualification
+shared ECP first/second-order sources are retained. For CPU radial-power-two
+operators with local/s/p/d projectors and s--f orbitals, one compiler-owned
+Gaussian operator supplies native primal, first and contracted second
+derivatives. The snapshot token authenticates the immutable native system;
+the response owner caches the fixed-density coordinate Hessian once and adds
+the first-derivative contraction with the density response for each HVP. It
+does not allocate a global coordinate-squared AO tensor or copy a native grid
+to construct this source. Workspace and generated-block work are independently
+bounded before execution, and stale snapshots fail before publication.
+
+Other legal powers/projectors retain checked-grid sources. A finite coarse/fine
+HVP validation mismatch on that fallback may use one bounded finer validation
+grid; the returned HVP remains on the original native grid. Nonfinite values,
+exhausted resources and unresolved quadrature error still reject. The retained CsH qualification
 and its explicit domain limitations are documented in
 [the bounded-validation rationale](../../.agents/notes/implemented/numerics/2026-11-04-scalar-ecp-hessian-bounded-validation.md).
 

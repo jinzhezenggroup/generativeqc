@@ -1367,6 +1367,9 @@ def composite_rks_hvp(
         "second_integral_backend": operator.backend.device,
         "grid_ad_backend": "cpu",
         "ecp_ad_backend": "cpu" if operator.ecp is not None else None,
+        "ecp_owner_work": None
+        if operator.ecp is None
+        else dict(operator.ecp.statistics),
         "df_integral_ad_backend": "cpu" if operator.df is not None else None,
         "density_fitting": "full-rank-full-range-jk-plus-exact-lr"
         if operator.df is not None
@@ -1467,6 +1470,9 @@ def composite_rks_hessian(
         "second_integral_backend": operator.backend.device,
         "grid_ad_backend": "cpu",
         "ecp_ad_backend": "cpu" if operator.ecp is not None else None,
+        "ecp_owner_work": None
+        if operator.ecp is None
+        else dict(operator.ecp.statistics),
         "df_integral_ad_backend": "cpu" if operator.df is not None else None,
         "density_fitting": "full-rank-full-range-jk-plus-exact-lr"
         if operator.df is not None

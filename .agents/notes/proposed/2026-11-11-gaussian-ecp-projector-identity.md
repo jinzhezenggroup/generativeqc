@@ -389,3 +389,14 @@ particular, do not materialize a global `(3N)^2 * nao^2` jet tensor in a large
 molecular consumer merely because the private three-atom diagnostic exports it.
 The architectural proposal remains proposed until those production boundaries
 are implemented and independently qualified.
+
+## Follow-up: bounded production source port
+
+The subsequent [native Gaussian ECP response decision](../implemented/numerics/2026-11-11-native-gaussian-ecp-response.md)
+records the implemented CPU selector, early-contracted native geometry sources,
+authenticated snapshot handoff and bounded response cache. Its actual production
+integral/source tests and original unscaled Cs-H RKS HVP pass without widening
+the earlier gates. That note preserves the source/library recovery identity and
+does not turn these results into installed ECP, UKS, full-matrix or TS acceptance.
+The historical failed attempts and independent-reference receipts above remain
+unchanged.

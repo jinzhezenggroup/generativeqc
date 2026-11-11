@@ -235,6 +235,8 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_ecp_capability_tests tests/native/test_ecp_capabilities.cpp)
   generativeqc_native_test(generativeqc_ecp_cpu_tests tests/native/test_ecp_cpu.cpp)
   target_sources(generativeqc_ecp_cpu_tests PRIVATE tests/native/ecp_reference.cpp)
+  generativeqc_native_test(generativeqc_ecp_gaussian_tests tests/native/test_ecp_gaussian.cpp)
+  target_sources(generativeqc_ecp_gaussian_tests PRIVATE tests/native/ecp_reference.cpp)
   add_dependencies(generativeqc_ecp_projector_tests generativeqc_ecp_codegen)
   target_include_directories(generativeqc_ecp_projector_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   generativeqc_native_test(generativeqc_fock_provider_tests tests/native/test_fock_provider.cpp)
@@ -598,7 +600,8 @@ macro(generativeqc_add_native_tests)
       src/dft/cosx_reference.cpp
       src/integrals/s_integrals.cpp
       src/integrals/generated_df_cpu.cpp
-      src/integrals/ecp.cpp)
+      src/integrals/ecp.cpp
+      $<TARGET_OBJECTS:generativeqc_ecp_gaussian_cpu>)
     add_dependencies(generativeqc_cosx_cuda_tests generativeqc_ecp_codegen generativeqc_libxc_semilocal_cuda_codegen)
     if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
       # This standalone test compiles s_integrals.cpp instead of linking the

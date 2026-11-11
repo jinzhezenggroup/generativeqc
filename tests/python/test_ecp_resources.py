@@ -58,13 +58,36 @@ def item(
         (50, 56, 4, 80, 12),
     ),
 )
-def test_native_matches_independent_portable_two_grid_bound(
+def test_native_matches_independent_portable_ecp_bound(
     library: typing.Any, shape: tuple[int, ...], cuda: bool
 ) -> None:
     """CUDA here selects scalar scheduling arithmetic, never a CUDA context."""
     topology = item(*shape)
     expected = resources_hf._ecp_workspace(topology, cuda=cuda)
     assert resources_hf._ecp_workspace(topology, cuda=cuda, library=library) == expected
+
+
+@pytest.mark.parametrize("cartesian_nao,atoms", ((1, 1), (1024, 40)))
+@pytest.mark.parametrize("native", (False, True))
+def test_cpu_inventory_covers_analytic_scratch_and_compensated_publication(
+    library: typing.Any, cartesian_nao: int, atoms: int, native: bool
+) -> None:
+    """Exercise both fixed-scratch and derivative-output dominated shapes."""
+    from generativeqc_compiler.integral.ecp_policy import (
+        GAUSSIAN_MAX_SCRATCH_DOUBLES,
+    )
+
+    topology = item(
+        nao=cartesian_nao,
+        cartesian_nao=cartesian_nao,
+        atoms=atoms,
+        primitives=cartesian_nao,
+    )
+    minimum = 48 * cartesian_nao**2 * (1 + 3 * atoms) + 8 * GAUSSIAN_MAX_SCRATCH_DOUBLES
+    capacity = resources_hf._ecp_workspace(
+        topology, library=library if native else None
+    )
+    assert capacity >= minimum
 
 
 @pytest.mark.parametrize("cuda", (False, True))
@@ -139,7 +162,7 @@ def test_invalid_native_output_cannot_wrap_into_a_budget() -> None:
         return 0
 
     loaded = SimpleNamespace(generativeqc_resource_ecp_workspace_v1=oversized)
-    with pytest.raises(ValueError, match="ECP two-grid workspace"):
+    with pytest.raises(ValueError, match="ECP workspace"):
         resources_hf._ecp_workspace(item(), library=loaded)
 
 

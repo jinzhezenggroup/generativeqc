@@ -27,6 +27,7 @@ GRIDS = {
 def owner_with_integrals(values: dict) -> tuple:
     """Supply grid-dependent integrals without depending on invocation order."""
     owner = object.__new__(ECPSecondOrder)
+    owner._analytic_source = None
     owner.statistics = {"hvp_validation_refinements": 0}
     integrals = {GRIDS[name]: value for name, value in values.items()}
 
