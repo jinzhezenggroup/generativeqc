@@ -1,9 +1,8 @@
 # RTX 5090: #3064/#3065, aligned HF/KS defaults, 2026-11-11
 
-Source `a50c80f627455a801e1e2196b26259e64e5e9de2` combines master
-`978efb34d`, #3064 `ebe21c712`, #3065 `bd92afd10`, RKS orbital stopping,
-compact DF RHF alignment, formatter fixes and public Standard defaults. `samples.json.xz`
-records source/ELF, software, allocation and build/cache identities.
+Source `a50c80f627455a801e1e2196b26259e64e5e9de2`: #3064/#3065, aligned HF/KS
+and public Standard defaults. `samples.json.xz` binds exact source/ELF,
+software, allocation and cached-build identities.
 
 | Mode | Cold wins | Warm wins | Qualified cold | Qualified warm |
 | --- | ---: | ---: | ---: | ---: |
@@ -54,8 +53,7 @@ PYTHONPATH=python:. python -m benchmarks.readme_defaults_summary \
 Full-vector and source-matched build/qualification receipts remain in
 `.artifacts/readme-public-default-20261111/` and the matching
 `n1:/data/jzzeng/readme-public-default-20261111`.
-The preceding 64/64 cold cohort remains at `2a7f52f7e475297246be8ab80ce3596518cc3409`;
-public defaults changed source identity, so every point was reacquired.
+The preceding 64/64 cold cohort is retained; every new-source point was reacquired.
 The [default decision](../../../.agents/notes/implemented/compatibility/2026-11-11-public-default-standard.md)
 retains older cohort identities, the Balanced mismatch and source validation.
 Strict/default HF ablation has equal work counts: matching thresholds proves
