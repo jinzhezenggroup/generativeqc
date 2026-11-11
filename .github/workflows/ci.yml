@@ -2307,7 +2307,7 @@ jobs:
             -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
           # Flush bounded host pressure samples before a runner loss can hide them.
           python3 tools/ci_host_resources.py -- \
-            cmake --build --preset cuda-release-cli --parallel 3
+            cmake --build --preset cuda-release-cli --parallel 2
       - name: Report completed CLI Ninja command timings
         if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outcome != '' && steps.native_cli_build.outcome != 'skipped'
         continue-on-error: true

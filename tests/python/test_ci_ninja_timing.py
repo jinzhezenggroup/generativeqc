@@ -506,13 +506,17 @@ def test_signal_forwarding_reaps_only_owned_child_and_stops_sampling(
     tmp_path: Path, signum: int
 ) -> None:
     ready = tmp_path / "ready"
+    pending = tmp_path / "ready.pending"
     # A separate long-lived process proves forwarding never hits the caller's
     # process group or a shared compiler-cache server.
     unrelated = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     child = subprocess.Popen(
         resource_command(
             "import os,pathlib,time; "
-            f"pathlib.Path({str(ready)!r}).write_text(str(os.getpid())); "
+            # Publish readiness only after the complete PID has been written.
+            # File creation by write_text is visible before its contents are.
+            f"pathlib.Path({str(pending)!r}).write_text(str(os.getpid())); "
+            f"pathlib.Path({str(pending)!r}).replace({str(ready)!r}); "
             "time.sleep(30)"
         ),
         stdout=subprocess.PIPE,

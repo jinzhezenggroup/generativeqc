@@ -48,3 +48,50 @@ They neither fix runner loss nor prove its cause. Revisit resource limits only
 when actual measurements identify pressure and equivalent qualification exists.
 
 Reference: https://github.com/jinzhezenggroup/generativeqc/actions/runs/43009841638/job/130486436715
+
+## Measured-pressure follow-up: 2026-11-11
+
+The initial decision above preserved parallelism while collecting evidence. The
+next release-tier attempt at source
+`d9504e65b4403812b94c80c3f6136bf596318855` retained `FAST_COMPILE=OFF`, global
+parallelism 3, and bounded CUDA/AOT pools of 3/2. It was not an unbounded build.
+Job 130530443024 ended with a runner-shutdown message at 13:03:17 UTC after
+emitting 31 host-resource samples. Available memory fell from 9,079,416 KiB
+(8.66 GiB) at 13:01:33 to 798,992 KiB (0.76 GiB) at 13:02:03. The last sample,
+at 13:03:04, recorded:
+
+- 484,148 KiB (473 MiB) available out of 16,366,512 KiB physical memory;
+- 14.37 GiB aggregate host compiler RSS, with a maximum of 11.76 GiB for one
+  sampled compiler process;
+- 707,480 KiB (691 MiB) swap in use;
+- memory-pressure `avg10` of 21.81% `some` and 21.33% `full`; and
+- 75.48 GiB workspace disk space available.
+
+These measurements establish severe memory pressure before the shutdown, not an
+explicit OOM kill or the shutdown's definitive cause. Compiler RSS is host-wide
+and can double-count shared pages; it does not identify an offending build edge.
+The last completed Ninja edge, 453/767, likewise does not identify which of the
+concurrent commands was responsible. There is no observed disk-exhaustion signal.
+
+As a controlled mitigation, reduce only this native CLI build invocation's
+global parallelism from 3 to 2. The explicit command-line cap overrides an
+inherited `CMAKE_BUILD_PARALLEL_LEVEL`; the existing per-pool limits remain
+unchanged beneath it. Keep the full release configuration, flags, scientific
+inputs and numerical gates, tests, compiler caching, job timeout, fast seed job,
+other jobs, and artifact/publication behavior unchanged. Retain the same bounded
+telemetry to evaluate the next equivalent release attempt.
+
+`tests/python/test_ci_cli_ccache.py` executes the actual workflow shell and
+diagnostic wrapper with recording cmake/ccache substitutes for both ON/OFF tiers,
+with empty and larger inherited parallelism defaults. It checks the explicit cap
+of 2, strict cache configuration, and unchanged configure/build failure status.
+This is workflow-contract coverage, not a native build or GPU qualification.
+
+Two jobs may still exceed this runner's memory, and lower parallelism may increase
+wall time. A passing fast-tier/high-cache-hit build does not qualify the release
+workload. Do not claim the mitigation fixes runner loss until the equivalent
+release build and required gates complete. Revisit the cap or investigate
+individual translation-unit memory only with further measured evidence; preserve
+the failed attempts and do not relax release flags or numerical gates.
+
+Reference: https://github.com/jinzhezenggroup/generativeqc/actions/runs/43022943858/job/130530443024
