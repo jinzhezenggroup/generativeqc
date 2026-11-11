@@ -148,6 +148,22 @@ for all 512 endpoints, the default convergence contract and reproducible
 timing/error summaries. The cold DF HF96 slow point remains visible; matching
 SCF thresholds does not imply identical work or a universal speedup guarantee.
 
+**HF/DFT energy + analytic forces — H100 (2026-11-11)**
+
+The same 64 pairs on master `5533417aa` (the RTX 5090 source plus the #3069
+erf metric fix) on one H100 80GB, against GPU4PySCF 1.9.0 defaults, show
+GenerativeQC faster in **63/64 cold** and **62/64 warm** cases. Independent
+gates again qualify **58/64 pairs**, with the same six failures; **57/58 cold**
+and **57/58 warm** qualified pairs are faster. Qualified slow points are
+Direct ωB97M-V96 cold (48.1 vs 42.0 s) and Direct r2SCAN-3c96 warm
+(4.01 vs 3.85 s). Warm Direct ωB97M-V96 is 1.33× faster.
+
+![Direct cold and warm endpoint timings on H100, measured 2026-11-11](assets/readme-direct-defaults-h100.svg)
+
+![Density-fitted cold and warm endpoint timings on H100, measured 2026-11-11](assets/readme-df-defaults-h100.svg)
+
+See [H100 measurements, accuracy and conditions](benchmarks/results/readme-h100-20261111/README.md).
+
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 
 ![GPU full-DF CCSD(T)/CBS complete endpoint timings](assets/readme-cbs-performance.svg)
