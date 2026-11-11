@@ -470,6 +470,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::size_t following_force_device_bytes{};
   bool following_force_requested{};
   unsigned pending_iterations{};
+  std::uint64_t pending_residual_matrix_products{};
   std::array<std::uint64_t, kCudaKsChunkCapacity> pending_generations{};
   runtime::SolverRegionCudaExecutor solver_region_executor;
   runtime::CompiledExecutionRegion device_chunk_region;
@@ -1134,7 +1135,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
                                 scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
-      const std::uint64_t strict_matrix_products = stabilize_occupations ? 9U : 7U;
+      const std::uint64_t strict_matrix_products =
+          (stabilize_occupations ? 9U : 7U) + pending_residual_matrix_products;
       record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
                                 scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict,
                                 strict_matrix_products);
@@ -4228,6 +4230,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       launch_subtract_matrix_batches_kernel(blocks, 128, 0, stream, 1, spins, n, tmp2, enabled,
                                             residual);
       check(cudaGetLastError());
+      // Count the shared transform only when executed, once per physical Fock.
+      // A subsequent strict/retry sweep must not inherit the previous count.
+      pending_residual_matrix_products = 0;
       const bool physical_orbital_check = standard_stationarity_allowance_active() &&
                                           !pending_nonlocal_seed && !pending_nonlocal_frozen;
       if (physical_orbital_check) {
@@ -4236,6 +4241,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // nor its largest element can be compared to the MO threshold directly.
         multiply(residual, true, false, x, false, tmp1);
         multiply(x, false, true, tmp1, true, tmp2);
+        pending_residual_matrix_products += 2;
         cuda_ks_detail::orbital_gradient(stream, n, tmp2, enabled, scalar_records);
         check(cudaGetLastError());
         runtime::cuda_trace::trace_counter("physical_orbital_gradient_checks", 1);
@@ -4251,6 +4257,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         if (!physical_orbital_check) {
           multiply(residual, true, false, x, false, tmp1);
           multiply(x, false, true, tmp1, true, tmp2);
+          pending_residual_matrix_products += 2;
         }
         history_residual = tmp2;
         runtime::cuda_trace::trace_counter("orthogonal_diis_residuals", 1);
@@ -4608,10 +4615,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !precision_schedule.any_lower_precision() && provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; }) &&
-        detail::stationary_density_needs_energy_confirmation(
-            has_energy_history, output.energy_change, physical.density_change, physical.residual,
-            physical.maximum_residual, options.energy_tolerance, options.density_tolerance,
-            physical_stationarity_tolerance());
+        direct_ks_density_confirmation(stopping, orbital_policy, physical.orbital_gradient);
     // Keep the existing RMS diagnostic, but do not publish an energy-only state
     // that the shared final-state validator will reject on the AO maximum norm.
     // Budget Fock already requires consecutive fresh FP64 physical Focks and

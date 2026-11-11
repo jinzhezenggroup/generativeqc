@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "dft/energy_change.hpp"
 #include "dft/semilocal_family.hpp"
 
 namespace generativeqc::dft {
@@ -89,6 +90,19 @@ constexpr bool early_ks_final_probe_stationary(const KsStoppingState& state,
  */
 inline bool orbital_ks_stationary(const KsStoppingState& state, double orbital_gradient) noexcept {
   return orbital_gradient >= 0.0 && orbital_gradient < std::sqrt(state.energy_tolerance);
+}
+
+/** An unchanged Direct density may confirm energy only after every active
+ * stationarity gate passes. Strict callers retain the existing AO policy. */
+inline bool direct_ks_density_confirmation(const KsStoppingState& state, bool orbital_policy,
+                                           double orbital_gradient) noexcept {
+  const bool history =
+      state.iterations > 1 || (state.iterations == 1 && state.warm_energy_baseline);
+  return detail::stationary_density_needs_energy_confirmation(
+             history, state.energy_change, state.density_change, state.residual,
+             state.maximum_residual, state.energy_tolerance, state.density_tolerance,
+             state.stationarity_tolerance) &&
+         (!orbital_policy || orbital_ks_stationary(state, orbital_gradient));
 }
 
 /** Restricted molecular E/MO-gradient candidate, matching GPU4PySCF's norms.
