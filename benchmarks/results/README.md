@@ -2,6 +2,8 @@
 
 The [combined #3064/#3065 RTX 5090 refresh](readme-rtx5090-composed-20261111/README.md)
 retains all 512 fresh HF/DFT E+force calls, independent gates and cold slow points.
+The [H100 counterpart on `5533417aa`](readme-h100-20261111/README.md) retains the
+same 512-call matrix, its qualified slow points and the #3069 DF ωB97M-V fix.
 
 The [final 2026-10-25 default-only refresh](readme-refresh-20261025/README.md)
 retains all 128 populations / 512 complete E+F calls under the #2786 framework,
