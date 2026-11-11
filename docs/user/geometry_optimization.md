@@ -124,3 +124,97 @@ See the {ref}`native contract reference <native-c-generativeqc-saddle-correct-v1
 for callback lifetimes, output capacities and failure semantics. This callback
 API is algorithm infrastructure, not independent molecular or Ni/ECP TS
 qualification.
+
+## Python saddle interfaces
+
+`generativeqc.saddle.correct_saddle` binds that same native corrector to Python
+energy/gradient and raw-Hessian callbacks. It does not reimplement the optimizer.
+`generativeqc.saddle.optimize_saddle` supplies the molecular adapter, using an
+existing `Calculator` without switching the method, basis or grid. These APIs do
+not change `generativeqc optimize`, which remains a Python-free minimum search;
+there is not yet a molecular TS CLI task.
+
+(python-saddle-backends)=
+### Admission and execution
+
+The molecular adapter requires an already qualified public Hessian and forces,
+CPU FP64 direct all-electron unpolarized full-range hybrid RKS, and one fixed
+charge with multiplicity one. Semilocal-only, range/nonlocal, UKS, ECP, DF and
+CUDA calculators are not admitted by this adapter. A qualified uncut two-body
+D3(BJ) correction remains part of the same total MethodIR. This narrower adapter
+does not promote an unqualified derivative domain. In particular, it does not
+deliver the requested Ni/I/Cs transition-state endpoint.
+
+One prepared native SCF supplies energy/forces and the raw Hessian at each
+geometry. All electronic owners close before additive D3 curvature publication.
+No reference engine, finite differences, external optimizer or preliminary
+lower-level calculation runs in production. Independent cold SCFs must preserve
+the occupied subspace relative to the **last accepted** state: the smallest
+principal cross-geometry AO overlap must meet `minimum_occupied_overlap`
+(default `0.9`). Rejected trial roots never replace the accepted reference.
+This fail-closed local policy is not an electronic stability proof, a guarantee
+of the global ground state or an unrestricted root-selection algorithm.
+
+(python-saddle-values)=
+### Inputs and outputs
+
+Atoms and callback coordinates use Bohr in fixed nucleus order, with at most
+300 Cartesian components. Molecular calls require one positive physical or
+isotopic mass per atom in dalton. Derivative callbacks return Hartree energy,
+gradient (not forces) of shape `(N, 3)` in Hartree/Bohr and raw Hessian of shape
+`(3N, 3N)` in Hartree/Bohr². Inputs must be real and finite; complex, boolean
+and string arrays are not silently converted. The native reference controls,
+attempt counting and unaligned `3N` RMS conventions are defined above.
+
+`SaddleOptions` holds the independent convergence, trust, symmetry, tracking and
+native numerical-capacity controls. Molecular calls require rigid projection,
+which their default options enable. `SaddleProgress` describes the accepted
+geometry and receipt, even after rejection. Returning true cancels; None/false
+continues. `evaluation_progress` additionally receives start/complete/failed
+derivative stages, coordinates, elapsed seconds and completed SCF/response work.
+Those observer calls are not optimizer iterations.
+
+`SaddleResult` separates native execution from verified convergence. Inspect
+`converged`, `receipt`, `detail` and `failures`; zero C execution status alone is
+not convergence. `MolecularSaddleResult.optimizer` retains that native outcome;
+`atoms` is the last accepted geometry. Only fresh stationary verification
+produces `harmonics`, with unscaled frequencies and **all** vibrational modes
+retained. Its native curvatures are unweighted Cartesian values, not frequencies.
+The harmonic analyzer explicitly averages a raw matrix only after the declared
+symmetry gate; the optimizer result always retains the unmodified raw Hessian.
+
+(python-saddle-errors)=
+### Failure publication
+
+Invalid controls, shapes, units and masses raise ValueError or TypeError.
+Unqualified molecular domains raise NotImplementedError before SCF; native
+numeric-capacity and molecular output preflight refusals raise MemoryError.
+Library and ABI errors raise RuntimeError. Exceptions from derivative, progress
+and cancellation callbacks, including Python interrupts, never unwind through
+the C ABI: they produce explicit failed/cancelled results with exception type
+and message. Failed initial preparation has no valid derivative arrays and uses
+None for receipt metrics. Later failures preserve the last fully accepted
+geometry, gradient and raw Hessian, never a failed trial as a success result.
+
+Harmonic-publication failure preserves the native result but makes molecular
+`converged` false, with `diagnostics['final_status']='harmonic_analysis_failed'`.
+Completed SCF/response counts do not invent partially completed failed work;
+`work_counters_complete` and `work_counters_scope` make that limitation explicit.
+The attempt cap, a nonnegative target, lost tracking, ambiguous curvature and
+cancellation are never reported as successful index-one convergence.
+
+(python-saddle-ownership)=
+### Ownership and budgets
+
+Calls are synchronous. Serialize calls sharing a calculator or callback resources.
+Progress coordinates and returned arrays/mappings are detached read-only data,
+usable after callback return. No callback retains a borrowed C pointer, and no
+prepared electronic owner survives the molecular endpoint, including failures.
+Changing the calculator's physical model during a callback fails explicitly.
+
+`maximum_numeric_bytes` bounds the native optimizer only; overlap, integral,
+grid and output controls bound their named providers independently. Neither
+these bounds nor their sum is a whole-process peak-RSS claim. Complete endpoint
+seconds include preparation, derivative work, native optimization and final
+mode analysis. Qualification must independently measure process peak memory
+and inspect both completed and failed stage receipts.

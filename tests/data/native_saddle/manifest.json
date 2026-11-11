@@ -1,0 +1,40 @@
+{
+  "schema": "generativeqc.native-molecular-saddle-control/v1",
+  "scope": "CPU all-electron RKS public adapter controls, not Ni/ECP or installed TS CLI qualification",
+  "method": "B3LYP",
+  "vwn_variant": "Gaussian/VWN-RPA",
+  "basis": "sto-3g",
+  "basis_representation": "spherical",
+  "charge": 0,
+  "multiplicity": 1,
+  "grid": "native-default",
+  "d3": false,
+  "masses_dalton": [14.00307400443, 1.00782503223, 1.00782503223, 1.00782503223],
+  "acceptance": {
+    "energy_abs_hartree": 2e-9,
+    "gradient_max": 2e-7,
+    "density_max": 2e-9,
+    "orbital_gradient_norm": 2e-9,
+    "response_residual_norm": 2e-10,
+    "raw_symmetry_max": 2e-8,
+    "raw_translation_max": 2e-8,
+    "independent_matrix_max": 1e-5,
+    "independent_frequency_max_cm1": 1.0,
+    "difference_steps_bohr": [0.003, 0.001, 0.0003],
+    "difference_stencil": "symmetric-five-point-fourth-order"
+  },
+  "controls": {
+    "max_attempts": 100,
+    "energy_change": 1e-6,
+    "gradient_rms": 3e-4,
+    "gradient_max": 4.5e-4,
+    "displacement_rms_angstrom": 1.2e-3,
+    "displacement_max_angstrom": 1.8e-3,
+    "raw_symmetry_tolerance": 2e-8,
+    "project_rigid_motions": true
+  },
+  "cases": {
+    "saddle": {"nitrogen_z_bohr": 0.02, "hydrogen_radius_bohr": 1.9, "expected_status": "first_order_saddle", "expected_index": 1},
+    "nonnegative": {"nitrogen_z_bohr": 0.75, "hydrogen_radius_bohr": 1.9, "expected_status": "target_not_negative", "expected_index": 0}
+  }
+}
