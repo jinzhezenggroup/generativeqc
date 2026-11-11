@@ -1,26 +1,33 @@
 # RTX 5090: #3064/#3065, aligned HF/KS defaults, 2026-11-11
 
-Source `5a1ae34addac124423a22490d1d7dda0f90fc0f4` combines master
+Source `a50c80f627455a801e1e2196b26259e64e5e9de2` combines master
 `978efb34d`, #3064 `ebe21c712`, #3065 `bd92afd10`, RKS orbital stopping,
-compact DF RHF alignment and the concurrent formatter fix. `samples.json.xz`
+compact DF RHF alignment, formatter fixes and public Standard defaults. `samples.json.xz`
 records source/ELF, software, allocation and build/cache identities.
 
 | Mode | Cold wins | Warm wins | Qualified cold | Qualified warm |
 | --- | ---: | ---: | ---: | ---: |
 | Direct | 32/32 | 32/32 | 31/31 | 31/31 |
-| DF | 32/32 | 32/32 | 27/27 | 27/27 |
+| DF | 31/32 | 32/32 | 27/27 | 27/27 |
 
 All 64 pairs / 128 processes / 512 E+force calls succeed, with no retries or
-old timings. Warm Direct ωB97M-V96: 9.37×. These are observations, not
+old timings. Warm Direct ωB97M-V96: 9.39×. These are observations, not
 statistical rankings or universal speedups. CBS is unchanged.
+Cold DF HF96 remains slower: 17.860 s versus 17.328 s, with native target
+iterations/Focks 11/12 versus reference iterations/effective potentials 10/11.
 
 Four finite node1/main Slurm workers pair engines consecutively per 5090;
 first-engine order is balanced 32/32, math threads=1. Cold includes setup,
 SCF, forces and host export, excluding import/context startup and cache-miss
 compilation. Warm is the median of three frozen-own-cold-density calls;
 bars are min–max. Caches remain; native imports reject reference engines.
-Native RHF/KS convergence and XC-order selectors are unset. GPU4PySCF
+Profile, RHF/KS convergence and XC-order selectors are unset. GPU4PySCF
 SCF/convergence/grids and the common full-grid-response force contract are unchanged.
+
+The Standard arm omits `policy`, matching default `PrecisionCalculator` and
+`PrecisionPolicy()`. No SCF, initial-guess, grid or tile controls are supplied.
+Method/basis, spherical AOs and Direct/DF auxiliary inputs define the model;
+these model choices must match when reproducing a plotted case.
 
 Qualified restricted CUDA HF/KS energy and force endpoints share
 `|delta E| < 1e-9` AND `||2 C_vir^T F[D] C_occ||_F < sqrt(1e-9)`, matching the
@@ -48,8 +55,10 @@ PYTHONPATH=python:. python -m benchmarks.readme_defaults_summary \
 ```
 
 Full-vector and source-matched build/qualification receipts remain in
-`.artifacts/df-hf-aligned-final-20261111/` and the matching
-`n1:/data/jzzeng/df-hf-aligned-final-20261111`.
+`.artifacts/readme-public-default-20261111/` and the matching
+`n1:/data/jzzeng/readme-public-default-20261111`.
+The preceding 64/64 cold cohort remains at `2a7f52f7e475297246be8ab80ce3596518cc3409`;
+public defaults changed source identity, so every point was reacquired.
 Prior 63/64 and 56/64 cold cohorts:
 `e25b70c24d8464c32444bec25bccd33d2f494795` and
 `28ac57e819405bd9bae06e8fae60ac25b98d14a1`.
@@ -63,3 +72,5 @@ causal speedup. The
 and [KS decision](../../../.agents/notes/implemented/numerics/2026-11-11-ks-default-orbital-stopping.md)
 separate ordinary stopping from stringent force repeatability. Replay uses
 recorded unrounded errors, not fresh vector subtraction.
+The [public default decision](../../../.agents/notes/implemented/compatibility/2026-11-11-public-default-standard.md)
+records the former Balanced audit mismatch and source-matched validation.

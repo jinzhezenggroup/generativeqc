@@ -162,3 +162,14 @@ inventory, CUDA ownership and fixed-cap evidence checks pass. Native source
 identity remains `cf7b1e62f4502195b1983fc6124ca26d4aa7cdd7810c4b030d97e3827bff7986`;
 CBS bytes are unchanged. Libxc's historical evidence remains stale with zero
 current-source qualified products; passing catalog tests do not promote it.
+
+## Public default follow-up
+
+The separate
+`../compatibility/2026-11-11-public-default-standard.md` decision aligns the
+public precision facade and default policy object with the measured Standard
+endpoint and removes the benchmark's explicit profile selection. It retains
+this source-bound campaign rather than relabeling it, with a new complete
+source/image acquisition for the replacement publication. Neither this public
+dispatch correction nor a later timing cohort changes the same-image HF
+strict/default ablation or establishes a causal HF work reduction.
