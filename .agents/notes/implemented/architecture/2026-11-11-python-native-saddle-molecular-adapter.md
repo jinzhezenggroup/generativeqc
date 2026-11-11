@@ -181,3 +181,61 @@ positive and molecular `converged == False`, followed by three independent full
 raw matrices and unscaled frequency agreement. These gates are frozen before
 running the control. Adding the input alone does not qualify that endpoint; the
 earlier nonstationary negative receipt remains a different test.
+
+## Installed stationary-minimum acceptance
+
+The separate public minimum control at
+`5ecd28301d5048492985f0cdd044e4774be44147` completes with actual zero test and
+process exits: `1 passed in 1102.58s`. It runs outside the checkout against a
+fresh normally repaired wheel, including the subsequent input/harmonic guards,
+with installed saddle modules verified against committed source. The wheel SHA
+is `b0861e79ff0bb3b4a89b85cdeedd93aeaf5449c52d8278dcbdde2c716ec4f19a`;
+installed native library SHA is
+`3a942689b291d382fa30e7345e026f5ae5ce77db2a33dac2b379d75dc0868af6`.
+The source identity is
+`1e942c693a4be572d1777498eb4e73ff8de389916a18ab81734732e76712738f`.
+
+Native fresh final verification returns `other_index`, index zero, zero
+attempts, six rigid and six active modes, no ambiguous active curvature and
+**molecular `converged == False`**. This is now a stationary minimum rejection
+control, not a relabelled nonstationary input or a reported TS success. Two
+energy/gradient evaluations and two fresh raw Hessians consume 18 SCF iterations,
+22 Fock builds and 24 nuclear response solves. The native endpoint takes
+871.7023754213005 seconds; complete process wall time is 1103.97 seconds with
+peak RSS 1,082,360 KiB. Maximum true response residual is
+`4.286388255605711e-12`; final maximum gradient is
+`1.1319646775476144e-8` Hartree/Bohr, below the predeclared stationary-input gate.
+
+Independent central density error is `2.544853217045784e-12` and orbital gradient
+norm `5.335988115494629e-12`. All three full raw matrices pass the original
+fourth-order `[0.003, 0.001, 0.0003]` Bohr gates: maximum errors are
+`[1.007668393171457e-10, 2.79616794995885e-10, 2.051555036963748e-10]`.
+Maximum unscaled frequency error is `3.766160716622835e-7` cm⁻¹. All six retained
+frequencies are positive:
+`[1355.0826394488868, 1937.65814014424, 1937.7612662190868,
+3404.2146811967036, 3669.533056745566, 3669.6608098249953]` cm⁻¹.
+No column, negative/soft mode or failed comparison is removed to pass a gate.
+
+The same installed artifact passes 170 ABI/admission/dispatch tests, 81 public
+contract/D3/vibration tests plus 17 subtests, nine low-level light-element UKS
+and UKS/D3 tests, the native SDK saddle harness and C99 header compilation.
+The updated strict documentation build and pre-commit checks pass. These UKS
+tests retain their small custom-grid domain, not public/default-grid Ni or ECP
+admission. Initial test-only import and scratch C-probe defects are retained
+separately from the corrected successful runs.
+
+Verified local recovery under
+`build/qualification/stationary-minimum-20261111` consists of the 47-member
+build/input archive (SHA
+`b020b6a6fc042cf94e17dd1dbf110f0b0d63fc42e9124f43b089b60451087a35`) and
+137-member completed-minimum archive (SHA
+`41157ef851b8d17ded61a1172d13b2d4b649f8ac4545fd05fc4f373f9f73177b`).
+The latter includes final raw arrays, independent full matrices, source hashes,
+compiler artifacts, process receipts and low-level UKS regression evidence.
+No release or external asset is published.
+
+This does not restamp the original `cf3f871af` positive/negative receipts.
+A fresh positive run against the updated `5ecd28301` wheel is still pending
+at this evidence boundary. The original Ni full matrix is also still running;
+its eleven frozen identities remain unchanged. Native TS CLI, public Ni/UKS/ECP,
+mixed Ni/I/Cs and the requested D3/def2-SVP production TS endpoint remain open.
