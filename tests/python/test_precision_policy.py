@@ -4,6 +4,7 @@ import ctypes
 import json
 import typing
 from dataclasses import FrozenInstanceError, fields, replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -114,6 +115,12 @@ def backend(
                 from generativeqc import KsOptions
 
                 self._ks_options = KsOptions()
+            if state.standard_convergence and self._ks_options is not None:
+                from generativeqc.ks import resolve_ks_options
+
+                self._ks_options = resolve_ks_options(
+                    options["method"], self._ks_options
+                )
             self._density_fitting_mode = 0
             self._density_fitting_relative_threshold = 1e-10
             self._energy_tolerance = options.get("energy_tolerance", 1e-10)
@@ -339,6 +346,58 @@ def test_standard_executes_once_without_inventing_budget_evidence(
     assert calculator.policy.to_dict() == {"profile": profile.lower(), "target": None}
     assert json.loads(json.dumps(report.to_dict(), allow_nan=False))["target"] is None
     np.testing.assert_array_equal(output.forces, native.forces)
+
+
+@pytest.mark.parametrize("mode", ("direct", "df"))
+@pytest.mark.parametrize(
+    "method", ("hf", "pbe", "pbe0", "b3lyp", "r2scan", "r2scan-3c", "m06-2x", "wb97m-v")
+)
+@pytest.mark.parametrize("explicit_policy", (False, True))
+def test_public_defaults_match_readme_standard_endpoint(
+    backend: SimpleNamespace,
+    tmp_path: Path,
+    mode: str,
+    method: str,
+    explicit_policy: bool,
+) -> None:
+    """Omitted controls must select the measured endpoint, not an extra audit."""
+    from benchmarks.readme_defaults import METHODS, native_calculator
+
+    backend.standard_convergence = True
+    options: dict[str, typing.Any] = {
+        "method": METHODS[method][0],
+        "device": "cuda",
+        "basis_representation": "spherical",
+    }
+    if method != "r2scan-3c":
+        options["basis"] = "def2-svp"
+    if mode == "df":
+        options.update(
+            density_fitting="cuda",
+            auxiliary_basis=tmp_path / f"{method}-auxiliary.json",
+        )
+    if explicit_policy:
+        options["policy"] = PrecisionPolicy()
+    ordinary = PrecisionCalculator(**options)
+    benchmark = native_calculator(method, "standard", mode, tmp_path)
+    assert (
+        ordinary.policy.to_dict()
+        == benchmark.policy.to_dict()
+        == {"profile": "standard", "target": None}
+    )
+    assert ordinary._options == benchmark._options
+    backend.outputs = [result(executed_backend="cuda"), result(executed_backend="cuda")]
+    reports = []
+    for calculator in (ordinary, benchmark):
+        reports.append(calculator.singlepoint(ATOMS).precision_validation)
+        calculator.clear_cache()
+    for report in reports:
+        assert report.status == "strict_fp64" and report.solve_count == 1
+        assert report.target is None and not report.errors
+        assert report.solves[0].requested_precision == "fp64"
+        assert report.solves[0].energy_tolerance == 1e-9
+        assert report.solves[0].density_tolerance == 1e-5
+        assert report.solves[0].screening_tolerance == 1e-12
 
 
 def test_tight_is_a_cbs_only_preset(backend: SimpleNamespace) -> None:
@@ -1148,7 +1207,7 @@ def test_success_accounts_for_both_endpoints_and_owned_inputs(
 def test_fallback_requires_its_own_verification(backend: SimpleNamespace) -> None:
     candidate, strict, tighter = result(force=1e-3), result(force=1e-8), result()
     backend.outputs = [candidate, strict, tighter]
-    output = PrecisionCalculator().singlepoint(ATOMS)
+    output = PrecisionCalculator(policy="balanced").singlepoint(ATOMS)
     report = output.precision_validation
     np.testing.assert_array_equal(output.forces, strict.forces)
     assert report.solve_count == 3 and report.status == "observed_met"
@@ -1165,7 +1224,7 @@ def test_failed_fallback_raises_with_observed_error_and_bounded_work(
 ) -> None:
     backend.outputs = [result(force=1e-2), result(force=1e-3), result()]
     with pytest.raises(PrecisionBudgetError) as failure:
-        PrecisionCalculator().singlepoint(ATOMS)
+        PrecisionCalculator(policy="balanced").singlepoint(ATOMS)
     report = failure.value.validation
     assert report.status == "observed_unmet" and report.solve_count == 3
     assert any(not error.met for error in report.errors)
@@ -1217,7 +1276,7 @@ def test_invalid_reference_never_passes(
 ) -> None:
     backend.outputs = [result(), damaged]
     with pytest.raises((ValueError, RuntimeError)):
-        PrecisionCalculator().singlepoint(ATOMS)
+        PrecisionCalculator(policy="balanced").singlepoint(ATOMS)
     assert backend.live is None
 
 
@@ -1271,7 +1330,7 @@ def test_native_failures_release_owners_and_are_not_hidden(
 ) -> None:
     backend.outputs = outputs
     with pytest.raises(RuntimeError, match="execution failed"):
-        PrecisionCalculator().singlepoint(ATOMS)
+        PrecisionCalculator(policy="balanced").singlepoint(ATOMS)
     assert backend.live is None
 
 
@@ -1306,14 +1365,14 @@ def test_incomplete_property_request_fails_before_solve(
     backend: SimpleNamespace, properties: typing.Any
 ) -> None:
     with pytest.raises((ValueError, TypeError)):
-        PrecisionCalculator().singlepoint(ATOMS, properties=properties)
+        PrecisionCalculator(policy="balanced").singlepoint(ATOMS, properties=properties)
     assert not backend.calls
 
 
 def test_mismatched_model_is_rejected_before_reference_execution(
     backend: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calculator = PrecisionCalculator()
+    calculator = PrecisionCalculator(policy="balanced")
     reference = calculator._reference()
     monkeypatch.setattr(
         reference,

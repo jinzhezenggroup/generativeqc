@@ -1,5 +1,12 @@
 # Application precision and explicit audits
 
+`PrecisionCalculator(...)` and `PrecisionPolicy()` default to Standard,
+the same optimized FP64 endpoint used by the README benchmark. Omitted
+convergence, initial-guess, grid and scheduling controls use the ordinary
+`Calculator` defaults; no benchmark-only environment selector is required.
+The method, orbital/auxiliary bases and Direct/DF mode still define the model
+and must match the plotted case when reproducing it.
+
 `PrecisionCalculator(policy="standard")` runs one optimized FP64 endpoint,
 while `PrecisionCalculator(policy="fast")` permits qualified approximations
 from an application error budget: supported routes can use FP32 arithmetic,
@@ -598,8 +605,9 @@ result = calculator.singlepoint([("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))])
 print(result.precision_validation.to_dict())
 ```
 
-The preset names are case-insensitive. Balanced remains the facade default;
-this naming change does not alter default calculations or audit behavior.
+The preset names are case-insensitive. Standard is the facade and policy-object
+default. Select `policy="balanced"`, `policy="strict"`, `policy="audit_auto"`
+or an explicit target to request the separate comparison endpoints and their cost.
 Providing `target` replaces all preset audit requirements, so energy-only audits
 use a target containing just energy. `properties` must include every explicit
 target observable and energy; by default these are requested automatically.
