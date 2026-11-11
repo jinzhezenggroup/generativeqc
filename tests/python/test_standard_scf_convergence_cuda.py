@@ -24,7 +24,8 @@ pytestmark = pytest.mark.skipif(
         (method, "direct", system)
         for method in ("hf", "pbe0", "m06-2x")
         for system in ("ammonia", "methane")
-    ],
+    ]
+    + [("hf", "df", system) for system in ("ammonia", "methane")],
 )
 def test_default_complete_endpoint_against_tight_same_model(
     method: str, mode: str, system: str, tmp_path: Path
@@ -107,6 +108,22 @@ def test_default_complete_endpoint_against_tight_same_model(
             reference.kernel(dm0=cp.asnumpy(density))
             reference_solver = "gpu-diis+cpu-newton"
         assert reference.converged
+        if method == "hf" and mode == "df" and system != "water":
+            from tools.generativeqc_validation.correlation_df_oracle import (
+                basis_snapshot,
+            )
+
+            # The README freezer contains only H/O. New N/C fixtures must export
+            # the oracle's exact default auxiliary choice, never substitute a
+            # different fitted operator or change the production benchmark input.
+            auxiliary_names = set(reference.with_df.auxmol.basis.values())
+            assert len(auxiliary_names) == 1
+            auxiliary = basis_snapshot(
+                auxiliary_names.pop(), [gto.charge(symbol) for symbol, _ in atoms]
+            )
+            (tmp_path / "hf-auxiliary.json").write_text(
+                json.dumps(auxiliary.to_payload()) + "\n"
+            )
         gradient = reference.nuc_grad_method()
         if method != "hf":
             gradient.grid_response = True
@@ -161,3 +178,38 @@ def test_default_complete_endpoint_against_tight_same_model(
                 (output / f"{method}-{mode}-{system}.json").write_text(
                     json.dumps(receipt, indent=2) + "\n"
                 )
+
+
+@pytest.mark.parametrize("method", ("pbe", "b3lyp"))
+@pytest.mark.parametrize("mode", ("direct", "df"))
+def test_explicit_strict_ks_policy_keeps_default_controls_and_independent_force_gates(
+    method: str, mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep historical stopping and its receipts separate from default E/D.
+
+    Both policies exercise the same scientific gates; a strict observation
+    must not overwrite the default observation for the same method and geometry.
+    """
+    monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CONVERGENCE", "strict")
+    if destination := os.environ.get("GENERATIVEQC_SCF_ORACLE_RECEIPTS"):
+        monkeypatch.setenv(
+            "GENERATIVEQC_SCF_ORACLE_RECEIPTS", str(Path(destination) / "strict")
+        )
+    test_default_complete_endpoint_against_tight_same_model(
+        method, mode, "water", tmp_path
+    )
+
+
+@pytest.mark.parametrize("mode", ("direct", "df"))
+def test_explicit_strict_hf_policy_keeps_independent_force_gates(
+    mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Strict HF uses default public E/D and retains independent receipt identity."""
+    monkeypatch.setenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE", "strict")
+    if destination := os.environ.get("GENERATIVEQC_SCF_ORACLE_RECEIPTS"):
+        monkeypatch.setenv(
+            "GENERATIVEQC_SCF_ORACLE_RECEIPTS", str(Path(destination) / "strict-hf")
+        )
+    test_default_complete_endpoint_against_tight_same_model(
+        "hf", mode, "water", tmp_path
+    )

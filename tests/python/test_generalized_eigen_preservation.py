@@ -279,6 +279,7 @@ def orchestration_probe(
         "canonical-adapter",
         "canonical-ordinary",
         "canonical-rhf",
+        "canonical-rhf-orbital",
         "canonical-uhf",
         "identity",
         "private-abi",
@@ -320,7 +321,7 @@ def _token_digest(source: str) -> str:
 
 
 def _expand_canonical(source: str, *, ordinary: bool) -> str:
-    """Expand only the replaced 2/1-GEMM phases to their original call sites."""
+    """Compare each shared transform with its equivalent explicit GEMM lowering."""
 
     def expand(match: re.Match[str]) -> str:
         args = [arg.strip() for arg in match[2].split(",")]
@@ -345,11 +346,9 @@ def _expand_canonical(source: str, *, ordinary: bool) -> str:
             second = "{" + second + "}"
         return first + f"if ({status} == GENERATIVEQC_STATUS_SUCCESS) " + second
 
-    expanded, count = re.subn(
+    return re.sub(
         r"\b(\w+)\s*=\s*scf_generalized_transform\(([^;]+)\);", expand, source
     )
-    assert count == (4 if "d_alpha_fock" in source else 2), count
-    return expanded
 
 
 @pytest.mark.skipif(
@@ -510,42 +509,48 @@ def _canonical_regions() -> str:
     ]
     for name in ("df_eigensystem", "df_rhf_scf", "df_uhf_scf"):
         live = (ROOT / "src/scf/cuda" / (name + ".cpp")).read_text()
+        if name == "df_eigensystem":
+            start = live.index(
+                "    if (orthogonalizer) {",
+                live.index('"upload ordinary DF eigen inputs"'),
+            )
+            end = live.index("    {\n      trace::TraceRegion download(", start)
+        elif name == "df_rhf_scf":
+            # Include the optional stopping-residual transform as well as the
+            # orbital frame. Slice before expansion so formatting/new phases
+            # cannot make the baseline start in a different branch.
+            start = live.index(
+                "    if (orbital_gradient_convergence) {",
+                live.index("const auto launch_iteration ="),
+            )
+            end = live.index("    launch_build_device_density_kernel", start)
+        else:
+            start = live.index("    iteration_status = scf_generalized_transform(")
+            end = live.index("      launch_update_device_uhf_convergence_kernel", start)
+        region = live[start:end]
+        if name == "df_uhf_scf":
+            region += "}\n"
         for baseline in (False, True):
             source = (
-                _expand_canonical(live, ordinary=name == "df_eigensystem")
+                _expand_canonical(region, ordinary=name == "df_eigensystem")
                 if baseline
-                else live
+                else region
             )
             function = ("baseline_" if baseline else "live_") + name
             if name == "df_eigensystem":
-                start = source.index(
-                    "    if (orthogonalizer) {",
-                    source.index('"upload ordinary DF eigen inputs"'),
-                )
-                end = source.index("    {\n      trace::TraceRegion download(", start)
                 parts.append(
                     f"generativeqc_status {function}(CudaDensityFittingJkPlan* plan, "
                     "dfao::OrdinaryEigensystem* state, bool orthogonalizer, double*& published, "
                     "std::string& detail) { const auto n = plan->nbf; "
                     "generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS; struct { int solver_calls{}; } diagnostic;\n"
-                    + source[start:end]
+                    + source
                     + "published = output; return status; }\n"
                 )
             else:
-                first_call = "scf_gemm" if baseline else "scf_generalized_transform"
-                start = source.index("    iteration_status = " + first_call + "(")
-                if name == "df_rhf_scf":
-                    end = source.index("    launch_build_device_density_kernel", start)
-                else:
-                    end = source.index(
-                        "      launch_update_device_uhf_convergence_kernel", start
-                    )
-                region = source[start:end]
-                if name == "df_uhf_scf":
-                    region += "}\n"
                 parts.append(
                     f"generativeqc_status {function}(CudaDensityFittingJkPlan* plan, "
                     "CanonicalState* state, CanonicalBuffers& buffers, bool occupied_exchange, "
+                    "[[maybe_unused]] bool orbital_gradient_convergence, "
                     "std::string& detail) { "
                     "const std::size_t batch_size = 3, expected = batch_size * plan->nbf * plan->nbf; "
                     "[[maybe_unused]] constexpr unsigned kThreads = 256; "
@@ -572,7 +577,7 @@ def _canonical_regions() -> str:
                         )
                     )
                     + "(void)expected; (void)occupied_exchange;\n"
-                    + region
+                    + source
                     + "return iteration_status; }\n"
                 )
     return "\n".join(parts) + "}\n"

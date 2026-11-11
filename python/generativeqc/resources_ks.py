@@ -1138,6 +1138,7 @@ def ks_resource_request(
     if backend == "cuda":
         controls.update(
             device_id=device_id,
+            convergence_policy=os.environ.get("GENERATIVEQC_CUDA_KS_CONVERGENCE"),
             generated_force_device_cap=force_device_cap,
             generated_force_host_cap=force_host_cap,
             one_electron_mapping=os.environ.get(

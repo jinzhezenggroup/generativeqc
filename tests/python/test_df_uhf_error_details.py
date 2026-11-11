@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from _cc_owner_test_support import compile_owner
+from _df_scf_test_support import df_convergence_owner
 from test_huckel_df_error_boundaries import _SHIM, ROOT
 
 if TYPE_CHECKING:
@@ -108,7 +109,9 @@ def uhf_error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     end = source.index("\n#endif  // GENERATIVEQC_HAS_CUDA", begin)
     directory = tmp_path_factory.mktemp("uhf_error_details")
     probe = directory / "probe.cpp"
-    probe.write_text(_SHIM + _UHF_SHIM + source[begin:end] + _UHF_MAIN)
+    probe.write_text(
+        df_convergence_owner() + _SHIM + _UHF_SHIM + source[begin:end] + _UHF_MAIN
+    )
     binary = directory / "probe"
     compile_owner(compiler, directory, [probe], binary)
     return binary

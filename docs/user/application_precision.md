@@ -1,5 +1,12 @@
 # Application precision and explicit audits
 
+`PrecisionCalculator(...)` and `PrecisionPolicy()` default to Standard,
+the same optimized FP64 endpoint used by the README benchmark. Omitted
+convergence, initial-guess, grid and scheduling controls use the ordinary
+`Calculator` defaults; no benchmark-only environment selector is required.
+The method, orbital/auxiliary bases and Direct/DF mode still define the model
+and must match the plotted case when reproducing it.
+
 `PrecisionCalculator(policy="standard")` runs one optimized FP64 endpoint,
 while `PrecisionCalculator(policy="fast")` permits qualified approximations
 from an application error budget: supported routes can use FP32 arithmetic,
@@ -477,12 +484,13 @@ GFN2-xTB is an SCC method with no GPU4PySCF counterpart and retains its own
 The energy default matches GPU4PySCF's `conv_tol=1e-9`. GPU4PySCF's ordinary SCF
 test additionally requires an MO-gradient norm below `sqrt(conv_tol)` (about
 `3.1623e-5` at the default); its density change is diagnostic, not a stopping
-threshold. GenerativeQC's density control and physical final-state gates are
-additional native conditions, not a relabeling of that MO-gradient norm. These
+threshold. Qualified restricted CUDA owners use that same SCF candidate test;
+their physical final-state gates remain separate native conditions, not a
+relabeling of that MO-gradient norm. Other owners retain density-based stopping. These
 shared settings do not imply identical SCF trajectories or iteration counts.
 Neither FP64 arithmetic nor solver thresholds bound observable energy/force error.
 
-With the AO-commutator policy, eligible energy-only CUDA RHF and qualified KS
+With the AO-commutator policy, eligible energy-only CUDA RHF
 owners cap the physical AO
 commutator at `1e-5`. Direct CUDA RHF's explicit strict analytic-force policy
 uses the `1e-8` ceiling, capped by the requested density tolerance; its default
@@ -500,15 +508,18 @@ error, and it does not turn a failed dense-reference comparison into a pass.
 For an explicit stringent request, use e.g. `energy_tolerance=1e-12` and
 `density_tolerance=1e-10`.
 
-Standard all-electron FP64 **Direct CUDA RHF defaults to orbital-gradient
+Standard all-electron FP64 **Direct and DF CUDA RHF default to orbital-gradient
 convergence**, matching the norm and threshold used by default GPU4PySCF.
-This replaces the AO-maximum stationarity gate, including force finalization,
-with `||2 C_vir^T F[D] C_occ||_F < sqrt(energy_tolerance)`. The physical Fock
+The SCF candidate uses `|delta E| < energy_tolerance` and
+`||2 C_vir^T F[D] C_occ||_F < sqrt(energy_tolerance)`. The physical Fock
 must belong to that same determinant; a DIIS-extrapolated Fock cannot supply
 the norm. The implementation evaluates `X^T(FDS-SDF)X/sqrt(2)` in the existing
-scratch storage. Energy and density-change controls, screening, FP64 arithmetic,
-initial guess, final-state ownership and complete force evaluation remain in
-effect. Density change remains an additional native stopping condition.
+scratch storage. Screening, FP64 arithmetic, initial guess, final-state ownership
+and complete force evaluation remain in effect. Density change is diagnostic,
+not an additional orbital-policy candidate gate. Direct force finalization uses
+the same gradient norm; DF retains its separate complete physical-state proof,
+including its existing final AO-commutator, density/projector, trace,
+idempotency, canonicality and response-token checks.
 Either tighter energy or density controls restore the historical strict
 physical gate regardless of the default or explicit orbital request, including
 stricter audit solves; the default must not weaken their reference calculation.
@@ -519,16 +530,24 @@ selects the owner-bound default. UHF, ECP, mixed arithmetic,
 application-budget/Fast owners and physical-reference exports retain their
 strict gates by default. Explicit `orbital-gradient` requests reject these
 unsupported owners rather than inherit an unqualified stopping policy.
-Compact DF HF and KS have separate owners and do not use this control. The
+The compact DF RHF owner uses the same control when physical DIIS residual
+storage is available; no-DIIS execution retains strict stopping. DF transforms
+only the stopping residual after DIIS has retained its AO history, preserving
+the proposal trajectory. Both owners treat density change as diagnostic under
+orbital policy and require the exact energy threshold without a roundoff margin.
+KS has a separate convergence control. The
 request is part of CUDA resource/checkpoint identity. Prepared resource plans
-and captured native iteration plans reject a changed policy. Unknown values
+reject a changed request. Compact DF graphs rebuild when the effective stopping
+policy or numerical controls change; Direct captured plans reject a changed
+policy. Unknown values
 fail rather than select a looser policy.
 This is **not** a promise of `1e-7` maximum-force accuracy: compare complete
 energies/forces with independent references and disclose the selected numerical
 policy. GPU4PySCF needs no convergence or other default-setting changes. Equal
 norm thresholds do not imply equal iterations, algorithms or force errors.
 
-Canonical restricted CUDA WB97M-V instead uses the molecular GPU4PySCF-style
+Qualified all-electron FP64 restricted CUDA PBE/PBE0/B3LYP/r2SCAN/M06-2X,
+including the electronic component of r2SCAN-3c, and canonical WB97M-V use the molecular GPU4PySCF-style
 **energy AND orbital-gradient** SCF candidate test: `|delta E| < 1e-9` and
 `||2 C_vir^T F[D] C_occ||_F < sqrt(1e-9)`. Density change remains diagnostic,
 not an extra SCF candidate gate. The native owner evaluates this norm from
@@ -539,7 +558,18 @@ token checks still apply; frozen/provisional VV10 operators cannot publish.
 The final proof retains the Standard `1e-5` density/stationarity ceilings, so
 matching SCF candidate thresholds does not imply identical algorithms or cycle
 counts. Either explicit tighter energy/density request restores the historical
-strict WB97M-V gates and strict VV10 inner tolerances. CPU, UKS, custom models
+strict KS gates (including strict VV10 inner tolerances for WB97M-V).
+The default candidate test is the same for energy-only and energy+force calls;
+requesting forces does not silently tighten SCF. Full-range physical-reference
+exports retain their stricter contract. Set
+`GENERATIVEQC_CUDA_KS_CONVERGENCE=strict` before preparing an owner to keep the
+historical AO/density stopping policy even with the public default E/D controls.
+Unset or empty selects the qualified default; other values fail closed. This
+control participates in CUDA resource and checkpoint identity. It is independent
+of `GENERATIVEQC_CUDA_RHF_CONVERGENCE` and does not change GPU4PySCF settings.
+Neither the default nor matched SCF thresholds promise `1e-7` force repeatability;
+use an explicit stringent request and independent validation for that task.
+CPU, UKS, custom models
 or grids, mixed arithmetic, chunked owners and missing validation resources
 retain the bounded conservative path.
 
@@ -575,8 +605,9 @@ result = calculator.singlepoint([("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))])
 print(result.precision_validation.to_dict())
 ```
 
-The preset names are case-insensitive. Balanced remains the facade default;
-this naming change does not alter default calculations or audit behavior.
+The preset names are case-insensitive. Standard is the facade and policy-object
+default. Select `policy="balanced"`, `policy="strict"`, `policy="audit_auto"`
+or an explicit target to request the separate comparison endpoints and their cost.
 Providing `target` replaces all preset audit requirements, so energy-only audits
 use a target containing just energy. `properties` must include every explicit
 target observable and energy; by default these are requested automatically.
