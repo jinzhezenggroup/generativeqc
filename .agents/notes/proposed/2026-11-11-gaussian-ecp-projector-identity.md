@@ -319,3 +319,73 @@ The prior primal archive is linked unchanged. No production selector changes,
 reference values enter no production calculation, and the proposal remains
 proposed pending complete independent derivatives, bounded contracted consumers
 and public/installed molecular integration.
+
+## Follow-up: independent complete matrix derivative reference accepted
+
+The original complete PySCF analytic-reference process remains failed. A new
+independent reference no longer substitutes a hand-selected block into that
+matrix: it covers **every AO pair** of the original mixed Ni/I/H and Ni/Cs/H
+fixtures in both representations, including d/f functions, coincident AO/ECP
+centers, all nine first and all 81 mixed second nuclear components. The native
+candidate and its original raw arrays/library are unchanged.
+
+For nonlocal channels, the reference expands normalized Cartesian orbital
+polynomials and real spherical projector polynomials into angular moments of
+the addition theorem. Scaled spherical Bessels include their analytic origin
+series; `ive`'s nonanalytic real scaling is undone before complex-step
+differentiation. Unlike the native closed Gaussian-projector radial identity,
+the reference numerically integrates on a fixed segmented radial quadrature,
+refined around every orbital/ECP-center radius and the tightest primitive
+width. The grid is held fixed across nuclear perturbations. Independent local
+Gaussian moments, separately normalized contractions and the checked PySCF
+Cartesian/spherical transformation complete the same raw AO space. No ECP
+integral or derivative from PySCF enters this new reference.
+
+The initial first-only quadrature orders `[8,12,16]` fail the frozen `5e-13`
+value/gradient convergence gate at `9.565681580170349e-13`; preserve that actual
+failed receipt and original script. A separately identified retry increases
+quadrature resolution to `[12,16,24]`, with 1,608/2,144/3,216 radial points for
+I and 1,632/2,176/3,264 for Cs. Its complete first-derivative process finishes
+zero in 21.91 seconds. No numerical gate is widened. Complex-step first
+derivatives and fourth-order differences of those gradients at the original
+steps `[0.003,0.001,0.0003]` then furnish the complete independent nuclear jets.
+
+The new complete process actually finishes zero in **479.29 seconds**. All four
+raw matrix comparisons pass the unchanged `2e-8` first/second gates. Maximum
+value error is `2.1316282072803006e-14`, first error
+`3.692879335659427e-14`; second errors at the three steps are:
+
+| Fixture | Second errors, largest to smallest step |
+| --- | --- |
+| I spherical, 62 AOs | `[8.30488497416404e-10,1.0265857608438012e-11,7.7973183465474e-12]` |
+| I Cartesian, 69 AOs | `[1.1314812975449229e-9,1.3986006797139794e-11,8.988365607365267e-12]` |
+| Cs spherical, 60 AOs | `[7.568189408502235e-10,9.415579427241028e-12,1.698086116164177e-11]` |
+| Cs Cartesian, 67 AOs | `[1.2715061226131752e-9,1.57898139008239e-11,1.9883317214919316e-11]` |
+
+Reference order convergence stays below `2.132e-14` and the maximum multistep
+spread is `1.272e-9`, passing the frozen `5e-13` / `2e-9` reference controls.
+The earlier extension to the entire 70-entry Ni-s/p-to-H-s/p block also passes
+every first/mixed second component in 486.01 seconds, with first errors below
+`2.610e-15` and second errors below `3.710e-11`. That scoped result is retained
+separately; it is not used as a substitute for the complete reference.
+
+The new member/hash-verified local recovery is
+`build/qualification/ecp-gaussian-derivative-20261111/full-reference-recovery.tar.gz`,
+28 members, 42,954,908 bytes, SHA
+`17b161764d52d3d4039409a2e4a2dedf0e333034f45aa72ea5654b2e601654e5`.
+It includes the original failed full probe/raw arrays/native library, all new
+full/scoped reference arrays, failed and successful reference attempts, scripts,
+logs, pinned input and normalization/transformation helpers. The original
+206-member derivative recovery is linked with its unchanged checksum, not
+overwritten; generated Graph sources and compiler-lifetime evidence remain there.
+
+This resolves the complete **private one-electron integral-jet** reference gate
+for these fixtures without relabeling the original failed processes. It does
+not implement a production ECP selector or SCF force/Hessian provider. Early
+contraction, bounded resource admission/fallbacks, native provider ownership,
+effective-charge/Pulay response, matched RKS/UKS total endpoints, installed
+execution and 25–40-atom work remain separate acceptance requirements. In
+particular, do not materialize a global `(3N)^2 * nao^2` jet tensor in a large
+molecular consumer merely because the private three-atom diagnostic exports it.
+The architectural proposal remains proposed until those production boundaries
+are implemented and independently qualified.
