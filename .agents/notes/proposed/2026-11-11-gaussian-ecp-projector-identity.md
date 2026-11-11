@@ -240,3 +240,82 @@ No external asset is published and all eleven original live-Ni numerical
 dependencies remain unchanged. Matching native first/second derivatives,
 complete contracted mixed-element qualification and production integration
 remain necessary; this architectural proposal is not yet implemented.
+
+## Follow-up: compiled first/second jets and retained reference failures
+
+The standalone native candidate now also generates all six relative-center
+first and 36 second derivative channels for complete Cartesian primitive blocks,
+using exact Gaussian raising/lowering and shared shifted-shell blocks. Nuclear
+chain mapping includes both AO centers and the ECP center, including coincident
+atoms. Equal-exponent groups reuse radial frontiers, compensated contraction
+preserves the normalized NativeAO representation, and every admission/budget/
+capacity failure stages outputs transactionally. This private experiment exports
+complete raw one-electron nuclear jets, not an SCF energy/force/Hessian provider.
+
+Sixty-three additional canonical Graph blocks, through h/f and g/g, have at
+most 334,850 nodes. A monolithic O1 build is interrupted, exit 143: its shared
+cache daemon workers outlived client timeouts. Only this candidate's exact
+compiler commands are cleaned up; the shared server and original Ni job are
+not stopped. The retained private-foreground retry safely times out four large
+O0 translation units at 180 seconds and exits one, preserving 60 successful
+objects. A further lowering-only retry retains the Graph arithmetic and scalar
+assignment order, partitions those four units into 1,024-temporary no-inline
+functions, and finishes zero in 184.08 seconds. Maximum explicit per-kernel
+scratch is 2,485,304 bytes. It uses the verified sccache 0.16.0 finite owned
+compiler runner and existing leased cache slots. Shared-server statistics are
+retained but are **not** private-invocation hit/miss counts. No optimized
+production endpoint speedup is claimed for these mixed O0/staged-O1 objects.
+
+The original 192-case analytic-PySCF derivative probe **exits one**. It covers
+every ordered s/p/d/f pair, all four channels and ordinary, resolved-scaled and
+zero-center families. Exactly 191 cases pass the original primitive gates; the
+remaining local resolved-scaled f/f case differs by `3.05731476506893e-8` in
+first derivatives and `6.228740606656347e-6` in second derivatives, above the
+unchanged `2e-8` / `5e-6` gates. A separate exact-order 12-point Gauss-Hermite
+Gaussian-moment diagnostic covers all 48 complete local blocks, not just that
+failure; all pass, with maximum value/first/second errors
+`[6.245004513516506e-17, 3.400058012914542e-16,
+2.192690473634684e-15]`. This independently diagnoses the local reference
+failure without altering the original failed process.
+
+All four complete mixed Ni/I/Cs spherical/Cartesian raw derivative comparisons
+also remain failed at the unchanged `2e-8` first/second gates. Maximum errors
+are `1.8315743552431686e-7` / `6.552796647257033e-7` for I and
+`1.2921066869357904e-5` / `3.6093541650785484e-5` for Cs. The full jets retain
+every matrix entry and all nine first/81 second nuclear channels. Native raw
+translation and derivative symmetry errors stay below `4.5e-16`; sixteen
+budget/radial-power/nonfinite/capacity controls preserve every output. For I,
+437,030 generated blocks produce 6,906,466 Cartesian values with 29,376 shared
+radial frontiers; spherical export takes 11.72 seconds. These are complete
+raw-integral measurements, not molecular endpoint timings. Full probe process
+wall time is 55.53 seconds and peak RSS 501,992 KiB.
+
+A separate three-direction, three-step independent raw-matrix difference
+diagnostic also exits one. For I the native first derivatives agree to below
+`7.2e-11`, whereas PySCF analytic first derivatives differ by approximately
+`1.3e-7`; second differences remain unresolved. This is a consistency diagnosis,
+not a full-derivative acceptance or a reason to relax any gate.
+
+A further independently normalized localized radial reference selects the
+entire contracted Ni-s/H-s cross block (ten AO pairs) by angular/element family.
+It uses SciPy complex Bessels, undoing `ive`'s nonanalytic real scaling before
+complex-step differentiation; fourth-order differences of these independent
+gradients provide every nuclear second component at the original three steps.
+Orders `[64,128,192]` converge below `5e-13`; all four representations finish
+zero in 99.96 seconds. Worst native gradient error is `1.4988010832439613e-15`,
+second error `8.528948380881474e-12`, and multistep reference spread
+`8.570984200151344e-12`, against predeclared `2e-8` derivative / `2e-9`
+spread gates. This confirms the native values at the original worst mixed
+entries, but it is **only that complete angular-family block**, not every AO
+pair or a replacement for the failed complete-matrix derivative gate.
+
+All original failures, successful scoped diagnostics, raw arrays, generated
+and staged code, objects/library, source hashes, scripts and compiler lifetime
+evidence are preserved in the ignored member/hash-verified local archive
+`build/qualification/ecp-gaussian-derivative-20261111/derivative-recovery.tar.gz`,
+206 entries, 100,461,478 bytes, SHA
+`759ab077c7d305c8093a8c55f6f768f453a053b7857adabb687d508ff73a1e34`.
+The prior primal archive is linked unchanged. No production selector changes,
+reference values enter no production calculation, and the proposal remains
+proposed pending complete independent derivatives, bounded contracted consumers
+and public/installed molecular integration.

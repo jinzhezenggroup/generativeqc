@@ -127,3 +127,8 @@ matrix gates and a finite eight-hour process limit, and writes under
 full matrix. Mixed Ni/I/Cs and unrestricted ECP acceptance, their exactly-once
 D3 totals, installed qualification and fixed-method TS/final frequencies remain
 required for issues #2844–#2848.
+
+The subsequent clean-start serial full-matrix run now finishes and passes its
+original complete gates. See the separate
+[full-matrix acceptance](2026-11-11-ni-production-full-matrix-acceptance.md)
+for that later evidence boundary; the directional receipt above is unchanged.
