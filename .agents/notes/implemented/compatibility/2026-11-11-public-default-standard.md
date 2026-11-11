@@ -109,6 +109,19 @@ Eh, Fmax 5.2886742096802664e-8 and Frms 2.5530112380328044e-8 Eh/Bohr across
 eight complete endpoints. Default-policy inventory, native CUDA ownership,
 source-identity and fixed-cap evidence checks pass; CBS bytes are unchanged.
 
+## Squashed predecessor integration
+
+The protected merge queue lands #3065 as master `29fae71c7`, whose complete
+Git tree is exactly `707802ba7f1eee8c25dd70f4b40caef5d9a97494`, identical to
+reviewed predecessor `bd92afd10` already in this branch's ancestry. The squash
+commit itself is not an ancestor, so an ordinary merge reports duplicate
+content/add-add conflicts despite introducing no new files or implementation.
+Resolve these with the already-tested branch versions, verify that the entire
+resolved tree is byte-identical to the prior head, then record master ancestry.
+Only this explanatory note differs. Complete measured source identity remains
+`f502f9e5471d7de71bc41098273f059a6ec340852dbbc8cff1cb1a47a33edacf`; neither
+measured source nor any timing/qualification is relabeled or substituted.
+
 ## References
 
 - `docs/user/application_precision.md`
