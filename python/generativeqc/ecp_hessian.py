@@ -70,6 +70,17 @@ def _quadrature(radial: int, polar: int) -> tuple:
     return radii, radial_weights, sphere, angular_weights, harmonics * angular_weights
 
 
+def _gaussian_source_supported(source: typing.Any) -> bool:
+    """Screen authenticated metadata; the native owner rechecks the full system."""
+    terms = getattr(source, "ecp_terms", ())
+    return (
+        source.backend == "cpu"
+        and source.hamiltonian == "scalar-semilocal-ecp"
+        and bool(terms)
+        and all(term[2] == 2 and -1 <= term[1] <= 2 for term in terms)
+    )
+
+
 class ECPSecondOrder:
     """Match native residual channels with bounded validation and no displaced SCFs.
 
@@ -96,12 +107,7 @@ class ECPSecondOrder:
             "hvp_validation_error": None,
         }
         self._analytic_source = (
-            state._source
-            if state._source.backend == "cpu"
-            and all(
-                term[2] == 2 and -1 <= term[1] <= 2 for term in state._source.ecp_terms
-            )
-            else None
+            state._source if _gaussian_source_supported(state._source) else None
         )
         if self._analytic_source is not None:
             first, first_work = self._analytic_source.ecp_gaussian(

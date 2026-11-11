@@ -9,7 +9,8 @@ displaced SCF or reference engine enters production; quadrature/active-set
 branches and occupations remain fixed during differentiation.
 
 CPU direct all-electron full-range RKS/UKS and scalar-ECP RKS graphs can also
-enter the low-level qualification owner. Scalar ECPs reuse the existing
+enter the low-level qualification owner. Scalar-ECP UKS is restricted to the
+native analytic Gaussian specialization. Scalar ECPs reuse the existing
 effective-charge, perturbation and bounded second-order sources. They do not
 inherit WB97M-V's public capability admission:
 independent molecular, spherical/Ni and resource gates remain prerequisites.
@@ -62,7 +63,7 @@ from ._dft_gradient import (
     _native_ao_atoms,
 )
 from .df_hessian import DFSecondOrder
-from .ecp_hessian import ECPSecondOrder
+from .ecp_hessian import ECPSecondOrder, _gaussian_source_supported
 from .fock import FockBuildSpec, FockPlan, FockTerm
 from .hessian_basis import HessianBasis
 from .ks import composite_stationary_second_order_eligible
@@ -832,7 +833,10 @@ class CompositeRKSResponse(CPKSResponseOperator):
                     state._source.hamiltonian == "all-electron"
                     or (
                         state._source.hamiltonian == "scalar-semilocal-ecp"
-                        and state.density.shape[0] == 1
+                        and (
+                            state.density.shape[0] == 1
+                            or _gaussian_source_supported(state._source)
+                        )
                     )
                 )
                 and state._source.fock_provider_proof()[:2] == ("exact", "exact")
@@ -845,7 +849,8 @@ class CompositeRKSResponse(CPKSResponseOperator):
             ):
                 raise NotImplementedError(
                     "composite molecular Hessian requires canonical WB97M-V or "
-                    "a CPU direct full-range all-electron RKS/UKS or scalar-ECP RKS qualification candidate"
+                    "a CPU direct full-range all-electron RKS/UKS, scalar-ECP RKS "
+                    "or analytic scalar-ECP UKS qualification candidate"
                 )
             if state._source.backend == "cuda":
                 from .cuda_composite_hessian import CudaCompositeResponse

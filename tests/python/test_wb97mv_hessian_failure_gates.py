@@ -89,6 +89,10 @@ def test_ecp_quadrature_finite_convergence_control(difference: float) -> None:
 @pytest.mark.parametrize("hamiltonian", ("all-electron", "scalar-semilocal-ecp"))
 @pytest.mark.parametrize("backend", ("cpu", "cuda"))
 @pytest.mark.parametrize("provider", ("exact", "density-fitted"))
+@pytest.mark.parametrize(
+    "ecp_terms",
+    ((), ((0, 1, 2, 0.7, 1.0),), ((0, 1, 1, 0.7, 1.0),), ((0, 3, 2, 0.7, 1.0),)),
+)
 def test_full_range_spin_domain_before_owner_allocation(
     monkeypatch: pytest.MonkeyPatch,
     functional: str,
@@ -96,12 +100,14 @@ def test_full_range_spin_domain_before_owner_allocation(
     hamiltonian: str,
     backend: str,
     provider: str,
+    ecp_terms: tuple,
 ) -> None:
     closed = []
     source = SimpleNamespace(
         range_density_fitted=False,
         backend=backend,
         hamiltonian=hamiltonian,
+        ecp_terms=ecp_terms,
         method_ir=resolve_method(
             functional, spin="unpolarized" if spins == 1 else "polarized"
         ),
@@ -121,7 +127,11 @@ def test_full_range_spin_domain_before_owner_allocation(
     admitted = (
         backend == "cpu"
         and provider == "exact"
-        and (hamiltonian == "all-electron" or spins == 1)
+        and (
+            hamiltonian == "all-electron"
+            or spins == 1
+            or (bool(ecp_terms) and ecp_terms[0][1:3] == (1, 2))
+        )
     )
     with pytest.raises(AllocationReached if admitted else NotImplementedError):
         response.CompositeRKSResponse.from_native(object(), object())

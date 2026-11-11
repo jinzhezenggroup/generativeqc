@@ -177,8 +177,10 @@ alone is not a public endpoint qualification; the installed endpoint,
 independent molecular, lifecycle and resource checks are also required.
 
 The low-level CPU direct full-range candidate owner also admits scalar-ECP
-RKS, while retaining all-electron RKS/UKS admission. Scalar-ECP UKS is not
-included in this candidate extension. This does not promote public scalar-ECP
+RKS, while retaining all-electron RKS/UKS admission. Scalar-ECP UKS candidates
+require the CPU analytic Gaussian specialization: radial power two and
+local/s/p/d projectors, with the full native operator rechecked by the snapshot
+owner. Other scalar-ECP UKS operators remain refused. This does not promote public scalar-ECP
 B3LYP/PBE0 Hessian capabilities. The existing effective ionic charges and
 shared ECP first/second-order sources are retained. For CPU radial-power-two
 operators with local/s/p/d projectors and s--f orbitals, one compiler-owned
@@ -189,6 +191,16 @@ the first-derivative contraction with the density response for each HVP. It
 does not allocate a global coordinate-squared AO tensor or copy a native grid
 to construct this source. Workspace and generated-block work are independently
 bounded before execution, and stale snapshots fail before publication.
+
+Candidate spin-response qualification distinguishes exact-input derivatives
+from comparisons between independently converged states. Arbitrary symmetric
+AO probes compare both spin outputs against an independent kernel at identical
+Cartesian density fields; a minority-spin orbital node can amplify tiny state
+differences beyond an otherwise valid SCF density tolerance. Independently
+converged physical occupied/virtual responses and complete moving-grid molecular
+Hessians remain separate required gates. The synthetic analytic-ECP test uses
+XCFun only as this exact-input derivative oracle and PySCF/Libxc for independent
+state and molecular checks; neither enters production or seeds the native SCF.
 
 Other legal powers/projectors retain checked-grid sources. A finite coarse/fine
 HVP validation mismatch on that fallback may use one bounded finer validation
