@@ -503,13 +503,16 @@ For an explicit stringent request, use e.g. `energy_tolerance=1e-12` and
 
 Standard all-electron FP64 **Direct and DF CUDA RHF default to orbital-gradient
 convergence**, matching the norm and threshold used by default GPU4PySCF.
-This replaces the AO-maximum stationarity gate, including force finalization,
-with `||2 C_vir^T F[D] C_occ||_F < sqrt(energy_tolerance)`. The physical Fock
+The SCF candidate uses `|delta E| < energy_tolerance` and
+`||2 C_vir^T F[D] C_occ||_F < sqrt(energy_tolerance)`. The physical Fock
 must belong to that same determinant; a DIIS-extrapolated Fock cannot supply
 the norm. The implementation evaluates `X^T(FDS-SDF)X/sqrt(2)` in the existing
-scratch storage. Energy and density-change controls, screening, FP64 arithmetic,
-initial guess, final-state ownership and complete force evaluation remain in
-effect. Density change remains an additional native stopping condition.
+scratch storage. Screening, FP64 arithmetic, initial guess, final-state ownership
+and complete force evaluation remain in effect. Density change is diagnostic,
+not an additional orbital-policy candidate gate. Direct force finalization uses
+the same gradient norm; DF retains its separate complete physical-state proof,
+including its existing final AO-commutator, density/projector, trace,
+idempotency, canonicality and response-token checks.
 Either tighter energy or density controls restore the historical strict
 physical gate regardless of the default or explicit orbital request, including
 stricter audit solves; the default must not weaken their reference calculation.
@@ -527,7 +530,9 @@ the proposal trajectory. Both owners treat density change as diagnostic under
 orbital policy and require the exact energy threshold without a roundoff margin.
 KS has a separate convergence control. The
 request is part of CUDA resource/checkpoint identity. Prepared resource plans
-and captured native iteration plans reject a changed policy. Unknown values
+reject a changed request. Compact DF graphs rebuild when the effective stopping
+policy or numerical controls change; Direct captured plans reject a changed
+policy. Unknown values
 fail rather than select a looser policy.
 This is **not** a promise of `1e-7` maximum-force accuracy: compare complete
 energies/forces with independent references and disclose the selected numerical

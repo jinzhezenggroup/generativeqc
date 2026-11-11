@@ -108,6 +108,22 @@ def test_default_complete_endpoint_against_tight_same_model(
             reference.kernel(dm0=cp.asnumpy(density))
             reference_solver = "gpu-diis+cpu-newton"
         assert reference.converged
+        if method == "hf" and mode == "df" and system != "water":
+            from tools.generativeqc_validation.correlation_df_oracle import (
+                basis_snapshot,
+            )
+
+            # The README freezer contains only H/O. New N/C fixtures must export
+            # the oracle's exact default auxiliary choice, never substitute a
+            # different fitted operator or change the production benchmark input.
+            auxiliary_names = set(reference.with_df.auxmol.basis.values())
+            assert len(auxiliary_names) == 1
+            auxiliary = basis_snapshot(
+                auxiliary_names.pop(), [gto.charge(symbol) for symbol, _ in atoms]
+            )
+            (tmp_path / "hf-auxiliary.json").write_text(
+                json.dumps(auxiliary.to_payload()) + "\n"
+            )
         gradient = reference.nuc_grad_method()
         if method != "hf":
             gradient.grid_response = True

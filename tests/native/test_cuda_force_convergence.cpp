@@ -678,10 +678,10 @@ void check_orbital_gradient_convergence(unsigned threads, bool retain, bool grap
           change.data, rms.data, residual.data, true, true);
     } else {
       launch_update_convergence_kernel(retain, batch, threads, 0, stream, batch, basis_size,
-                                     energy_tolerance, 1e-5, false, energy.data, previous.data,
-                                     next.data, density.data, active.data, converged.data,
-                                     iterations.data, change.data, rms.data, residual.data, nullptr,
-                                     false, nullptr, nullptr, {}, true);
+                                       energy_tolerance, 1e-5, false, energy.data, previous.data,
+                                       next.data, density.data, active.data, converged.data,
+                                       iterations.data, change.data, rms.data, residual.data,
+                                       nullptr, false, nullptr, nullptr, {}, true);
     }
     check(cudaGetLastError());
   };

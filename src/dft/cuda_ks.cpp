@@ -931,8 +931,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   bool standard_stationarity_allowance_active() const noexcept {
     return standard_ks_stationarity_allowance(
-        standard_convergence_active(), standard_nonlocal_model,
-        options.export_physical_reference);
+        standard_convergence_active(), standard_nonlocal_model, options.export_physical_reference);
   }
 
   double physical_stationarity_tolerance() const noexcept {
@@ -4230,8 +4229,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                             residual);
       check(cudaGetLastError());
       const bool physical_orbital_check = standard_stationarity_allowance_active() &&
-                                          !pending_nonlocal_seed &&
-                                          !pending_nonlocal_frozen;
+                                          !pending_nonlocal_seed && !pending_nonlocal_frozen;
       if (physical_orbital_check) {
         // X^T S X=I and D=2 C_occ C_occ^T. Hence the transformed physical
         // commutator norm is sqrt(2)*||2 C_vir^T F C_occ||_F. Neither AO RMS

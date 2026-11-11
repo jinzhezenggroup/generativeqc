@@ -2,5 +2,5 @@
   "path": "src/scf/cuda/scf_convergence_policy.cuh",
   "role": "runtime",
   "subsystem": "scf_tensor",
-  "reason": "Shared HF scalar convergence policy and generic physical residual norms: AO maximum or orthonormal Frobenius reduction for the owner-bound Direct RHF default. Iteration and final-state admission share the same selected norm; DF and unsupported owners retain their existing policies."
+  "reason": "Shared HF scalar convergence policy and physical residual norms: AO maximum for strict owners or orthonormal Frobenius reduction for qualified Direct/DF RHF orbital stopping. Orbital policy uses the exact energy/gradient conjunction with diagnostic-only density change; unsupported owners retain strict stopping and all final-state proofs remain mandatory."
 }

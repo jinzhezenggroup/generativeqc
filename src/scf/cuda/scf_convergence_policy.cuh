@@ -38,9 +38,8 @@ __device__ inline bool hf_iteration_converged(double energy, double previous_ene
   return isfinite(energy) && isfinite(previous_energy) && isfinite(density_rms) &&
          isfinite(physical_maximum) &&
          fabs(energy - previous_energy) <
-             energy_tolerance +
-                 hf_energy_roundoff_guard(guard_roundoff && !orbital_gradient, energy,
-                                           previous_energy) &&
+             energy_tolerance + hf_energy_roundoff_guard(guard_roundoff && !orbital_gradient,
+                                                         energy, previous_energy) &&
          (orbital_gradient || density_rms < density_tolerance) &&
          hf_physical_stationarity_met(physical_maximum, energy_tolerance, density_tolerance,
                                       qualified_owner, orbital_gradient);

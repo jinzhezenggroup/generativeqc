@@ -339,9 +339,9 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     // Whiten only the stopping copy: ||X^T(FDS-SDF)X||_F/sqrt(2) is the
     // restricted MO-gradient norm, without changing DIIS or allocating scratch.
     if (orbital_gradient_convergence) {
-      iteration_status = scf_generalized_transform(
-          *plan, false, batch_size, plan->nbf, state->d_diis_residual, d_orthogonalizer,
-          state->d_diis_temporary, detail);
+      iteration_status =
+          scf_generalized_transform(*plan, false, batch_size, plan->nbf, state->d_diis_residual,
+                                    d_orthogonalizer, state->d_diis_temporary, detail);
       if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
     }
     iteration_status = scf_generalized_transform(*plan, false, batch_size, plan->nbf, d_fock,

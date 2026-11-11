@@ -1510,11 +1510,11 @@ unsigned cuda_df_iteration_diis_history(const ScfOptions& options) {
  * implementation; explicit unsupported requests must fail rather than relax it.
  */
 bool cuda_df_orbital_convergence(const ScfOptions& options, bool qualified_owner) {
-  const bool eligible = qualified_owner && !options.export_physical_reference &&
-                        cuda_df_iteration_diis_history(options) >= 2 &&
-                        options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
-                            GENERATIVEQC_PRECISION_FP64 &&
-                        options.application_precision_budget == std::array<double, 3>{};
+  const bool eligible =
+      qualified_owner && !options.export_physical_reference &&
+      cuda_df_iteration_diis_history(options) >= 2 &&
+      options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) == GENERATIVEQC_PRECISION_FP64 &&
+      options.application_precision_budget == std::array<double, 3>{};
   const auto policy = cuda_policy::resolve_hf_convergence_request(
       cuda_policy::hf_convergence_requested(), eligible, options.energy_tolerance,
       options.density_tolerance);
