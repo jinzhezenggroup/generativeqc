@@ -48,6 +48,10 @@ def test_component_precision_census_preserves_complete_inventory(
     publication = finish[
         finish.index("    try {", finish.rindex("    previous_energy =")) :
     ]
+    submit = _method(source, "  void enqueue_legacy(")
+    residual_start = submit.index("      pending_residual_matrix_products = 0;")
+    residual_end = submit.index("      if (final_closure) {", residual_start)
+    residual_work = submit[residual_start:residual_end]
     harness = (
         r"""
 #include <algorithm>
@@ -58,12 +62,43 @@ def test_component_precision_census_preserves_complete_inventory(
 #include <stdexcept>
 #include "scf/types.hpp"
 namespace scf = generativeqc::scf;
+namespace cuda_ks_detail { void orbital_gradient(int, int, double*, int, int) {} }
+namespace runtime::cuda_trace { void trace_counter(const char*, int) {} }
+int cudaGetLastError() { return 0; }
+void check(int error) { assert(error == 0); }
 using Kind = scf::PrecisionOperatorKind;
 using Mode = scf::PrecisionArithmeticMode;
 using Dtype = scf::PrecisionDtype;
 struct Owner {
   bool occupied_xc_executed{}, strict_refinement{};
   unsigned occupied_xc_refinement_iterations{};
+  std::uint64_t pending_residual_matrix_products{};
+  bool standard{}, pure_uks_orthogonal_diis{}, cold_fock_startup{};
+  static constexpr unsigned kColdFockStartupIterations = 3;
+  unsigned executed_products{};
+  bool standard_stationarity_allowance_active() const { return standard; }
+  void residual_transform() {
+    int stream = 0, n = 2, enabled = 0, scalar_records = 0;
+    double r[4]{1,2,3,4}, orthogonalizer[4]{2,0,0,3}, a[4]{}, b[4]{};
+    double *residual = r, *x = orthogonalizer, *tmp1 = a, *tmp2 = b;
+    auto multiply = [&](const double* left, bool, bool transpose, const double* right,
+                        bool, double* out) {
+      ++executed_products;
+      for (int i = 0; i < 2; ++i) for (int j = 0; j < 2; ++j) {
+        out[2*i+j] = 0;
+        for (int k = 0; k < 2; ++k)
+          out[2*i+j] += left[transpose ? 2*k+i : 2*i+k] * right[2*k+j];
+      }
+    };
+"""
+        + residual_work
+        + r"""
+    assert(history_residual == ((!final_closure &&
+        (pure_uks_orthogonal_diis || (cold_fock_startup && output.iterations >= 3))) ? tmp2 : residual));
+    if (pending_residual_matrix_products) {
+      assert(b[0] == 4 && b[1] == 12 && b[2] == 18 && b[3] == 36);
+    }
+  }
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
   bool pending_mixed_point{}, experimental_mixed_contractions{}, pending_mixed_exchange{};
   bool pending_mixed_contractions{};
@@ -140,6 +175,41 @@ void check_inventory(const Owner& p, bool coulomb, bool density, bool stabilized
   assert(p.output.precision_work.operators.size() == expected_rows);
 }
 int main() {
+  // Execute the actual submit transforms and finish census together. Orbital
+  // and DIIS consumers must share the same two products, not count them twice.
+  for (bool standard : {false, true}) for (bool diis : {false, true})
+    for (bool seed : {false, true}) for (bool frozen : {false, true})
+      for (bool closure : {false, true}) {
+        Owner current;
+        current.standard = standard;
+        current.pure_uks_orthogonal_diis = diis;
+        current.pending_nonlocal_seed = seed;
+        current.pending_nonlocal_frozen = frozen;
+        current.final_closure = closure;
+        current.residual_transform();
+        const unsigned products = ((standard && !seed && !frozen) || (diis && !closure)) ? 2 : 0;
+        assert(current.executed_products == products);
+        current.complete(false, false, 0);
+        assert(count(current, Kind::MatrixProduct) == 7 + products);
+        // A new strict sweep cannot inherit the prior optional products.
+        current.standard = current.pure_uks_orthogonal_diis = false;
+        current.residual_transform();
+        current.complete(false, false, 0);
+        assert(count(current, Kind::MatrixProduct) == 14 + products);
+      }
+  for (unsigned iteration : {2U, 3U}) for (bool closure : {false, true})
+    for (bool stabilized : {false, true}) {
+      Owner startup;
+      startup.cold_fock_startup = true;
+      startup.final_closure = closure;
+      startup.stabilize_occupations = stabilized;
+      startup.output.iterations = iteration;
+      startup.residual_transform();
+      const unsigned products = iteration >= 3 && !closure ? 2 : 0;
+      assert(startup.executed_products == products);
+      startup.complete(false, false, 0);
+      assert(count(startup, Kind::MatrixProduct) == (stabilized ? 9U : 7U) + products);
+    }
   // Shared contraction arithmetic is independent of the point functional.
   // The two logical products do not relabel point algebra or strict control.
   Owner contractions;
