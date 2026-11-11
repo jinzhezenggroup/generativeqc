@@ -239,3 +239,43 @@ A fresh positive run against the updated `5ecd28301` wheel is still pending
 at this evidence boundary. The original Ni full matrix is also still running;
 its eleven frozen identities remain unchanged. Native TS CLI, public Ni/UKS/ECP,
 mixed Ni/I/Cs and the requested D3/def2-SVP production TS endpoint remain open.
+
+## Updated installed positive acceptance
+
+The subsequently completed fresh positive against the updated `5ecd28301`
+artifact also finishes with actual zero test and process exits:
+`1 passed in 2111.80s`. This supersedes the pending-positive statement at the
+previous evidence boundary, without restamping the original `cf3f871af` run.
+The normally repaired wheel, native library and source identities are the same
+as the separately accepted updated stationary-minimum control above. Every
+input, driver, independent helper and imported production-source hash is checked
+again against this run's own receipt; no production callable is replaced.
+
+Native final status is `first_order_saddle`, with fresh stationary verification,
+one negative active curvature and all five original convergence controls
+satisfied. Three attempts are accepted. Five energy/gradient evaluations and
+five fresh raw Hessians consume 42 SCF iterations, 54 Fock builds and 60 nuclear
+response solves. Native endpoint time is 1920.5464496659115 seconds; complete
+process wall time is 2113.05 seconds with peak RSS 1,091,612 KiB. These are
+complete small-molecule endpoint measurements, not a Ni or scalability claim.
+
+Independent final density error is `5.471179065352771e-13`; orbital gradient
+norm is `9.371274234739576e-13`. All three independent complete raw-matrix
+comparisons pass the unchanged fourth-order steps and gates. Their maximum
+errors are `[4.929251451457617e-10, 2.574847217384768e-9,
+7.035446725200956e-9]`; corresponding maximum frequency errors are
+`[1.522399770692573e-6, 3.3213932852049766e-5,
+5.155171254500601e-5]` cm⁻¹. The six unscaled final frequencies, with no
+deleted soft or imaginary modes, are
+`[-902.2167603047881, 1719.6442376211628, 1719.726965163753,
+3725.992746207092, 4046.7137055084554, 4046.7345924537135]` cm⁻¹.
+
+The separate ignored local recovery is
+`build/qualification/installed-saddle-positive-20261111/positive-recovery.tar.gz`,
+132 member/hash-verified entries, 17,025,859 bytes, SHA
+`493c2eeaa6607d484ef0eb83f4e7fd9c6c06c04f83283c2d09fc0143a159cf7a`.
+It preserves raw matrices, final state, progress events, frozen source hashes,
+logs, process/JUnit receipts and the linked updated build/minimum identities.
+Historical archives remain unchanged. Public UKS/ECP/Ni admission and installed
+native TS CLI qualification remain false in this successful positive receipt;
+the overall requested production-domain gates are not closed by this result.

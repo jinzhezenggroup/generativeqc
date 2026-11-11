@@ -183,3 +183,60 @@ evidence are member/hash-verified in the ignored local archive
 SHA `63b916d65e52a4f33a4efe7d450e5e61557975a9f4a148bd878ca2d3ef759118`.
 No external asset is published. The still-running original Ni matrix's eleven
 frozen source/library identities are unchanged by these scratch experiments.
+
+## Follow-up: compiled primal and independent mixed-matrix diagnosis
+
+A separate bounded native candidate now compiles 70 canonical-Graph-generated
+complete Cartesian primitive blocks, covering local and nonlocal `l=0,1,2`
+Gaussian terms for every s/p/d/f shell pair. The largest block has 55,453 DAG
+nodes. Grouping equal ECP exponents reuses radial frontiers, and FP64 compensated
+contraction consumes the actual normalized NativeAO basis records. A private
+standalone ABI preserves output buffers on admission, finite-budget and
+nonfinite failures. Only radial-power-two terms are admitted. This remains a
+primal experiment, not production dispatch, public ABI or derivative admission.
+
+All 128 complete normalized primitive-block comparisons pass the independent
+PySCF matrices and shell interchange gate, including resolved scaled points;
+worst error is `8.698075549748441e-11` against the frozen `2e-10` gate. Twelve
+failure controls preserve all outputs. The verified sccache 0.16.0 build makes
+71 real compile requests, all misses, in 118.87 seconds; no cache-hit or endpoint
+speedup is inferred from these build measurements.
+
+The original complete mixed-matrix probe **exits one**, and stays failed.
+At the unchanged Ni/I-or-Cs/H geometry, Ni/I spherical and Cartesian matrix
+errors are `6.358418053516591e-13` and `4.910285997309811e-13`.
+Both Ni/Cs representations differ from PySCF by `3.084613118154323e-9`, exceeding
+the unchanged full raw-matrix gate `2e-9`. The 60/67-AO Cs matrices are not
+truncated, selected or relabelled as passes. The worst discrepancy is the
+off-center Ni core p-x diagonal: native `0.0001479659942117013` versus PySCF
+`0.00014796907882481947`.
+
+A separate independent diagnostic integrates **all** 196 entries in the
+14-AO same-center Ni s/p block, selected by element/angular family rather than
+observed error. It independently normalizes PySCF shell exponent/contraction
+data and uses SciPy scaled Bessels with localized one-dimensional radial
+Gauss-Legendre quadrature, not the native closed Gaussian radial identity.
+Orders `[64,128,192]` converge within the predeclared `5e-13` reference gate;
+the largest observed convergence error is `1.509903313490213e-14`.
+The p/p transverse angular term is retained. The localized worst p-x value is
+`0.00014796599421169543`, agreeing with native rather than the PySCF value.
+
+That diagnostic forms an explicitly labelled hybrid independent reference:
+the complete localized Ni s/p block plus unchanged PySCF for every other entry.
+It finishes zero. Full-matrix errors remain `6.358418053516591e-13` and
+`4.910285997309811e-13` for I, and become `4.715258919131765e-10` and
+`6.903696171049571e-10` for Cs spherical/Cartesian, all below the unchanged
+`2e-9` gate. This supplies evidence of a scoped reference-resolution limitation;
+it does not silently replace the failed original probe or qualify arbitrary
+tight derivatives, contracted forces/Hessians, SCF or a molecular endpoint.
+
+All generated/compiled sources and objects, the standalone library, both raw
+matrix sets, original failure, independent localized receipt, scripts, logs
+and cache statistics are member/hash-verified in the ignored local recovery
+`build/qualification/ecp-gaussian-native-20261111/native-primal-recovery.tar.gz`,
+169 entries, SHA
+`05a198e274fb5aa8ce4bd2a8f8b20634dbdcd2ff49060d14e2e127eb6dde9cde`.
+No external asset is published and all eleven original live-Ni numerical
+dependencies remain unchanged. Matching native first/second derivatives,
+complete contracted mixed-element qualification and production integration
+remain necessary; this architectural proposal is not yet implemented.
