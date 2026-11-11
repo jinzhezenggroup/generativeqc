@@ -20,19 +20,29 @@ __global__ void build_cuda_nuclear_repulsion_kernel(DeviceBatch batch,
       return;
     }
     double result = 0.0;
-    for (std::int64_t first = batch.atom_offsets[system]; first < batch.atom_offsets[system + 1];
-         ++first) {
+    const auto atom = system_derivative_coordinate / 3;
+    if (atom < batch.atom_offsets[system] || atom >= batch.atom_offsets[system + 1]) {
+      nuclear_repulsion[system] = 0.0;
+      return;
+    }
+    // Only pairs containing the differentiated atom contribute. Visit partners
+    // in ascending order to retain the original triangular sum and orientation
+    // without evaluating every unrelated pair for each of the 3*N coordinates.
+    for (std::int64_t partner = batch.atom_offsets[system];
+         partner < batch.atom_offsets[system + 1]; ++partner) {
+      if (partner == atom) continue;
+      const auto first = partner < atom ? atom : partner;
+      const auto second = partner < atom ? partner : atom;
       const double* a = batch.positions + 3 * first;
-      for (std::int64_t second = batch.atom_offsets[system]; second < first; ++second) {
-        const double* b = batch.positions + 3 * second;
-        double gradient[3];
-        ::generativeqc::generated::nuclear_repulsion::gradient(
-            static_cast<double>(batch.atomic_numbers[first]) * batch.atomic_numbers[second],
-            a[0] - b[0], a[1] - b[1], a[2] - b[2], gradient);
-        const auto atom = system_derivative_coordinate / 3;
-        if (atom == first) result += gradient[system_derivative_coordinate % 3];
-        if (atom == second) result -= gradient[system_derivative_coordinate % 3];
-      }
+      const double* b = batch.positions + 3 * second;
+      double gradient[3];
+      ::generativeqc::generated::nuclear_repulsion::gradient(
+          static_cast<double>(batch.atomic_numbers[first]) * batch.atomic_numbers[second],
+          a[0] - b[0], a[1] - b[1], a[2] - b[2], gradient);
+      if (atom == first)
+        result += gradient[system_derivative_coordinate % 3];
+      else
+        result -= gradient[system_derivative_coordinate % 3];
     }
     nuclear_repulsion[system] = result;
   } else {

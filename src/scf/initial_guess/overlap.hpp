@@ -13,12 +13,14 @@
 #include "scf/initial_guess/eigen_operation.hpp"
 #include "scf/reference/linalg.hpp"
 #include "scf/reference/observation.hpp"
+#include "scf/solver/validation_products.hpp"
 
 namespace generativeqc::scf::initial_guess {
 
 /** Preserve the full symmetric S^(-1/2) and historical strict '<1e-10' cutoff.
- * Only decomposition is substituted; no Cholesky representation or subspace
- * truncation is introduced. The provider validates its eigenframe separately. */
+ * Use the shared FP64 host product provider for construction and metric proof,
+ * retaining scalar products when unavailable. The independent reference and
+ * provider eigenframe validation are unchanged; no subspace is truncated. */
 inline reference::Matrix symmetric_overlap(const reference::Matrix& overlap, std::size_t n,
                                            const EigenOperation& eigen) {
   if (!eigen) return reference::symmetric_orthogonalizer(overlap, n);
@@ -34,9 +36,9 @@ inline reference::Matrix symmetric_overlap(const reference::Matrix& overlap, std
     const double factor = 1.0 / std::sqrt(frame.values[column]);
     for (std::size_t row = 0; row < n; ++row) scaled[row * n + column] *= factor;
   }
-  auto x = reference::multiply(scaled, reference::transpose(frame.vectors, n), n);
-  const auto metric =
-      reference::multiply(reference::transpose(x, n), reference::multiply(overlap, x, n), n);
+  const solver::ValidationProducts multiply({}, true);
+  auto x = multiply(scaled, frame.vectors, n, false, true);
+  const auto metric = multiply(x, multiply(overlap, x, n), n, true, false);
   for (std::size_t row = 0; row < n; ++row)
     for (std::size_t column = 0; column < n; ++column) {
       const auto value = metric[row * n + column];
