@@ -86,15 +86,17 @@ void launch_compute_device_uhf_energy_kernel(dim3 grid, dim3 block, std::size_t 
                                              const double* alpha_fock, const double* beta_fock,
                                              const double* nuclear_repulsion, double* energy);
 
-/** Shared direct/DF FP64 acceptance. Residuals are physical pre-DIIS FDS-SDF;
- * UHF stores adjacent spins per item. Null preserves the low-level no-DIIS
- * compatibility interface; final physical validation remains mandatory. */
+/** Restricted FP64 acceptance using the physical pre-DIIS residual. Orbital
+ * policy supplies X^T(FDS-SDF)X and uses its Frobenius norm / sqrt(2); strict
+ * policy supplies FDS-SDF and uses its AO maximum. Null is only for low-level
+ * no-DIIS callers; final physical validation remains mandatory. */
 void launch_update_device_convergence_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::size_t batch_size,
     std::size_t nbf, double energy_tolerance, double density_tolerance, const double* energy,
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual = nullptr, bool qualified_owner = false);
+    const double* physical_residual = nullptr, bool qualified_owner = false,
+    bool orbital_gradient = false);
 
 /** Forward the caller's exact launch configuration on its existing stream. */
 void launch_tail_cuda_density_fitting_scf_graph_kernel(

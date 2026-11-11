@@ -81,6 +81,7 @@ struct PersistentScfState {
   double energy_tolerance{};
   double density_tolerance{};
   bool qualified_standard_owner{};
+  bool orbital_gradient_convergence{};
 
   // Ready entries are revoked before every attempted solve. A matched entry
   // survives privately until a successful final endpoint republishes it.

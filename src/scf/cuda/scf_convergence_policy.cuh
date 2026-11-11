@@ -26,7 +26,9 @@ __device__ inline double hf_energy_roundoff_guard(bool enabled, double energy,
 /** Shared direct/DF stopping rule, independent of how a solver obtained its
  * baseline. The reported energy change remains the unmodified absolute delta.
  * A trusted warm baseline permits one step; a missing baseline requires a
- * second physical energy evaluation. NaNs/infinities fail every route closed. */
+ * second physical energy evaluation. Orbital policy uses the exact E/MO-gradient
+ * conjunction; density change stays diagnostic and receives no roundoff budget.
+ * NaNs/infinities fail every route closed. */
 __device__ inline bool hf_iteration_converged(double energy, double previous_energy,
                                               double energy_tolerance, double density_tolerance,
                                               double density_rms, double physical_maximum,
@@ -36,8 +38,10 @@ __device__ inline bool hf_iteration_converged(double energy, double previous_ene
   return isfinite(energy) && isfinite(previous_energy) && isfinite(density_rms) &&
          isfinite(physical_maximum) &&
          fabs(energy - previous_energy) <
-             energy_tolerance + hf_energy_roundoff_guard(guard_roundoff, energy, previous_energy) &&
-         density_rms < density_tolerance &&
+             energy_tolerance +
+                 hf_energy_roundoff_guard(guard_roundoff && !orbital_gradient, energy,
+                                           previous_energy) &&
+         (orbital_gradient || density_rms < density_tolerance) &&
          hf_physical_stationarity_met(physical_maximum, energy_tolerance, density_tolerance,
                                       qualified_owner, orbital_gradient);
 }

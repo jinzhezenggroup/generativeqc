@@ -24,7 +24,8 @@ pytestmark = pytest.mark.skipif(
         (method, "direct", system)
         for method in ("hf", "pbe0", "m06-2x")
         for system in ("ammonia", "methane")
-    ],
+    ]
+    + [("hf", "df", system) for system in ("ammonia", "methane")],
 )
 def test_default_complete_endpoint_against_tight_same_model(
     method: str, mode: str, system: str, tmp_path: Path
@@ -180,4 +181,19 @@ def test_explicit_strict_ks_policy_keeps_default_controls_and_independent_force_
         )
     test_default_complete_endpoint_against_tight_same_model(
         method, mode, "water", tmp_path
+    )
+
+
+@pytest.mark.parametrize("mode", ("direct", "df"))
+def test_explicit_strict_hf_policy_keeps_independent_force_gates(
+    mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Strict HF uses default public E/D and retains independent receipt identity."""
+    monkeypatch.setenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE", "strict")
+    if destination := os.environ.get("GENERATIVEQC_SCF_ORACLE_RECEIPTS"):
+        monkeypatch.setenv(
+            "GENERATIVEQC_SCF_ORACLE_RECEIPTS", str(Path(destination) / "strict-hf")
+        )
+    test_default_complete_endpoint_against_tight_same_model(
+        "hf", mode, "water", tmp_path
     )

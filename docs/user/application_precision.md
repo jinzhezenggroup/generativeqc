@@ -501,7 +501,7 @@ error, and it does not turn a failed dense-reference comparison into a pass.
 For an explicit stringent request, use e.g. `energy_tolerance=1e-12` and
 `density_tolerance=1e-10`.
 
-Standard all-electron FP64 **Direct CUDA RHF defaults to orbital-gradient
+Standard all-electron FP64 **Direct and DF CUDA RHF default to orbital-gradient
 convergence**, matching the norm and threshold used by default GPU4PySCF.
 This replaces the AO-maximum stationarity gate, including force finalization,
 with `||2 C_vir^T F[D] C_occ||_F < sqrt(energy_tolerance)`. The physical Fock
@@ -520,7 +520,12 @@ selects the owner-bound default. UHF, ECP, mixed arithmetic,
 application-budget/Fast owners and physical-reference exports retain their
 strict gates by default. Explicit `orbital-gradient` requests reject these
 unsupported owners rather than inherit an unqualified stopping policy.
-Compact DF HF and KS have separate owners and do not use this control. The
+The compact DF RHF owner uses the same control when physical DIIS residual
+storage is available; no-DIIS execution retains strict stopping. DF transforms
+only the stopping residual after DIIS has retained its AO history, preserving
+the proposal trajectory. Both owners treat density change as diagnostic under
+orbital policy and require the exact energy threshold without a roundoff margin.
+KS has a separate convergence control. The
 request is part of CUDA resource/checkpoint identity. Prepared resource plans
 and captured native iteration plans reject a changed policy. Unknown values
 fail rather than select a looser policy.

@@ -647,7 +647,8 @@ void check_reference_startup(bool retain, unsigned threads, unsigned basis_size)
       throw std::runtime_error("small cold-reference proposals unnecessarily retired DIIS");
   }
 }
-void check_orbital_gradient_convergence(unsigned threads, bool retain, bool graph) {
+void check_orbital_gradient_convergence(unsigned threads, bool retain, bool graph,
+                                        bool fitted = false) {
   using namespace generativeqc::scf::cuda_execution;
   constexpr unsigned basis_size = 33, batch = 5, matrix = basis_size * basis_size;
   constexpr double energy_tolerance = 1e-9;
@@ -663,18 +664,25 @@ void check_orbital_gradient_convergence(unsigned threads, bool retain, bool grap
   values[3 * matrix - 1] = std::numeric_limits<double>::quiet_NaN();
   values[4 * matrix - 1] = std::numeric_limits<double>::infinity();
   Device<double> residual(values), density(std::vector<double>(batch * matrix, 0.25)),
-      next(std::vector<double>(batch * matrix, 0.25 + 1e-12)),
+      next(std::vector<double>(batch * matrix, 0.25 + 2e-5)),
       energy(std::vector<double>(batch, -1.0)), previous(std::vector<double>(batch, -1.0)),
       change(std::vector<double>(batch, 0.0)), rms(std::vector<double>(batch, 0.0));
   Device<std::uint8_t> active(std::vector<std::uint8_t>{1, 1, 1, 1, 0}),
       converged(std::vector<std::uint8_t>(batch, 0));
   Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 0));
   const auto launch = [&](cudaStream_t stream) {
-    launch_update_convergence_kernel(retain, batch, threads, 0, stream, batch, basis_size,
+    if (fitted) {
+      generativeqc::scf::cuda_df::launch_update_device_convergence_kernel(
+          batch, 32, 0, stream, batch, basis_size, energy_tolerance, 1e-5, energy.data,
+          previous.data, next.data, density.data, active.data, converged.data, iterations.data,
+          change.data, rms.data, residual.data, true, true);
+    } else {
+      launch_update_convergence_kernel(retain, batch, threads, 0, stream, batch, basis_size,
                                      energy_tolerance, 1e-5, false, energy.data, previous.data,
                                      next.data, density.data, active.data, converged.data,
                                      iterations.data, change.data, rms.data, residual.data, nullptr,
                                      false, nullptr, nullptr, {}, true);
+    }
     check(cudaGetLastError());
   };
   if (graph) {
@@ -718,6 +726,7 @@ int main(int argc, char** argv) {
     for (unsigned threads : {32U, 256U})
       for (bool retain : {false, true})
         for (bool graph : {false, true}) check_orbital_gradient_convergence(threads, retain, graph);
+    for (bool graph : {false, true}) check_orbital_gradient_convergence(32, false, graph, true);
     if (block_only) {
       for (unsigned threads : {32U, 256U}) {
         for (bool retain : {false, true}) {

@@ -543,7 +543,8 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
     std::string& detail, const std::vector<double>& overlap, unsigned diis_history);
 
-/** Explicit admission from a restricted all-electron HF owner. */
+/** Explicit admission from a restricted all-electron HF owner. Orbital stopping
+ * requires physical residual storage and the caller's qualified FP64 policy. */
 generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     CudaDensityFittingJkPlan* plan, const std::vector<double>& hcore,
     const std::vector<double>& orthogonalizer, const std::vector<double>& initial_density,
@@ -551,7 +552,7 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     unsigned max_iterations, double energy_tolerance, double density_tolerance,
     std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
     std::string& detail, const std::vector<double>& overlap, unsigned diis_history,
-    bool qualified_standard_owner);
+    bool qualified_standard_owner, bool orbital_gradient_convergence = false);
 
 /** UHF counterpart of the device-resident DF SCF loop. */
 generativeqc_status run_cuda_density_fitting_uhf_device_scf(

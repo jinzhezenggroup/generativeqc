@@ -57,7 +57,7 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     unsigned max_iterations, double energy_tolerance, double density_tolerance,
     std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
     std::string& detail, const std::vector<double>& overlap, unsigned diis_history,
-    bool qualified_standard_owner) {
+    bool qualified_standard_owner, bool orbital_gradient_convergence) {
   runtime::df_progress::Scope progress("compact_rhf_scf");
   detail.clear();
   // Hold at most the matching immutable input while revoking all published
@@ -72,7 +72,8 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
   }
   if (plan == nullptr || max_iterations == 0 || !(energy_tolerance > 0.0) ||
       !(density_tolerance > 0.0) || !std::isfinite(energy_tolerance) ||
-      !std::isfinite(density_tolerance)) {
+      !std::isfinite(density_tolerance) ||
+      (orbital_gradient_convergence && (!qualified_standard_owner || diis_history < 2))) {
     detail = "CUDA DF device RHF SCF arguments are invalid";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -293,7 +294,8 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
   const bool options_changed = state->max_iterations != max_iterations ||
                                state->energy_tolerance != energy_tolerance ||
                                state->density_tolerance != density_tolerance ||
-                               state->qualified_standard_owner != qualified_standard_owner;
+                               state->qualified_standard_owner != qualified_standard_owner ||
+                               state->orbital_gradient_convergence != orbital_gradient_convergence;
   if (options_changed) {
     state->graph.reset();
     state->graph.device_id = plan->device_id;
@@ -304,6 +306,7 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
   state->energy_tolerance = energy_tolerance;
   state->density_tolerance = density_tolerance;
   state->qualified_standard_owner = qualified_standard_owner;
+  state->orbital_gradient_convergence = orbital_gradient_convergence;
   DeviceIterationGraph& iteration_graph = state->graph;
   // Restored factors are pageable immutable snapshots. Any early provider or
   // capture failure must drain their upload before dropping the final owner.
@@ -332,6 +335,15 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
                                         d_nuclear, d_energy);
     iteration_status = apply_scf_diis(*plan, *state, detail);
     if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
+    // DIIS has consumed the physical AO residual and retained its own history.
+    // Whiten only the stopping copy: ||X^T(FDS-SDF)X||_F/sqrt(2) is the
+    // restricted MO-gradient norm, without changing DIIS or allocating scratch.
+    if (orbital_gradient_convergence) {
+      iteration_status = scf_generalized_transform(
+          *plan, false, batch_size, plan->nbf, state->d_diis_residual, d_orthogonalizer,
+          state->d_diis_temporary, detail);
+      if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
+    }
     iteration_status = scf_generalized_transform(*plan, false, batch_size, plan->nbf, d_fock,
                                                  d_orthogonalizer, d_temporary, detail);
     if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
@@ -349,7 +361,7 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
         static_cast<unsigned>(batch_size), 32, 0, plan->stream, batch_size, plan->nbf,
         energy_tolerance, density_tolerance, d_energy, d_previous_energy, d_next_density, d_density,
         d_active, d_converged, d_iterations, d_energy_change, d_density_rms, state->d_diis_residual,
-        qualified_standard_owner);
+        qualified_standard_owner, orbital_gradient_convergence);
     if (tail)
       launch_tail_cuda_density_fitting_scf_graph_kernel(1, 1, 0, plan->stream,
                                                         static_cast<std::int32_t>(batch_size),
