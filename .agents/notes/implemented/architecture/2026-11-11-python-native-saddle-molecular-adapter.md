@@ -163,3 +163,21 @@ native-default-grid, no-D3 ammonia control. This accepts that fixed-model
 public molecular workflow, not a native TS CLI, a certified equilibrium-minimum
 negative control, or the requested Ni/I/Cs/ECP/D3/def2-SVP endpoint. The original
 serial Ni matrix experiment remains separate and has not yet returned a result.
+
+## Stationary-minimum control input
+
+A separate minimum case now freezes independently prepared Cartesian coordinates
+and a full-gradient gate of `1e-7` Hartree/Bohr. Its validation-only preparation
+uses PySCF gradients and SciPy minimization, never a production TS optimizer.
+The constrained solve reports success, but the full Cartesian BFGS solve reports
+precision loss rather than success; the final independent maximum gradient is
+`1.1319699733114419e-8`. Preserve both solver statuses: satisfying the physical
+stationary-input gate is not a claim that the minimizer reports convergence or
+that curvature has already been certified.
+
+The public reference driver must separately require fresh native stationary
+verification, index zero, zero optimizer attempts, all retained frequencies
+positive and molecular `converged == False`, followed by three independent full
+raw matrices and unscaled frequency agreement. These gates are frozen before
+running the control. Adding the input alone does not qualify that endpoint; the
+earlier nonstationary negative receipt remains a different test.

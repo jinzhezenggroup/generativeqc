@@ -39,7 +39,7 @@ def _json(value: typing.Any) -> typing.Any:
 
 
 @pytest.mark.ci_nightly
-@pytest.mark.parametrize("case", ["saddle", "nonnegative"])
+@pytest.mark.parametrize("case", ["saddle", "nonnegative", "minimum"])
 def test_native_molecular_saddle_reference(case: str, tmp_path: Path) -> None:
     """Compare every final raw Hessian column at three independent stencil sizes."""
     pytest.importorskip("pyscf")
@@ -47,13 +47,21 @@ def test_native_molecular_saddle_reference(case: str, tmp_path: Path) -> None:
     manifest = json.loads(MANIFEST.read_text())
     gates = manifest["acceptance"]
     specification = manifest["cases"][case]
-    radius = specification["hydrogen_radius_bohr"]
-    initial = (
-        ("N", (0, 0, specification["nitrogen_z_bohr"])),
-        ("H", (radius, 0, 0)),
-        ("H", (-radius / 2, radius * math.sqrt(3) / 2, 0)),
-        ("H", (-radius / 2, -radius * math.sqrt(3) / 2, 0)),
-    )
+    if "coordinates_bohr" in specification:
+        initial = tuple(
+            (element, tuple(position))
+            for element, position in zip(
+                ("N", "H", "H", "H"), specification["coordinates_bohr"], strict=True
+            )
+        )
+    else:
+        radius = specification["hydrogen_radius_bohr"]
+        initial = (
+            ("N", (0, 0, specification["nitrogen_z_bohr"])),
+            ("H", (radius, 0, 0)),
+            ("H", (-radius / 2, radius * math.sqrt(3) / 2, 0)),
+            ("H", (-radius / 2, -radius * math.sqrt(3) / 2, 0)),
+        )
     method = resolve_method(manifest["method"])
     xc = "+".join(
         f"{float(weight)}*{name}"
@@ -164,7 +172,10 @@ def test_native_molecular_saddle_reference(case: str, tmp_path: Path) -> None:
         assert native.receipt["negative_curvatures"] == specification["expected_index"]
         assert not native.receipt["near_zero_curvatures"]
         assert result.converged == (case == "saddle")
-        assert native.receipt["stationary_verified"] == (case == "saddle")
+        assert (
+            native.receipt["stationary_verified"]
+            == specification["expected_stationary_verified"]
+        )
         if case == "saddle":
             assert (
                 0
@@ -172,6 +183,7 @@ def test_native_molecular_saddle_reference(case: str, tmp_path: Path) -> None:
                 <= native.receipt["attempts"]
                 <= 100
             )
+        if native.receipt["stationary_verified"]:
             for name in (
                 "energy_change",
                 "gradient_rms",
@@ -180,8 +192,30 @@ def test_native_molecular_saddle_reference(case: str, tmp_path: Path) -> None:
                 "displacement_max_angstrom",
             ):
                 assert native.receipt[name] <= getattr(options, name)
-            assert result.harmonics.significant_imaginary_mode_count == 1
+            assert (
+                result.harmonics.negative_mode_count == specification["expected_index"]
+            )
+            assert (
+                result.harmonics.significant_imaginary_mode_count
+                == specification["expected_index"]
+            )
             assert result.harmonics.diagnostics["frequency_scale_factor"] == 1
+            assert result.harmonics.frequencies_cm1.size == (
+                native.coordinates.size - native.receipt["rigid_modes"]
+            )
+            save(
+                "stationary-classification-checked",
+                unscaled_frequencies_cm1=result.harmonics.frequencies_cm1,
+                harmonic_negative_modes=result.harmonics.negative_mode_count,
+                harmonic_rigid_modes=result.harmonics.rigid_mode_count,
+            )
+            if case == "minimum":
+                assert native.receipt["attempts"] == 0
+                assert (
+                    native.receipt["gradient_max"]
+                    < gates["stationary_input_gradient_max"]
+                )
+                assert np.all(result.harmonics.frequencies_cm1 > 0)
         else:
             assert native.receipt["attempts"] == 0 and result.harmonics is None
             assert native.receipt["gradient_max"] > options.gradient_max
@@ -231,6 +265,8 @@ def test_native_molecular_saddle_reference(case: str, tmp_path: Path) -> None:
         assert abs(energy - native.receipt["energy"]) < gates["energy_abs_hartree"]
         assert abs(point.energy - energy) < gates["energy_abs_hartree"]
         assert np.max(np.abs(gradient - native.gradient)) < gates["gradient_max"]
+        if case == "minimum":
+            assert np.max(np.abs(gradient)) < gates["stationary_input_gradient_max"]
         save(
             "independent-central-state-matched",
             density_error=density_error,
@@ -277,7 +313,7 @@ def test_native_molecular_saddle_reference(case: str, tmp_path: Path) -> None:
                 == specification["expected_index"]
             )
             frequency_error = None
-            if case == "saddle":
+            if result.harmonics is not None:
                 frequency_error = float(
                     np.max(
                         np.abs(result.harmonics.frequencies_cm1 - modes.frequencies_cm1)
