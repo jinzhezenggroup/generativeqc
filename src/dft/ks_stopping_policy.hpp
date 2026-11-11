@@ -3,17 +3,29 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <stdexcept>
+#include <string_view>
 
 #include "dft/semilocal_family.hpp"
 
 namespace generativeqc::dft {
 
-/** Full-range force/reference consumers retain the strict physical ceiling.
- * Public energy/density controls do not bound force error. The separately
- * qualified nonlocal orbital-gradient contract keeps its own admission. */
+/** Explicit opt-out of default orbital stopping, snapshotted by the owner.
+ * This preserves stringent force-repeatability tasks without changing their
+ * public E/D tolerances. Unknown values must not silently loosen convergence. */
+inline bool strict_ks_convergence_requested(const char* value) {
+  if (!value || !*value) return false;
+  if (std::string_view(value) == "strict") return true;
+  throw std::invalid_argument("GENERATIVEQC_CUDA_KS_CONVERGENCE requires empty or strict");
+}
+
+/** Default E/F endpoints share the restricted physical orbital-gradient gate.
+ * Requesting forces must not silently change the SCF accuracy contract. A
+ * full-range physical-reference export still needs its stricter canonical
+ * contract; tighter public controls also retain the strict owner admission. */
 constexpr bool standard_ks_stationarity_allowance(bool standard_owner, bool nonlocal_owner,
-                                                  bool forces, bool physical_reference) noexcept {
-  return standard_owner && (nonlocal_owner || (!forces && !physical_reference));
+                                                  bool physical_reference) noexcept {
+  return standard_owner && (nonlocal_owner || !physical_reference);
 }
 
 /** Complete compositions with independent default-grid early-stop evidence.

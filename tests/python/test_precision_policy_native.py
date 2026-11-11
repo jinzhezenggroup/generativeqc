@@ -185,7 +185,9 @@ def test_hybrid_audit_replays_constructor_inputs_not_resolved_outputs(
 ) -> None:
     """Discovered/MethodIR selectors already own their KS composition."""
     options = KsOptions(grid=GridSpec(16, 8, 16))
-    calculator = PrecisionCalculator(method=method, ks_options=options)
+    calculator = PrecisionCalculator(
+        method=method, ks_options=options, policy="balanced"
+    )
     reference = calculator._reference()
     assert calculator._options["ks_options"] is options
     assert _model_identity(calculator._candidate, H2, 0, 1) == _model_identity(
@@ -235,7 +237,7 @@ def _pyscf_pbe_energy(calculator: Calculator, atoms: tuple[Atom, ...]) -> float:
 def test_pbe_energy_and_analytic_force_against_independent_scf_difference() -> None:
     pyscf = pytest.importorskip("pyscf")
     pyscf.lib.num_threads(1)
-    calculator = PrecisionCalculator(method="pbe-rks")
+    calculator = PrecisionCalculator(method="pbe-rks", policy="balanced")
     observed = calculator.singlepoint(H2)
     oracle = Calculator(method="pbe-rks")
     energy = _pyscf_pbe_energy(oracle, H2)

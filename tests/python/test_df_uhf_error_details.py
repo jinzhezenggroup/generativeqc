@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from _cc_owner_test_support import compile_owner
+from _df_scf_test_support import df_convergence_owner
 from test_huckel_df_error_boundaries import _SHIM, ROOT
 
 if TYPE_CHECKING:
@@ -110,6 +111,7 @@ def uhf_error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     probe = directory / "probe.cpp"
     probe.write_text(
         '#include "scf/cuda/df_spin_domain.hpp"\n'
+        + df_convergence_owner()
         + _SHIM
         + _UHF_SHIM
         + source[begin:end]

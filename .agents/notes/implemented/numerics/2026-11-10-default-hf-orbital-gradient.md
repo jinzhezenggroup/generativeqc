@@ -1,5 +1,10 @@
 # Decision: promote owner-bound Direct RHF orbital-gradient convergence
 
+The subsequent [compact DF RHF alignment](2026-11-11-df-hf-orbital-stopping.md)
+extends the owner domain and removes the remaining orbital-policy density and
+energy-roundoff additions. The observations below retain their original source
+and historical Direct-only scope.
+
 Status: implemented; promoted-image device, scientific and full-endpoint qualification complete
 Date: 2026-11-10
 

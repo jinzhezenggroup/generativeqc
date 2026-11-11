@@ -176,6 +176,7 @@ generativeqc_status launch_solver(const EigensolverResources&, CudaEigensolverFa
 }
 struct CanonicalState {
   df::DeviceSolver solver;
+  double *d_diis_residual{}, *d_diis_temporary{};
 };
 struct CanonicalBuffers {
   double *d_fock{}, *d_orthogonalizer{}, *d_temporary{}, *d_eigenvalues{};
@@ -461,7 +462,9 @@ void test_canonical_sequences(const std::string& scenario) {
   state.solver.host_workspace = std::malloc(192);
   state.solver.host_workspace_bytes = 192;
   assert(state.solver.host_workspace != nullptr);
-  std::array<double, 128> beta_density{};
+  std::array<double, 128> beta_density{}, stopping_residual{}, stopping_temporary{};
+  state.d_diis_residual = stopping_residual.data();
+  state.d_diis_temporary = stopping_temporary.data();
   CanonicalBuffers buffers{f.h.data(),      f.factors.data(),      f.a.data(),
                            f.values.data(), f.info_a.data(),       f.h.data(),
                            f.b.data(),      f.values.data(),       f.eigenvalues.data(),
@@ -489,10 +492,11 @@ void test_canonical_sequences(const std::string& scenario) {
             return fn(&plan, &ordinary, orthogonalizer, published, detail);
           }
           const auto fn =
-              scenario == "canonical-rhf"
+              scenario == "canonical-rhf" || scenario == "canonical-rhf-orbital"
                   ? (baseline ? canonical::baseline_df_rhf_scf : canonical::live_df_rhf_scf)
                   : (baseline ? canonical::baseline_df_uhf_scf : canonical::live_df_uhf_scf);
-          return fn(&plan, &state, buffers, occupied_exchange, detail);
+          return fn(&plan, &state, buffers, occupied_exchange, scenario == "canonical-rhf-orbital",
+                    detail);
         };
         orchestration::reset();
         std::string expected_detail = "unchanged", actual_detail = "unchanged";
@@ -787,7 +791,7 @@ int main(int argc, char** argv) {
   else if (scenario == "canonical")
     test_canonical();
   else if (scenario == "canonical-ordinary" || scenario == "canonical-rhf" ||
-           scenario == "canonical-uhf")
+           scenario == "canonical-rhf-orbital" || scenario == "canonical-uhf")
     test_canonical_sequences(scenario);
   else if (scenario == "canonical-adapter")
     test_canonical_adapter();

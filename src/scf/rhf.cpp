@@ -1506,6 +1506,24 @@ unsigned cuda_df_iteration_diis_history(const ScfOptions& options) {
   return value && value[0] == '1' && value[1] == '\0' ? 0 : options.diis_history;
 }
 
+/** DF shares the restricted stopping contract, not the Direct execution owner.
+ * Keep unsupported arithmetic/reference/no-DIIS paths on their bounded strict
+ * implementation; explicit unsupported requests must fail rather than relax it.
+ */
+bool cuda_df_orbital_convergence(const ScfOptions& options, bool qualified_owner) {
+  const bool eligible =
+      qualified_owner && !options.export_physical_reference &&
+      cuda_df_iteration_diis_history(options) >= 2 &&
+      options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) == GENERATIVEQC_PRECISION_FP64 &&
+      options.application_precision_budget == std::array<double, 3>{};
+  const auto policy = cuda_policy::resolve_hf_convergence_request(
+      cuda_policy::hf_convergence_requested(), eligible, options.energy_tolerance,
+      options.density_tolerance);
+  if (policy == cuda_policy::HfConvergenceRequest::Invalid)
+    throw std::invalid_argument("CUDA DF RHF convergence request is invalid or unsupported");
+  return policy == cuda_policy::HfConvergenceRequest::OrbitalGradient;
+}
+
 /** Preserve a complete final occupied projection at the singleton RHF crossover.
  * The total allowance and explicit policies stay fixed. Rebalance only when
  * the resulting physical source plan actually admits both resident B and U;
@@ -2178,6 +2196,11 @@ ScfResult run_rhf_density_fitting_cuda_impl(
     std::vector<double> device_final_density;
     std::vector<CudaDensityFittingDeviceScfItem> device_records;
     std::string detail;
+    const bool qualified_standard_owner =
+        system.ecp_terms.empty() &&
+        std::none_of(system.atoms.begin(), system.atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
+    const bool orbital_convergence = cuda_df_orbital_convergence(options, qualified_standard_owner);
     const generativeqc_status device_status = host_trace::call("device_scf_submission_wait", [&] {
       return run_cuda_density_fitting_rhf_device_scf(
           plan.get(), data.one_electron.hcore, orthogonalizer, density,
@@ -2185,9 +2208,7 @@ ScfResult run_rhf_density_fitting_cuda_impl(
           options.max_iterations, options.energy_tolerance, options.density_tolerance,
           device_final_density, device_records, detail, data.one_electron.overlap,
           cuda_df_iteration_diis_history(options),
-          !options.export_physical_reference && system.ecp_terms.empty() &&
-              std::none_of(system.atoms.begin(), system.atoms.end(),
-                           [](const auto& atom) { return atom.ecp_core != 0; }));
+          !options.export_physical_reference && qualified_standard_owner, orbital_convergence);
     });
     runtime::df_progress::number("compact_dispatch_status", device_status);
     if (device_status == GENERATIVEQC_STATUS_SUCCESS && device_records.size() == 1)
@@ -2790,17 +2811,20 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
     std::vector<double> device_final_density;
     std::vector<CudaDensityFittingDeviceScfItem> device_records;
     std::string device_detail;
+    const bool qualified_standard_owner =
+        std::all_of(source_indices.begin(), source_indices.end(), [&](auto index) {
+          const auto& system = systems[index];
+          return system.ecp_terms.empty() &&
+                 std::none_of(system.atoms.begin(), system.atoms.end(),
+                              [](const auto& atom) { return atom.ecp_core != 0; });
+        });
+    const bool orbital_convergence = cuda_df_orbital_convergence(options, qualified_standard_owner);
     const generativeqc_status device_status = host_trace::call("device_scf_submission_wait", [&] {
       return run_cuda_density_fitting_rhf_device_scf(
           plan, hcore, orthogonalizer, initial_density, occupied, nuclear, options.max_iterations,
           options.energy_tolerance, options.density_tolerance, device_final_density, device_records,
           device_detail, overlap, cuda_df_iteration_diis_history(options),
-          std::all_of(source_indices.begin(), source_indices.end(), [&](auto index) {
-            const auto& system = systems[index];
-            return !options.export_physical_reference && system.ecp_terms.empty() &&
-                   std::none_of(system.atoms.begin(), system.atoms.end(),
-                                [](const auto& atom) { return atom.ecp_core != 0; });
-          }));
+          !options.export_physical_reference && qualified_standard_owner, orbital_convergence);
     });
     if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
         device_status == GENERATIVEQC_STATUS_CUDA_ERROR) {
