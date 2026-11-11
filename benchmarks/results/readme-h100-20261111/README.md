@@ -2,11 +2,12 @@
 
 Source `5533417aac131c49fac0e02b9303a6c65f3dd774` (master after #3069), native
 source identity `8c47adf9ee506c0048432f01f2e6d7cbb8c53f0eb6d13c6a0d936303ab751b43`.
-Its RTX 5090 counterpart is the [#3067 cohort](../readme-rtx5090-composed-20261111/README.md)
+Its historical RTX 5090 counterpart is the [#3067 cohort](https://github.com/jinzhezenggroup/generativeqc/blob/dfd78041bba26f694b13137c3982d1169544fbea/benchmarks/results/readme-rtx5090-composed-20261111/README.md)
 (`a50c80f62`, native identity `f502f9e5…`). The only native delta is
 `src/scf/cuda/df_source_setup.cpp` (#3069 erf metric schedule). The sealed
 staging protocol named the earlier `5a1ae34ad` draft cohort as its counterpart;
-`samples.json.xz` records the correction.
+`samples.json.xz` records the correction. The refreshed RTX cohort includes two
+further preparation optimizations; it is not this H100 source's counterpart.
 
 | Mode | Cold wins | Warm wins | Qualified cold | Qualified warm |
 | --- | ---: | ---: | ---: | ---: |
@@ -24,7 +25,7 @@ or universal speedups. **H100 is not ahead in every case:**
 | DF HF96 (fails gates) | warm | 0.956 s | 0.767 s | 1/2 | 1/2 |
 
 Warm Direct ωB97M-V96 is 1.33× and DF ωB97M-V96 2.01× faster; the RTX 5090
-values are 9.39× and 5.50×. The H100 Direct ωB97M-V and r2SCAN-3c large-system
+historical values are 9.39× and 5.50×. The H100 Direct ωB97M-V and r2SCAN-3c large-system
 margins are smaller than on RTX 5090 and are not explained by this cohort.
 
 ## Conditions
