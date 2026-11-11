@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.d3-second-order-acceptance/v1",
+  "method": "Gaussian/VWN-RPA B3LYP RKS plus uncut two-body D3(BJ), ATM off",
+  "fixture": "Canonical spherical def2-SVP/def2-ECP46 CsH and moving grid from test_global_hybrid_ecp_hessian.py",
+  "elemental_atomic_numbers": [55, 1],
+  "charge": 0,
+  "multiplicity": 1,
+  "difference_steps_bohr": [0.003, 0.001, 0.0003],
+  "difference_stencil": "symmetric-two-point-second-order",
+  "gates": {
+    "normalized_total_hvp_abs_hartree_per_bohr2": 1e-5,
+    "d3_hvp_abs_hartree_per_bohr2": 2e-9,
+    "additive_source_abs": 2e-11
+  },
+  "scope": "Low-level Cs-ECP RKS directional composition only; not a native full matrix, UKS ECP, mixed Ni/I/Cs, public endpoint, or TS qualification. Independent electronic-gradient gates and both original directions remain unchanged."
+}

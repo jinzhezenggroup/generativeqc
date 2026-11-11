@@ -1,0 +1,27 @@
+{
+  "schema": "generativeqc.d3-second-order-acceptance/v1",
+  "method": "Gaussian/VWN-RPA B3LYP UKS plus uncut two-body D3(BJ), ATM off",
+  "independent_oracles": ["PySCF", "simple-dftd3"],
+  "basis": "native STO-3G records supplied unchanged to independent SCF",
+  "representation": "real-spherical",
+  "grid": {"radial_points": 8, "angular_polar": 4, "angular_azimuth": 8},
+  "charge": 0,
+  "multiplicity": 2,
+  "occupations": [2, 1],
+  "atoms_bohr": [["H", [0, 0.1, -1.6]], ["H", [0.3, -0.2, 0]], ["H", [-0.1, 0.4, 1.6]]],
+  "direction": [[0.02, -0.03, 0.1], [-0.04, 0.01, -0.02], [0.02, 0.02, -0.08]],
+  "difference_steps_bohr": [0.003, 0.001, 0.0003],
+  "difference_stencil": "symmetric-five-point-fourth-order",
+  "gates": {
+    "energy_abs_hartree": 2e-9,
+    "gradient_abs_hartree_per_bohr": 2e-7,
+    "density_max": 2e-9,
+    "orbital_gradient_norm": 2e-9,
+    "response_residual_norm": 2e-10,
+    "total_hessian_abs_hartree_per_bohr2": 1e-5,
+    "total_hvp_abs_hartree_per_bohr2": 2e-6,
+    "raw_invariants_abs": 2e-8,
+    "additive_source_abs": 2e-11
+  },
+  "scope": "Low-level CPU direct all-electron UKS composition only; not public UKS, external Ni, ECP, native-default grid, or TS qualification. No displaced production SCF enters the oracle."
+}

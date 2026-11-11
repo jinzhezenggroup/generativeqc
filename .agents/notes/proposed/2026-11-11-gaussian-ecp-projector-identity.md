@@ -107,3 +107,36 @@ disagreement or qualify contracted mixed-basis matrices or nuclear derivatives.
 
 The local s-pair experiment is evidence for further investigation, not a fix
 for #2846 or #2847 and not permission to open their installed public domains.
+
+## Follow-up: tight reference quadrature, not a zero operator
+
+The earlier shorthand "libcint" identifies the normalization/integral interface,
+not the owner of this ECP calculation: PySCF 2.14.0 implements it in
+`pyscf/lib/gto/nr_ecp.c`. The installed source SHA256 is
+`1f13b0ef396236873aecddb3122103a3455736d6622f00274f97ddd79eff4457`.
+Its projector integration refines nested Gaussian-Chebyshev radial rules and
+can stop after two consecutive relative-agreement observations. Agreement of
+two zero sampled integrals is therefore not proof of a zero integral.
+
+The separate diagnostic `/tmp/gqc-ecp-tight-reference-quadrature.py` reads the
+actual static radial nodes/weights without changing or rebuilding PySCF. It
+evaluates the stable scaled-Bessel integrand on each complete nested rule for
+all four retained tight cases. The 31- and 63-point rules both give exactly
+zero: their nearest node is 29.155 Gaussian peak units away. The 127-point rule
+is still approximately 1e-287. Later rules detect the nonzero peak, but even
+the complete 2,047-point rule differs from the 60-decimal localized integral
+by 9.2710181672e-10 through 6.4896580097e-9. Thus forcing the current maximum
+rule alone would still fail the original 2e-10 comparison gate.
+
+This is a quadrature-resolution diagnosis and a source-supported explanation
+for the observed zero, not an instrumented trace proving which C branch ran.
+The diagnostic uses SciPy scaled Bessels rather than copying PySCF's Bessel
+approximations. Its receipt and log are
+`/tmp/gqc-ecp-tight-reference-quadrature.{json,log}`; the receipt hashes the
+script, reference C source and unchanged original 24-case receipt. Keep all
+four original failed comparisons visible. No gate is relaxed, no reference
+value is substituted into production, and no contracted/derivative/molecular
+provider is accepted by this diagnosis. It motivates an independently stable
+localized reference as well as the still-unimplemented analytic provider;
+neither merely sampling a denser grid nor deleting the tight cases resolves
+the full qualification problem.
