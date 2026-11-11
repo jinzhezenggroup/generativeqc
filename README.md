@@ -124,28 +124,26 @@ print(first.energies)
 
 ## Benchmarks
 
-**Historical HF/DFT energy + analytic forces — RTX 5090 (2026-10-26 frozen cohort)**
+**HF/DFT energy + analytic forces — RTX 5090 (2026-11-11)**
 
-With the frozen cohort's then-default settings, GenerativeQC was faster than
-GPU4PySCF in **64/64** measured warm cases. For 96-atom Direct ωB97M-V,
-the measured warm speedup was **4.22×**.
+Fresh measurements of `8c9acd542` (based on master `d35ca77a4`) with the
+convergence-aligned native RHF default and unchanged GPU4PySCF defaults show
+GenerativeQC faster in **62/64 cold** and **64/64 warm** cases. For 96-atom
+Direct ωB97M-V, the measured warm speedup is **9.37×**.
 
-These figures preserve the `46b916ac` image after the DF screening-headroom
-repair, not current-master performance. That image enabled screened Direct HF
-by default; the current source keeps that route explicit opt-in after a stronger
-force diagnostic failed. These historical timings do not qualify the restored
-ordinary-HF default, and no new integrated-image GPU measurements are claimed.
+![Direct cold and warm endpoint timings on RTX 5090, measured 2026-11-11](assets/readme-direct-defaults.svg)
 
-![Historical frozen-image Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
+![Density-fitted cold and warm endpoint timings on RTX 5090, measured 2026-11-11](assets/readme-df-defaults.svg)
 
-![Historical frozen-image density-fitted cold and warm endpoint timings](assets/readme-df-defaults.svg)
-
-The measured image used its default XC/VV10 grids, native SCF policies and full grid-response forces;
-all complete performance points are shown, including accuracy failures.
-Cold includes setup; warm is the median of three frozen-density calls.
-Independent energy/force accuracy results remain in the detailed tables.
-See [measurements and conditions](benchmarks/results/readme-refresh-20261026/README.md)
-for accuracy checks and detailed comparisons.
+The source-matched Release build uses default XC/VV10 grids, native SCF policies
+and full grid-response forces. Cold includes setup; warm is the median of three
+frozen-density calls, with min–max bars. These are single-process observations,
+not statistical rankings. Independent accuracy gates qualify **58/64 pairs**:
+**57/58 cold** and **58/58 warm** are faster. The six failing pairs remain plotted
+(DF HF at all sizes; Direct/DF M06-2X at 3 atoms).
+See [measurements, accuracy and conditions](benchmarks/results/readme-rtx5090-20261111/README.md)
+for all 512 selected endpoints, a disclosed failed-pair retry and reproducible
+timing/error summaries.
 
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 

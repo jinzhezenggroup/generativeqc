@@ -8,10 +8,34 @@
 #include <limits>
 
 #include "generated_one_electron_derivative_policy.cuh"
+#include "scf/convergence_limits.hpp"
 #include "scf/cuda/hf_bounded_page_policy.hpp"
 #include "scf/rhf_block_convergence_policy.hpp"
 
 namespace generativeqc::scf::cuda_policy {
+
+HfConvergenceRequest parse_hf_convergence_request(const char* value) noexcept {
+  if (value == nullptr || *value == '\0') return HfConvergenceRequest::Default;
+  if (std::strcmp(value, "strict") == 0) return HfConvergenceRequest::Strict;
+  return std::strcmp(value, "orbital-gradient") == 0 ? HfConvergenceRequest::OrbitalGradient
+                                                     : HfConvergenceRequest::Invalid;
+}
+
+HfConvergenceRequest hf_convergence_requested() noexcept {
+  return parse_hf_convergence_request(std::getenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE"));
+}
+
+HfConvergenceRequest resolve_hf_convergence_request(HfConvergenceRequest request,
+                                                    bool eligible_owner, double energy_tolerance,
+                                                    double density_tolerance) noexcept {
+  if (request == HfConvergenceRequest::Invalid ||
+      (request == HfConvergenceRequest::OrbitalGradient && !eligible_owner))
+    return HfConvergenceRequest::Invalid;
+  return request != HfConvergenceRequest::Strict && eligible_owner &&
+                 standard_scf_convergence_requested(energy_tolerance, density_tolerance)
+             ? HfConvergenceRequest::OrbitalGradient
+             : HfConvergenceRequest::Strict;
+}
 
 RhfBlockConvergenceRequest parse_rhf_block_convergence_request(const char* value) noexcept {
   if (value == nullptr || std::strcmp(value, "0") == 0) return RhfBlockConvergenceRequest::Off;
