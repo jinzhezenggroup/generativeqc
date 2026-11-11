@@ -33,11 +33,8 @@ Qualified restricted CUDA HF/KS energy and force endpoints share
 `|delta E| < 1e-9` AND `||2 C_vir^T F[D] C_occ||_F < sqrt(1e-9)`, matching the
 stock GPU4PySCF candidate gate; density change is diagnostic. Native canonical
 publication proof, including DF RHF physical final-state checks, remains mandatory.
-Explicit tighter E/D requests,
-`GENERATIVEQC_CUDA_RHF_CONVERGENCE=strict` and
-`GENERATIVEQC_CUDA_KS_CONVERGENCE=strict`, physical-reference exports,
-no-DIIS and unsupported owners retain strict stopping. Compact DF RHF uses
-the same candidate norm with unchanged AO DIIS history. See
+Strict/tighter E/D, physical-reference, no-DIIS and unsupported owners retain
+their gates; DF RHF keeps AO DIIS history. See
 [application precision](../../../docs/user/application_precision.md) for the
 policy. Default SCF thresholds do not promise `1e-7` force repeatability;
 the original-grid regression selects historical strict policy with unchanged gates.
@@ -59,18 +56,8 @@ Full-vector and source-matched build/qualification receipts remain in
 `n1:/data/jzzeng/readme-public-default-20261111`.
 The preceding 64/64 cold cohort remains at `2a7f52f7e475297246be8ab80ce3596518cc3409`;
 public defaults changed source identity, so every point was reacquired.
-Prior 63/64 and 56/64 cold cohorts:
-`e25b70c24d8464c32444bec25bccd33d2f494795` and
-`28ac57e819405bd9bae06e8fae60ac25b98d14a1`.
-Initial `0b74eb57f` cohort: ignored
-`.artifacts/df-hf-aligned-20261111/` and matching node1 storage. Formatting
-changed native identity; every final-source point was reacquired.
-Same-image strict/default DF HF ablation has equal iteration/Fock counts
-at every size: matching thresholds proves neither equal trajectories nor
-causal speedup. The
-[DF HF decision](../../../.agents/notes/implemented/numerics/2026-11-11-df-hf-orbital-stopping.md)
-and [KS decision](../../../.agents/notes/implemented/numerics/2026-11-11-ks-default-orbital-stopping.md)
-separate ordinary stopping from stringent force repeatability. Replay uses
-recorded unrounded errors, not fresh vector subtraction.
-The [public default decision](../../../.agents/notes/implemented/compatibility/2026-11-11-public-default-standard.md)
-records the former Balanced audit mismatch and source-matched validation.
+The [default decision](../../../.agents/notes/implemented/compatibility/2026-11-11-public-default-standard.md)
+retains older cohort identities, the Balanced mismatch and source validation.
+Strict/default HF ablation has equal work counts: matching thresholds proves
+neither equal trajectories nor causal speedup. Replay uses recorded scalar
+errors, not fresh vector subtraction.

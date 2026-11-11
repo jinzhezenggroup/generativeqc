@@ -88,6 +88,15 @@ or infer a causal policy regression from cross-cohort cold timing noise.
 The prior publication remains recoverable at
 `2a7f52f7e475297246be8ab80ce3596518cc3409` and its original
 `.artifacts/df-hf-aligned-final-20261111/` / matching node1 artifact root.
+The older 63/64 and 56/64 cold publications remain at
+`e25b70c24d8464c32444bec25bccd33d2f494795` and
+`28ac57e819405bd9bae06e8fae60ac25b98d14a1`. The initial `0b74eb57f` source
+cohort remains in `.artifacts/df-hf-aligned-20261111/` and matching node1 storage.
+These historical recovery pointers live here rather than growing the bounded
+current benchmark summary; no raw observations or unrelated evidence are removed.
+The first publication bookkeeping commit exceeded the fixed aggregate evidence
+budget by 799 bytes. Compacting only this campaign's summary restores the cap;
+the numerical capsule, plots and complete endpoint population are unchanged.
 The earlier same-image strict/default HF ablation is unchanged and remains
 distinct from either complete README cohort.
 
