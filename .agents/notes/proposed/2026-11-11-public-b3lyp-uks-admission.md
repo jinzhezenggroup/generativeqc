@@ -1,6 +1,6 @@
 # Policy candidate: public direct CPU B3LYP unrestricted curvature
 
-Status: proposed; installed/public numerical qualification pending
+Status: proposed; installed light-element tests pass, public Ni qualification pending
 Date: 2026-11-11
 
 ## Evidence and decision boundary
@@ -69,3 +69,72 @@ UKS/D3 gradient-difference gates; the subsequent nineteen-case run exercises
 the modified public metadata, raw matrix/H@v, owner cleanup, budget recovery,
 geometry freshness and negative admission boundaries. Preserve both actual
 process results instead of restamping the failed complete batch as a pass.
+
+## Fresh installed cohort and complete small-molecule suite
+
+The clean implementation source is
+`e5c60110175b658459a81c0a7e83dcfd589877d0`. Its CPU wheel builds in 7.70 seconds
+through verified sccache 0.16.0: one actual compiler invocation, one miss, no
+cache-hit claim. The initial auditwheel repair cannot locate the linked BLAS
+library and remains a failed attempt; a distinct normal repair supplies that
+library directory to auditwheel without manually patching RPATHs. Installed
+imports and dependency resolution are verified outside the checkout.
+
+Repaired wheel SHA256 is
+`73e430f9a1c0c6012ffd0fca533fa00865a91a30ce2b22788f392d78e7c9d9df`;
+native library SHA256 is
+`7ff0721c476b1eddacb4038973b5805cb2d46df784c910ebfa61bcaaf172d7bc`.
+The actual installed four-file public/UKS/D3 suite finishes zero:
+**41 passed in 1286.66 seconds**, complete measured process 1288.02 seconds.
+This includes the independent raw UKS/D3 matrix gates, public matrix/H@v and
+exactly-once composition, state/provenance, cleanup and negative boundaries.
+These are qualification-process measurements, not an isolated endpoint speedup.
+
+The member/hash-verified immutable build recovery is
+`build/qualification/public-ni-uks-20261111/build-recovery.tar.gz`,
+1,559 members, 130,258,382 bytes, SHA
+`cce8c0a39692997bdb0b7428290a427c755756fcba9c1c1399bcc24b2eec8567`.
+It retains the installed files/headers/libraries, wheels, actual compiler/cache
+and repair evidence, source results and first failed Ni preflight. It explicitly
+excludes mutable live endpoint/test outputs and does not declare Ni acceptance.
+
+## Ni preparation and still-live actual public curvature
+
+For the requested B3LYP/VWN-RPA, spherical external def2-SVP, default-grid,
+neutral all-electron NiH3 doublet, the new installed central state matches an
+independently converged reference: density error `7.873e-12`, total-energy error
+`2.728e-12` Eh and native physical residual `1.261e-13`. Occupations are `(16,15)`
+with 50,064 quadrature points. A separate actual native force evaluation agrees
+with independent electronic plus D3 gradients to `4.175e-12` Eh/Bohr, with
+identical native density. Each preparation SCF takes 123 iterations / 131 Fock
+builds; the complete successful preparation work takes 899.93 seconds. All 72
+original independent gradient columns are reauthenticated by input/hash/root
+gates; minimum occupied-root cross-overlap is `0.9998716754`, above `0.99`.
+
+Three harness attempts remain visibly failed: commutative XC-string ordering;
+an incorrect expected exception type at the output-budget guard; and comparing
+JSON-loaded list payloads with the corresponding in-memory tuples. None is a
+failed numerical gate or a successful public matrix run. Physical XC comparison
+uses resolved LibXC terms, preserving VWN/VWN-RPA and exchange-fraction negative
+controls. Exact JSON normalization handles the serialization boundary. The
+actual insufficient-output contract is a `ValueError` naming
+`output_budget_bytes`; no production exception behavior is changed.
+
+The final distinct run reauthenticates the completed preparation, including its
+exact old driver/source/input hashes, central state and all reference columns;
+it independently reconstructs the three electronic+D3 reference matrices.
+It does not reuse native owners, seed a production density, replay a production
+matrix or replace production callables. Preparation wall time and work remain
+separate retained measurements. The actual public full Hessian has now started;
+it performs its own fresh SCF and must report the same actual state fingerprint.
+Two further real public HVPs and all original raw-matrix/residual/invariance
+gates remain required. The installed artifact stays attributed to `e5c601101`,
+not subsequent documentation-only commits.
+
+All three failed drivers/receipts and the completed installed test results are
+separately member/hash-verified in
+`build/qualification/public-ni-uks-20261111/preflight-recovery.tar.gz`,
+25 members, 1,729,999 bytes, SHA
+`045803eb3e43e9e69a36e7799ff9cbb0b57e6a5030a34d1a27625ce12b1d1b81`.
+The older accepted low-level Ni matrix remains its own source cohort; neither
+it nor successful preparation is relabeled as the still-pending public result.
