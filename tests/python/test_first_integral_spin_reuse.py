@@ -130,7 +130,9 @@ def test_spin_panel_matches_independent_fixed_density_fock_directions(
         np.testing.assert_allclose(overlap, expected[1], atol=2e-10, rtol=2e-8)
         assert work["directional_calls"] > 0
         assert work["raw_first_calls"] > 0
-    assert results[0][2] == results[1][2]
+    assert (
+        results[0][2]["component_evaluations"] == results[1][2]["component_evaluations"]
+    )
 
 
 def test_spin_panel_is_admitted_before_compilation(

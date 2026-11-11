@@ -84,6 +84,12 @@ clang-format, public-contract classification, 603-module compiler dependency,
 configured ty 0.0.82, changed-file precommit and warnings-as-errors Sphinx checks
 pass. These are correctness regressions, not paired performance claims.
 
+A test-only follow-up compares primitive-component work between one and two
+spins rather than requiring equality of every diagnostic counter. This preserves
+the no-repeated-integral-work contract without pinning internal paging/call
+counts; all independent Fock, overlap and input-admission checks remain. The
+three focused tests replay successfully in 61.75 seconds.
+
 ## Qualification-harness failure, not an accepted Ni action
 
 The first final-byte Ni trial retained the matched 123-iteration native state
@@ -111,3 +117,8 @@ process timeout, and writes a distinct receipt directory:
 acceptance of the unfinished HVP or rule out a separate numerical failure.
 Do not reintroduce that asynchronous watchdog on this interpreter merely to
 observe a long compile; a diagnostic must not become a new source of failures.
+
+The no-watchdog production retry subsequently passes all frozen action gates.
+Its distinct source identity, complete timing/work receipts and remaining
+full-matrix/installed boundaries are recorded in
+`../numerics/2026-11-11-ni-production-directional-hvp-acceptance.md`.
