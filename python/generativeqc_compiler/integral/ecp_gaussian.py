@@ -222,11 +222,19 @@ def gaussian_ecp_block(
     leaves = []
     for center in centers:
         square_derivative = graph.differentiate(square, center)
-        argument_derivative = graph.differentiate(argument, center) if scaled else None
+        if scaled:
+            assert argument is not None
+            argument_derivative = graph.differentiate(argument, center)
+        else:
+            argument_derivative = None
         leaves.append(
             {
                 f"radial{order}": radial[order + 1] * square_derivative / 2
-                - (radial[order] * argument_derivative if scaled else 0)
+                - (
+                    radial[order] * argument_derivative
+                    if argument_derivative is not None
+                    else 0
+                )
                 for order in range(10)
             }
             if channel != -1
