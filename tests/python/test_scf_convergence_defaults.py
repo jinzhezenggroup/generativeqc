@@ -551,6 +551,24 @@ int main() {
   assert(confirm(false, gradient));
   assert(!orbital_ks_converged(state, gradient));
   assert(!confirm(true, gradient));
+  // Direct confirmation must apply the same active MO gate, even though
+  // this physical idempotent example passes every AO/density bound.
+  state.energy_change = 2e-9;
+  assert(direct_ks_density_confirmation(state, false, gradient));
+  assert(!direct_ks_density_confirmation(state, true, gradient));
+  assert(direct_ks_density_confirmation(state, true, gradient * 0.5));
+  assert(!direct_ks_density_confirmation(state, true, std::sqrt(state.energy_tolerance)));
+  for (double invalid : {-1.0, std::numeric_limits<double>::infinity(),
+                         std::numeric_limits<double>::quiet_NaN()})
+    assert(!direct_ks_density_confirmation(state, true, invalid));
+  state.iterations = 1;
+  assert(!direct_ks_density_confirmation(state, false, gradient));
+  state.warm_energy_baseline = true;
+  assert(direct_ks_density_confirmation(state, true, gradient * 0.5));
+  state.iterations = 20;
+  state.warm_energy_baseline = false;
+  state.energy_change = 0;
+  assert(!direct_ks_density_confirmation(state, true, gradient * 0.5));
   const double stationary = gradient * 0.5;
   assert(confirm(true, stationary));
   assert(orbital_ks_converged(state, stationary));
