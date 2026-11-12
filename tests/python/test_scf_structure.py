@@ -16,6 +16,46 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
 
 @pytest.mark.parametrize(
     "dependency",
+    ("validation_products.hpp", "cpu_target_eigen.hpp", "diis.hpp"),
+)
+def test_overlap_preparation_borrows_only_the_product_adapter(
+    tmp_path: Path, dependency: str
+) -> None:
+    """Dense products do not authorize solver state in overlap preparation."""
+    source = tmp_path / "src/scf"
+    (source / "initial_guess").mkdir(parents=True)
+    (source / "solver").mkdir()
+    (source / "solver" / dependency).write_text("\n")
+    (source / "initial_guess/overlap.hpp").write_text(
+        f'#include "scf/solver/{dependency}"\n'
+    )
+    errors = audit_scf_structure(tmp_path)["errors"]
+    if dependency == "validation_products.hpp":
+        assert not errors
+    else:
+        assert len(errors) == 1
+        assert "forbidden initial_guess dependency" in errors[0]
+
+
+@pytest.mark.parametrize("module", ("reference", "initial_guess"))
+def test_overlap_product_adapter_is_not_admitted_to_other_shared_algebra(
+    tmp_path: Path, module: str
+) -> None:
+    """The production preparation exception must not redirect the oracle."""
+    source = tmp_path / "src/scf"
+    (source / module).mkdir(parents=True)
+    (source / "solver").mkdir()
+    (source / "solver/validation_products.hpp").write_text("\n")
+    (source / module / "linalg.hpp").write_text(
+        '#include "scf/solver/validation_products.hpp"\n'
+    )
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert f"forbidden {module} dependency" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "dependency",
     [
         "runtime/loaded_provider_identity.hpp",
         "scf/cuda/rhf_bucket_internal.hpp",

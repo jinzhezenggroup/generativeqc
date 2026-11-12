@@ -77,6 +77,10 @@ SOURCE_EXACT_ALLOWED = {
         "molecule/basis.hpp",
         "runtime/bounded_workspace.hpp",
     ),
+    # Production overlap construction borrows only the stateless FP64 product
+    # adapter, not a solver driver or mutable provider owner. Reference algebra
+    # and other initial-guess modules keep their independent scalar boundary.
+    "scf/initial_guess/overlap.hpp": ("scf/solver/validation_products.hpp",),
 }
 # CUDA planning and linear algebra have separate rebuild ownership. Enumerate
 # these extracted owners rather than exempting all historical cuda/ fragments.
