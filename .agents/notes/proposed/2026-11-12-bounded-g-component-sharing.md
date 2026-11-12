@@ -60,13 +60,14 @@ cache hit, not another fresh timing sample. These single samples are diagnostics
 not a statistically established compilation-speed improvement.
 
 Host GNU14 O0 diagnostics cannot establish CUDA12.9 Release compile resources or
-GPU performance. CUDA compilation, device numerical gates, register/spill counts
-and complete endpoint throughput remain unmeasured. The original build failure
-is unresolved pending matching-toolchain/device evidence. Publication integrates
+GPU performance. At the local prototype stage CUDA compilation, device numerical
+gates, register/spill counts and complete endpoint throughput were unmeasured.
+The matching-toolchain result below was obtained only after publication. Publication integrates
 master fc9bbe6bea9b441f61a3bc0aab75ebb5a25f2960 and refreshes current catalog
 identities with the official generator, without relabeling historical
 qualifications. The integrated <=f and full-g generated headers are byte-identical
-to the tested candidate artifacts. The PR remains Draft pending CUDA validation.
+to the tested candidate artifacts. The PR was kept Draft throughout that first
+CUDA validation; incomplete test qualification must not be inferred from it.
 
 A shared scientific source Graph reordered n-ary arithmetic (paired differences
 up to 5.7e-14), so source graphs remain per-component. Nested regions shrink text
@@ -94,3 +95,29 @@ Reproduce the required arithmetic gate with
 `pytest -q tests/python/test_one_electron_g_shared_values.py` using the repository's
 verified compiler-cache fixture and PySCF/Libcint. This test does not substitute
 for real CUDA compilation or device qualification.
+
+## Subsequent exact-head CUDA compilation evidence
+
+Head `56b2b6bb15b551dd99cd92b6e69f0614876df4c7` completed the full native CLI
+job on 2026-11-12 at 13:56:21 UTC:
+https://github.com/jinzhezenggroup/generativeqc/actions/runs/43221290971/job/131193221284
+
+The hosted build used NVIDIA CUDA 12.9.86, GNU 13.3.0, sm_120, Release and
+`GENERATIVEQC_CUDA_FAST_COMPILE=OFF`, preserving parallelism two and full g.
+The actual one-electron values translation unit completed in 467.665 seconds.
+Its attributed ptxas process was observed during compilation, so completion was
+not a cache-only replay. The maximum sampled RSS for that process was
+5,388,656,640 bytes (5.02 GiB), versus 15,131,713,536 bytes (14.09 GiB) in the
+prior failed run. These are sampled values, not exact instantaneous peaks, and
+the prior shutdown was not proven to be a kernel OOM kill. The full build used
+662 compiler-cache hits and 125 misses; compilation, linkage, packaging and
+packaged-command checks completed successfully.
+
+This establishes a successful full Release compile of the conservative repair,
+not universal build-memory headroom: other translation units still consumed
+substantial memory and the whole-run minimum available RAM was about 0.53 GiB.
+The hosted runner explicitly reported no sm_120 GPU; the ten-method CLI E+F
+device test was NOT RUN. Device numerical qualification, actual register/spill
+use and complete endpoint performance remain unverified. The same run's ECP
+and core-b test-step timeouts are separate unresolved qualification results,
+addressed by bounded test-scheduling follow-ups, not weakened scientific gates.

@@ -153,6 +153,10 @@ fi
 # expensive enough to earn an explicit shard.
 dist_mode=loadfile
 slow_paths=(
+  # Run 43221290971: the new 181-case emitted-g oracle used 133 worker
+  # seconds in core-b. Keep its module fixture on the existing compiler
+  # loadfile lane, without inserting a slot into ordinary core ownership.
+  tests/python/test_one_electron_g_shared_values.py
   tests/python/test_cc_complete_gradient.py
   tests/python/test_cc_triples_response.py
   tests/python/test_ccsd_t_gradient_validation.py
@@ -160,6 +164,8 @@ slow_paths=(
   tests/python/test_dft_complete_cpu.py
   tests/python/test_ecp_stationary_cpu.py
   tests/python/test_ecp_public_cpu.py
+  tests/python/test_ecp_f_cartesian_cpu.py
+  tests/python/test_ecp_f_spherical_cpu.py
   tests/python/test_ecp_spd_cartesian_cpu.py
   tests/python/test_ecp_spd_spherical_cpu.py
   tests/python/test_ecp_stuttgart_dft.py
@@ -654,10 +660,13 @@ case "${GENERATIVEQC_CI_SHARD}" in
     done
     ;;
   ecp-forces)
-    # Full d-force qualification exceeded the 20-minute job cap when
-    # serialized in one file. Keep every case, split representations
-    # across loadfile workers, and retain the existing job time cap.
+    # Run 43221290971 exhausted the 30-minute test deadline in the public
+    # file's serial f-force tail; the other workers had finished by 822 s.
+    # Keep all methods and oracles, with separate representation owners as
+    # for s/p/d below. Start the longest spherical unit on the first worker.
     test_targets=(
+      tests/python/test_ecp_f_spherical_cpu.py
+      tests/python/test_ecp_f_cartesian_cpu.py
       tests/python/test_ecp_public_cpu.py
       tests/python/test_ecp_spd_cartesian_cpu.py
       tests/python/test_ecp_spd_spherical_cpu.py
@@ -725,6 +734,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_dft_mp_v1_capacity.py
       tests/python/test_df_lambda_frontier.py
     )
+    # New qualification files have no historical core modulo slot. Keep this
+    # emitted-header fixture whole on loadfile, including tracked missing files.
+    if git ls-files --error-unmatch -- tests/python/test_one_electron_g_shared_values.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_one_electron_g_shared_values.py)
+    fi
     # Complete native/full-Fock modules retain
     # every numerical/compile/fault case on one loadfile worker per file.
     # Select tracked missing paths too, so incomplete checkouts fail closed.
@@ -784,9 +798,8 @@ if [[ "${GENERATIVEQC_CI_SHARD}" == "runtime-heavy" && "${GITHUB_EVENT_NAME}" !=
 fi
 
 if [[ "${GENERATIVEQC_CI_SHARD}" == "ecp-forces" && "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
-  # Run 42965903275: public CPU f-force cases progressed for 23 minutes,
-  # but their complete file started nearly four minutes late because xdist
-  # ranked cheap, high-count files first. It is already first in test_targets.
-  # Start it immediately without splitting module fixtures or removing gates.
+  # Start the measured f-force representation owners immediately instead of
+  # ranking cheap, high-count files first. Preserve each complete wrapper
+  # file and all cases; no fixtures or scientific gates are split.
   extra_args+=(--no-loadscope-reorder)
 fi
