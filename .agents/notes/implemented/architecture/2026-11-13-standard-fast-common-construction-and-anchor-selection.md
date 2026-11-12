@@ -1,7 +1,20 @@
 # Decision: common construction and conservative anchor selection
 
-Status: implemented; qualification recorded below
+Status: construction implemented; original anchor-default withdrawal superseded
 Date: 2026-11-13
+
+## Current default-selection decision
+
+The [superseding Fast-default decision](../performance/2026-11-12-retain-qualified-fast-anchor-default.md)
+retains automatic fixed-anchor reuse for eligible budget-Fock/budget-stationarity
+Fast owners at 192 or more AOs. Strict Standard and smaller owners remain opt-in;
+explicit zero disables reuse, and explicit one cannot bypass scientific,
+lifetime or resource admission. Shared construction and selector implementation
+do not imply identical Standard/Fast defaults. No new GPU or endpoint-performance
+qualification is claimed for this review repair.
+
+The original withdrawal rationale and measurements below are historical. They
+are retained to explain the rejected alternative, not as current default policy.
 
 ## Problem
 
@@ -24,20 +37,27 @@ optional attempt starts from the same resolved-model attributes, including the
 unresolved automatic guess. Failed admission restores the entire previous
 configuration; it cannot leak selected controls, budgets or capabilities.
 
-Standard and Fast both require `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` for the
-existing bounded FP64 linear-operator optimization. Unset and zero retain the
-incumbent. FP64 eligibility no longer rejects a strict owner merely because its
+### Original anchor default (superseded)
+
+The original implementation required Standard and Fast to use
+`GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` for the
+existing bounded FP64 linear-operator optimization. Unset and zero retained the
+incumbent in that superseded implementation. FP64 eligibility no longer rejects a strict owner merely because its
 descriptor carries a budget. Existing complete-model/provider, mixed outer-state,
 ledger/chunk, capacity, final physical closure and retirement guards remain.
 Invalid selectors still fail for otherwise ineligible owners.
 
-This intentionally withdraws the previous Fast-only automatic floor instead
-of enabling an incompletely qualified Standard default. It may sacrifice prior
-Fast savings; no speedup is claimed. A future automatic policy must be common
-and independently qualified for the complete endpoints of both profiles.
+This original proposal withdrew the previous Fast-only automatic floor instead
+of enabling an incompletely qualified Standard default. It could sacrifice prior
+Fast savings. Review rejected that withdrawal because missing common-default
+qualification does not establish a defect in the already qualified Fast path.
+A future shared automatic policy still needs independent complete-endpoint
+qualification for both profiles.
 
-Together with the resource follow-up, these changes remove the known
-profile/budget-presence engineering branches. This does not mean that only
+Together with the resource follow-up, shared construction/resource admission
+removes the identified incidental profile/budget-presence engineering branches.
+The current retained Fast default remains an explicit qualified policy boundary.
+This does not mean that only
 SCF tolerances differ: admitted FP32 proposals/gradients, provisional screening,
 physical convergence qualification, independent audits and their bounded
 numerical fallbacks remain explicit policy differences. Their scientific
@@ -63,7 +83,10 @@ profiles through complete cold and warm energy/force endpoints and independent
 moving-grid observables. These are semantic checks, not large-shape performance
 or default-promotion evidence.
 
-## Evidence
+## Historical author evidence before review repairs
+
+The following source/binary identities and GPU receipts belong to the original
+`6f6969a6` implementation, not the later review repair or master integration.
 
 The implementation is based on refreshed master `f590a214b`; it preserves its
 new convergence, resource identity and prepared native-force defaults. Earlier
@@ -164,5 +187,6 @@ FP64 output alone supplies that performance evidence.
 
 The [Fast-default retention decision](../performance/2026-11-12-retain-qualified-fast-anchor-default.md)
 preserves the previously qualified Fast automatic path while leaving Standard
-opt-in. It supersedes only the blanket default withdrawal described above. It does not relabel the historical qualification above or claim
-that existing HF/DF/moved-owner failures have been resolved.
+opt-in. It supersedes only the historical blanket default withdrawal described
+above. It does not relabel the historical qualification above or claim that
+existing HF/DF/moved-owner failures have been resolved.
