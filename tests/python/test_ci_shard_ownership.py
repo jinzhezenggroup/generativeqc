@@ -884,7 +884,7 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         in step
     )
     assert (
-        "&& 100 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40)"
+        "&& 100 || matrix.shard == 'core-b' && 60 || matrix.shard == 'ecp-forces' && 50 || ((matrix.shard == 'posthf' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40)"
         in source
     )
 

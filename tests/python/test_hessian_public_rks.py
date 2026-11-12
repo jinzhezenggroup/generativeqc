@@ -1,4 +1,4 @@
-"""Public Calculator acceptance for the qualified semilocal RKS Hessian slice."""
+"""Public Calculator admission and qualified semilocal RKS Hessian acceptance."""
 
 from __future__ import annotations
 
@@ -41,8 +41,10 @@ def _calculator(method: str = "lda-rks", **kwargs: object) -> Calculator:
     )
 
 
-@pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "pbe0-rks", "b3lyp-rks"))
-def test_public_rks_second_order_capability_is_context_qualified(method: str) -> None:
+@pytest.mark.parametrize(
+    "method", ("lda-rks", "pbe-rks", "pbe0-rks", "b3lyp-rks", "b3lyp-uks")
+)
+def test_public_second_order_capability_is_context_qualified(method: str) -> None:
     assert method_capabilities(method).supported_second_order == frozenset()
     calculator = _calculator(method)
     assert calculator.capabilities.supported_second_order == frozenset(
@@ -56,7 +58,7 @@ def test_public_rks_second_order_capability_is_context_qualified(method: str) ->
     (
         ("lda-uks", {}),
         ("pbe0-uks", {}),
-        ("b3lyp-uks", {}),
+        ("b3lyp-uks", {"density_fitting": "cpu"}),
         ("r2scan-rks", {}),
         ("pbe-rks", {"basis_representation": "spherical"}),
     ),

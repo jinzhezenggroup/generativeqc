@@ -126,10 +126,10 @@ print(first.energies)
 
 **HF/DFT energy + analytic forces — RTX 5090 (2026-11-11)**
 
-Fresh measurements of `a50c80f62` (master `978efb34d` plus the combined
-large-XC scheduling, Direct/DF RHF/RKS convergence and public Standard defaults)
-with unchanged GPU4PySCF settings show GenerativeQC faster in **63/64 cold**
-and **64/64 warm** cases. For 96-atom Direct ωB97M-V, warm speedup is **9.39×**.
+Fresh measurements of master `4024f95b8` plus exact nuclear-derivative and
+overlap-preparation optimizations, on an exclusive node with unchanged
+GPU4PySCF settings, show GenerativeQC faster in **64/64 cold**
+and **64/64 warm** cases. For 96-atom Direct ωB97M-V, warm speedup is **9.42×**.
 The Standard benchmark uses the public default policy, initial guess, grids and
 solver/scheduling controls without benchmark-only overrides.
 
@@ -145,13 +145,15 @@ not statistical rankings. Independent accuracy gates qualify **58/64 pairs**:
 (DF HF at all sizes; Direct/DF M06-2X at 3 atoms).
 See [measurements, accuracy and conditions](benchmarks/results/readme-rtx5090-composed-20261111/README.md)
 for all 512 endpoints, the default convergence contract and reproducible
-timing/error summaries. The cold DF HF96 slow point remains visible; matching
-SCF thresholds does not imply identical work or a universal speedup guarantee.
+timing/error summaries and exact source/image identities. Cold DF HF96 now takes
+**16.259 s versus 16.559 s**; six separate balanced-order repeats also favor
+GenerativeQC. Matching SCF thresholds still does not imply identical work or a
+universal speedup guarantee.
 
 **HF/DFT energy + analytic forces — H100 (2026-11-11)**
 
-The same 64 pairs on master `5533417aa` (the RTX 5090 source plus the #3069
-erf metric fix) on one H100 80GB, against GPU4PySCF 1.9.0 defaults, show
+A separate 64-pair cohort on master `5533417aa` (including the #3069
+erf metric fix) on one H100 80GB, against GPU4PySCF 1.9.0 defaults, shows
 GenerativeQC faster in **63/64 cold** and **62/64 warm** cases. Independent
 gates again qualify **58/64 pairs**, with the same six failures; **57/58 cold**
 and **57/58 warm** qualified pairs are faster. Qualified slow points are

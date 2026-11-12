@@ -714,14 +714,16 @@ def test_safe_workflow_preserves_threshold_coverage_and_limits() -> None:
         in step
     )
     assert (
-        "&& 100 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40)"
+        "&& 100 || matrix.shard == 'core-b' && 60 || matrix.shard == 'ecp-forces' && 50 || ((matrix.shard == 'posthf' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40)"
         in source
     )
     assert "faulthandler_timeout=900" not in source
     preservation = source.split(
         "      - name: Preserve transient benchmark/debug artifacts on failure\n", 1
     )[1].split("\n      - name:", 1)[0]
-    assert "if: failure()" in preservation
+    assert "failure() || cancelled()" in preservation
+    assert "timeout-minutes: 2" in preservation
+    assert "continue-on-error: true" in preservation
     assert "path: .artifacts/" in preservation and "retention-days: 14" in preservation
     assert ".venv/bin/python -m pytest tests/test_ci_native_diagnostics.py -q" in source
 

@@ -221,13 +221,13 @@ def test_master_complete_cache_cannot_precede_the_python_seed() -> None:
     "filename, job, shard, routine_minutes",
     [
         ("ci.yml", "python", "core-a", 40),
-        ("ci.yml", "python", "core-b", 45),
+        ("ci.yml", "python", "core-b", 60),
         ("ci.yml", "python", "core-c", 40),
         ("ci.yml", "python", "uccsd-forces", 40),
         ("ci.yml", "python", "runtime-heavy", 45),
         ("ci.yml", "python", "posthf", 45),
         ("ci.yml", "python", "compiler-heavy", 45),
-        ("ci.yml", "python", "ecp-forces", 40),
+        ("ci.yml", "python", "ecp-forces", 50),
         ("cumetal-cuda.yml", "cuda-tests", "", 75),
     ],
 )
@@ -263,6 +263,69 @@ def test_full_qualification_has_a_separate_finite_budget(
             path.parents[2] / ".github/scripts/ci_select_python_shard.sh"
         ).read_text(encoding="utf-8")
         assert '!= "schedule"' in selector and '!= "workflow_dispatch"' in selector
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize(
+    ("shard", "job_minutes", "test_minutes"),
+    (("ecp-forces", 50, 30), ("core-b", 60, 35)),
+)
+def test_cold_python_setup_preserves_the_existing_test_deadline(
+    event: str, shard: str, job_minutes: int, test_minutes: int
+) -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    section = (
+        path.read_text()
+        .split("\n  python:\n", 1)[1]
+        .split("\n  upload-coverage:\n", 1)[0]
+    )
+    test_step = section.split("      - name: Run Python tests with coverage\n", 1)[
+        1
+    ].split("\n      - ", 1)[0]
+    job_limit = re.search(r"^    timeout-minutes: (.+)$", section, re.MULTILINE)
+    test_limit = re.search(r"^        timeout-minutes: (.+)$", test_step, re.MULTILINE)
+    assert job_limit and test_limit
+    context = {"matrix.shard": shard, "github.event_name": event}
+    full = event in {"schedule", "workflow_dispatch"}
+    assert expression(test_limit[1], context) == (90 if full else test_minutes)
+    assert expression(job_limit[1], context) == (100 if full else job_minutes)
+    assert_full_coverage_step(test_step)
+    assert "continue-on-error:" not in test_step
+
+
+@pytest.mark.parametrize("outcome", ("success", "failure", "cancelled"))
+@pytest.mark.parametrize("scope", ("full", "prose", "unknown"))
+def test_python_diagnostics_survive_job_timeout_without_masking_tests(
+    outcome: str, scope: str
+) -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    section = (
+        path.read_text()
+        .split("\n  python:\n", 1)[1]
+        .split("\n  upload-coverage:\n", 1)[0]
+    )
+    receipt = section.split(
+        "      - name: Preserve transient benchmark/debug artifacts on failure\n",
+        1,
+    )[1].split("\n      - ", 1)[0]
+    condition = re.search(r"^        if: (.+)$", receipt, re.MULTILINE)
+    assert condition
+    context = {
+        "failure()": outcome == "failure",
+        "cancelled()": outcome == "cancelled",
+        "steps.prose_scope.outcome": "success" if scope != "unknown" else "failure",
+        "steps.prose_scope.outputs.scope": scope,
+    }
+    assert expression(condition[1], context) == (
+        outcome != "success" and scope != "prose"
+    )
+    assert "continue-on-error: true" in receipt
+    assert "timeout-minutes: 2" in receipt
+    assert "path: .artifacts/" in receipt
+    assert "include-hidden-files: true" in receipt
+    assert "retention-days: 14" in receipt
 
 
 def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> None:
