@@ -18,7 +18,7 @@ def _assert_cpu_budget(workflow: str) -> None:
             context = {"matrix.compiler": compiler, "github.event_name": event}
             minutes = expression(match[1], context)
             assert type(minutes) is int
-            assert minutes == (25 if compiler == "gcc" else 20)
+            assert minutes == (25 if compiler == "gcc" else 30)
     assert "compiler: [gcc, clang]" in header
     assert "fail-fast: false" in header
     assert "continue-on-error:" not in header
@@ -133,7 +133,7 @@ def test_cpu_budgets_preserve_instrumentation_and_bound_cold_builds(
     assert budget
     context = {"matrix.compiler": compiler, "github.event_name": event}
     instrumented = compiler == "gcc" and event in {"schedule", "workflow_dispatch"}
-    assert expression(budget[1], context) == (25 if compiler == "gcc" else 20)
+    assert expression(budget[1], context) == (25 if compiler == "gcc" else 30)
     for flag, enabled in (
         (
             "COVERAGE_COMPILE_FLAGS",
@@ -154,32 +154,33 @@ def test_cpu_budget_preserves_required_work_and_independent_master_cache_save() 
 @pytest.mark.parametrize(
     ("budget", "valid"),
     [
-        ("${{ matrix.compiler == 'gcc' && 25 || 20 }}", True),
+        ("${{ matrix.compiler == 'gcc' && 25 || 30 }}", True),
         (
             (
                 "${{ matrix.compiler == 'gcc' && "
                 "(github.event_name == 'schedule' || "
                 "github.event_name == 'workflow_dispatch') && 25 || "
-                "matrix.compiler == 'clang' && 20 || 25 }}"
+                "matrix.compiler == 'clang' && 30 || 25 }}"
             ),
             True,
         ),
-        ("${{ matrix.compiler == 'clang' && 20 || 15 }}", False),
-        ("${{ matrix.compiler == 'clang' && 15 || 25 }}", False),
+        ("${{ matrix.compiler == 'clang' && 30 || 15 }}", False),
+        ("${{ matrix.compiler == 'clang' && 20 || 25 }}", False),
         ("${{ matrix.compiler == 'clang' && 25 || 25 }}", False),
+        ("${{ matrix.compiler == 'clang' && 35 || 25 }}", False),
         (
             (
                 "${{ matrix.compiler == 'gcc' && "
                 "(github.event_name == 'schedule' || "
                 "github.event_name == 'workflow_dispatch') && 20 || "
-                "matrix.compiler == 'clang' && 20 || 25 }}"
+                "matrix.compiler == 'clang' && 30 || 25 }}"
             ),
             False,
         ),
         (
             (
                 "${{ github.event_name == 'merge_group' && 15 || "
-                "matrix.compiler == 'clang' && 20 || 25 }}"
+                "matrix.compiler == 'clang' && 30 || 25 }}"
             ),
             False,
         ),

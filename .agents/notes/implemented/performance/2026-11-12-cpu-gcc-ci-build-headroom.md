@@ -81,3 +81,10 @@ Revisit this ceiling using complete GCC build/test timings if 25 minutes still
 truncates healthy work, if an actual compiler or test failure appears, or if
 later source growth materially changes the compile workload. No runtime
 performance or broader numerical qualification is inferred from these CI logs.
+
+## Subsequent evidence
+
+The [later Clang budget decision](2026-11-12-cpu-clang-ci-build-headroom.md)
+supersedes this note's choice to retain Clang at 20 minutes after another
+same-production-source build exceeded it. The observations and GCC estimate
+above remain the historical evidence used for this earlier decision.
