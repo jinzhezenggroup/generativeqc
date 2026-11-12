@@ -41,6 +41,21 @@ detached prior results, warm nonfinite rejection, scientific shape/dtype
 admission, recovery after native failure, concurrent replay and closed owners.
 The polynomial source is an orchestration fixture, not a QC numerical oracle.
 
+The combined targeted host run passes 479 tests with 19 native/device-dependent
+skips. The broader Array API run passes 2603 tests with 21 skips and 36 failures
+inside the independent `array_api_strict.clip` oracle (integer bounds on floating
+arrays). All 36 failures reproduce against unchanged base `fc9bbe6be`; this
+change does not alter those tests or the oracle.
+
+The source-matched n4 Release CUDA build (`GENERATIVEQC_CUDA_FAST_COMPILE=OFF`,
+verified sccache 0.16.0) exceeds its initial 20-minute bound. A cache/object-reusing
+resume is stopped without a completed library. The outstanding native CUDA
+translation units are not replaced with compiler-oriented fast-compile output
+to manufacture endpoint acceptance. Build/cache logs and prepared qualification
+scripts remain in ignored `.artifacts/array-api-2293-20261113/` and the isolated
+remote `/tmp/gqc-2293-20261113/` checkout. No new n1/n4 endpoint measurements or
+real-device scientific test results are claimed by this change.
+
 Real-device endpoint evidence, when available, is recorded separately from these
 host checks. No host test or reduction in metadata work establishes the
 two-node H2 <=0.2 ms gate, complete exact-J/K inventory, peak memory or residency
