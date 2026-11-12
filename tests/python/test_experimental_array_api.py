@@ -82,6 +82,32 @@ def test_public_namespace_runs_eagerly_and_compiles_the_same_expression() -> Non
     np.testing.assert_allclose(compiled(x, y), eager)
 
 
+@pytest.mark.parametrize("scientific", (False, True))
+def test_warm_specialization_preserves_input_admission(scientific: bool) -> None:
+    """Metadata reuse never bypasses value or scientific-domain admission."""
+    compiled = xp.compile(
+        lambda values: xp.sum(values * values),
+        backend="reference",
+        specs={"values": _vector_spec()} if scientific else None,
+    )
+    try:
+        for values in (np.arange(3.0), np.arange(3.0) + 2, np.arange(3.0)):
+            np.testing.assert_allclose(compiled(values), np.sum(values * values))
+        with pytest.raises(ValueError, match="non-finite compiled input"):
+            compiled(np.asarray([1.0, np.inf, 3.0]))
+        for values in (np.arange(4.0), np.arange(3, dtype=np.float32)):
+            if scientific:
+                with pytest.raises(ValueError, match="scientific TensorSpec"):
+                    compiled(values)
+            else:
+                result = compiled(values)
+                np.testing.assert_allclose(result, np.sum(values * values))
+                assert result.dtype == values.dtype
+        np.testing.assert_allclose(compiled(np.arange(3.0)), 5.0)
+    finally:
+        compiled.close()
+
+
 def test_eager_namespace_array_manipulation_matches_numpy() -> None:
     matrix = xp.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=xp.float64)
     vector = xp.asarray([1.0, 2.0], dtype=xp.float64)

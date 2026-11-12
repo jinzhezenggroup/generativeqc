@@ -716,12 +716,23 @@ class _MolecularCapture:
         return result
 
 
+@dataclass(frozen=True)
+class _MolecularRequest:
+    """Immutable dispatch requirements, never geometry or native result data."""
+
+    source: _MolecularSource
+    needed: frozenset[str]
+    derivative: bool
+    second: bool
+
+
 class _MolecularRuntime:
     def __init__(self) -> None:
         self.sources: dict[str, _MolecularSource] = {}
         self.calculators: dict[str, Any] = {}
         self.diagnostics: dict[str, dict[str, Any]] = {}
         self.bound_programs: dict[str, Program] = {}
+        self.requests: dict[str, tuple[_MolecularRequest, ...]] = {}
         self.directions: dict[str, np.ndarray] = {}
         self.profile_enabled = os.environ.get("GENERATIVEQC_ARRAY_API_PROFILE") == "1"
         self.profile_totals_ns: dict[str, int] = {}
@@ -741,6 +752,10 @@ class _MolecularRuntime:
             previous = self.sources.get(source.energy)
             if previous is not None and previous.payload() != source.payload():
                 raise ValueError("molecular source identity collision")
+            if previous is None:
+                # A previously lowered program may become executable after its
+                # sources are registered; do not retain an incomplete dispatch.
+                self.requests.clear()
             self.sources[source.energy] = source
 
     def bind_snapshots(self, program: Program) -> Program:
@@ -783,16 +798,31 @@ class _MolecularRuntime:
     def materialize(
         self, executor: Any, program: Program, feeds: dict[str, Any]
     ) -> None:
+        if not self.sources:
+            return
         profiling = self.profile_enabled
         mark = time.perf_counter_ns() if profiling else 0
-        required = {
-            node.attrs["name"] for node in program.live_nodes if node.op == "input"
-        }
+        requests = self.requests.get(program.logical_hash)
+        if requests is None:
+            required = {
+                node.attrs["name"] for node in program.live_nodes if node.op == "input"
+            }
+            requests = tuple(
+                _MolecularRequest(
+                    source,
+                    frozenset(needed),
+                    bool((set(source.names) - {source.energy}) & needed),
+                    bool(set(source.response_names) & needed),
+                )
+                for source in self.sources.values()
+                if (needed := required.intersection(source.names))
+            )
+            self.requests[program.logical_hash] = requests
         if profiling:
             self.record_profile("source_input_scan", time.perf_counter_ns() - mark)
-        for source in self.sources.values():
-            needed = required.intersection(source.names)
-            if not needed or needed <= feeds.keys():
+        for request in requests:
+            source = request.source
+            if request.needed <= feeds.keys():
                 continue
             mark = time.perf_counter_ns() if profiling else 0
             coordinate_node = source.geometry.outputs["coordinates"]
@@ -823,8 +853,7 @@ class _MolecularRuntime:
                 self.record_profile(
                     "source_calculator_lookup", time.perf_counter_ns() - mark
                 )
-            derivative = bool((set(source.names) - {source.energy}) & needed)
-            second = bool(set(source.response_names) & needed)
+            derivative, second = request.derivative, request.second
             mark = time.perf_counter_ns() if profiling else 0
             directions = None
             if second:
@@ -984,3 +1013,4 @@ class _MolecularRuntime:
         self.calculators.clear()
         self.sources.clear()
         self.bound_programs.clear()
+        self.requests.clear()

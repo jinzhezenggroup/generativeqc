@@ -1096,7 +1096,6 @@ class CompiledFunction:
         bound = self._signature.bind(*args, **kwargs)
         bound.apply_defaults()
         feeds: dict[str, np.ndarray] = {}
-        specs: dict[str, TensorSpec] = {}
         key_rows = []
         for name, value in bound.arguments.items():
             array = _symbolic_backend.asarray(value)
@@ -1110,17 +1109,6 @@ class CompiledFunction:
             if not np.isfinite(array).all():
                 raise ValueError(f"non-finite compiled input: {name}")
             feeds[name] = array
-            spec = self._specs.get(name)
-            if spec is not None:
-                if spec.shape != array.shape or spec.dtype != array.dtype.name:
-                    raise ValueError(
-                        f"input {name} does not match its scientific TensorSpec"
-                    )
-                specs[name] = replace(spec, differentiable=name in self._differentiable)
-            else:
-                specs[name] = _generic_spec(
-                    array, differentiable=name in self._differentiable
-                )
             key_rows.append(
                 (name, tuple(int(x) for x in array.shape), array.dtype.name)
             )
@@ -1129,6 +1117,23 @@ class CompiledFunction:
         if program is None:
             from ._array_api_molecular import _MolecularCapture
 
+            # Shape/dtype and scientific domains belong to the specialization;
+            # only concrete values and finiteness need validation on every call.
+            specs: dict[str, TensorSpec] = {}
+            for name, array in feeds.items():
+                spec = self._specs.get(name)
+                if spec is not None:
+                    if spec.shape != array.shape or spec.dtype != array.dtype.name:
+                        raise ValueError(
+                            f"input {name} does not match its scientific TensorSpec"
+                        )
+                    specs[name] = replace(
+                        spec, differentiable=name in self._differentiable
+                    )
+                else:
+                    specs[name] = _generic_spec(
+                        array, differentiable=name in self._differentiable
+                    )
             with (
                 _MolecularCapture(
                     self._backend, self._options["device"], set(specs)

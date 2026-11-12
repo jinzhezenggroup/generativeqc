@@ -758,6 +758,13 @@ run a new native endpoint; identical operator/geometry expressions within one
 capture share one source invocation. VJP replay uses the saved forward source
 and does not rerun SCF after the caller changes an input.
 
+Warm calls reuse shape/dtype-specialized tensor metadata and the immutable live
+source/derivative requirements of each program. This cache holds no coordinate
+values or native results: each call still validates finite inputs, and changed
+shapes/dtypes undergo fresh specialization and scientific-domain admission.
+Registering another source invalidates the dispatch metadata; closing the owner
+releases it along with its native calculators and compiled programs.
+
 The molecular method is an **explicit native source cut**. Capture records its
 settings and geometry subprogram without loading a native library or executing
 SCF. The derivative tape contains its local first-order jet; after AD lowering,
