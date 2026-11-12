@@ -583,6 +583,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         ),
         "uccsd-forces": (
             "test_wb97mv_hessian.py",
+            "test_global_hybrid_molecular_hessian.py",
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
             "test_uccsd_t_lambda.py",
@@ -790,6 +791,7 @@ def test_complete_forces_and_rks_hessian_share_prioritized_worksteal_owner(
     distribution, targets, arguments = _selection(event, "uccsd-forces")
     expected = [
         "tests/python/test_wb97mv_hessian.py",
+        "tests/python/test_global_hybrid_molecular_hessian.py",
         "tests/python/test_uccsd_gradient.py",
         "tests/python/test_uccsd_t_gradient.py",
         "tests/python/test_uccsd_t_lambda.py",
@@ -1891,11 +1893,12 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     """Execute the selector's real order and plugin without scientific workloads."""
     names = (
         "test_wb97mv_hessian.py",
+        "test_global_hybrid_molecular_hessian.py",
         "test_uccsd_gradient.py",
         "test_uccsd_t_gradient.py",
         "test_uccsd_t_lambda.py",
     )
-    counts = (10, 24, 24, 17)
+    counts = (10, 13, 24, 24, 17)
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
     directory = tmp_path / "tests/python"
     directory.mkdir(parents=True)
@@ -1965,6 +1968,16 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     owner = next(entries for entries in records if hvp in entries)
     assert owner.index(hvp) <= 1
     assert all(node.startswith(prefix) for node in owner[: owner.index(hvp)])
+    molecular = "tests/python/test_global_hybrid_molecular_hessian.py::"
+    force = "tests/python/test_uccsd"
+    # All four initial queues receive molecular cases immediately after RKS,
+    # before any existing force work. Their fresh setups remain independent.
+    assert all(any(node.startswith(molecular) for node in rows) for rows in records)
+    for rows in records:
+        first_force = next(
+            (i for i, node in enumerate(rows) if node.startswith(force)), len(rows)
+        )
+        assert any(node.startswith(molecular) for node in rows[:first_force])
     expected = Counter(
         f"tests/python/{name}::test_case[{value}]"
         for name, count in zip(names, counts, strict=True)
@@ -1995,7 +2008,7 @@ def test_qualification_insertion_preserves_existing_core_owners(
         "test_factorized_host.py": "core-b",
         "test_global_hybrid_grid_second_order.py": "core-a",
         "test_global_hybrid_hessian_lifecycle.py": "core-b",
-        "test_global_hybrid_molecular_hessian.py": "core-c",
+        "test_global_hybrid_molecular_hessian.py": "uccsd-forces",
         "test_native_semilocal_grid_second_order.py": "core-c",
         "test_orbital_gap_preconditioner.py": "core-c",
         "test_second_component_schedule.py": "core-a",
@@ -2042,13 +2055,7 @@ def test_qualification_insertion_preserves_existing_core_owners(
     after = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
     for shard in shards:
         assert after[shard][0] == before[shard][0] == "worksteal"
-        priority = (
-            "--ci-fresh-priority=tests/python/test_global_hybrid_molecular_hessian.py"
-        )
-        expected_extra = list(before[shard][2])
-        if family == "hybrid" and tracked and shard == "core-c":
-            expected_extra += ["-p", "tools.pytest_ci_fresh_frontier", priority]
-        assert after[shard][2] == expected_extra
+        assert after[shard][2] == before[shard][2]
         assert [p for p in after[shard][1] if p not in owners] == before[shard][1]
         assert Counter(p for p in after[shard][1] if p in owners) == Counter(
             p for p, owner in owners.items() if tracked and owner == shard
@@ -2065,6 +2072,13 @@ def test_qualification_insertion_preserves_existing_core_owners(
         )
         == expected
     )
+    if family == "hybrid":
+        module = "tests/python/test_global_hybrid_molecular_hessian.py"
+        distribution, targets, extra = after["uccsd-forces"]
+        assert distribution == "worksteal"
+        assert targets == ([module] if tracked else [])
+        assert (f"--ci-fresh-priority={module}" in extra) == tracked
+        assert ("tools.pytest_ci_fresh_frontier" in extra) == tracked
     if family == "derivative":
         assert not any(
             path in argument
@@ -2120,7 +2134,7 @@ def test_real_hybrid_lane_starts_curvature_before_ordinary_queues(
     subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
     selections = [
         _selection(event, shard, root=tmp_path)
-        for shard in ("core-a", "core-b", "core-c")
+        for shard in ("core-a", "core-b", "core-c", "uccsd-forces")
     ]
     owners = [
         selection

@@ -153,6 +153,11 @@ fi
 # expensive enough to earn an explicit shard.
 dist_mode=loadfile
 slow_paths=(
+  # Cold queue 43237971940: all 13 molecular Hessian cases passed but used
+  # 2120 worker-seconds in core-c; uccsd-forces finished in 273 seconds.
+  # Move the intact function-scoped suite to that worksteal lane, preserving
+  # its supplemental no-modulo-slot semantics and all scientific assertions.
+  tests/python/test_global_hybrid_molecular_hessian.py
   # Run 43221290971: the new 181-case emitted-g oracle used 133 worker
   # seconds in core-b. Keep its module fixture on the existing compiler
   # loadfile lane, without inserting a slot into ordinary core ownership.
@@ -445,10 +450,8 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # otherwise moved 1292 of 2163 existing core files on #2977's base.
     # Keep the molecular matrix on worksteal, not a serial loadfile worker.
     # The d/f compile remains on core-a and lifecycle cases on core-b.
-    # Earlier run 42040437186 moved molecular curvature out of core-c before
-    # fresh-frontier scheduling. Current cold queue 42137083928 instead has
-    # core-c at 806s and core-b beyond 35min; restore only that supplemental
-    # owner below. Preserve all cases, historical modulo slots and cache trust.
+    # Molecular curvature now shares the lighter force lane; slow_paths keeps
+    # its former supplemental no-slot semantics without reassigning core files.
     declare -A supplemental_core_owner=(
       # Derivative AD adds nine files. In PR run 42410861878 their insertion
       # moved 1272 existing modules, including scalar-ECP HVPs from core-a
@@ -470,10 +473,6 @@ case "${GENERATIVEQC_CI_SHARD}" in
       [tests/python/test_factorized_host.py]=1
       [tests/python/test_global_hybrid_grid_second_order.py]=0
       [tests/python/test_global_hybrid_hessian_lifecycle.py]=1
-      # Queue 42137083928: core-b remained cold-overloaded after priority;
-      # this intact 1634-worker-second suite moves to core-c (806s total).
-      # Preserve its supplemental, non-modulo slot and all fresh case priority.
-      [tests/python/test_global_hybrid_molecular_hessian.py]=2
       [tests/python/test_native_semilocal_grid_second_order.py]=2
       [tests/python/test_orbital_gap_preconditioner.py]=2
       [tests/python/test_second_component_schedule.py]=0
@@ -489,9 +488,6 @@ case "${GENERATIVEQC_CI_SHARD}" in
       # Their native states/caches are function-scoped. Start the two cases on
       # separate existing worker frontiers; preserve their ordinary core owner.
       tests/python/test_global_hybrid_ecp_hessian.py
-      # Independent 103-136s curvature cases otherwise started at minute 28.
-      # Seed them across existing worker frontiers, never one serial tail.
-      tests/python/test_global_hybrid_molecular_hessian.py
       # Queue 42128769441 reached 99% with these fresh Hessian cases still
       # compiling at the 35-minute cap. Preserve their existing shard owners
       # and seed cases early across the same four worksteal workers.
@@ -565,12 +561,15 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # The intact RKS Hessian suite shares this existing lighter lane. Put it
     # first so its long water HVP starts before the complete force matrices;
     # worksteal keeps their independent function-scoped cases parallel.
+    # Molecular curvature follows RKS before the force matrices, retaining
+    # fresh function-scoped cases across the same four worker frontiers.
     # Corrected Lambda retains its fresh priority without sharing function fixtures.
     dist_mode=worksteal
     test_targets=()
     force_priorities=()
     for path in \
       tests/python/test_wb97mv_hessian.py \
+      tests/python/test_global_hybrid_molecular_hessian.py \
       tests/python/test_uccsd_gradient.py \
       tests/python/test_uccsd_t_gradient.py \
       tests/python/test_uccsd_t_lambda.py; do
