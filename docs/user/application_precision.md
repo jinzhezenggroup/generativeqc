@@ -14,7 +14,11 @@ relaxed stopping limits, or both, without asking users to select kernels.
 Fast need not execute approximate work or be faster on every input.
 
 Both profiles use the same candidate execution, native scheduling and publication
-pipeline. Successful unaudited scalar calls retain their candidate's native
+pipeline. Construction resolves the model, basis snapshots and native library
+once. Arithmetic selection reuses that snapshot and reruns the ordinary
+capability, transport and initial-guess checks before publishing the calculator;
+rejected optional configurations restore the complete strict configuration.
+Successful unaudited scalar calls retain their candidate's native
 workspace for subsequent calls in either profile. `clear_cache()` releases it;
 execution/publication failures and transitions to an independent audit also
 release candidate residency. Precision policy changes arithmetic admission and
@@ -23,9 +27,15 @@ policy owner and retain their independently managed `close()` lifetime.
 
 Shared drivers are not a dtype-only parity guarantee. Fast can also change SCF
 stopping and provisional screening, and its required fallback/audit work may add
-complete solves. Some native execution optimizations and resource admissions
-still depend on the application budget. The VV10 fixed-anchor implementation is
-shared, but its strict route remains explicitly selected rather than automatic.
+complete solves. Strict FP64 SCF/force owners share the optional native numeric
+reservation and automatic force-tile admission even with a nonzero application
+budget. These decisions use the selected force qualification, not the mere
+presence of a budget. Mixed derivative scratch remains outside the strict fleet
+reservation; existing bounded admission, explicit tile overrides, complete-model
+checks and resource-constrained tile fallbacks still apply. VV10 fixed-anchor
+reuse shares implementation and explicit selection in both profiles. Qualified
+relaxed budget outer solves retain their automatic AO floor; strict owners stay
+opt-in. Budget presence alone is not sufficient admission.
 Equal FP64 arithmetic alone therefore does not establish identical
 internal schedules, work counts, memory requirements or endpoint cost.
 
@@ -163,11 +173,14 @@ admission policy. Failed mixed proposals retire their source
 without certifying it and retry the strict target. Completed construction is
 counted once; replay reports mixed-source J/K work but no new recurrence work.
 
-For relaxed Fast WB97M-V restricted exact-Direct solves, the ordinary cold
-nonlocal outer schedule uses a fixed FP64 J/K/range-K anchor automatically
-at 192 or more AOs, without a fixed upper AO limit. This is not a whitelist of
-measured AO counts or a claim that every larger shape has been benchmarked. Smaller eligible
-owners keep ordinary Fast unless explicitly opted in. Provisional
+For eligible Standard and Fast WB97M-V restricted exact-Direct solves,
+`GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` explicitly selects fixed FP64 J/K/range-K
+anchors in the cold nonlocal outer schedule. Explicit `0` disables reuse.
+Unset preserves automatic reuse for eligible relaxed Fast budget outer solves
+at 192 or more AOs, with no fixed upper AO ceiling. Smaller eligible owners
+and strict Standard owners remain opt-in. The floor is not a measured-size
+whitelist or a claim of profitability for every larger shape. A common automatic
+policy still requires separate complete-endpoint qualification. Provisional
 initializer and frozen-VV10 iterations evaluate linear operators on the total
 current-minus-anchor density and reconstruct their full matrices in FP64.
 Every full target refreshes the anchor with full-density FP64 J/K; nonlinear
@@ -183,7 +196,7 @@ force handoff the idle anchor is retired before optional ERIs; density, stationa
 weights, XC, the final-state token and the warm seed remain valid. Subsequent
 warm and cold solves on that owner use the incumbent route without reallocating anchors.
 Both policies use the same FP64 anchor implementation and complete-model/provider
-guards. `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` also opts strict FP64 WB97M-V
+guards. `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` opts strict FP64 WB97M-V
 single-spin exact-Direct VV10 owners into provisional anchor reuse, without
 relaxing their tolerances, narrowing arithmetic or changing final physical closure.
 Strict AUTO requests alone are not admission. Other models, DF/UKS, public

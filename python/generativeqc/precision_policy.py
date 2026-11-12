@@ -514,20 +514,55 @@ class PrecisionCalculator:
                     requested = float(requested)
                     if not math.isfinite(requested) or requested <= 0:
                         raise ValueError(f"{name} must be finite and positive")
-        self._candidate = Calculator(**self._options, precision="fp64")
+        self._candidate_precision = "fp64"
+        self._fast_native = False
+        self._fast_fock = False
+        self._fast_transport_v2 = False
+        self._route_reasons = ["fp32_gradient_not_qualified"]
+        self._candidate = Calculator(
+            **self._options,
+            precision="fp64",
+            _execution_selector=lambda calculator, configure: self._select_execution(
+                calculator, configure, options
+            ),
+        )
+        require_precision_schedule(self._candidate._library)
+        require_observable_comparison(self._candidate._library)
+        require_candidate_classification(self._candidate._library)
+
+    def _select_execution(
+        self,
+        calculator: Calculator,
+        configure: typing.Callable[..., None],
+        requested: dict[str, typing.Any],
+    ) -> None:
+        """Select arithmetic during the shared calculator construction phase.
+
+        The resolved model, basis snapshots and selected native library are
+        fixed. Optional configurations rerun ordinary capability and guess
+        admission before the calculator becomes observable to any caller.
+        """
+        policy = self._policy
+        device = calculator._device_name
         if policy.profile in ("standard", "fp64", "fast"):
             # Select the same qualified Standard controls as Calculator after
             # resolving the native library and complete model. Unsupported
             # native owners keep their strict defaults. Missing policy support
             # rejects the installation instead of choosing Python defaults. Tight
             # caller values survive both Standard and Fast fallback paths.
-            for name, ceiling in default_controls(self._candidate).items():
-                requested = self._options.get(name)
-                value = min(ceiling, ceiling if requested is None else float(requested))
+            controls = {}
+            for name, ceiling in default_controls(calculator).items():
+                supplied = self._options.get(name)
+                value = min(ceiling, ceiling if supplied is None else float(supplied))
                 self._options[name] = value
-                setattr(self._candidate, "_" + name, value)
-        self._fp64_properties = self._candidate.capabilities.supported_properties
-        if self._candidate.capabilities.family not in (
+                controls[name] = value
+            if any(
+                getattr(calculator, "_" + name) != value
+                for name, value in controls.items()
+            ):
+                configure("fp64", controls)
+        self._fp64_properties = calculator.capabilities.supported_properties
+        if calculator.capabilities.family not in (
             "hartree_fock",
             "density_functional",
         ):
@@ -538,52 +573,25 @@ class PrecisionCalculator:
         # resolved options also contain composition/functional outputs, which
         # named and MethodIR constructors reject as conflicting model owners.
         self._options.update(
-            basis=self._candidate._basis,
-            auxiliary_basis=self._candidate._auxiliary_basis,
+            basis=calculator._basis,
+            auxiliary_basis=calculator._auxiliary_basis,
         )
-        self._candidate_precision = "fp64"
-        self._fast_native = False
-        self._fast_fock = False
-        self._fast_transport_v2 = False
-        self._route_reasons = ["fp32_gradient_not_qualified"]
         if policy.profile == "fast":
             from ._precision_native import require_admission
-            from .ks import KsOptions
 
-            require_admission(self._candidate)
+            require_admission(calculator)
             method_transport = getattr(
-                getattr(self._candidate, "_library", None),
+                getattr(calculator, "_library", None),
                 "generativeqc_application_precision_version_v2",
                 None,
             )
             if device == "cuda" and (
-                self._candidate._ks_options is not None or method_transport is not None
+                calculator._ks_options is not None or method_transport is not None
             ):
-                candidate_options = dict(self._options)
                 fock_controls = _budget_fock_controls(
-                    self._candidate, policy.budget, options
+                    calculator, policy.budget, requested
                 )
-                candidate_options.update(fock_controls)
-                if method_transport is not None:
-                    candidate_options["_application_precision_budget"] = policy.budget
-                else:
-                    ks_options = candidate_options.get("ks_options") or KsOptions()
-                    candidate_options["ks_options"] = replace(
-                        ks_options,
-                        _precision_budget=(
-                            policy.budget.energy_abs,
-                            policy.budget.force_max_abs,
-                            policy.budget.force_rms or 0.0,
-                        ),
-                    )
-                    # replace() resets init=False fields. Resolved options retain
-                    # their scientific composition there, including exact exchange.
-                    object.__setattr__(
-                        candidate_options["ks_options"],
-                        "_method_ir",
-                        ks_options._method_ir,
-                    )
-                resolved_ks = self._candidate._ks_options
+                resolved_ks = calculator._ks_options
                 nonlocal_scf = (
                     resolved_ks is not None
                     and getattr(resolved_ks, "_method_ir", None) is not None
@@ -600,10 +608,14 @@ class PrecisionCalculator:
                 # strict SCF may still own budget-qualified derivative consumers.
                 for precision in precisions:
                     try:
-                        candidate = Calculator(**candidate_options, precision=precision)
+                        configure(
+                            precision,
+                            fock_controls,
+                            policy.budget,
+                            legacy_ks_transport=method_transport is None,
+                        )
                     except NotImplementedError:
                         continue
-                    self._candidate = candidate
                     self._candidate_precision = precision
                     self._fast_native = True
                     self._fast_fock = bool(fock_controls) and precision == "auto"
@@ -620,13 +632,10 @@ class PrecisionCalculator:
                 self._route_reasons.append("auto_scf_unavailable_on_backend")
             else:
                 try:
-                    self._candidate = Calculator(**self._options, precision="auto")
+                    configure("auto", {})
                     self._candidate_precision = "auto"
                 except NotImplementedError:
                     self._route_reasons.append("auto_scf_unavailable_for_model")
-        require_precision_schedule(self._candidate._library)
-        require_observable_comparison(self._candidate._library)
-        require_candidate_classification(self._candidate._library)
 
     @property
     def policy(self) -> PrecisionPolicy:

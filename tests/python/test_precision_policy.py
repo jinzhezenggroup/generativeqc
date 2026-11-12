@@ -85,9 +85,11 @@ def backend(
 
     class Backend:
         def __init__(self, **options: typing.Any) -> None:
+            selector = options.pop("_execution_selector", None)
             if state.block_auto and options["precision"] == "auto":
                 raise NotImplementedError("unavailable AUTO domain")
             self.options = options
+            self._device_name = options.get("device", "cpu")
             self._method = _native.METHOD_RHF
             self._library = policy_metadata(policy_library)
             if state.missing_admission:
@@ -115,7 +117,7 @@ def backend(
                 from generativeqc import KsOptions
 
                 self._ks_options = KsOptions()
-            if state.standard_convergence and self._ks_options is not None:
+            if self._ks_options is not None:
                 from generativeqc.ks import resolve_ks_options
 
                 self._ks_options = resolve_ks_options(
@@ -139,6 +141,43 @@ def backend(
                     self.capabilities, supported_properties=state.auto_properties
                 )
             state.instances.append(self)
+            if selector is not None:
+
+                def configure(
+                    precision: str,
+                    controls: dict,
+                    budget: typing.Any = None,
+                    *,
+                    legacy_ks_transport: bool = False,
+                ) -> None:
+                    """Inject admission outcomes, not a second model resolver."""
+                    if precision == "auto" and state.block_auto:
+                        raise NotImplementedError("unavailable AUTO domain")
+                    self.options = {**self.options, "precision": precision, **controls}
+                    self._application_precision_budget = budget
+                    if legacy_ks_transport:
+                        original = self._ks_options
+                        self._ks_options = replace(
+                            original,
+                            _precision_budget=(
+                                budget.energy_abs,
+                                budget.force_max_abs,
+                                budget.force_rms or 0.0,
+                            ),
+                        )
+                        object.__setattr__(
+                            self._ks_options, "_method_ir", original._method_ir
+                        )
+                        self._application_precision_budget = None
+                    for name, value in controls.items():
+                        setattr(self, "_" + name, value)
+                    if precision == "auto" and state.auto_properties is not None:
+                        self.capabilities = replace(
+                            self.capabilities,
+                            supported_properties=state.auto_properties,
+                        )
+
+                selector(self, configure)
 
         def basis_metadata(self, *args: typing.Any, **kwargs: typing.Any) -> dict:
             return {"orbital": {"mathematical_identity": "orbital"}}
@@ -1431,6 +1470,78 @@ def cuda_constructor(
     )
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
     install_registry_stub(library, frozenset({"energy"}))
+
+
+@pytest.mark.parametrize("profile", ("standard", "fast", "audit_auto"))
+def test_candidate_keeps_model_snapshot_when_basis_file_disappears(
+    cuda_constructor: None,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    profile: str,
+) -> None:
+    """Execution selection must not reopen an already resolved scientific input."""
+    import generativeqc.calculator as calculator_module
+
+    snapshot = Calculator(basis="sto-3g", device="cuda", initial_guess=None)._basis
+    path = tmp_path / "orbital.json"
+    snapshot.write(path)
+    original = calculator_module._native_method_capabilities
+
+    def remove_resolved_input(*arguments: typing.Any) -> MethodCapabilities:
+        path.unlink(missing_ok=True)
+        return original(*arguments)
+
+    monkeypatch.setattr(
+        calculator_module, "_native_method_capabilities", remove_resolved_input
+    )
+    calculator = PrecisionCalculator(
+        method="pbe0-rks",
+        basis=path,
+        device="cuda",
+        initial_guess=None,
+        policy=profile,
+    )
+    assert not path.exists()
+    assert calculator._candidate._basis.identity == snapshot.identity
+    assert calculator._options["basis"].identity == snapshot.identity
+    assert calculator._candidate_precision == (
+        "fp64" if profile == "standard" else "auto"
+    )
+
+
+def test_failed_execution_admission_restores_the_complete_strict_owner(
+    cuda_constructor: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rejected AUTO attempt must not leave budget, controls or capabilities behind."""
+    original = Calculator._initialize_execution
+
+    def reject_after_partial_admission(self: Calculator, **options: typing.Any) -> None:
+        original(self, **options)
+        if self._precision_mode == _native.PRECISION_AUTO:
+            self._energy_tolerance = 123.0
+            self._capabilities = replace(
+                self._capabilities, supported_properties=frozenset()
+            )
+            raise NotImplementedError("injected AUTO admission failure")
+
+    monkeypatch.setattr(
+        Calculator, "_initialize_execution", reject_after_partial_admission
+    )
+    calculator = PrecisionCalculator(
+        method="pbe0-rks", device="cuda", initial_guess=None, policy="fast"
+    )
+    assert calculator._candidate_precision == "fp64"
+    assert calculator._candidate._precision_mode == _native.PRECISION_FP64
+    assert calculator._candidate._application_precision_budget is None
+    assert calculator._candidate.ks_options._precision_budget is None
+    assert (
+        calculator._candidate._energy_tolerance
+        == calculator._options["energy_tolerance"]
+    )
+    assert calculator._candidate.capabilities.supported_properties == {
+        "energy",
+        "forces",
+    }
 
 
 @pytest.mark.parametrize("method", ("m06-2x-rks", "mn15-rks"))

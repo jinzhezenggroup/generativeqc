@@ -448,9 +448,11 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
       composite ? execution_plan.nonlocal_parameters.coefficient : 0.0};
   if (composite && exchange != execution_plan.short_range_exchange) return {};
   const auto* binding = dft::cuda_stationary_binding(model);
-  if (application && (!binding || !dft::application_gradient_qualification(
-                                      *binding, options.application_precision_budget, aos, atoms,
-                                      maximum_angular)))
+  if (application &&
+      (!binding ||
+       !dft::application_gradient_qualification(
+           *binding, options.application_precision_budget, aos, atoms, maximum_angular,
+           {options.energy_tolerance, options.density_tolerance, options.screening_tolerance})))
     return {};
   return binding;
 }
@@ -458,7 +460,9 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
 /** Reserve the counted native CUDA owners before constructing any fleet item.
  * The initial domain is strict all-electron s/p PBE/PBE0 Direct/DF, without
  * preliminary guesses. Individual D4 owners use the same allocator-owned
- * capacity query as preparation, including qualified Direct d-shell contexts;
+ * capacity query as preparation, including qualified Direct d-shell contexts.
+ * Budget-bearing FP64 owners share this bound only when their selected force
+ * consumer is also FP64; mixed derivative scratch retains bounded admission.
  * D3/gCP remain outside this promise. Unsupported configurations
  * and insufficient caps retain the incumbent admission path. This is a numeric
  * and declared-provider bound, not a CUDA-context/opaque-runtime measurement.
@@ -479,8 +483,6 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
       options.nonlocal_grid_spec || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
       options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused ||
       options.incremental_direct_jk || !options.resolved_fock_build ||
-      std::any_of(options.application_precision_budget.begin(),
-                  options.application_precision_budget.end(), [](double v) { return v != 0; }) ||
       std::getenv("GENERATIVEQC_EXPERIMENTAL_PBE_POINT_FP32") ||
       std::getenv("GENERATIVEQC_EXPERIMENTAL_PBE_POINT_KEEP_DIIS"))
     return {};
@@ -524,6 +526,13 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
       primitives = runtime::size_add(primitives, shell.primitives.size());
       angular = std::max(angular, std::size_t{shell.angular_momentum});
     }
+    const auto* binding =
+        native_cuda_stationary_binding(execution_plan, options, grid, true, angular, n, atoms);
+    if (binding &&
+        dft::application_gradient_qualification(
+            *binding, options.application_precision_budget, n, atoms, angular,
+            {options.energy_tolerance, options.density_tolerance, options.screening_tolerance}))
+      return {};
     const auto points = dft::grid_point_count(system, grid);
     const auto direct =
         approximation == scf::FockApproximation::Exact
@@ -544,8 +553,6 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
         options.semilocal_correlation_scale, true);
     std::size_t stationary = 0;
     if (approximation == scf::FockApproximation::Exact) {
-      const auto* binding =
-          native_cuda_stationary_binding(execution_plan, options, grid, true, angular, n, atoms);
       if (!binding) return {};
       const auto force = dft::cuda_stationary_capacity(*binding, atoms, n, primitives, points,
                                                        options.stationary_tile_points(), false);
@@ -697,17 +704,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
                 system_.ecp_terms.empty() &&
                 std::none_of(system_.atoms.begin(), system_.atoms.end(),
                              [](const auto& atom) { return atom.ecp_core != 0; });
-            const bool strict_precision_budget =
-                std::all_of(options_.application_precision_budget.begin(),
-                            options_.application_precision_budget.end(),
-                            [](double value) { return value == 0; });
             // Nonlocal SCF panels keep their fitted admission. Force batching
             // admits the same strict fused RKS owner independently of fitting.
             options_.xc_tile_points = dft::automatic_ks_scf_tile(
                 0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
                 execution_plan_.nonlocal_correlation, target.compute_capability_major,
                 target.fp32_fp64_ratio);
-            if (automatic_force && strict_precision_budget && admitted_cuda_stationary_binding()) {
+            if (automatic_force && admitted_cuda_stationary_binding() &&
+                !application_gradient_qualification()) {
               options_.xc_force_tile_points = dft::automatic_ks_force_tile(
                   fused_rks_fp64, available >= (1ULL << 30), all_electron, maximum_angular,
                   basis_.natom, basis_.nao, grid_.point_count(), target.compute_capability_major);
@@ -2473,16 +2477,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
   /** Both capacity planning and execution consume the same budget/model gate.
    * In particular, strict SCF does not imply strict derivative arithmetic. */
   std::uint64_t application_gradient_qualification() const noexcept {
-    if (!dft::admit_stationary_force_controls(options_.energy_tolerance, options_.density_tolerance,
-                                              options_.screening_tolerance, false))
-      return 0;
     const auto* binding = admitted_cuda_stationary_binding();
     if (!binding) return 0;
     std::size_t maximum_angular = 0;
     for (const auto& shell : system_.shells)
       maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
-    return dft::application_gradient_qualification(*binding, options_.application_precision_budget,
-                                                   basis_.nao, basis_.natom, maximum_angular);
+    return dft::application_gradient_qualification(
+        *binding, options_.application_precision_budget, basis_.nao, basis_.natom, maximum_angular,
+        {options_.energy_tolerance, options_.density_tolerance, options_.screening_tolerance});
   }
 
   generativeqc_status native_cuda_stationary_capacity(dft::CudaStationaryCapacity& capacity,
@@ -3965,10 +3967,10 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
     }
     const auto candidate = dft::cuda_stationary_capacity(
         *binding, shape[0], shape[1], shape[2], shape[3], options.stationary_tile_points(),
-        dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
-                                             options.screening_tolerance, false) &&
-            dft::application_gradient_qualification(*binding, options.application_precision_budget,
-                                                    shape[1], shape[0], shape[4]) != 0,
+        dft::application_gradient_qualification(
+            *binding, options.application_precision_budget, shape[1], shape[0], shape[4],
+            {options.energy_tolerance, options.density_tolerance, options.screening_tolerance}) !=
+            0,
         nonlocal_points);
     capacity = candidate;
     detail.clear();

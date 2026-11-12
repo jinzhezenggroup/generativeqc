@@ -32,6 +32,78 @@ def _oracle(functional: str, case_name: str = CASE) -> dict[str, Any]:
     return reference(case_name, GRID, 4, functional=functional, backend="gpu4pyscf")
 
 
+@pytest.mark.parametrize("policy", ("standard", "fast"))
+def test_fixed_fp64_anchor_selection_is_profile_independent(
+    monkeypatch: pytest.MonkeyPatch, policy: str
+) -> None:
+    """Default/off and explicit reuse preserve complete cold and warm observables.
+
+    These small endpoints qualify semantics, not automatic profitability or a
+    large-shape performance default. Mixed arithmetic keeps its separate budget.
+    """
+    case_name = "water-tetramer-def2-svp-spherical"
+    case = benchmark_cases()[case_name]
+    oracle = _oracle("WB97M-V", case_name)
+    energy_gate = 1e-7 if policy == "standard" else 1e-5
+    force_gate = 1e-6 if policy == "standard" else 1e-4
+    rms_gate = 3e-7 if policy == "standard" else 3e-5
+    endpoints = []
+    for selection in (None, "0", "1"):
+        if selection is None:
+            monkeypatch.delenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", raising=False)
+        else:
+            monkeypatch.setenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", selection)
+        calculator = PrecisionCalculator(
+            method="wb97m-v-rks",
+            basis=case.generativeqc_basis,
+            basis_representation=case.basis_representation,
+            device="cuda",
+            ks_options=KsOptions(grid=GRID),
+            initial_guess=None,
+            max_iterations=180,
+            policy=policy,
+            **(
+                {
+                    "energy_tolerance": 1e-10,
+                    "density_tolerance": 1e-8,
+                    "screening_tolerance": 1e-12,
+                }
+                if policy == "standard"
+                else {}
+            ),
+        )
+        try:
+            with calculator.prepare_batch([case.atoms], warm_start=True) as owner:
+                observed = []
+                for _ in range(2):
+                    result = owner.execute(
+                        strict=True, properties=("energy", "forces")
+                    ).items[0]
+                    assert result.succeeded and result.converged
+                    assert result.executed_backend == "cuda"
+                    assert abs(result.energy - oracle["energy"]) < energy_gate
+                    np.testing.assert_allclose(
+                        result.forces, oracle["forces"], atol=force_gate, rtol=0
+                    )
+                    difference = np.asarray(result.forces) - oracle["forces"]
+                    assert np.sqrt(np.mean(difference * difference)) < rms_gate
+                    observed.append(result)
+                endpoints.append(observed)
+        finally:
+            calculator.clear_cache()
+    for selected in endpoints[1:]:
+        for baseline, candidate in zip(endpoints[0], selected, strict=True):
+            assert abs(baseline.energy - candidate.energy) < (
+                1e-9 if policy == "standard" else 1e-5
+            )
+            np.testing.assert_allclose(
+                baseline.forces,
+                candidate.forces,
+                atol=1e-7 if policy == "standard" else 1e-4,
+                rtol=0,
+            )
+
+
 @pytest.mark.parametrize("selection", ("auto", "full", "partial", "refused"))
 def test_fast_range_source_composes_with_strict_refinement(
     monkeypatch: pytest.MonkeyPatch, selection: str

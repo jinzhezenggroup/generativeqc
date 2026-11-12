@@ -211,6 +211,7 @@ class Calculator:
         _application_precision_budget: typing.Any = None,
         _correlation_convergence_budget: typing.Any = None,
         _correlation_preconvergence: str | None = None,
+        _execution_selector: typing.Callable[..., None] | None = None,
     ) -> None:
         """Create a calculator, optionally selecting CPU or CUDA DF.
 
@@ -708,22 +709,6 @@ class Calculator:
         self._correlation_preconvergence = None
         self._correlation_preconvergence_fallback = None
         self._application_precision_budget = _application_precision_budget
-        if _application_precision_budget is not None:
-            from .force_aware_numerics import TargetErrorBudget
-
-            if not isinstance(_application_precision_budget, TargetErrorBudget):
-                raise TypeError(
-                    "application precision requires an immutable TargetErrorBudget"
-                )
-            if device != "cuda" or self._method not in (
-                _HF_METHODS | _method_manifest.NATIVE_DFT_METHOD_IDS
-            ):
-                raise NotImplementedError("application precision requires CUDA HF/KS")
-        if (
-            self._method == _native.METHOD_PBE_D4_RKS
-            and self._precision_mode != _native.PRECISION_FP64
-        ):
-            raise NotImplementedError("PBE-D4 currently requires strict FP64")
         self._ks_options = None
         if self._method in _method_manifest.NATIVE_DFT_METHOD_IDS:
             from .ks import KsOptions, resolve_ks_options
@@ -1010,6 +995,132 @@ class Calculator:
                 raise NotImplementedError(
                     "native library lacks correlated FP32 telemetry"
                 )
+        execution_arguments = {
+            "method": method,
+            "auxiliary_basis": auxiliary_basis,
+            "density_fitting_mode": density_fitting_mode,
+            "device": device,
+            "target_accuracy": target_accuracy,
+            "energy_tolerance": energy_tolerance,
+            "density_tolerance": density_tolerance,
+            "intrinsic_df_rccsdt": intrinsic_df_rccsdt,
+            "unrestricted_correlated": unrestricted_correlated,
+        }
+        model_attributes = self.__dict__.copy() if _execution_selector else None
+        self._initialize_execution(**execution_arguments)
+        if _execution_selector is not None:
+
+            def configure_execution(
+                precision: str,
+                controls: dict[str, float],
+                budget: typing.Any = None,
+                *,
+                legacy_ks_transport: bool = False,
+            ) -> None:
+                """Validate an unpublished execution against the same resolved model.
+
+                No geometry or native workspace exists during construction. Each
+                attempt starts from the model snapshot, including unresolved
+                automatic guesses, rather than mutating a published calculator.
+                Failed admission restores the previous complete configuration.
+                """
+                mode = precision_modes[precision]
+                for name, value in controls.items():
+                    if (
+                        name
+                        not in {
+                            "energy_tolerance",
+                            "density_tolerance",
+                            "screening_tolerance",
+                        }
+                        or not np.isfinite(value)
+                        or value <= 0
+                    ):
+                        raise ValueError(
+                            "execution controls must be finite and positive"
+                        )
+                previous = self.__dict__.copy()
+                selected_controls = {
+                    name: controls.get(name, getattr(self, "_" + name))
+                    for name in (
+                        "energy_tolerance",
+                        "density_tolerance",
+                        "screening_tolerance",
+                    )
+                }
+                try:
+                    self.__dict__.clear()
+                    self.__dict__.update(model_attributes)
+                    self._precision_mode = mode
+                    self._application_precision_budget = budget
+                    if legacy_ks_transport:
+                        options = self._ks_options
+                        self._ks_options = replace(
+                            options,
+                            _precision_budget=(
+                                budget.energy_abs,
+                                budget.force_max_abs,
+                                budget.force_rms or 0.0,
+                            ),
+                        )
+                        # replace() clears init=False scientific resolution.
+                        object.__setattr__(
+                            self._ks_options, "_method_ir", options._method_ir
+                        )
+                        self._application_precision_budget = None
+                    for name, value in selected_controls.items():
+                        setattr(self, "_" + name, value)
+                    self._initialize_execution(
+                        **{
+                            **execution_arguments,
+                            "energy_tolerance": self._energy_tolerance,
+                            "density_tolerance": self._density_tolerance,
+                        }
+                    )
+                except BaseException:
+                    self.__dict__.clear()
+                    self.__dict__.update(previous)
+                    raise
+
+            _execution_selector(self, configure_execution)
+
+    def _initialize_execution(
+        self,
+        *,
+        method: typing.Any,
+        auxiliary_basis: typing.Any,
+        density_fitting_mode: int,
+        device: str,
+        target_accuracy: TargetAccuracy | None,
+        energy_tolerance: float | None,
+        density_tolerance: float | None,
+        intrinsic_df_rccsdt: bool,
+        unrestricted_correlated: bool,
+    ) -> None:
+        """Admit arithmetic, capabilities and guesses without resolving a new model.
+
+        Ordinary calculators and application profiles use the same validation.
+        This construction-only phase allocates no molecular workspace; failed
+        optional arithmetic can therefore retry the immutable resolved model.
+        """
+        from generativeqc_compiler.method import D4Spec, DispersionCorrectionPrimitive
+
+        if self._application_precision_budget is not None:
+            from .force_aware_numerics import TargetErrorBudget
+
+            if not isinstance(self._application_precision_budget, TargetErrorBudget):
+                raise TypeError(
+                    "application precision requires an immutable TargetErrorBudget"
+                )
+            if device != "cuda" or self._method not in (
+                _HF_METHODS | _method_manifest.NATIVE_DFT_METHOD_IDS
+            ):
+                raise NotImplementedError("application precision requires CUDA HF/KS")
+        if (
+            self._method == _native.METHOD_PBE_D4_RKS
+            and self._precision_mode != _native.PRECISION_FP64
+        ):
+            raise NotImplementedError("PBE-D4 currently requires strict FP64")
         self._ks_options_version = 0
         if self._application_precision_budget is not None:
             query = getattr(
@@ -1028,7 +1139,6 @@ class Calculator:
             query = self._library.generativeqc_ks_options_version
             query.argtypes, query.restype = [], ctypes.c_uint32
             self._ks_options_version = query()
-            from .ks import resolve_ks_options
 
             if self._ks_options_version != 1:
                 raise NotImplementedError(

@@ -1,5 +1,9 @@
 # Decision: share provisional FP64 anchors independently of accuracy profile
 
+The [common construction and anchor-selection follow-up](../architecture/2026-11-13-standard-fast-common-construction-and-anchor-selection.md)
+subsequently replaces the asymmetric automatic default with shared explicit
+opt-in. The experiment, measurements and decisions below remain historical.
+
 Status: implemented opt-in trial; strict default unchanged
 Date: 2026-11-05
 

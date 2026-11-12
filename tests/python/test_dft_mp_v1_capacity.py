@@ -21,6 +21,7 @@ from test_stationary_geometry_resources import (
 )
 
 from tools.dft_mp_v1 import qualify_capacity
+from tools.generativeqc_validation.calculator_admission import force_admission_owner
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -82,7 +83,7 @@ def current_grid_layout_identity() -> str:
 
 def current_python_owner_identity(
     relative: str,
-    name: str,
+    name: str | None,
     *,
     owner: str | None = None,
     assignment: str | None = None,
@@ -96,11 +97,18 @@ def current_python_owner_identity(
             for node in nodes
             if isinstance(node, ast.ClassDef) and node.name == owner
         ).body
-    node = next(
-        node
-        for node in nodes
-        if isinstance(node, ast.FunctionDef) and node.name == name
-    )
+    if name is None:
+        from tools.generativeqc_validation.calculator_admission import (
+            force_admission_owner,
+        )
+
+        node = force_admission_owner(source)
+    else:
+        node = next(
+            node
+            for node in nodes
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        )
     if assignment is not None:
         node = next(
             item
@@ -488,7 +496,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         ),
         "global_hybrid_force_predicate_sha256": current_python_owner_identity(
             "python/generativeqc/calculator.py",
-            "__init__",
+            None,
             owner="Calculator",
             assignment="cuda_hybrid_force",
         ),
@@ -5445,3 +5453,59 @@ def test_resident_ao_binding_witness_rejects_lifecycle_drift(
         RuntimeError, match="resident AO policy lifecycle contract changed"
     ):
         check_resident_ao_binding(changed)
+
+
+@pytest.mark.parametrize("helper", ("configure", "renamed_admission"))
+@pytest.mark.parametrize("delegated", (False, True))
+def test_discovery_preserves_executable_admission(helper: str, delegated: bool) -> None:
+    body = "        semilocal_force = allowed\n        return semilocal_force\n"
+    source = (
+        "class Calculator:\n"
+        "    def __init__(self, allowed):\n"
+        + (
+            f"        self.result = self.{helper}(allowed)\n"
+            f"    def {helper}(self, allowed):\n"
+            if delegated
+            else ""
+        )
+        + body
+    )
+    owner = force_admission_owner(source)
+    # Execute the discovered admission over both positive and negative inputs,
+    # rather than requiring a particular helper name or source fingerprint.
+    namespace = {}
+    exec(compile(source, "<admission-fixture>", "exec"), namespace)  # noqa: S102 - owned fixture
+    cls = namespace["Calculator"]
+    for allowed in (False, True):
+        obj = object.__new__(cls)
+        assert getattr(obj, owner.name)(allowed) is allowed
+
+
+@pytest.mark.parametrize("mode", ("unreachable", "nested-only", "ambiguous"))
+def test_discovery_rejects_unreachable_or_ambiguous_admission(mode: str) -> None:
+    call = {
+        "unreachable": "        pass\n",
+        "nested-only": "        def later():\n            self.hidden(True)\n",
+        "ambiguous": "        self.hidden(True)\n        self.other(True)\n",
+    }[mode]
+    source = (
+        "class Calculator:\n    def __init__(self):\n"
+        + call
+        + "    def hidden(self, allowed):\n        semilocal_force = allowed\n"
+        + "    def other(self, allowed):\n        semilocal_force = allowed\n"
+    )
+    with pytest.raises(RuntimeError, match="capability owner is ambiguous"):
+        force_admission_owner(source)
+
+
+def test_discovery_follows_multiple_levels_without_looping() -> None:
+    source = """class Calculator:
+    def __init__(self):
+        self.forward()
+    def forward(self):
+        self.admit()
+    def admit(self):
+        semilocal_force = True
+        self.forward()
+"""
+    assert force_admission_owner(source) is not None
