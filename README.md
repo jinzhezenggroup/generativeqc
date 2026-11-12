@@ -150,21 +150,21 @@ timing/error summaries and exact source/image identities. Cold DF HF96 now takes
 GenerativeQC. Matching SCF thresholds still does not imply identical work or a
 universal speedup guarantee.
 
-**HF/DFT energy + analytic forces — H100 (2026-11-11)**
+**HF/DFT energy + analytic forces — H100 (2026-11-12)**
 
-A separate 64-pair cohort on master `5533417aa` (including the #3069
-erf metric fix) on one H100 80GB, against GPU4PySCF 1.9.0 defaults, shows
-GenerativeQC faster in **63/64 cold** and **62/64 warm** cases. Independent
-gates again qualify **58/64 pairs**, with the same six failures; **57/58 cold**
-and **57/58 warm** qualified pairs are faster. Qualified slow points are
-Direct ωB97M-V96 cold (48.1 vs 42.0 s) and Direct r2SCAN-3c96 warm
-(4.01 vs 3.85 s). Warm Direct ωB97M-V96 is 1.33× faster.
+The same 64 pairs on master `a7241b4fd` (after #3072) on one H100 80GB,
+against GPU4PySCF 1.9.0 defaults, show GenerativeQC faster in **62/64 cold**
+and **61/64 warm** cases. Independent gates qualify **58/64 pairs**, with the
+same six failures; **56/58 cold** and **56/58 warm** qualified pairs are faster.
+**H100 is not ahead everywhere:** qualified slow points are Direct HF96
+(cold 6.74 vs 5.99 s, warm 1.40 vs 1.33 s), Direct ωB97M-V96 cold
+(48.3 vs 40.7 s) and Direct r2SCAN-3c96 warm (4.02 vs 3.75 s).
 
-![Direct cold and warm endpoint timings on H100, measured 2026-11-11](assets/readme-direct-defaults-h100.svg)
+![Direct cold and warm endpoint timings on H100, measured 2026-11-12](assets/readme-direct-defaults-h100.svg)
 
-![Density-fitted cold and warm endpoint timings on H100, measured 2026-11-11](assets/readme-df-defaults-h100.svg)
+![Density-fitted cold and warm endpoint timings on H100, measured 2026-11-12](assets/readme-df-defaults-h100.svg)
 
-See [H100 measurements, accuracy and conditions](benchmarks/results/readme-h100-20261111/README.md).
+See [H100 measurements, accuracy and conditions](benchmarks/results/readme-h100-20261112/README.md).
 
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 

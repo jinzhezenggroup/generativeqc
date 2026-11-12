@@ -121,6 +121,7 @@ def test_reject_incomplete_or_mismatched_evidence(
         "readme-rtx5090-20261111",
         "readme-rtx5090-composed-20261111",
         "readme-h100-20261111",
+        "readme-h100-20261112",
     ],
 )
 def test_retained_samples_recompute_the_published_summary(
