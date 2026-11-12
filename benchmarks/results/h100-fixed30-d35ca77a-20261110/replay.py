@@ -130,7 +130,8 @@ def main():
         value = read(output)
         check(value == read(task / 'fixed30-analysis-d35-v1.json'), 'Offline reduction differs from sealed reduction')
         summary = compact(value)
-        check(summary == read(BUNDLE / 'summary.json'), 'Published summary differs from full raw reduction')
+        check(summary == json.loads(lzma.decompress((BUNDLE / 'summary.json.xz').read_bytes())),
+              'Published summary differs from full raw reduction')
         if args.output:
             with args.output.open('x') as stream:
                 json.dump(summary, stream, indent=2, allow_nan=False)

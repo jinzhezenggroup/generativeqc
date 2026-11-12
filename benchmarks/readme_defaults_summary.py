@@ -242,7 +242,7 @@ def render(data: dict, destination: Path) -> None:
             figure.text(
                 0.5,
                 0.018,
-                f"{'Direct' if mode == 'direct' else 'Density fitting'} · RTX 5090 · cold includes setup · warm: frozen cold density · bars: min–max · all complete points",
+                f"{'Direct' if mode == 'direct' else 'Density fitting'} · {data.get('device_label', 'RTX 5090')} · cold includes setup · warm: frozen cold density · bars: min–max · all complete points",
                 ha="center",
                 fontsize=9,
                 color="#555555",

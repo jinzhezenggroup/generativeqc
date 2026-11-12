@@ -527,6 +527,59 @@ generativeqc::core::System compact_auxiliary_system() {
   return system;
 }
 
+#if GENERATIVEQC_HAS_CUDA
+void check_cuda_nuclear_only_derivatives() {
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.1, -0.3, 0.2}}, {2, {1.2, 0.4, -0.5}}, {3, {-0.6, 1.1, 0.8}}};
+  system.shells = {{0, 0, {{1.0, 1.0}}}, {1, 0, {{1.1, 1.0}}}, {2, 0, {{1.2, 1.0}}}};
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  auto moved = system;
+  moved.atoms[1].position[2] += 0.2;
+  const std::vector<generativeqc::core::System> systems{system, moved};
+  std::vector<generativeqc::integrals::IntegralData> batched;
+  require(generativeqc::scf::build_cuda_one_electron_integrals_batch(
+              0, systems, batched, detail, false, true) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  require(batched.size() == systems.size(), "nuclear-only batch result count differs");
+  for (std::size_t item = 0; item < systems.size(); ++item) {
+    generativeqc::integrals::IntegralData singleton;
+    require(generativeqc::scf::build_cuda_one_electron_integrals(
+                0, systems[item], singleton, detail, false, true) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    std::vector<double> expected(3 * systems[item].atoms.size());
+    // Independently assemble the Coulomb derivative, without generated helpers.
+    // Three non-collinear unequal charges exercise both pair orientations,
+    // every Cartesian axis, the middle atom, and nonzero batch atom offsets.
+    for (std::size_t atom = 0; atom < systems[item].atoms.size(); ++atom) {
+      for (std::size_t partner = 0; partner < systems[item].atoms.size(); ++partner) {
+        if (partner == atom) continue;
+        double squared_distance = 0.0;
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+          const double displacement = systems[item].atoms[atom].position[axis] -
+                                      systems[item].atoms[partner].position[axis];
+          squared_distance += displacement * displacement;
+        }
+        const double scale = -static_cast<double>(systems[item].atoms[atom].atomic_number) *
+                             systems[item].atoms[partner].atomic_number /
+                             (squared_distance * std::sqrt(squared_distance));
+        for (std::size_t axis = 0; axis < 3; ++axis)
+          expected[3 * atom + axis] += scale * (systems[item].atoms[atom].position[axis] -
+                                                systems[item].atoms[partner].position[axis]);
+      }
+    }
+    for (const auto* actual : {&singleton, &batched[item]}) {
+      require(actual->overlap_derivative.empty() && actual->hcore_derivative.empty(),
+              "nuclear-only export materialized AO derivatives");
+      require_matrix_close(actual->nuclear_repulsion_derivative, expected, 3.0e-12,
+                           "nuclear-only CUDA derivative differs from Coulomb oracle");
+    }
+  }
+}
+#endif
+
 }  // namespace
 
 int main() {
@@ -1182,6 +1235,7 @@ int main() {
               "API range");
     }
     if (cuda_device_available()) {
+      check_cuda_nuclear_only_derivatives();
       for (std::size_t a : {1U, 2U, 5U}) {
         // Unequal dimensions and nonsymmetric A/D expose any accidental AO
         // transpose in the flattened resident contraction. Physical integral
