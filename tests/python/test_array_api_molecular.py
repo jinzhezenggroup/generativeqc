@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import FrozenInstanceError
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -362,6 +363,76 @@ def test_energy_only_recomputes_changed_geometry_and_prunes_unused_sources(
     assert diagnostics[0]["total_iterations"] == 6
     unused.close()
     compiled.close()
+
+
+def test_warm_dispatch_recomputes_values_across_source_specializations(
+    tmp_path: Path, polynomial_source: list[Any]
+) -> None:
+    """Cached dispatch must not retain feeds or confuse different live sources."""
+    models = {
+        count: xp.MolecularModel(("H",) * count, method="rhf") for count in (2, 4)
+    }
+
+    def expression(coordinates: Any) -> Any:
+        return models[coordinates.shape[0]](coordinates)
+
+    compiled = xp.value_and_grad(expression, cache=tmp_path)
+    first = COORDINATES.copy()
+    larger = np.concatenate((COORDINATES, COORDINATES + 2))
+    try:
+        old_value, old_gradient = compiled(first)
+        for coordinates in (larger, first * 1.1, larger * 0.9, first):
+            value, gradient = compiled(coordinates)
+            np.testing.assert_allclose(value, np.sum(coordinates * coordinates))
+            np.testing.assert_allclose(gradient, 2 * coordinates)
+        np.testing.assert_allclose(old_value, np.sum(first * first))
+        np.testing.assert_allclose(old_gradient, 2 * first)
+        diagnostics = compiled.compilation_info()["molecular_calls"]
+        assert len(diagnostics) == 2
+        assert all(item["nuclear_gradient"] for item in diagnostics)
+        assert sum(item["calls"] for item in diagnostics) == 5
+        invalid = first.copy()
+        invalid[0, 0] = np.nan
+        with pytest.raises(ValueError, match="non-finite compiled input"):
+            compiled(invalid)
+        np.testing.assert_allclose(compiled(first)[1], 2 * first)
+    finally:
+        compiled.close()
+    assert all(owner.closed for owner in polynomial_source)
+    with pytest.raises(RuntimeError, match="closed"):
+        compiled(first)
+
+
+def test_warm_dispatch_failure_and_concurrent_replays_do_not_reuse_results(
+    tmp_path: Path, polynomial_source: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Failed calls publish nothing, and serialized native owners keep feeds local."""
+    model = xp.MolecularModel(("H", "H"), method="rhf")
+    compiled = xp.value_and_grad(lambda coordinates: model(coordinates), cache=tmp_path)
+    try:
+        initial = compiled(COORDINATES)
+        owner = polynomial_source[0]
+        singlepoint = owner.singlepoint
+
+        def failed(*args: Any, **kwargs: Any) -> Any:
+            result = singlepoint(*args, **kwargs)
+            result.converged = False
+            return result
+
+        with monkeypatch.context() as patch:
+            patch.setattr(owner, "singlepoint", failed)
+            with pytest.raises(RuntimeError, match="converg"):
+                compiled(COORDINATES * 2)
+        geometries = [COORDINATES * scale for scale in (1.1, 0.9, 1.2, 0.8)]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(compiled, geometries))
+        for coordinates, (value, gradient) in zip(geometries, results, strict=True):
+            np.testing.assert_allclose(value, np.sum(coordinates * coordinates))
+            np.testing.assert_allclose(gradient, 2 * coordinates)
+        np.testing.assert_allclose(initial[1], 2 * COORDINATES)
+    finally:
+        compiled.close()
+    assert owner.closed
 
 
 @pytest.mark.parametrize(
