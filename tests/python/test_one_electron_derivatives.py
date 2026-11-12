@@ -157,7 +157,7 @@ def test_selected_g_cartesian_derivatives_match_independent_libcint(
             )
 
 
-def test_g_derivative_codegen_is_explicit_and_production_stays_fail_closed() -> None:
+def test_g_derivative_codegen_and_production_one_electron_capability() -> None:
     from generativeqc_compiler.integral.capabilities import query_integral_capability
     from generativeqc_compiler.integral.one_electron_derivatives_cuda import (
         _emit_axis_permutations,
@@ -173,8 +173,7 @@ def test_g_derivative_codegen_is_explicit_and_production_stays_fail_closed() -> 
     production = query_integral_capability(
         request, backend="cuda_one_electron_derivatives"
     )
-    assert not production.supported
-    assert "production one-electron CUDA tables support l<=3" in production.reasons[0]
+    assert production.supported
 
 
 @pytest.mark.parametrize("family", ["overlap", "kinetic", "nuclear_attraction"])

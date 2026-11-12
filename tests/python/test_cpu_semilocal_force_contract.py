@@ -664,13 +664,13 @@ def test_preparation_and_force_replay_admit_only_requested_derivatives(
 ) -> None:
     calculator = Calculator(method=method)
     calls = []
-    require_basis = calculator_module.require_basis
+    basis_capability = calculator_module.basis_capability
 
     def record(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         calls.append((kwargs["operator"], kwargs["derivative_order"]))
-        return require_basis(*args, **kwargs)
+        return basis_capability(*args, **kwargs)
 
-    monkeypatch.setattr(calculator_module, "require_basis", record)
+    monkeypatch.setattr(calculator_module, "basis_capability", record)
     monkeypatch.setattr(PreparedBatch, "_public_dft_cpu_force", fake_native.force)
     with calculator.prepare_batch([H2]) as batch:
         assert ("ao", ao_order) in calls
@@ -692,14 +692,19 @@ def test_force_derivative_rejection_precedes_native_replay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calculator = Calculator(method="pbe-rks")
-    require_basis = calculator_module.require_basis
+    basis_capability = calculator_module.basis_capability
 
     def reject_derivative(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        report = basis_capability(*args, **kwargs)
         if kwargs["operator"] != "ao" and kwargs["derivative_order"]:
-            raise NotImplementedError("injected unavailable force derivative")
-        return require_basis(*args, **kwargs)
+            report = {
+                **report,
+                "eligible": False,
+                "reasons": ["injected unavailable force derivative"],
+            }
+        return report
 
-    monkeypatch.setattr(calculator_module, "require_basis", reject_derivative)
+    monkeypatch.setattr(calculator_module, "basis_capability", reject_derivative)
     with calculator.prepare_batch([H2]) as batch:
         with pytest.raises(NotImplementedError, match="unavailable force derivative"):
             batch.execute(strict=True, properties=FORCES)

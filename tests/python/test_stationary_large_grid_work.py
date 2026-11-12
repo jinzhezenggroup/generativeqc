@@ -417,11 +417,11 @@ def _resource_preflight(basis: typing.Any, host_budget: int = 256 << 20) -> dict
         "reserve",
     ),
     [
-        (24, 192, 176, 62592, 24714848, 2229248, 328064),
+        (24, 192, 176, 62592, 24727520, 2229248, 340736),
         # Automatic phased Becke adds 10,433,344 / 39,755,392 bytes to the
         # source owner at 48 / 96 atoms. Keep the original total budget gates.
-        (48, 384, 352, 125184, 65054240, 15371840, 1245888),
-        (96, 768, 704, 250368, 197047712, 53734272, 4851008),
+        (48, 384, 352, 125184, 65079584, 15371840, 1271232),
+        (96, 768, 704, 250368, 197098400, 53734272, 4901696),
     ],
 )
 def test_actual_resource_admission_keeps_24_48_96_inside_unchanged_byte_caps(

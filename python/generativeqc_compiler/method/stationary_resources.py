@@ -354,8 +354,9 @@ def stationary_native_pair_reserve(*, atoms: int, aos: int, primitives: int) -> 
     src/scf/cuda/one_electron_gradient_bridge.cu, also covering its resident-D/W
     device scratch. A retained Direct owner only needs 48*atoms, but capability
     fallback must keep the full shared provider allowance. The current AO
-    topology has at most three Cartesian expansion terms. Native arithmetic
-    parity is independently host-compiled in the resource tests.
+    topology retains six Cartesian expansion slots, including padded through-f
+    shells, independently of the legacy three-term Direct-HF topology. Native
+    arithmetic parity is independently host-compiled in the resource tests.
     """
     for name, value, cap in (
         ("atoms", atoms, STATIONARY_MAX_ATOMS),
@@ -365,7 +366,7 @@ def stationary_native_pair_reserve(*, atoms: int, aos: int, primitives: int) -> 
         if type(value) is not int or not 1 <= value <= cap:
             raise ValueError(f"stationary CUDA {name} exceeds resource caps")
     return (
-        2 * (58 * aos + 52 * atoms + 16 * primitives + 4 * aos * (aos + 1) + 32)
+        2 * (91 * aos + 52 * atoms + 16 * primitives + 4 * aos * (aos + 1) + 32)
         + 48 * atoms
     )
 

@@ -11,7 +11,6 @@ namespace {
 namespace generated = generated_one_electron_derivatives;
 namespace derivative_policy = generated_one_electron_derivative_policy;
 using NucleusCooperativeSchedule = derivative_policy::NucleusCooperativeSchedule;
-constexpr std::size_t kTerms = molecule::kMaximumAoExpansionTerms;
 constexpr unsigned kWarpThreads = 32U;
 constexpr unsigned kDerivativeThreads = 128U;
 constexpr unsigned kCooperativeLanes = NucleusCooperativeSchedule::group_lanes;
@@ -54,11 +53,11 @@ __device__ void contract_pair(const OneElectronDeviceView& batch, std::int64_t i
                                A[1], A[2], B[0], B[1], B[2]);
       const double radial = batch.primitive_coefficients[a] * batch.primitive_coefficients[b];
       for (unsigned ti = 0; ti < batch.ao_term_counts[i]; ++ti) {
-        const auto term_i = i * kTerms + ti;
+        const auto term_i = i * batch.ao_expansion_terms + ti;
         const auto* ai = batch.ao_term_angular + 3 * term_i;
         const auto ca = generated::component_index(ai[0], ai[1], ai[2]);
         for (unsigned tj = 0; tj < batch.ao_term_counts[j]; ++tj) {
-          const auto term_j = j * kTerms + tj;
+          const auto term_j = j * batch.ao_expansion_terms + tj;
           const auto* aj = batch.ao_term_angular + 3 * term_j;
           const auto cb = generated::component_index(aj[0], aj[1], aj[2]);
           const double norm = sign * radial * batch.ao_term_coefficients[term_i] *
@@ -140,11 +139,11 @@ __device__ void contract_pair_nucleus_cooperative(const OneElectronDeviceView& b
                                  A[1], A[2], B[0], B[1], B[2]);
         const double radial = batch.primitive_coefficients[a] * batch.primitive_coefficients[b];
         for (unsigned ti = 0; ti < batch.ao_term_counts[i]; ++ti) {
-          const auto term_i = i * kTerms + ti;
+          const auto term_i = i * batch.ao_expansion_terms + ti;
           const auto* ai = batch.ao_term_angular + 3 * term_i;
           const auto ca = generated::component_index(ai[0], ai[1], ai[2]);
           for (unsigned tj = 0; tj < batch.ao_term_counts[j]; ++tj) {
-            const auto term_j = j * kTerms + tj;
+            const auto term_j = j * batch.ao_expansion_terms + tj;
             const auto* aj = batch.ao_term_angular + 3 * term_j;
             const auto cb = generated::component_index(aj[0], aj[1], aj[2]);
             const double norm = sign * radial * batch.ao_term_coefficients[term_i] *
@@ -186,11 +185,11 @@ __device__ void contract_pair_nucleus_cooperative(const OneElectronDeviceView& b
           __syncwarp(kWarpMask);
           const double radial = batch.primitive_coefficients[a] * batch.primitive_coefficients[b];
           for (unsigned ti = 0; ti < batch.ao_term_counts[i]; ++ti) {
-            const auto term_i = i * kTerms + ti;
+            const auto term_i = i * batch.ao_expansion_terms + ti;
             const auto* ai = batch.ao_term_angular + 3 * term_i;
             const auto ca = generated::component_index(ai[0], ai[1], ai[2]);
             for (unsigned tj = 0; tj < batch.ao_term_counts[j]; ++tj) {
-              const auto term_j = j * kTerms + tj;
+              const auto term_j = j * batch.ao_expansion_terms + tj;
               const auto* aj = batch.ao_term_angular + 3 * term_j;
               const auto cb = generated::component_index(aj[0], aj[1], aj[2]);
               const double norm = sign * radial * batch.ao_term_coefficients[term_i] *

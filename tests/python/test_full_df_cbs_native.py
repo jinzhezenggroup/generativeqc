@@ -2,17 +2,97 @@
 
 from __future__ import annotations
 
+import json
 import os
-from dataclasses import replace
+import subprocess
+import time
+from contextlib import contextmanager
+from dataclasses import asdict, replace
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, CBSBasis, CCSDTCBSCalculator
+from generativeqc import Calculator, CBSBasis, CCSDTCBSCalculator, Primitive, Shell
 
 from tools.generativeqc_validation.correlation_df_oracle import basis_snapshot, energies
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 HYDROGEN = ((1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7)))
 WATER = ((8, (0.0, 0.0, 0.0)), (1, (1.4, 0.0, 1.1)), (1, (-1.4, 0.0, 1.1)))
+CH_PLUS = ((6, (0.0, 0.0, 0.0)), (1, (0.3, -0.4, 2.4)))
+CYANIDE = (
+    (6, tuple(np.array((-0.074650273, 0.694596054, 0.378790432)) / 0.529177210903)),
+    (7, tuple(np.array((-0.206743139, 1.592263011, 1.110970151)) / 0.529177210903)),
+)
+
+
+def retain_evidence(name: str, payload: dict) -> None:
+    """Opt-in source-matched qualification artifacts, separate from required CI."""
+    directory = os.environ.get("GENERATIVEQC_FULL_DF_EVIDENCE_DIR")
+    if directory:
+        path = Path(directory)
+        path.mkdir(parents=True, exist_ok=True)
+        payload["slurm_job_id"] = os.environ["SLURM_JOB_ID"]
+        payload["source_identity"] = os.environ.get("GENERATIVEQC_VALIDATION_SOURCE_ID")
+        (path / (name + ".json")).write_text(
+            json.dumps(payload, indent=2, default=lambda value: value.tolist()) + "\n"
+        )
+
+
+@contextmanager
+def observed_device_memory(name: str) -> Iterator[dict]:
+    """Sample this test process on its allocated GPU, including driver overhead.
+
+    This is optional qualification evidence, not a replacement for the native
+    numeric capacity budget. NVML is sampled at 100 ms and may miss short peaks.
+    The module's allocation fixture runs before any test enters this scope.
+    """
+    directory = os.environ.get("GENERATIVEQC_FULL_DF_EVIDENCE_DIR")
+    observation = {}
+    if not directory:
+        yield observation
+        return
+    assert os.environ.get("SLURM_JOB_ID")
+    path = Path(directory)
+    path.mkdir(parents=True, exist_ok=True)
+    samples = path / (name + "-device-memory.csv")
+    with samples.open("w") as output:
+        sampler = subprocess.Popen(
+            [
+                "nvidia-smi",
+                "--id=" + os.environ["CUDA_VISIBLE_DEVICES"],
+                "--query-compute-apps=pid,used_gpu_memory",
+                "--format=csv,noheader,nounits",
+                "--loop-ms=100",
+            ],
+            stdout=output,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            yield observation
+        finally:
+            sampler.terminate()
+            sampler.wait(timeout=15)
+    values = []
+    for line in samples.read_text().splitlines():
+        fields = [field.strip() for field in line.split(",")]
+        if len(fields) == 2 and fields[0] == str(os.getpid()) and fields[1].isdigit():
+            values.append(int(fields[1]) * (1 << 20))
+    observation.update(
+        {
+            "sampling_interval_ms": 100,
+            "process_id": os.getpid(),
+            "samples": len(values),
+            "sampled_device_process_peak_bytes": max(values, default=None),
+            "includes": "native allocations, CUDA libraries and driver/context overhead",
+        }
+    )
+    assert values, (
+        "allocated process GPU memory sampler produced no numeric observations"
+    )
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -52,13 +132,15 @@ def test_explicit_preconvergence_rejects_legacy_batch() -> None:
 
 
 @pytest.mark.parametrize(
-    "atoms,orbital,auxiliary,method,cartesian",
+    "atoms,orbital,auxiliary,method,cartesian,charge",
     (
-        (HYDROGEN, "sto-3g", "def2-svp", "mp2", False),
-        (WATER, "cc-pvdz", "cc-pvdz-jkfit", "mp2", False),
-        (WATER, "cc-pvtz", "cc-pvtz-jkfit", "mp2", False),
-        (WATER, "cc-pvdz", "cc-pvdz-jkfit", "mp2", True),
-        (WATER, "def2-svp", "def2-svp-jkfit", "df-ccsd(t)", False),
+        (HYDROGEN, "sto-3g", "def2-svp", "mp2", False, 0),
+        (WATER, "cc-pvdz", "cc-pvdz-jkfit", "mp2", False, 0),
+        (WATER, "cc-pvtz", "cc-pvtz-jkfit", "mp2", False, 0),
+        (WATER, "cc-pvdz", "cc-pvdz-jkfit", "mp2", True, 0),
+        (WATER, "def2-svp", "def2-svp-jkfit", "df-ccsd(t)", False, 0),
+        (CH_PLUS, "aug-cc-pvqz", "aug-cc-pvqz-jkfit", "df-ccsd(t)", False, 1),
+        (CYANIDE, "aug-cc-pvqz", "aug-cc-pvqz-jkfit", "mp2", False, -1),
     ),
 )
 def test_full_df_complete_energy_force_and_companions(
@@ -67,6 +149,7 @@ def test_full_df_complete_energy_force_and_companions(
     auxiliary: str,
     method: str,
     cartesian: bool,
+    charge: int,
 ) -> None:
     """Qualify all companion energies and forces against reconverged PySCF."""
     elements = [atom[0] for atom in atoms]
@@ -90,11 +173,34 @@ def test_full_df_complete_energy_force_and_companions(
     )
     triples = method == "df-ccsd(t)"
     try:
-        result = owner.singlepoint_components(
-            atoms,
-            companions=("mp2", "rhf") if triples else ("rhf",),
-            properties=("energy", "forces"),
-        )
+        with observed_device_memory(f"{orbital}-{method}-{charge}") as memory:
+            started = time.monotonic()
+            result = owner.singlepoint_components(
+                atoms,
+                charge=charge,
+                companions=("mp2", "rhf") if triples else ("rhf",),
+                properties=("energy", "forces"),
+            )
+            endpoint_seconds = time.monotonic() - started
+        evidence = {
+            "native_complete_endpoint_seconds": endpoint_seconds,
+            "memory_observation": memory,
+            "atoms_bohr": atoms,
+            "charge": charge,
+            "orbital": orbital,
+            "auxiliary": auxiliary,
+            "cartesian": cartesian,
+            "basis_snapshots": {
+                "orbital": asdict(basis_snapshot(orbital, elements)),
+                "auxiliary": asdict(basis_snapshot(auxiliary, elements)),
+            },
+            "components": {
+                name: asdict(component) for name, component in result.items()
+            },
+            "finite_differences": [],
+        }
+        retain_evidence(f"{orbital}-{method}-{charge}-partial", evidence)
+        oracle_diagnostics = {}
         expected = energies(
             atoms,
             orbital,
@@ -102,7 +208,12 @@ def test_full_df_complete_energy_force_and_companions(
             triples=triples,
             df_reference=True,
             cartesian=cartesian,
+            charge=charge,
+            diagnostics=oracle_diagnostics,
         )
+        evidence["oracle_energies"] = expected
+        evidence["oracle_root"] = oracle_diagnostics
+        retain_evidence(f"{orbital}-{method}-{charge}-partial", evidence)
         for name, component in result.items():
             assert component.converged and component.executed_backend == "cuda"
             assert component.energy == pytest.approx(expected[name], abs=5e-9)
@@ -119,22 +230,194 @@ def test_full_df_complete_energy_force_and_companions(
                     triples=triples,
                     df_reference=True,
                     cartesian=cartesian,
+                    charge=charge,
                 )
                 for sign in (-1, 1)
             ]
             for name, component in result.items():
                 slope = (oracle[1][name] - oracle[0][name]) / (2 * step)
+                evidence["finite_differences"].append(
+                    {
+                        "step_bohr": step,
+                        "method": name,
+                        "direction": direction,
+                        "displaced_energies": [value[name] for value in oracle],
+                        "oracle_slope": slope,
+                        "native_slope": -np.vdot(component.forces, direction),
+                    }
+                )
+                retain_evidence(f"{orbital}-{method}-{charge}-partial", evidence)
                 assert -np.vdot(component.forces, direction) == pytest.approx(
                     slope, abs=3e-6
                 )
-        replay = owner.singlepoint(atoms, properties=("energy", "forces"))
+        replay = owner.singlepoint(
+            atoms, charge=charge, properties=("energy", "forces")
+        )
         assert replay.energy == pytest.approx(result[method].energy, abs=1e-10)
         np.testing.assert_allclose(
             replay.forces, result[method].forces, atol=1e-9, rtol=0
         )
-        energy_only = owner.singlepoint(atoms, properties=("energy",))
+        energy_only = owner.singlepoint(atoms, charge=charge, properties=("energy",))
         assert energy_only.forces is None
         assert energy_only.energy == pytest.approx(result[method].energy, abs=1e-10)
+        retain_evidence(f"{orbital}-{method}-{charge}", evidence)
+    finally:
+        owner.clear_cache()
+
+
+@pytest.mark.parametrize("correction_cardinal", ("d", "t"))
+def test_augmented_tq_cbs_energy_and_force(correction_cardinal: str) -> None:
+    """Unmodified heavy-atom T/Q extrapolation with a separately selected delta."""
+    names = ("aug-cc-pvtz", "aug-cc-pvqz", f"aug-cc-pv{correction_cardinal}z")
+    bases = tuple(basis_snapshot(name, [6, 1]) for name in names)
+    fits = tuple(basis_snapshot(name + "-jkfit", [6, 1]) for name in names)
+    workflow = CCSDTCBSCalculator(
+        tuple(
+            CBSBasis(basis, cardinal)
+            for basis, cardinal in zip(bases[:2], (3, 4), strict=True)
+        ),
+        auxiliary_bases=fits[:2],
+        correction_basis=bases[2],
+        correction_auxiliary_basis=fits[2],
+        hf_reference="df",
+        device="cuda",
+        preconvergence="fp64",
+        policy="tight",
+        calculator_options={"correlation_memory_budget_bytes": 2 << 30},
+    )
+    with observed_device_memory(
+        f"augmented-tq-cbs-delta-{correction_cardinal}"
+    ) as memory:
+        result = workflow.singlepoint(CH_PLUS, charge=1)
+    assert result.converged and result.executed_backend == "cuda"
+    np.testing.assert_allclose(result.mp2_weights, [-27 / 37, 64 / 37], atol=1e-15)
+    exponential = np.exp(-1.63)
+    np.testing.assert_allclose(
+        result.hf_weights,
+        [-exponential / (1 - exponential), 1 / (1 - exponential)],
+        atol=1e-15,
+    )
+    evidence = {
+        "result": asdict(result),
+        "atoms_bohr": CH_PLUS,
+        "charge": 1,
+        "basis_snapshots": {
+            "orbital": [asdict(basis) for basis in bases],
+            "auxiliary": [asdict(basis) for basis in fits],
+        },
+        "finite_differences": [],
+        "memory_observation": memory,
+    }
+    label = f"augmented-tq-cbs-delta-{correction_cardinal}"
+    retain_evidence(label + "-partial", evidence)
+
+    def oracle(geometry: tuple | list) -> np.ndarray:
+        values = {}
+        for index in (2, 0, 1):
+            if bases[index].identity not in values:
+                root_diagnostics = {}
+                values[bases[index].identity] = energies(
+                    geometry,
+                    names[index],
+                    names[index] + "-jkfit",
+                    charge=1,
+                    df_reference=True,
+                    triples=index == 2,
+                    diagnostics=root_diagnostics,
+                )
+                evidence.setdefault("oracle_roots", []).append(
+                    {
+                        "basis": names[index],
+                        "atoms_bohr": geometry,
+                        "root": root_diagnostics,
+                    }
+                )
+        return np.array(
+            [
+                values[component.basis_identity][component.method]
+                for component in result.components
+            ]
+        )
+
+    coefficients = np.array([component.coefficient for component in result.components])
+    expected = oracle(CH_PLUS)
+    assert abs(result.energy - coefficients @ expected) < 1e-8
+    for index, component in enumerate(result.components):
+        assert abs(component.result.energy - expected[index]) < 1e-8
+    evidence["oracle_component_energies"] = expected
+    direction = np.random.default_rng(3055).normal(size=(2, 3))
+    direction /= np.linalg.norm(direction)
+    for step in (1e-4, 3e-5):
+        slopes = (
+            oracle(displaced(CH_PLUS, direction, step))
+            - oracle(displaced(CH_PLUS, direction, -step))
+        ) / (2 * step)
+        for index, component in enumerate(result.components):
+            assert -np.vdot(component.result.forces, direction) == pytest.approx(
+                slopes[index], abs=3e-6
+            )
+        assert -np.vdot(result.forces, direction) == pytest.approx(
+            coefficients @ slopes, abs=3e-6
+        )
+        evidence["finite_differences"].append(
+            {"step_bohr": step, "direction": direction, "component_slopes": slopes}
+        )
+        retain_evidence(label + "-partial", evidence)
+    retain_evidence(label, evidence)
+
+
+def test_orbital_g_with_low_angular_fitting_basis() -> None:
+    """Orbital g must select raised moments even without a high-l auxiliary.
+
+    This deliberately synthetic small orbital basis tests policy selection;
+    it is separate from the unmodified augmented molecular qualification.
+    """
+    atoms = ((2, (0.2, -0.3, -0.7)), (1, (0.1, 0.2, 0.7)))
+    orbital = {"He": [[0, [1.5, 1.0]], [4, [0.6, 1.0]]], "H": [[0, [1.2, 1.0]]]}
+    basis = (
+        Shell(0, 0, (Primitive(1.5, 1.0),)),
+        Shell(0, 4, (Primitive(0.6, 1.0),)),
+        Shell(1, 0, (Primitive(1.2, 1.0),)),
+    )
+    owner = Calculator(
+        method="mp2",
+        basis=basis,
+        basis_representation="spherical",
+        auxiliary_basis=basis_snapshot("def2-svp", [2, 1]),
+        device="cuda",
+        density_fitting="full_cuda",
+        correlation_memory_budget_bytes=512 << 20,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-11,
+    )
+    try:
+        result = owner.singlepoint_components(
+            atoms, charge=1, companions=("rhf",), properties=("energy", "forces")
+        )
+        expected = energies(atoms, orbital, "def2-svp", charge=1, df_reference=True)
+        for name, component in result.items():
+            assert component.energy == pytest.approx(expected[name], abs=5e-9)
+            np.testing.assert_allclose(component.forces.sum(axis=0), 0.0, atol=3e-7)
+        direction = np.random.default_rng(3055).normal(size=(2, 3))
+        direction /= np.linalg.norm(direction)
+        for step in (1e-4, 3e-5):
+            displaced_energies = [
+                energies(
+                    displaced(atoms, direction, sign * step),
+                    orbital,
+                    "def2-svp",
+                    charge=1,
+                    df_reference=True,
+                )
+                for sign in (-1, 1)
+            ]
+            for name, component in result.items():
+                slope = (displaced_energies[1][name] - displaced_energies[0][name]) / (
+                    2 * step
+                )
+                assert -np.vdot(component.forces, direction) == pytest.approx(
+                    slope, abs=3e-6
+                )
     finally:
         owner.clear_cache()
 

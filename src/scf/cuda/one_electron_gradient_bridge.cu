@@ -55,8 +55,9 @@ HostView pack(const core::System& system, unsigned schedule) {
   host.primitive_offsets.push_back(0);
   for (const auto& shell : system.shells) {
     const auto si = static_cast<std::int32_t>(host.shell_atoms.size());
-    if (shell.angular_momentum > 3 || shell.atom_index >= system.atoms.size())
-      throw std::invalid_argument("generated one-electron gradients require valid s/p/d/f shells");
+    if (shell.angular_momentum > 4 || shell.atom_index >= system.atoms.size())
+      throw std::invalid_argument(
+          "generated one-electron gradients require valid through-g shells");
     host.shell_atoms.push_back(shell.atom_index);
     for (const auto& primitive : shell.primitives) {
       host.exponents.push_back(primitive.exponent);
@@ -67,7 +68,7 @@ HostView pack(const core::System& system, unsigned schedule) {
          molecule::ao_expansions(shell.angular_momentum, system.basis_representation)) {
       host.ao_shells.push_back(si);
       host.term_counts.push_back(expansion.size());
-      for (std::size_t term = 0; term < molecule::kMaximumAoExpansionTerms; ++term) {
+      for (std::size_t term = 0; term < molecule::kMaximumAuxiliaryAoExpansionTerms; ++term) {
         if (term < expansion.size()) {
           const auto& item = expansion[term];
           for (auto power : item.component) host.term_angular.push_back(power);
@@ -174,7 +175,7 @@ generativeqc_status execute_cuda_one_electron_gradient(
   // expansion storage, atom data, output, and the larger of the pair lists.
   constexpr long double per_ao =
       2 * sizeof(std::int32_t) + 2 * sizeof(std::int64_t) + sizeof(std::uint8_t) +
-      molecule::kMaximumAoExpansionTerms * (3 * sizeof(std::uint8_t) + sizeof(double));
+      molecule::kMaximumAuxiliaryAoExpansionTerms * (3 * sizeof(std::uint8_t) + sizeof(double));
   constexpr long double per_atom = sizeof(std::int32_t) + 6 * sizeof(double);
   const long double host_bound =
       2 * (per_ao * n + per_atom * atoms + 2 * sizeof(double) * primitives +
@@ -216,7 +217,8 @@ generativeqc_status execute_cuda_one_electron_gradient(
                                arena.upload(host.term_angular),
                                arena.upload(host.term_coefficients),
                                arena.upload(host.exponents),
-                               arena.upload(host.coefficients)};
+                               arena.upload(host.coefficients),
+                               molecule::kMaximumAuxiliaryAoExpansionTerms};
     const auto* first = arena.upload(host.pair_first);
     const auto* second = arena.upload(host.pair_second);
     OneElectronWeightView weights{arena.upload(ws), arena.upload(wt), nullptr};
@@ -314,7 +316,7 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
   for (const auto& shell : system.shells) primitives += shell.primitives.size();
   constexpr long double per_ao =
       2 * sizeof(std::int32_t) + 2 * sizeof(std::int64_t) + sizeof(std::uint8_t) +
-      molecule::kMaximumAoExpansionTerms * (3 * sizeof(std::uint8_t) + sizeof(double));
+      molecule::kMaximumAuxiliaryAoExpansionTerms * (3 * sizeof(std::uint8_t) + sizeof(double));
   constexpr long double per_atom = sizeof(std::int32_t) + 6 * sizeof(double);
   const long double host_bound =
       2 * (per_ao * n + per_atom * atoms + 2 * sizeof(double) * primitives +
@@ -358,7 +360,8 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
                                arena.upload(host.term_angular),
                                arena.upload(host.term_coefficients),
                                arena.upload(host.exponents),
-                               arena.upload(host.coefficients)};
+                               arena.upload(host.coefficients),
+                               molecule::kMaximumAuxiliaryAoExpansionTerms};
     const auto* first = arena.upload(host.pair_first);
     const auto* second = arena.upload(host.pair_second);
     const auto* d_device = resident_weights ? resident_density : arena.upload(density);

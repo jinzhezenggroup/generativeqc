@@ -1116,6 +1116,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_kernels.py"
     ARGS
       --output "${GENERATIVEQC_ONE_ELECTRON_HEADER}"
+      --max-angular-momentum 4
       --policy-output "${GENERATIVEQC_ONE_ELECTRON_POLICY_HEADER}")
 
   set(GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_HEADER
@@ -1129,7 +1130,8 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_kernels.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/cooperative_schedule.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/one_electron_derivative_policy_cuda.py"
-    ARGS --derivatives --output "${GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_HEADER}")
+    ARGS --derivatives --max-angular-momentum 4
+      --output "${GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_HEADER}")
 
   set(GENERATIVEQC_COSX_CONTRACTION_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cosx_contractions.cuh")

@@ -1,10 +1,10 @@
 """CUDA lowering of pruned, shared one-electron S/T/V scalar DAGs.
 
 The native contraction layer owns normalized coefficients and output layouts.
-Production builds retain the bounded s/p/d/f primitive family.  Qualification
-tools may opt into g-shell emission without promoting that larger artifact into
-the default runtime; pair geometry remains hoisted out of the nuclear loop and
-S/T are lowered together for common-subexpression reuse.
+Standalone generation defaults to s/p/d/f; full-DF CUDA builds request g.
+Pair geometry remains hoisted out of the nuclear loop and S/T share scalar
+subexpressions. High-angular alternatives additionally reuse exact ancestors
+before their component switch without evaluating inactive components.
 """
 
 import typing
@@ -12,7 +12,7 @@ from functools import cache
 from itertools import product
 
 from .cuda import CudaEmitter
-from .expr import Graph, Node
+from .expr import Expr, Graph, Node
 from .ir_serialization import integral_to_payload
 from .one_electron_values import (
     build_one_electron_component_kernel,
@@ -81,14 +81,16 @@ def one_electron_program_inventory(
     }
 
 
-def _geometry_boundary(kernel: typing.Any, roots: typing.Any) -> typing.Any:
+def _geometry_boundary(
+    kernel: typing.Any, roots: typing.Any, *, target: Graph | None = None
+) -> typing.Any:
     """Cut hoisted geometry roots out of a copy of the executable DAG.
 
     Substitution before topological scheduling also removes their ancestors;
     renaming emitted temporaries alone would leave redundant exponentials and
     divisions inside every nuclear-center invocation.
     """
-    target = Graph()
+    target = Graph() if target is None else target
     replacements = {expr.identifier: name for name, expr in kernel.pair_geometry}
 
     @cache
@@ -145,6 +147,85 @@ def _emit_pair_geometry() -> typing.Any:
     return "\n".join(lines + emitter.lines + ["  return pair;", "}"])
 
 
+def _emit_shared_shell_helper(attraction: bool, angular: tuple[int, int]) -> str:
+    """Lower high-angular alternatives with exact, non-speculative shared CSE.
+
+    Existing Graph value numbering identifies shared ancestors. Only nodes
+    needed by every component in the shell pair are emitted before its switch.
+    Child emitters inherit definitions without evaluating inactive work.
+    The complete <=f artifact remains on its established scalar lowering.
+    """
+    target = Graph()
+    roots_by_case = []
+    boys_count = sum(angular) + 1
+    for components in product(*(cartesian_components(l) for l in angular)):
+        # Keep each scientific DAG's original operand ordering. Global source
+        # IDs can reorder n-ary sums/products even before scalar emission.
+        graph = Graph()
+        if attraction:
+            kernel = build_one_electron_component_kernel(
+                build_one_electron_value_ir("nuclear_attraction", angular),
+                components,
+                graph=graph,
+            )
+            _, roots = _geometry_boundary(
+                kernel, (kernel.boys_argument, kernel.value), target=target
+            )
+        else:
+            overlap = build_one_electron_component_kernel(
+                build_one_electron_value_ir("overlap", angular), components, graph=graph
+            )
+            kernel = build_one_electron_component_kernel(
+                build_one_electron_value_ir("kinetic", angular), components, graph=graph
+            )
+            _, roots = _geometry_boundary(
+                kernel, (overlap.value, kernel.value), target=target
+            )
+        roots_by_case.append(roots)
+    name = "attraction" if attraction else "overlap_kinetic"
+    result_type, invalid = ("double", "NAN") if attraction else ("ST", "ST{NAN, NAN}")
+    arguments = "const PairGeometry& pair, unsigned component"
+    if attraction:
+        arguments += ", double c_x, double c_y, double c_z"
+    lines = [
+        f"static __device__ __noinline__ {result_type} {name}_{angular[0]}{angular[1]}({arguments}) {{",
+        f"  if (component >= {len(roots_by_case)}U) return {invalid};",
+    ]
+    common = set.intersection(
+        *(set(target.topological_order(roots)) for roots in roots_by_case)
+    )
+    shared = CudaEmitter(target, {})
+    if attraction:
+        # This order/argument is identical for all Cartesian components. Boys
+        # inputs must be initialized before any hoisted node that reads them.
+        argument = roots_by_case[0][0]
+        shared.emit((argument,))
+        lines.extend(shared.lines)
+        shared.lines.clear()
+        lines += [
+            f"  double boys[{boys_count}];",
+            f"  boys_values<{boys_count - 1}>({shared.reference(argument)}, boys);",
+        ]
+    shared.emit(tuple(Expr(target, identifier) for identifier in sorted(common)))
+    lines.extend(shared.lines)
+
+    lines.append("  switch (component) {")
+    for index, roots in enumerate(roots_by_case):
+        emitter = shared.fork()
+        emitter.emit(roots)
+        result = (
+            emitter.reference(roots[1])
+            if attraction
+            else "{" + ", ".join(emitter.reference(root) for root in roots) + "}"
+        )
+        lines.append(f"    case {index}U: {{")
+        lines.extend(emitter.lines)
+        lines.extend([f"      return {result};", "    }"])
+    lines.append("  }")
+    lines.extend([f"  return {invalid};", "}"])
+    return "\n".join(lines)
+
+
 def _emit_operator_helpers(
     attraction: typing.Any, maximum_angular_momentum: int = 3
 ) -> typing.Any:
@@ -158,6 +239,11 @@ def _emit_operator_helpers(
         arguments += ", double c_x, double c_y, double c_z"
     lines = []
     for angular in product(range(maximum + 1), repeat=2):
+        if 4 in angular:
+            lines.append(
+                _emit_shared_shell_helper(bool(attraction), (angular[0], angular[1]))
+            )
+            continue
         suffix = f"{angular[0]}{angular[1]}"
         lines += [
             f"static __device__ __noinline__ {return_type} {name}_{suffix}({arguments}) {{",

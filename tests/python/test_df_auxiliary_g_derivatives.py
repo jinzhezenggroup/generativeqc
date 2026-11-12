@@ -1,8 +1,4 @@
-"""Independent generated auxiliary-g center-response qualification.
-
-This tests an explicit compiler variant; production derivative dispatch is
-unchanged until the native integration and its endpoint gates are qualified.
-"""
+"""Independent generated orbital-g/auxiliary-h center-response qualification."""
 
 from __future__ import annotations
 
@@ -18,6 +14,7 @@ import numpy as np
 import pytest
 from generativeqc_compiler.integral.df_derivatives import axis_polynomial
 from generativeqc_compiler.integral.df_derivatives_cuda import (
+    df_derivative_inventory,
     emit_df_derivatives_cpu,
     emit_df_derivatives_cuda,
 )
@@ -30,7 +27,10 @@ SIGNATURES = [a for a in product(range(5), repeat=2) if 4 in a] + [
 ]
 
 
-@pytest.fixture(scope="module", params=["cpu", "cuda", "cpu-h", "cuda-h"])
+@pytest.fixture(
+    scope="module",
+    params=["cpu", "cuda", "cpu-h", "cuda-h", "cpu-orbital-g", "cuda-orbital-g"],
+)
 def derivative_probe(
     request: typing.Any, tmp_path_factory: pytest.TempPathFactory
 ) -> typing.Any:
@@ -40,7 +40,8 @@ def derivative_probe(
     is an emission check; only the separate CUDA parameter exercises the GPU.
     """
     cuda = request.param.startswith("cuda")
-    auxiliary_h = request.param.endswith("-h")
+    maximum_orbital = 4 if request.param.endswith("-orbital-g") else 3
+    auxiliary_h = request.param.endswith("-h") or maximum_orbital == 4
     if cuda and os.environ.get("GENERATIVEQC_DF_G_CUDA_TEST") != "1":
         pytest.skip("requires explicit finite Slurm allocation")
     if cuda:
@@ -52,10 +53,16 @@ def derivative_probe(
     subprocess.run([cache, "--version"], check=True, capture_output=True, timeout=30)
     directory = tmp_path_factory.mktemp("df-g-derivative-" + request.param)
     header = (
-        emit_df_derivatives_cuda(auxiliary_g=not auxiliary_h, auxiliary_h=auxiliary_h)
+        emit_df_derivatives_cuda(
+            auxiliary_g=not auxiliary_h,
+            auxiliary_h=auxiliary_h,
+            maximum_orbital=maximum_orbital,
+        )
         if cuda
         else emit_df_derivatives_cpu(
-            auxiliary_g=not auxiliary_h, auxiliary_h=auxiliary_h
+            auxiliary_g=not auxiliary_h,
+            auxiliary_h=auxiliary_h,
+            maximum_orbital=maximum_orbital,
         )
     )
     (directory / "values.h").write_text(header)
@@ -151,7 +158,61 @@ extern "C" int probe(const Input* inputs,std::size_t n,double* output) {
         return output
 
     evaluate.maximum_auxiliary = 5 if auxiliary_h else 4
+    evaluate.maximum_orbital = maximum_orbital
     return evaluate
+
+
+@pytest.mark.parametrize(
+    "angular",
+    [(a, b, c) for a, b, c in product(range(5), range(5), range(6)) if 4 in (a, b)],
+)
+@pytest.mark.parametrize("variant", ["asymmetric", "coincident"])
+def test_orbital_g_complete_center_blocks(
+    derivative_probe: typing.Any, angular: tuple[int, ...], variant: str
+) -> None:
+    """Independent libcint center channels include both raised orbital centers."""
+    if derivative_probe.maximum_orbital != 4:
+        pytest.skip("requires the orbital-g response domain")
+    fixture = make_df_derivative_fixture(angular, variant=variant)
+    actual = fixture.contract(derivative_probe(fixture.records))
+    np.testing.assert_allclose(actual, fixture.reference, atol=5e-10, rtol=5e-10)
+    np.testing.assert_allclose(
+        fixture.spherical(actual), fixture.spherical_reference, atol=5e-10, rtol=5e-10
+    )
+    np.testing.assert_allclose(actual.sum(axis=0), 0, atol=1e-11, rtol=0)
+
+
+def test_orbital_g_domain_has_only_one_internal_raise() -> None:
+    """Raised moment scratch is not public orbital-h/auxiliary-i admission."""
+    for powers in ((5, 4, 5), (4, 5, 5), (6, 0, 5)):
+        axis_polynomial(*powers, auxiliary_h_derivative=True, maximum_orbital=4)
+    for powers in ((5, 5, 5), (6, 1, 5), (4, 4, 6), (4, 6, 5)):
+        with pytest.raises(ValueError):
+            axis_polynomial(*powers, auxiliary_h_derivative=True, maximum_orbital=4)
+
+
+@pytest.mark.parametrize(
+    "options, count, boys_order",
+    [
+        ({}, 2 * (16 + 16 * 4), 10),
+        ({"auxiliary_h": True}, 2 * (36 + 16 * 6), 12),
+        ({"auxiliary_h": True, "maximum_orbital": 4}, 2 * (36 + 25 * 6), 14),
+    ],
+)
+def test_response_inventory_domains(options: dict, count: int, boys_order: int) -> None:
+    """Inventories distinguish default f response from the full-DF g variant."""
+    inventory = df_derivative_inventory(**options)
+    assert len(inventory["programs"]) == count
+    assert inventory["maximum_boys_order"] == boys_order
+
+
+@pytest.mark.parametrize("options", [{"maximum_orbital": 4}, {"maximum_orbital": 5}])
+def test_response_inventory_rejects_unsupported_domain(options: dict) -> None:
+    """Inventory admission follows the emitter's bounded response domain."""
+    with pytest.raises(ValueError, match="orbital g requires"):
+        df_derivative_inventory(**options)
+    with pytest.raises(ValueError):
+        axis_polynomial(4, 4, 5, auxiliary_h=True)
 
 
 def test_explicit_g_derivative_axis_domain_preserves_old_boundaries() -> None:

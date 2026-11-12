@@ -55,7 +55,7 @@ def main() -> None:
         metavar="{0,1,2,3,4}",
         help=(
             "largest shell emitted into the generated CUDA value/derivative artifact; "
-            "production defaults to f (3), while g (4) is qualification-only"
+            "standalone emission defaults to f (3); full-DF CUDA builds select g (4)"
         ),
     )
     args = parser.parse_args()
@@ -63,13 +63,6 @@ def main() -> None:
         parser.error("--policy-output applies only to values")
     if args.derivative_policy_output and not args.derivatives:
         parser.error("--derivative-policy-output requires --derivatives")
-    if (
-        args.policy_output or args.derivative_policy_output
-    ) and args.max_angular_momentum != 3:
-        parser.error(
-            "execution policy remains production-qualified through f; "
-            "g-shell generation is structural/qualification-only"
-        )
     if not args.output and not args.cpu_st_output and not args.derivative_policy_output:
         parser.error("at least one generated output is required")
     if args.inventory and not args.output:

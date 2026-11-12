@@ -415,6 +415,46 @@ The unrestricted UMP2/UCCSD owners also admit an explicitly requested native
 CPU-reference context with these fitting selectors; results report
 `cpu_reference`. This separate reference domain never substitutes CPU work for
 a requested CUDA context. The restricted full-DF owners remain CUDA-only.
+The restricted full-DF closure admits orbital shells through **g (`l=4`)** and
+complete fitting bases through **h (`l=5`)**, for both energies and first
+analytic nuclear derivatives. This includes unmodified heavy-atom
+aug-cc-pVQZ/aug-cc-pVQZ-JKFIT records; shells are never truncated. Select
+`hf_reference="df"` for CBS, or `density_fitting="full_cuda"` for standalone
+MP2/DF-CCSD(T), with FP64 and an explicit complete correlation budget.
+The bounded generated polynomial consumer owns the higher classes; optional
+f/f/g Hermite storage and shell-specialized response schedules are not assumed
+to cover g orbitals or h auxiliaries. Their resource/domain refusal retains
+the complete generic source and weighted nuclear sink.
+
+Native unrestricted CUDA DF Fock plans and resident single/bucket UHF execution
+reject orbital g before one-electron or fitting-source preparation. This consumer
+gate does not narrow the shared integral source used by qualified restricted full DF.
+
+This does **not** admit conventional four-center orbital-g CUDA HF/correlation,
+DFT orbital g, or higher derivatives. Heavy-atom aug-cc-pV5Z additionally needs
+orbital h and auxiliary i (`l=6`), which remain explicit errors. QZ support is
+not Q/5 qualification. Inspect `basis_capability_report` for the actual route
+before planning a larger basis. The independent allocated regression gates in
+`tests/python/test_full_df_cbs_native.py` cover complete augmented-QZ component
+energies/forces and two-step reconverged finite differences, plus T/Q CBS
+composition with separate DZ and TZ corrections. Retain the component values,
+actual extrapolation weights, basis identities and root/resource diagnostics;
+a CBS result is not a certified estimate of basis incompleteness.
+
+Optional heavy-atom Q/5 anchors require a separate staged extension:
+
+1. Extend the shared compiler algebra and native packing to orbital h/auxiliary
+   i, including all S/T/V, three-center and metric values, spherical transforms
+   and their first nuclear derivatives. Independently check the new raw blocks
+   and raised-moment bounds before admitting a molecular route.
+2. Qualify complete full-DF RHF/MP2 E/F with reconverged same-root references,
+   two finite-difference steps, metric-rank diagnostics and bounded resource
+   refusal, using the unmodified 5Z basis and fitting records.
+3. Separately qualify CCSD(T), Lambda/orbital response and weighted force sinks,
+   then Q/5 CBS composition with retained absolute components and actual weights.
+   Record complete endpoint time, sampled device memory and semantic work;
+   retain explicit h/i rejection until these gates pass.
+
 Unrestricted fitted components admit orbital shells through f and auxiliary
 shells through g for both values and analytic response, including unmodified
 Na def2-universal-JKFIT and B cc-pVTZ-JKFIT auxiliaries. See the

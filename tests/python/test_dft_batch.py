@@ -265,14 +265,14 @@ def test_energy_batch_resolves_only_required_operator_derivatives(
     import generativeqc.calculator as calculator_module
 
     calls = []
-    original = calculator_module.require_basis
+    original = calculator_module.basis_capability
 
     def record(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         calls.append((kwargs["operator"], kwargs["derivative_order"]))
         return original(*args, **kwargs)
 
     calculator = Calculator(method=method, device="cpu")
-    monkeypatch.setattr(calculator_module, "require_basis", record)
+    monkeypatch.setattr(calculator_module, "basis_capability", record)
     with calculator.prepare_batch([[("He", (0, 0, 0))]]):
         assert ("ao", ao_order) in calls
         assert all(order == 0 for operator, order in calls if operator != "ao")

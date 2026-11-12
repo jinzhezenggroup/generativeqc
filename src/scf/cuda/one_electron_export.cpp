@@ -38,7 +38,9 @@ generativeqc_status build_cuda_one_electron_integrals_impl(
   // both RHF and UHF systems; closed-shell packing incorrectly rejects the
   // odd-electron orbital metadata needed by an open-shell DF endpoint.
   // Matrix-only packing omits direct-ERI task tables that this exporter never consumes.
-  if (!pack_host_batch({cartesian_system}, no_warm, host, true, true) || host.nbf == 0U) {
+  if (!pack_host_batch({cartesian_system}, no_warm, host, true, true, false,
+                       ResidentPsssPolicy::Skip, HostBasisPacking::OneElectronValues) ||
+      host.nbf == 0U) {
     detail = "Cartesian one-electron basis cannot be represented by CUDA";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }

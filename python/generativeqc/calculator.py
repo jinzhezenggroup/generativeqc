@@ -37,7 +37,11 @@ from ._result_translation import (
 from ._result_translation import read_correlation_result as _read_correlation_result
 from .accuracy import AccuracyAssessment, ResolvedModel, TargetAccuracy
 from .basis import BasisSet
-from .basis_capabilities import require_basis, resolved_basis_metadata
+from .basis_capabilities import (
+    basis_capability,
+    require_basis,
+    resolved_basis_metadata,
+)
 from .elements import checked_integer
 from .initial_guess import InitialGuessSpec, read_initial_guess_diagnostic
 from .profiles import canonical_hash
@@ -1837,7 +1841,13 @@ class Calculator:
         if not isinstance(selected_basis, BasisSet):
             selected_basis = _snapshot_basis(selected_basis, self._representation_name)
         auxiliary = basis is not None
-        selected_operator = operator or ("df_metric" if auxiliary else "eri")
+        selected_operator = operator or (
+            "df_metric"
+            if auxiliary
+            else "df_three_center"
+            if self._full_df_basis_consumer("df_three_center")
+            else "eri"
+        )
         require_basis(
             selected_basis,
             atoms,
@@ -1850,7 +1860,7 @@ class Calculator:
             else self._representation_name,
             consumer=self._auxiliary_basis_consumer(selected_operator, derivative_order)
             if auxiliary
-            else None,
+            else self._full_df_basis_consumer(selected_operator, derivative_order),
         )
         return selected_basis
 
@@ -1867,7 +1877,13 @@ class Calculator:
             atoms, basis, operator=operator, derivative_order=derivative_order
         )
         auxiliary = basis is not None
-        selected_operator = operator or ("df_metric" if auxiliary else "eri")
+        selected_operator = operator or (
+            "df_metric"
+            if auxiliary
+            else "df_three_center"
+            if self._full_df_basis_consumer("df_three_center")
+            else "eri"
+        )
         return (
             selected_basis.shells_for(
                 atoms,
@@ -1881,7 +1897,7 @@ class Calculator:
                     selected_operator, derivative_order
                 )
                 if auxiliary
-                else None,
+                else self._full_df_basis_consumer(selected_operator, derivative_order),
             )
             if isinstance(selected_basis, BasisSet)
             else tuple(selected_basis)
@@ -1894,6 +1910,28 @@ class Calculator:
             return "cuda"
         return self._device_name
 
+    def _full_df_basis_consumer(
+        self, operator: str, derivative_order: int = 0
+    ) -> str | None:
+        """Admit only the closed-shell Coulomb full-DF operator closure, not ERIs."""
+        if (
+            self._device_name == "cuda"
+            and self._density_fitting_mode == _native.DENSITY_FITTING_FULL_CUDA
+            and self._auxiliary_basis is not None
+            and self._method in (_native.METHOD_MP2, _native.METHOD_DF_RCCSD_T)
+            and derivative_order in (0, 1)
+            and operator
+            in (
+                "overlap",
+                "kinetic",
+                "nuclear_attraction",
+                "df_metric",
+                "df_three_center",
+            )
+        ):
+            return "full_df"
+        return None
+
     def _auxiliary_basis_consumer(
         self, operator: str, derivative_order: int = 0
     ) -> str | None:
@@ -1904,6 +1942,9 @@ class Calculator:
         use that same scoped policy. HF/KS uses a separate role for its complete
         value/first-derivative owner; older libraries retain their f boundary.
         """
+        full_df = self._full_df_basis_consumer(operator, derivative_order)
+        if full_df:
+            return full_df
         if (
             operator in {"df_metric", "df_three_center"}
             and self._density_fitting_backend() == "cuda"
@@ -2191,24 +2232,45 @@ class Calculator:
             converged=converged,
         )
 
-    def _preflight_hf_basis(
-        self, atoms: typing.Any, *, compute_forces: typing.Any = True
-    ) -> None:
-        """Check operators and AO jets needed by the selected mean-field outputs.
+    def basis_capability_report(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        compute_forces: bool = True,
+    ) -> dict[str, typing.Any]:
+        """Inspect all basis-operator requirements without native execution.
 
-        Runtime shape/resource and occupation checks remain native. GFN2-xTB
-        owns an intrinsic minimal basis and deliberately bypasses Gaussian
-        basis capability checks.
+        Checks use this calculator's backend, representation and linked
+        auxiliary consumer, exactly as calculation preflight does. Both values
+        and first nuclear derivatives are inspected unless ``compute_forces``
+        is false. DFT additionally inspects its required spatial AO jets.
+        Orbital DF indices use the fitting backend, which can differ from the
+        backend evaluating orbital one-electron operators.
+
+        ``eligible`` describes basis operators only: it does not qualify SCF,
+        correlation amplitudes, orbital response, force contractions, resource
+        bounds or numerical accuracy. No integrals, device probes or shell
+        truncation are performed. GFN2-xTB has an intrinsic basis and reports
+        ``applicable=False`` with no Gaussian checks.
         """
+        atoms = tuple(Atom.from_value(atom) for atom in atoms)
+        if not atoms:
+            raise ValueError("at least one atom is required")
         if self._method == _native.METHOD_GFN2_XTB:
-            return
-        if self._dispersion_method_ir is not None:
-            self._dispersion_method_ir.preflight_atomic_numbers(
-                tuple(atom.atomic_number for atom in atoms)
-            )
+            return {
+                "applicable": False,
+                "eligible": True,
+                "checks": [],
+                "reasons": [],
+            }
+        checks = []
         derivative_orders = (0, 1) if compute_forces else (0,)
         auxiliary_backend = self._density_fitting_backend()
-        orbital_operators = ["overlap", "kinetic", "nuclear_attraction", "eri"]
+        orbital_operators = ["overlap", "kinetic", "nuclear_attraction"]
+        if not self._full_df_basis_consumer("df_three_center"):
+            orbital_operators.append("eri")
+        if self._auxiliary_basis is not None:
+            orbital_operators.append("df_three_center")
         if self._capabilities.family == "density_functional":
             orbital_operators.append("ao")
         for role, basis, operators in (
@@ -2229,22 +2291,49 @@ class Calculator:
                 if operator == "ao":
                     orders = (self._ks_options.ao_order,)
                 for order in orders:
-                    require_basis(
-                        basis,
-                        atoms,
-                        backend=auxiliary_backend
-                        if role == "auxiliary"
-                        else self._device_name,
-                        operator=operator,
-                        derivative_order=order,
-                        role=role,
-                        representation=basis.representation
-                        if isinstance(basis, BasisSet)
-                        else self._representation_name,
-                        consumer=self._auxiliary_basis_consumer(operator, order)
-                        if role == "auxiliary"
-                        else None,
+                    checks.append(
+                        basis_capability(
+                            basis,
+                            atoms,
+                            backend=auxiliary_backend
+                            if operator in ("df_metric", "df_three_center")
+                            else self._device_name,
+                            operator=operator,
+                            derivative_order=order,
+                            role=role,
+                            representation=basis.representation
+                            if isinstance(basis, BasisSet)
+                            else self._representation_name,
+                            consumer=self._auxiliary_basis_consumer(operator, order)
+                            if role == "auxiliary"
+                            else self._full_df_basis_consumer(operator, order),
+                        )
                     )
+        reasons = [reason for check in checks for reason in check["reasons"]]
+        return {
+            "applicable": True,
+            "eligible": not reasons,
+            "checks": checks,
+            "reasons": reasons,
+        }
+
+    def _preflight_hf_basis(
+        self, atoms: typing.Any, *, compute_forces: typing.Any = True
+    ) -> None:
+        """Reject the complete missing basis closure before native preparation.
+
+        Keep dispersion admission independent of the Gaussian operator report.
+        Runtime shape/resource and occupation checks remain native.
+        """
+        if self._method == _native.METHOD_GFN2_XTB:
+            return
+        if self._dispersion_method_ir is not None:
+            self._dispersion_method_ir.preflight_atomic_numbers(
+                tuple(atom.atomic_number for atom in atoms)
+            )
+        report = self.basis_capability_report(atoms, compute_forces=compute_forces)
+        if not report["eligible"]:
+            raise NotImplementedError("; ".join(report["reasons"]))
 
     def _create_native_system(
         self,
@@ -2485,7 +2574,7 @@ class Calculator:
             create_system = getattr(
                 self._library,
                 "generativeqc_correlation_auxiliary_system_create_v1"
-                if auxiliary_consumer == "correlation_df"
+                if auxiliary_consumer in ("correlation_df", "full_df")
                 else (
                     "generativeqc_scf_auxiliary_system_create_v1"
                     if auxiliary_consumer == "scf_df"

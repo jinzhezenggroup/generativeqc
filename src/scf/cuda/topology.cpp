@@ -122,14 +122,14 @@ bool pack_host_batch(const std::vector<core::System>& systems,
   // The DF owner independently expands public spherical AOs after packing.
   // Enforce Cartesian metadata here so the legacy three-term AO ABI remains
   // valid; g public transforms have their own bounded six-term records.
-  if (df_values && (unrestricted || !matrix_direct || require_direct_transform ||
-                    std::any_of(systems.begin(), systems.end(),
-                                [](const auto& system) {
-                                  return system.basis_representation !=
-                                         GENERATIVEQC_BASIS_CARTESIAN;
-                                }) ||
-                    std::any_of(initial_densities.begin(), initial_densities.end(),
-                                [](const auto* density) { return density != nullptr; })))
+  if (packing != HostBasisPacking::Scf &&
+      ((unrestricted && df_values) || !matrix_direct || require_direct_transform ||
+       std::any_of(systems.begin(), systems.end(),
+                   [](const auto& system) {
+                     return system.basis_representation != GENERATIVEQC_BASIS_CARTESIAN;
+                   }) ||
+       std::any_of(initial_densities.begin(), initial_densities.end(),
+                   [](const auto* density) { return density != nullptr; })))
     return false;
   if (std::any_of(systems.begin(), systems.end(),
                   [](const auto& s) { return !s.ecp_terms.empty(); }))
@@ -203,8 +203,11 @@ bool pack_host_batch(const std::vector<core::System>& systems,
     const std::size_t system_direct_ao_begin = host.direct_ao_shells.size();
     const std::size_t system_shell_begin = host.shell_atoms.size();
     for (const core::Shell& shell : system.shells) {
-      if (shell.angular_momentum > (df_values ? 5U : kMaximumAngularMomentum) ||
-          shell.atom_index >= system.atoms.size())
+      const auto maximum_angular = packing == HostBasisPacking::DfValues ? 5U
+                                   : packing == HostBasisPacking::OneElectronValues
+                                       ? 4U
+                                       : kMaximumAngularMomentum;
+      if (shell.angular_momentum > maximum_angular || shell.atom_index >= system.atoms.size())
         return false;
       if (host.shell_atoms.size() >=
           static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {

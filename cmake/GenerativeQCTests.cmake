@@ -241,6 +241,7 @@ macro(generativeqc_add_native_tests)
   target_include_directories(generativeqc_ecp_projector_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   generativeqc_native_test(generativeqc_fock_provider_tests tests/native/test_fock_provider.cpp)
   generativeqc_native_test(generativeqc_fock_api_tests tests/native/test_fock_api.cpp NO_SRC_INCLUDE)
+  generativeqc_native_test(generativeqc_df_spin_admission_tests tests/native/test_df_spin_admission.cpp)
   generativeqc_native_test(generativeqc_native_tests tests/native/test_rhf.cpp)
   generativeqc_native_test(generativeqc_mean_field_options_tests
                        tests/native/test_mean_field_options.cpp)

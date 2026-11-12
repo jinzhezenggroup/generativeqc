@@ -105,7 +105,8 @@ void tensor_extent_boundary() {
 
 void system_backend_boundary() {
   // This is the host-side ABI preflight only: no device or CUDA execution is
-  // initialized. A resolved backend fixture exercises rejection in CPU CI.
+  // initialized. Orbital g metadata is shared with the full-DF route;
+  // operator-specific Direct-HF rejection is covered by the host packer test.
   generativeqc_context context;
   generativeqc_atom atom{2, 0, 0, 0};
   generativeqc_primitive primitive{1, 1};
@@ -121,7 +122,7 @@ void system_backend_boundary() {
         generativeqc_system sentinel;
         auto* result = &sentinel;
         const auto status = generativeqc_system_create(&context, &descriptor, &result);
-        const bool supported = l <= (backend == GENERATIVEQC_BACKEND_CPU_REFERENCE ? 4U : 3U);
+        const bool supported = l <= 4U;
         if (supported) {
           require(status == GENERATIVEQC_STATUS_SUCCESS && result != nullptr && result != &sentinel,
                   "supported shell must publish a system");
@@ -130,9 +131,9 @@ void system_backend_boundary() {
           require(status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && result == nullptr,
                   "unsupported shell must fail without publishing a system");
           if (backend == GENERATIVEQC_BACKEND_CUDA)
-            require(
-                context.last_detail.find("CUDA basis execution supports l<=3") != std::string::npos,
-                "CUDA rejection must identify its backend capability boundary");
+            require(context.last_detail.find("CUDA orbital metadata supports l<=4") !=
+                        std::string::npos,
+                    "CUDA rejection must identify its backend capability boundary");
         }
       }
     }

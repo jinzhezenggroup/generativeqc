@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "full-df-aug-qz-3055-20261109",
+  "owner": "full-DF augmented-QZ independent qualification",
+  "reason": "Exact v3 compaction preserves all 36 original decompressed files, all 6090 FP64 values, 49399 raw native progress records, failed-run evidence and source/build provenance. The approved aggregate increase is exactly 576 KiB; per-file and incoming review limits remain unchanged. Historical CUDA fast-compile correctness is not current-source or release-performance qualification.",
+  "review_document": "benchmarks/results/full-df-aug-qz-3055-20261109/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/full-df-aug-qz-3055-20261109/receipts.json.xz",
+      "family": "full-df-aug-qz-3055-20261109",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete historical receipts including rejected root and exact native progress",
+      "bytes": 533192,
+      "sha256": "3fb509ec69b96f58166f5242b499c08932dbe12cd08b8758e61653bb47bc91d1"
+    }
+  ]
+}
