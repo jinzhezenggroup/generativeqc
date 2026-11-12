@@ -82,3 +82,67 @@ source-path imports or an external electronic
 engine; its Python/fixture digests match the checkout. JIT-artifact replay and
 fresh SCF are explicitly distinguished, and memory high-water marks are not
 misrepresented as simultaneous process-tree totals.
+
+## Low-level UKS and Cs-ECP total actions (2026-11-11)
+
+The shared additive owner now has independent coupled-spin and scalar-ECP
+qualification tests. These are new low-level composition receipts, not public
+UKS/ECP admission or an extension of the earlier installed RKS qualification.
+Production numerical code and the live Ni full-matrix source/binary identities
+are unchanged by this test-only follow-up.
+
+`tests/data/d3_second_order/uks_manifest.json` freezes the asymmetric H3 doublet,
+occupations `(2,1)`, spherical STO-3G, explicit 8/4/8 grid, three displacement
+steps and gates before execution. The native corrected SCF matches independent
+PySCF energy, forces, both densities, electron counts and orbital stationarity.
+The actual coupled electronic matrix/action is composed only after its owners
+close. Tests reject omitted, reversed, duplicated and already-present correction
+sources; raw symmetry, translation and H@v remain checked. D3 introduces no
+additional electronic response solve and never changes the spin state.
+
+For every raw column, a five-point stencil reconverges only the independent
+UKS and adds independent simple-dftd3 gradients on the same moving grid. There
+is no displaced production SCF even in oracle preparation. Maximum total raw
+matrix errors at 0.003, 0.001 and 0.0003 Bohr are respectively
+`1.602063420813593e-8`, `1.8194549603056664e-8` and
+`5.6288377466018336e-8`, below the preselected 1e-5 gate. The independent HVP
+gate remains 2e-6 and raw invariants 2e-8. Three tests pass in 147.06 seconds;
+complete process wall time is 148.80 seconds with peak RSS 618,268 KiB.
+
+`tests/data/d3_second_order/ecp_manifest.json` freezes the Cs-ECP RKS total
+action gates. Both original CsH directions and every existing electronic
+oracle threshold remain. After electronic owners close, the real additive
+owner receives elemental `(55,1)`, not ECP-adjusted `(9,1)`. Independent D3
+gradient differences augment the already-converged independent electronic
+actions without repeating their SCFs or nuclear response solves. The original
+normalized 1e-5 total-action gate is unchanged. Observed total errors at 0.003,
+0.001 and 0.0003 Bohr are:
+
+- Original direction: `7.914266203837047e-8`, `9.90284575199316e-9`,
+  `4.009399084895942e-9`.
+- Unscaled unit-Cs-x: `1.1228007537550424e-6`, `1.253671335030789e-7`,
+  `1.2092561415266025e-8`.
+
+Both tests pass in 1164.00 seconds. The complete two-fixture validation process
+takes 1165.29 seconds with peak RSS 659,668 KiB. These warmed-artifact tests
+include independent reference work and run alongside other CPU qualifications;
+they are neither installed endpoint benchmarks nor paired speedup claims.
+The three JUnit record-property warnings across both suites are reporting-format
+warnings, not numerical failures. Raw logs, XML, process timing and compiler
+cache statistics use `/tmp/gqc-uks-d3-total` and `/tmp/gqc-ecp-d3-total` prefixes.
+
+Unrestricted ECP totals, mixed Ni/I/Cs forces/second order, a complete Cs raw
+matrix, installed Ni curvature, fixed-method molecular TS and its final
+frequencies remain outside these receipts. No issue is closed by these tests.
+
+An ignored local recovery bundle at
+`build/qualification/uks-ecp-d3-20261111/local-recovery.tar.gz` retains the exact
+test inputs, raw logs/XML/timing/cache receipts and reference-quadrature
+diagnostics. All 42 members are verified; its 473,995 bytes have SHA256
+`c3d3251e83e7e8fe1d1ebd76b3e946272d409949d33700e6467c6a632b98a123`.
+The input-manifest SHA256 is
+`1b6d84cf5c9ea8a21eb8e1a60f3459fb1e18081e4ea71694479a8169e269c464`.
+It records the actual 16b5 parent plus dirty test/note files before this
+recovery-pointer paragraph, not a clean later-commit run. The native binary is
+referenced by its verified identity and prior local Ni recovery archive, not
+duplicated or uploaded to an external asset host.

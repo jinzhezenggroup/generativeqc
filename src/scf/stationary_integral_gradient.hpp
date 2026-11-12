@@ -13,7 +13,7 @@ namespace generativeqc::scf {
 class PreparedFockPlan;
 struct ResolvedFockBuild;
 
-/** Validate the packaged Direct s/p/d inventory and checked work counters.
+/** Validate the packaged Direct s/p/d/f inventory and checked work counters.
  * Source pages have bounded storage independently of the molecular size.
  * Actual memory admission belongs to the owning resource ledger; historical
  * test sizes and conservative primitive counts are not capability limits. */

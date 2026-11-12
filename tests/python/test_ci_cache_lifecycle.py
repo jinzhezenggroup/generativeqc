@@ -8,6 +8,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from test_ci_pr_cli_ccache import expression
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -163,20 +164,33 @@ def test_master_python_seed_matches_python_shard_compilation_paths(
 def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
     job = _job("python")
     tests = _step("python", "Run Python tests with coverage")
-    # Both job and test ceilings preserve the nightly tier; the extended shards
-    # get bounded extra time for their measured complete routine workloads.
-    pattern = (
-        r"timeout-minutes: \$\{\{ \(github.event_name == 'schedule' \|\| "
-        r"github.event_name == 'workflow_dispatch'\) && (\d+) \|\| "
-        r"\(\(matrix.shard == 'posthf' \|\| matrix.shard == 'core-b' \|\| "
-        r"matrix.shard == 'compiler-heavy' \|\| matrix.shard == 'runtime-heavy'\) "
-        r"&& (\d+) \|\| (\d+)\) \}\}"
-    )
-    job_limits = re.search(pattern, job.split("\n    steps:\n", 1)[0])
-    test_limits = re.search(pattern, tests)
+    # Evaluate the matrix rather than requiring identical expression shapes:
+    # Cold core-a/core-b/ECP need setup headroom, not longer test allowances.
+    pattern = r"^\s*timeout-minutes: (.+)$"
+    job_limits = re.search(pattern, job.split("\n    steps:\n", 1)[0], re.MULTILINE)
+    test_limits = re.search(pattern, tests, re.MULTILINE)
     assert job_limits and test_limits
-    assert tuple(map(int, test_limits.groups())) == (90, 35, 30)
-    assert tuple(map(int, job_limits.groups())) == (100, 45, 40)
+    shards = re.search(r"shard: \[([^\]]+)\]", job)
+    assert shards
+    extended = {"posthf", "core-b", "compiler-heavy", "runtime-heavy"}
+    for shard in (value.strip() for value in shards[1].split(",")):
+        for event in (
+            "pull_request",
+            "push",
+            "merge_group",
+            "schedule",
+            "workflow_dispatch",
+        ):
+            context = {"matrix.shard": shard, "github.event_name": event}
+            full = event in {"schedule", "workflow_dispatch"}
+            test_minutes = 90 if full else 35 if shard in extended else 30
+            setup_minutes = (
+                10
+                if full
+                else {"core-a": 20, "core-b": 25, "ecp-forces": 20}.get(shard, 10)
+            )
+            assert expression(test_limits[1], context) == test_minutes
+            assert expression(job_limits[1], context) == test_minutes + setup_minutes
     assert "id: python_tests" in tests
     assert "continue-on-error:" not in tests
     assert "-m pytest" in tests and '"${collection_targets[@]}"' in tests

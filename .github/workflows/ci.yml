@@ -229,10 +229,11 @@ jobs:
       actions: read
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
-    # Cold GCC coverage can spend 6 minutes compiling and 13 minutes in CTest.
-    # Leave room for lcov and artifacts. Cold Clang can spend 13.5 minutes
-    # compiling plus 1.5 minutes in CTest; retain a bounded 20-minute job.
-    timeout-minutes: ${{ matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 25 || matrix.compiler == 'clang' && 20 || 15 }}
+    # Run 43146888679 passed GCC but exhausted Clang's former 20-minute job
+    # during a progressing Gaussian-ECP build. The matched prior-build tail
+    # estimates 22.5-24 minutes total, so reserve a finite 30-minute Clang
+    # ceiling for build/test variation. Keep the existing GCC 25-minute ceiling.
+    timeout-minutes: ${{ matrix.compiler == 'clang' && 30 || 25 }}
     strategy:
       fail-fast: false
       matrix:
@@ -1339,9 +1340,13 @@ jobs:
     # The broad core suite is split deterministically by test file so routine
     # feedback does not leave one ~18-minute serial critical-path shard.
     # Keep the full test-step ceilings and leave setup/cache-save headroom.
-    # The extended shards have 35-minute test allowances. Their setup and
-    # artifact publication retain ten further minutes; other caps stay bounded.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40) }}
+    # Run 43052160517/attempt 2 spent 16m09s in ECP setup and 19m03s in
+    # core-b setup, truncating their existing 30/35-minute test allowances.
+    # Run 43138869481 then spent 18m43s preparing core-a, leaving only 21m29s
+    # of its 30-minute test deadline before the whole-job cap stopped it at 99%.
+    # Reserve twenty core-a/ECP and twenty-five core-b setup/cleanup minutes
+    # without extending test deadlines. Other shards retain ten minutes.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || matrix.shard == 'core-b' && 60 || (matrix.shard == 'core-a' || matrix.shard == 'ecp-forces') && 50 || ((matrix.shard == 'posthf' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40) }}
     env:
       CCACHE_MAXSIZE: 2G
       # PySCF and NumPy can each fan out through BLAS/OpenMP. Keep those
@@ -1688,7 +1693,9 @@ jobs:
             ccache --print-log-stats --format=json || echo "::warning::Unable to export probe-cache stats log"
           fi
       - name: Preserve transient benchmark/debug artifacts on failure
-        if: failure() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        if: (failure() || cancelled()) && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 2
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: benchmark-debug-${{ github.run_id }}-${{ matrix.shard }}

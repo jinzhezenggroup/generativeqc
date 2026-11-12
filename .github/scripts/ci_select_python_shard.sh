@@ -782,3 +782,11 @@ if [[ "${GENERATIVEQC_CI_SHARD}" == "runtime-heavy" && "${GITHUB_EVENT_NAME}" !=
   source "${BASH_SOURCE[0]%/*}/ci_prioritize_runtime_files.sh"
   extra_args+=(--no-loadscope-reorder)
 fi
+
+if [[ "${GENERATIVEQC_CI_SHARD}" == "ecp-forces" && "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
+  # Run 42965903275: public CPU f-force cases progressed for 23 minutes,
+  # but their complete file started nearly four minutes late because xdist
+  # ranked cheap, high-count files first. It is already first in test_targets.
+  # Start it immediately without splitting module fixtures or removing gates.
+  extra_args+=(--no-loadscope-reorder)
+fi

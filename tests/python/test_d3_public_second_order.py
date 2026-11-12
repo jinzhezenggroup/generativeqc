@@ -330,18 +330,18 @@ def test_public_correction_failure_closes_electronic_owners_and_recovers(
     np.testing.assert_array_equal(recovered.value, action.value)
 
 
-@pytest.mark.parametrize("variant", ("uks", "df", "ecp", "atm", "cutoff", "zero", "d4"))
+@pytest.mark.parametrize(
+    "variant", ("pbe0_uks", "df", "ecp", "atm", "cutoff", "zero", "d4")
+)
 def test_unqualified_domains_do_not_inherit_corrected_admission(variant: str) -> None:
     """Correction availability never grants an unqualified electronic capability."""
     method = METHOD
     options = {}
-    if variant == "uks":
+    if variant == "pbe0_uks":
+        electronic = resolve_method("PBE0", spin="polarized")
         method = replace(
-            resolve_method("B3LYP", spin="polarized"),
-            primitives=(
-                *resolve_method("B3LYP", spin="polarized").primitives,
-                DispersionCorrectionPrimitive(SPEC),
-            ),
+            electronic,
+            primitives=(*electronic.primitives, DispersionCorrectionPrimitive(SPEC)),
         )
     elif variant == "df":
         options["density_fitting"] = "cpu"

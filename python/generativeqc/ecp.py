@@ -14,6 +14,10 @@ import typing
 from dataclasses import dataclass
 
 import numpy as np
+from generativeqc_compiler.integral.ecp_policy import (
+    MAX_CPU_POLAR_POINTS,
+    MAX_CPU_RADIAL_POINTS,
+)
 
 from .basis import BasisSet, validate_ecp_data
 from .elements import checked_integer
@@ -165,6 +169,9 @@ def ecp_integrals(
 
     Quadrature settings are explicit. Compare a refined grid to assess
     discretization error independently from floating-point/backend differences.
+    CPU raw-integral diagnostics admit up to 1536 radial and 192 polar points;
+    CUDA retains its 512/96 limits. These controls do not change the checked
+    SCF/force quadrature or promote any electronic/second-order capability.
     """
     from . import _native
     from .calculator import Atom, Calculator
@@ -173,8 +180,18 @@ def ecp_integrals(
     if not isinstance(basis, BasisSet):
         raise TypeError("ECP evaluation requires an owned canonical BasisSet")
     atoms = tuple(Atom.from_value(a) for a in atoms)
-    radial_points = checked_integer(radial_points, "radial points", low=16, high=512)
-    polar_points = checked_integer(polar_points, "polar points", low=8, high=96)
+    radial_points = checked_integer(
+        radial_points,
+        "radial points",
+        low=16,
+        high=MAX_CPU_RADIAL_POINTS if device == "cpu" else 512,
+    )
+    polar_points = checked_integer(
+        polar_points,
+        "polar points",
+        low=8,
+        high=MAX_CPU_POLAR_POINTS if device == "cpu" else 96,
+    )
     if type(derivatives) is not bool:
         raise TypeError("derivatives must be boolean")
     resolve_ecp(basis, atoms)

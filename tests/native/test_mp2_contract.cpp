@@ -745,6 +745,54 @@ void shared_shell_derivative_channels() {
   }
 }
 
+/** Sparse f-shell weights test independent recurrence/slot and spin-neutral
+ * channel reuse without allocating a molecular rank-four derivative tensor. */
+void generated_f_shell_derivative_channels() {
+  if (!generativeqc::integrals::has_packaged_cpu_eri_shell_derivatives()) return;
+  for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL})
+    for (const auto angular : {std::array<unsigned, 4>{3, 1, 2, 0}, {3, 3, 3, 3}}) {
+      generativeqc::core::System system;
+      system.atoms = {{1, {0.1, -0.2, -0.7}},
+                      {1, {-0.3, 0.15, 0.7}},
+                      {1, {0.4, 0.6, -0.2}},
+                      {1, {-0.5, 0.3, 0.1}}};
+      system.basis_representation = representation;
+      std::size_t count = 1;
+      for (std::size_t slot = 0; slot < angular.size(); ++slot) {
+        system.shells.push_back(
+            {static_cast<unsigned>(slot), angular[slot], {{0.5 + 0.1 * slot, 1.0}}});
+        count *= generativeqc::molecule::ao_expansions(angular[slot], representation).size();
+      }
+      std::string detail;
+      require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              "generated f-shell fixture normalization failed");
+      const std::array<std::size_t, 4> shells{0, 1, 2, 3};
+      require(generativeqc::integrals::supports_packaged_cpu_eri_shell_derivatives(system, shells),
+              "compiled derivative capability does not cover f components");
+      std::vector<double> first(count), second(count), zeros(count);
+      first.front() = 0.37;
+      first.back() = -0.21;
+      first[count / 2] = 0.08;
+      second.front() = -0.13;
+      second[count / 3] = 0.11;
+      const std::array<std::span<const double>, 3> channels{first, second, zeros};
+      std::uint64_t reference_visits = 0, generated_visits = 0;
+      const auto reference = generativeqc::integrals::contract_weighted_eri_shell_derivatives(
+          system, shells, channels, &reference_visits);
+      const auto generated = generativeqc::integrals::contract_weighted_eri_shell_derivatives(
+          system, shells, channels, &generated_visits,
+          generativeqc::integrals::WeightedEriDerivativeExecution::PackagedCpu);
+      require(reference_visits > 0 && generated_visits >= reference_visits &&
+                  generated_visits <= 3 * reference_visits,
+              "f-shell channel fusion repeated directional primitive work");
+      for (std::size_t channel = 0; channel < channels.size(); ++channel)
+        for (std::size_t coordinate = 0; coordinate < 12; ++coordinate)
+          require(std::abs(generated[channel][coordinate] - reference[channel][coordinate]) < 2e-10,
+                  "generated f-shell derivative differs from independent recurrence");
+    }
+}
+
 /** Unsupported artifacts remain explicit errors, while the MP2 consumer keeps
  * its bounded reference route. This is a cotangent contract, not an SCF oracle. */
 void unsupported_packaged_derivative_preserves_reference_consumer() {
@@ -754,14 +802,14 @@ void unsupported_packaged_derivative_preserves_reference_consumer() {
   invalid[0] = system.shells.size();
   require(!generativeqc::integrals::supports_packaged_cpu_eri_shell_derivatives(system, invalid),
           "compiled derivative capability accepted an invalid shell index");
-  system.shells[0] = {0, 3, {{0.8, 1.0}}};
+  system.shells[0] = {0, 4, {{0.8, 1.0}}};
   std::string detail;
   require(
       generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
       "reference derivative fallback fixture is invalid");
   require(!generativeqc::integrals::supports_packaged_cpu_eri_shell_derivatives(system, shells),
-          "compiled derivative capability claims unqualified f components");
-  const auto count = generativeqc::molecule::ao_expansions(3, system.basis_representation).size();
+          "compiled derivative capability claims unqualified g components");
+  const auto count = generativeqc::molecule::ao_expansions(4, system.basis_representation).size();
   std::vector<double> local(count, 0.37);
   const std::array<std::span<const double>, 1> channels{local};
   std::uint64_t evaluations = 123;
@@ -1112,6 +1160,7 @@ int main() {
     conventional_energy_batch_fallback_matches();
     shell_local_weighted_eri_derivative();
     shared_shell_derivative_channels();
+    generated_f_shell_derivative_channels();
     unsupported_packaged_derivative_preserves_reference_consumer();
     cuda_shell_derivative_budget_failure_is_transactional();
     streamed_one_electron_derivative();

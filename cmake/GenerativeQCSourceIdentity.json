@@ -109,6 +109,7 @@
     "tools/generate_ordered_history_native.py",
     "tools/generate_stationary_force_aot.py",
     "tools/generate_native_range_force.py",
+    "tools/generate_cpu_coulomb_derivative.py",
     "tools/generate_stationary_cpu_derivative_aot.py",
     "tools/stationary_cpu_source_receipt.py",
     "tools/write_stationary_aot_manifest.py",

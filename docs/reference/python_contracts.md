@@ -742,6 +742,19 @@ Hartree/Bohr²; overlap-only derivatives inherit inverse-length units instead.
 Memory budgets are bytes for the declared generated integral work, separate
 from full molecular response and output storage.
 
+`generated_directional_spin_integral_first_order` accepts a finite symmetric
+`(nspin, nbf, nbf)` density panel with one spin-summed RKS member or two distinct
+alpha/beta members. It returns the frozen Fock direction panel of that same
+shape, one shared `(nbf, nbf)` overlap direction, and successful first-source
+work counters. Coulomb uses the spin sum; exchange keeps the RKS half factor or
+the full same-spin UKS factor. `include_coulomb=False` suppresses J, not core or
+exchange derivatives. Full-range ERIs consume a scalar direction; other sources
+retain bounded raw-first component pages. `raw_first_calls`, `directional_calls`,
+`records`, `component_evaluations` and `factorized_geometry_evaluations` count
+successful source evaluations, not repeated spin Fock scatters. Composite HVP
+diagnostics expose these counters with a `first_source_` prefix; full-Hessian
+diagnostics sum them over the actual coordinate actions.
+
 (python-integrals-errors)=
 ## Generated derivative failures
 
@@ -752,6 +765,10 @@ propagate; no partial contraction is published as a completed HVP. Byte/work
 admission bounds the generated provider, not every surrounding response
 allocation. `checked_second_hvp_options` rejects unsupported second-order
 backend/compiler options rather than routing silently to another provider.
+The spin-panel first-source provider rejects malformed/nonfinite/asymmetric
+densities and directions before compilation or native calls. Overflow while
+forming total or same-spin densities raises `FloatingPointError` before source
+execution, even when the supplied individual density entries are finite.
 
 (python-integrals-ownership)=
 ## Generated derivative lifetime
@@ -767,6 +784,8 @@ share live owners or mutable compilation/cache state.
 ## Generated derivative backend restrictions
 
 CPU and explicitly named CUDA first-order providers are separate entry points.
+The shared spin-panel first-source provider is CPU-only; it does not silently
+route a resident CUDA consumer through a host implementation.
 The topology currently admits Cartesian shells through f for this bounded
 RKS derivative domain; broader value-integral support is irrelevant here.
 Second-order options and the complete public molecular HVP remain independently

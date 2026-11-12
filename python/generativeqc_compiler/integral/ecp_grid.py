@@ -8,6 +8,7 @@ The independent CPU ECP oracle deliberately retains its own implementation.
 import math
 import typing
 
+from .ecp_policy import MAX_CPU_POLAR_POINTS, MAX_CPU_RADIAL_POINTS
 from .expr import Graph
 from .ir import ECP_MAX_ORBITAL_ANGULAR, ECP_MAX_PROJECTOR_ANGULAR
 from .quadrature import legendre_step_roots
@@ -73,7 +74,7 @@ def _scalar(
 
 
 def emit_ecp_grid_cpp() -> typing.Any:
-    """Host-only helpers; grid sizes and Newton stopping policy are unchanged."""
+    """Host-only helpers with bounded raw diagnostics and unchanged root policy."""
     lines = [
         "inline std::array<double, 2> ecp_legendre_step(double k, double z,",
         "    double p, double previous, double dp, double dprevious) {",
@@ -95,7 +96,7 @@ def emit_ecp_grid_cpp() -> typing.Any:
     lines += _scalar("ecp_root_update", ("z", "delta"), lambda z, d: z - d)
     lines += [
         "inline std::vector<std::array<double, 2>> ecp_legendre(unsigned n) {",
-        '  if (n < 8 || n > 512) throw std::invalid_argument("invalid ECP Legendre order");',
+        f'  if (n < 8 || n > {MAX_CPU_RADIAL_POINTS}) throw std::invalid_argument("invalid ECP Legendre order");',
         "  std::vector<std::array<double, 2>> result(n);",
         "  for (unsigned i=0; i<(n+1)/2; ++i) {",
         "    double z = std::cos(ecp_root_angle(i, n)), derivative = 0;",
@@ -160,7 +161,7 @@ def emit_ecp_grid_cpp() -> typing.Any:
         "template<class Radial, class Point>",
         "inline void ecp_make_grid(unsigned radial, unsigned angular,",
         "    std::vector<Radial>& radii, std::vector<Point>& sphere) {",
-        "  if (radial<16 || radial>512 || angular<8 || angular>96)",
+        f"  if (radial<16 || radial>{MAX_CPU_RADIAL_POINTS} || angular<8 || angular>{MAX_CPU_POLAR_POINTS})",
         '    throw std::invalid_argument("invalid ECP quadrature grid");',
         "  for (const auto& tw: ecp_legendre(radial))",
         "    radii.push_back(ecp_radial_node<Radial>(tw[0], tw[1]));",

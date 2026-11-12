@@ -145,6 +145,16 @@ generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t 
   return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 }
 
+generativeqc_status borrow_dft_integral_system(PreparedBatch& batch, std::size_t index,
+                                               const dft::CudaKsFinalStateToken& expected,
+                                               const core::System*& output, std::string& detail) {
+  auto* ks = dynamic_cast<KsBatchOwnerPort*>(&batch);
+  if (ks) return ks->borrow_integral_system(index, expected, output, detail);
+  output = nullptr;
+  detail = "prepared batch is not a KS integral-system owner";
+  return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+}
+
 generativeqc_status read_dft_derivative_sources(PreparedBatch& batch, std::size_t index,
                                                 const dft::CudaKsFinalStateToken& expected,
                                                 KsDerivativeSnapshot& output, std::string& detail) {

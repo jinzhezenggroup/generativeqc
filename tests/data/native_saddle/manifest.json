@@ -1,0 +1,59 @@
+{
+  "schema": "generativeqc.native-molecular-saddle-control/v1",
+  "scope": "CPU all-electron RKS public adapter controls, not Ni/ECP or installed TS CLI qualification",
+  "method": "B3LYP",
+  "vwn_variant": "Gaussian/VWN-RPA",
+  "basis": "sto-3g",
+  "basis_representation": "spherical",
+  "charge": 0,
+  "multiplicity": 1,
+  "grid": "native-default",
+  "d3": false,
+  "masses_dalton": [14.00307400443, 1.00782503223, 1.00782503223, 1.00782503223],
+  "acceptance": {
+    "energy_abs_hartree": 2e-9,
+    "gradient_max": 2e-7,
+    "stationary_input_gradient_max": 1e-7,
+    "density_max": 2e-9,
+    "orbital_gradient_norm": 2e-9,
+    "response_residual_norm": 2e-10,
+    "raw_symmetry_max": 2e-8,
+    "raw_translation_max": 2e-8,
+    "independent_matrix_max": 1e-5,
+    "independent_frequency_max_cm1": 1.0,
+    "difference_steps_bohr": [0.003, 0.001, 0.0003],
+    "difference_stencil": "symmetric-five-point-fourth-order"
+  },
+  "controls": {
+    "max_attempts": 100,
+    "energy_change": 1e-6,
+    "gradient_rms": 3e-4,
+    "gradient_max": 4.5e-4,
+    "displacement_rms_angstrom": 1.2e-3,
+    "displacement_max_angstrom": 1.8e-3,
+    "raw_symmetry_tolerance": 2e-8,
+    "project_rigid_motions": true
+  },
+  "cases": {
+    "saddle": {"nitrogen_z_bohr": 0.02, "hydrogen_radius_bohr": 1.9, "expected_status": "first_order_saddle", "expected_index": 1, "expected_stationary_verified": true},
+    "nonnegative": {"nitrogen_z_bohr": 0.75, "hydrogen_radius_bohr": 1.9, "expected_status": "target_not_negative", "expected_index": 0, "expected_stationary_verified": false},
+    "minimum": {
+      "coordinates_bohr": [
+        [0.07050990082028043, 4.6072765194397595e-12, 0.9086119351462287],
+        [1.755307376413924, 1.5085982968845248e-11, -0.18311209943900397],
+        [-0.9129086386093846, 1.548759257690155, 0.09337010592593327],
+        [-0.9129086385901487, -1.5487592576931237, 0.09337010592587504]
+      ],
+      "input_preparation": {
+        "scope": "Independent validation-only stationary input; no production optimization or curvature certification",
+        "full_gradient_max": 1.1319699733114419e-8,
+        "constrained_solver_success": true,
+        "cartesian_solver_success": false,
+        "cartesian_solver_status": "Desired error not necessarily achieved due to precision loss."
+      },
+      "expected_status": "other_index",
+      "expected_index": 0,
+      "expected_stationary_verified": true
+    }
+  }
+}

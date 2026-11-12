@@ -123,6 +123,8 @@ class StationaryOwner final : public PlainBatch, public KsBatchOwnerPort {
       std::string&) override { std::abort(); }
   generativeqc_status read_derivative_sources(std::size_t, const Token&, KsDerivativeSnapshot&,
       std::string&) override { std::abort(); }
+  generativeqc_status borrow_integral_system(std::size_t, const Token&, const core::System*&,
+      std::string&) override { std::abort(); }
 };
 int main() {
   StationaryOwner owner;

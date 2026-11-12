@@ -30,6 +30,7 @@ def fixture(
     spin: typing.Any = 0,
     f_projector: typing.Any = False,
     compact_d_oracle: typing.Any = False,
+    compact_f_oracle: typing.Any = False,
 ) -> typing.Any:
     gto = pytest.importorskip("pyscf.gto")
     # Parameters are read only by this independent test, never by runtime.
@@ -51,6 +52,16 @@ def fixture(
         basis["Na"] += [[3, [0.55, 0.81], [0.17, 0.23]]]
     if f_on_h:
         basis["H"] += [[3, [0.45, 0.9], [1.15, -0.12]]]
+    if compact_f_oracle:
+        if not f_shell or not f_on_h or d_shell or compact_d_oracle:
+            raise ValueError("compact f oracle requires f shells on both atoms")
+        # The complete public-endpoint checks need both-center f motion, not
+        # the many contracted valence primitives used by the raw ECP fixtures.
+        # Raw f tests retain their signed multiexponent contractions separately.
+        basis = {
+            "Na": [[0, [0.65, 1.0]], [1, [0.45, 1.0]], [3, [0.55, 1.0]]],
+            "H": [[0, [0.8, 1.0]], [3, [0.45, 1.0]]],
+        }
     ecp = {"Na": gto.basis.load_ecp("lanl2dz", "Na")}
     if f_projector:
         # Synthetic bounded extension, not a new physical element parameterization.

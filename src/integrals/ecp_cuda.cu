@@ -292,6 +292,10 @@ generativeqc_status ecp_integrals_cuda(int device, const core::System& system, u
                                        unsigned polar, bool derivatives, EcpData& output,
                                        std::string& detail, bool convergence) {
   try {
+    if (!convergence) {
+      const auto status = validate_ecp_cuda_grid(radial, polar, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    }
     DeviceGuard device_guard;
     check(cudaSetDevice(device));
     run(system, radial, polar, derivatives, nullptr, &output, nullptr, nullptr, nullptr,

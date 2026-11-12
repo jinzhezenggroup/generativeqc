@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 #include <memory>
 #include <vector>
@@ -16,10 +17,12 @@
 #include "dft/xc_point_response.hpp"
 #include "integrals/ecp.hpp"
 #include "integrals/ecp_cuda.hpp"
+#include "integrals/ecp_gaussian.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "methods/dft_method.hpp"
 #include "molecule/basis.hpp"
 #include "response/resident_krylov.hpp"
+#include "runtime/bounded_workspace.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_xc.hpp"
 #include "dft/grid_task_view.cuh"
@@ -965,9 +968,98 @@ generativeqc_status generativeqc_ks_snapshot_copy_v1(const generativeqc_batch* b
   }
 }
 
-// Diagnostic-only reuse of the backend-specific ECP provider. Return separate
-// local/projector all-center derivatives; generated TensorIR owns their D weights.
-// Re-read the actual owner under its token instead of accepting a caller's ECP.
+// Borrow the authenticated native geometry, never a caller-supplied ECP model.
+generativeqc_status generativeqc_ks_snapshot_ecp_gaussian_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, std::uint32_t operation,
+    const double* weights, std::size_t weight_count, std::size_t maximum_bytes,
+    std::uint64_t maximum_kernel_blocks, double* values, std::size_t count, std::uint64_t* work,
+    std::size_t work_count) {
+  if (!batch || !snapshot || !values || !work || work_count != 8 || operation > 1 ||
+      !maximum_bytes || !maximum_kernel_blocks || (operation == 0 && (weights || weight_count)) ||
+      (operation == 1 && !weights))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (snapshot->token.identity.determinant.model.backend != generativeqc::scf::FockBackend::Cpu) {
+      batch->context->last_detail = "analytic Gaussian ECP snapshot execution requires CPU";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const generativeqc::core::System* system = nullptr;
+    status = generativeqc::methods::detail::borrow_dft_integral_system(
+        *batch->plan, snapshot->index, snapshot->token, system, batch->context->last_detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (!system || !generativeqc::integrals::gaussian_ecp_supported(*system)) {
+      batch->context->last_detail = "ECP operator outside the analytic Gaussian specialization";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const auto coordinates = generativeqc::runtime::size_mul(3, system->atoms.size());
+    const auto aos = generativeqc::molecule::ao_count(*system);
+    const auto matrix_size = generativeqc::runtime::size_mul(aos, aos);
+    const auto entries = generativeqc::runtime::size_add(1, coordinates);
+    const auto expected =
+        operation == 0
+            ? generativeqc::runtime::size_mul(2,
+                                              generativeqc::runtime::size_mul(entries, matrix_size))
+            : generativeqc::runtime::size_mul(
+                  2, generativeqc::runtime::size_add(
+                         entries, generativeqc::runtime::size_mul(coordinates, coordinates)));
+    if (count != expected || (operation == 1 && weight_count != matrix_size))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    const auto publication = generativeqc::runtime::size_mul(sizeof(double), count);
+    if (publication >= maximum_bytes) {
+      batch->context->last_detail = "Gaussian ECP publication exceeds maximum_bytes";
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    }
+    const generativeqc::integrals::EcpGaussianLimits limits{maximum_bytes - publication,
+                                                            maximum_kernel_blocks};
+    const auto publish =
+        [&](std::initializer_list<std::span<const double>> panels,
+            const generativeqc::integrals::EcpGaussianWork& observed) -> generativeqc_status {
+      std::size_t elements = 0;
+      for (const auto panel : panels)
+        elements = generativeqc::runtime::size_add(elements, panel.size());
+      if (elements != count) return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+      const std::array<std::uint64_t, 8> receipt{
+          observed.shell_pairs,
+          observed.primitive_groups,
+          observed.radial_frontiers,
+          observed.kernel_blocks,
+          observed.cartesian_values,
+          observed.kernel_block_bound,
+          generativeqc::runtime::size_add(observed.workspace_bound_bytes, publication),
+          count};
+      const auto current = check_current(*batch, *snapshot);
+      if (current != GENERATIVEQC_STATUS_SUCCESS) return current;
+      auto* cursor = values;
+      for (const auto panel : panels) cursor = std::copy(panel.begin(), panel.end(), cursor);
+      std::copy(receipt.begin(), receipt.end(), work);
+      return GENERATIVEQC_STATUS_SUCCESS;
+    };
+    if (operation == 0) {
+      generativeqc::integrals::EcpGaussianWork observed;
+      const auto result =
+          generativeqc::integrals::gaussian_ecp_integrals(*system, true, &observed, limits);
+      return publish(
+          {result.local, result.local_derivative, result.nonlocal, result.nonlocal_derivative},
+          observed);
+    }
+    const auto result = generativeqc::integrals::gaussian_ecp_weighted_second_order(
+        *system, std::span<const double>(weights, weight_count), limits);
+    return publish({std::span<const double>(&result.parts[0].value, 1), result.parts[0].gradient,
+                    result.parts[0].hessian, std::span<const double>(&result.parts[1].value, 1),
+                    result.parts[1].gradient, result.parts[1].hessian},
+                   result.work);
+  } catch (const std::length_error& error) {
+    batch->context->last_detail = error.what();
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
+// Diagnostic-only backend export. Generated TensorIR owns its density weights.
 generativeqc_status generativeqc_ks_snapshot_ecp_derivatives_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count) {

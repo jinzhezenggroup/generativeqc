@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "generated_ecp_ao.cuh"
+#include "integrals/ecp_gaussian.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_usage.hpp"
@@ -34,8 +35,10 @@ void ecp_quadrature(unsigned radial, unsigned angular, std::vector<EcpRadialPoin
 
 EcpData ecp_integrals(const core::System& system, unsigned radial, unsigned angular,
                       bool derivatives) {
-  if (radial < 16 || radial > 512 || angular < 8 || angular > 96)
-    throw std::invalid_argument("ECP quadrature requires 16..512 radial and 8..96 polar points");
+  if (radial < 16 || radial > generated::ecp_cpu_max_radial_points || angular < 8 ||
+      angular > generated::ecp_cpu_max_polar_points)
+    throw std::invalid_argument(
+        "CPU ECP quadrature requires 16..1536 radial and 8..192 polar points");
   const auto n = molecule::ao_count(system);
   const auto size = runtime::size_mul(n, n);
   const auto ncoord = derivatives ? runtime::size_mul(3, system.atoms.size()) : 0;
@@ -130,6 +133,7 @@ EcpData ecp_integrals(const core::System& system, unsigned radial, unsigned angu
 }
 
 EcpData checked_ecp_integrals(const core::System& system, bool derivatives) {
+  if (gaussian_ecp_supported(system)) return gaussian_ecp_integrals(system, derivatives);
   const auto coarse = ecp_integrals(system, generated::ecp_coarse_radial_points,
                                     generated::ecp_coarse_polar_points, derivatives);
   runtime::CpuRetainedCapacity retained(runtime::vector_capacities(
@@ -175,7 +179,9 @@ std::size_t ecp_workspace_capacity(const core::System& system) {
                             runtime::size_mul(4 * sizeof(core::EcpTerm), system.ecp_terms.size()));
   for (const auto& shell : system.shells)
     bytes = runtime::size_add(bytes, runtime::size_mul(64, shell.primitives.size()));
-  return bytes;
+  return gaussian_ecp_supported(system)
+             ? std::max(bytes, gaussian_ecp_workspace_capacity(system, true))
+             : bytes;
 }
 
 void add_ecp(const EcpData& ecp, std::vector<double>& hcore, std::vector<double>& derivative) {

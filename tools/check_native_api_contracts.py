@@ -29,6 +29,7 @@ HEADERS = (
     "include/generativeqc/scf_defaults.h",
     "include/generativeqc/warm_seed.h",
     "include/generativeqc/electronic_properties.h",
+    "include/generativeqc/saddle.h",
 )
 MANIFEST = "manifests/native_api_contracts.json"
 REFERENCE = "docs/reference/native_symbols.md"

@@ -25,7 +25,9 @@ integral adjoint weights: `generate_stationary_integral_weights.py` specializes
 that same TensorIR AD into portable scalar bindings for one or two spin blocks,
 including the B3LYP-specific RKS exchange coefficient. The XC geometry response
 shares the analytic GGA AO/Becke pullback while evaluating B3LYP's own generated
-semilocal point program. B3LYP UKS remains unqualified. PBE/PBE0 UKS combines
+semilocal point program. The Direct B3LYP UKS force path is independently
+covered by the all-electron fixtures below; no broader DF B3LYP UKS qualification
+is inferred here. UKS combines
 both spins in generated weights and charges its compact flattened D/W buffers;
 an empty beta population still supplies explicit zero matrices. It reuses the
 existing two-spin XC/DF derivative, moving-grid, token and final publication
@@ -36,6 +38,20 @@ and retains the independent reference recurrence for oracle/legacy consumers.
 The diagnostic below remains an explicit reference and the compatibility
 production route for separately qualified, not-yet-native contexts. It is
 not retired while those domains still need it.
+
+The native Direct full-range integral force owner covers Cartesian and
+real-spherical s/p/d/f shells. Its s/p/d quartets retain the packaged component
+programs; quartets containing f components use a build-time full-range
+specialization of the shared CPU/CUDA Cartesian recurrence. Three independent
+center seeds recover all twelve slot derivatives by translation and are counted
+as three primitive recurrence evaluations, shared across J/K channels. Only the
+physical nuclear contraction elides a quartet whose four shells belong to one
+atom; the low-level independent-slot provider retains those derivatives.
+The Python diagnostic's smaller admission bounds do not change. A separate slow
+real-spherical def2-SVP/default-grid NiH3 doublet fixture requires independent
+cold-state and complete moving-grid force agreement. This is not a guarantee of
+arbitrary Ni SCF convergence or a qualification of UKS molecular Hessians,
+mixed Ni/ECP quadrature, or a molecular TS task.
 
 The separate [CUDA diagnostic](stationary_cuda_diagnostic.md) consumes a live
 native CUDA snapshot and executes all seven sources on device with explicit

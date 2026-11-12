@@ -7,6 +7,47 @@ native CPU versus CUDA J/K/XC actions, spin-resolved response,
 device-resident vector lifetimes, physical transport and resource
 admission. Backend selection is not proof of an all-device solver.
 
+## CPU composite stationary response
+
+The CPU composite nuclear-response driver uses occupied/virtual orbital-gap
+right conditioning for both RKS and coupled UKS. UKS packs alpha rotations
+before beta rotations with each block occupied-major. Signed gaps remain
+unchanged; a zero/near-zero gap in either spin selects the unpreconditioned
+coupled solve. Conditioning never changes the physical response operator or
+its true-residual acceptance gate. HVP diagnostics name the selected policy.
+
+For compiler-AD semilocal XC, a fixed-state `_CompositeGrid` may retain the
+point-local feature Jacobian, including cross-spin entries. Repeated response
+actions then reuse that Jacobian while AO contractions remain directional.
+The owner reserves twice the panel size from both AO-feature and scalar-AD
+budgets before construction. Insufficient capacity or candidate allocation
+failure retains the original bounded action; failed candidates are never
+published. Moving-grid/weight derivatives continue through their original
+directional programs. Nonlocal pair kernels and native point providers retain
+their original actions, since neither promises the same arbitrary unit-feature
+direction contract. No cache survives into a different state/geometry owner.
+
+HVP and full-matrix diagnostics report grid actions, point-kernel builds,
+reuses/fallbacks, retained panel bytes and reserved bytes. These work counts
+are not complete-endpoint timing or broader method/domain qualification.
+
+CPU fixed-weight one-electron second-integral HVPs use one canonical orientation
+per distinct Gaussian shell pair. The cotangent combines both ordered shell
+blocks by transposition; diagonal shell blocks are neither doubled nor averaged.
+Angular-momentum ordering permits reuse of the same generated program across
+unlike shell orientations. Nuclear attraction is linear in the fixed nuclear
+charge, so the admitted schedule contracts a unit-charge kernel with
+charge-scaled weights instead of compiling a program for each element. This does
+not differentiate the charge or introduce an ECP contribution.
+
+The temporary folded/charge-scaled weight workspace has explicit host admission;
+insufficient capacity retains both ordered shell blocks and the original
+charge-specialized kernels. CUDA retains its original ordered schedule. Source
+diagnostics report ordered one-electron weight blocks, symmetry-reduced shell
+pairs and unit-charge nuclear shell pairs. The counts cover each invoked source
+family separately, not SCF iterations, complete molecular evaluations or an
+end-to-end performance qualification.
+
 ## Native CUDA CPKS
 
 The same `from_native` entry points select CUDA J/XC actions when the borrowed

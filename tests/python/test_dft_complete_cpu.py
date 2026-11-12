@@ -765,7 +765,9 @@ def independent_global_hybrid_gradient(
     auxiliary_shells: typing.Any = None,
     return_mean_field: bool = False,
     initial_density: typing.Any = None,
+    initial_guess: str = "minao",
     scf_gradient_tolerance: float = 1e-10,
+    scf_max_cycles: int = 200,
     scf_trace: list[dict[str, typing.Any]] | None = None,
 ) -> typing.Any:
     """Independent hybrid SCF/moving-grid gradient in the endpoint's AO space.
@@ -778,6 +780,9 @@ def independent_global_hybrid_gradient(
     normalization and ordering. Explicit oracle gradient controls permit
     replaying published reference protocols; endpoint error gates remain with
     the caller, independently of the SCF program's convergence flag.
+    The initial guess selects an independent oracle guess, not a native density.
+    Increasing the oracle's cycle cap never changes the caller's state-match
+    or derivative acceptance gates.
     """
     from pyscf import dft, gto, lib
     from pyscf.data.elements import ELEMENTS
@@ -854,9 +859,18 @@ def independent_global_hybrid_gradient(
             )
 
         mf.callback = observe
-    mf.conv_tol, mf.conv_tol_grad, mf.max_cycle = 1e-13, scf_gradient_tolerance, 200
+    mf.init_guess = initial_guess
+    mf.conv_tol, mf.conv_tol_grad, mf.max_cycle = (
+        1e-13,
+        scf_gradient_tolerance,
+        scf_max_cycles,
+    )
     energy = mf.kernel(dm0=initial_density)
-    assert mf.converged, {"energy": energy, "independent_scf_history": scf_trace}
+    assert mf.converged, (
+        f"independent hybrid SCF did not converge: energy={energy:.16g}, "
+        f"orbital_gradient={np.linalg.norm(mf.get_grad(mf.mo_coeff, mf.mo_occ)):.9g}, "
+        f"maximum_cycles={scf_max_cycles}, independent_scf_history={scf_trace}"
+    )
     np.testing.assert_array_equal(mf.grids.coords, state.grid.points)
     np.testing.assert_array_equal(mf.grids.weights, state.grid.weights)
     gradient = mf.nuc_grad_method()

@@ -11,7 +11,8 @@ from __future__ import annotations
 import shutil
 import typing
 from dataclasses import dataclass
-from itertools import product
+from itertools import combinations_with_replacement, product
+from math import prod
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -87,6 +88,7 @@ __all__ = [
     "checked_second_hvp_options",
     "generated_directional_semilocal_rks_integral_first_order",
     "generated_directional_semilocal_rks_integral_first_order_cuda",
+    "generated_directional_spin_integral_first_order",
     "generated_weighted_first_integral_gradient",
     "generated_weighted_first_integral_gradient_cuda",
     "generated_weighted_second_integral_hvp",
@@ -196,6 +198,13 @@ class _FirstDerivativeProvider:
         self.integrals: dict[object, typing.Any] = {}
         self.normalizations: dict[tuple[int, ...], np.ndarray] = {}
         self.factorized: FactorizedERIHost | None = None
+        self.statistics = {
+            "raw_first_calls": 0,
+            "directional_calls": 0,
+            "records": 0,
+            "component_evaluations": 0,
+            "factorized_geometry_evaluations": 0,
+        }
         self.shells = topology.shells
         self.offsets = np.cumsum((0, *topology.shell_sizes))
         self.primitives = tuple(
@@ -229,19 +238,8 @@ class _FirstDerivativeProvider:
             )
         return self.integrals[key]
 
-    def raw_blocks(
-        self,
-        ir: typing.Any,
-        slots: tuple[int, ...],
-        atom_indices: tuple[int, ...],
-    ) -> typing.Iterator[tuple[tuple[np.ndarray, ...], np.ndarray]]:
-        """Publish bounded component batches, not a Python callback per AO tuple."""
-        signature = ir.signature
-        angular, count, shape = (
-            signature.angular,
-            signature.component_count,
-            signature.component_shape,
-        )
+    def _scales(self, ir: typing.Any) -> np.ndarray:
+        angular, shape = ir.signature.angular, ir.signature.component_shape
         if angular not in self.normalizations:
             self.normalizations[angular] = np.asarray(
                 [
@@ -251,7 +249,34 @@ class _FirstDerivativeProvider:
                     )
                 ]
             )
-        scales = self.normalizations[angular]
+        return self.normalizations[angular]
+
+    def _record_first_work(
+        self,
+        slots: tuple[int, ...],
+        components: int,
+        *,
+        directional: bool,
+        factorized: bool,
+    ) -> None:
+        """Count successfully consumed primitive sources, not Fock scatters."""
+        records = prod(len(self.primitives[slot]) for slot in slots)
+        self.statistics["directional_calls" if directional else "raw_first_calls"] += 1
+        self.statistics["records"] += records
+        self.statistics["component_evaluations"] += records * components
+        if factorized:
+            self.statistics["factorized_geometry_evaluations"] += records
+
+    def raw_blocks(
+        self,
+        ir: typing.Any,
+        slots: tuple[int, ...],
+        atom_indices: tuple[int, ...],
+    ) -> typing.Iterator[tuple[tuple[np.ndarray, ...], np.ndarray]]:
+        """Publish bounded component batches, not a Python callback per AO tuple."""
+        angular = ir.signature.angular
+        count, shape = ir.signature.component_count, ir.signature.component_shape
+        scales = self._scales(ir)
         for start in range(0, count, 64):
             indices = tuple(range(start, min(start + 64, count)))
             if ir.operator == FOUR_CENTER_ERI_OPERATOR:
@@ -281,10 +306,54 @@ class _FirstDerivativeProvider:
                     self.coords[list(atom_indices)],
                 )
             values *= scales[list(indices), None]
+            self._record_first_work(
+                slots,
+                len(indices),
+                directional=False,
+                factorized=ir.operator == FOUR_CENTER_ERI_OPERATOR,
+            )
             yield (
                 np.unravel_index(indices, shape),
                 values[:, 1:].reshape(len(indices), -1, 3),
             )
+
+    def directional_blocks(
+        self,
+        ir: typing.Any,
+        slots: tuple[int, ...],
+        atom_indices: tuple[int, ...],
+        direction: np.ndarray,
+    ) -> typing.Iterator[tuple[tuple[np.ndarray, ...], np.ndarray]]:
+        """Lower full-range ERIs to scalar directions; retain bounded other sources."""
+        motion = direction[list(atom_indices)]
+        if ir.operator != FOUR_CENTER_ERI_OPERATOR:
+            for components, gradient in self.raw_blocks(ir, slots, atom_indices):
+                yield components, np.einsum("nca,ca->n", gradient, motion)
+            return
+        angular = ir.signature.angular
+        count, shape = ir.signature.component_count, ir.signature.component_shape
+        scales = self._scales(ir)
+        for start in range(0, count, 64):
+            indices = tuple(range(start, min(start + 64, count)))
+            validate_first_components(ir, indices)
+            if self.factorized is None:
+                self.factorized = FactorizedERIHost(
+                    self.compiler, self.cache.parent / "factorized-eri"
+                )
+            values, diagnostics = self.factorized.first_direction(
+                angular,
+                indices,
+                tuple(self.primitives[slot] for slot in slots),
+                self.coords[list(atom_indices)],
+                motion,
+            )
+            self.statistics["directional_calls"] += 1
+            for name in ("records", "component_evaluations"):
+                self.statistics[name] += diagnostics[name]
+            self.statistics["factorized_geometry_evaluations"] += diagnostics[
+                "geometry_evaluations"
+            ]
+            yield np.unravel_index(indices, shape), values[:, 1] * scales[list(indices)]
 
 
 def _contract_directional_first_order(
@@ -296,15 +365,16 @@ def _contract_directional_first_order(
     exchange_operators: tuple = (),
     exchange_density: np.ndarray | None = None,
     include_coulomb: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
     provider = _FirstDerivativeProvider(topology, cache)
     shells, offsets = provider.shells, provider.offsets
     charges = np.asarray(
         [atom.atomic_number for atom in topology.atoms], dtype=np.float64
     )
-    frozen = np.zeros((topology.nbf, topology.nbf))
-    exchange_density = density if exchange_density is None else exchange_density
-    overlap = np.zeros_like(frozen)
+    exchange_density = density[None] if exchange_density is None else exchange_density
+    frozen = np.zeros_like(exchange_density)
+    core = np.zeros((topology.nbf, topology.nbf))
+    overlap = np.zeros_like(core)
 
     def accumulate(
         out: np.ndarray,
@@ -321,12 +391,12 @@ def _contract_directional_first_order(
         )
 
     if not np.any(direction):
-        return immutable(frozen), immutable(overlap)
+        return immutable(frozen), immutable(overlap), dict(provider.statistics)
 
     for a, b in product(range(len(shells)), repeat=2):
         angular = (shells[a].angular_momentum, shells[b].angular_momentum)
         atoms = (shells[a].atom_index, shells[b].atom_index)
-        for family, out in (("overlap", overlap), ("kinetic", frozen)):
+        for family, out in (("overlap", overlap), ("kinetic", core)):
             if atoms[0] == atoms[1]:
                 continue
             ir = provider.one_electron_ir(family, angular)
@@ -341,13 +411,14 @@ def _contract_directional_first_order(
             )
             for (u, v), gradient in provider.raw_blocks(ir, (a, b), centers):
                 accumulate(
-                    frozen,
+                    core,
                     centers,
                     gradient,
                     offsets[a] + u,
                     offsets[b] + v,
                 )
 
+    frozen[:] = core
     # Evaluate a real Coulomb-family quartet once, then scatter every distinct
     # ordered shell orientation. J and full-range K share that same raw jet;
     # their density/spin factors remain explicit consumer policy here.
@@ -355,7 +426,9 @@ def _contract_directional_first_order(
         object, list[tuple[tuple[int, int], tuple[int, int], float, np.ndarray]]
     ] = {}
     if include_coulomb:
-        consumers[FOUR_CENTER_ERI_OPERATOR] = [((0, 1), (2, 3), 1.0, density)]
+        consumers[FOUR_CENTER_ERI_OPERATOR] = [
+            ((0, 1), (2, 3), 1.0, np.broadcast_to(density, frozen.shape))
+        ]
     for operator, coefficient in exchange_operators:
         consumers.setdefault(operator, []).append(
             ((0, 2), (1, 3), -0.5 * float(coefficient), exchange_density)
@@ -370,26 +443,28 @@ def _contract_directional_first_order(
         permutations = distinct_eri_shell_permutations(slots)
         for operator, terms in consumers.items():
             ir = provider.eri_ir(angular, operator)
-            for component, gradient in provider.raw_blocks(ir, slots, atoms):
+            for component, directional in provider.directional_blocks(
+                ir, slots, atoms, direction
+            ):
                 ao = tuple(
                     offsets[shell] + index
                     for shell, index in zip(slots, component, strict=True)
                 )
-                directional = np.einsum("nca,ca->n", gradient, direction[list(atoms)])
                 for _, permutation in permutations:
                     ordered = tuple(ao[axis] for axis in permutation)
                     for output_pair, weight_pair, coefficient, weight in terms:
                         rows, columns = (ordered[axis] for axis in output_pair)
                         first, second = (ordered[axis] for axis in weight_pair)
-                        np.add.at(
-                            frozen,
-                            (rows, columns),
-                            coefficient * weight[first, second] * directional,
-                        )
+                        for spin, block in enumerate(frozen):
+                            np.add.at(
+                                block,
+                                (rows, columns),
+                                coefficient * weight[spin, first, second] * directional,
+                            )
 
     if not np.isfinite(frozen).all() or not np.isfinite(overlap).all():
         raise FloatingPointError("generated RKS nuclear source is nonfinite")
-    return immutable(frozen), immutable(overlap)
+    return immutable(frozen), immutable(overlap), dict(provider.statistics)
 
 
 def generated_directional_semilocal_rks_integral_first_order(
@@ -406,7 +481,7 @@ def generated_directional_semilocal_rks_integral_first_order(
     topology.check_current()
     vector = checked_direction(direction, len(topology.atoms))
     ao_density = _checked_ao_weight(density, topology.nbf, "RKS reference density")
-    return _contract_directional_first_order(
+    frozen, overlap, _ = _contract_directional_first_order(
         topology,
         ao_density,
         vector,
@@ -417,7 +492,49 @@ def generated_directional_semilocal_rks_integral_first_order(
         if exchange_density is None
         else _checked_ao_weight(
             exchange_density, topology.nbf, "exchange reference density"
-        ),
+        )[None],
+    )
+    return immutable(frozen[0]), overlap
+
+
+def generated_directional_spin_integral_first_order(
+    topology: RKSIntegralTopology,
+    densities: typing.Any,
+    direction: typing.Any,
+    *,
+    cache: typing.Any = ".artifacts",
+    exchange_operators: tuple = (),
+    include_coulomb: bool = True,
+) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
+    """Share one first-integral source across an RKS or alpha/beta Fock panel.
+
+    A single panel member is the spin-summed RKS density. Two members are
+    alpha and beta densities: Coulomb consumes their sum, whereas exchange
+    consumes each spin separately with its full same-spin coefficient.
+    All panels and the direction are admitted before constructing a provider.
+    """
+    topology.check_current()
+    panel = np.asarray(densities)
+    if panel.ndim != 3 or panel.shape[0] not in (1, 2):
+        raise ValueError("first integral densities require one or two spin AO matrices")
+    panel = np.asarray(
+        [
+            _checked_ao_weight(density, topology.nbf, "spin reference density")
+            for density in panel
+        ]
+    )
+    vector = checked_direction(direction, len(topology.atoms))
+    with np.errstate(over="raise", invalid="raise"):
+        total_density = panel.sum(axis=0)
+        exchange_densities = (2 if len(panel) == 2 else 1) * panel
+    return _contract_directional_first_order(
+        topology,
+        total_density,
+        vector,
+        cache=cache,
+        exchange_operators=exchange_operators,
+        exchange_density=exchange_densities,
+        include_coulomb=include_coulomb,
     )
 
 
@@ -1127,6 +1244,9 @@ def _second_data(
         "peak_symmetry_weight_bytes": 0,
         "ordered_eri_shell_weight_blocks": 0,
         "symmetry_reduced_eri_shell_quartets": 0,
+        "ordered_one_electron_shell_weight_blocks": 0,
+        "symmetry_reduced_one_electron_shell_pairs": 0,
+        "unit_charge_nuclear_shell_pairs": 0,
     }
 
 
@@ -1175,6 +1295,13 @@ def _second_diagnostics(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
         "symmetry_reduced_eri_shell_quartets": data[
             "symmetry_reduced_eri_shell_quartets"
         ],
+        "ordered_one_electron_shell_weight_blocks": data[
+            "ordered_one_electron_shell_weight_blocks"
+        ],
+        "symmetry_reduced_one_electron_shell_pairs": data[
+            "symmetry_reduced_one_electron_shell_pairs"
+        ],
+        "unit_charge_nuclear_shell_pairs": data["unit_charge_nuclear_shell_pairs"],
         "peak_device_bytes": max(
             (item["resources"]["peak_bytes"].get("device", 0) for item in executions),
             default=0,
@@ -1183,6 +1310,54 @@ def _second_diagnostics(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
         else 0,
         "device_timing_ms": timing if cuda else None,
     }
+
+
+def _one_electron_pair_blocks(
+    data: dict[str, typing.Any], weight: np.ndarray
+) -> typing.Iterator[tuple[int, int, np.ndarray, bool]]:
+    """Fold distinct shell orientations without assuming a symmetric cotangent.
+
+    S/T/V are symmetric in the two complete Gaussian slots, including their
+    nuclear derivatives. Ordering by angular momentum also shares compiled
+    programs between unlike shells. A diagonal shell block is not doubled or
+    symmetrized. CUDA and insufficient host leases retain the ordered schedule.
+    The lease covers a folded block, charge-scaled block and staging copy;
+    primitive execution retains its independently bounded workspace.
+    """
+    shells, state = data["shells"], data["state"]
+    cpu = data["backend"] == "cpu"
+    order = sorted(
+        range(len(shells)), key=lambda slot: (shells[slot].angular_momentum, slot)
+    )
+    pairs = (
+        combinations_with_replacement(order, 2)
+        if cpu
+        else product(range(len(shells)), repeat=2)
+    )
+    for first, second in pairs:
+        first_slice = slice(state.offsets[first], state.offsets[first + 1])
+        second_slice = slice(state.offsets[second], state.offsets[second + 1])
+        block = weight[first_slice, second_slice]
+        fold_bytes = data["output_accumulator_bytes"] + 3 * block.size * 8
+        reuse = cpu and fold_bytes <= data["budget_bytes"]
+        if reuse:
+            data["peak_symmetry_weight_bytes"] = max(
+                data["peak_symmetry_weight_bytes"], fold_bytes
+            )
+            if first != second:
+                with np.errstate(over="raise", invalid="raise"):
+                    block = block + weight[second_slice, first_slice].T
+            data["ordered_one_electron_shell_weight_blocks"] += (
+                1 if first == second else 2
+            )
+            data["symmetry_reduced_one_electron_shell_pairs"] += 1
+            yield first, second, block, True
+        else:
+            data["ordered_one_electron_shell_weight_blocks"] += 1
+            yield first, second, block, False
+            if cpu and first != second:
+                data["ordered_one_electron_shell_weight_blocks"] += 1
+                yield second, first, weight[second_slice, first_slice], False
 
 
 def _run_one_electron_hvp(
@@ -1194,17 +1369,24 @@ def _run_one_electron_hvp(
     state = data["state"]
     shells = data["shells"]
     total = np.zeros((state.nat, 3))
-    for a, b in product(range(len(shells)), repeat=2):
+    for a, b, wa, reuse in _one_electron_pair_blocks(data, weight):
         la, lb = shells[a].angular_momentum, shells[b].angular_momentum
         na, nb = len(cartesian_components(la)), len(cartesian_components(lb))
-        wa = weight[
-            state.offsets[a] : state.offsets[a] + na,
-            state.offsets[b] : state.offsets[b] + nb,
-        ].reshape(na, nb)
         primitives = (data["primitives"][a], data["primitives"][b])
         atom_a, atom_b = shells[a].atom_index, shells[b].atom_index
         if family == "nuclear_attraction":
+            if reuse:
+                data["unit_charge_nuclear_shell_pairs"] += 1
             for nucleus in range(state.nat):
+                charge = float(state.Z[nucleus])
+                if reuse:
+                    # V is linear in a fixed nuclear charge. Keep charge in the
+                    # cotangent, not in a separate generated program per element.
+                    with np.errstate(over="raise", invalid="raise"):
+                        nuclear_weights = charge * wa.ravel()
+                    charge = 1.0
+                else:
+                    nuclear_weights = wa.ravel()
                 centers = np.asarray(
                     [
                         state.coords[atom_a],
@@ -1214,21 +1396,22 @@ def _run_one_electron_hvp(
                 )
                 total += _run_kernel_hvp(
                     data,
-                    (family, la, lb, float(state.Z[nucleus])),
+                    (family, la, lb, charge),
                     build_one_electron_second_ir,
                     {
                         "family": family,
                         "angular": (la, lb),
-                        "charge": float(state.Z[nucleus]),
+                        "charge": charge,
                         "output": "weighted_hvp",
                         "_center_atoms": (atom_a, atom_b, nucleus),
                     },
                     primitives,
                     centers,
-                    wa.ravel(),
+                    nuclear_weights,
                     na * nb,
                     direction,
                 )
+                del nuclear_weights
         else:
             centers = np.asarray([state.coords[atom_a], state.coords[atom_b]])
             total += _run_kernel_hvp(
@@ -1247,6 +1430,7 @@ def _run_one_electron_hvp(
                 na * nb,
                 direction,
             )
+        del wa
     return total
 
 

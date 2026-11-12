@@ -85,6 +85,12 @@ generativeqc_status read_dft_derivative_sources(PreparedBatch& batch, std::size_
                                                 const dft::CudaKsFinalStateToken& expected,
                                                 KsDerivativeSnapshot& output, std::string& detail);
 
+/** Token-checked borrow valid only while the caller holds the batch context lock.
+ * Copies no geometry/grid/state buffers; the prepared owner retains storage. */
+generativeqc_status borrow_dft_integral_system(PreparedBatch& batch, std::size_t index,
+                                               const dft::CudaKsFinalStateToken& expected,
+                                               const core::System*& output, std::string& detail);
+
 /** Private #2151 single-calculation stationary integral-source bridge.
  * Reuses the exact converged owner and the already qualified DF (CPU/CUDA)
  * or Direct (CUDA) derivative provider. The output is source-major

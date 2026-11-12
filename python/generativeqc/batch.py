@@ -280,7 +280,10 @@ class PreparedBatch:
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
         self._output_aware_cpu_forces = qualified_direct_semilocal_context(calculator)
-        if self._output_aware_cpu_forces and resource_plan is not None:
+        if (
+            calculator._capabilities.family == "density_functional"
+            and resource_plan is not None
+        ):
             self._planned_properties = next(
                 (
                     request.identity.observables
@@ -1255,15 +1258,18 @@ class PreparedBatch:
             )
         if replay is not None:
             self._cuda_d4_resource_replay = (inputs, expected)
-        if not self._output_aware_cpu_forces:
+        if not self._output_aware_cpu_forces and properties <= frozenset(
+            expected.identity.observables
+        ):
             return expected, self.resource_plan
         candidate = self.resource_plan
         current = calculator._resource_request(
             self._systems, **options, properties=properties
         )
         if current != expected:
-            # Preserve all provider selections, phases, other owners and the
-            # caller's budget. Only this serialized CPU workspace changes.
+            # Preserve provider selections, phases, other owners and the budget.
+            # A wider native force domain must not replay an energy-only plan;
+            # its resource owner still has to admit the requested derivatives.
             candidate = replace(
                 self.resource_plan,
                 requests=tuple(
@@ -1300,8 +1306,8 @@ class PreparedBatch:
         execution returns ``forces=None``.
         Output selection does not change the prepared model or warm snapshot;
         a later force replay rebuilds response caches when necessary. Resource
-        plans revalidate optional CPU semilocal force capacity before replay;
-        other owners retain their conservative force capacity allowance.
+        plans revalidate newly requested force capacity before replay;
+        conservative derivative reservations survive energy-only replays.
         Generated force failures retain the original exception type and detail
         in the failed item's ``status_message``, including in strict mode.
         DFT force routing uses each native prepared item's capability. With a
@@ -1320,7 +1326,13 @@ class PreparedBatch:
         from .initial_guess import read_initial_guess_diagnostic
 
         if properties is None:
-            properties = self._calculator._default_properties(batch=True)
+            properties = self._calculator._default_properties(
+                batch=True,
+                native_forces=(
+                    self._calculator._capabilities.family == "density_functional"
+                    and self._native_dft_force_eligible()
+                ),
+            )
         if isinstance(properties, (str, bytes)):
             raise TypeError("properties must be an iterable of property names")
         try:
@@ -1875,8 +1887,8 @@ class PreparedBatch:
                 raise
         if execution_plan is not None and all(item.succeeded for item in result.items):
             self.resource_plan = execution_plan
-            if self._output_aware_cpu_forces:
-                self._planned_properties = requested
+            if self._calculator._capabilities.family == "density_functional":
+                self._planned_properties = frozenset(current.identity.observables)
         return result
 
     def save_checkpoint(

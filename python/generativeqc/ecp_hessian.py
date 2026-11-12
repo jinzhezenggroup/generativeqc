@@ -1,4 +1,4 @@
-"""Streamed compiler-AD ECP projector geometry in the native quadrature model."""
+"""Bounded analytic or checked-grid ECP geometry matching the native operator."""
 
 from __future__ import annotations
 
@@ -70,10 +70,22 @@ def _quadrature(radial: int, polar: int) -> tuple:
     return radii, radial_weights, sphere, angular_weights, harmonics * angular_weights
 
 
+def _gaussian_source_supported(source: typing.Any) -> bool:
+    """Screen authenticated metadata; the native owner rechecks the full system."""
+    terms = getattr(source, "ecp_terms", ())
+    return (
+        source.backend == "cpu"
+        and source.hamiltonian == "scalar-semilocal-ecp"
+        and bool(terms)
+        and all(term[2] == 2 and -1 <= term[1] <= 2 for term in terms)
+    )
+
+
 class ECPSecondOrder:
     """Match native residual channels with bounded validation and no displaced SCFs.
 
-    The ECP-centered radial/angular rule is fixed. Nuclear motion acts on AO
+    CPU Gaussian residuals use the native analytic primal and derivative owner.
+    Other operators retain a fixed ECP-centered radial/angular rule. Motion acts on AO
     jets relative to the ECP center; angular projection is a fixed linear map.
     TensorIR generates the mixed AO/density derivative of each contracted
     local or nonlocal energy. Only one radial layer is ever retained.
@@ -94,6 +106,31 @@ class ECPSecondOrder:
             "hvp_coarse_error": None,
             "hvp_validation_error": None,
         }
+        self._analytic_source = (
+            state._source if _gaussian_source_supported(state._source) else None
+        )
+        if self._analytic_source is not None:
+            first, first_work = self._analytic_source.ecp_gaussian(
+                budget_bytes=budget_bytes
+            )
+            self.matrix = immutable(first[:, 0].sum(axis=0))
+            self._analytic_first = first[:, 1:]
+            self._analytic_density = immutable(state.density.sum(axis=0))
+            retained = first.nbytes + self.matrix.nbytes + self._analytic_density.nbytes
+            if retained >= budget_bytes:
+                raise MemoryError("retained Gaussian ECP sources exceed budget_bytes")
+            second, second_work = self._analytic_source.ecp_gaussian(
+                budget_bytes=budget_bytes - retained, weights=self._analytic_density
+            )
+            self._analytic_second = second
+            self._analytic_retained_bytes = retained + second.nbytes
+            self.statistics.update(
+                analytic_gaussian=True,
+                resident_bytes=self._analytic_retained_bytes,
+                **{"first_" + name: value for name, value in first_work.items()},
+                **{"second_" + name: value for name, value in second_work.items()},
+            )
+            return
         self.matrix = immutable(self._integrate("matrix"))
 
     def _layers(self, radial: int, polar: int) -> typing.Iterator[tuple]:
@@ -208,17 +245,71 @@ class ECPSecondOrder:
 
     def frozen_fock(self, vector: np.ndarray) -> np.ndarray:
         """Differentiate the actual residual local/projector AO operator."""
+        if self._analytic_source is not None:
+            self._analytic_source.check_current()
+            direction = np.asarray(vector).reshape(-1)
+            if vector.shape != self.centers.shape or not np.isfinite(direction).all():
+                raise ValueError(
+                    "ECP direction must match the finite nuclear coordinates"
+                )
+            result = np.einsum("pcab,c->ab", self._analytic_first, direction)
+            self._analytic_source.check_current()
+            return immutable(result)
         return immutable(self._integrate("frozen", vector=vector))
 
     def hvp(
         self, vector: np.ndarray, density: np.ndarray, delta_density: np.ndarray
     ) -> dict:
-        """Validate the fixed native HVP without changing its discretization.
+        """Use the native analytic operator or validate the fixed grid operator.
 
-        Retain the original two-grid fast path. A finite mismatch permits one
+        Analytic sources reuse the fixed-density contracted coordinate Hessian,
+        adding the density-response contraction with the same first derivatives.
+        The fallback retains the original two-grid fast path. A mismatch permits one
         denser check of the native fine-grid result at the same absolute
         tolerance; nonfinite values and unresolved refinement still reject.
         """
+        if self._analytic_source is not None:
+            self._analytic_source.check_current()
+            direction = np.asarray(vector).reshape(-1)
+            if vector.shape != self.centers.shape or not np.isfinite(direction).all():
+                raise ValueError(
+                    "ECP direction must match the finite nuclear coordinates"
+                )
+            expected = self._analytic_density.shape
+            if (
+                density.shape != expected
+                or delta_density.shape != expected
+                or not (np.isfinite(density).all() and np.isfinite(delta_density).all())
+            ):
+                raise ValueError(
+                    "ECP response densities require finite ordered AO matrices"
+                )
+            second = self._analytic_second
+            if not np.array_equal(density, self._analytic_density):
+                if self._analytic_retained_bytes >= self.budget_bytes:
+                    raise MemoryError(
+                        "retained Gaussian ECP sources exceed budget_bytes"
+                    )
+                second, work = self._analytic_source.ecp_gaussian(
+                    budget_bytes=self.budget_bytes - self._analytic_retained_bytes,
+                    weights=density,
+                )
+                self.statistics.update(
+                    {"last_second_" + name: value for name, value in work.items()}
+                )
+            coordinates = direction.size
+            curvature = second[:, 1 + coordinates :].reshape(
+                2, coordinates, coordinates
+            )
+            values = np.einsum("pcd,d->pc", curvature, direction)
+            values += np.einsum("pcab,ab->pc", self._analytic_first, delta_density)
+            self._analytic_source.check_current()
+            return {
+                name: immutable(value.reshape(self.centers.shape))
+                for name, value in zip(
+                    ("ecp_local", "ecp_nonlocal"), values, strict=True
+                )
+            }
         self.statistics["hvp_coarse_error"] = None
         self.statistics["hvp_validation_error"] = None
         options = {"vector": vector, "density": density, "delta_density": delta_density}

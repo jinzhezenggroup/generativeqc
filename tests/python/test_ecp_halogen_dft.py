@@ -56,8 +56,14 @@ def select_fixture(
         spin: int = 0,
         representation: str = "spherical",
         d_shell: bool = False,
+        f_shell: bool = False,
+        f_on_h: bool = False,
+        compact_d_oracle: bool = False,
+        compact_f_oracle: bool = False,
     ) -> typing.Any:
-        assert not d_shell
+        assert not any(
+            (d_shell, f_shell, f_on_h, compact_d_oracle, compact_f_oracle)
+        ), "physical halogen qualification uses the unchanged s/p fixture"
         atoms, basis, mol = heavy_fixture(symbol, spin=0)
         if spin:
             # The cationic doublet has a symmetry-degenerate pi hole and
@@ -85,16 +91,27 @@ def select_fixture(
     original_reference = gates.reference
 
     def selected_reference(
-        mol: typing.Any, state: typing.Any, method: str
+        mol: typing.Any,
+        state: typing.Any,
+        method: str,
+        *,
+        return_mean_field: bool = False,
     ) -> typing.Any:
         if not method.endswith("uks"):
-            return original_reference(mol, state, method)
+            return original_reference(
+                mol, state, method, return_mean_field=return_mean_field
+            )
         # The independent atomic guess avoids the slowly rotating open-shell
         # basin reached from the one-electron guess. Do not seed from GenerativeQC.
         record_property("independent_initial_guess", "atom")
         record_property("independent_maximum_cycles", 600)
         return original_reference(
-            mol, state, method, initial_guess="atom", maximum_cycles=600
+            mol,
+            state,
+            method,
+            initial_guess="atom",
+            maximum_cycles=600,
+            return_mean_field=return_mean_field,
         )
 
     monkeypatch.setattr(gates, "fixture", selected)
@@ -117,10 +134,11 @@ def test_halogen_complete_force_analytic_and_fd(
 ) -> None:
     gates = select_fixture(symbol, device, monkeypatch, record_property)
     gates.test_public_ecp_force_analytic_and_reconverged_fd(
-        method,
-        representation,
-        record_property,
-        tmp_path,
+        method=method,
+        representation=representation,
+        record_property=record_property,
+        tmp_path=tmp_path,
+        d_shell=False,
     )
 
 

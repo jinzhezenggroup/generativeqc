@@ -7,13 +7,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
 import argparse
 
+from generativeqc_compiler.integral.ecp_gaussian import emit_gaussian_ecp_sources
 from generativeqc_compiler.integral.ecp_projector import emit_ecp_quadrature_cpp
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", required=True, type=Path)
+    outputs = parser.add_mutually_exclusive_group(required=True)
+    outputs.add_argument("--output", type=Path)
+    outputs.add_argument("--gaussian-directory", type=Path)
     args = parser.parse_args()
+    if args.gaussian_directory is not None:
+        emit_gaussian_ecp_sources(args.gaussian_directory)
+        return
     text = emit_ecp_quadrature_cpp()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if not args.output.exists() or args.output.read_text() != text:

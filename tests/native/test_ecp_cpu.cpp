@@ -122,7 +122,7 @@ void check_checked_and_failures() {
   for (bool derivatives : {false, true})
     compare(generativeqc::integrals::checked_ecp_integrals(system, derivatives),
             generativeqc::testing::checked_ecp_integrals(system, derivatives));
-  for (auto grid : {std::array<unsigned, 2>{15, 8}, {513, 8}, {16, 7}, {16, 97}})
+  for (auto grid : {std::array<unsigned, 2>{15, 8}, {1537, 8}, {16, 7}, {16, 193}})
     rejects([&] { generativeqc::integrals::ecp_integrals(system, grid[0], grid[1]); });
   auto empty = system;
   empty.ecp_terms.clear();
@@ -180,6 +180,32 @@ void check_checked_and_failures() {
   rejects([&] { generativeqc::integrals::add_ecp(data, hcore, derivative); });
 }
 
+void check_extended_raw_orders() {
+  // A normalized, coincident s Gaussian has an independent closed-form
+  // Gaussian-residual integral. Extend each raw grid axis without using the
+  // production two-grid oracle, whose historical domain remains unchanged.
+  System system;
+  system.atoms = {{11, {0.13, -0.21, 0.17}, 10}};
+  system.shells = {{0, 0, {{0.7, 1.0}}}};
+  system.ecp_terms = {{0, -1, 2, 0.8, -0.2}, {0, 0, 2, 0.8, 0.3}};
+  system.multiplicity = 2;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const double expected = std::pow(1.4 / 2.2, 1.5);
+  for (const auto grid : {std::array<unsigned, 2>{513, 8}, {160, 97}}) {
+    const auto actual = generativeqc::integrals::ecp_integrals(system, grid[0], grid[1], true);
+    require(actual.nbf == 1 && actual.ncoord == 3, "extended raw ECP dimensions");
+    near(actual.local[0], -0.2 * expected, 2e-11);
+    near(actual.nonlocal[0], 0.3 * expected, 2e-11);
+    for (unsigned axis = 0; axis < 3; ++axis) {
+      near(actual.local_derivative[axis], 0, 2e-11);
+      near(actual.nonlocal_derivative[axis], 0, 2e-11);
+    }
+  }
+}
+
 void check_larger() {
   auto system = fixture(GENERATIVEQC_BASIS_CARTESIAN);
   // 80 AOs, beyond the public stationary s/p slice: same one-layer provider.
@@ -204,6 +230,7 @@ int main() {
     check_raw(GENERATIVEQC_BASIS_CARTESIAN);
     check_raw(GENERATIVEQC_BASIS_SPHERICAL);
     check_checked_and_failures();
+    check_extended_raw_orders();
     check_larger();
     std::cout << "CPU ECP generated/oracle matrix, derivative, replay and rejection gates passed\n";
   } catch (const std::exception& error) {

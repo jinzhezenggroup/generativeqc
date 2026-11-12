@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from fractions import Fraction
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 from generativeqc import Calculator, GridSpec, KsOptions, method_capabilities
 from generativeqc.response_solver import GMRESOptions
+from generativeqc_compiler.method import resolve_method
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -49,7 +52,7 @@ def _force_difference(
     return -(forces[1] - forces[0]) / (2 * step)
 
 
-@pytest.mark.parametrize("method", ("wb97m-v", "wb97m-v-rks"))
+@pytest.mark.parametrize("method", ("wb97m-v", "wb97m-v-rks", "wb97m-v-uks"))
 def test_public_wb97mv_second_order_admission(method: str) -> None:
     assert not method_capabilities(method).supported_second_order
     assert _calculator(method=method).second_order_capabilities == frozenset(
@@ -57,8 +60,14 @@ def test_public_wb97mv_second_order_admission(method: str) -> None:
     )
 
 
-@pytest.mark.parametrize("kwargs", ({"method": "b3lyp-uks"},))
-def test_unqualified_wb97mv_second_order_contexts_fail_before_scf(
+@pytest.mark.parametrize(
+    "kwargs",
+    (
+        {"method": "pbe0-uks"},
+        {"method": "b3lyp-uks", "density_fitting": "cpu"},
+    ),
+)
+def test_unqualified_second_order_contexts_fail_before_scf(
     kwargs: dict,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -71,6 +80,33 @@ def test_unqualified_wb97mv_second_order_contexts_fail_before_scf(
     assert not calculator.second_order_capabilities
     with pytest.raises(NotImplementedError, match="does not expose public hessian"):
         calculator.hessian(H2)
+    with pytest.raises(NotImplementedError, match="does not expose public hvp"):
+        calculator.hessian_vector_product(H2, np.zeros((2, 3)))
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_noncanonical_wb97mv_second_order_fails_before_scf(
+    spin: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A canonical name cannot qualify a changed physical exchange fraction."""
+    canonical = resolve_method("WB97M-V", spin=spin)
+    altered = replace(
+        canonical,
+        primitives=(
+            canonical.primitives[0],
+            replace(canonical.primitives[1], coefficient=Fraction(1, 2)),
+            *canonical.primitives[2:],
+        ),
+    )
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("unqualified composition must not prepare SCF")
+
+    monkeypatch.setattr(Calculator, "prepare_batch", forbidden)
+    with pytest.raises(
+        NotImplementedError, match="requires canonical WB97M-V composition"
+    ):
+        _calculator(method=altered)
 
 
 def test_raw_wb97mv_hessian_uses_one_scf_and_matches_all_gradient_columns(

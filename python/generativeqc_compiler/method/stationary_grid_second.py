@@ -126,8 +126,14 @@ def features(
 
 @cache
 def _mixed_program(points: int, nao: int) -> Program:
-    """Separate left and right namespaces before nested TensorIR linearization."""
-    _, first = feature_programs(points, nao)
+    """Differentiate a fixed-density left AO motion along the full right leg.
+
+    The left leg is a nuclear partial, never an independent density response.
+    The right leg still differentiates density, AOs and the left AO tangent,
+    preserving both AO legs and every right-density cross term.
+    """
+    primal, _ = feature_programs(points, nao)
+    first = linearize(primal, ("ao0", "ao1", "ao2", "ao3")).program
     replacements = {}
     for node in first.nodes:
         attributes = node.attributes
@@ -158,9 +164,7 @@ def _mixed_features(
     program = _mixed_program(jets.shape[1], jets.shape[2])
     feeds = {
         "density": density,
-        "left_density": np.zeros_like(density),
         "d_density": delta_density,
-        "d_left_density": np.zeros_like(density),
     }
     for axis in range(4):
         feeds.update(
@@ -200,9 +204,7 @@ def density_mixed(
     """
     feeds = {
         "density": density,
-        "left_density": np.zeros_like(density),
         "d_density": delta_density,
-        "d_left_density": np.zeros_like(density),
         "ao0": values,
         "left_ao0": left,
         "d_ao0": right,

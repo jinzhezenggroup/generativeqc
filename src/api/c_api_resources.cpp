@@ -420,9 +420,10 @@ void generativeqc_resource_journal_destroy_v1(void* handle) {
  */
 int generativeqc_cpu_resource_inventory_version_v1() { return sizeof(void*) == 8 ? 1 : 0; }
 
-/** Shape-only two-grid ECP bound from the same generated policy as execution.
+/** Shape-only ECP bound from the same generated policy as execution.
  * Output is transactional; neither grids, AO matrices nor a CUDA context are
- * constructed. CUDA batching follows the generated radial scheduling gate. */
+ * constructed. CPU metadata cannot distinguish analytic from checked-grid
+ * operators, so reserve the larger bound. CUDA retains its radial tile bound. */
 int generativeqc_resource_ecp_workspace_v1(std::size_t nao, std::size_t cartesian_nao,
                                            std::size_t atoms, std::size_t primitives,
                                            std::size_t terms, int cuda, std::uint64_t* output) {
@@ -451,6 +452,17 @@ int generativeqc_resource_ecp_workspace_v1(std::size_t nao, std::size_t cartesia
     metadata = size_add(metadata, primitives);
     metadata = size_add(metadata, terms);
     bytes = size_add(bytes, size_add(size_mul(256, metadata), 4096));
+    if (!cuda) {
+      auto analytic = size_mul(
+          48, size_mul(size_mul(cartesian_nao, cartesian_nao), size_add(1, size_mul(3, atoms))));
+      analytic = size_add(analytic,
+                          size_mul(8, generativeqc::generated::ecp_gaussian_max_scratch_doubles));
+      analytic = size_add(analytic, 144 * (32 + 225 * 8));
+      analytic = size_add(analytic, 2 * 43 * 100 * 16 + 100 * 6 * 8);
+      analytic = size_add(analytic, size_mul(256, terms));
+      analytic = size_add(analytic, size_mul(4096, std::min(primitives, cartesian_nao)));
+      bytes = std::max(bytes, analytic);
+    }
     if (bytes > static_cast<std::uint64_t>(INT64_MAX)) return 1;
     *output = bytes;
     return 0;

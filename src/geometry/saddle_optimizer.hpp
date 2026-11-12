@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "geometry/rigid_subspace.hpp"
 #include "solver/cpu/symmetric_eigen.hpp"
 
 namespace generativeqc::geometry::saddle {
@@ -18,8 +19,9 @@ namespace generativeqc::geometry::saddle {
 /** Internal local saddle corrector, not molecular task admission.
  * Callbacks supply gradients (not forces) and raw row-major Hessians at the
  * exact atom-major Bohr coordinates. Energies are Hartree. This local algorithm
- * requires a negative target curvature; it does not escape a minimum, project
- * rigid motions, choose chemistry, or establish provider/state provenance.
+ * requires a negative target curvature; it does not escape a minimum, choose
+ * chemistry, or establish provider/state provenance. Molecular callers can
+ * explicitly project geometry-derived rigid motions, never small eigenvalues.
  */
 struct Evaluation {
   double energy{};
@@ -28,6 +30,7 @@ struct Evaluation {
 
 struct Options {
   std::size_t max_attempts{100}, max_coordinates{300};
+  bool project_rigid_motions{false};
   double energy_change{1e-6};
   double gradient_rms{3e-4}, gradient_max{4.5e-4};
   double displacement_rms_angstrom{1.2e-3}, displacement_max_angstrom{1.8e-3};
@@ -60,13 +63,14 @@ struct Attempt {
 struct Result {
   Status status{Status::attempt_limit};
   bool has_valid_state{}, stationary_verified{};
-  std::vector<double> coordinates, gradient, target_mode, curvatures;
+  std::vector<double> coordinates, gradient, hessian, target_mode, curvatures;
   double energy{std::numeric_limits<double>::quiet_NaN()};
   double energy_change{}, gradient_rms{}, gradient_max{};
   double displacement_rms_angstrom{}, displacement_max_angstrom{};
   double trust_radius{}, target_curvature{}, target_overlap{};
   std::size_t attempts{}, accepted_steps{}, energy_gradient_calls{}, hessian_calls{};
   std::size_t negative_curvatures{}, near_zero_curvatures{};
+  std::size_t rigid_modes{};
   std::string failure;
   std::vector<Attempt> history;
 };
@@ -74,6 +78,7 @@ struct Result {
 using Evaluator = std::function<Evaluation(std::span<const double>)>;
 using Hessian = std::function<std::vector<double>(std::span<const double>)>;
 using Cancellation = std::function<bool()>;
+using Progress = std::function<void(const Result&)>;
 
 namespace detail {
 inline bool finite(std::span<const double> values) {
@@ -139,7 +144,7 @@ inline void validate(std::span<const double> initial, const Options& options) {
  */
 inline Result correct(std::span<const double> initial, const Options& options,
                       const Evaluator& evaluate, const Hessian& hessian,
-                      const Cancellation& cancelled = {}) {
+                      const Cancellation& cancelled = {}, const Progress& progress = {}) {
   detail::validate(initial, options);
   if (!evaluate || !hessian) throw std::invalid_argument("missing native saddle callbacks");
   Result result;
@@ -150,9 +155,26 @@ inline Result correct(std::span<const double> initial, const Options& options,
   auto stop = [&] {
     if (cancelled && cancelled()) {
       result.status = Status::cancelled;
+      result.stationary_verified = false;
       return true;
     }
     return false;
+  };
+  auto notify = [&] {
+    try {
+      if (progress) progress(result);
+      return stop();
+    } catch (const std::exception& error) {
+      result.status = Status::cancelled;
+      result.stationary_verified = false;
+      result.failure = error.what();
+      return true;
+    } catch (...) {
+      result.status = Status::cancelled;
+      result.stationary_verified = false;
+      result.failure = "saddle progress callback failed";
+      return true;
+    }
   };
   auto energy_gradient = [&](std::span<const double> coordinates, Evaluation& output) {
     if (stop()) return false;
@@ -183,9 +205,41 @@ inline Result correct(std::span<const double> initial, const Options& options,
           if (std::abs(matrix[row * count + column] - matrix[column * count + row]) >
               options.raw_symmetry_tolerance)
             throw std::runtime_error("raw saddle Hessian exceeds symmetry tolerance");
-      const auto prepared = solver::cpu::prepare_owned_symmetric_eigen(
-          count, solver::cpu::SymmetricEigenFamily::scalar_owned_row_major);
-      spectrum = solver::cpu::execute_symmetric_eigen(prepared, matrix);
+      if (options.project_rigid_motions) {
+        const auto subspace = geometry::rigid_subspace(coordinates);
+        if (!subspace.active_modes)
+          throw std::runtime_error("molecular saddle requires vibrational coordinates");
+        if (result.hessian_calls > 1 && subspace.rigid_modes != result.rigid_modes)
+          throw std::runtime_error("molecular rigid-motion rank changed during correction");
+        result.rigid_modes = subspace.rigid_modes;
+        const auto active = subspace.active_modes;
+        std::vector<double> product(count * active), projected(active * active);
+        for (std::size_t row = 0; row < count; ++row)
+          for (std::size_t mode = 0; mode < active; ++mode)
+            for (std::size_t column = 0; column < count; ++column)
+              product[row * active + mode] +=
+                  matrix[row * count + column] * subspace.basis[column * active + mode];
+        for (std::size_t row = 0; row < active; ++row)
+          for (std::size_t column = 0; column < active; ++column)
+            for (std::size_t coordinate = 0; coordinate < count; ++coordinate)
+              projected[row * active + column] +=
+                  subspace.basis[coordinate * active + row] * product[coordinate * active + column];
+        const auto prepared = solver::cpu::prepare_owned_symmetric_eigen(
+            active, solver::cpu::SymmetricEigenFamily::scalar_owned_row_major);
+        const auto reduced = solver::cpu::execute_symmetric_eigen(prepared, projected);
+        spectrum.values = reduced.values;
+        spectrum.vectors.assign(count * count, 0);
+        for (std::size_t coordinate = 0; coordinate < count; ++coordinate)
+          for (std::size_t mode = 0; mode < active; ++mode)
+            for (std::size_t inner = 0; inner < active; ++inner)
+              spectrum.vectors[coordinate * count + mode] +=
+                  subspace.basis[coordinate * active + inner] *
+                  reduced.vectors[inner * active + mode];
+      } else {
+        const auto prepared = solver::cpu::prepare_owned_symmetric_eigen(
+            count, solver::cpu::SymmetricEigenFamily::scalar_owned_row_major);
+        spectrum = solver::cpu::execute_symmetric_eigen(prepared, matrix);
+      }
       return true;
     } catch (const std::exception& error) {
       result.status = Status::hessian_failed;
@@ -201,7 +255,7 @@ inline Result correct(std::span<const double> initial, const Options& options,
     double signed_overlap = 1;
     if (!previous.empty()) {
       const double norm = std::sqrt(detail::dot(previous, previous));
-      for (std::size_t column = 0; column < count; ++column) {
+      for (std::size_t column = 0; column < spectrum.values.size(); ++column) {
         double candidate = 0;
         for (std::size_t row = 0; row < count; ++row)
           candidate += spectrum.vectors[row * count + column] * previous[row] / norm;
@@ -222,10 +276,12 @@ inline Result correct(std::span<const double> initial, const Options& options,
     return true;
   };
   auto publish = [&](const Evaluation& state, const tensor::CpuSymmetricEigenResult& spectrum,
-                     const std::vector<double>& mode, std::size_t selected, double overlap) {
+                     const std::vector<double>& raw, const std::vector<double>& mode,
+                     std::size_t selected, double overlap) {
     result.has_valid_state = true;
     result.energy = state.energy;
     result.gradient = state.gradient;
+    result.hessian = raw;
     result.gradient_rms = detail::rms(state.gradient);
     result.gradient_max = detail::maximum(state.gradient);
     result.curvatures = spectrum.values;
@@ -255,7 +311,8 @@ inline Result correct(std::span<const double> initial, const Options& options,
       !curvature(result.coordinates, matrix, spectrum) ||
       !select(spectrum, options.initial_mode, selected, mode, overlap))
     return result;
-  publish(current, spectrum, mode, selected, overlap);
+  publish(current, spectrum, matrix, mode, selected, overlap);
+  if (notify()) return result;
   for (;;) {
     if (stop()) return result;
     if (five_tests()) {
@@ -278,13 +335,14 @@ inline Result correct(std::span<const double> initial, const Options& options,
         return result;
       }
       result.energy_change = verified_energy_change;
-      publish(final_state, final_spectrum, final_mode, final_selected, final_overlap);
+      publish(final_state, final_spectrum, final_matrix, final_mode, final_selected, final_overlap);
       result.stationary_verified = true;
       result.status = result.near_zero_curvatures ? Status::stationary_ambiguous_curvature
                       : result.negative_curvatures == 1 &&
                               result.target_curvature < -options.curvature_tolerance
                           ? Status::first_order_saddle
                           : Status::stationary_other_index;
+      notify();
       return result;
     }
     if (spectrum.values[selected] >= -options.curvature_tolerance) {
@@ -296,7 +354,7 @@ inline Result correct(std::span<const double> initial, const Options& options,
       return result;
     }
     std::vector<double> step(count, 0);
-    for (std::size_t column = 0; column < count; ++column) {
+    for (std::size_t column = 0; column < spectrum.values.size(); ++column) {
       double component = 0;
       for (std::size_t row = 0; row < count; ++row)
         component += spectrum.vectors[row * count + column] * current.gradient[row];
@@ -341,6 +399,7 @@ inline Result correct(std::span<const double> initial, const Options& options,
         result.status = Status::trust_radius_exhausted;
         return result;
       }
+      if (notify()) return result;
       continue;
     }
     std::vector<double> trial_matrix, trial_mode;
@@ -363,11 +422,12 @@ inline Result correct(std::span<const double> initial, const Options& options,
     ++result.accepted_steps;
     result.history.back().accepted = true;
     result.history.back().target_overlap = overlap;
-    publish(current, spectrum, mode, selected, overlap);
+    publish(current, spectrum, matrix, mode, selected, overlap);
     if (ratio > 0.75 && norm >= 0.8 * result.trust_radius)
       result.trust_radius = std::min(options.maximum_radius, 2 * result.trust_radius);
     else if (ratio < 0.25)
       result.trust_radius = std::max(options.minimum_radius, 0.5 * result.trust_radius);
+    if (notify()) return result;
   }
 }
 }  // namespace generativeqc::geometry::saddle

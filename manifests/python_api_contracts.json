@@ -2,6 +2,12 @@
   "schema_version": 1,
   "debt": [],
   "exports": {
+    "generativeqc.saddle.MolecularSaddleResult": "generativeqc/saddle.py:MolecularSaddleResult",
+    "generativeqc.saddle.SaddleOptions": "generativeqc/saddle.py:SaddleOptions",
+    "generativeqc.saddle.SaddleProgress": "generativeqc/saddle.py:SaddleProgress",
+    "generativeqc.saddle.SaddleResult": "generativeqc/saddle.py:SaddleResult",
+    "generativeqc.saddle.correct_saddle": "generativeqc/saddle.py:correct_saddle",
+    "generativeqc.saddle.optimize_saddle": "generativeqc/saddle.py:optimize_saddle",
     "generativeqc.HarmonicAnalysis": "generativeqc/vibrations.py:HarmonicAnalysis",
     "generativeqc.analyze_harmonic_modes": "generativeqc/vibrations.py:analyze_harmonic_modes",
     "generativeqc.vibrations.HarmonicAnalysis": "generativeqc/vibrations.py:HarmonicAnalysis",
@@ -414,6 +420,7 @@
     "generativeqc.rks_hessian_integrals.checked_second_hvp_options": "generativeqc/rks_hessian_integrals.py:checked_second_hvp_options",
     "generativeqc.rks_hessian_integrals.generated_directional_semilocal_rks_integral_first_order": "generativeqc/rks_hessian_integrals.py:generated_directional_semilocal_rks_integral_first_order",
     "generativeqc.rks_hessian_integrals.generated_directional_semilocal_rks_integral_first_order_cuda": "generativeqc/rks_hessian_integrals.py:generated_directional_semilocal_rks_integral_first_order_cuda",
+    "generativeqc.rks_hessian_integrals.generated_directional_spin_integral_first_order": "generativeqc/rks_hessian_integrals.py:generated_directional_spin_integral_first_order",
     "generativeqc.rks_hessian_integrals.generated_weighted_first_integral_gradient": "generativeqc/rks_hessian_integrals.py:generated_weighted_first_integral_gradient",
     "generativeqc.rks_hessian_integrals.generated_weighted_first_integral_gradient_cuda": "generativeqc/rks_hessian_integrals.py:generated_weighted_first_integral_gradient_cuda",
     "generativeqc.rks_hessian_integrals.generated_weighted_second_integral_hvp": "generativeqc/rks_hessian_integrals.py:generated_weighted_second_integral_hvp",
@@ -449,6 +456,83 @@
     "generativeqc.torch.integral_energy": "generativeqc/torch.py:integral_energy"
   },
   "declarations": {
+    "generativeqc/saddle.py:MolecularSaddleResult": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/geometry_optimization.md#python-saddle-values",
+        "ownership": "docs/user/geometry_optimization.md#python-saddle-ownership"
+      }
+    },
+    "generativeqc/saddle.py:MolecularSaddleResult.converged": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {"behavior": "docstring"}
+    },
+    "generativeqc/saddle.py:SaddleOptions": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/geometry_optimization.md#python-saddle-values",
+        "ownership": "docs/user/geometry_optimization.md#python-saddle-ownership"
+      }
+    },
+    "generativeqc/saddle.py:SaddleOptions.__post_init__": {
+      "kind": "function",
+      "profile": "validation",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/geometry_optimization.md#python-saddle-values",
+        "errors": "docs/user/geometry_optimization.md#python-saddle-errors"
+      }
+    },
+    "generativeqc/saddle.py:SaddleProgress": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/geometry_optimization.md#python-saddle-values",
+        "ownership": "docs/user/geometry_optimization.md#python-saddle-ownership"
+      }
+    },
+    "generativeqc/saddle.py:SaddleResult": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/geometry_optimization.md#python-saddle-values",
+        "ownership": "docs/user/geometry_optimization.md#python-saddle-ownership"
+      }
+    },
+    "generativeqc/saddle.py:SaddleResult.converged": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {"behavior": "docstring"}
+    },
+    "generativeqc/saddle.py:correct_saddle": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/geometry_optimization.md#python-saddle-values",
+        "errors": "docs/user/geometry_optimization.md#python-saddle-errors",
+        "ownership": "docs/user/geometry_optimization.md#python-saddle-ownership",
+        "backends": "docs/user/geometry_optimization.md#python-saddle-backends"
+      }
+    },
+    "generativeqc/saddle.py:optimize_saddle": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/geometry_optimization.md#python-saddle-values",
+        "errors": "docs/user/geometry_optimization.md#python-saddle-errors",
+        "ownership": "docs/user/geometry_optimization.md#python-saddle-ownership",
+        "backends": "docs/user/geometry_optimization.md#python-saddle-backends"
+      }
+    },
     "generativeqc/vibrations.py:HarmonicAnalysis": {
       "kind": "class",
       "profile": "record",
@@ -6919,6 +7003,17 @@
       }
     },
     "generativeqc/rks_hessian_integrals.py:generated_directional_semilocal_rks_integral_first_order_cuda": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-integrals-backends",
+        "errors": "docs/reference/python_contracts.md#python-integrals-errors",
+        "ownership": "docs/reference/python_contracts.md#python-integrals-ownership",
+        "values": "docs/reference/python_contracts.md#python-integrals-values"
+      }
+    },
+    "generativeqc/rks_hessian_integrals.py:generated_directional_spin_integral_first_order": {
       "kind": "function",
       "profile": "execution",
       "facets": {

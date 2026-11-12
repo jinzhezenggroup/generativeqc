@@ -50,7 +50,7 @@ def test_streamed_first_and_weighted_hvp_match_independent_libcint(
         for exponent in EXPONENTS
     )
     size = math.prod((order + 1) * (order + 2) // 2 for order in angular)
-    components = tuple(sorted({0, min(1, size - 1), size // 3, size // 2, size - 1}))
+    components = tuple(np.linspace(0, size - 1, min(size, 64), dtype=int).tolist())
     weights = np.linspace(-0.4, 0.6, len(components))
     expected_first = np.zeros((len(components), 13))
     expected_hvp = np.zeros((4, 3))
@@ -81,8 +81,26 @@ def test_streamed_first_and_weighted_hvp_match_independent_libcint(
     actual_hvp, diagnostics = host.weighted_hvp(
         angular, components, primitives, POSITIONS, weights, DIRECTION
     )
+    actual_direction, first_diagnostics = host.first_direction(
+        angular, components, primitives, POSITIONS, DIRECTION
+    )
+    expected_direction = np.column_stack(
+        (expected_first[:, 0], expected_first[:, 1:] @ DIRECTION.ravel())
+    )
     np.testing.assert_allclose(actual_first, expected_first, atol=3e-10, rtol=2e-9)
     np.testing.assert_allclose(actual_hvp, expected_hvp, atol=1e-9, rtol=2e-9)
+    np.testing.assert_allclose(
+        actual_direction, expected_direction, atol=3e-10, rtol=2e-9
+    )
+    assert first_diagnostics["records"] == 16
+    assert first_diagnostics["component_evaluations"] == 16 * len(components)
+    assert first_diagnostics["native_artifact"] != diagnostics["native_artifact"]
+    zero, zero_diagnostics = host.first_direction(
+        angular, components, primitives, POSITIONS, np.zeros((4, 3))
+    )
+    np.testing.assert_allclose(zero[:, 0], expected_first[:, 0], atol=3e-10, rtol=2e-9)
+    np.testing.assert_array_equal(zero[:, 1], 0)
+    assert zero_diagnostics["program_identity"] == first_diagnostics["program_identity"]
     np.testing.assert_allclose(
         actual_first[:, 1:].reshape(-1, 4, 3).sum(axis=1), 0, atol=3e-12
     )
@@ -101,16 +119,22 @@ def test_factorized_host_native_failure_does_not_publish_partial_results(
     records = np.tile(np.r_[EXPONENTS, POSITIONS.ravel(), 1.0], (2, 1))
     weights = np.ones(1)
     direction = np.ascontiguousarray(DIRECTION)
-    for operation, failure in ((1, "late-invalid"), (2, "late-overflow")):
+    for operation, mode, failure in (
+        (1, "first", "late-invalid"),
+        (2, "full", "late-overflow"),
+        (3, "directional", "late-invalid"),
+        (3, "directional", "late-overflow"),
+    ):
         inputs = records.copy()
         if failure == "late-invalid":
             inputs[1, 0] = np.nan
         else:
             inputs[1, -1] = 1e308
             weights[0] = 1e308
-        output = np.full(13 if operation == 1 else 12, 7.25)
+            inputs[1, :4] = 0.001
+        output = np.full({1: 13, 2: 12, 3: 2}[operation], 7.25)
         visits = np.full(2, 17, dtype=np.uint64)
-        status = host.run(
+        status = host._binding(mode)[2](
             operation,
             angular.ctypes.data,
             components.ctypes.data,
@@ -124,7 +148,7 @@ def test_factorized_host_native_failure_does_not_publish_partial_results(
             output.size,
             visits.ctypes.data,
         )
-        assert status == (1 if operation == 1 else 5)
+        assert status == (1 if failure == "late-invalid" else 5)
         np.testing.assert_array_equal(output, 7.25)
         np.testing.assert_array_equal(visits, 17)
 
@@ -142,10 +166,94 @@ def test_factorized_host_budget_inputs_and_closed_owner(
             host.raw_first((0, 0, 0, 0), components, primitives, POSITIONS)
     with pytest.raises(ValueError, match="direction"):
         host.weighted_hvp((0, 0, 0, 0), (0,), primitives, POSITIONS, (1.0,), None)
+    for direction in (None, np.zeros(12), np.full((4, 3), np.nan)):
+        with pytest.raises(ValueError, match="direction"):
+            host.first_direction((0, 0, 0, 0), (0,), primitives, POSITIONS, direction)
     closed = FactorizedERIHost(compiler, host_directory)
     closed.close()
     with pytest.raises(RuntimeError, match="closed"):
         closed.raw_first((0, 0, 0, 0), (0,), primitives, POSITIONS)
+
+
+def test_first_direction_admission_and_failure_preserve_owner(
+    host_directory: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No compile before input admission; failed native pages publish no work."""
+    compiler = CppCompilerAdapter(Path(shutil.which("c++")))
+    owner = FactorizedERIHost(compiler, host_directory)
+    primitives = tuple(((float(exponent), 1.0),) for exponent in EXPONENTS)
+
+    def unexpected_artifact(*args: object, **kwargs: object) -> None:
+        pytest.fail("invalid input compiled a factorized artifact")
+
+    with monkeypatch.context() as context:
+        context.setattr(
+            "generativeqc_compiler.integral.factorized_host._artifact",
+            unexpected_artifact,
+        )
+        for components, positions, motion in (
+            ((0, 0), POSITIONS, DIRECTION),
+            ((0,), np.full((4, 3), np.inf), DIRECTION),
+            ((0,), POSITIONS, np.full((4, 3), np.nan)),
+        ):
+            with pytest.raises(ValueError):
+                owner.first_direction(
+                    (0, 0, 0, 0), components, primitives, positions, motion
+                )
+
+    before = dict(owner.statistics)
+
+    def late_failure(*args: object) -> int:
+        return 5
+
+    binding = owner._binding("directional")
+    owner._bindings["directional"] = (*binding[:2], late_failure)
+    with pytest.raises(FloatingPointError, match="native status 5"):
+        owner.first_direction((0, 0, 0, 0), (0,), primitives, POSITIONS, DIRECTION)
+    assert owner.statistics == before
+    owner._bindings["directional"] = binding
+    recovered, _ = owner.first_direction(
+        (0, 0, 0, 0), (0,), primitives, POSITIONS, DIRECTION
+    )
+    assert np.isfinite(recovered).all()
+    assert owner.statistics["records"] > 0
+    owner.close()
+
+
+@pytest.mark.parametrize("operation", (0, 1, 2, 3, 4))
+def test_directional_native_abi_admits_only_matching_operation_and_capacity(
+    host: FactorizedERIHost, operation: int
+) -> None:
+    """Explicit packing and finite direction gates remain transactional."""
+    angular = np.zeros(4, dtype=np.uint32)
+    components = np.zeros(1, dtype=np.uint32)
+    record = np.r_[EXPONENTS, POSITIONS.ravel(), 1.0]
+    motion = np.ascontiguousarray(DIRECTION)
+    run = host._binding("directional")[2]
+    for count, size, direction in (
+        (129, 2, motion),
+        (1, 13, motion),
+        (1, 2, np.full((4, 3), np.nan)),
+    ):
+        output = np.full(13, 7.25)
+        visits = np.full(2, 17, dtype=np.uint64)
+        status = run(
+            operation,
+            angular.ctypes.data,
+            components.ctypes.data,
+            1,
+            record.ctypes.data,
+            count,
+            17,
+            None,
+            direction.ctypes.data,
+            output.ctypes.data,
+            size,
+            visits.ctypes.data,
+        )
+        assert status == 1
+        np.testing.assert_array_equal(output, 7.25)
+        np.testing.assert_array_equal(visits, 17)
 
 
 def test_staged_wheel_factor_consumer_has_no_checkout_or_runtime_dependency(
@@ -212,6 +320,11 @@ owner = FactorizedERIHost(CppCompilerAdapter(Path(shutil.which("c++"))), Path(sy
 try:
     actual = owner.raw_first((0,0,0,0), (0,), tuple(((exponent,1.0),) for exponent in data["exponents"]), data["centers"])
     np.testing.assert_allclose(actual[0], data["expected"], atol=3e-10, rtol=2e-9)
+    motion = np.arange(12, dtype=float).reshape(4, 3) * 0.01
+    directed, diagnostic = owner.first_direction((0,0,0,0), (0,), tuple(((exponent,1.0),) for exponent in data["exponents"]), data["centers"], motion)
+    independent = np.asarray(data["expected"])
+    np.testing.assert_allclose(directed[0], (independent[0], independent[1:] @ motion.ravel()), atol=3e-10, rtol=2e-9)
+    assert diagnostic["records"] == diagnostic["component_evaluations"] == 1
     for name, module in tuple(sys.modules.items()):
         if name == "generativeqc_compiler" or name.startswith("generativeqc_compiler."):
             assert Path(module.__file__).resolve().is_relative_to(PACKAGE), name

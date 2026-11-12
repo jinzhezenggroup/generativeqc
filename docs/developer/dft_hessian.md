@@ -80,11 +80,13 @@ not the native carrier selector, to the mixed J/K/XC response, frozen K nuclear
 RHS and compiler-owned `exact_exchange` second-order source. Cartesian and
 real-spherical AOs reuse `HessianBasis`; the SCF, density and response remain in
 the original public variational space. The public wrapper separately admits
-strict-FP64 CPU direct all-electron restricted PBE0/B3LYP semilocal compositions
+strict-FP64 CPU direct all-electron PBE0 RKS and B3LYP RKS/UKS semilocal compositions
 with one full-range coefficient in `(0, 1]`, Cartesian/spherical AOs through f,
-and no additional primitive. Admission compares resolved mathematics rather
-than a user-controlled identifier. UKS, ECP, DF, dispersion and CUDA full-range
-variants remain excluded. An installed spherical Ni/def2-SVP fixture does not
+and no additional electronic primitive. Admission compares resolved mathematics
+with the same physical spin rather than a user-controlled identifier. An uncut
+two-body D3(BJ), ATM-off correction is an independently qualified additive
+source; it does not repeat electronic response. PBE0 UKS, ECP, DF and CUDA full-range
+variants remain excluded. A spherical Ni/def2-SVP fixture does not
 establish production-scale support for 25–40-atom Ni systems.
 The low-level receipt always reports `public_calculator_endpoint=False`;
 only the actual Calculator wrapper marks the endpoint public and adds native
@@ -155,7 +157,8 @@ different WB97M-V feature floors. Primitive fractions remain part of the graph
 and scientific identity. WB97M-V retains its existing work policy and VV10
 admission. Neither this grid source nor a complete small-molecule low-level
 HVP independently grants public capability: the complete molecular and installed
-gates remain separate. Full-range UKS, ECP, DF, D3 and CUDA are not promoted.
+gates remain separate. These primitive providers do not independently promote
+full-range ECP, DF or CUDA variants.
 
 Native LDA/PBE grid partials use a separate identity-bound point-provider
 contract inside the same grid/weight and molecular orchestration. The runtime
@@ -174,13 +177,35 @@ alone is not a public endpoint qualification; the installed endpoint,
 independent molecular, lifecycle and resource checks are also required.
 
 The low-level CPU direct full-range candidate owner also admits scalar-ECP
-RKS, while retaining all-electron RKS/UKS admission. Scalar-ECP UKS is not
-included in this candidate extension. This does not promote public scalar-ECP
+RKS, while retaining all-electron RKS/UKS admission. Scalar-ECP UKS candidates
+require the CPU analytic Gaussian specialization: radial power two and
+local/s/p/d projectors, with the full native operator rechecked by the snapshot
+owner. Other scalar-ECP UKS operators remain refused. This does not promote public scalar-ECP
 B3LYP/PBE0 Hessian capabilities. The existing effective ionic charges and
-shared ECP first/second-order sources are retained. A finite coarse/fine HVP
-validation mismatch may use one bounded finer validation grid; the returned
-HVP remains on the original native grid. Nonfinite values, exhausted resources
-and unresolved quadrature error still reject. The retained CsH qualification
+shared ECP first/second-order sources are retained. For CPU radial-power-two
+operators with local/s/p/d projectors and s--f orbitals, one compiler-owned
+Gaussian operator supplies native primal, first and contracted second
+derivatives. The snapshot token authenticates the immutable native system;
+the response owner caches the fixed-density coordinate Hessian once and adds
+the first-derivative contraction with the density response for each HVP. It
+does not allocate a global coordinate-squared AO tensor or copy a native grid
+to construct this source. Workspace and generated-block work are independently
+bounded before execution, and stale snapshots fail before publication.
+
+Candidate spin-response qualification distinguishes exact-input derivatives
+from comparisons between independently converged states. Arbitrary symmetric
+AO probes compare both spin outputs against an independent kernel at identical
+Cartesian density fields; a minority-spin orbital node can amplify tiny state
+differences beyond an otherwise valid SCF density tolerance. Independently
+converged physical occupied/virtual responses and complete moving-grid molecular
+Hessians remain separate required gates. The synthetic analytic-ECP test uses
+XCFun only as this exact-input derivative oracle and PySCF/Libxc for independent
+state and molecular checks; neither enters production or seeds the native SCF.
+
+Other legal powers/projectors retain checked-grid sources. A finite coarse/fine
+HVP validation mismatch on that fallback may use one bounded finer validation
+grid; the returned HVP remains on the original native grid. Nonfinite values,
+exhausted resources and unresolved quadrature error still reject. The retained CsH qualification
 and its explicit domain limitations are documented in
 [the bounded-validation rationale](../../.agents/notes/implemented/numerics/2026-11-04-scalar-ecp-hessian-bounded-validation.md).
 
