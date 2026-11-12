@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-11-05
 
+The installed callback API and geometry-derived rigid projection are superseded
+by [the follow-up decision](2026-11-10-native-saddle-callback-and-rigid-subspace.md).
+The molecular-task and independent-qualification boundaries remain in force.
+
 ## Problem and decision
 
 Issue #2848 requires native saddle optimization, not a geomeTRIC bridge or a

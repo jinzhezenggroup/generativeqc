@@ -55,6 +55,7 @@ def test_resident_solver_accepts_only_true_residuals(scale: float) -> None:
 @pytest.mark.parametrize("value", (np.nan, np.inf, -np.inf))
 def test_ecp_quadrature_rejects_either_nonfinite_grid(grid: str, value: float) -> None:
     owner = ECPSecondOrder.__new__(ECPSecondOrder)
+    owner._analytic_source = None
     owner.statistics = {"hvp_validation_refinements": 0}
     coarse, fine = np.zeros((2, 1, 3)), np.zeros((2, 1, 3))
     (coarse if grid == "coarse" else fine)[0, 0, 0] = value
@@ -67,6 +68,7 @@ def test_ecp_quadrature_rejects_either_nonfinite_grid(grid: str, value: float) -
 @pytest.mark.parametrize("difference", (0.0, 1.0))
 def test_ecp_quadrature_finite_convergence_control(difference: float) -> None:
     owner = ECPSecondOrder.__new__(ECPSecondOrder)
+    owner._analytic_source = None
     owner.statistics = {"hvp_validation_refinements": 0}
     coarse, fine = np.zeros((2, 1, 3)), np.full((2, 1, 3), difference)
     results = iter((coarse, fine, coarse))
@@ -87,6 +89,10 @@ def test_ecp_quadrature_finite_convergence_control(difference: float) -> None:
 @pytest.mark.parametrize("hamiltonian", ("all-electron", "scalar-semilocal-ecp"))
 @pytest.mark.parametrize("backend", ("cpu", "cuda"))
 @pytest.mark.parametrize("provider", ("exact", "density-fitted"))
+@pytest.mark.parametrize(
+    "ecp_terms",
+    ((), ((0, 1, 2, 0.7, 1.0),), ((0, 1, 1, 0.7, 1.0),), ((0, 3, 2, 0.7, 1.0),)),
+)
 def test_full_range_spin_domain_before_owner_allocation(
     monkeypatch: pytest.MonkeyPatch,
     functional: str,
@@ -94,12 +100,14 @@ def test_full_range_spin_domain_before_owner_allocation(
     hamiltonian: str,
     backend: str,
     provider: str,
+    ecp_terms: tuple,
 ) -> None:
     closed = []
     source = SimpleNamespace(
         range_density_fitted=False,
         backend=backend,
         hamiltonian=hamiltonian,
+        ecp_terms=ecp_terms,
         method_ir=resolve_method(
             functional, spin="unpolarized" if spins == 1 else "polarized"
         ),
@@ -119,7 +127,11 @@ def test_full_range_spin_domain_before_owner_allocation(
     admitted = (
         backend == "cpu"
         and provider == "exact"
-        and (hamiltonian == "all-electron" or spins == 1)
+        and (
+            hamiltonian == "all-electron"
+            or spins == 1
+            or (bool(ecp_terms) and ecp_terms[0][1:3] == (1, 2))
+        )
     )
     with pytest.raises(AllocationReached if admitted else NotImplementedError):
         response.CompositeRKSResponse.from_native(object(), object())

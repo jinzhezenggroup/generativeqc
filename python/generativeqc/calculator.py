@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import os
 import typing
 from contextlib import nullcontext
@@ -46,6 +47,30 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from .spin_roots import SpinRootPolicy, SpinRootResult
+
+
+def _scf_grid_fingerprint(grid: typing.Any) -> str:
+    """Hash exact quadrature contents independently of its native owner lease.
+
+    Point/weight FP64 and owner i32 buffers use little-endian C order, framed by
+    the point count and a schema tag. Chunking bounds conversion scratch rather
+    than materializing another complete quadrature just for provenance.
+    """
+    digest = hashlib.sha256(b"generativeqc.scf-grid-v1\0")
+    digest.update(str(len(grid.points)).encode("ascii") + b"\0")
+    for values, dtype in (
+        (grid.points, "<f8"),
+        (grid.weights, "<f8"),
+        (grid.owners, "<i4"),
+    ):
+        for start in range(0, len(values), 32768):
+            digest.update(
+                np.asarray(values[start : start + 32768], dtype=dtype).tobytes(
+                    order="C"
+                )
+            )
+    return digest.hexdigest()
+
 
 _METHODS = _method_manifest.METHOD_NAME_TO_ID
 _COMPOSITE_METHOD_ALIASES = _method_manifest.COMPOSITE_METHOD_ALIASES
@@ -1452,7 +1477,9 @@ class Calculator:
         canonical = resolve_method("R2SCAN-3c", spin=graph.spin)
         return graph.manifest_identity == canonical.manifest_identity
 
-    def _default_properties(self, *, batch: bool = False) -> frozenset[str]:
+    def _default_properties(
+        self, *, batch: bool = False, native_forces: bool = False
+    ) -> frozenset[str]:
         """New bounded CPU forces are opt-in; retain established defaults."""
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
@@ -1473,7 +1500,18 @@ class Calculator:
             or self._automatic_libxc_name is not None
         ):
             return frozenset({"energy"})
-        return self._capabilities.supported_properties
+        supported = self._capabilities.supported_properties
+        if (
+            native_forces
+            and self._capabilities.family == "density_functional"
+            and isinstance(self._basis, BasisSet)
+            and any(element.ecp_core_electrons for element in self._basis.elements)
+        ):
+            # ECP method metadata also covers the narrower compatibility owner.
+            # Only the actual prepared provider can extend its default outputs;
+            # this must not widen that Python consumer's angular/resource domain.
+            return supported | {"forces"}
+        return supported
 
     def _resource_properties(self, properties: typing.Any) -> frozenset[str]:
         """Validate an output request before building its capacity contract."""
@@ -2536,7 +2574,7 @@ class Calculator:
             planned = (
                 requested
                 if qualified_direct_semilocal_context(self)
-                else self._capabilities.supported_properties
+                else self._capabilities.supported_properties | requested
             )
             return ks_resource_request(
                 systems,
@@ -2908,7 +2946,7 @@ class Calculator:
                 f"method {method!r} does not expose public {endpoint}; "
                 "qualified domains are CPU direct all-electron Cartesian FP64 "
                 "closed-shell LDA/PBE; CPU direct all-electron FP64 "
-                "Cartesian/spherical restricted PBE0/B3LYP compositions with "
+                "Cartesian/spherical PBE0 RKS or B3LYP RKS/UKS compositions with "
                 "full-range exchange in (0, 1], optionally with uncut two-body "
                 "D3(BJ); or canonical FP64 WB97M-V RKS/UKS with "
                 "CPU/CUDA, Cartesian/spherical, full-rank DF and scalar ECPs"
@@ -2919,7 +2957,7 @@ class Calculator:
         ):
             raise NotImplementedError(
                 "RKS requires multiplicity=1; open-shell second order requires "
-                "the polarized WB97M-V graph"
+                "an admitted polarized graph"
             )
         native_atoms = tuple(Atom.from_value(atom) for atom in atoms)
         if not native_atoms:
@@ -2988,6 +3026,23 @@ class Calculator:
                             "electronic_method_identity": self._ks_options.method_ir.identity,
                             "total_method_identity": self.method_ir.identity,
                             "total_method_manifest_identity": self.method_ir.manifest_identity,
+                            "scf_density_sha256": hashlib.sha256(
+                                np.asarray(operator.state.density, dtype="<f8").tobytes(
+                                    order="C"
+                                )
+                            ).hexdigest(),
+                            "scf_density_shape": tuple(operator.state.density.shape),
+                            "scf_occupied_orbitals": tuple(
+                                int(np.count_nonzero(occupations))
+                                for occupations in operator.state.occupations
+                            ),
+                            "scf_physical_residual": operator.state.physical_residual,
+                            "scf_basis_identity": operator.state.identity.basis_identity,
+                            "scf_grid_identity": operator.state.identity.grid_identity,
+                            "scf_grid_sha256": _scf_grid_fingerprint(
+                                operator.state.grid
+                            ),
+                            "scf_grid_point_count": len(operator.state.grid.points),
                         }
                     ),
                 )
@@ -3045,8 +3100,8 @@ class Calculator:
         """Compute a bounded analytic Cartesian semilocal or hybrid HVP.
 
         LDA/PBE require CPU direct all-electron Cartesian closed-shell FP64.
-        Qualified PBE0/B3LYP compositions also admit spherical AOs on CPU with
-        direct all-electron restricted FP64 and full-range exchange in (0, 1].
+        Qualified PBE0 RKS and B3LYP RKS/UKS compositions also admit spherical
+        AOs on CPU with direct all-electron FP64 and full-range exchange in (0, 1].
         Their uncut two-body D3(BJ) correction is added exactly once, without
         another electronic response solve. Its simultaneous workspace uses
         ``dispersion_memory_budget_bytes`` from construction.
@@ -3140,7 +3195,7 @@ class Calculator:
         both the dense matrix and immutable publication; integral/response
         resources retain their independently checked contracts.
 
-        PBE0/B3LYP compositions require CPU direct all-electron restricted FP64;
+        PBE0 RKS and B3LYP RKS/UKS require CPU direct all-electron FP64;
         Cartesian/spherical AOs and full-range exchange in (0, 1] are admitted.
         Uncut two-body D3(BJ) is an additive source with no extra CPKS solve.
         Corrected output budgets must hold three dense matrices (the detached
@@ -3422,7 +3477,8 @@ class Calculator:
             from ._provider_initialization_lifetime import require_no_pending_owner
 
             require_no_pending_owner()
-        if properties is None:
+        default_properties = properties is None
+        if default_properties:
             properties = self._default_properties()
         if isinstance(properties, (str, bytes)):
             raise TypeError("properties must be an iterable of property names")
@@ -3500,8 +3556,16 @@ class Calculator:
                 warm_start=False,
                 resource_plan=resource_plan,
             ) as batch:
+                execution_properties = requested_properties - PROPERTY_NAMES
+                if (
+                    default_properties
+                    and self._capabilities.family == "density_functional"
+                ):
+                    execution_properties = self._default_properties(
+                        native_forces=batch._native_dft_force_eligible()
+                    )
                 item = batch.execute(
-                    strict=True, properties=requested_properties - PROPERTY_NAMES
+                    strict=True, properties=execution_properties
                 ).items[0]
                 electronic_outputs = (
                     density_capture.from_batch(batch)

@@ -8,8 +8,10 @@ snapshots. Export is explicit and may transfer the final CUDA matrices.
 import ctypes as ct
 import threading
 import typing
+from collections.abc import Sequence
 from dataclasses import dataclass
 from hashlib import sha256
+from numbers import Real
 from types import MappingProxyType
 
 import numpy as np
@@ -1656,11 +1658,137 @@ class NativeKsSnapshot:
             ),
         }
 
+    def ecp_gaussian(
+        self, *, budget_bytes: int, weights: np.ndarray | None = None
+    ) -> tuple[np.ndarray, dict[str, int]]:
+        """Evaluate token-bound CPU analytic ECP sources with bounded publication.
+
+        Without weights, return separate value/first-derivative AO panels. With
+        ordered AO weights, contract before retaining the coordinate Hessian.
+        The native owner borrows its actual geometry, without exporting a grid
+        or electronic state or accepting replacement model identity labels.
+        """
+        self.check_current()
+        if self.backend != "cpu" or self.hamiltonian != "scalar-semilocal-ecp":
+            raise NotImplementedError("analytic ECP snapshots require a CPU ECP owner")
+        if type(budget_bytes) is not int or not 0 < budget_bytes < 2**63:
+            raise ValueError("ECP budget_bytes must be a positive int64 byte count")
+        count, atoms = self.metadata[1], self.metadata[3]
+        coordinates = 3 * atoms
+        operation = int(weights is not None)
+        shape = (
+            (2, 1 + coordinates, count, count)
+            if not operation
+            else (2, 1 + coordinates + coordinates**2)
+        )
+        elements = (
+            2 * (1 + coordinates) * count**2
+            if not operation
+            else 2 * (1 + coordinates + coordinates**2)
+        )
+        input_bytes = 0 if weights is None else count**2 * 8
+        if elements * 8 + input_bytes >= budget_bytes:
+            raise MemoryError("Gaussian ECP publication exceeds budget_bytes")
+        pointer = ct.POINTER(ct.c_double)
+        weight_data = None
+        if weights is not None:
+            error = "Gaussian ECP weights require a finite real ordered AO matrix"
+            if isinstance(weights, np.ndarray):
+                valid = weights.shape == (count, count) and weights.dtype.kind in "iuf"
+            else:
+                # Inspect sequence dimensions before materializing even a raw array.
+                # A malformed broadcast or nested input must not evade input_bytes.
+                valid = isinstance(weights, Sequence) and len(weights) == count
+                if valid:
+                    valid = all(
+                        (
+                            isinstance(row, np.ndarray)
+                            and row.shape == (count,)
+                            and row.dtype.kind in "iuf"
+                        )
+                        or (
+                            isinstance(row, Sequence)
+                            and len(row) == count
+                            and all(
+                                isinstance(value, Real)
+                                and not isinstance(value, (bool, np.bool_))
+                                for value in row
+                            )
+                        )
+                        for row in weights
+                    )
+            if not valid:
+                raise ValueError(error)
+            try:
+                with np.errstate(over="ignore", invalid="ignore"):
+                    weight_data = np.ascontiguousarray(weights, dtype=np.float64)
+            except (TypeError, ValueError, OverflowError) as cause:
+                raise ValueError(error) from cause
+            # Validate before allocating output, reusing its admitted byte envelope.
+            # A full boolean mask would exceed a tight budget after an FP64 copy.
+            flat_weights = weight_data.reshape(-1)
+            validation_block = min(32768, elements * 8)
+            for start in range(0, weight_data.size, validation_block):
+                if not np.isfinite(
+                    flat_weights[start : start + validation_block]
+                ).all():
+                    raise ValueError(error)
+        output = np.empty(shape, dtype=np.float64)
+        work = np.empty(8, dtype=np.uint64)
+        evaluate = self._library.generativeqc_ks_snapshot_ecp_gaussian_v1
+        evaluate.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_uint32,
+            pointer,
+            ct.c_size_t,
+            ct.c_size_t,
+            ct.c_uint64,
+            pointer,
+            ct.c_size_t,
+            ct.POINTER(ct.c_uint64),
+            ct.c_size_t,
+        ]
+        evaluate.restype = ct.c_int
+        status = evaluate(
+            self._batch._batch,
+            self._handle,
+            operation,
+            None if weight_data is None else weight_data.ctypes.data_as(pointer),
+            0 if weight_data is None else weight_data.size,
+            budget_bytes - input_bytes,
+            64 << 20,
+            output.ctypes.data_as(pointer),
+            output.size,
+            work.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+            work.size,
+        )
+        if status == _native.STATUS_OUT_OF_MEMORY:
+            raise MemoryError("Gaussian ECP endpoint exceeds budget_bytes")
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        if not np.isfinite(output).all():
+            raise ArithmeticError("nonfinite native Gaussian ECP sources")
+        names = (
+            "shell_pairs",
+            "primitive_groups",
+            "radial_frontiers",
+            "kernel_blocks",
+            "cartesian_values",
+            "kernel_block_bound",
+            "workspace_bound_bytes",
+            "output_elements",
+        )
+        observed = dict(zip(names, map(int, work), strict=True))
+        observed["workspace_bound_bytes"] += input_bytes
+        return immutable(output), observed
+
     def ecp_derivatives(self) -> typing.Any:
         """Backend-specific provider bound to this live owner's exact ECP model.
 
         Materializes two atom/xyz/AO-pair arrays. CPU and CUDA execute shared
-        generated ECP mathematics with checked two-grid admission.
+        generated ECP mathematics; CPU power-two specialization is analytic,
+        while other CPU operators and CUDA retain checked two-grid admission.
         Public wrappers admit and reserve this dense export before execution.
         """
         self.check_current()

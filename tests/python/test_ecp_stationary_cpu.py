@@ -44,12 +44,17 @@ def reference(
     *,
     initial_guess: str = "1e",
     maximum_cycles: int = 150,
+    return_mean_field: bool = False,
 ) -> typing.Any:
     from pyscf import dft, lib
 
     lib.num_threads(1)
     solver = dft.UKS(mol) if method.endswith("uks") else dft.RKS(mol)
-    solver.xc = "PBE" if method.startswith("pbe") else "LDA_X,LDA_C_PW"
+    if method.startswith("b3lyp"):
+        # Pin the Gaussian/VWN-RPA definition independently of native admission.
+        solver.xc = "0.08*LDA_X+0.72*GGA_X_B88+0.19*LDA_C_VWN_RPA+0.81*GGA_C_LYP+0.2*HF"
+    else:
+        solver.xc = "PBE" if method.startswith("pbe") else "LDA_X,LDA_C_PW"
     solver.grids.coords = np.array(state.grid.points)
     solver.grids.weights = np.array(state.grid.weights)
     solver.grids.radii_adjust = None
@@ -70,7 +75,12 @@ def reference(
     assert solver.converged
     gradient = solver.nuc_grad_method()
     gradient.grid_response = True
-    return solver.e_tot, gradient.kernel()
+    derivative = gradient.kernel()
+    return (
+        (solver.e_tot, derivative, solver)
+        if return_mean_field
+        else (solver.e_tot, derivative)
+    )
 
 
 @pytest.mark.parametrize("method", ["lda-rks", "pbe-rks", "lda-uks", "pbe-uks"])

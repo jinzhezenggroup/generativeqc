@@ -139,6 +139,13 @@ class KsBatchOwnerPort {
                                                       const dft::CudaKsFinalStateToken& expected,
                                                       KsDerivativeSnapshot& output,
                                                       std::string& detail) = 0;
+
+  /** Borrow only immutable integral geometry under the caller's context lock.
+   * No grid, density or final-state arrays are copied/exported. */
+  virtual generativeqc_status borrow_integral_system(std::size_t index,
+                                                     const dft::CudaKsFinalStateToken& expected,
+                                                     const core::System*& output,
+                                                     std::string& detail) = 0;
 };
 
 }  // namespace generativeqc::methods::detail

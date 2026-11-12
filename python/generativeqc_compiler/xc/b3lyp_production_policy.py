@@ -43,17 +43,26 @@ def b88_exchange(
     gamma_b88 = F(6)
     terms = []
     for density, sigma in ((ra, saa), (rb, sbb)):
+        density_power = density.pow(4 / 3)
         y = sigma * density.pow(-8 / 3)
-        x = y.pow(0.5)
-        x_asinh_x = x * graph.transcendental_unary("asinh", x)
         # x*asinh(x) is analytic in y=x^2. This branch keeps the
         # sigma derivative finite at zero gradient before differentiation.
         series = y * (
             1 + y * (-F(1, 6) + y * (F(3, 40) + y * (-F(5, 112) + y * F(35, 1152))))
         )
-        x_asinh_x = graph.select_le(y, F(1, 100000000), series, x_asinh_x)
-        enhancement = 1 + beta_b88 / cx * y / (1 + gamma_b88 * beta_b88 * x_asinh_x)
-        term = -cx * density.pow(4 / 3) * enhancement
+        small = -cx * density_power - beta_b88 * sigma / (
+            density_power * (1 + gamma_b88 * beta_b88 * series)
+        )
+        gradient_norm = sigma.pow(0.5)
+        denominator = density_power + gamma_b88 * beta_b88 * gradient_norm * (
+            graph.transcendental_unary("asinh", gradient_norm / density_power)
+        )
+        # Cancel the inverse density powers in the original enhancement before
+        # AD. At minority-spin nodes, separately differentiating rho^(4/3)
+        # and y=sigma*rho^(-8/3) loses AO-response accuracy through cancellation.
+        # This is the same positive-density energy, not a tangent/density floor.
+        ordinary = -cx * density_power - beta_b88 * sigma / denominator
+        term = graph.select_le(y, F(1, 100000000), small, ordinary)
         # The lazy branch avoids evaluating inverse powers of a zero spin
         # density; physical zero density carries zero same-spin gradient.
         term = graph.select_le(density, 0, 0, term)

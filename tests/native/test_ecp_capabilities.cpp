@@ -5,6 +5,7 @@
 #include <numbers>
 #include <stdexcept>
 
+#include "api/handles.hpp"
 #include "generativeqc/generativeqc.h"
 #include "integrals/ecp.hpp"
 #include "integrals/ecp_cuda.hpp"
@@ -12,6 +13,41 @@
 namespace {
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
+}
+
+void check_cuda_grid_admission() {
+  using namespace generativeqc::integrals;
+  std::string detail;
+  for (const auto grid : {std::array<unsigned, 2>{16, 8}, {512, 96}})
+    require(validate_ecp_cuda_grid(grid[0], grid[1], detail) == GENERATIVEQC_STATUS_SUCCESS,
+            "CUDA raw grid boundary rejected");
+  generativeqc_context context;
+  context.state.executed_backend = GENERATIVEQC_BACKEND_CUDA;
+  generativeqc_system system;
+  system.data.atoms = {{11, {0, 0, 0}, 10}};
+  system.data.shells = {{0, 0, {{0.7, 1.0}}}};
+  system.data.ecp_terms = {{0, -1, 2, 0.8, -2.0}};
+  for (const auto grid :
+       {std::array<unsigned, 2>{0, 0}, {15, 8}, {16, 7}, {513, 8}, {16, 97}, {1536, 192}}) {
+    for (bool derivatives : {false, true}) {
+      EcpData native_output{1, 1, {42}, {43}, {44}, {45}};
+      require(ecp_integrals_cuda(-1, system.data, grid[0], grid[1], derivatives, native_output,
+                                 detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "raw CUDA grid must reject before device selection");
+      require(native_output.nbf == 1 && native_output.ncoord == 1 &&
+                  native_output.local == std::vector<double>{42} &&
+                  native_output.nonlocal == std::vector<double>{43} &&
+                  native_output.local_derivative == std::vector<double>{44} &&
+                  native_output.nonlocal_derivative == std::vector<double>{45},
+              "rejected direct CUDA grid changed output");
+      std::vector<double> output(derivatives ? 8 : 2, 123.0);
+      require(generativeqc_system_ecp_integrals(&context, &system, grid[0], grid[1], derivatives,
+                                                output.data(), output.size()) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "public CUDA grid boundary not enforced");
+      for (double value : output) require(value == 123.0, "rejected C grid changed output");
+    }
+  }
 }
 
 void check_grid_wrapper() {
@@ -90,6 +126,9 @@ void check_cuda_not_built_stub() {
   require(generativeqc::integrals::ecp_integrals_cuda(0, system, 160, 32, false, output, detail) ==
               GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
           "CPU-only ECP CUDA stub lost not-implemented status");
+  require(generativeqc::integrals::ecp_integrals_cuda(0, system, 0, 0, false, output, detail,
+                                                      true) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "checked CUDA defaults must not be interpreted as a raw zero grid");
   require(detail.find("cuda.scalar") != std::string::npos &&
               detail.find("not built") != std::string::npos,
           "CPU-only ECP CUDA stub lost provider-specific diagnostics");
@@ -100,6 +139,7 @@ void check_cuda_not_built_stub() {
 
 int main() {
   try {
+    check_cuda_grid_admission();
     check_grid_wrapper();
     check_c_api();
 #if !GENERATIVEQC_HAS_CUDA

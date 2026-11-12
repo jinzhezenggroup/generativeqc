@@ -45,7 +45,7 @@ def full_range_uks(request: pytest.FixtureRequest) -> Iterator[tuple]:
         density_tolerance=1e-11,
         max_iterations=240,
     )
-    assert not calculator.capabilities.supported_second_order
+    assert calculator.capabilities.supported_second_order == {"hvp", "hessian"}
     try:
         yield calculator, method, representation
     finally:
@@ -144,6 +144,7 @@ def test_full_range_uks_raw_hessian_matches_independent_moving_grid_gradients(
             assert not result.diagnostics["public_calculator_endpoint"]
             assert not hessian.diagnostics["public_calculator_endpoint"]
             assert result.diagnostics["response_residual_norm"] < 2e-10
+            assert result.diagnostics["response_preconditioner"] == "spin-orbital-gap"
             assert result.diagnostics["nuclear_response_solves"] == 1
             assert result.diagnostics["displaced_scf_evaluations"] == 0
             assert result.diagnostics["pair_evaluations"] == 0

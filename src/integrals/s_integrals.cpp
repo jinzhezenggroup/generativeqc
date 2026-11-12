@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "generated_cpu_coulomb_derivative.hpp"
 #include "generated_eri_cpu.hpp"
 #include "generated_nuclear_repulsion.hpp"
 #include "generated_one_electron_st_cpu.hpp"
@@ -2366,6 +2367,7 @@ bool has_packaged_cpu_eri_shell_derivatives() noexcept {
 
 namespace {
 bool packaged_cpu_eri_shell_supported(unsigned angular_momentum) noexcept {
+  if (angular_momentum == 3) return generated_full_range_derivative_available;
   const auto expected = molecule::cartesian_count(angular_momentum);
   const auto available = static_cast<std::size_t>(std::count_if(
       std::begin(generated_stationary_dispatch::components),
@@ -2392,6 +2394,26 @@ namespace {
 Jet packaged_eri_derivative(const std::array<const core::Primitive*, 4>& primitives,
                             const std::array<const molecule::CartesianExpansionTerm*, 4>& terms,
                             const std::array<Vec3, 4>& centers) {
+  if (std::any_of(terms.begin(), terms.end(), [](const auto* term) {
+        return term->component[0] + term->component[1] + term->component[2] == 3;
+      })) {
+    std::array<double, 4> exponents{};
+    std::array<double, 12> positions{}, values{};
+    std::array<unsigned, 12> powers{};
+    for (std::size_t slot = 0; slot < terms.size(); ++slot) {
+      exponents[slot] = primitives[slot]->exponent;
+      for (std::size_t axis = 0; axis < 3; ++axis) {
+        positions[3 * slot + axis] = centers[slot][axis].value;
+        powers[3 * slot + axis] = terms[slot]->component[axis];
+      }
+    }
+    if (generativeqc_full_range_primitive_derivative_cpu(exponents.data(), positions.data(),
+                                                         powers.data(), values.data()) != 0)
+      throw std::runtime_error("generated full-range f-shell ERI derivative failed");
+    Jet derivative(0.0, 12);
+    std::copy(values.begin(), values.end(), derivative.derivative.begin());
+    return derivative;
+  }
   std::size_t component_index = 0;
   for (const auto* term : terms) {
     const auto label =
@@ -2481,13 +2503,23 @@ std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
                 for (const auto& el : ao_l) {
                   const std::array<const molecule::CartesianExpansionTerm*, 4> terms{&ei, &ej, &ek,
                                                                                      &el};
+                  const std::uint64_t recurrence_passes =
+                      packaged && std::any_of(terms.begin(), terms.end(),
+                                              [](const auto* term) {
+                                                return term->component[0] + term->component[1] +
+                                                           term->component[2] ==
+                                                       3;
+                                              })
+                          ? 3
+                          : 1;
                   for (const auto& pi : shells[0]->primitives)
                     for (const auto& pj : shells[1]->primitives)
                       for (const auto& pk : shells[2]->primitives)
                         for (const auto& pl : shells[3]->primitives) {
-                          if (evaluations == std::numeric_limits<std::uint64_t>::max())
+                          if (evaluations >
+                              std::numeric_limits<std::uint64_t>::max() - recurrence_passes)
                             throw std::overflow_error("weighted ERI primitive count overflow");
-                          ++evaluations;
+                          evaluations += recurrence_passes;
                           const auto derivative =
                               packaged
                                   ? packaged_eri_derivative({&pi, &pj, &pk, &pl}, terms, centers)

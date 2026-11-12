@@ -794,7 +794,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
     if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
         (!integrals::has_packaged_cpu_eri_shell_derivatives() ||
          std::any_of(system_.shells.begin(), system_.shells.end(),
-                     [](const auto& shell) { return shell.angular_momentum > 2; })))
+                     [](const auto& shell) { return shell.angular_momentum > 3; })))
       return false;
     const auto& spec = fock_.strategy().spec;
     if (execution_plan_.spin_channels != (spec.spin == scf::FockSpin::Restricted ? 1u : 2u))
@@ -1204,6 +1204,20 @@ class KsPreparedState final : public KsSingleOwnerPort {
       output.export_synchronizations = after.synchronizations - before.synchronizations;
     }
 #endif
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  generativeqc_status borrow_integral_system(const dft::CudaKsFinalStateToken& expected,
+                                             const core::System*& output, std::string& detail) {
+    output = nullptr;
+    dft::CudaKsFinalStateToken current;
+    const auto status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (current != expected) {
+      detail = "KS integral geometry has a stale final-state token";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    output = &system_;
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
@@ -3693,6 +3707,17 @@ class KsPreparedBatch final : public PreparedBatch,
       return items_[index].plan->read_derivative_sources(expected, output, detail);
     output = {};
     detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status borrow_integral_system(std::size_t index,
+                                             const dft::CudaKsFinalStateToken& expected,
+                                             const core::System*& output,
+                                             std::string& detail) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->borrow_integral_system(expected, output, detail);
+    output = nullptr;
+    detail = "KS batch item has no prepared integral-system owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 

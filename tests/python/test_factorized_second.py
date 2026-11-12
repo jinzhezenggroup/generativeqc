@@ -257,3 +257,5 @@ def test_factorized_emission_is_finite_and_host_only() -> None:
     assert "PySCF" not in source and "cupy" not in source
     with pytest.raises(ValueError, match="backend"):
         emit_factorized_second(backend="python")
+    with pytest.raises(ValueError, match="output"):
+        emit_factorized_second(output="automatic")

@@ -235,6 +235,24 @@ macro(generativeqc_register_host_generated_sources target)
          --enabled ${_generativeqc_stationary_dispatch_enabled}
     COMMENT "Generating native bindings to packaged stationary CPU derivatives")
 
+  set(_cpu_coulomb_derivative_outputs "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cpu_coulomb_derivative.hpp")
+  if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+    list(APPEND _cpu_coulomb_derivative_outputs "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cpu_coulomb_derivative.cpp")
+  endif()
+  generativeqc_register_generated_sources(
+    NAME generativeqc_cpu_coulomb_derivative_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cpu_coulomb_derivative.py"
+    OUTPUTS ${_cpu_coulomb_derivative_outputs}
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/range_exchange_cpu.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py"
+    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+         --enabled ${_generativeqc_stationary_dispatch_enabled}
+    COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
+    COMMENT "Packaging shared host full-range s/p/d/f primitive derivatives")
+
   set(_native_range_force_outputs "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_native_range_force.hpp")
   if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
     list(APPEND _native_range_force_outputs "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_native_range_force.cpp")
@@ -919,6 +937,38 @@ macro(generativeqc_register_host_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_ecp_kernels.py"
     OUTPUTS "${GENERATIVEQC_ECP_HEADER}"
     ARGS --output "${GENERATIVEQC_ECP_HEADER}")
+
+  set(GENERATIVEQC_ECP_GAUSSIAN_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/ecp_gaussian")
+  set(GENERATIVEQC_ECP_GAUSSIAN_SOURCES)
+  foreach(_first RANGE 0 5)
+    math(EXPR _maximum_second "8 - ${_first}")
+    if(_maximum_second GREATER _first)
+      set(_maximum_second "${_first}")
+    endif()
+    foreach(_second RANGE 0 ${_maximum_second})
+      foreach(_channel local projector0 projector1 projector2)
+        foreach(_scaled RANGE 0 1)
+          if(_channel STREQUAL "local" AND _scaled EQUAL 1)
+            continue()
+          endif()
+          list(APPEND GENERATIVEQC_ECP_GAUSSIAN_SOURCES
+            "${GENERATIVEQC_ECP_GAUSSIAN_DIRECTORY}/ecp_gaussian_${_first}_${_second}_${_channel}_${_scaled}.cpp")
+        endforeach()
+      endforeach()
+    endforeach()
+  endforeach()
+  generativeqc_register_generated_sources(
+    NAME generativeqc_ecp_gaussian_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_ecp_kernels.py"
+    OUTPUTS
+      "${GENERATIVEQC_ECP_GAUSSIAN_DIRECTORY}/generated_ecp_gaussian.hpp"
+      ${GENERATIVEQC_ECP_GAUSSIAN_SOURCES}
+    ARGS --gaussian-directory "${GENERATIVEQC_ECP_GAUSSIAN_DIRECTORY}"
+    COMMENT "Generating bounded analytic Gaussian ECP projectors and derivative shifts")
+  target_include_directories(${target} PRIVATE "${GENERATIVEQC_ECP_GAUSSIAN_DIRECTORY}")
+  set_source_files_properties(${GENERATIVEQC_ECP_GAUSSIAN_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-O1;-ffp-contract=off;-Wno-unused-parameter>")
 endmacro()
 
 macro(generativeqc_register_cuda_generated_sources target)

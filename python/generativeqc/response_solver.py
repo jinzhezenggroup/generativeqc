@@ -303,10 +303,59 @@ class DiagonalPreconditioner:
                 ) from error
         if not np.isfinite(gaps).all():
             raise ValueError("orbital gaps must be representable in FP64")
-        cutoff = _DIAGONAL_RELATIVE_THRESHOLD * max(float(np.max(np.abs(gaps))), 1.0)
-        if np.any(np.abs(gaps) <= cutoff):
+        return cls._from_gap_diagonal(layout.pack(gaps))
+
+    @classmethod
+    def from_spin_orbital_gaps(
+        cls, orbital_energies: typing.Any, occupied: tuple[int, int]
+    ) -> DiagonalPreconditioner | None:
+        """Pack alpha then beta occupied-major gaps without changing the operator.
+
+        Empty occupied or virtual spin spaces contribute no unknowns. A small
+        gap in either spin declines conditioning for the entire coupled solve;
+        the physical denominators and true-residual gate are never modified.
+        """
+        raw = np.asarray(orbital_energies)
+        if (
+            raw.ndim != 2
+            or raw.shape[0] != 2
+            or raw.dtype.kind not in "iuf"
+            or not np.isfinite(raw).all()
+        ):
+            raise ValueError("spin orbital energies must be a finite real [2,mo] panel")
+        if len(occupied) != 2 or any(
+            type(count) is not int or not 0 <= count <= raw.shape[1]
+            for count in occupied
+        ):
+            raise ValueError("spin occupied counts must lie within the orbital panel")
+        with np.errstate(over="raise", invalid="raise"):
+            try:
+                energies = np.asarray(raw, dtype=np.float64)
+                gaps = np.concatenate(
+                    [
+                        (values[count:][None, :] - values[:count, None]).reshape(-1)
+                        for values, count in zip(energies, occupied, strict=True)
+                    ]
+                )
+            except FloatingPointError as error:
+                raise ValueError(
+                    "spin orbital gaps must be representable in FP64"
+                ) from error
+        if not np.isfinite(gaps).all():
+            raise ValueError("spin orbital gaps must be representable in FP64")
+        return cls._from_gap_diagonal(gaps)
+
+    @classmethod
+    def _from_gap_diagonal(cls, diagonal: np.ndarray) -> DiagonalPreconditioner | None:
+        """Use the same global relative cutoff for every physical spin block."""
+        if not diagonal.size:
             return None
-        return cls(layout.pack(gaps))
+        cutoff = _DIAGONAL_RELATIVE_THRESHOLD * max(
+            float(np.max(np.abs(diagonal))), 1.0
+        )
+        if np.any(np.abs(diagonal) <= cutoff):
+            return None
+        return cls(diagonal)
 
     def apply(self, vector: typing.Any) -> typing.Any:
         raw = np.asarray(vector)

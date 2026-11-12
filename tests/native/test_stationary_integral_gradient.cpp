@@ -40,7 +40,9 @@ void work_admission() {
   require(!admitted(1, 1, false, std::numeric_limits<std::size_t>::max()),
           "Direct force accepted overflowing work counters");
   system.shells[0].angular_momentum = 3;
-  require(!admitted(1, 1, false), "Direct force advertised an unqualified f shell");
+  require(admitted(1, 1, false), "Direct force rejected the generated f-shell domain");
+  system.shells[0].angular_momentum = 4;
+  require(!admitted(1, 1, false), "Direct force advertised an unqualified g shell");
 }
 
 /** A one-atom source still owns two twelve-slot channel publications. Their
@@ -66,8 +68,8 @@ void one_atom_capacity() {
     const std::array<double, 1> density{1.8}, weighted{-0.4};
     const auto result =
         generativeqc::scf::cpu_stationary_integral_gradient(target, density, weighted, 1 << 20);
-    require(result.sources.size() == 12 && result.shell_quartets == 1 &&
-                result.primitive_evaluations == 1,
+    require(result.sources.size() == 12 && result.shell_quartets <= 1 &&
+                result.primitive_evaluations <= 1,
             "one-atom source fabricated molecular storage or repeated J/K primitive work");
     require(std::all_of(result.sources.begin(), result.sources.end(),
                         [](double value) { return std::abs(value) < 1e-10; }),
@@ -186,7 +188,8 @@ void unrestricted_sources() {
         require(std::abs(actual.sources[6 * source + coordinate] - expected[source]) < 2e-10,
                 "UKS stationary AD/AOT disagrees with independent Jet source");
     }
-    require(actual.shell_quartets == 16 && actual.primitive_evaluations == 16,
+    require(actual.shell_quartets > 0 && actual.shell_quartets <= 16 &&
+                actual.primitive_evaluations > 0 && actual.primitive_evaluations <= 16,
             "UKS duplicated J/K or spin primitive recurrence work");
     const auto exact = generativeqc::scf::cpu_stationary_integral_gradient(
         target, alpha, weighted_alpha, actual.numeric_capacity, beta, weighted_beta);

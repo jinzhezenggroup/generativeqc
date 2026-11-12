@@ -1,13 +1,23 @@
 """Low-level scalar-def2-ECP RKS curvature, without public domain promotion."""
 
+import json
+from dataclasses import replace
+from pathlib import Path
 from time import perf_counter
+from types import MappingProxyType
+from typing import Any
 
 import numpy as np
 import pytest
+from generativeqc import Atom
 from generativeqc._dft_gradient import StationaryKsState
 from generativeqc.composite_rks_hessian import CompositeRKSResponse, composite_rks_hvp
+from generativeqc.d3_hessian import compose_second_order
 from generativeqc.response_solver import GMRESOptions
 from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.method import DispersionCorrectionPrimitive
+from generativeqc_compiler.method._generated_parameters import d3_parameters
+from generativeqc_compiler.method.dispersion import D3Spec
 from test_global_hybrid_ecp_basis import canonical_records as _canonical_records
 from test_global_hybrid_ecp_forces import (
     independent_solver,
@@ -18,6 +28,87 @@ from test_integral_autodiff_second import require_native_library  # noqa: F401
 
 ecp_records = _canonical_records
 SOLVER = GMRESOptions(atol=1e-12, rtol=1e-11)
+D3_MANIFEST = json.loads(
+    (Path(__file__).parents[1] / "data/d3_second_order/ecp_manifest.json").read_text()
+)
+
+
+def assert_independent_d3_total(
+    electronic: Any,
+    method: Any,
+    atoms: list,
+    direction: np.ndarray,
+    independent_actions: list,
+    cache: Any,
+    record_property: Any,
+) -> None:
+    """Compose only after electronic closure, keeping elemental Cs distinct from ECP9.
+
+    The already-converged independent electronic actions are reused; no production
+    displacement or additional electronic response supplies the correction.
+    """
+    interface = pytest.importorskip("dftd3.interface")
+    specification = D3Spec(**d3_parameters("B3LYP-D3(BJ)"))
+    total_method = replace(
+        method,
+        primitives=(*method.primitives, DispersionCorrectionPrimitive(specification)),
+    )
+    native_atoms = tuple(Atom.from_value(atom) for atom in atoms)
+    positions = np.array([atom.position for atom in native_atoms])
+    numbers = np.array([atom.atomic_number for atom in native_atoms])
+    np.testing.assert_array_equal(numbers, D3_MANIFEST["elemental_atomic_numbers"])
+    total = compose_second_order(
+        electronic,
+        total_method,
+        native_atoms,
+        cache=cache,
+        max_workspace_bytes=64 << 20,
+    )
+    damping = interface.RationalDampingParam(
+        s6=specification.s6,
+        s8=specification.s8,
+        a1=specification.a1,
+        a2=specification.a2,
+        s9=specification.s9,
+    )
+    gates = D3_MANIFEST["gates"]
+    correction = total.value - electronic.value
+    assert np.max(abs(correction)) > 20 * gates["additive_source_abs"]
+    errors = []
+    for step, electronic_action in independent_actions:
+        gradients = [
+            interface.DispersionModel(
+                numbers, positions + sign * step * direction
+            ).get_dispersion(damping, grad=True)["gradient"]
+            for sign in (1, -1)
+        ]
+        finite = (gradients[0] - gradients[1]) / (2 * step)
+        np.testing.assert_allclose(
+            correction,
+            finite,
+            atol=gates["d3_hvp_abs_hartree_per_bohr2"],
+            rtol=0,
+        )
+        errors.append(
+            float(
+                np.max(abs(total.value - electronic_action - finite))
+                / np.linalg.norm(direction)
+            )
+        )
+    assert max(errors) < gates["normalized_total_hvp_abs_hartree_per_bohr2"]
+    assert set(total.components) == {*electronic.components, "d3_bj_two_body"}
+    np.testing.assert_allclose(
+        sum(total.components.values()), total.value, atol=2e-12, rtol=0
+    )
+    assert (
+        total.diagnostics["nuclear_response_solves"]
+        == electronic.diagnostics["nuclear_response_solves"]
+    )
+    assert total.diagnostics["dispersion"]["electronic_response_solves"] == 0
+    assert total.diagnostics["displaced_scf_evaluations"] == 0
+    assert not total.diagnostics["public_calculator_endpoint"]
+    record_property("independent_total_normalized_hvp_errors", errors)
+    record_property("composed_d3_hvp_diagnostics", json.dumps(total.diagnostics))
 
 
 def independent_moved_gradient(
@@ -94,6 +185,17 @@ def test_low_level_def2_cs_rks_hvp_matches_independent_moving_grid_gradients(
                 result = composite_rks_hvp(
                     operator, direction, cache=tmp_path, solver_options=SOLVER
                 )
+                electronic_method = operator.state._source.method_ir
+                result = replace(
+                    result,
+                    _diagnostics=MappingProxyType(
+                        {
+                            **result.diagnostics,
+                            "electronic_method_identity": electronic_method.identity,
+                            "geometry_identity": operator.state.identity.geometry_identity,
+                        }
+                    ),
+                )
                 record_property(
                     "whole_low_level_native_hvp_seconds", perf_counter() - started
                 )
@@ -145,7 +247,8 @@ def test_low_level_def2_cs_rks_hvp_matches_independent_moving_grid_gradients(
                     for index, (symbol, center) in enumerate(atoms)
                 }
                 errors = []
-                for step in (3e-3, 1e-3, 3e-4):
+                independent_actions = []
+                for step in D3_MANIFEST["difference_steps_bohr"]:
                     gradients = []
                     for sign in (1, -1):
                         moved = [
@@ -158,6 +261,7 @@ def test_low_level_def2_cs_rks_hvp_matches_independent_moving_grid_gradients(
                             independent_moved_gradient(raw, moved, atomic_rules)
                         )
                     finite = (gradients[0] - gradients[1]) / (2 * step)
+                    independent_actions.append((step, finite))
                     errors.append(
                         float(
                             np.max(abs(result.value - finite))
@@ -168,3 +272,15 @@ def test_low_level_def2_cs_rks_hvp_matches_independent_moving_grid_gradients(
                 assert max(errors) <= 1e-5
         finally:
             state._source.close()
+    assert_independent_d3_total(
+        result,
+        electronic_method,
+        atoms,
+        direction,
+        independent_actions,
+        tmp_path,
+        record_property,
+    )
+    record_property(
+        "whole_low_level_total_validation_seconds", perf_counter() - started
+    )

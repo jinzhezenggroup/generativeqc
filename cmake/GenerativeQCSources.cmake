@@ -21,6 +21,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_fleet_projection.cpp
     src/api/c_api_hf_physical_audit.cpp
     src/api/c_api_response.cpp
+    src/api/c_api_saddle.cpp
     src/api/c_api_df_gradient.cpp
     src/api/c_api_d3.cpp
     src/api/c_api_d4.cpp
@@ -334,6 +335,11 @@ function(generativeqc_add_host_object_component parent component)
 endfunction()
 
 function(generativeqc_add_cpu_component_object_targets target)
+  generativeqc_add_host_object_component(${target} generativeqc_ecp_gaussian_cpu
+    SOURCES
+      src/integrals/ecp_gaussian.cpp
+      ${GENERATIVEQC_ECP_GAUSSIAN_SOURCES}
+    CODEGEN generativeqc_ecp_codegen generativeqc_ecp_gaussian_codegen)
   generativeqc_add_host_object_component(${target} generativeqc_cpu_scf_solver
     SOURCES
       src/scf/reference/linalg.cpp

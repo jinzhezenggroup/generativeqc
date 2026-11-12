@@ -3579,6 +3579,70 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_saddle_evaluator_v1": {
+      "kind": "c-callback",
+      "header": "include/generativeqc/saddle.h",
+      "signature_sha256": "f3d8ee2fad68b278148dff2f2fc9e051c645d902615057677856b27d4465f9de",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_saddle_progress_v1": {
+      "kind": "c-callback",
+      "header": "include/generativeqc/saddle.h",
+      "signature_sha256": "82184e3d09fd43327e91239ff1b2a252b36d9f27ab34a28498b0e53092a59b27",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_saddle_cancellation_v1": {
+      "kind": "c-callback",
+      "header": "include/generativeqc/saddle.h",
+      "signature_sha256": "f33a083a96368f3c2899ef88f8814f364782d683b2835aa6f7d1d3932a177486",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_saddle_correct_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/saddle.h",
+      "signature_sha256": "88e5aa2e8a2aed7f7b6bf8d36c06f68f531816aac29c7598f88003e41a6d2fd4",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_system_position_integrals_cpu_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/electronic_properties.h",

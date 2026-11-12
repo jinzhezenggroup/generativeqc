@@ -61,6 +61,11 @@ def test_public_results_are_complete_detached_and_changed_geometry_is_fresh(
         assert action.diagnostics["displaced_scf_evaluations"] == 0
         assert action.diagnostics["response_residual_norm"] < 2e-10
         assert action.diagnostics["scf_fock_builds"] > 0
+        assert (
+            action.diagnostics["scf_density_sha256"]
+            == matrix.diagnostics["scf_density_sha256"]
+        )
+        assert action.diagnostics["scf_occupied_orbitals"] == (1,)
     assert np.vdot(other, first.value) == pytest.approx(
         np.vdot(DIRECTION, second.value), abs=2e-10
     )
@@ -75,6 +80,10 @@ def test_public_results_are_complete_detached_and_changed_geometry_is_fresh(
     ]
     changed = calculator.hessian_vector_product(shifted, DIRECTION, **options)
     assert changed.identity != first.identity
+    assert (
+        changed.diagnostics["scf_density_sha256"]
+        != first.diagnostics["scf_density_sha256"]
+    )
     assert (
         abs(changed.diagnostics["scf_energy"] - first.diagnostics["scf_energy"]) > 1e-7
     )
@@ -125,11 +134,72 @@ def test_public_failures_close_owners_and_do_not_poison_the_next_request(
     assert recovered.diagnostics["public_calculator_endpoint"]
 
 
-@pytest.mark.parametrize("method", ("b3lyp-uks", "pbe0-uks"))
-def test_unqualified_spin_does_not_inherit_restricted_admission(method: str) -> None:
-    """A qualified restricted graph does not promote an unrestricted consumer."""
+@pytest.mark.parametrize("method", ("b3lyp-uks",))
+def test_public_uks_raw_matrix_and_failure_recovery(
+    method: str, tmp_path: Path
+) -> None:
+    """Exercise nontrivial occupied/virtual spaces in both physical spin blocks."""
+    atoms = [
+        ("H", (0, 0.1, -1.6)),
+        ("H", (0.3, -0.2, 0)),
+        ("H", (-0.1, 0.4, 1.6)),
+    ]
+    direction = np.array(
+        [[0.02, -0.03, 0.1], [-0.04, 0.01, -0.02], [0.02, 0.02, -0.08]]
+    )
     calculator = Calculator(
-        method=method, device="cpu", ks_options=KsOptions(grid=GRID)
+        method=method,
+        device="cpu",
+        basis_representation="spherical",
+        ks_options=KsOptions(grid=GRID),
+        energy_tolerance=1e-13,
+        density_tolerance=1e-11,
+        max_iterations=240,
+    )
+    assert calculator.second_order_capabilities == {"hvp", "hessian"}
+    options = {"multiplicity": 2, "cache": tmp_path, "solver_options": SOLVER}
+    with pytest.raises(MemoryError, match="grid_budget_bytes"):
+        calculator.hessian_vector_product(
+            atoms, direction, grid_budget_bytes=1, **options
+        )
+    with pytest.raises(ResponseSolveError):
+        calculator.hessian_vector_product(
+            atoms,
+            direction,
+            multiplicity=2,
+            cache=tmp_path,
+            solver_options=GMRESOptions(max_workspace_bytes=1),
+        )
+    matrix = calculator.hessian(atoms, **options)
+    action = calculator.hessian_vector_product(atoms, direction, **options)
+    np.testing.assert_allclose(
+        matrix.matrix @ direction.ravel(), action.value.ravel(), atol=2e-8, rtol=0
+    )
+    np.testing.assert_allclose(matrix.matrix, matrix.matrix.T, atol=2e-8, rtol=0)
+    np.testing.assert_allclose(
+        matrix.matrix @ np.tile(np.eye(3), (3, 1)), 0, atol=2e-8, rtol=0
+    )
+    for result in (matrix, action):
+        assert result.diagnostics["public_calculator_endpoint"]
+        assert result.diagnostics["spin"] == "polarized"
+        assert result.diagnostics["displaced_scf_evaluations"] == 0
+        assert result.diagnostics["scf_fock_builds"] > 0
+        assert result.diagnostics["scf_occupied_orbitals"] == (2, 1)
+        assert result.diagnostics["scf_density_shape"] == (2, 3, 3)
+        assert result.diagnostics["scf_physical_residual"] < 2e-10
+        assert (
+            result.diagnostics["scf_density_sha256"]
+            == matrix.diagnostics["scf_density_sha256"]
+        )
+    calculator.clear_cache()
+    assert np.isfinite(matrix.matrix).all() and not matrix.matrix.flags.writeable
+    assert np.isfinite(action.value).all() and not action.value.flags.writeable
+
+
+def test_unqualified_pbe0_uks_stays_closed() -> None:
+    """A failed unrestricted point provider cannot inherit RKS admission."""
+    calculator = Calculator(
+        method="pbe0-uks", device="cpu", ks_options=KsOptions(grid=GRID)
     )
     assert not calculator.second_order_capabilities
     with pytest.raises(NotImplementedError, match="does not expose public hessian"):
@@ -151,17 +221,17 @@ def test_fitting_does_not_inherit_direct_admission(method: str) -> None:
 
 
 @pytest.mark.parametrize("method", ("B3LYP", "PBE0"))
-def test_semantic_admission_does_not_trust_an_identifier(method: str) -> None:
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_semantic_admission_does_not_trust_an_identifier(
+    method: str, spin: str
+) -> None:
     """Qualification follows the physical graph, including its resolved spin."""
-    graph = resolve_method(method)
+    graph = resolve_method(method, spin=spin)
     assert full_range_stationary_second_order_eligible(
         replace(graph, identifier="not-a-canonical-method-name")
-    )
+    ) is (spin == "unpolarized" or method == "B3LYP")
     assert not full_range_stationary_second_order_eligible(
-        replace(resolve_method("WB97M-V"), identifier=method)
-    )
-    assert not full_range_stationary_second_order_eligible(
-        resolve_method(method, spin="polarized")
+        replace(resolve_method("WB97M-V", spin=spin), identifier=method)
     )
 
 

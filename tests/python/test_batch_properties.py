@@ -105,7 +105,7 @@ def test_invalid_batch_properties_reject_before_execution(
 
 
 @pytest.mark.parametrize("method", ["lda-rks", "lda-uks", "pbe-rks", "pbe-uks"])
-@pytest.mark.parametrize("atomic_number, expected", [(1, True), (8, False)])
+@pytest.mark.parametrize("atomic_number, expected", [(1, True), (8, True)])
 def test_native_semilocal_force_admission_uses_actual_basis_shells(
     method: str, atomic_number: int, expected: bool
 ) -> None:
@@ -117,8 +117,8 @@ def test_native_semilocal_force_admission_uses_actual_basis_shells(
     assert max(shell.angular_momentum for shell in shells) == (
         1 if atomic_number == 1 else 3
     )
-    # Method-level capability is a candidate; the native prepared owner must
-    # still reject O's f shell instead of confusing it with H's s/p basis.
+    # H exercises the component AOT inventory; O exercises the generated
+    # full-range f-shell provider through the actual prepared basis.
     assert "forces" in calculator.capabilities.supported_properties
     with calculator.prepare_batch([atoms]) as batch:
         assert batch._native_dft_force_eligible() is expected

@@ -62,10 +62,16 @@ def test_public_ecp_force_analytic_and_reconverged_fd(
     record_property: typing.Any,
     tmp_path: typing.Any,
     d_shell: bool = False,
+    f_shell: bool = False,
 ) -> None:
     spin = int(method.endswith("uks"))
     atoms, record, mol = fixture(
-        spin=spin, representation=representation, d_shell=d_shell
+        spin=spin,
+        representation=representation,
+        d_shell=d_shell,
+        f_shell=f_shell,
+        f_on_h=f_shell,
+        compact_f_oracle=f_shell,
     )
     charge, multiplicity = mol.charge, mol.spin + 1
     # Exercise serialized spherical ECP data through the real public endpoint.
@@ -94,9 +100,28 @@ def test_public_ecp_force_analytic_and_reconverged_fd(
     ):
         energy = batch.execute(strict=True, properties=("energy",)).items[0]
         assert energy.forces is None
+        if f_shell:
+            replay = batch.execute(strict=True).items[0]
+            np.testing.assert_allclose(replay.forces, result.forces, atol=2e-9, rtol=0)
         state = StationaryKsState.from_native(batch, basis)
         try:
-            expected_energy, gradient = reference(mol, state, method)
+            expected_energy, gradient, independent = reference(
+                mol, state, method, return_mean_field=True
+            )
+            if f_shell:
+                density = np.asarray(independent.make_rdm1())
+                if density.ndim == 2:
+                    density = density[None]
+                if representation == "cartesian":
+                    scale = np.sqrt(np.diag(independent.get_ovlp()))
+                    density = density * scale[:, None] * scale[None, :]
+                np.testing.assert_allclose(state.density, density, atol=2e-8, rtol=0)
+                assert (
+                    np.linalg.norm(
+                        independent.get_grad(independent.mo_coeff, independent.mo_occ)
+                    )
+                    < 2e-9
+                )
         finally:
             state._source.close()
     assert abs(result.energy - expected_energy) < 2e-8
@@ -126,7 +151,7 @@ def test_public_ecp_force_analytic_and_reconverged_fd(
         errors.append(abs(-(energies[0] - energies[1]) / (2 * step) - projection))
     assert max(errors) < 2e-7
     record_property("fd_errors", errors)
-    if representation == "spherical" and not d_shell:
+    if representation == "spherical" and not (d_shell or f_shell):
         # s/p real spherical and Cartesian spaces are equivalent, but public
         # normalized AO ordering/representation identities remain distinct.
         from dataclasses import replace
@@ -617,15 +642,102 @@ def test_ecp_force_admission_uses_prepared_hybrid_program(
             batch.execute(properties=("energy", "forces"))
 
 
-def test_cpu_f_ecp_forces_rejected_by_prepared_owner(monkeypatch: typing.Any) -> None:
-    atoms, record, _ = fixture(f_shell=True)
+@pytest.mark.parametrize(
+    "method", ["lda-rks", "pbe-rks", "b3lyp-rks", "lda-uks", "pbe-uks", "b3lyp-uks"]
+)
+@pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+def test_cpu_f_ecp_forces_owned_by_prepared_provider(
+    method: str,
+    representation: str,
+    monkeypatch: pytest.MonkeyPatch,
+    record_property: typing.Any,
+    tmp_path: Path,
+) -> None:
+    """Check both-center orbital f forces against independent analytic/FD oracles."""
+    from generativeqc.batch import PreparedBatch
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
+        pytest.fail("native f-shell ECP forces reached the compatibility consumer")
+
+    monkeypatch.setattr(PreparedBatch, "_public_dft_cpu_force", forbidden)
+    test_public_ecp_force_analytic_and_reconverged_fd(
+        method, representation, record_property, tmp_path, f_shell=True
+    )
+
+
+def test_cpu_f_ecp_default_requires_native_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An old provider keeps energy-only defaults and cannot enter the s/p/d bridge."""
+    from generativeqc.batch import PreparedBatch
+
+    atoms, record, _ = fixture(f_shell=True, f_on_h=True, compact_f_oracle=True)
     calc = calculator(record)
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("unqualified f-shell forces reached the compatibility consumer")
+        pytest.fail("unqualified f-shell ECP reached the compatibility consumer")
 
+    monkeypatch.setattr(PreparedBatch, "_public_dft_cpu_force", forbidden)
     with calc.prepare_batch([atoms]) as batch:
-        assert not batch._native_dft_force_eligible()
-        monkeypatch.setattr(batch, "_public_dft_cpu_force", forbidden)
-        with pytest.raises(ValueError, match="forces"):
-            batch.execute(properties=("energy", "forces"))
+        monkeypatch.setattr(
+            batch._library, "generativeqc_ks_batch_supported_properties_v1", None
+        )
+        assert batch.execute(strict=True).items[0].forces is None
+        with pytest.raises(ValueError, match="does not support properties: forces"):
+            batch.execute(strict=True, properties=("energy", "forces"))
+        assert calc.singlepoint(atoms).forces is None
+        with pytest.raises(ValueError, match="does not support properties: forces"):
+            calc.singlepoint(atoms, properties=("energy", "forces"))
+
+
+def test_cpu_f_ecp_forces_do_not_reuse_an_energy_only_resource_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A native force promotion must reserve and retain its larger resource plan."""
+    atoms, record, _ = fixture(f_shell=True, f_on_h=True, compact_f_oracle=True)
+    estimator = calculator(record)
+    energy_plan = estimator.estimate_resources([atoms], properties=("energy",))
+    force_plan = estimator.estimate_resources(
+        [atoms], properties=("energy", "forces")
+    ).require_feasible()
+    assert force_plan.requests[0].identity.observables == ("energy", "forces")
+    assert force_plan.peak_bytes["host"] > energy_plan.peak_bytes["host"]
+    calc = calculator(
+        record,
+        resource_budget=ResourceBudget(host_bytes=energy_plan.peak_bytes["host"]),
+    )
+    with calc.prepare_batch([atoms]) as batch:
+        assert batch._native_dft_force_eligible()
+        assert batch.resource_plan.requests[0].identity.observables == ("energy",)
+
+        def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
+            pytest.fail("unbudgeted f-shell force reached native execution")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(batch._library, "generativeqc_batch_execute", forbidden)
+            with pytest.raises(MemoryError):
+                batch.execute(strict=True)
+            with pytest.raises(MemoryError):
+                batch.execute(strict=True, properties=("energy", "forces"))
+            with pytest.raises(MemoryError):
+                calc.singlepoint(atoms)
+        energy = batch.execute(strict=True, properties=("energy",)).items[0]
+        assert energy.converged and energy.forces is None
+    with estimator.prepare_batch([atoms], resource_plan=force_plan) as batch:
+        assert batch.execute(strict=True, properties=("energy",)).items[0].converged
+        assert batch.execute(strict=True, properties=("energy",)).items[0].converged
+        assert batch.resource_plan.requests[0].identity.observables == (
+            "energy",
+            "forces",
+        )
+    bounded = calculator(record, resource_budget=ResourceBudget(host_bytes=2 << 30))
+    with bounded.prepare_batch([atoms]) as batch:
+        result = batch.execute(strict=True).items[0]
+        assert result.converged and np.isfinite(result.forces).all()
+        assert batch.resource_plan.requests[0].identity.observables == (
+            "energy",
+            "forces",
+        )
+        assert (
+            batch.execute(strict=True, properties=("energy",)).items[0].forces is None
+        )
