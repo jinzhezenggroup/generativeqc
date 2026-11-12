@@ -468,6 +468,8 @@ compiled function**. `compiled.compilation_info()` then exposes
 `source_native_singlepoint`, `source_result_publication`,
 `source_diagnostics`, `tensor_snapshot_binding`,
 `tensor_build_cold`, `molecular_dispatch`, and `tensor_execute`.
+`source_input_scan` includes the cold live-input scan/request construction or
+the warm lookup of cached immutable dispatch requirements.
 `molecular_dispatch` includes its nested source stages, so do **not** sum all
 stage totals as if they were disjoint. Timings use CPU wall clocks around
 synchronous calls and are **not** CUDA-event/kernel measurements.
