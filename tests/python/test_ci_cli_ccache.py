@@ -34,6 +34,9 @@ def _fake_tools(tmp_path: Path, failure: str = "") -> dict[str, str]:
         "os.environ.get('CCACHE_SLOPPINESS')]) + '\\n')\n"
         "if tool == 'cmake':\n"
         "    stage = 'build' if '--build' in args else 'configure'\n"
+        "    if stage == 'build':\n"
+        "        names = ['CCACHE_PREFIX', 'CCACHE_PREFIX_CPP', 'GENERATIVEQC_CI_COMPILE_TRACE_DIR']\n"
+        "        pathlib.Path(os.environ['TRACE_CONFIG']).write_text(json.dumps({name: os.environ.get(name) for name in names}))\n"
         "    if stage == os.environ['FAIL_STAGE']:\n"
         "        sys.exit(23)\n"
         "elif '--show-stats' in args and '--verbose' in args:\n"
@@ -54,6 +57,8 @@ def _fake_tools(tmp_path: Path, failure: str = "") -> dict[str, str]:
         "CALLS": str(tmp_path / "calls.jsonl"),
         "FAIL_STAGE": failure,
         "GITHUB_OUTPUT": str(tmp_path / "outputs.txt"),
+        "TRACE_CONFIG": str(tmp_path / "trace_config.json"),
+        "RUNNER_TEMP": str(tmp_path),
     }
 
 
@@ -123,6 +128,15 @@ def test_cli_ci_configures_non_pch_strict_caching_and_preserves_failures(
         if failure == "configure"
         else [["--build", "--preset", preset_name, "--parallel", "2"]]
     )
+    trace_config = tmp_path / "trace_config.json"
+    if builds:
+        assert json.loads(trace_config.read_text()) == {
+            "CCACHE_PREFIX": str(tmp_path / "tools/ci_compile_trace.py"),
+            "CCACHE_PREFIX_CPP": str(tmp_path / "tools/ci_compile_trace.py"),
+            "GENERATIVEQC_CI_COMPILE_TRACE_DIR": str(tmp_path / "cli-compile-traces"),
+        }
+    else:
+        assert not trace_config.exists()
 
 
 def test_cli_verbose_statistics_include_uncacheable_reasons(tmp_path: Path) -> None:

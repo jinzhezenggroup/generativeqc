@@ -21,6 +21,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+if __package__:
+    from . import ci_compile_trace
+else:
+    import ci_compile_trace
+
 if TYPE_CHECKING:
     from types import FrameType
     from typing import TextIO
@@ -28,6 +33,8 @@ if TYPE_CHECKING:
 MAX_SAMPLES = 512  # 30-second samples cover the existing 210-minute job budget.
 MAX_PROCESSES = 4096
 MAX_RECORD_BYTES = 4096
+MAX_COMPILER_DETAILS = 4
+MAX_COMPILER_ANCESTORS = 16
 COMPILERS = frozenset(
     {"nvcc", "cicc", "ptxas", "fatbinary", "cc1", "cc1plus", "clang", "clang++", "lto1"}
 )
@@ -38,8 +45,46 @@ def _read(path: Path, limit: int = 4096) -> str:
         return stream.read(limit)
 
 
-def snapshot(proc: Path = Path("/proc"), disk: Path = Path(".")) -> dict[str, object]:
-    """Read allowlisted counters only, never argv, environment or arbitrary text."""
+def compiler_source(
+    pid: int, proc: Path, traces: Path, sampled_start: int | None
+) -> str | None:
+    """Match a live numeric ancestry chain to a validated cache-prefix record."""
+    if sampled_start is None:
+        return None
+    for depth in range(MAX_COMPILER_ANCESTORS):
+        if pid <= 1:
+            break
+        try:
+            parent, started = ci_compile_trace.process_identity(proc / str(pid))
+        except (OSError, ValueError, IndexError):
+            break
+        if depth == 0 and started != sampled_start:
+            return None
+        try:
+            record = json.loads(_read(traces / f"{pid}.json", 512))
+            source = record["source"]
+            if (
+                type(record["start_ticks"]) is int
+                and record["start_ticks"] == started
+                and isinstance(source, str)
+                and ci_compile_trace.public_source(
+                    ci_compile_trace.ROOT / source, ci_compile_trace.ROOT
+                )
+                == source
+            ):
+                return source
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        pid = parent
+    return None
+
+
+def snapshot(
+    proc: Path = Path("/proc"),
+    disk: Path = Path("."),
+    traces: Path | None = None,
+) -> dict[str, object]:
+    """Read counters and optional public-source attribution, never argv/environment."""
     result: dict[str, object] = {}
     try:
         wanted = {"MemTotal", "MemAvailable", "SwapTotal", "SwapFree"}
@@ -79,6 +124,7 @@ def snapshot(proc: Path = Path("/proc"), disk: Path = Path(".")) -> dict[str, ob
         result["workspace_disk_bytes"] = None
     try:
         count = total = peak = skipped = 0
+        largest = []
         truncated = False
         pagesize = os.sysconf("SC_PAGE_SIZE")
         with os.scandir(proc) as entries:
@@ -90,7 +136,14 @@ def snapshot(proc: Path = Path("/proc"), disk: Path = Path(".")) -> dict[str, ob
                     continue
                 try:
                     path = Path(entry.path)
-                    if _read(path / "comm", 64).strip() not in COMPILERS:
+                    started = None
+                    if traces is not None:
+                        try:
+                            _, started = ci_compile_trace.process_identity(path)
+                        except (OSError, ValueError, IndexError):
+                            pass
+                    compiler = _read(path / "comm", 64).strip()
+                    if compiler not in COMPILERS:
                         continue
                     resident = int(_read(path / "statm", 256).split()[1]) * pagesize
                     if resident < 0:
@@ -98,6 +151,9 @@ def snapshot(proc: Path = Path("/proc"), disk: Path = Path(".")) -> dict[str, ob
                     count += 1
                     total += resident
                     peak = max(peak, resident)
+                    if traces is not None:
+                        largest.append((resident, int(entry.name), compiler, started))
+                        largest = sorted(largest, reverse=True)[:MAX_COMPILER_DETAILS]
                 except (OSError, ValueError, IndexError):
                     skipped += 1  # Includes processes exiting during sampling.
         result["host_compiler_rss_bytes"] = {
@@ -107,6 +163,16 @@ def snapshot(proc: Path = Path("/proc"), disk: Path = Path(".")) -> dict[str, ob
             "unreadable_processes": skipped,
             "scan_truncated": truncated,
         }
+        if traces is not None:
+            result["largest_compiler_processes"] = [
+                {
+                    "pid": pid,
+                    "compiler": compiler,
+                    "rss_bytes": resident,
+                    "source": compiler_source(pid, proc, traces, started),
+                }
+                for resident, pid, compiler, started in largest
+            ]
     except (OSError, ValueError, AttributeError):
         result["host_compiler_rss_bytes"] = None
     return result
@@ -115,9 +181,12 @@ def snapshot(proc: Path = Path("/proc"), disk: Path = Path(".")) -> dict[str, ob
 class Sampler:
     """No subprocesses, unbounded log growth, or required diagnostic output."""
 
-    def __init__(self, interval: float, stream: TextIO) -> None:
+    def __init__(
+        self, interval: float, stream: TextIO, traces: Path | None = None
+    ) -> None:
         self.interval = interval
         self.fd = stream.fileno()
+        self.traces = traces
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
 
@@ -128,7 +197,7 @@ class Sampler:
                 record = {
                     "sample": index,
                     "elapsed_seconds": round(time.monotonic() - started, 3),
-                    **snapshot(),
+                    **(snapshot(traces=self.traces) if self.traces else snapshot()),
                 }
                 line = "CI_HOST_RESOURCES " + json.dumps(record, allow_nan=False) + "\n"
                 if len(line.encode()) > MAX_RECORD_BYTES or self.stop.is_set():
@@ -148,7 +217,7 @@ class Sampler:
             self.thread.join(timeout=1)
 
 
-def run(command: list[str], interval: float = 30.0) -> int:
+def run(command: list[str], interval: float = 30.0, traces: Path | None = None) -> int:
     """Preserve argv, environment, I/O and shell-style exit/signal status."""
     sampler = None
     process = None
@@ -167,7 +236,7 @@ def run(command: list[str], interval: float = 30.0) -> int:
         for signum in (signal.SIGINT, signal.SIGTERM):
             previous[signum] = signal.signal(signum, forward)
         try:
-            sampler = Sampler(interval, sys.stdout)
+            sampler = Sampler(interval, sys.stdout, traces)
             sampler.thread.start()
         except Exception:  # noqa: BLE001, S110 - optional diagnostics cannot skip the build
             pass
@@ -191,6 +260,7 @@ def run(command: list[str], interval: float = 30.0) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--interval-seconds", type=float, default=30.0)
+    parser.add_argument("--compile-traces", type=Path)
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
@@ -199,7 +269,7 @@ def main() -> int:
     if not math.isfinite(args.interval_seconds) or args.interval_seconds < 0.05:
         parser.error("interval must be finite and at least 0.05 seconds")
     try:
-        return run(command, args.interval_seconds)
+        return run(command, args.interval_seconds, args.compile_traces)
     except FileNotFoundError:
         return 127
     except OSError:

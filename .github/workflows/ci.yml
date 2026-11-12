@@ -2306,7 +2306,12 @@ jobs:
             -DGENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE="$RUNNER_TEMP/stationary-aot-source-cache" \
             -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
           # Flush bounded host pressure samples before a runner loss can hide them.
-          python3 tools/ci_host_resources.py -- \
+          # Cache-prefix records attribute live compiler descendants without argv dumps.
+          GENERATIVEQC_CI_COMPILE_TRACE_DIR="$RUNNER_TEMP/cli-compile-traces" \
+          CCACHE_PREFIX="$PWD/tools/ci_compile_trace.py" \
+          CCACHE_PREFIX_CPP="$PWD/tools/ci_compile_trace.py" \
+          python3 tools/ci_host_resources.py \
+            --compile-traces "$RUNNER_TEMP/cli-compile-traces" -- \
             cmake --build --preset cuda-release-cli --parallel 2
       - name: Report completed CLI Ninja command timings
         if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outcome != '' && steps.native_cli_build.outcome != 'skipped'

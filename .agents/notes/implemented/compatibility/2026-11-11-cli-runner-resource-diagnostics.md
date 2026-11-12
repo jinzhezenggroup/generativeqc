@@ -95,3 +95,9 @@ individual translation-unit memory only with further measured evidence; preserve
 the failed attempts and do not relax release flags or numerical gates.
 
 Reference: https://github.com/jinzhezenggroup/generativeqc/actions/runs/43022943858/job/130530443024
+
+The later cap-2 attempt again measured severe pressure, this time dominated by
+one compiler process. The [2026-11-12 source-attribution decision](2026-11-12-cli-compiler-source-attribution.md)
+extends the original counters-only output with narrowly validated public source
+paths and fixed compiler categories; it preserves the original privacy boundary
+against arbitrary command lines/environments and does not claim a memory fix.
