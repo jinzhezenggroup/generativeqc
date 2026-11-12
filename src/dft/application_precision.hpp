@@ -4,6 +4,8 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
+#include <stdexcept>
 
 #include "dft/cuda_stationary_binding.hpp"
 #include "dft/semilocal_family.hpp"
@@ -187,8 +189,8 @@ inline bool admit_application_df_xc_budget(const std::array<double, 3>& allowanc
 }
 
 /** Share fixed FP64 linear-operator anchors independently of the public profile.
- * Strict callers must explicitly opt in; budget-qualified outer solves keep
- * their existing automatic floor. Neither route admits new mixed arithmetic.
+ * Both routes require explicit opt-in pending common endpoint qualification.
+ * Neither route admits new mixed arithmetic.
  * Complete targets still rebuild physical operators, and ledger/chunk owners
  * retain their bounded incumbent storage plan. */
 inline bool admit_fixed_anchor_delta(bool strict_fp64, bool budget_fock, bool budget_stationarity,
@@ -200,13 +202,13 @@ inline bool admit_fixed_anchor_delta(bool strict_fp64, bool budget_fock, bool bu
          spins == 1 && vv10 && !resource_ledger && chunk_width == 1;
 }
 
-/** Profitability is separate from scientific eligibility and resource admission.
- * Retain the lower floor established by complete endpoints, not an upper bound
- * tied to measured sizes. Smaller eligible owners retain opt-in; membership is
- * no per-call speed or observable-error guarantee. */
-inline bool default_fixed_anchor_delta(bool budget_fock, bool budget_stationarity,
-                                       std::size_t aos) noexcept {
-  return budget_fock && budget_stationarity && aos >= 192;
+/** Keep optional FP64 reuse explicit for every profile until a common default
+ * has complete endpoint qualification. Validate requests even for an ineligible
+ * owner, so a typo cannot silently select a different execution policy. */
+inline bool select_fixed_anchor_delta(bool eligible, const char* selection) {
+  if (selection && std::strcmp(selection, "0") != 0 && std::strcmp(selection, "1") != 0)
+    throw std::invalid_argument("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA accepts 0 or 1");
+  return eligible && selection && std::strcmp(selection, "1") == 0;
 }
 
 /** Independently qualified stationary RKS candidate at a strict final
@@ -257,14 +259,18 @@ inline std::uint64_t stationary_gradient_model_qualification(const CudaStationar
   return 0;
 }
 
-/** Narrow derivative arithmetic only after independent budget/shape admission.
- * A linked typed entry point is necessary, but never sufficient, evidence. */
-inline std::uint64_t application_gradient_qualification(const CudaStationaryBinding& binding,
-                                                        const std::array<double, 3>& allowances,
-                                                        std::size_t aos, std::size_t atoms,
-                                                        std::size_t maximum_angular) noexcept {
-  if (!binding.geometry_fp32 || !admit_application_gradient(allowances, aos, atoms, maximum_angular,
-                                                            binding.model.spin_blocks == 1))
+/** Share derivative-precision admission across execution, capacity and tile selection.
+ * Strict SCF arithmetic and a nonzero budget do not imply mixed derivatives:
+ * stationarity controls, a typed entry point and complete-model qualification
+ * must all admit them. A zero result retains the existing FP64 force owner. */
+inline std::uint64_t application_gradient_qualification(
+    const CudaStationaryBinding& binding, const std::array<double, 3>& allowances, std::size_t aos,
+    std::size_t atoms, std::size_t maximum_angular,
+    const std::array<double, 3>& controls) noexcept {
+  if (!admit_stationary_force_controls(controls[0], controls[1], controls[2], false) ||
+      !binding.geometry_fp32 ||
+      !admit_application_gradient(allowances, aos, atoms, maximum_angular,
+                                  binding.model.spin_blocks == 1))
     return 0;
   return stationary_gradient_model_qualification(binding, aos);
 }

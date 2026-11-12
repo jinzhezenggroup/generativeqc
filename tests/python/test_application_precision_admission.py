@@ -256,10 +256,24 @@ int main() {
                               std::uint64_t, std::uint64_t, char*, std::size_t) { return 0; };
   using generativeqc::dft::application_gradient_qualification;
   const auto qualify = [&] (unsigned aos) {
-    return application_gradient_qualification(binding, loose, aos, 12, 2);
+    return application_gradient_qualification(binding, loose, aos, 12, 2,
+                                               {1e-10, 1e-8, 1e-12});
   };
   binding.model = {1, 4, 1, 3, 0.75, 1.0, 0.25};
   assert(qualify(384) == 1);
+  // A budget alone cannot select mixed force scratch or exclude strict reuse.
+  assert(application_gradient_qualification(binding, {}, 96, 12, 2,
+                                              {1e-10, 1e-8, 1e-12}) == 0);
+  assert(application_gradient_qualification(binding, loose, 96, 12, 2,
+                                              {1e-9, 1e-5, 1e-12}) == 0);
+  for (unsigned index = 0; index < 3; ++index) {
+    for (const auto invalid : {0.0, -1.0, std::numeric_limits<double>::infinity(),
+                               std::numeric_limits<double>::quiet_NaN()}) {
+      std::array<double, 3> controls{1e-10, 1e-8, 1e-12};
+      controls[index] = invalid;
+      assert(application_gradient_qualification(binding, loose, 96, 12, 2, controls) == 0);
+    }
+  }
   binding.model = {1, 4, 1, 3, 1.0, 1.0, 0.0};
   assert(qualify(24) == 2 && qualify(96) == 2 && qualify(97) == 0);
   binding.model = {3, 1, 1, 3, 1.0, 1.0, 0.2};
