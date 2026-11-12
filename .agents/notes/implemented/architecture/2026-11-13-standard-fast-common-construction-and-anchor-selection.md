@@ -159,3 +159,10 @@ Common automatic-anchor qualification includes independent complete
 cold/warm/moved observables, real work/resource bounds and paired profitable
 endpoint measurements for both profiles. No constructor reuse or matching
 FP64 output alone supplies that performance evidence.
+
+## Superseding default-selection decision
+
+The [Fast-default retention decision](../performance/2026-11-12-retain-qualified-fast-anchor-default.md)
+preserves the previously qualified Fast automatic path while leaving Standard
+opt-in. It supersedes only the blanket default withdrawal described above. It does not relabel the historical qualification above or claim
+that existing HF/DF/moved-owner failures have been resolved.

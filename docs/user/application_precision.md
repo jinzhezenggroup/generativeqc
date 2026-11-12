@@ -33,8 +33,9 @@ budget. These decisions use the selected force qualification, not the mere
 presence of a budget. Mixed derivative scratch remains outside the strict fleet
 reservation; existing bounded admission, explicit tile overrides, complete-model
 checks and resource-constrained tile fallbacks still apply. VV10 fixed-anchor
-reuse has the same explicit opt-in policy in both profiles; a nonzero budget
-does not select it automatically.
+reuse shares implementation and explicit selection in both profiles. Qualified
+relaxed budget outer solves retain their automatic AO floor; strict owners stay
+opt-in. Budget presence alone is not sufficient admission.
 Equal FP64 arithmetic alone therefore does not establish identical
 internal schedules, work counts, memory requirements or endpoint cost.
 
@@ -174,10 +175,12 @@ counted once; replay reports mixed-source J/K work but no new recurrence work.
 
 For eligible Standard and Fast WB97M-V restricted exact-Direct solves,
 `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` explicitly selects fixed FP64 J/K/range-K
-anchors in the cold nonlocal outer schedule. Unset and `0` retain the incumbent
-route in both profiles, independently of the application budget and AO count.
-Automatic enablement requires common complete-endpoint qualification; the
-opt-in is not a claim of profitability for every eligible shape. Provisional
+anchors in the cold nonlocal outer schedule. Explicit `0` disables reuse.
+Unset preserves automatic reuse for eligible relaxed Fast budget outer solves
+at 192 or more AOs, with no fixed upper AO ceiling. Smaller eligible owners
+and strict Standard owners remain opt-in. The floor is not a measured-size
+whitelist or a claim of profitability for every larger shape. A common automatic
+policy still requires separate complete-endpoint qualification. Provisional
 initializer and frozen-VV10 iterations evaluate linear operators on the total
 current-minus-anchor density and reconstruct their full matrices in FP64.
 Every full target refreshes the anchor with full-density FP64 J/K; nonlinear

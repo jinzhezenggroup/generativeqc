@@ -3262,24 +3262,12 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
         encoding="utf-8"
     )
     batch = (repository / "python/generativeqc/batch.py").read_text(encoding="utf-8")
-    calculator_tree = ast.parse(calculator)
-    calculator_classes = [
-        node
-        for node in calculator_tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "Calculator"
-    ]
-    if len(calculator_classes) != 1:
-        raise RuntimeError("public Calculator owner is missing or ambiguous")
-    constructors = [
-        node
-        for node in calculator_classes[0].body
-        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
-    ]
-    if len(constructors) != 1:
-        raise RuntimeError("public Calculator constructor is missing or ambiguous")
+    from tools.generativeqc_validation.calculator_admission import force_admission_owner
+
+    admission = force_admission_owner(calculator)
     semilocal_assignments = [
         node
-        for node in ast.walk(constructors[0])
+        for node in ast.walk(admission)
         if isinstance(node, ast.Assign)
         and any(
             isinstance(target, ast.Name) and target.id == "semilocal_force"
@@ -3288,7 +3276,7 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
     ]
     hybrid_assignments = [
         node
-        for node in ast.walk(constructors[0])
+        for node in ast.walk(admission)
         if isinstance(node, ast.Assign)
         and any(
             isinstance(target, ast.Name) and target.id == "cuda_hybrid_force"
@@ -3297,7 +3285,7 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
     ]
     force_promotions = [
         node
-        for node in constructors[0].body
+        for node in admission.body
         if isinstance(node, ast.If)
         and any(
             isinstance(item, ast.Name) and item.id == "semilocal_force"

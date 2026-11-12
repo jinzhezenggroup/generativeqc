@@ -102,16 +102,9 @@ def test_wb97mv_cuda_force_gate_treats_auto_as_scf_component_policy() -> None:
     source = (
         Path(__file__).resolve().parents[2] / "python/generativeqc/calculator.py"
     ).read_text(encoding="utf-8")
-    owner = next(
-        node
-        for node in ast.parse(source).body
-        if isinstance(node, ast.ClassDef) and node.name == "Calculator"
-    )
-    constructor = next(
-        node
-        for node in owner.body
-        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
-    )
+    from tools.generativeqc_validation.calculator_admission import force_admission_owner
+
+    constructor = force_admission_owner(source)
     assignment = next(
         node
         for node in ast.walk(constructor)

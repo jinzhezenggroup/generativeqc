@@ -189,7 +189,7 @@ inline bool admit_application_df_xc_budget(const std::array<double, 3>& allowanc
 }
 
 /** Share fixed FP64 linear-operator anchors independently of the public profile.
- * Both routes require explicit opt-in pending common endpoint qualification.
+ * Strict owners require opt-in; qualified budget outer solves retain their default.
  * Neither route admits new mixed arithmetic.
  * Complete targets still rebuild physical operators, and ledger/chunk owners
  * retain their bounded incumbent storage plan. */
@@ -202,13 +202,15 @@ inline bool admit_fixed_anchor_delta(bool strict_fp64, bool budget_fock, bool bu
          spins == 1 && vv10 && !resource_ledger && chunk_width == 1;
 }
 
-/** Keep optional FP64 reuse explicit for every profile until a common default
- * has complete endpoint qualification. Validate requests even for an ineligible
- * owner, so a typo cannot silently select a different execution policy. */
-inline bool select_fixed_anchor_delta(bool eligible, const char* selection) {
+/** Preserve the qualified budget-outer default without promoting strict owners.
+ * Explicit selection remains shared. Validate it even for an ineligible owner,
+ * so a typo cannot silently select a different execution policy. */
+inline bool select_fixed_anchor_delta(bool eligible, bool budget_fock, bool budget_stationarity,
+                                      std::size_t aos, const char* selection) {
   if (selection && std::strcmp(selection, "0") != 0 && std::strcmp(selection, "1") != 0)
     throw std::invalid_argument("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA accepts 0 or 1");
-  return eligible && selection && std::strcmp(selection, "1") == 0;
+  return eligible && (selection ? std::strcmp(selection, "1") == 0
+                                : budget_fock && budget_stationarity && aos >= 192);
 }
 
 /** Independently qualified stationary RKS candidate at a strict final

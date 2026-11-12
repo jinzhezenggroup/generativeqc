@@ -1,6 +1,6 @@
 {
   "id": "ks.fast-fixed-anchor-delta",
-  "classification": "retained-opt-in",
+  "classification": "already-default",
   "controls": [
     "ks-runtime:GENERATIVEQC_KS_FIXED_ANCHOR_DELTA",
     "hf-runtime:GENERATIVEQC_KS_FIXED_ANCHOR_DELTA"
@@ -13,8 +13,8 @@
     "python/generativeqc/resources_hf.py",
     "src/dft/application_precision.hpp"
   ],
-  "rationale": "Standard and Fast share explicit opt-in for fixed FP64 J/K/range-K anchors in eligible WB97M-V restricted exact-Direct cold nonlocal outer solves. Unset and 0 keep the incumbent path for both profiles; 1 requests the same scientifically admitted bounded optimization, without a fixed AO ceiling. FP64 eligibility follows actual arithmetic rather than the presence of an application budget. The previous Fast-only automatic floor is withdrawn rather than promoting an incompletely qualified Standard default. This conservative shared policy makes no speedup claim and may give up previously measured Fast savings. Provisional linear operators consume total current-minus-anchor density; full targets refresh FP64 anchors and nonlinear XC/VV10 retain total density. Unsupported models, DF/UKS, warm solves, chunk or public resource-ledger owners and optional device-allocation failures retain their incumbent paths. Five FP64 matrices and one scalar remain charged and can be retired before forces without revoking the final physical state. Numerical acceptance gates are unchanged.",
-  "revisit_condition": "A common automatic policy requires matched Standard/Fast complete cold/warm/moved energy/force endpoints, independent oracles, semantic work counts, bounded resource/failure evidence and profitable endpoint measurements. Historical Standard-only or Fast-only measurements do not qualify a shared default. Preserve explicit rollback, strict full-target closure and force-phase optional-memory fallback.",
+  "rationale": "Standard and Fast share bounded fixed FP64 anchor implementation and explicit selection. Preserve the existing unset default only for scientifically eligible budget-Fock, budget-stationarity WB97M-V restricted exact-Direct cold VV10 owners at 192 or more AOs, without a fixed upper ceiling. Strict Standard and smaller eligible owners remain opt-in; explicit 0 disables both and explicit 1 cannot bypass model, precision, lifetime or resource admission. Missing qualification of a common default does not establish a defect in the existing Fast policy. Historical receipts retain their source and workload limits; this retention is not new numerical or performance qualification and does not resolve HF, DF or moved/fresh force failures. Five FP64 matrices and one scalar remain charged and bounded, with final physical closure and force-pressure retirement unchanged.",
+  "revisit_condition": "Change the existing default only with evidence addressing its admitted endpoint domain or an explicit accepted policy tradeoff. A common automatic policy still requires matched Standard/Fast complete cold/warm/moved observables, independent oracles, semantic work and resource bounds. Preserve explicit rollback and all numerical gates.",
   "evidence": [
     "docs/user/application_precision.md",
     ".agents/notes/implemented/architecture/2026-11-13-standard-fast-common-construction-and-anchor-selection.md",
@@ -27,6 +27,7 @@
     "benchmarks/results/fast-anchor-domain-20261019/README.md",
     "tests/python/test_fast_anchor_delta_controller.py",
     "tests/native/test_ks_cuda.cpp",
-    ".agents/notes/proposed/2026-11-05-strict-vv10-fixed-anchors.md"
+    ".agents/notes/proposed/2026-11-05-strict-vv10-fixed-anchors.md",
+    ".agents/notes/implemented/performance/2026-11-12-retain-qualified-fast-anchor-default.md"
   ]
 }

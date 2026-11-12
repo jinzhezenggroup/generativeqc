@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_fixed_anchor_admission(required_native_cxx: NativeCxx, tmp_path: Path) -> None:
-    """Share opt-in scientific guards without profile-specific automatic reuse."""
+    """Preserve the qualified budget default without promoting strict owners."""
     source = tmp_path / "admission.cpp"
     source.write_text(r"""
 #include <cassert>
@@ -26,14 +26,25 @@ int main() {
   using generativeqc::dft::semilocal_family_code;
   const auto wb = semilocal_family_code(SemilocalFamily::Wb97mv);
   for (const bool eligible : {false, true}) {
-    assert(!select_fixed_anchor_delta(eligible, nullptr));
-    assert(!select_fixed_anchor_delta(eligible, "0"));
-    assert(select_fixed_anchor_delta(eligible, "1") == eligible);
-    for (const auto invalid : {"", "auto", "yes", "2"}) {
-      bool rejected = false;
-      try { (void)select_fixed_anchor_delta(eligible, invalid); }
-      catch (const std::invalid_argument&) { rejected = true; }
-      assert(rejected);
+    for (const bool budget_fock : {false, true}) {
+      for (const bool budget_stationarity : {false, true}) {
+        for (const std::size_t aos : {0U, 24U, 96U, 191U, 192U, 193U, 512U, 8192U}) {
+          const auto selected = [&](const char* value) {
+            return select_fixed_anchor_delta(eligible, budget_fock, budget_stationarity,
+                                             aos, value);
+          };
+          assert(selected(nullptr) ==
+                 (eligible && budget_fock && budget_stationarity && aos >= 192));
+          assert(!selected("0"));
+          assert(selected("1") == eligible);
+          for (const auto invalid : {"", "auto", "yes", "2"}) {
+            bool rejected = false;
+            try { (void)selected(invalid); }
+            catch (const std::invalid_argument&) { rejected = true; }
+            assert(rejected);
+          }
+        }
+      }
     }
   }
   for (const std::size_t aos : {769U, 1024U, 1536U, 2048U, 4096U, 8192U}) {
