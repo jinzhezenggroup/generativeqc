@@ -642,11 +642,7 @@ def test_ecp_force_admission_uses_prepared_hybrid_program(
             batch.execute(properties=("energy", "forces"))
 
 
-@pytest.mark.parametrize(
-    "method", ["lda-rks", "pbe-rks", "b3lyp-rks", "lda-uks", "pbe-uks", "b3lyp-uks"]
-)
-@pytest.mark.parametrize("representation", ["cartesian", "spherical"])
-def test_cpu_f_ecp_forces_owned_by_prepared_provider(
+def check_cpu_f_ecp_forces_owned_by_prepared_provider(
     method: str,
     representation: str,
     monkeypatch: pytest.MonkeyPatch,

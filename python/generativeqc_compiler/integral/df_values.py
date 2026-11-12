@@ -286,6 +286,7 @@ def build_df_axis_moment(
     auxiliary_g_derivative: bool = False,
     auxiliary_h: bool = False,
     auxiliary_h_derivative: bool = False,
+    maximum_orbital: int = 3,
     states: set[tuple[int, int, int]] | None = None,
 ) -> tuple[Graph, Expr]:
     """Build one-axis Gaussian moments used by a bounded Rys value schedule.
@@ -304,10 +305,19 @@ def build_df_axis_moment(
     The h flags select the corresponding auxiliary-through-h domains: values
     need F11 and a single independent derivative raise needs F12. Metric-only
     first-center powers may reach five/six; orbital centers remain f/f.
+    ``maximum_orbital=4`` explicitly extends only that h domain to g/g/h:
+    values end at F13 and responses at F14. At most one orbital center can
+    carry the internally raised h power; a metric's first center may reach i.
     An optional diagnostic set collects the nonconstant recurrence states visited
     by this same builder, before expression simplification or backend CSE.
     """
     powers = (a, b, c)
+    if maximum_orbital not in (3, 4) or (
+        maximum_orbital == 4 and not (auxiliary_h or auxiliary_h_derivative)
+    ):
+        raise ValueError(
+            "orbital g requires the explicit auxiliary-through-h moment domain"
+        )
     maximum = (
         6
         if auxiliary_h_derivative
@@ -326,9 +336,9 @@ def build_df_axis_moment(
             or auxiliary_g_derivative
             or (auxiliary_h and auxiliary_h_derivative)
             or c > 5
-            or (b > (4 if auxiliary_h_derivative else 3))
-            or (a > (4 if auxiliary_h_derivative else 3) and b != 0)
-            or (a == 4 and b == 4)
+            or (b > maximum_orbital + int(auxiliary_h_derivative))
+            or (a > maximum_orbital + int(auxiliary_h_derivative) and b != 0)
+            or (auxiliary_h_derivative and a == b == maximum_orbital + 1)
         )
     elif auxiliary_g_derivative:
         invalid = (

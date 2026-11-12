@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from generativeqc_compiler.integral.df_cuda import (
+    df_program_inventory,
     emit_df_values_cpu,
     emit_df_values_cuda,
 )
@@ -25,7 +26,14 @@ SIGNATURES = (
     [a for a in product(range(5), repeat=2) if 4 in a]
     + [(a, b, 4) for a, b in product(range(4), repeat=2)]
     + [(0, 5), (4, 5), (5, 5), (0, 0, 5), (2, 1, 5), (3, 3, 5)]
+    + [(a, b, c) for a, b, c in product(range(5), range(5), range(6)) if 4 in (a, b)]
 )
+
+
+def test_full_df_value_inventory() -> None:
+    """The scientific inventory includes the entire emitted g/g/h domain."""
+    inventory = df_program_inventory()
+    assert len(inventory["programs"]) == 36 + 5 * 5 * 6
 
 
 @pytest.fixture(scope="module")
@@ -268,7 +276,7 @@ def test_all_added_cartesian_and_spherical_blocks(
     )
 
 
-@pytest.mark.parametrize("angular", [(4, 4), (3, 3, 4), (5, 5), (3, 3, 5)])
+@pytest.mark.parametrize("angular", [(4, 4), (3, 3, 4), (5, 5), (3, 3, 5), (4, 4, 5)])
 @pytest.mark.parametrize(
     "exponent_scale,separation_scale", [(0.02, 5), (20, 1), (1, 10)]
 )
@@ -290,12 +298,12 @@ def test_diffuse_tight_and_large_boys_argument(
     )
 
 
-def test_unsupported_orbital_g_and_auxiliary_i_fail_closed(
+def test_unsupported_orbital_h_and_auxiliary_i_fail_closed(
     value_probe: typing.Any,
 ) -> None:
     pytest.importorskip("pyscf")
     records = make_df_value_fixture((0, 0, 0)).records.copy()
-    records["angular"][:, 0, 0] = 4
+    records["angular"][:, 0, 0] = 5
     assert np.isnan(value_probe(records)).all()
     records["angular"][:, 0, 0] = 0
     records["angular"][:, 2, 0] = 6

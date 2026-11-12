@@ -27,7 +27,7 @@ namespace core {
 using CorrelationConvergence = generativeqc::core::CorrelationConvergence;
 struct Shell { unsigned angular_momentum=0; };
 struct System { bool df_supported=true; int electron_count=2; std::size_t nbf=2;
-  std::vector<Shell> shells{{4}}; };
+  std::vector<Shell> shells{{3}}; };
 }
 namespace molecule {
 std::size_t ao_count(const core::System& system) { return system.nbf; }
@@ -161,6 +161,17 @@ int main(int argc,char** argv) {
   if (mode == 0) descriptor.budget=79;
   if (mode == 1) descriptor.valid=false;
   if (mode == 2) execution.cuda=true;
+  if (mode == 13) {
+    execution.cuda=true;
+    system.shells={{4}};
+    try {
+      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,{},nullptr);
+      return 19;
+    } catch (const MethodError& error) {
+      return executions || allocations || cache ||
+          std::string(error.what()).find("full-DF reference") == std::string::npos ? 20 : 0;
+    }
+  }
   if (mode == 12) {
     execution.cuda=true;
     core::System auxiliary; auxiliary.shells={{5}};
@@ -284,7 +295,7 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         text=True,
         timeout=30,
     )
-    for mode in range(13):
+    for mode in range(14):
         result = subprocess.run(
             [str(executable), str(mode)],
             capture_output=True,

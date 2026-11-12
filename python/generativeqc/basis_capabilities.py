@@ -64,7 +64,15 @@ def basis_capability(
     values through g; native Hessian derivatives require their own linked closure.
     ``consumer="scf_df"`` admits full-range CUDA HF/KS fitting auxiliaries through h for
     values and first derivatives, using the bounded six-term nuclear sink.
-    Neither widens generic CUDA DF exports, orbital shells or higher derivatives.
+    ``consumer="full_df"`` selects closed-shell full-DF one-electron/three-center
+    orbital values and first derivatives through g, and fitting auxiliaries
+    through h. It does not register conventional ERIs, AO jets or higher orders.
+    These scoped consumers never widen a different reference model's admission.
+
+    The report retains the selected ``consumer``, the largest supplied angular
+    momentum and the route's supported maximum, even when admission fails.
+    A supported maximum of ``None`` means no route is registered, not unlimited
+    angular momentum. These bounds do not qualify a complete molecular endpoint.
     """
     from .calculator import Atom
 
@@ -77,7 +85,24 @@ def basis_capability(
     reasons, rows = [], []
     maximum = LIMITS.get(backend, {}).get(operator, {}).get(derivative_order)
     if consumer is not None:
-        if (
+        full_df = (
+            consumer == "full_df"
+            and backend == "cuda"
+            and derivative_order in (0, 1)
+            and (
+                (
+                    role == "orbital"
+                    and operator
+                    in ("overlap", "kinetic", "nuclear_attraction", "df_three_center")
+                )
+                or (
+                    role == "auxiliary" and operator in ("df_metric", "df_three_center")
+                )
+            )
+        )
+        if full_df:
+            maximum = 4 if role == "orbital" else 5
+        elif (
             consumer not in ("correlation_df", "wb97mv_df_values", "scf_df")
             or backend != "cuda"
             or role != "auxiliary"
@@ -88,7 +113,8 @@ def basis_capability(
             raise ValueError(
                 "source-only consumer requires CUDA auxiliary DF values or qualified first derivatives"
             )
-        maximum = 5 if consumer == "scf_df" else 4
+        else:
+            maximum = 5 if consumer == "scf_df" else 4
     if maximum is None:
         reasons.append(
             f"{backend}/{operator}: derivative order {derivative_order} has no registered execution route"
@@ -172,6 +198,9 @@ def basis_capability(
         "derivative_order": derivative_order,
         "representation": mode,
         "role": role,
+        "consumer": consumer,
+        "max_angular_momentum": max((row[3] for row in rows), default=None),
+        "max_supported_angular_momentum": maximum,
         "shells_checked": len(rows),
         "reasons": reasons,
         "validated_element_model": False,

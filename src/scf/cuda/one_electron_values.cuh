@@ -31,6 +31,8 @@ struct OneElectronDeviceView {
   const double* ao_term_coefficients;
   const double* primitive_exponents;
   const double* primitive_coefficients;
+  /** Compact response owners use six terms for spherical g; Direct-HF stays at three. */
+  std::size_t ao_expansion_terms = 3;
 };
 
 /** Launch normalized S/Hcore, optionally retaining separate T/V diagnostics.

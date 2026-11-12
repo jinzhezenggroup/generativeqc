@@ -1,4 +1,4 @@
-"""Bounded CUDA DF values: Rys through f and moment polynomials for auxiliary g/h.
+"""Bounded CUDA DF values: Rys through f, polynomials through orbital g/auxiliary h.
 
 The operator/signature records own root counts and auxiliary roles. Scalar
 Gaussian moment DAGs are lowered by the common expression emitter; audited
@@ -23,10 +23,10 @@ from .rys import (
 
 
 def df_program_inventory() -> dict:
-    """Expose the Rys and auxiliary-g/h polynomial value domains explicitly."""
+    """Expose the complete orbital-g/auxiliary-h native value domain."""
     programs = []
     for family, count in (("coulomb_metric", 2), ("three_center_eri", 3)):
-        domains = (range(6),) * 2 if count == 2 else (range(4), range(4), range(6))
+        domains = (range(6),) * 2 if count == 2 else (range(5), range(5), range(6))
         for angular in product(*domains):
             nroots = sum(angular) // 2 + 1
             recurrence = "subset_wick" if max(angular) >= 4 else f"rys{nroots}"
@@ -198,7 +198,8 @@ __device__ __forceinline__ double three_center(
   const Vec3 difference{A.x - C.x + pa.x, A.y - C.y + pa.y, A.z - C.z + pa.z};
   const double decay = exp(-alpha * beta / p * (ab.x * ab.x + ab.y * ab.y + ab.z * ab.z));
   const unsigned total = order(a) + order(b) + order(c);
-  if (order(a) > 3 || order(b) > 3 || order(c) > 5) return NAN;
+  if (order(a) > 4 || order(b) > 4 || order(c) > 5) return NAN;
+  if (order(a) == 4 || order(b) == 4) return orbital_g::evaluate(alpha,A,a,beta,B,b,gamma,C,c);
   if (order(c) == 5) return auxiliary_h::evaluate(alpha,A,a,beta,B,b,gamma,C,c);
   if (order(c) == 4) return auxiliary_g::evaluate(alpha,A,a,beta,B,b,gamma,C,c);
   double result;
@@ -223,6 +224,7 @@ __device__ __forceinline__ double three_center(
             + emit_df_axis_cuda()
             + emit_df_g_values_cuda()
             + emit_df_g_values_cuda(maximum_auxiliary=5)
+            + emit_df_g_values_cuda(maximum_auxiliary=5, maximum_orbital=4)
             + suffix
         )
         .replace("__device__", "static __device__")

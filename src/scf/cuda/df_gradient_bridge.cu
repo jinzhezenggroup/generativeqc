@@ -32,6 +32,15 @@
 
 namespace generativeqc::scf {
 namespace {
+/** The six-term owner also selects the larger raised-moment response policy. */
+bool high_df_domain(const core::System& orbital, const core::System& auxiliary) {
+  for (const auto* system : {&orbital, &auxiliary})
+    if (std::any_of(system->shells.begin(), system->shells.end(),
+                    [](const auto& shell) { return shell.angular_momentum >= 4; }))
+      return true;
+  return false;
+}
+
 struct CudaFailure {
   cudaError_t status;
 };
@@ -575,8 +584,7 @@ CudaDfNuclearSink::CudaDfNuclearSink(int device, const core::System& orbital,
   for (std::size_t atom = 0; atom < atoms; ++atom)
     if (orbital.atoms[atom].position != auxiliary.atoms[atom].position)
       throw std::invalid_argument("DF nuclear sink requires matching physical atom coordinates");
-  const auto terms = std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
-                                 [](const auto& shell) { return shell.angular_momentum >= 4; })
+  const auto terms = high_df_domain(orbital, auxiliary)
                          ? molecule::kMaximumAuxiliaryAoExpansionTerms
                          : molecule::kMaximumAoExpansionTerms;
   long double primitives = 0;
@@ -616,7 +624,7 @@ CudaDfNuclearSink::CudaDfNuclearSink(int device, const core::System& orbital,
     DeviceGuard restore;
     check(cudaSetDevice(device));
     check(cudaStreamCreateWithFlags(&arena.stream, cudaStreamNonBlocking));
-    const auto host_o = pack(orbital, 3, terms), host_x = pack(auxiliary, 5, terms);
+    const auto host_o = pack(orbital, 4, terms), host_x = pack(auxiliary, 5, terms);
     std::vector<double> positions(3 * atoms);
     state->result.resize(positions.size());
     for (std::size_t atom = 0; atom < atoms; ++atom)
@@ -740,11 +748,9 @@ generativeqc_status execute_cuda_df_gradient(
       detail = "DF response weights must be finite";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-  const auto expansion_terms =
-      std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
-                  [](const auto& shell) { return shell.angular_momentum >= 4; })
-          ? molecule::kMaximumAuxiliaryAoExpansionTerms
-          : molecule::kMaximumAoExpansionTerms;
+  const auto expansion_terms = high_df_domain(orbital, auxiliary)
+                                   ? molecule::kMaximumAuxiliaryAoExpansionTerms
+                                   : molecule::kMaximumAoExpansionTerms;
   long double primitives = 0;
   for (const auto* system : {&orbital, &auxiliary})
     for (const auto& shell : system->shells) primitives += shell.primitives.size();
@@ -759,7 +765,7 @@ generativeqc_status execute_cuda_df_gradient(
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
-    const auto host_o = pack(orbital, 3, expansion_terms),
+    const auto host_o = pack(orbital, 4, expansion_terms),
                host_a = pack(auxiliary, 5, expansion_terms);
     std::vector<double> positions(3 * atoms), result(3 * atoms);
     for (std::size_t atom = 0; atom < atoms; ++atom)
@@ -865,11 +871,9 @@ generativeqc_status execute_cuda_df_gradient_tile(
     detail = "DF response weight tile exceeds its full tensor";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  const auto expansion_terms =
-      std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
-                  [](const auto& shell) { return shell.angular_momentum >= 4; })
-          ? molecule::kMaximumAuxiliaryAoExpansionTerms
-          : molecule::kMaximumAoExpansionTerms;
+  const auto expansion_terms = high_df_domain(orbital, auxiliary)
+                                   ? molecule::kMaximumAuxiliaryAoExpansionTerms
+                                   : molecule::kMaximumAoExpansionTerms;
   long double primitives = 0;
   for (const auto* system : {&orbital, &auxiliary})
     for (const auto& shell : system->shells) primitives += shell.primitives.size();
@@ -883,7 +887,7 @@ generativeqc_status execute_cuda_df_gradient_tile(
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
-    const auto host_o = pack(orbital, 3, expansion_terms),
+    const auto host_o = pack(orbital, 4, expansion_terms),
                host_a = pack(auxiliary, 5, expansion_terms);
     std::vector<double> positions(3 * atoms), result(3 * atoms);
     for (std::size_t atom = 0; atom < atoms; ++atom)
@@ -1177,11 +1181,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
   const bool auxiliary_h =
       std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
                   [](const auto& shell) { return shell.angular_momentum == 5; });
-  const bool auxiliary_high =
-      std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
-                  [](const auto& shell) { return shell.angular_momentum >= 4; });
-  if (auxiliary_h && range_omega != 0.0) {
-    detail = "h auxiliary DF response requires the full-range Coulomb operator";
+  const bool auxiliary_high = high_df_domain(orbital, auxiliary);
+  const bool orbital_g = std::any_of(orbital.shells.begin(), orbital.shells.end(),
+                                     [](const auto& shell) { return shell.angular_momentum == 4; });
+  if ((auxiliary_h || orbital_g) && range_omega != 0.0) {
+    detail = "g orbital/h auxiliary DF response requires the full-range Coulomb operator";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   const auto expansion_terms = auxiliary_high ? molecule::kMaximumAuxiliaryAoExpansionTerms
@@ -1196,7 +1200,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
-    const auto host_o = pack(orbital, 3, expansion_terms),
+    const auto host_o = pack(orbital, 4, expansion_terms),
                host_a = pack(auxiliary, 5, expansion_terms);
     std::vector<double> positions(3 * atoms), result(3 * atoms);
     for (std::size_t atom = 0; atom < atoms; ++atom)
@@ -1333,7 +1337,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // enabling its full-range screening, compact schedule or mixed precision.
     // H has no promoted shell schedule. Keep its complete response on the
     // independently qualified, bounded six-term polynomial panel consumer.
-    const bool shell_execution = !auxiliary_h &&
+    const bool shell_execution = !auxiliary_h && !orbital_g &&
                                  (range_omega == 0.0 || execution_control || promoted_range) &&
                                  execution != "generic" && device_metric && schedule == 0;
     mixed_shell = mixed_shell && shell_execution && !auxiliary_high && range_omega == 0.0;

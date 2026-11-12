@@ -66,7 +66,8 @@ def test_optional_transport_precedes_unchanged_required_compilation(job: str) ->
         assert "continue-on-error:" not in required
     else:
         assert '-DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"' in build
-        assert "cmake --build --preset cuda-release-cli --parallel 3" in build
+        # The executable CLI cache contract owns the effective parallelism cap.
+        assert "cmake --build --preset cuda-release-cli" in build
 
 
 def test_master_seed_and_release_share_sources_not_compiler_flag_identities() -> None:

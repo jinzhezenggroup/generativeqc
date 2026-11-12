@@ -650,8 +650,10 @@ generativeqc_status validate_mp2_system(generativeqc_method, const core::System&
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (std::any_of(system.shells.begin(), system.shells.end(),
-                  [](const auto& shell) { return shell.angular_momentum > 3; })) {
-    detail = "canonical MP2 reference/provider validation supports shells through f";
+                  [](const auto& shell) { return shell.angular_momentum > 4; })) {
+    detail =
+        "canonical MP2 orbital metadata supports through g; execution admission is "
+        "reference-specific";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2) {
@@ -675,6 +677,10 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation_impl(
   if (density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA ||
       density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_FULL_CUDA)
     return prepare_df_rccsdt_calculation(caps, context, system, d, auxiliary_basis);
+  if (std::any_of(system.shells.begin(), system.shells.end(),
+                  [](const auto& shell) { return shell.angular_momentum > 3; }))
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "orbital g MP2 requires the qualified CUDA full-DF reference");
   if (density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&

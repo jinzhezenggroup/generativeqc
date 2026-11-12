@@ -153,6 +153,15 @@ fi
 # expensive enough to earn an explicit shard.
 dist_mode=loadfile
 slow_paths=(
+  # Cold queue 43237971940: all 13 molecular Hessian cases passed but used
+  # 2120 worker-seconds in core-c; uccsd-forces finished in 273 seconds.
+  # Move the intact function-scoped suite to that worksteal lane, preserving
+  # its supplemental no-modulo-slot semantics and all scientific assertions.
+  tests/python/test_global_hybrid_molecular_hessian.py
+  # Run 43221290971: the new 181-case emitted-g oracle used 133 worker
+  # seconds in core-b. Keep its module fixture on the existing compiler
+  # loadfile lane, without inserting a slot into ordinary core ownership.
+  tests/python/test_one_electron_g_shared_values.py
   tests/python/test_cc_complete_gradient.py
   tests/python/test_cc_triples_response.py
   tests/python/test_ccsd_t_gradient_validation.py
@@ -160,6 +169,8 @@ slow_paths=(
   tests/python/test_dft_complete_cpu.py
   tests/python/test_ecp_stationary_cpu.py
   tests/python/test_ecp_public_cpu.py
+  tests/python/test_ecp_f_cartesian_cpu.py
+  tests/python/test_ecp_f_spherical_cpu.py
   tests/python/test_ecp_spd_cartesian_cpu.py
   tests/python/test_ecp_spd_spherical_cpu.py
   tests/python/test_ecp_stuttgart_dft.py
@@ -439,10 +450,8 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # otherwise moved 1292 of 2163 existing core files on #2977's base.
     # Keep the molecular matrix on worksteal, not a serial loadfile worker.
     # The d/f compile remains on core-a and lifecycle cases on core-b.
-    # Earlier run 42040437186 moved molecular curvature out of core-c before
-    # fresh-frontier scheduling. Current cold queue 42137083928 instead has
-    # core-c at 806s and core-b beyond 35min; restore only that supplemental
-    # owner below. Preserve all cases, historical modulo slots and cache trust.
+    # Molecular curvature now shares the lighter force lane; slow_paths keeps
+    # its former supplemental no-slot semantics without reassigning core files.
     declare -A supplemental_core_owner=(
       # Derivative AD adds nine files. In PR run 42410861878 their insertion
       # moved 1272 existing modules, including scalar-ECP HVPs from core-a
@@ -464,10 +473,6 @@ case "${GENERATIVEQC_CI_SHARD}" in
       [tests/python/test_factorized_host.py]=1
       [tests/python/test_global_hybrid_grid_second_order.py]=0
       [tests/python/test_global_hybrid_hessian_lifecycle.py]=1
-      # Queue 42137083928: core-b remained cold-overloaded after priority;
-      # this intact 1634-worker-second suite moves to core-c (806s total).
-      # Preserve its supplemental, non-modulo slot and all fresh case priority.
-      [tests/python/test_global_hybrid_molecular_hessian.py]=2
       [tests/python/test_native_semilocal_grid_second_order.py]=2
       [tests/python/test_orbital_gap_preconditioner.py]=2
       [tests/python/test_second_component_schedule.py]=0
@@ -483,9 +488,6 @@ case "${GENERATIVEQC_CI_SHARD}" in
       # Their native states/caches are function-scoped. Start the two cases on
       # separate existing worker frontiers; preserve their ordinary core owner.
       tests/python/test_global_hybrid_ecp_hessian.py
-      # Independent 103-136s curvature cases otherwise started at minute 28.
-      # Seed them across existing worker frontiers, never one serial tail.
-      tests/python/test_global_hybrid_molecular_hessian.py
       # Queue 42128769441 reached 99% with these fresh Hessian cases still
       # compiling at the 35-minute cap. Preserve their existing shard owners
       # and seed cases early across the same four worksteal workers.
@@ -559,12 +561,15 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # The intact RKS Hessian suite shares this existing lighter lane. Put it
     # first so its long water HVP starts before the complete force matrices;
     # worksteal keeps their independent function-scoped cases parallel.
+    # Molecular curvature follows RKS before the force matrices, retaining
+    # fresh function-scoped cases across the same four worker frontiers.
     # Corrected Lambda retains its fresh priority without sharing function fixtures.
     dist_mode=worksteal
     test_targets=()
     force_priorities=()
     for path in \
       tests/python/test_wb97mv_hessian.py \
+      tests/python/test_global_hybrid_molecular_hessian.py \
       tests/python/test_uccsd_gradient.py \
       tests/python/test_uccsd_t_gradient.py \
       tests/python/test_uccsd_t_lambda.py; do
@@ -654,10 +659,13 @@ case "${GENERATIVEQC_CI_SHARD}" in
     done
     ;;
   ecp-forces)
-    # Full d-force qualification exceeded the 20-minute job cap when
-    # serialized in one file. Keep every case, split representations
-    # across loadfile workers, and retain the existing job time cap.
+    # Run 43221290971 exhausted the 30-minute test deadline in the public
+    # file's serial f-force tail; the other workers had finished by 822 s.
+    # Keep all methods and oracles, with separate representation owners as
+    # for s/p/d below. Start the longest spherical unit on the first worker.
     test_targets=(
+      tests/python/test_ecp_f_spherical_cpu.py
+      tests/python/test_ecp_f_cartesian_cpu.py
       tests/python/test_ecp_public_cpu.py
       tests/python/test_ecp_spd_cartesian_cpu.py
       tests/python/test_ecp_spd_spherical_cpu.py
@@ -725,6 +733,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_dft_mp_v1_capacity.py
       tests/python/test_df_lambda_frontier.py
     )
+    # New qualification files have no historical core modulo slot. Keep this
+    # emitted-header fixture whole on loadfile, including tracked missing files.
+    if git ls-files --error-unmatch -- tests/python/test_one_electron_g_shared_values.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_one_electron_g_shared_values.py)
+    fi
     # Complete native/full-Fock modules retain
     # every numerical/compile/fault case on one loadfile worker per file.
     # Select tracked missing paths too, so incomplete checkouts fail closed.
@@ -784,9 +797,8 @@ if [[ "${GENERATIVEQC_CI_SHARD}" == "runtime-heavy" && "${GITHUB_EVENT_NAME}" !=
 fi
 
 if [[ "${GENERATIVEQC_CI_SHARD}" == "ecp-forces" && "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
-  # Run 42965903275: public CPU f-force cases progressed for 23 minutes,
-  # but their complete file started nearly four minutes late because xdist
-  # ranked cheap, high-count files first. It is already first in test_targets.
-  # Start it immediately without splitting module fixtures or removing gates.
+  # Start the measured f-force representation owners immediately instead of
+  # ranking cheap, high-count files first. Preserve each complete wrapper
+  # file and all cases; no fixtures or scientific gates are split.
   extra_args+=(--no-loadscope-reorder)
 fi

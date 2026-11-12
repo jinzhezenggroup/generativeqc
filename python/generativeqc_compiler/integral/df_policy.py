@@ -30,7 +30,7 @@ __device__ __forceinline__ Response convert(generated_df_auxiliary_g_derivatives
  * angular classes retain the smaller evaluator and its existing arithmetic. */
 __device__ __forceinline__ Response evaluate(bool metric,double alpha,Vec3 A,Angular a,
     double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c,double omega,bool responses) {
-  if(generated_df_derivatives::order(a)<=3 && generated_df_derivatives::order(c)<=3)
+  if(generated_df_derivatives::order(a)<=3 && generated_df_derivatives::order(b)<=3 && generated_df_derivatives::order(c)<=3)
     return generated_df_derivatives::evaluate(metric,alpha,A,a,beta,B,b,gamma,C,c,omega,responses);
   return convert(generated_df_auxiliary_g_derivatives::evaluate(metric,
       alpha,{A.x,A.y,A.z},{a.x,a.y,a.z},beta,{B.x,B.y,B.z},{b.x,b.y,b.z},
@@ -44,7 +44,7 @@ __device__ __forceinline__ Response metric(double alpha,Vec3 A,Angular a,double 
 }
 __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
     double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c,double omega=0.0) {
-  if(generated_df_derivatives::order(c)<=3)
+  if(generated_df_derivatives::order(a)<=3 && generated_df_derivatives::order(b)<=3 && generated_df_derivatives::order(c)<=3)
     return generated_df_derivatives::three_center(alpha,A,a,beta,B,b,gamma,C,c,omega);
   return convert(generated_df_auxiliary_g_derivatives::three_center(alpha,{A.x,A.y,A.z},{a.x,a.y,a.z},
        beta,{B.x,B.y,B.z},{b.x,b.y,b.z},gamma,{C.x,C.y,C.z},{c.x,c.y,c.z},omega));
@@ -200,7 +200,7 @@ template<unsigned Math=0> struct CompensatedValue {
         else ""
     )
     h_support = (
-        emit_df_derivatives_cuda(auxiliary_h=True)
+        emit_df_derivatives_cuda(auxiliary_h=True, maximum_orbital=4)
         + _auxiliary_g_policy_adapter()
         .replace("generated_df_g_adapter", "generated_df_h_adapter")
         .replace(

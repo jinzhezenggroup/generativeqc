@@ -11,6 +11,7 @@
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/df_source_domain.hpp"
+#include "scf/cuda/df_spin_domain.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
@@ -239,6 +240,9 @@ struct PreparedFockPlan::Impl {
         retained_fitted_derivative_order(retained_fitted_derivative_order_input),
         projection_reservation(projection_reservation_input) {
     validate_resolved_fock_build(strategy);
+    if (strategy.backend == FockBackend::Cuda &&
+        needs(strategy.spec, FockApproximation::DensityFitted))
+      cuda_execution::require_cuda_df_spin_domain(system, strategy.spec.spin);
     const auto reserved_rank = projection_reservation.restricted_rank;
     if (reserved_rank &&
         (strategy.backend != FockBackend::Cuda || strategy.spec.spin != FockSpin::Restricted ||

@@ -54,20 +54,32 @@ def test_cuda_df_inventory_retains_all_operator_signatures_and_exact_root_counts
     from generativeqc_compiler.integral.df_cuda import df_program_inventory
 
     inventory = df_program_inventory()
-    assert len(inventory["programs"]) == 36 + 96
+    expected = {
+        (OperatorFamily.COULOMB_METRIC, angular)
+        for angular in product(range(6), repeat=2)
+    } | {
+        (OperatorFamily.THREE_CENTER_ERI, angular)
+        for angular in product(range(5), range(5), range(6))
+    }
+    observed = set()
     root_counts = set()
     for payload in inventory["programs"]:
         integral = integral_from_payload(payload)
+        identity = (integral.operator.family, integral.signature.angular)
+        assert identity not in observed
+        observed.add(identity)
         if max(integral.signature.angular) >= 4:
             assert integral.recurrence == "subset_wick"
-            assert integral.maximum_coulomb_order <= 11
+            assert integral.maximum_coulomb_order == sum(integral.signature.angular)
+            assert integral.maximum_coulomb_order <= 13
             if len(integral.signature.angular) == 3:
-                assert max(integral.signature.angular[:2]) <= 3
+                assert max(integral.signature.angular[:2]) <= 4
             continue
         count = sum(integral.signature.angular) // 2 + 1
         assert integral.recurrence == f"rys{count}"
         assert integral.required_rys_roots == count
         root_counts.add(count)
+    assert observed == expected
     assert root_counts == {1, 2, 3, 4, 5}
     with pytest.raises(ValueError, match="requires rys1"):
         build_df_value_ir("coulomb_metric", (0, 0), recurrence="rys2")

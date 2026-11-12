@@ -1472,6 +1472,16 @@
         "values": "docs/reference/python_execution_contracts.md#python-calculation-values"
       }
     },
+    "generativeqc/calculator.py:Calculator.basis_capability_report": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-basis-errors",
+        "ownership": "docs/reference/python_contracts.md#python-basis-ownership",
+        "values": "docs/reference/python_contracts.md#python-basis-values"
+      }
+    },
     "generativeqc/calculator.py:Calculator.basis_metadata": {
       "kind": "function",
       "profile": "transformation",

@@ -87,6 +87,26 @@ active electrons and spin occupations. Charge and multiplicity are exact integer
 identities. A basis can preserve unsupported shell/ECP data without making it
 executable. `basis_capability` checks every actual shell/operator/derivative and
 returns reasons; eligibility does not prove a device exists or SCF converges.
+Its `consumer`, `max_angular_momentum` and `max_supported_angular_momentum`
+describe the selected role-specific route even on rejection. A supported maximum
+of `None` means no registered execution route; an actual maximum of `None`
+means no shells were found.
+
+`Calculator.basis_capability_report(atoms, compute_forces=True)` returns detached
+`applicable`, `eligible`, `checks` and `reasons` entries. Each item in `checks` is
+a `basis_capability` result for the calculator's actual backend, representation,
+operator, derivative and linked auxiliary consumer. Energy-only requests omit
+nuclear derivatives, not required DFT spatial AO jets. `reasons` combines all
+missing basis routes and is also used for calculation preflight errors. GFN2-xTB
+reports `applicable=False`, `eligible=True` and empty checks/reasons because it
+does not use an external Gaussian basis. This report does not assess correlation
+or response closure, endpoint numerical qualification or resource feasibility.
+Closed-shell `density_fitting="full_cuda"` selects the scoped `full_df`
+consumer: orbital S/T/V and three-center values/first nuclear derivatives
+through g and auxiliary metric/three-center values/first derivatives through h.
+Its dependency report does not require conventional four-center ERIs, because
+RI-JK and its matching response define the reference. Exact-reference,
+unrestricted, DFT, AO-jet and higher-derivative domains remain independent.
 `load_r2scan3c_basis` supplies the canonical composite basis rather than accepting
 an interchangeable named basis.
 

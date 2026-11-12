@@ -19,8 +19,8 @@ bool resolve_cuda_df_source_policy(CudaDfSourcePolicy& policy, std::string& deta
 
 bool cuda_df_shell_domain(const core::System& system, const char* role, std::string& detail) {
   for (const auto& shell : system.shells) {
-    if (shell.angular_momentum > 3U) {
-      detail = std::string("CUDA DF ") + role + " shells beyond f (l > 3) are unsupported";
+    if (shell.angular_momentum > 4U) {
+      detail = std::string("CUDA DF ") + role + " shells beyond g (l > 4) are unsupported";
       return false;
     }
   }
@@ -38,6 +38,11 @@ bool cuda_df_value_domain(const core::System& orbital, const core::System& auxil
     return false;
   }
   if (!cuda_df_shell_domain(orbital, "orbital", detail)) return false;
+  for (const auto& shell : orbital.shells)
+    if (shell.angular_momentum == 4U && (policy.value_math != 0U || policy.range_omega != 0.0)) {
+      detail = "g orbital DF values require the generic full-range Coulomb policy";
+      return false;
+    }
   for (const auto& shell : auxiliary.shells) {
     // Generic math owns g for Coulomb/erf and the separately qualified full-range
     // h polynomial domain. Specialized value schedules remain auxiliary-f-only.
@@ -60,12 +65,6 @@ bool cuda_df_value_domain(const core::System& orbital, const core::System& auxil
 bool cuda_df_integral_export_domain(const core::System& orbital, const core::System& auxiliary,
                                     const CudaDfSourcePolicy& policy, std::string& detail) {
   if (!cuda_df_value_domain(orbital, auxiliary, policy, detail)) return false;
-  for (const auto& shell : auxiliary.shells) {
-    if (shell.angular_momentum > 4U) {
-      detail = "CUDA DF auxiliary integral export shells beyond g (l > 4) are unsupported";
-      return false;
-    }
-  }
   return true;
 }
 
