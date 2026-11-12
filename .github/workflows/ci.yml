@@ -229,10 +229,11 @@ jobs:
       actions: read
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
-    # Cold GCC coverage can spend 6 minutes compiling and 13 minutes in CTest.
-    # Leave room for lcov and artifacts. Cold Clang can spend 13.5 minutes
-    # compiling plus 1.5 minutes in CTest; retain a bounded 20-minute job.
-    timeout-minutes: ${{ matrix.compiler == 'gcc' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 25 || matrix.compiler == 'clang' && 20 || 15 }}
+    # Run 43138869481 exhausted GCC's former 15-minute job during a progressing
+    # Gaussian-ECP build. Reuse the existing 25-minute GCC coverage ceiling for
+    # ordinary GCC too; its completion margin remains an estimate. Clang passed
+    # its full build and 141 CTests in 18m09s, retaining the 20-minute ceiling.
+    timeout-minutes: ${{ matrix.compiler == 'clang' && 20 || 25 }}
     strategy:
       fail-fast: false
       matrix:
@@ -1341,9 +1342,11 @@ jobs:
     # Keep the full test-step ceilings and leave setup/cache-save headroom.
     # Run 43052160517/attempt 2 spent 16m09s in ECP setup and 19m03s in
     # core-b setup, truncating their existing 30/35-minute test allowances.
-    # Reserve twenty ECP and twenty-five core-b setup/cleanup minutes without
-    # extending test deadlines. Other shards retain ten minutes of headroom.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || matrix.shard == 'core-b' && 60 || matrix.shard == 'ecp-forces' && 50 || ((matrix.shard == 'posthf' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40) }}
+    # Run 43138869481 then spent 18m43s preparing core-a, leaving only 21m29s
+    # of its 30-minute test deadline before the whole-job cap stopped it at 99%.
+    # Reserve twenty core-a/ECP and twenty-five core-b setup/cleanup minutes
+    # without extending test deadlines. Other shards retain ten minutes.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || matrix.shard == 'core-b' && 60 || (matrix.shard == 'core-a' || matrix.shard == 'ecp-forces') && 50 || ((matrix.shard == 'posthf' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40) }}
     env:
       CCACHE_MAXSIZE: 2G
       # PySCF and NumPy can each fan out through BLAS/OpenMP. Keep those

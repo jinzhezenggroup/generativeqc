@@ -3,6 +3,7 @@
 import ast
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -12,6 +13,7 @@ from itertools import pairwise
 from pathlib import Path
 
 import pytest
+from test_ci_pr_cli_ccache import expression
 
 ROOT = Path(__file__).resolve().parents[2]
 SHARDS = (
@@ -879,14 +881,30 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         in preparation
     )
     assert '-o "$RUNNER_TEMP/libnative-fault-record.so"' in preparation
-    assert (
-        "&& 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 35 || 30)"
-        in step
-    )
-    assert (
-        "&& 100 || matrix.shard == 'core-b' && 60 || matrix.shard == 'ecp-forces' && 50 || ((matrix.shard == 'posthf' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40)"
-        in source
-    )
+    python_job = source.split("\n  python:\n", 1)[1].split("\n  upload-coverage:\n", 1)[
+        0
+    ]
+    job_limit = re.search(r"^    timeout-minutes: (.+)$", python_job, re.MULTILINE)
+    test_limit = re.search(r"^        timeout-minutes: (.+)$", step, re.MULTILINE)
+    assert job_limit and test_limit
+    for event in (
+        "pull_request",
+        "push",
+        "merge_group",
+        "schedule",
+        "workflow_dispatch",
+    ):
+        for shard in SHARDS:
+            full = event in {"schedule", "workflow_dispatch"}
+            extended = shard in {"core-b", "posthf", "compiler-heavy", "runtime-heavy"}
+            job_minutes = {"core-a": 50, "core-b": 60, "ecp-forces": 50}.get(
+                shard, 45 if extended else 40
+            )
+            context = {"matrix.shard": shard, "github.event_name": event}
+            assert expression(job_limit[1], context) == (100 if full else job_minutes)
+            assert expression(test_limit[1], context) == (
+                90 if full else 35 if extended else 30
+            )
 
 
 @pytest.mark.parametrize(
@@ -900,14 +918,6 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         ('"${diagnostic_args[@]}"', '""'),
         ("-p tools.pytest_native_diagnostics", "-p no:tools.pytest_native_diagnostics"),
         ("tools/native_fault_record.c", "tools/not-the-fatal-recorder.c"),
-        # Exercise full, ordinary, and extended-shard budgets independently. The old
-        # pre-exception fragments no longer reached the contract assertion.
-        ("&& 90 ||", "&& 91 ||"),
-        ("&& 100 ||", "&& 101 ||"),
-        ("&& 35 || 30", "&& 35 || 31"),
-        ("&& 45 || 40", "&& 45 || 41"),
-        ("&& 35 || 30", "&& 36 || 30"),
-        ("&& 45 || 40", "&& 46 || 40"),
     ],
 )
 def test_timed_diagnostics_contract_rejects_disabled_or_changed_guards(
@@ -917,6 +927,76 @@ def test_timed_diagnostics_contract_rejects_disabled_or_changed_guards(
     assert before in source
     with pytest.raises(AssertionError):
         _assert_timed_diagnostics_contract(source.replace(before, after))
+
+
+@pytest.mark.parametrize(
+    ("indent", "event", "shard", "minutes"),
+    (
+        (4, "schedule", "core-c", 101),
+        (8, "schedule", "core-c", 91),
+        (4, "pull_request", "core-c", 41),
+        (8, "pull_request", "core-c", 31),
+        (4, "merge_group", "posthf", 46),
+        (8, "merge_group", "posthf", 36),
+        (4, "pull_request", "core-a", 40),
+        (4, "pull_request", "core-b", 45),
+    ),
+)
+def test_timed_diagnostics_contract_rejects_changed_budget_policy(
+    indent: int, event: str, shard: str, minutes: int
+) -> None:
+    source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    start = source.index("\n  python:\n")
+    end = source.index("\n  upload-coverage:\n", start)
+    if indent == 8:
+        start = source.index("      - name: Run Python tests with coverage\n", start)
+        end = source.index("\n      - name:", start)
+    section = source[start:end]
+    pattern = rf"^({' ' * indent}timeout-minutes: )(.+)$"
+    original = re.search(pattern, section, re.MULTILINE)
+    assert original
+    fallback = original[2].removeprefix("${{").removesuffix("}}").strip()
+    override = (
+        "${{ "
+        f"github.event_name == '{event}' && matrix.shard == '{shard}' && {minutes}"
+        f" || ({fallback}) "
+        "}}"
+    )
+    changed = re.sub(
+        pattern, lambda match: match[1] + override, section, count=1, flags=re.MULTILINE
+    )
+    with pytest.raises(AssertionError):
+        _assert_timed_diagnostics_contract(source[:start] + changed + source[end:])
+
+
+def test_timed_diagnostics_contract_accepts_equivalent_timeout_expressions() -> None:
+    source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    full = (
+        "(github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')"
+    )
+    extended = "(matrix.shard == 'runtime-heavy' || matrix.shard == 'compiler-heavy' || matrix.shard == 'posthf')"
+    alternatives = {
+        4: f"${{{{ {full} && 100 || {extended} && 45 || matrix.shard == 'ecp-forces' && 50 || matrix.shard == 'core-a' && 50 || matrix.shard == 'core-b' && 60 || 40 }}}}",
+        8: f"${{{{ {full} && 90 || {extended} && 35 || matrix.shard == 'core-b' && 35 || 30 }}}}",
+    }
+    for indent, budget in alternatives.items():
+        start = source.index("\n  python:\n")
+        end = source.index("\n  upload-coverage:\n", start)
+        if indent == 8:
+            start = source.index(
+                "      - name: Run Python tests with coverage\n", start
+            )
+            end = source.index("\n      - name:", start)
+        section, replaced = re.subn(
+            rf"^{' ' * indent}timeout-minutes: .+$",
+            f"{' ' * indent}timeout-minutes: {budget}",
+            source[start:end],
+            count=1,
+            flags=re.MULTILINE,
+        )
+        assert replaced == 1
+        source = source[:start] + section + source[end:]
+    _assert_timed_diagnostics_contract(source)
 
 
 @pytest.mark.parametrize(

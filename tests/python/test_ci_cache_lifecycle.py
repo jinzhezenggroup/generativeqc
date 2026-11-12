@@ -165,7 +165,7 @@ def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
     job = _job("python")
     tests = _step("python", "Run Python tests with coverage")
     # Evaluate the matrix rather than requiring identical expression shapes:
-    # Cold ECP/core-b need setup headroom, not longer scientific test allowances.
+    # Cold core-a/core-b/ECP need setup headroom, not longer test allowances.
     pattern = r"^\s*timeout-minutes: (.+)$"
     job_limits = re.search(pattern, job.split("\n    steps:\n", 1)[0], re.MULTILINE)
     test_limits = re.search(pattern, tests, re.MULTILINE)
@@ -185,7 +185,9 @@ def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
             full = event in {"schedule", "workflow_dispatch"}
             test_minutes = 90 if full else 35 if shard in extended else 30
             setup_minutes = (
-                10 if full else {"ecp-forces": 20, "core-b": 25}.get(shard, 10)
+                10
+                if full
+                else {"core-a": 20, "core-b": 25, "ecp-forces": 20}.get(shard, 10)
             )
             assert expression(test_limits[1], context) == test_minutes
             assert expression(job_limits[1], context) == test_minutes + setup_minutes

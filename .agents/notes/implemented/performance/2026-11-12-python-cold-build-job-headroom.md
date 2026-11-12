@@ -108,16 +108,52 @@ repair, not an attribution from progress percentages or a later green run.
 
 ## Verification and limits
 
-Workflow regressions evaluate all event-specific ECP/core-b job/test deadlines
-and failure/cancellation/prose upload conditions. Existing tests retain every
-other shard ceiling, required CPU build/CTest work and compiler-cache
+### Next-run core-a headroom and completed neighboring shards
+
+In [run 43138869481](https://github.com/jinzhezenggroup/generativeqc/actions/runs/43138869481),
+source `6667d3722e5f0aa39a5ad8b26bad50f03afbbe20` used synthetic merge
+`cc62754d44a5406e910e3a2bd45c7b7645b3b596`, whose tree exactly matches the
+source tree. Core-a job `130920737536` reached its 40-minute whole-job cap:
+
+- Setup began at 02:04:56 UTC. The native build took 17m22s, from 02:05:45
+  to 02:23:07; remaining preparation finished at 02:23:39. Total setup was
+  18m43s. Pytest ran for only 21m29s before cancellation at 02:45:08,
+  despite its unchanged 30-minute step deadline, and reached 99%.
+- No failure marker appeared in the quiet progress and no retained diagnostic
+  report failed. The cancellation debug artifact `13910187745` was uploaded
+  successfully. One worker's history reached its bounded 4-MiB cap; no final
+  JUnit or pytest summary exists, so this is not full-shard acceptance.
+- The retained report explicitly records
+  `test_native_stationary_owner_ports.py::test_stationary_owner_port_forwarding_and_refusals`
+  passing in 5.1533s. Its preceding compiler-fixture defect is fixed; the
+  later whole-job timeout does not reverse or replace that recorded result.
+
+Increase only routine core-a's outer ceiling from 40 to 50 minutes, preserving
+its 30-minute pytest allowance. Twenty minutes remain for setup and cleanup:
+the measured 18m43s setup plus the full test allowance totals 48m43s, leaving
+1m17s against the seven seconds of observed cleanup/upload. This is bounded
+planning headroom, not a measured full core-a completion time. Preserve every
+test, inner deadline, diagnostic limit, command, coverage path, cache and
+scheduling choice. Nightly/manual core-a and other Python shard caps remain
+unchanged. Revisit using the next complete run if this margin is insufficient.
+
+At this same source, core-b completed with 17,207 passes, 5,705 skips and 2,730
+subtests in 1427.94s; ECP completed with 260 passes and 66 skips in 1738.85s,
+inside its unchanged 30-minute pytest deadline. These are actual hosted
+results at their recorded identity, not a retroactive pass of the earlier
+timeouts or broader Ni, mixed-ECP or molecular-TS qualification. The separate
+[GCC headroom decision](2026-11-12-cpu-gcc-ci-build-headroom.md) records its
+remaining incomplete build and the unchanged successful Clang ceiling.
+
+Workflow regressions evaluate every Python shard/event job and test deadline,
+both CPU compiler ceilings and failure/cancellation/prose upload conditions.
+Existing tests retain required CPU build/CTest work and compiler-cache
 ownership. The unchanged whole-file scheduling regression is rerun.
 
 No scientific suite or native build is duplicated for this workflow edit.
-A fresh normal CI run is still required to show whether the unchanged
-30/35-minute test allowances suffice and to expose complete failure details.
-If it is not, use retained per-test diagnostics before considering another
-change. Do not remove gates or increase the test deadline merely to pass.
+A fresh normal CI run is still required to complete core-a and GCC. Use
+retained per-test diagnostics if either remains incomplete or reports a real
+failure. Do not remove gates or increase the test deadline merely to pass.
 
 ## References
 

@@ -11,16 +11,14 @@ from test_ci_prose_workflow import assert_full_coverage_step
 def _assert_cpu_budget(workflow: str) -> None:
     section = workflow.split("\n  cpu:\n", 1)[1].split("\n  cuda-compile:\n", 1)[0]
     header = section.split("\n    steps:\n", 1)[0]
-    match = re.search(
-        r"timeout-minutes: \$\{\{ matrix.compiler == 'gcc' && "
-        r"\(github.event_name == 'schedule' \|\| "
-        r"github.event_name == 'workflow_dispatch'\) && (\d+) \|\| "
-        r"matrix.compiler == 'clang' && (\d+) \|\| (\d+) \}\}",
-        header,
-    )
-    assert match, "instrumented GCC needs time for cold build, tests, and coverage"
-    coverage, clang, plain = map(int, match.groups())
-    assert (coverage, clang, plain) == (25, 20, 15)
+    match = re.search(r"^\s*timeout-minutes: (.+)$", header, re.MULTILINE)
+    assert match, "CPU jobs need a finite cold-build and CTest budget"
+    for compiler in ("gcc", "clang"):
+        for event in ("pull_request", "merge_group", "schedule", "workflow_dispatch"):
+            context = {"matrix.compiler": compiler, "github.event_name": event}
+            minutes = expression(match[1], context)
+            assert type(minutes) is int
+            assert minutes == (25 if compiler == "gcc" else 20)
     assert "compiler: [gcc, clang]" in header
     assert "fail-fast: false" in header
     assert "continue-on-error:" not in header
@@ -124,7 +122,7 @@ def test_cpu_coverage_has_a_bounded_cold_build_budget() -> None:
 @pytest.mark.parametrize(
     "event", ["pull_request", "merge_group", "schedule", "workflow_dispatch"]
 )
-def test_cpu_budgets_preserve_instrumentation_and_bound_cold_clang(
+def test_cpu_budgets_preserve_instrumentation_and_bound_cold_builds(
     compiler: str, event: str
 ) -> None:
     path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
@@ -135,9 +133,7 @@ def test_cpu_budgets_preserve_instrumentation_and_bound_cold_clang(
     assert budget
     context = {"matrix.compiler": compiler, "github.event_name": event}
     instrumented = compiler == "gcc" and event in {"schedule", "workflow_dispatch"}
-    assert expression(budget[1], context) == (
-        25 if instrumented else 20 if compiler == "clang" else 15
-    )
+    assert expression(budget[1], context) == (25 if compiler == "gcc" else 20)
     for flag, enabled in (
         (
             "COVERAGE_COMPILE_FLAGS",
@@ -156,12 +152,64 @@ def test_cpu_budget_preserves_required_work_and_independent_master_cache_save() 
 
 
 @pytest.mark.parametrize(
+    ("budget", "valid"),
+    [
+        ("${{ matrix.compiler == 'gcc' && 25 || 20 }}", True),
+        (
+            (
+                "${{ matrix.compiler == 'gcc' && "
+                "(github.event_name == 'schedule' || "
+                "github.event_name == 'workflow_dispatch') && 25 || "
+                "matrix.compiler == 'clang' && 20 || 25 }}"
+            ),
+            True,
+        ),
+        ("${{ matrix.compiler == 'clang' && 20 || 15 }}", False),
+        ("${{ matrix.compiler == 'clang' && 15 || 25 }}", False),
+        ("${{ matrix.compiler == 'clang' && 25 || 25 }}", False),
+        (
+            (
+                "${{ matrix.compiler == 'gcc' && "
+                "(github.event_name == 'schedule' || "
+                "github.event_name == 'workflow_dispatch') && 20 || "
+                "matrix.compiler == 'clang' && 20 || 25 }}"
+            ),
+            False,
+        ),
+        (
+            (
+                "${{ github.event_name == 'merge_group' && 15 || "
+                "matrix.compiler == 'clang' && 20 || 25 }}"
+            ),
+            False,
+        ),
+    ],
+)
+def test_cpu_budget_contract_evaluates_policy_not_expression_spelling(
+    budget: str, valid: bool
+) -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    workflow = path.read_text()
+    start = workflow.index("\n  cpu:\n")
+    end = workflow.index("\n  cuda-compile:\n", start)
+    cpu = re.sub(
+        r"^    timeout-minutes: .+$",
+        f"    timeout-minutes: {budget}",
+        workflow[start:end],
+        count=1,
+        flags=re.MULTILINE,
+    )
+    candidate = workflow[:start] + cpu + workflow[end:]
+    if valid:
+        _assert_cpu_budget(candidate)
+    else:
+        with pytest.raises(AssertionError):
+            _assert_cpu_budget(candidate)
+
+
+@pytest.mark.parametrize(
     ("before", "after"),
     [
-        ("&& 25 ||", "&& 20 ||"),
-        ("&& 20 || 15", "&& 20 || 25"),
-        ("&& 20 || 15", "&& 15 || 15"),
-        ("&& 20 || 15", "&& 25 || 15"),
         (
             "run: cmake --build build --parallel",
             "if: false\n        run: cmake --build build --parallel",
@@ -220,7 +268,7 @@ def test_master_complete_cache_cannot_precede_the_python_seed() -> None:
 @pytest.mark.parametrize(
     "filename, job, shard, routine_minutes",
     [
-        ("ci.yml", "python", "core-a", 40),
+        ("ci.yml", "python", "core-a", 50),
         ("ci.yml", "python", "core-b", 60),
         ("ci.yml", "python", "core-c", 40),
         ("ci.yml", "python", "uccsd-forces", 40),
@@ -270,7 +318,16 @@ def test_full_qualification_has_a_separate_finite_budget(
 )
 @pytest.mark.parametrize(
     ("shard", "job_minutes", "test_minutes"),
-    (("ecp-forces", 50, 30), ("core-b", 60, 35)),
+    (
+        ("core-a", 50, 30),
+        ("core-b", 60, 35),
+        ("core-c", 40, 30),
+        ("uccsd-forces", 40, 30),
+        ("runtime-heavy", 45, 35),
+        ("posthf", 45, 35),
+        ("compiler-heavy", 45, 35),
+        ("ecp-forces", 50, 30),
+    ),
 )
 def test_cold_python_setup_preserves_the_existing_test_deadline(
     event: str, shard: str, job_minutes: int, test_minutes: int

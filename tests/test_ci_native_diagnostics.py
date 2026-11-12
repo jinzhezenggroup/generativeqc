@@ -709,14 +709,8 @@ def test_safe_workflow_preserves_threshold_coverage_and_limits() -> None:
     assert '"${diagnostic_args[@]}"' in step
     assert '"${coverage_args[@]}"' in step
     assert '-n 4 --dist="$dist_mode"' in step
-    assert (
-        "&& 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 35 || 30)"
-        in step
-    )
-    assert (
-        "&& 100 || matrix.shard == 'core-b' && 60 || matrix.shard == 'ecp-forces' && 50 || ((matrix.shard == 'posthf' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40)"
-        in source
-    )
+    # Event/shard timeout policy is evaluated in test_ci_time_budgets.py and
+    # test_ci_shard_ownership.py; equivalent expressions must remain acceptable.
     assert "faulthandler_timeout=900" not in source
     preservation = source.split(
         "      - name: Preserve transient benchmark/debug artifacts on failure\n", 1
